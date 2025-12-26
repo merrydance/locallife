@@ -1,0 +1,37 @@
+<scroll-view scroll-y class="kanban-list">
+  <view class="order-card" wx:for="{{orders}}" wx:key="id">
+    <view class="card-header">
+      <text class="order-no">#{{item.orderNo}}</text>
+      <view class="status-tag {{item.statusColor}}">{{item.statusText}}</view>
+    </view>
+    
+    <view class="card-body">
+      <view class="order-items">
+        <text wx:for="{{item.items}}" wx:for-item="food" wx:key="name">
+          {{food.name}} x{{food.count}}
+        </text>
+      </view>
+      <view class="order-meta">
+        <text class="time">{{item.elapsedTime}}</text>
+        <text class="price">¥{{item.totalPrice}}</text>
+      </view>
+    </view>
+    
+    <view class="card-actions">
+      <button 
+        wx:if="{{item.status === 1}}" 
+        class="btn-primary" 
+        data-id="{{item.id}}" 
+        data-action="accept"
+        bindtap="onAction"
+      >接单</button>
+      <button 
+        wx:if="{{item.status === 2}}" 
+        class="btn-success" 
+        data-id="{{item.id}}" 
+        data-action="ready"
+        bindtap="onAction"
+      >出餐</button>
+    </view>
+  </view>
+</scroll-view>

@@ -1,0 +1,44 @@
+<view class="dish-card" bindtap="onTap">
+  <t-image class="dish-image" src="{{dish.imageUrl}}" mode="aspectFill" lazy />
+  
+  <view class="dish-info">
+    <!-- 第1行: 店名·菜名 -->
+    <view class="row-1">
+      <text class="shop-dish-name">{{dish.shopName}}·{{dish.name}}</text>
+    </view>
+    
+    <!-- 第2行: 价格 | 销量 -->
+    <view class="row-2">
+      <text class="price">{{dish.priceDisplay}}</text>
+      <text class="separator">|</text>
+      <text class="sales">{{dish.salesBadge}}</text>
+    </view>
+    
+    <!-- 第3行: 距离 + 预估配送时间 -->
+    <view class="row-3">
+      <text class="distance">📍{{dish.distance}}</text>
+      <text class="delivery-time">🕐{{dish.deliveryTimeDisplay}}</text>
+    </view>
+    
+    <!-- 第4行: 代取费 + 满返信息 -->
+    <view class="row-4">
+      <text wx:if="{{dish.deliveryFeeDisplay}}" class="delivery-fee">{{dish.deliveryFeeDisplay}}</text>
+      <text wx:if="{{dish.discountRule}}" class="discount">{{dish.discountRule}}</text>
+    </view>
+    
+    <!-- 第5行: 标签（条件显示）-->
+    <view wx:if="{{dish.isPremade || (dish.attributes && dish.attributes.length > 0)}}" class="row-5">
+      <t-tag wx:if="{{dish.isPremade}}" theme="warning" size="small" variant="light">预制菜</t-tag>
+      <t-tag wx:for="{{dish.attributes}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
+    </view>
+  </view>
+  
+  <t-button
+    class="add-btn"
+    theme="primary"
+    size="small"
+    icon="add"
+    shape="circle"
+    catchtap="onAdd"
+  />
+</view>

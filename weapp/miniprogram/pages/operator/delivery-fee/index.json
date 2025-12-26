@@ -1,0 +1,8 @@
+{
+    "navigationBarTitleText": "配送规则",
+    "usingComponents": {
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-button": "tdesign-miniprogram/button/button"
+    }
+}

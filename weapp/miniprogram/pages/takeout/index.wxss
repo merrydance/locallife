@@ -1,0 +1,242 @@
+@import "../../styles/responsive.wxss";
+
+/* 外卖首页 - 基于color_guide.md配色 */
+
+/* ========== 页面容器 (60% 陶瓷白背景) ========== */
+.page-container {
+  background: var(--td-bg-color-page);  /* #FAFAFA 陶瓷白 */
+}
+
+/* ========== 搜索区域 ========== */
+.search-section {
+  padding: 24rpx;
+  background: var(--td-bg-color-container);  /* 纯白卡片 */
+}
+
+@media (min-width: 750px) {
+  .search-section {
+    padding: 0 32px 12px !important;
+    height: 64px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: sticky;
+    top: 64px !important; /* Below Navbar */
+    z-index: 100;
+    background: var(--td-bg-color-container) !important;
+    box-sizing: border-box;
+  }
+  .search-section .t-search {
+    width: 100% !important;
+    max-width: 640px !important; /* Refined from 800px to 640px for balance */
+  }
+}
+
+/* ========== Tabs区域 ========== */
+.tabs-section {
+  background: var(--td-bg-color-container);
+  margin-bottom: 16rpx;
+}
+
+@media (min-width: 750px) {
+  .tabs-section {
+    padding: 0 32px !important;
+    height: 48px !important;
+    margin-bottom: 8px !important;
+    position: sticky;
+    top: 128px !important; /* Below Navbar + Search */
+    z-index: 99;
+    background: var(--td-bg-color-container) !important;
+    box-sizing: border-box;
+  }
+  .tabs-section .t-tabs {
+    height: 48px !important;
+  }
+}
+
+/* ========== 分类导航 ========== */
+.category-section {
+  background: var(--td-bg-color-container);
+  margin-bottom: 16rpx;
+}
+
+@media (min-width: 768px) {
+  .category-section {
+    padding: 0 48rpx;
+  }
+}
+
+/* ========== 内容区域 ========== */
+.content-section {
+  padding: 0 24rpx 24rpx;
+}
+
+/* 响应式网格布局已由 responsive-grid-3 接管 */
+
+/* Asset Stabilization Caps */
+@media (min-width: 750px) {
+  .package-image {
+    width: 80px !important;
+    height: 80px !important;
+    border-radius: 6px !important;
+  }
+  .package-name {
+    font-size: 16px !important;
+  }
+  .package-price {
+    font-size: 18px !important;
+  }
+  .location-guide-icon {
+    font-size: 48px !important;
+  }
+  .no-more {
+    font-size: 14px !important;
+    padding: 24px 0 !important;
+  }
+}
+
+/* ========== 骨架屏 ========== */
+.skeleton-card {
+  margin: 20rpx;
+  padding: 20rpx;
+  background: var(--td-bg-color-container);
+  border-radius: 16rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ========== 套餐卡片 ========== */
+.package-card {
+  display: flex;
+  gap: 24rpx;
+  padding: 24rpx;
+  background: var(--td-bg-color-container);
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  box-shadow: var(--shadow-md);
+}
+
+.package-image {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.package-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.package-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.package-name {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--td-text-color-primary);  /* #333 炭黑 */
+}
+
+/* 30% 品牌主色 - 价格使用活力珊瑚 */
+.package-price {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: var(--brand-coral);  /* #FF6B58 活力珊瑚 */
+}
+
+.package-original-price {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);  /* #999 */
+  text-decoration: line-through;
+}
+
+.package-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: var(--td-text-color-secondary);  /* #666 */
+}
+
+.package-item::after {
+  content: '、';
+}
+
+.package-item:last-child::after {
+  content: '';
+}
+
+.package-meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: var(--td-text-color-secondary);
+}
+
+/* 10% 强调色 - 评分使用日光芥末 */
+.package-meta .rating {
+  color: var(--brand-mustard);  /* #FFC107 日光芥末 */
+  font-weight: 500;
+}
+
+.package-meta .dot {
+  color: var(--td-text-color-placeholder);
+}
+
+.loading-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 48rpx 0;
+}
+
+.no-more {
+  text-align: center;
+  padding: 40rpx 0;
+  color: var(--td-text-color-placeholder);
+  font-size: 28rpx;
+}
+
+
+/* ========== 位置引导提示 ========== */
+.location-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 48rpx;
+  text-align: center;
+}
+
+.location-guide-icon {
+  font-size: 96rpx;
+  margin-bottom: 32rpx;
+}
+
+.location-guide-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: 16rpx;
+}
+
+.location-guide-desc {
+  font-size: 28rpx;
+  color: var(--td-text-color-secondary);
+  margin-bottom: 48rpx;
+  line-height: 1.6;
+}
+
+.location-guide-buttons {
+  display: flex;
+  gap: 24rpx;
+}
+
+.location-guide-buttons .t-button {
+  min-width: 180rpx;
+}

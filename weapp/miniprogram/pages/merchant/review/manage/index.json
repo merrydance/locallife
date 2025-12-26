@@ -1,0 +1,14 @@
+{
+    "navigationBarTitleText": "评价管理",
+    "enablePullDownRefresh": true,
+    "usingComponents": {
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "review-card": "/components/review-card/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-dialog": "tdesign-miniprogram/dialog/dialog",
+        "t-textarea": "tdesign-miniprogram/textarea/textarea",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

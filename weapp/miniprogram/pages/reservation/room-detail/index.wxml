@@ -1,0 +1,56 @@
+<custom-navbar title="包间详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading && room}}" class="content">
+    <!-- 轮播图 -->
+    <swiper class="swiper" indicator-dots autoplay circular>
+      <swiper-item wx:for="{{room.images}}" wx:key="*this">
+        <t-image src="{{item}}" mode="aspectFill" width="100%" height="100%" />
+      </swiper-item>
+    </swiper>
+
+    <!-- 基本信息 -->
+    <view class="info-section">
+      <view class="header-row">
+        <text class="room-name">{{room.name}}</text>
+        <t-tag theme="success" variant="light">可预订</t-tag>
+      </view>
+      <view class="detail-row">
+        <text class="label">容纳人数</text>
+        <text class="value">{{room.capacity}}人</text>
+      </view>
+      <view class="detail-row">
+        <text class="label">最低消费</text>
+        <text class="value price">¥{{room.min_spend / 100}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="label">预定定金</text>
+        <text class="value price">¥{{room.deposit / 100}}</text>
+      </view>
+    </view>
+
+    <!-- 设施服务 -->
+    <view class="facilities-section">
+      <view class="section-title">设施服务</view>
+      <view class="facilities-grid">
+        <view wx:for="{{room.facilities}}" wx:key="*this" class="facility-item">
+          <t-icon name="check-circle" size="32rpx" color="#00A870" />
+          <text>{{item}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 包间介绍 -->
+    <view class="desc-section">
+      <view class="section-title">包间介绍</view>
+      <text class="desc-text">{{room.description}}</text>
+    </view>
+  </view>
+</view>
+
+<!-- 底部按钮 -->
+<view wx:if="{{!loading && room}}" class="bottom-bar">
+  <t-button block theme="primary" size="large" bindtap="onBook">立即预定</t-button>
+</view>

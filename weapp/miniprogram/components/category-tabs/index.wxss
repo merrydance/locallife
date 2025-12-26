@@ -1,0 +1,59 @@
+.category-tabs {
+  white-space: nowrap;
+  height: 88rpx;
+  background: var(--td-bg-color-container);
+  display: flex;
+  align-items: center;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  border-bottom: 1rpx solid var(--td-component-stroke-color, #f0f0f0);
+}
+
+.tab-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24rpx;
+  height: 100%;
+  position: relative;
+  color: #666;
+  font-size: 28rpx;
+  transition: all 0.3s;
+}
+
+.tab-item.active {
+  color: #0052D9;
+  font-weight: 600;
+  font-size: 30rpx;
+}
+
+.active-line {
+  position: absolute;
+  bottom: 12rpx;
+  width: 40rpx;
+  height: 6rpx;
+  background: #0052D9;
+  border-radius: 3rpx;
+}
+
+@media (min-width: 750px) {
+  .category-tabs {
+    height: 48px !important; /* Standardize to 48px */
+    padding: 0 32px !important;
+  }
+  .tab-item {
+    font-size: 14px !important;
+    padding: 0 24px !important;
+    height: 100% !important;
+  }
+  .tab-item.active {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+  }
+  .active-line {
+    bottom: 0 !important;
+    width: 24px !important;
+    height: 3px !important;
+  }
+}

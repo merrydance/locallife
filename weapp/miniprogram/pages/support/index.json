@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "客服入口",
+  "navigationBarBackgroundColor": "#ffffff",
+  "navigationBarTextStyle": "black",
+  "backgroundColor": "#f4f5fb",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index"
+  }
+}

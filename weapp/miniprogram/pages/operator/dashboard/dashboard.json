@@ -1,0 +1,11 @@
+{
+    "navigationBarTitleText": "运营商工作台",
+    "navigationBarBackgroundColor": "#667eea",
+    "navigationBarTextStyle": "white",
+    "enablePullDownRefresh": true,
+    "usingComponents": {
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-tag": "tdesign-miniprogram/tag/tag"
+    }
+}

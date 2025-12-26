@@ -1,0 +1,43 @@
+<!-- 共享订单项模板 -->
+<template name="order-view">
+  <t-empty wx:if="{{pendingOrders.length === 0}}" description="暂无待处理订单" icon="file-paste" />
+  <view wx:else class="orders-list">
+    <view 
+      wx:for="{{pendingOrders}}" 
+      wx:key="id"
+      class="order-card-v3"
+      bindtap="onOrderTap"
+      data-id="{{item.id}}"
+    >
+      <view class="order-v3-header">
+        <text class="no">#{{item.order_no}}</text>
+        <t-tag size="extra-small" theme="{{item.order_type === 'takeout' ? 'primary' : 'success'}}">
+          {{item.order_type === 'takeout' ? '外卖' : '堂食'}}
+        </t-tag>
+      </view>
+      <view class="order-v3-body">
+        <text class="items">{{item.customer_name || '位名'}} · {{item.items[0].name}}等{{item.items.length}}件</text>
+        <text class="time">{{item.created_at}}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<!-- 共享桌台模板 -->
+<template name="table-view">
+  <view wx:for="{{tableGroups}}" wx:key="type" class="table-group-v3">
+    <view class="group-title">{{item.name}} ({{item.tables.length}})</view>
+    <view class="tables-grid-v3">
+      <view 
+        wx:for="{{item.tables}}" 
+        wx:for-item="table" 
+        wx:key="id" 
+        class="table-dot-card {{table.status}}"
+        bindtap="onTableTap"
+        data-id="{{table.id}}"
+      >
+        {{table.table_no}}
+      </view>
+    </view>
+  </view>
+</template>

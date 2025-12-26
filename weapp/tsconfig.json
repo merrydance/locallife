@@ -1,0 +1,39 @@
+{
+    "compilerOptions": {
+        "target": "es2016",
+        "module": "commonjs",
+        "lib": [
+            "es2016",
+            "dom"
+        ],
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "strictBindCallApply": true,
+        "strictPropertyInitialization": true,
+        "noImplicitThis": true,
+        "alwaysStrict": true,
+        "moduleResolution": "node",
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "baseUrl": ".",
+        "paths": {
+            "@/*": [
+                "miniprogram/*"
+            ]
+        },
+        "types": [
+            "miniprogram-api-typings"
+        ]
+    },
+    "include": [
+        "miniprogram/**/*.ts",
+        "typings/**/*.d.ts"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}

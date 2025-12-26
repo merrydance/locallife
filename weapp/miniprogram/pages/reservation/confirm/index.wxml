@@ -1,0 +1,64 @@
+<custom-navbar title="确认预定" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <!-- 房间信息 -->
+  <view class="room-info">
+    <text class="room-name">{{roomName}}</text>
+    <text class="deposit-tip">需支付定金: ¥{{deposit / 100}}</text>
+  </view>
+
+  <!-- 预定表单 -->
+  <view class="form-section">
+    <t-cell-group title="预定信息">
+      <t-cell title="日期" arrow hover note="{{form.date || '请选择日期'}}" bindtap="showDatePicker" />
+      <t-cell title="时间" arrow hover note="{{form.time || '请选择时间'}}" bindtap="showTimePicker" />
+      <t-cell title="人数">
+        <t-stepper value="{{form.guestCount}}" min="1" max="20" bind:change="onGuestCountChange" slot="note" />
+      </t-cell>
+    </t-cell-group>
+
+    <t-cell-group title="联系人信息" style="margin-top: 24rpx;">
+      <t-input label="姓名" placeholder="请输入姓名" value="{{form.name}}" data-field="name" bindchange="onInputChange" />
+      <t-input label="手机号" placeholder="请输入手机号" type="number" value="{{form.phone}}" data-field="phone" bindchange="onInputChange" />
+      <t-input label="备注" placeholder="如有特殊需求请备注" value="{{form.remark}}" data-field="remark" bindchange="onInputChange" />
+    </t-cell-group>
+  </view>
+
+  <!-- 支付提示 -->
+  <view class="payment-tip">
+    <t-icon name="info-circle" size="32rpx" color="#999" />
+    <text>提交预定后需在15分钟内完成定金支付，否则预定将自动取消。</text>
+  </view>
+</view>
+
+<!-- 底部提交栏 -->
+<view class="bottom-bar">
+  <view class="price-info">
+    <text>定金：</text>
+    <text class="price">¥{{deposit / 100}}</text>
+  </view>
+  <t-button theme="primary" size="large" loading="{{submitting}}" bindtap="onSubmit">立即支付</t-button>
+</view>
+
+<!-- 日期选择器 -->
+<t-date-time-picker
+  title="选择日期"
+  visible="{{dateVisible}}"
+  mode="date"
+  defaultValue="{{form.date}}"
+  format="YYYY-MM-DD"
+  bindchange="onDateConfirm"
+  bindcancel="hideDatePicker"
+  start="{{minDate}}"
+/>
+
+<!-- 时间选择器 -->
+<t-date-time-picker
+  title="选择时间"
+  visible="{{timeVisible}}"
+  mode="time"
+  defaultValue="{{form.time}}"
+  format="HH:mm"
+  bindchange="onTimeConfirm"
+  bindcancel="hideTimePicker"
+/>

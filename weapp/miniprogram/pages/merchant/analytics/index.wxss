@@ -1,0 +1,145 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.time-filter {
+  background: #fff;
+  margin-bottom: 16rpx;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.analytics-container {
+  padding: 24rpx;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+@media (min-width: 750px) {
+  .analytics-container {
+    padding: 24px !important;
+  }
+  .section-title {
+    font-size: 16px !important;
+  }
+  .metric-value {
+    font-size: 24px !important;
+  }
+  .metric-label {
+    font-size: 14px !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .analytics-container {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .metrics-grid {
+    flex: 2;
+    margin-bottom: 0;
+  }
+
+  .chart-section {
+    flex: 1;
+    margin-bottom: 0;
+  }
+}
+
+.metric-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.04);
+}
+
+.metric-label {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.metric-value {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.metric-change {
+  font-size: 22rpx;
+}
+
+.metric-change.positive {
+  color: #00A870;
+}
+
+.chart-section {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 24rpx;
+}
+
+.top-dishes {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.dish-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.dish-rank {
+  width: 40rpx;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #0052D9;
+}
+
+.dish-name {
+  width: 160rpx;
+  font-size: 24rpx;
+  color: #333;
+}
+
+.dish-bar {
+  height: 24rpx;
+  background: linear-gradient(to right, #0052D9, #0041B3);
+  border-radius: 12rpx;
+}
+
+.dish-sales {
+  margin-left: auto;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.tip-section {
+  background: #fff;
+  border-radius: 16rpx;
+  overflow: hidden;
+}

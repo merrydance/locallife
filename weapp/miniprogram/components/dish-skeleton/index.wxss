@@ -1,0 +1,68 @@
+/* 菜品卡片骨架屏样式 */
+.dish-skeleton {
+  display: flex;
+  gap: 24rpx;
+  padding: 24rpx;
+  background: var(--td-bg-color-container);
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.skeleton-image {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  flex-shrink: 0;
+}
+
+.skeleton-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  min-width: 0;
+}
+
+.skeleton-line {
+  height: 28rpx;
+  border-radius: 4rpx;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-title {
+  width: 80%;
+}
+
+.skeleton-price {
+  width: 40%;
+}
+
+.skeleton-tags {
+  width: 60%;
+  height: 20rpx;
+}
+
+.skeleton-button {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  align-self: flex-end;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

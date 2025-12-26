@@ -1,0 +1,61 @@
+<custom-navbar title="购物车" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <!-- 购物车列表 -->
+  <view wx:if="{{items.length > 0}}" class="cart-list">
+    <view class="cart-header">
+      <text class="shop-name">{{items[0].shopName}}</text>
+      <text class="clear-btn" bindtap="onClearAll">清空</text>
+    </view>
+
+    <view wx:for="{{items}}" wx:key="dishId" class="cart-item">
+      <t-image class="item-image" src="{{item.imageUrl}}" mode="aspectFill" />
+      
+      <view class="item-info">
+        <text class="item-name">{{item.dishName}}</text>
+        <text class="item-price">{{item.priceDisplay}}</text>
+      </view>
+
+      <view class="item-actions">
+        <t-button 
+          class="quantity-btn" 
+          size="small" 
+          icon="remove"
+          shape="circle"
+          data-dish-id="{{item.dishId}}"
+          bindtap="onDecrease"
+        />
+        <text class="quantity">{{item.quantity}}</text>
+        <t-button 
+          class="quantity-btn" 
+          size="small" 
+          icon="add"
+          shape="circle"
+          theme="primary"
+          data-dish-id="{{item.dishId}}"
+          bindtap="onIncrease"
+        />
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <t-empty 
+    wx:if="{{items.length === 0}}"
+    icon="cart"
+    description="购物车是空的"
+  >
+    <t-button theme="primary" size="large" bindtap="onBackToTakeout">去逛逛</t-button>
+  </t-empty>
+</view>
+
+<!-- 底部结算栏 -->
+<view wx:if="{{items.length > 0}}" class="checkout-bar">
+  <view class="total-info">
+    <text class="total-label">合计:</text>
+    <text class="total-price">{{totalPriceDisplay}}</text>
+  </view>
+  <t-button class="checkout-btn" theme="primary" size="large" bindtap="onCheckout">
+    去结算({{totalCount}})
+  </t-button>
+</view>

@@ -1,0 +1,65 @@
+<custom-navbar title="优惠券管理" showBack="{{true}}" bind:navheight="onNavHeight">
+  <view slot="right">
+    <t-button size="small" icon="add" bindtap="onAddCoupon">新建</t-button>
+  </view>
+</custom-navbar>
+
+<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+  <view class="tabs-section">
+    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
+      <t-tab-panel label="进行中" value="ACTIVE" />
+      <t-tab-panel label="已停用" value="INACTIVE" />
+      <t-tab-panel label="已过期" value="EXPIRED" />
+    </t-tabs>
+  </view>
+
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading}}" class="coupons-container">
+    <view wx:if="{{coupons.length === 0}}" class="empty">
+      <t-empty description="暂无优惠券" />
+    </view>
+
+    <view wx:else class="coupons-grid">
+      <view wx:for="{{coupons}}" wx:key="id" class="coupon-card">
+        <view class="coupon-header">
+          <text class="coupon-name">{{item.name}}</text>
+          <t-tag size="small" theme="{{item.status === 'ACTIVE' ? 'success' : 'default'}}">
+            {{item.status === 'ACTIVE' ? '进行中' : item.status === 'INACTIVE' ? '已停用' : '已过期'}}
+          </t-tag>
+        </view>
+
+        <view class="coupon-body">
+          <view class="info-row">
+            <text class="label">类型:</text>
+            <text class="value">满¥{{item.threshold / 100}}减¥{{item.discount / 100}}</text>
+          </view>
+          <view class="info-row">
+            <text class="label">有效期:</text>
+            <text class="value">{{item.start_date}} ~ {{item.end_date}}</text>
+          </view>
+          <view class="info-row">
+            <text class="label">已领取:</text>
+            <text class="value">{{item.claimed_count}}/{{item.total_count}}</text>
+          </view>
+          <view class="info-row">
+            <text class="label">已使用:</text>
+            <text class="value">{{item.used_count}}</text>
+          </view>
+        </view>
+
+        <view class="coupon-actions">
+          <t-button size="small" data-id="{{item.id}}" bindtap="onEditCoupon">编辑</t-button>
+          <t-button 
+            size="small" 
+            theme="{{item.status === 'ACTIVE' ? 'default' : 'primary'}}"
+            data-id="{{item.id}}"
+            bindtap="onToggleStatus"
+          >
+            {{item.status === 'ACTIVE' ? '停用' : '启用'}}
+          </t-button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,8 @@
+{
+    "navigationBarTitleText": "确认订单",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-button": "tdesign-miniprogram/button/button"
+    }
+}

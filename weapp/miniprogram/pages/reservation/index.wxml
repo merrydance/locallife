@@ -1,0 +1,159 @@
+<custom-navbar title="预订" location="{{address}}" bind:navheight="onNavHeight" bind:locationchange="onLocationChange" />
+
+<!-- Content with safe area -->
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- Top Bar: Filter + Search -->
+  <view class="top-bar">
+    <t-button 
+      class="filter-btn-new"
+      theme="primary" 
+      variant="outline"
+      icon="control-platform" 
+      size="medium" 
+      aria-label="条件过滤"
+      bind:tap="showFilterPopup"
+    >条件过滤</t-button>
+    <view class="search-box">
+      <t-search 
+        model:value="{{keyword}}"
+        placeholder="搜索包间、餐厅、菜系"
+        bind:change="onSearch"
+        shape="round"
+      />
+    </view>
+  </view>
+
+  <!-- Filter Tabs (Pinned below search) -->
+  <view class="tabs-section">
+    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
+      <t-tab-panel label="预订包间" value="room" />
+      <t-tab-panel label="找餐厅" value="restaurant" />
+    </t-tabs>
+  </view>
+
+  <!-- Listings -->
+  <view class="listings">
+    <!-- Skeleton Loading -->
+    <view wx:if="{{loading && itemList.length === 0}}" class="skeleton-container">
+      <card-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
+    </view>
+
+    <!-- Empty State -->
+    <t-empty 
+      wx:elif="{{itemList.length === 0 && !loading}}"
+      description="暂无符合条件的结果"
+      icon="info-circle-filled"
+    />
+
+    <!-- List Content -->
+    <block wx:else>
+      <view class="list-container">
+        <!-- Room Cards -->
+        <block wx:if="{{activeTab === 'room'}}">
+          <room-card 
+            wx:for="{{itemList}}" 
+            wx:key="id" 
+            room="{{item}}"
+            bind:tap="onItemTap"
+            data-id="{{item.id}}"
+          />
+        </block>
+
+        <!-- Restaurant Cards -->
+        <block wx:if="{{activeTab === 'restaurant'}}">
+          <restaurant-card 
+            wx:for="{{itemList}}" 
+            wx:key="id" 
+            restaurant="{{item}}"
+            bind:tap="onItemTap"
+            data-id="{{item.id}}"
+          />
+        </block>
+      </view>
+      
+      <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
+      <view wx:if="{{!hasMore && itemList.length > 0}}" class="no-more">没有更多了</view>
+    </block>
+  </view>
+</view>
+
+<!-- Filter Popup -->
+<t-popup visible="{{filterVisible}}" placement="left" bind:visible-change="onFilterPopupChange">
+  <view class="filter-drawer" style="padding-top: {{navBarHeight}}px;">
+    <view class="drawer-header">
+      <text class="drawer-title">筛选条件</text>
+      <t-icon name="close" size="40rpx" bind:tap="hideFilterPopup" />
+    </view>
+    
+    <scroll-view scroll-y class="drawer-content">
+      <!-- Date -->
+      <view class="filter-group">
+        <view class="group-title">就餐日期</view>
+        <view class="tags-container">
+          <t-check-tag 
+            wx:for="{{dateOptions}}" 
+            wx:key="value" 
+            checked="{{uiSelectedDate == item.value}}"
+            content="{{item.label}}"
+            bind:change="onDateTagChange"
+            data-value="{{item.value}}"
+            variant="outline"
+          />
+        </view>
+      </view>
+
+      <!-- Time -->
+      <view class="filter-group">
+        <view class="group-title">就餐时段</view>
+        <view class="tags-container">
+          <t-check-tag 
+            wx:for="{{timeOptions}}" 
+            wx:key="value" 
+            checked="{{uiSelectedTimeSlot == item.value}}"
+            content="{{item.label}}"
+            bind:change="onTimeTagChange"
+            data-value="{{item.value}}"
+            variant="outline"
+          />
+        </view>
+      </view>
+
+      <!-- Guest Count -->
+      <view class="filter-group">
+        <view class="group-title">就餐人数</view>
+        <view class="tags-container">
+          <t-check-tag 
+            wx:for="{{guestOptionsShort}}" 
+            wx:key="value" 
+            checked="{{uiGuestCount == item.value}}"
+            content="{{item.label}}"
+            bind:change="onGuestTagChange"
+            data-value="{{item.value}}"
+            variant="outline" 
+          />
+        </view>
+      </view>
+
+      <!-- Price Range -->
+      <view class="filter-group">
+        <view class="group-title">人均价格</view>
+        <view class="tags-container">
+           <t-check-tag 
+            wx:for="{{priceOptions}}" 
+            wx:key="value"
+            checked="{{uiPriceRange === item.value}}"
+            content="{{item.label}}"
+            bind:change="onPriceTagChange"
+            data-value="{{item.value}}"
+            variant="outline"
+           />
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="drawer-footer">
+      <t-button theme="light" block bind:tap="resetFilter">重置</t-button>
+      <t-button theme="primary" block bind:tap="applyFilter">查看结果</t-button>
+    </view>
+  </view>
+</t-popup>

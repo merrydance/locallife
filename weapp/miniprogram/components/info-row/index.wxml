@@ -1,0 +1,13 @@
+<!-- 信息行组件 - 用于展示评分、销量、距离等 -->
+<view class="info-row">
+  <block wx:for="{{items}}" wx:key="index">
+    <text 
+      class="info-item {{item.theme}}" 
+      wx:if="{{item.text}}"
+    >
+      <text wx:if="{{item.icon}}" class="info-icon">{{item.icon}}</text>
+      {{item.text}}
+    </text>
+    <text wx:if="{{index < items.length - 1}}" class="separator">{{separator}}</text>
+  </block>
+</view>

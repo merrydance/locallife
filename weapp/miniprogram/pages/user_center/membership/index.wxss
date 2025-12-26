@@ -1,0 +1,98 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.content {
+  padding: 24rpx;
+}
+
+.member-card {
+  border-radius: 24rpx;
+  padding: 40rpx;
+  color: #fff;
+  margin-bottom: 32rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.15);
+  min-height: 300rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.member-card.level-GOLD {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.level-name {
+  font-size: 40rpx;
+  font-weight: bold;
+}
+
+.exp-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  margin-bottom: 16rpx;
+  opacity: 0.9;
+}
+
+.benefits-section {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 32rpx;
+}
+
+.benefits-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24rpx;
+}
+
+.benefit-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8rpx;
+}
+
+.benefit-icon {
+  width: 88rpx;
+  height: 88rpx;
+  background: #FFF0F1;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.benefit-name {
+  font-size: 26rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.benefit-desc {
+  font-size: 20rpx;
+  color: #999;
+}

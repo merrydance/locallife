@@ -1,0 +1,74 @@
+/* 通用列表项骨架屏样式 */
+.list-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 24rpx 32rpx;
+  background: var(--td-bg-color-container);
+  border-bottom: 1rpx solid var(--td-border-level-2-color);
+}
+
+.skeleton-left {
+  flex-shrink: 0;
+}
+
+.skeleton-avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.skeleton-line {
+  height: 28rpx;
+  border-radius: 4rpx;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-title {
+  width: 70%;
+}
+
+.skeleton-subtitle {
+  width: 50%;
+  height: 24rpx;
+}
+
+.skeleton-desc {
+  width: 40%;
+  height: 20rpx;
+}
+
+.skeleton-right {
+  flex-shrink: 0;
+}
+
+.skeleton-arrow {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 4rpx;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

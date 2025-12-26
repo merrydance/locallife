@@ -1,0 +1,13 @@
+{
+    "navigationBarTitleText": "优惠券",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "list-skeleton": "/components/list-skeleton/index",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

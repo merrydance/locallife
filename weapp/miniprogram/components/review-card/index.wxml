@@ -1,0 +1,32 @@
+<view class="review-card" wx:if="{{review}}">
+  <view class="header">
+    <image class="avatar" src="{{showMerchant ? review.merchant_image : review.user_avatar}}" mode="aspectFill" />
+    <view class="user-info">
+      <text class="name">{{showMerchant ? review.merchant_name : review.user_name}}</text>
+      <text class="date">{{review.created_at}}</text>
+    </view>
+    <t-rate value="{{review.rating}}" size="14" disabled />
+  </view>
+
+  <view class="content">
+    <text>{{review.content}}</text>
+  </view>
+
+  <view class="images" wx:if="{{review.images && review.images.length > 0}}">
+    <image 
+      wx:for="{{review.images}}" 
+      wx:key="*this"
+      src="{{item}}" 
+      class="review-image"
+      mode="aspectFill"
+      bind:tap="onPreviewImage"
+      data-index="{{index}}"
+    />
+  </view>
+
+  <view class="reply" wx:if="{{review.reply}}">
+    <text class="reply-label">商家回复：</text>
+    <text class="reply-content">{{review.reply}}</text>
+    <text class="reply-date">({{review.reply_at}})</text>
+  </view>
+</view>

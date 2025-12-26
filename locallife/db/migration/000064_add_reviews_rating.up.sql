@@ -1,0 +1,5 @@
+-- NO-OP (withdrawn)
+--
+-- This migration was introduced by mistake while debugging a production 500.
+-- The correct fix is to stop referencing a non-existent reviews.rating column
+-- in queries, not to change the schema.

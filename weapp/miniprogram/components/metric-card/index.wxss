@@ -1,0 +1,43 @@
+.metric-card {
+  background: #fff;
+  padding: 32rpx;
+  border-radius: 16rpx;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.05);
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.label {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 16rpx;
+}
+
+.value {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #333;
+  font-family: 'DIN Alternate', sans-serif;
+}
+
+.trend-row {
+  margin-top: 16rpx;
+  display: flex;
+  align-items: center;
+  font-size: 24rpx;
+}
+
+.trend-label {
+  color: #999;
+  margin-right: 8rpx;
+}
+
+.trend-value.up {
+  color: #fa4126;
+}
+
+.trend-value.down {
+  color: #00C777;
+}

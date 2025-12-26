@@ -1,0 +1,55 @@
+<view class="container">
+  <t-tabs value="{{currentTab}}" bind:change="onTabChange" sticky>
+    <t-tab-panel wx:for="{{tabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+  </t-tabs>
+
+  <t-pull-down-refresh
+    value="{{refreshing}}"
+    bind:refresh="onPullDownRefresh"
+  >
+    <view class="content">
+      <block wx:if="{{coupons.length > 0}}">
+        <view 
+            class="coupon-item {{currentTab !== 'available' ? 'disabled' : ''}}" 
+            wx:for="{{coupons}}" 
+            wx:key="id"
+        >
+          <view class="coupon-left">
+            <view class="value-box">
+              <text class="symbol" wx:if="{{item.type === 'amount'}}">¥</text>
+              <text class="value">{{item.type === 'amount' ? item.value / 100 : item.value / 10}}</text>
+              <text class="unit" wx:if="{{item.type === 'discount'}}">折</text>
+            </view>
+            <text class="condition">{{item._formatMinSpend}}</text>
+          </view>
+          
+          <view class="coupon-right">
+            <view class="info">
+              <text class="coupon-title">{{item.title}}</text>
+              <text class="shop-name">{{item.merchant_name}}</text>
+              <text class="expire-date">有效期至 {{item._formatTime}}</text>
+            </view>
+            
+            <t-button 
+                wx:if="{{currentTab === 'available'}}"
+                size="small" 
+                theme="danger"
+                variant="outline"
+                bind:tap="onGoUse"
+            >
+                去使用
+            </t-button>
+             <t-icon wx:if="{{currentTab === 'used'}}" name="check-circle" size="48rpx" color="#ccc" />
+             <t-icon wx:if="{{currentTab === 'expired'}}" name="error-circle" size="48rpx" color="#ccc" />
+          </view>
+        </view>
+        <view class="load-more">
+            <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="加载中..." />
+            <view wx:if="{{!loading && !hasMore}}" class="no-more">没有更多了</view>
+        </view>
+      </block>
+      
+      <t-empty wx:else icon="info-circle-filled" description="暂无优惠券" />
+    </view>
+  </t-pull-down-refresh>
+</view>

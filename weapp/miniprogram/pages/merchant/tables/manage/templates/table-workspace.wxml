@@ -1,0 +1,126 @@
+<!-- 桌台工作区内容模板 (SaaS布局使用) -->
+<view class="lds-workspace-card lds-full-constraint lds-table-grid-main">
+  
+  <!-- LDS Pane A: 视觉全景监控 (Master View) -->
+  <view class="lds-pane lds-pane-monitor">
+    <view class="lds-pane-header">
+      <t-icon name="view-comfortable" size="20px" color="var(--lds-primary)" />
+      <text class="lds-text-md" style="margin-left: 10px;">全景监控与点位资产</text>
+    </view>
+    <view class="lds-pane-content lds-bg-container">
+      <!-- 统计概览层 -->
+      <view class="lds-table-stats lds-p-4 lds-m-b-4">
+        <view class="lds-stat-mini lds-card lds-p-4">
+          <text class="lds-text-xs lds-text-secondary">总规模</text>
+          <text class="lds-text-lg">{{allTables.length}}</text>
+        </view>
+        <view class="lds-stat-mini lds-card lds-p-4">
+          <text class="lds-text-xs lds-text-secondary">就绪</text>
+          <text class="lds-text-lg" style="color: #059669;">{{tableStates.available || 0}}</text>
+        </view>
+      </view>
+      
+      <view class="lds-p-4">
+        <t-tabs value="{{activeTypeTab}}" bind:change="onTypeTabChange" t-class="lds-custom-tabs">
+          <t-tab-panel label="全部" value="all" />
+          <t-tab-panel label="大厅" value="table" />
+          <t-tab-panel label="包厢" value="room" />
+        </t-tabs>
+      </view>
+
+      <!-- 高密度点位网格 -->
+      <scroll-view scroll-y class="lds-table-scroll lds-p-4">
+        <view class="lds-table-grid-layout">
+          <view 
+            wx:for="{{tables}}" 
+            wx:key="id" 
+            class="lds-table-box lds-hoverable lds-card {{selectedTable.id === item.id ? 'lds-selected' : ''}} {{item.status}}"
+            bindtap="onSelectTable"
+            data-item="{{item}}"
+          >
+            <view class="lds-table-header">
+              <text class="lds-text-md">{{item.table_no}}</text>
+              <view class="lds-status-dot {{item.status}}"></view>
+            </view>
+            <view class="lds-table-body">
+              <t-icon name="{{item.table_type === 'room' ? 'house' : 'view-comfortable'}}" size="16px" color="var(--lds-text-muted)" />
+              <text class="lds-text-xs lds-text-secondary">{{item.capacity}}人</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+    <view class="lds-pane-footer lds-p-4">
+      <t-button block theme="primary" size="small" icon="add" bindtap="addTable">引入新资产点位</t-button>
+    </view>
+  </view>
+
+  <!-- LDS Pane B: 详情配置层 (Property Panel) -->
+  <view class="lds-pane lds-pane-config">
+    <view wx:if="{{!selectedTable && !isAdding}}" class="lds-editor-placeholder">
+      <t-icon name="pigeon-hole" size="48px" color="var(--lds-border)" />
+      <view class="lds-text-secondary lds-m-t-4">点选左侧点位进入配置模式</view>
+    </view>
+
+    <view wx:else class="lds-editor-container">
+      <view class="lds-pane-header lds-p-4">
+        <view class="lds-editor-title-box">
+          <text class="lds-text-lg">{{isAdding ? '建立新资产记录' : '配置：' + selectedTable.table_no}}</text>
+        </view>
+        <view class="lds-editor-actions">
+          <t-button variant="outline" theme="danger" size="small" wx:if="{{!isAdding}}" bindtap="onDeleteTable">报废</t-button>
+          <t-button theme="primary" size="small" bindtap="onSaveTable" style="margin-left: 8px;">保存配置</t-button>
+        </view>
+      </view>
+
+      <view class="lds-pane-content lds-p-6">
+        <view class="lds-property-panel">
+          <view class="lds-form-grid">
+            <view class="lds-form-item">
+              <text class="lds-form-label">物理编号</text>
+              <t-input borderless placeholder="例如：A001" value="{{selectedTable.table_no}}" data-field="table_no" bind:change="onFieldChange" />
+            </view>
+
+            <view class="lds-form-row">
+              <view class="lds-form-item flex-1">
+                <text class="lds-form-label">资产类型</text>
+                <t-button block variant="outline" size="small" bindtap="onTypePicker">
+                  {{selectedTable.table_type === 'room' ? '私密包厢' : '标准桌位'}}
+                </t-button>
+              </view>
+              <view class="lds-form-item flex-1 lds-m-l-4">
+                <text class="lds-form-label">承载容量 (人)</text>
+                <t-input borderless type="number" value="{{selectedTable.capacity}}" data-field="capacity" bind:change="onFieldChange" />
+              </view>
+            </view>
+
+            <view class="lds-form-item">
+              <text class="lds-form-label">最低消费基准 (元)</text>
+              <t-input borderless type="digit" value="{{selectedTable.minimum_spend / 100}}" data-field="minimum_spend" bind:change="onPriceFieldChange" />
+            </view>
+
+            <view class="lds-form-item">
+              <text class="lds-form-label">物理方位描述</text>
+              <t-textarea borderless placeholder="例如：二楼靠窗景观位" value="{{selectedTable.description}}" data-field="description" bind:change="onFieldChange" />
+            </view>
+
+            <view class="lds-card lds-p-4 lds-m-t-4" wx:if="{{!isAdding}}">
+              <view class="lds-spec-header lds-m-b-4">
+                <text class="lds-text-sm lds-text-md">专属服务二维码</text>
+                <t-button size="extra-small" variant="text" theme="primary" bindtap="onRefreshQRCode">强制刷新</t-button>
+              </view>
+              <view class="lds-qr-preview-box">
+                <image wx:if="{{selectedTable.qr_code_url}}" src="{{selectedTable.qr_code_url}}" mode="aspectFit" class="lds-qr-img" />
+                <view wx:else class="lds-qr-placeholder">
+                  <t-icon name="qrcode" size="32px" color="var(--lds-border)" />
+                  <text class="lds-text-xs lds-text-muted">待生成...</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+</view>

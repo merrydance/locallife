@@ -1,0 +1,103 @@
+<custom-navbar title="库存管理" showBack="{{true}}" bind:navheight="onNavHeight">
+  <view slot="right" wx:if="{{deviceType === 'pc-full' || deviceType === 'desktop'}}">
+    <t-button size="small" variant="text" icon="refresh" bindtap="fetchInventory" />
+  </view>
+</custom-navbar>
+
+<view class="inventory-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 1. 手机端布局 (Mobile) -->
+  <match-media max-width="749">
+    <view class="mobile-view">
+      <view class="search-bar">
+        <t-search placeholder="搜索原材料/批次" shape="round" bind:change="onSearch" />
+      </view>
+      <t-cell-group theme="card">
+        <t-cell 
+          wx:for="{{inventoryList}}" 
+          wx:key="id"
+          title="{{item.name}}"
+          description="当前库存: {{item.stock}} {{item.unit}}"
+          note="{{item.status === 'danger' ? '严重缺货' : (item.status === 'warning' ? '低库存' : '')}}"
+          note-props="{{ { theme: item.status === 'danger' ? 'danger' : 'warning' } }}"
+          arrow
+          bindtap="onItemTap"
+          data-item="{{item}}"
+        />
+      </t-cell-group>
+    </view>
+  </match-media>
+
+  <!-- 2. 平板以上布局 (Tablet / PC-Window / PC-Full) -->
+  <match-media min-width="750">
+    <view class="desktop-split-view">
+      <!-- 左侧列表栏 -->
+      <view class="list-pane">
+        <view class="pane-header">
+           <text>原材料清单</text>
+           <t-button size="extra-small" theme="primary" variant="outline">导出报表</t-button>
+        </view>
+        <scroll-view scroll-y class="pane-scroll">
+          <view 
+            wx:for="{{inventoryList}}" 
+            wx:key="id" 
+            class="inventory-item-card {{selectedItem.id === item.id ? 'active' : ''}}"
+            bindtap="onItemTap"
+            data-item="{{item}}"
+          >
+            <view class="item-main">
+              <text class="item-name">{{item.name}}</text>
+              <t-tag size="extra-small" variant="light" theme="{{item.status === 'danger' ? 'danger' : (item.status === 'warning' ? 'warning' : 'success')}}">
+                {{item.stock}} {{item.unit}}
+              </t-tag>
+            </view>
+            <text class="item-cat">{{item.category}}</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <!-- 核心工作区 (详情与动态调整) -->
+      <view class="detail-pane">
+        <view wx:if="{{!selectedItem}}" class="empty-detail">
+          <t-icon name="info-circle" size="80rpx" color="#ccc" />
+          <text>请在左侧选择原材料以查看详情</text>
+        </view>
+        <view wx:else class="detail-content">
+          <view class="detail-header">
+            <view>
+              <text class="detail-title">{{selectedItem.name}}</text>
+              <text class="detail-subtitle">隶属分类: {{selectedItem.category}}</text>
+            </view>
+            <t-button theme="primary" icon="edit" size="small">编辑档案</t-button>
+          </view>
+
+          <!-- 数据概览 -->
+          <view class="detail-stats">
+            <view class="stat-box">
+              <text class="label">当前实时库存</text>
+              <text class="value highlight">{{selectedItem.stock}} {{selectedItem.unit}}</text>
+            </view>
+            <view class="stat-box">
+              <text class="label">安全库存阈值</text>
+              <text class="value">{{selectedItem.min_stock}} {{selectedItem.unit}}</text>
+            </view>
+            <view class="stat-box">
+              <text class="label">本月消耗量</text>
+              <text class="value">128.5 {{selectedItem.unit}}</text>
+            </view>
+          </view>
+
+          <!-- 快速入库/盘点 -->
+          <view class="action-card">
+            <text class="card-title">快速库存调整</text>
+            <view class="action-btns">
+               <t-button block theme="primary" variant="outline" data-id="{{selectedItem.id}}" data-delta="10" bindtap="onQuickAdjust">+ 10 单位入库</t-button>
+               <t-button block theme="danger" variant="outline" data-id="{{selectedItem.id}}" data-delta="-1" bindtap="onQuickAdjust">- 1 单位损耗</t-button>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </match-media>
+</view>
+
+<t-fab wx:if="{{deviceType === 'mobile'}}" icon="add" bind:click="onAdd" />

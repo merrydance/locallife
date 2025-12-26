@@ -1,0 +1,14 @@
+{
+    "navigationBarTitleText": "我的收藏",
+    "usingComponents": {
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-rate": "tdesign-miniprogram/rate/rate",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-swipe-cell": "tdesign-miniprogram/swipe-cell/swipe-cell",
+        "t-pull-down-refresh": "tdesign-miniprogram/pull-down-refresh/pull-down-refresh",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

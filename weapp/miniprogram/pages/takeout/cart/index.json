@@ -1,0 +1,9 @@
+{
+    "navigationBarTitleText": "购物车",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty"
+    }
+}

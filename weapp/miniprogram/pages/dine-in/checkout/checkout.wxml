@@ -1,0 +1,156 @@
+<!--堂食结算页面-->
+<view class="checkout-container">
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="loading-container">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">正在加载订单信息...</text>
+  </view>
+
+  <!-- 主要内容 -->
+  <scroll-view wx:else class="checkout-content" scroll-y="true">
+    <!-- 桌台信息 -->
+    <view class="section table-section">
+      <view class="section-header">
+        <text class="section-title">用餐信息</text>
+      </view>
+      <view class="table-info-card">
+        <view class="table-basic-info">
+          <text class="table-number">{{tableInfo.table_number}}号桌</text>
+          <text class="merchant-name">{{tableInfo.merchant_name}}</text>
+        </view>
+        <view class="dining-settings">
+          <view class="setting-item">
+            <text class="setting-label">用餐人数</text>
+            <input 
+              class="setting-input" 
+              type="number" 
+              value="{{diningInfo.guest_count}}"
+              bindinput="onGuestCountInput"
+              placeholder="请输入用餐人数"
+            />
+          </view>
+          <view class="setting-item">
+            <text class="setting-label">特殊要求</text>
+            <input 
+              class="setting-input" 
+              value="{{diningInfo.special_requests}}"
+              bindinput="onSpecialRequestsInput"
+              placeholder="如：不要香菜、少盐等"
+            />
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 订单商品 -->
+    <view class="section items-section">
+      <view class="section-header">
+        <text class="section-title">订单商品</text>
+        <text class="items-count">({{cart.total_quantity}}件)</text>
+      </view>
+      <view class="items-list">
+        <view wx:for="{{cart.items}}" wx:key="dish_id" class="order-item">
+          <image class="item-image" src="{{item.dish_image}}" mode="aspectFill"></image>
+          <view class="item-info">
+            <text class="item-name">{{item.dish_name}}</text>
+            <text class="item-spec">{{item.customizations_text || '标准'}}</text>
+            <view class="item-price-row">
+              <text class="item-price">¥{{item.price}}</text>
+              <text class="item-quantity">×{{item.quantity}}</text>
+            </view>
+          </view>
+          <view class="item-subtotal">
+            <text class="subtotal-amount">¥{{item.subtotal}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 费用明细 -->
+    <view class="section price-section">
+      <view class="section-header">
+        <text class="section-title">费用明细</text>
+      </view>
+      <view class="price-details">
+        <view class="price-item">
+          <text class="price-label">商品小计</text>
+          <text class="price-value">¥{{calculation.subtotal}}</text>
+        </view>
+        <view wx:if="{{calculation.service_fee > 0}}" class="price-item">
+          <text class="price-label">服务费</text>
+          <text class="price-value">¥{{calculation.service_fee}}</text>
+        </view>
+        <view wx:if="{{calculation.discount_amount > 0}}" class="price-item discount">
+          <text class="price-label">优惠减免</text>
+          <text class="price-value">-¥{{calculation.discount_amount}}</text>
+        </view>
+        <view class="price-item total">
+          <text class="price-label">合计</text>
+          <text class="price-value">¥{{calculation.total_amount}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 备注信息 -->
+    <view class="section remark-section">
+      <view class="section-header">
+        <text class="section-title">订单备注</text>
+      </view>
+      <view class="remark-input-wrapper">
+        <textarea 
+          class="remark-input" 
+          placeholder="请输入订单备注（选填）"
+          value="{{remark}}"
+          bindinput="onRemarkInput"
+          maxlength="200"
+        ></textarea>
+        <text class="remark-count">{{remark.length}}/200</text>
+      </view>
+    </view>
+
+    <!-- 支付方式 -->
+    <view class="section payment-section">
+      <view class="section-header">
+        <text class="section-title">支付方式</text>
+      </view>
+      <view class="payment-methods">
+        <view 
+          wx:for="{{paymentMethods}}" 
+          wx:key="id"
+          class="payment-method {{selectedPaymentMethod === item.id ? 'selected' : ''}} {{!item.enabled ? 'disabled' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="selectPaymentMethod"
+        >
+          <view class="method-info">
+            <text class="method-icon">{{item.icon}}</text>
+            <text class="method-name">{{item.name}}</text>
+          </view>
+          <view class="method-radio">
+            <view class="radio-dot {{selectedPaymentMethod === item.id ? 'checked' : ''}}"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部占位 -->
+    <view class="bottom-placeholder"></view>
+  </scroll-view>
+
+  <!-- 底部操作栏 -->
+  <view class="bottom-bar">
+    <view class="total-info">
+      <text class="total-label">合计：</text>
+      <text class="total-amount">¥{{calculation.total_amount}}</text>
+    </view>
+    <view class="action-buttons">
+      <button class="back-btn" bindtap="backToMenu">返回菜单</button>
+      <button 
+        class="submit-btn {{submitting ? 'loading' : ''}}" 
+        bindtap="submitOrder"
+        disabled="{{submitting}}"
+      >
+        {{submitting ? '提交中...' : '确认下单'}}
+      </button>
+    </view>
+  </view>
+</view>

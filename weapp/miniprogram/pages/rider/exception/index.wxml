@@ -1,0 +1,55 @@
+<view class="container">
+  <view class="header">
+    <text class="title">异常上报记录</text>
+    <t-button size="small" theme="primary" icon="add" bind:tap="onAdd">上报异常</t-button>
+  </view>
+
+  <view class="list" wx:if="{{exceptions.length > 0}}">
+    <view class="card" wx:for="{{exceptions}}" wx:key="id">
+        <view class="card-header">
+            <text class="type">{{item.exception_type}}</text>
+            <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'success' : 'danger')}}" size="small">{{item.status}}</t-tag>
+        </view>
+        <view class="desc">订单ID: {{item.order_id}}</view>
+        <view class="desc">{{item.description}}</view>
+        <view class="time">{{item.created_at}}</view>
+    </view>
+  </view>
+  
+  <t-empty wx:elif="{{!loading}}" icon="info-circle-filled" description="暂无异常记录" />
+
+  <t-dialog
+    visible="{{showDialog}}"
+    title="上报异常"
+    confirm-btn="提交"
+    cancel-btn="取消"
+    bind:confirm="onConfirm"
+    bind:cancel="onCancel"
+  >
+    <view class="form" slot="content">
+        <picker range="{{orders}}" range-key="order_no" bindchange="onOrderChange">
+            <t-input label="关联订单" placeholder="请选择订单" value="{{selectedOrderIndex > -1 ? orders[selectedOrderIndex].order_no : ''}}" disabled />
+        </picker>
+        
+        <view class="form-item">
+            <text class="label">异常类型</text>
+            <t-radio-group value="{{formData.exception_type}}" bind:change="onTypeChange">
+                <t-radio value="bad_weather" label="恶劣天气" />
+                <t-radio value="accident" label="交通事故" />
+                <t-radio value="merchant_delay" label="商家出餐慢" />
+                <t-radio value="other" label="其他" />
+            </t-radio-group>
+        </view>
+
+        <t-textarea label="异常描述" placeholder="请详细描述情况" value="{{formData.description}}" bind:change="onDescChange" />
+        
+        <t-upload
+            mediaType="{{['image']}}"
+            max="{{3}}"
+            files="{{[]}}"
+            bind:add="onImageAdd"
+            bind:remove="onImageRemove"
+        />
+    </view>
+  </t-dialog>
+</view>

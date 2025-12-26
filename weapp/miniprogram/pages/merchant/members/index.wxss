@@ -1,0 +1,114 @@
+/**
+ * 会员管理页面样式
+ * 遵循 LDS 工作站规范
+ */
+
+@import '/styles/lds.wxss';
+
+/* 会员管理三栏布局 */
+.lds-member-grid {
+  display: grid;
+  grid-template-columns: 200px 280px 1fr;
+  gap: 0;
+  height: calc(100vh - 40px);
+}
+
+/* 统计卡片 */
+.lds-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.lds-stat-card .lds-text-xl {
+  font-size: 48rpx;
+  font-weight: 600;
+  color: var(--lds-text);
+}
+
+.lds-stat-card .lds-text-lg {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: var(--lds-text);
+}
+
+/* 会员卡片 */
+.lds-member-card {
+  padding: 24rpx;
+  border-bottom: 1px solid var(--lds-border);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.lds-member-card.lds-selected {
+  background-color: var(--lds-bg-hover);
+  border-left: 3px solid var(--lds-primary);
+}
+
+.lds-member-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.lds-member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lds-member-meta {
+  display: flex;
+  align-items: center;
+}
+
+/* 分页 */
+.lds-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+/* 详情网格 */
+.lds-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24rpx;
+}
+
+.lds-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+/* 标签组 */
+.lds-tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+/* 菜品列表 */
+.lds-dish-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.lds-dish-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12rpx 16rpx;
+  background-color: var(--lds-bg);
+  border-radius: 8rpx;
+}
+
+/* 响应式调整 */
+@media (min-width: 1600px) {
+  .lds-member-grid {
+    grid-template-columns: 240px 320px 1fr;
+  }
+}

@@ -1,0 +1,2 @@
+-- 恢复打包费字段
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS packing_fee BIGINT NOT NULL DEFAULT 0;

@@ -1,0 +1,124 @@
+.restaurant-card {
+  display: flex;
+  gap: 24rpx;
+  padding: 24rpx;
+  background: var(--td-bg-color-container);
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease;
+}
+
+.restaurant-card:active {
+  transform: scale(0.98);
+  box-shadow: var(--shadow-sm);
+}
+
+.restaurant-image {
+  width: 240rpx;
+  height: 200rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.restaurant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.restaurant-name {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--td-text-color-primary);  /* #333 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rating {
+  font-size: 24rpx;
+  color: var(--brand-mustard);  /* #FFC107 */
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.row-2 {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);  /* #666 */
+}
+
+.cuisine {
+  color: var(--td-text-color-secondary);
+}
+
+.avg-price {
+  font-weight: bold;
+  color: var(--brand-coral);  /* #FF6B58 */
+}
+
+.separator {
+  color: var(--td-text-color-placeholder);  /* #999 */
+  margin: 0 4rpx;
+}
+
+.distance {
+  font-size: 24rpx;
+}
+
+.row-3 {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: wrap;
+  font-size: 22rpx;
+}
+
+.rooms {
+  color: var(--brand-teal);  /* #00897B */
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+@media (min-width: 750px) {
+  .restaurant-card {
+    gap: 16px !important;
+    padding: 16px !important;
+    border-radius: 12px !important;
+    margin-bottom: 0 !important;
+  }
+  .restaurant-image {
+    width: 120px !important;
+    height: 100px !important;
+    border-radius: 8px !important;
+  }
+  .restaurant-name {
+    font-size: 16px !important;
+  }
+  .rating {
+    font-size: 13px !important;
+  }
+  .row-2 {
+    font-size: 13px !important;
+    gap: 8px !important;
+  }
+  .distance {
+    font-size: 12px !important;
+  }
+  .row-3, .rooms {
+    font-size: 12px !important;
+  }
+}

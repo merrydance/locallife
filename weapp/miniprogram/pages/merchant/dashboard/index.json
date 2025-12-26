@@ -1,0 +1,27 @@
+{
+    "navigationBarTitleText": "商家工作台",
+    "navigationStyle": "custom",
+    "usingComponents": {
+        "custom-navbar": "../../../components/custom-navbar/index",
+        "merchant-sidebar": "../../../components/merchant-sidebar/index",
+        "merchant-header": "../../../components/merchant-header/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+        "t-grid": "tdesign-miniprogram/grid/grid",
+        "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
+        "t-badge": "tdesign-miniprogram/badge/badge",
+        "t-switch": "tdesign-miniprogram/switch/switch",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+        "t-fab": "tdesign-miniprogram/fab/fab",
+        "t-swipe-cell": "tdesign-miniprogram/swipe-cell/swipe-cell",
+        "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
+        "ll-stats-card": "../../../components/ll-stats-card/index"
+    }
+}

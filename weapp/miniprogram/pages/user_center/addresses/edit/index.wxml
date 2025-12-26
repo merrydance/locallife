@@ -1,0 +1,68 @@
+<view class="page-container">
+  <view class="form-group">
+    <t-input
+      label="联系人"
+      placeholder="请填写收货人姓名"
+      value="{{name}}"
+      bind:change="onNameChange"
+    />
+    
+    <view class="gender-group">
+      <t-radio-group value="{{gender}}" bind:change="onGenderChange" borderless>
+        <t-radio value="{{1}}" label="先生" />
+        <t-radio value="{{0}}" label="女士" />
+      </t-radio-group>
+    </view>
+
+    <t-input
+      label="手机号"
+      placeholder="请填写收货人手机号"
+      type="number"
+      value="{{mobile}}"
+      bind:change="onMobileChange"
+    />
+
+    <t-cell
+      title="收货地址"
+      note="{{address || '点击选择'}}"
+      arrow
+      bind:click="onChooseLocation"
+    />
+
+    <t-textarea
+      label="门牌号"
+      placeholder="例：5号楼501室"
+      value="{{complete_address}}"
+      bind:change="onDetailChange"
+      disableDefaultPadding="{{true}}"
+    />
+  </view>
+
+  <view class="form-group">
+    <t-cell title="标签">
+      <t-radio-group value="{{tag}}" bind:change="onTagChange" borderless slot="note" style="display: flex;">
+        <t-radio value="home" label="家" />
+        <t-radio value="company" label="公司" />
+        <t-radio value="school" label="学校" />
+      </t-radio-group>
+    </t-cell>
+
+    <t-cell title="设为默认地址">
+      <t-switch value="{{is_default}}" bind:change="onDefaultChange" slot="note" />
+    </t-cell>
+  </view>
+
+  <view class="button-group">
+    <t-button theme="primary" size="large" block bind:tap="onSave" loading="{{saving}}">保存地址</t-button>
+    <t-button 
+      wx:if="{{addressId}}" 
+      theme="danger" 
+      variant="text" 
+      size="large" 
+      block 
+      bind:tap="onDelete"
+      class="delete-btn"
+    >删除地址</t-button>
+  </view>
+</view>
+

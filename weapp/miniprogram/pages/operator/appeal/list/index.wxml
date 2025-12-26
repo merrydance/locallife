@@ -1,0 +1,22 @@
+<view class="container">
+  <t-tabs value="{{status}}" bind:change="onTabChange">
+    <t-tab-panel label="待处理" value="pending" />
+    <t-tab-panel label="已处理" value="processed" />
+  </t-tabs>
+
+  <view class="list" wx:if="{{appeals.length > 0}}">
+    <view class="card" wx:for="{{appeals}}" wx:key="id" bind:tap="onDetail" data-id="{{item.id}}">
+        <view class="card-header">
+            <text class="type">{{item.appeal_type}}</text>
+            <text class="time">{{item.created_at}}</text>
+        </view>
+        <view class="content">{{item.content}}</view>
+        <view class="footer">
+            <text class="user">用户ID: {{item.user_id}}</text>
+            <t-tag theme="{{item.status === 'pending' ? 'warning' : 'success'}}" size="small">{{item.status === 'pending' ? '待处理' : '已完成'}}</t-tag>
+        </view>
+    </view>
+  </view>
+  
+  <t-empty wx:elif="{{!loading}}" icon="info-circle-filled" description="暂无申诉" />
+</view>

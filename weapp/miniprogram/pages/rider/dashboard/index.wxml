@@ -1,0 +1,31 @@
+<view class="container {{isOnline ? 'online-bg' : 'offline-bg'}} responsive-container">
+  <!-- Top Status Bar -->
+  <view class="status-header">
+    <view class="status-text">
+      <text class="label">当前状态</text>
+      <text class="value">{{isOnline ? '接单中' : '休息中'}}</text>
+    </view>
+    <switch checked="{{isOnline}}" bindchange="onToggleOnline" color="#00C777" style="transform: scale(1.2);"/>
+  </view>
+
+  <!-- Offline State -->
+  <view class="offline-placeholder" wx:if="{{!isOnline}}">
+    <image class="placeholder-icon" src="https://tdesign.gtimg.com/mobile/demos/example1.png" mode="aspectFit" />
+    <text class="placeholder-text">上线后开始接单</text>
+  </view>
+
+  <!-- Online & No Task -->
+  <view class="waiting-state" wx:if="{{isOnline && !hasActiveTask}}">
+    <view class="radar-scan"></view>
+    <text class="waiting-text">正在为您寻找附近的订单...</text>
+  </view>
+
+  <!-- Active Task Card -->
+  <view class="task-container" wx:if="{{isOnline && hasActiveTask}}">
+    <map-view task="{{currentTask}}" />
+    <delivery-card 
+      task="{{currentTask}}" 
+      bind:action="onTaskAction"
+    />
+  </view>
+</view>

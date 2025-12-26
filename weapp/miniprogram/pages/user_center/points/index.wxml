@@ -1,0 +1,36 @@
+<custom-navbar title="我的积分" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 积分概览 -->
+  <view class="header-section">
+    <view class="points-display">
+      <text class="points-value">{{points}}</text>
+      <text class="points-label">当前积分</text>
+    </view>
+    <t-button theme="primary" size="small" bindtap="onExchange">积分兑换</t-button>
+  </view>
+
+  <!-- 积分明细 -->
+  <view class="history-section">
+    <view class="section-title">积分明细</view>
+    <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+    
+    <view wx:if="{{!loading}}" class="history-list">
+      <view wx:if="{{history.length === 0}}" class="empty">
+        <t-empty description="暂无积分记录" />
+      </view>
+      
+      <view wx:else>
+        <view wx:for="{{history}}" wx:key="id" class="history-item">
+          <view class="item-left">
+            <text class="item-desc">{{item.description}}</text>
+            <text class="item-time">{{item.created_at}}</text>
+          </view>
+          <text class="item-amount {{item.amount > 0 ? 'positive' : 'negative'}}">
+            {{item.amount > 0 ? '+' : ''}}{{item.amount}}
+          </text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

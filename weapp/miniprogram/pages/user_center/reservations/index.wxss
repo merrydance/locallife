@@ -1,0 +1,189 @@
+.page {
+  min-height: 100vh;
+  padding: 0 0 64rpx;
+  background: #f5f6fb;
+}
+
+/* 状态筛选Tab */
+.status-tabs {
+  display: flex;
+  white-space: nowrap;
+  padding: 24rpx 0;
+  margin-bottom: 8rpx;
+}
+
+.tab-item {
+  display: inline-block;
+  padding: 16rpx 32rpx;
+  margin-right: 16rpx;
+  font-size: 28rpx;
+  color: #57618c;
+  background: #fff;
+  border-radius: 999rpx;
+  box-shadow: 0 4rpx 12rpx rgba(29, 39, 71, 0.06);
+}
+
+.tab-item.active {
+  color: #fff;
+  background: linear-gradient(120deg, #1f7aec, #5b9dff);
+  font-weight: 600;
+}
+
+/* 卡片 */
+.card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(29, 39, 71, 0.08);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx dashed #edf0fb;
+}
+
+.table-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1d2750;
+}
+
+.datetime {
+  font-size: 26rpx;
+  color: #57618c;
+  margin-top: 8rpx;
+}
+
+.status {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.status.pending {
+  color: #865900;
+  background: #fff6d9;
+}
+
+.status.paid,
+.status.confirmed {
+  color: #0b5fff;
+  background: #e1ebff;
+}
+
+.status.completed {
+  color: #1d7a32;
+  background: #dff7e6;
+}
+
+.status.cancelled,
+.status.no_show {
+  color: #999;
+  background: #f0f0f0;
+}
+
+/* 卡片内容 */
+.card-body {
+  margin-bottom: 20rpx;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8rpx 0;
+  font-size: 26rpx;
+}
+
+.label {
+  color: #9aa4c2;
+}
+
+.value {
+  color: #1d2750;
+}
+
+/* 卡片底部 */
+.card-footer {
+  display: flex;
+  gap: 16rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx dashed #edf0fb;
+}
+
+button {
+  flex: 1;
+  height: 80rpx;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: normal;
+}
+
+button::after {
+  border: none;
+}
+
+.ghost {
+  background: #f0f2fb;
+  color: #1d2750;
+}
+
+.ghost.danger {
+  color: #e34d59;
+}
+
+.reservation-list {
+  padding: 0 32rpx;
+}
+
+/* 空状态 */
+.empty {
+  padding-top: 200rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+}
+
+/* 加载 */
+.loading-footer {
+  display: flex;
+  justify-content: center;
+  padding: 24rpx 0;
+}
+
+.no-more {
+  text-align: center;
+  color: #999;
+  font-size: 24rpx;
+}
+
+/* 骨架屏 */
+.skeleton-container {
+  padding-top: 24rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+}
+
+.card.skeleton {
+  background: #fff;
+}
+
+.skeleton-line {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+  border-radius: 8rpx;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

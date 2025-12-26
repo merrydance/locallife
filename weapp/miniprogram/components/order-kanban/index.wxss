@@ -1,0 +1,87 @@
+.kanban-list {
+  height: 100%;
+}
+
+.order-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  border: 1rpx solid #f0f0f0;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #f9f9f9;
+}
+
+.order-no {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.status-tag {
+  font-size: 24rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  font-weight: 600;
+}
+
+.status-tag.yellow { background: #FFF7E6; color: #FF9C19; }
+.status-tag.green { background: #E6FFFB; color: #00C777; }
+.status-tag.blue { background: #E6F7FF; color: #0052D9; }
+.status-tag.gray { background: #F5F5F5; color: #999; }
+
+.card-body {
+  margin-bottom: 24rpx;
+}
+
+.order-items {
+  display: flex;
+  flex-direction: column;
+  font-size: 28rpx;
+  color: #666;
+  margin-bottom: 16rpx;
+}
+
+.order-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.price {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+button {
+  margin: 0;
+  font-size: 28rpx;
+  padding: 0 32rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  border-radius: 32rpx;
+}
+
+.btn-primary {
+  background: #0052D9;
+  color: #fff;
+}
+
+.btn-success {
+  background: #00C777;
+  color: #fff;
+}

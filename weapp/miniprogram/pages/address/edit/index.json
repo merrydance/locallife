@@ -1,0 +1,10 @@
+{
+    "navigationBarTitleText": "编辑地址",
+    "usingComponents": {
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-switch": "tdesign-miniprogram/switch/switch"
+    }
+}

@@ -1,0 +1,172 @@
+/* 菜品卡片 - 遵循60-30-10配色法则 */
+
+/* 60% - 背景与留白 */
+.dish-card {
+  display: flex;
+  gap: 24rpx;
+  padding: 24rpx;
+  background: var(--td-bg-color-container);  /* 纯白卡片 */
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease;
+}
+
+.dish-card:active {
+  transform: scale(0.98);
+  box-shadow: var(--shadow-sm);
+}
+
+.dish-image {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.dish-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+
+/* 文字层级 - 炭黑主标题 */
+.shop-dish-name {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--td-text-color-primary);  /* #333 炭黑 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-2 {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+}
+
+/* 30% - 品牌主色用于价格 */
+.price {
+  font-weight: bold;
+  color: var(--brand-coral);  /* #FF6B58 活力珊瑚 */
+}
+
+.separator {
+  color: var(--td-text-color-placeholder);  /* #999 */
+  margin: 0 4rpx;
+}
+
+.sales {
+  color: var(--td-text-color-secondary);  /* #666 */
+  font-size: 24rpx;
+}
+
+/* 距离和配送时间行 */
+.row-3 {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  font-size: 22rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.distance, .delivery-time {
+  color: #666;
+  font-size: 22rpx;
+}
+
+/* 代取费和满返行 */
+.row-4 {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-wrap: wrap;
+  font-size: 22rpx;
+}
+
+/* 代取费信息 */
+.delivery-fee {
+  font-size: 22rpx;
+  color: #666;
+  padding: 2rpx 10rpx;
+  background: #f5f5f5;
+  border-radius: 4rpx;
+}
+
+/* 满返信息 */
+.discount {
+  font-size: 22rpx;
+  color: #ff6b58;
+  padding: 2rpx 10rpx;
+  background: #fff5f4;
+  border-radius: 4rpx;
+}
+
+/* 标签行 */
+.row-5 {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: wrap;
+  margin-top: 4rpx;
+}
+
+.add-btn {
+  align-self: flex-end;
+  transition: transform 0.2s ease;
+}
+
+.add-btn:active {
+  transform: scale(0.9);
+  animation: pulse 0.3s ease;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (min-width: 750px) {
+  .dish-card {
+    gap: 16px !important;
+    padding: 16px !important;
+    border-radius: 12px !important;
+    margin-bottom: 0 !important;
+  }
+  .dish-image {
+    width: 100px !important;
+    height: 100px !important;
+    border-radius: 8px !important;
+  }
+  .shop-dish-name {
+    font-size: 16px !important;
+  }
+  .price {
+    font-size: 18px !important;
+  }
+  .row-2, .sales, .row-3, .distance, .delivery-time, .row-4, .delivery-fee, .discount {
+    font-size: 13px !important;
+  }
+  .add-btn {
+    transform: scale(1.1);
+  }
+}

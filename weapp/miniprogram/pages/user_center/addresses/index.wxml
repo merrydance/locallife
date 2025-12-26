@@ -1,0 +1,66 @@
+<custom-navbar title="地址管理" showBack="{{true}}" bind:navheight="onNavHeight">
+  <view slot="right">
+    <t-button size="small" icon="add" bindtap="onAddAddress">新增</t-button>
+  </view>
+</custom-navbar>
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 骨架屏 -->
+  <view wx:if="{{loading && addresses.length === 0}}" class="skeleton-container">
+    <list-skeleton wx:for="{{[1,2,3,4]}}" wx:key="*this" show-avatar="{{false}}" />
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:elif="{{addresses.length === 0}}" class="empty">
+    <t-empty description="暂无地址" />
+  </view>
+
+  <!-- 地址列表 -->
+  <view wx:else class="addresses-container">
+    <view class="addresses-list">
+      <view 
+        wx:for="{{addresses}}" 
+        wx:key="id" 
+        class="address-card"
+        bindtap="onSelectAddress"
+        data-id="{{item.id}}"
+      >
+        <view class="address-header">
+          <view class="contact-info">
+            <text class="name">{{item.name}}</text>
+            <text class="phone">{{item.phone}}</text>
+          </view>
+          <t-tag wx:if="{{item.is_default}}" size="small" theme="primary">默认</t-tag>
+        </view>
+
+        <text class="address-text">{{item.address}} {{item.building}} {{item.room}}</text>
+
+        <view class="address-actions" catchtap="onStopPropagation">
+          <t-button 
+            wx:if="{{!item.is_default}}"
+            size="small" 
+            data-id="{{item.id}}"
+            bindtap="onSetDefault"
+          >
+            设为默认
+          </t-button>
+          <t-button 
+            size="small" 
+            data-id="{{item.id}}"
+            bindtap="onEditAddress"
+          >
+            编辑
+          </t-button>
+          <t-button 
+            size="small" 
+            theme="danger"
+            data-id="{{item.id}}"
+            bindtap="onDeleteAddress"
+          >
+            删除
+          </t-button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,92 @@
+<custom-navbar title="我的" showLocation="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view class="responsive-container">
+    <!-- User Profile Card -->
+    <view class="profile-section">
+      <view class="user-card">
+        <button class="avatar-wrapper" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
+          <auth-image wx:if="{{userInfo.avatarUrl}}" class="avatar" src="{{userInfo.avatarUrl}}" mode="aspectFill" />
+          <t-icon wx:else name="user" size="48rpx" color="#999" />
+        </button>
+        <view class="info-wrapper">
+          <input type="nickname" class="nickname-input" placeholder="请输入昵称" value="{{userInfo.nickName}}" bind:change="onNicknameChange" bind:blur="onNicknameChange" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 网格化内容区域 -->
+    <view class="user-grid-layout">
+      <!-- Workbenches (for registered roles) -->
+      <view class="section workbench-section" wx:if="{{workbenches.length > 0}}">
+        <view class="section-title">工作台</view>
+        <t-grid column="{{isLargeScreen ? 3 : 2}}" border="{{false}}">
+          <t-grid-item 
+            wx:for="{{workbenches}}" 
+            wx:key="id"
+            text="{{item.name}}"
+            icon="{{item.icon}}"
+            bind:click="onWorkbenchTap"
+            data-path="{{item.path}}"
+          />
+        </t-grid>
+      </view>
+
+      <!-- Common Functions (Grid on Large Screen) -->
+      <view class="section functions-section">
+        <view class="section-title">常用功能</view>
+        
+        <!-- Mobile: List -->
+        <match-media max-width="749">
+          <t-cell-group theme="card">
+            <t-cell title="我的订单" arrow hover bind:click="onMyOrders" />
+            <t-cell title="我的预订" arrow hover bind:click="onMyReservations" />
+            <t-cell title="地址管理" arrow hover bind:click="onAddresses" />
+            <t-cell title="积分中心" arrow hover bind:click="onPoints" />
+            <t-cell title="优惠券" arrow hover bind:click="onCoupons" />
+            <t-cell title="收藏夹" arrow hover bind:click="onFavorites" />
+            <t-cell title="会员中心" arrow hover bind:click="onMembership" />
+            <t-cell title="我的评价" arrow hover bind:click="onMyReviews" />
+            <t-cell title="钱包" arrow hover bind:click="onWallet" />
+            <t-cell title="信用分" arrow hover bind:click="onCredit" />
+            <t-cell title="联系客服" arrow hover bind:click="onContact" />
+          </t-cell-group>
+        </match-media>
+
+        <!-- Tablet/PC: Grid -->
+        <match-media min-width="750">
+          <t-grid column="4" border="{{false}}" theme="card">
+            <t-grid-item text="我的订单" icon="file-paste" bindtap="onMyOrders" />
+            <t-grid-item text="我的预订" icon="calendar" bindtap="onMyReservations" />
+            <t-grid-item text="地址管理" icon="location" bindtap="onAddresses" />
+            <t-grid-item text="积分中心" icon="component-steps" bindtap="onPoints" />
+            <t-grid-item text="优惠券" icon="coupon" bindtap="onCoupons" />
+            <t-grid-item text="收藏夹" icon="heart" bindtap="onFavorites" />
+            <t-grid-item text="会员中心" icon="user-vip" bindtap="onMembership" />
+            <t-grid-item text="我的评价" icon="chat" bindtap="onMyReviews" />
+            <t-grid-item text="钱包" icon="wallet" bindtap="onWallet" />
+            <t-grid-item text="信用分" icon="secured" bindtap="onCredit" />
+            <t-grid-item text="联系客服" icon="service" bindtap="onContact" />
+          </t-grid>
+        </match-media>
+      </view>
+    </view>
+
+    <!-- Registration Options -->
+    <view class="section registration-section">
+      <view class="section-title">入驻申请</view>
+      <t-cell-group theme="card">
+        <t-cell 
+          wx:for="{{registrationOptions}}" 
+          wx:key="id"
+          title="{{item.name}}"
+          description="{{item.desc}}"
+          arrow
+          hover
+          bind:click="onRegisterTap"
+          data-id="{{item.id}}"
+        />
+      </t-cell-group>
+    </view>
+  </view>
+</view>

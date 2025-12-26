@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_profit_sharing_orders_merchant_status_created;
+DROP INDEX IF EXISTS idx_profit_sharing_orders_merchant_created;

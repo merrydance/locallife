@@ -1,0 +1,70 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.addresses-container {
+  padding: 24rpx;
+}
+
+.empty {
+  padding: 100rpx 0;
+}
+
+.addresses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.address-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.04);
+}
+
+.address-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.contact-info {
+  display: flex;
+  gap: 24rpx;
+}
+
+.name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.phone {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.address-text {
+  font-size: 24rpx;
+  color: #666;
+  display: block;
+  margin-bottom: 16rpx;
+  line-height: 1.6;
+}
+
+.address-actions {
+  display: flex;
+  gap: 16rpx;
+  justify-content: flex-end;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F0F0F0;
+}

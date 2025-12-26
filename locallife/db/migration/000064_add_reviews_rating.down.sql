@@ -1,0 +1,2 @@
+-- NO-OP (withdrawn)
+-- See corresponding .up.sql for rationale.

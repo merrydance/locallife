@@ -1,0 +1,31 @@
+<!-- 商户 PC 端顶部工具栏 -->
+<view class="header" style="left: {{sidebarWidth}}px;">
+  <!-- 左侧：店铺信息 -->
+  <view class="header-left">
+    <text class="merchant-name">{{merchantName}}</text>
+    <view class="status-badge {{isOpen ? 'open' : 'closed'}}" bindtap="onToggleStatus">
+      <view class="status-dot"></view>
+      <text class="status-text">{{isOpen ? '营业中' : '休息中'}}</text>
+      <image class="status-arrow" src="/assets/icons/arrow-down.png" mode="aspectFit" />
+    </view>
+  </view>
+
+  <!-- 右侧：通知和用户 -->
+  <view class="header-right">
+    <!-- 今日日期 -->
+    <text class="today-date">{{todayDate}}</text>
+
+    <!-- 通知铃铛 -->
+    <view class="notification-btn" bindtap="onNotificationTap">
+      <image class="bell-icon" src="/assets/icons/bell.png" mode="aspectFit" />
+      <view wx:if="{{unreadCount > 0}}" class="notification-badge">{{unreadCount > 99 ? '99+' : unreadCount}}</view>
+    </view>
+
+    <!-- 用户头像和菜单 -->
+    <view class="user-menu" bindtap="onUserMenuTap">
+      <image class="user-avatar" src="{{avatarUrl || '/assets/icons/default-avatar.png'}}" mode="aspectFill" />
+      <text class="user-name">{{ownerName}}</text>
+      <image class="menu-arrow" src="/assets/icons/arrow-down.png" mode="aspectFit" />
+    </view>
+  </view>
+</view>

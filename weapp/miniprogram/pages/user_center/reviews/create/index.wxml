@@ -1,0 +1,80 @@
+<custom-navbar title="发表评价" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page" style="padding-top: {{navBarHeight}}px;">
+  <!-- 商家信息 -->
+  <view class="merchant-card" wx:if="{{merchantName}}">
+    <text class="merchant-name">{{merchantName}}</text>
+  </view>
+
+  <!-- 评分选择 -->
+  <view class="rating-section">
+    <view class="section-title">整体评分</view>
+    <view class="rating-options">
+      <view 
+        wx:for="{{ratingOptions}}" 
+        wx:key="value"
+        class="rating-item {{rating === item.value ? 'active' : ''}}"
+        data-rating="{{item.value}}"
+        bindtap="onRatingChange"
+      >
+        <text class="rating-icon">{{item.icon}}</text>
+        <text class="rating-label">{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 评价内容 -->
+  <view class="content-section">
+    <view class="section-title">评价内容</view>
+    <textarea 
+      class="content-input"
+      placeholder="分享您的用餐体验，帮助其他用户做出选择（至少10个字）"
+      maxlength="{{maxContentLength}}"
+      value="{{content}}"
+      bindinput="onContentInput"
+    />
+    <view class="content-count">{{content.length}}/{{maxContentLength}}</view>
+  </view>
+
+  <!-- 图片上传 -->
+  <view class="images-section">
+    <view class="section-title">添加图片（可选）</view>
+    <view class="images-grid">
+      <view 
+        wx:for="{{images}}" 
+        wx:key="*this" 
+        class="image-item"
+      >
+        <image 
+          src="{{item}}" 
+          mode="aspectFill" 
+          data-url="{{item}}"
+          bindtap="onPreviewImage"
+        />
+        <view class="remove-btn" data-index="{{index}}" bindtap="onRemoveImage">
+          <t-icon name="close" size="24rpx" color="#fff" />
+        </view>
+      </view>
+      <view 
+        wx:if="{{images.length < maxImages}}" 
+        class="add-image"
+        bindtap="onChooseImage"
+      >
+        <t-icon name="add" size="48rpx" color="#9aa4c2" />
+        <text>添加图片</text>
+      </view>
+    </view>
+    <view class="images-tip">最多上传{{maxImages}}张图片</view>
+  </view>
+
+  <!-- 提交按钮 -->
+  <view class="submit-section">
+    <t-button 
+      theme="primary" 
+      block 
+      loading="{{submitting}}"
+      disabled="{{submitting || content.length < 10}}"
+      bindtap="onSubmit"
+    >提交评价</t-button>
+  </view>
+</view>

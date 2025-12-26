@@ -1,0 +1,85 @@
+<view class="page">
+  <view class="section">
+    <view class="section-title">基础配送配置</view>
+    <t-input label="基础配送费" placeholder="请输入金额" suffix="元" type="digit" value="{{baseFeeInput}}" data-field="baseFeeInput" bind:change="onInputChange" />
+    <t-input label="基础距离" placeholder="请输入距离" suffix="米" type="number" value="{{baseDistanceInput}}" data-field="baseDistanceInput" bind:change="onInputChange" />
+    <t-input label="超距加价" placeholder="请输入金额" suffix="元/km" type="digit" value="{{extraFeeInput}}" data-field="extraFeeInput" bind:change="onInputChange" />
+    <t-input label="起送金额" placeholder="请输入金额" suffix="元" type="digit" value="{{minOrderInput}}" data-field="minOrderInput" bind:change="onInputChange" />
+    <t-input label="最大配送范围" placeholder="请输入距离" suffix="米" type="number" value="{{maxDistanceInput}}" data-field="maxDistanceInput" bind:change="onInputChange" />
+    
+    <view class="btn-wrapper">
+        <t-button theme="primary" block bind:tap="onSaveFeeConfig">保存基础配置</t-button>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-header">
+        <view class="section-title">特殊/峰时配置</view>
+        <t-button size="small" variant="outline" bind:tap="onAddPeak">添加</t-button>
+    </view>
+    
+    <view class="peak-list">
+        <block wx:for="{{peakConfigs}}" wx:key="id">
+            <t-cell title="{{item.start_time}} - {{item.end_time}}" description="周{{tools.formatDays(item.days_of_week)}} | 加价 {{item.extra_fee/100}}元 | {{item.multiplier}}倍">
+                <view slot="right-icon" bind:tap="onDeletePeak" data-id="{{item.id}}">
+                    <t-icon name="delete" size="48rpx" color="#d9001b" />
+                </view>
+            </t-cell>
+        </block>
+        <t-empty wx:if="{{peakConfigs.length === 0}}" icon="info-circle-filled" description="暂无特殊时段配置" />
+    </view>
+  </view>
+  
+  <!-- Modal -->
+  <t-popup visible="{{showPeakModal}}" placement="bottom" bind:visible-change="onClosePeakModal">
+      <view class="popup-content">
+          <view class="popup-header">
+              <view class="popup-title">添加高峰时段</view>
+              <t-icon name="close" size="48rpx" bind:tap="onClosePeakModal" />
+          </view>
+          <view class="popup-body">
+              <picker mode="time" value="{{peakForm.startTime}}" data-field="startTime" bindchange="onPeakFormChange">
+                <t-cell title="开始时间" note="{{peakForm.startTime}}" arrow />
+              </picker>
+              <picker mode="time" value="{{peakForm.endTime}}" data-field="endTime" bindchange="onPeakFormChange">
+                <t-cell title="结束时间" note="{{peakForm.endTime}}" arrow />
+              </picker>
+              
+              <t-input label="加价金额" placeholder="0.00" suffix="元" type="digit" value="{{peakForm.extraFee}}" data-field="extraFee" bind:change="onPeakFormChange"/>
+              <t-input label="倍率" placeholder="1.0" suffix="倍" type="digit" value="{{peakForm.multiplier}}" data-field="multiplier" bind:change="onPeakFormChange"/>
+              
+              <view class="form-item-col">
+                  <text class="label">生效日期</text>
+                  <view class="days-select">
+                    <view 
+                        wx:for="{{daysOptions}}" 
+                        wx:key="value" 
+                        class="day-tag {{tools.includes(peakForm.days, item.value) ? 'active' : ''}}"
+                        bindtap="onDayToggle"
+                        data-day="{{item.value}}"
+                    >
+                        {{item.label}}
+                    </view>
+                  </view>
+              </view>
+          </view>
+          <view class="popup-footer">
+              <t-button theme="primary" block bind:tap="onSavePeak">确定</t-button>
+          </view>
+      </view>
+  </t-popup>
+</view>
+
+<wxs module="tools">
+module.exports = {
+  formatDays: function(days) {
+    if (!days) return '';
+    var map = ['','一','二','三','四','五','六','日'];
+    return days.map(function(d){ return map[d] }).join('、');
+  },
+  includes: function(arr, val) {
+      if (!arr) return false;
+      return arr.indexOf(val) > -1;
+  }
+}
+</wxs>

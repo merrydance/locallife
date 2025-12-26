@@ -1,0 +1,86 @@
+@import "../../../styles/responsive.wxss";
+
+.platform-dashboard {
+  background-color: #f5f5f5;
+  box-sizing: border-box;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.header-actions {
+  padding: 24rpx;
+  background-color: #fff;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.dashboard-scroll {
+  box-sizing: border-box;
+}
+
+.tab-content {
+  background-color: #fff;
+}
+
+.ranking-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.ranking-row:last-child {
+  border-bottom: none;
+}
+
+.rank-left {
+  display: flex;
+  align-items: center;
+}
+
+.rank-num {
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+  margin-right: 16rpx;
+  font-size: 24rpx;
+  color: #666;
+  font-weight: bold;
+}
+
+.rank-1 {
+  background-color: #ffeb3b;
+  color: #d48806;
+}
+
+.rank-2 {
+  background-color: #e0e0e0;
+  color: #666;
+}
+
+.rank-3 {
+  background-color: #e6ccb2;
+  color: #8d6e63;
+}
+
+.rank-name {
+  font-size: 28rpx;
+  color: #333;
+}
+
+.rank-value {
+  font-size: 28rpx;
+  color: #1890ff;
+  font-weight: 500;
+}

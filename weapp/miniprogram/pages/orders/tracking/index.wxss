@@ -1,0 +1,256 @@
+.page {
+  min-height: 100vh;
+  padding: 0 32rpx 80rpx;
+  background: #f4f6fb;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding-top: 200rpx;
+}
+
+.hero-card {
+  position: relative;
+  height: 480rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+  box-shadow: 0 12rpx 30rpx rgba(18, 30, 63, 0.15);
+  margin-top: 16rpx;
+}
+
+.hero-map {
+  width: 100%;
+  height: 100%;
+}
+
+/* 状态卡片 */
+.status-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  margin-top: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+}
+
+.status-main {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.status-text {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1d2750;
+}
+
+.eta {
+  font-size: 26rpx;
+  color: #57618c;
+  margin-top: 12rpx;
+  padding-left: 64rpx;
+}
+
+/* 骑手卡片 */
+.rider-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  margin-top: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rider-info {
+  display: flex;
+  gap: 20rpx;
+  align-items: center;
+}
+
+.avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: #f0f2fb;
+}
+
+.rider-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1d2750;
+}
+
+.rider-desc {
+  font-size: 24rpx;
+  color: #9aa4c2;
+  margin-top: 4rpx;
+}
+
+.rider-actions button {
+  width: 180rpx;
+  height: 72rpx;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+}
+
+.primary {
+  background: linear-gradient(120deg, #1f7aec, #5b9dff);
+  color: #fff;
+  border: none;
+}
+
+button::after {
+  border: none;
+}
+
+/* 进度卡片 */
+.progress-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  margin-top: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1d2750;
+  margin-bottom: 24rpx;
+}
+
+.progress-list {
+  padding-left: 8rpx;
+}
+
+.progress-item {
+  display: flex;
+  position: relative;
+  padding-bottom: 32rpx;
+}
+
+.progress-item:last-child {
+  padding-bottom: 0;
+}
+
+.progress-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  background: #e0e4f0;
+  margin-top: 6rpx;
+  z-index: 1;
+}
+
+.progress-item.done .progress-dot {
+  background: #1d63ff;
+}
+
+.progress-item.active .progress-dot {
+  background: #1d63ff;
+  box-shadow: 0 0 0 8rpx rgba(29, 99, 255, 0.2);
+}
+
+.progress-line {
+  position: absolute;
+  left: 9rpx;
+  top: 26rpx;
+  width: 2rpx;
+  height: calc(100% - 26rpx);
+  background: #e0e4f0;
+}
+
+.progress-item.done .progress-line {
+  background: #1d63ff;
+}
+
+.progress-content {
+  flex: 1;
+  margin-left: 20rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-title {
+  font-size: 28rpx;
+  color: #9aa4c2;
+}
+
+.progress-item.done .progress-title,
+.progress-item.active .progress-title {
+  color: #1d2750;
+  font-weight: 500;
+}
+
+.progress-time {
+  font-size: 24rpx;
+  color: #9aa4c2;
+}
+
+/* 地址卡片 */
+.address-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  margin-top: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+}
+
+.address-row {
+  display: flex;
+  gap: 20rpx;
+  padding: 16rpx 0;
+}
+
+.address-row:first-child {
+  border-bottom: 1rpx dashed #edf0fb;
+}
+
+.address-icon {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  margin-top: 4rpx;
+}
+
+.address-icon.merchant {
+  background: #ff9500;
+}
+
+.address-icon.customer {
+  background: #1d63ff;
+}
+
+.address-info {
+  flex: 1;
+}
+
+.address-label {
+  font-size: 24rpx;
+  color: #9aa4c2;
+}
+
+.address-text {
+  font-size: 28rpx;
+  color: #1d2750;
+  margin-top: 4rpx;
+}
+
+/* 刷新按钮 */
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 24rpx;
+  color: #1d63ff;
+  font-size: 26rpx;
+}
+
+.empty {
+  padding-top: 200rpx;
+}

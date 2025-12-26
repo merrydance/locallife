@@ -1,0 +1,117 @@
+<custom-navbar title="外卖" location="{{address}}" bind:locationchange="onLocationChange" />
+
+<view 
+  class="page-container responsive-container" 
+  style="padding-top: {{navBarHeight}}px;"
+>
+  <!-- 搜索框 -->
+  <view class="search-section">
+    <t-search 
+      model:value="{{searchKeyword}}"
+      placeholder="搜索菜品、商家"
+      bind:change="onSearch"
+    />
+  </view>
+
+  <!-- 3个Tab -->
+  <view class="tabs-section">
+    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
+      <t-tab-panel label="菜品列表" value="dishes" />
+      <t-tab-panel label="餐厅列表" value="restaurants" />
+      <t-tab-panel label="套餐列表" value="packages" />
+    </t-tabs>
+  </view>
+
+  <!-- 分类导航 (仅菜品列表显示) -->
+  <view wx:if="{{activeTab === 'dishes'}}" class="category-section">
+    <category-tabs 
+      categories="{{categories}}"
+      activeId="{{activeCategoryId}}"
+      bind:change="onTabCategoryChange"
+    />
+  </view>
+
+  <!-- 位置引导提示 -->
+  <view wx:if="{{needLocation}}" class="location-guide">
+    <view class="location-guide-icon">📍</view>
+    <view class="location-guide-title">需要您的位置信息</view>
+    <view class="location-guide-desc">本地生活服务依赖于您的位置，请先完成定位</view>
+    <view class="location-guide-buttons">
+      <t-button theme="primary" size="small" bind:tap="onRetryLocation">重新定位</t-button>
+      <t-button theme="light" size="small" bind:tap="onManualLocation">手动选择</t-button>
+    </view>
+  </view>
+
+  <!-- 内容区域 -->
+  <view class="content-section responsive-grid-3" wx:if="{{!needLocation}}">
+    <!-- 菜品列表 -->
+    <block wx:if="{{activeTab === 'dishes'}}">
+      <!-- 骨架屏 -->
+      <block wx:if="{{loading && dishes.length === 0}}">
+        <dish-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" />
+      </block>
+      
+      <!-- 真实数据 -->
+      <dish-card 
+        wx:for="{{dishes}}" 
+        wx:key="id"
+        dish="{{item}}"
+        bind:add="onAddCart"
+      />
+      <t-empty wx:if="{{!loading && dishes.length === 0}}" description="暂无菜品" />
+      <view wx:if="{{!hasMore && dishes.length > 0}}" class="no-more">没有更多了</view>
+    </block>
+
+    <!-- 餐厅列表 -->
+    <block wx:if="{{activeTab === 'restaurants'}}">
+      <restaurant-card 
+        wx:for="{{restaurants}}" 
+        wx:key="id"
+        restaurant="{{item}}"
+      />
+      <t-empty wx:if="{{!loading && restaurants.length === 0}}" description="暂无餐厅" />
+      <view wx:if="{{!hasMore && restaurants.length > 0}}" class="no-more">没有更多了</view>
+    </block>
+
+    <!-- 套餐列表 -->
+    <block wx:if="{{activeTab === 'packages'}}">
+      <view wx:for="{{packages}}" wx:key="id" class="package-card">
+        <t-image class="package-image" src="{{item.image_url}}" mode="aspectFill" lazy />
+        <view class="package-info">
+          <view class="package-header">
+            <text class="package-name">{{item.shop_name}}·{{item.name}}</text>
+            <text class="package-price">¥{{item.price / 100}}</text>
+          </view>
+          <text class="package-original-price">原价¥{{item.original_price / 100}}</text>
+          <view class="package-items">
+            <text wx:for="{{item.items}}" wx:key="*this" class="package-item">{{item}}</text>
+          </view>
+          <view class="package-meta">
+            <text class="rating">⭐{{item.rating}}</text>
+            <text class="dot">·</text>
+            <text class="sales">月销{{item.month_sales}}</text>
+          </view>
+        </view>
+      </view>
+      <t-empty wx:if="{{!loading && packages.length === 0}}" description="暂无套餐" />
+      <view wx:if="{{!hasMore && packages.length > 0}}" class="no-more">没有更多了</view>
+    </block>
+
+    <!-- 加载中 -->
+    <view wx:if="{{loading}}" class="loading-wrapper">
+      <t-loading theme="circular" size="40rpx" text="加载中..." />
+    </view>
+  </view>
+  
+  <!-- 底部安全区占位 -->
+  <view style="height: 140rpx;"></view>
+</view>
+
+<!-- 购物车栏 -->
+<cart-bar 
+  wx:if="{{activeTab === 'dishes' && cartTotalCount > 0}}"
+  totalCount="{{cartTotalCount}}"
+  totalPrice="{{cartTotalPrice}}"
+  bind:checkout="onCheckout"
+  bind:toggle="onCheckout"
+/>

@@ -1,0 +1,45 @@
+<view class="container">
+  <t-tabs value="{{currentTab}}" bind:change="onTabChange" sticky>
+    <t-tab-panel wx:for="{{tabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+  </t-tabs>
+
+  <view class="list-content">
+    <t-pull-down-refresh
+       value="{{refreshing}}"
+       loadingTexts="{{['下拉刷新', '松手刷新', '正在刷新', '刷新完成']}}"
+       bind:refresh="onPullDownRefresh"
+    >
+      <view wx:if="{{reservations.length === 0 && !loading}}" class="empty-state">
+        <t-empty icon="info-circle-filled" description="暂无预订记录" />
+      </view>
+
+      <view wx:else class="reservation-list">
+        <view 
+            class="reservation-card" 
+            wx:for="{{reservations}}" 
+            wx:key="id"
+            bind:tap="onToDetail"
+            data-id="{{item.id}}"
+        >
+          <view class="card-header">
+            <text class="merchant-name">{{item.merchant_name}}</text>
+            <t-tag theme="{{item._statusTheme}}" variant="light">{{item._statusText}}</t-tag>
+          </view>
+          
+          <view class="card-body">
+            <view class="info-row">
+              <t-icon name="time" size="28rpx" color="#666" />
+              <text>{{item._timeText}}</text>
+            </view>
+            <view class="info-row">
+              <t-icon name="user" size="28rpx" color="#666" />
+              <text>{{item.party_size}}人 · {{item.contact_name}}</text>
+            </view>
+          </view>
+        </view>
+        
+        <t-load-more status="{{loading ? 'loading' : (hasMore ? 'loading' : 'nomore')}}" />
+      </view>
+    </t-pull-down-refresh>
+  </view>
+</view>

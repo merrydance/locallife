@@ -1,0 +1,13 @@
+<!-- 通用卡片骨架屏组件 -->
+<view class="card-skeleton">
+  <view class="skeleton-image"></view>
+  <view class="skeleton-content">
+    <view class="skeleton-line skeleton-title"></view>
+    <view class="skeleton-line skeleton-subtitle"></view>
+    <view class="skeleton-line skeleton-tags"></view>
+    <view class="skeleton-footer">
+      <view class="skeleton-line skeleton-price"></view>
+      <view class="skeleton-button"></view>
+    </view>
+  </view>
+</view>

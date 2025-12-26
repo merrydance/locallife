@@ -1,0 +1,17 @@
+{
+    "navigationBarTitleText": "平台管理大屏",
+    "navigationBarBackgroundColor": "#1890ff",
+    "navigationBarTextStyle": "white",
+    "enablePullDownRefresh": true,
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-grid": "tdesign-miniprogram/grid/grid",
+        "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-picker": "tdesign-miniprogram/picker/picker"
+    }
+}

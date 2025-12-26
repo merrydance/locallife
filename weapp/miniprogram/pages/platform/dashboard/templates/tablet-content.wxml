@@ -1,0 +1,26 @@
+<!-- Tablet 采用略微松散的布局 -->
+<view class="tablet-layout" style="padding: 32rpx;">
+  <view class="header-actions" style="margin-bottom: 32rpx;">
+    <picker range="{{dateRangeOptions}}" range-key="label" value="{{selectedDateRange}}" bindchange="onDateRangeChange">
+      <t-tag variant="light" shape="round" size="large">
+        {{dateRangeOptions[selectedDateRange].label}}
+      </t-tag>
+    </picker>
+  </view>
+
+  <view class="card" style="background: #fff; padding: 32rpx; border-radius: 24rpx; margin-bottom: 32rpx;">
+    <view class="responsive-title">实时概况</view>
+    <t-grid border="{{false}}" class="responsive-grid-4">
+      <t-grid-item text="活跃商户" description="{{realtimeData.realtime_stats.active_merchants}}" />
+      <t-grid-item text="在线骑手" description="{{realtimeData.realtime_stats.online_riders}}" />
+      <t-grid-item text="待处理" description="{{realtimeData.realtime_stats.pending_orders}}" />
+      <t-grid-item text="今日GMV" description="¥{{realtimeData.today_stats.today_gmv / 100}}" />
+    </t-grid>
+  </view>
+
+  <t-tabs defaultValue="{{activeTab}}" bind:change="onTabChange" theme="card">
+    <t-tab-panel label="详细统计" value="overview">
+      <include src="./stats-grid.wxml" />
+    </t-tab-panel>
+  </t-tabs>
+</view>

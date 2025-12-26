@@ -1,0 +1,52 @@
+<custom-navbar title="我的评价" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <t-tabs value="{{activeTab}}" bind:change="onTabChange" sticky>
+    <t-tab-panel label="待评价" value="{{0}}" />
+    <t-tab-panel label="已评价" value="{{1}}" />
+  </t-tabs>
+
+
+
+  <view class="reviews-list">
+    <view wx:if="{{reviews.length === 0 && !loading}}" class="empty">
+      <t-empty description="暂无评价记录" />
+    </view>
+
+    <view wx:else>
+      <view wx:for="{{reviews}}" wx:key="id" class="review-card">
+        <view class="card-header">
+          <text class="shop-name">{{item.restaurant_name}}</text>
+          <text class="time">{{item.created_at}}</text>
+        </view>
+        
+        <view class="rating-row">
+          <t-rate value="{{item.rating}}" size="14" readonly />
+        </view>
+
+        <text class="content">{{item.content}}</text>
+
+        <view wx:if="{{item.images.length > 0}}" class="images-grid">
+          <t-image 
+            wx:for="{{item.images}}" 
+            wx:key="*this" 
+            wx:for-item="img"
+            src="{{img}}" 
+            mode="aspectFill" 
+            width="160rpx" 
+            height="160rpx" 
+            class="review-img"
+          />
+        </view>
+
+        <view wx:if="{{item.reply}}" class="merchant-reply">
+          <text class="reply-label">商家回复：</text>
+          <text>{{item.reply}}</text>
+        </view>
+      </view>
+
+      <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
+      <view wx:if="{{!hasMore && reviews.length > 0}}" class="no-more">没有更多了</view>
+    </view>
+  </view>
+</view>

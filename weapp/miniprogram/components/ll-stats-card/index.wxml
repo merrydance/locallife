@@ -1,0 +1,27 @@
+<view class="ll-stats-card {{variant}} {{isLargeScreen ? 'large' : 'small'}}" bindtap="onTap">
+  <view class="card-header">
+    <view class="label-group">
+      <t-icon wx:if="{{icon}}" name="{{icon}}" size="32rpx" class="prefix-icon" />
+      <text class="label">{{label}}</text>
+    </view>
+    <view wx:if="{{trend !== 0}}" class="trend-group {{trend > 0 ? 'up' : 'down'}}">
+      <t-icon name="{{trend > 0 ? 'caret-up' : 'caret-down'}}" size="24rpx" />
+      <text class="trend-value">{{trend > 0 ? '+' : ''}}{{trend}}%</text>
+    </view>
+  </view>
+
+  <view class="card-body">
+    <view class="value-row">
+      <text class="value">{{value}}</text>
+      <text wx:if="{{unit}}" class="unit">{{unit}}</text>
+    </view>
+    
+    <!-- Large screen only extra info -->
+    <view wx:if="{{isLargeScreen}}" class="extra-info">
+      <slot name="extra"></slot>
+    </view>
+  </view>
+  
+  <!-- Subtle background decoration for premium feel -->
+  <view class="decoration-circle"></view>
+</view>

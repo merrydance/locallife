@@ -1,0 +1,9 @@
+{
+    "navigationBarTitleText": "数据分析",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "ec-canvas": "../../components/ec-canvas/index"
+    }
+}

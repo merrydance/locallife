@@ -1,0 +1,33 @@
+<view class="container">
+  <view class="form-group">
+    <t-input label="联系人" placeholder="名字" value="{{formData.contact_name}}" bind:change="onInput" data-field="contact_name" />
+    <t-input label="手机号" placeholder="手机号码" type="number" value="{{formData.contact_phone}}" bind:change="onInput" data-field="contact_phone" />
+    <t-cell title="收货地址" note="{{addressDisplay || '点击选择'}}" arrow bind:tap="onChooseLocation" />
+    <t-input label="门牌号" placeholder="例：8号楼808室" value="{{formData.address}}" bind:change="onInput" data-field="address" />
+    
+    <t-cell title="标签">
+      <view class="tags" slot="note">
+        <t-tag 
+            wx:for="{{tags}}" 
+            wx:key="*this" 
+            variant="{{formData.tag === item ? 'light' : 'outline'}}" 
+            theme="{{formData.tag === item ? 'primary' : 'default'}}" 
+            bind:tap="onTagSelect" 
+            data-tag="{{item}}"
+            style="margin-left: 16rpx"
+        >
+            {{item}}
+        </t-tag>
+      </view>
+    </t-cell>
+    
+    <t-cell title="设为默认地址">
+        <t-switch value="{{formData.is_default}}" slot="note" bind:change="onSwitchChange" />
+    </t-cell>
+  </view>
+
+  <view class="footer">
+    <t-button theme="primary" size="large" block bind:tap="onSave">保存地址</t-button>
+    <t-button wx:if="{{id}}" theme="danger" variant="text" size="large" block bind:tap="onDelete" style="margin-top: 24rpx">删除地址</t-button>
+  </view>
+</view>

@@ -1,0 +1,2 @@
+-- 删除申诉表
+DROP TABLE IF EXISTS appeals CASCADE;

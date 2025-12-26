@@ -1,0 +1,67 @@
+import { getOrderList } from '../../../api/order'
+import { OrderAdapter } from '../../../adapters/order'
+import { Order } from '../../../models/order'
+
+Page({
+    data: {
+        orders: [] as Order[],
+        navBarHeight: 88,
+        loading: false,
+        page: 1,
+        pageSize: 10,
+        hasMore: true
+    },
+
+    onLoad() {
+        this.loadOrders(true)
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    onReachBottom() {
+        if (this.data.hasMore && !this.data.loading) {
+            this.setData({ page: this.data.page + 1 })
+            this.loadOrders(false)
+        }
+    },
+
+    async loadOrders(reset = false) {
+        if (this.data.loading) return
+        this.setData({ loading: true })
+
+        if (reset) {
+            this.setData({ page: 1, orders: [], hasMore: true })
+        }
+
+        try {
+            // API Call
+            const orderDTOs = await getOrderList()
+            
+            // Adapter conversion
+            const newOrders = orderDTOs.map(OrderAdapter.toViewModel)
+
+            // Client-side pagination simulation (since API returns all for now or mock logic)
+            // In a real scenario with pagination params in getOrderList, use those.
+            // The current getOrderList only takes status, assuming it returns all recent orders.
+            
+            const orders = reset ? newOrders : [...this.data.orders, ...newOrders]
+            
+            this.setData({
+                orders,
+                loading: false,
+                hasMore: false // Assuming API returns all at once for now
+            })
+        } catch (error) {
+            console.error('Load orders failed:', error)
+            wx.showToast({ title: '加载失败', icon: 'error' })
+            this.setData({ loading: false })
+        }
+    },
+
+    onOrderDetail(e: WechatMiniprogram.CustomEvent) {
+        const { id } = e.currentTarget.dataset
+        wx.navigateTo({ url: `/pages/orders/detail/index?id=${id}` })
+    }
+})

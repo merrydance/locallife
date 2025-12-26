@@ -1,0 +1,34 @@
+[Unit]
+Description=LocalLife API Server
+Documentation=https://github.com/merrydance/locallife
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=sam
+Group=sam
+WorkingDirectory=/home/sam/locallife/locallife
+ExecStart=/home/sam/locallife/locallife/main
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/sam/locallife/locallife/app.log
+StandardError=append:/home/sam/locallife/locallife/app.log
+
+# Environment file (contains DB credentials, API keys, etc.)
+EnvironmentFile=/home/sam/locallife/locallife/app.env
+
+# Graceful shutdown timeout (matches your app's graceful shutdown)
+TimeoutStopSec=30
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/sam/locallife/locallife/uploads /home/sam/locallife/locallife/app.log
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

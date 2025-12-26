@@ -1,0 +1,242 @@
+import { ReservationAdapter } from '../../adapters/reservation'
+import { ReservationItem } from '../../models/reservation'
+import { getReservationRooms } from '../../api/reservation'
+import { getMerchants } from '../../api/merchant' // Assuming we need merchants for the 'restaurant' tab or combined view
+import { getUserLocation } from '../../utils/geo'
+
+Page({
+    data: {
+        keyword: '',
+        items: [] as ReservationItem[],
+        filteredItems: [] as ReservationItem[],
+        activeTab: 'all' as 'all' | 'room' | 'restaurant',
+        selectedTime: '',
+        guestCount: 2,
+        navBarHeight: 88,
+        address: '定位中...',
+
+        // Pagination
+        page: 1,
+        loading: false,
+        hasMore: true,
+
+        // Time Picker
+        timePickerVisible: false,
+        timePickerValue: [0, 0],
+        dateOptions: [] as Array<{ label: string, value: string }>,
+        timeOptions: [
+            { label: '11:00', value: '11:00' },
+            { label: '11:30', value: '11:30' },
+            { label: '12:00', value: '12:00' },
+            { label: '12:30', value: '12:30' },
+            { label: '13:00', value: '13:00' },
+            { label: '17:00', value: '17:00' },
+            { label: '17:30', value: '17:30' },
+            { label: '18:00', value: '18:00' },
+            { label: '18:30', value: '18:30' },
+            { label: '19:00', value: '19:00' },
+            { label: '19:30', value: '19:30' },
+            { label: '20:00', value: '20:00' }
+        ],
+
+        // Guest Picker
+        guestPickerVisible: false,
+        guestPickerValue: [1],
+        guestOptions: Array.from({ length: 20 }, (_, i) => ({
+            label: `${i + 1}人`,
+            value: i + 1
+        }))
+    },
+
+    onLoad() {
+        this.generateDateOptions()
+        this.loadReservationItems(true)
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    onLocationChange() {
+        this.setData({ keyword: '' })
+        this.loadReservationItems(true)
+    },
+
+    onReachBottom() {
+        if (this.data.hasMore && !this.data.loading) {
+            this.setData({ page: this.data.page + 1 })
+            this.loadReservationItems(false)
+        }
+    },
+
+    generateDateOptions() {
+        const options = []
+        const today = new Date()
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(today)
+            date.setDate(today.getDate() + i)
+            const label = i === 0 ? '今天' : i === 1 ? '明天' : `${date.getMonth() + 1}月${date.getDate()}日`
+            options.push({
+                label,
+                value: date.toISOString().split('T')[0]
+            })
+        }
+        this.setData({ dateOptions: options })
+    },
+
+    async loadReservationItems(reset = false) {
+        if (this.data.loading) return
+        this.setData({ loading: true })
+
+        if (reset) {
+            this.setData({ page: 1, items: [], filteredItems: [], hasMore: true })
+        }
+
+        try {
+            // Fetch Rooms (and maybe Merchants)
+            // Since the UI mixes Rooms and Restaurants, we might need two parallel calls or one depending on backend API design.
+            // getReservationRooms requires merchant_id, which suggests it lists rooms for a specific merchant.
+            // But this page seems to be a "Search/List" page for ALL reservations.
+            // Assuming we load merchants first, then maybe rooms? Or backend should provide a comprehensive search endpoint.
+            // For now, let's load Merchants and treat them as 'restaurant' type items.
+            
+            const { latitude, longitude } = await getUserLocation()
+            const merchants = await getMerchants({ latitude, longitude, keyword: this.data.keyword })
+
+            // TODO: If there's an endpoint for "Featured Rooms" across all merchants, use that. 
+            // Otherwise, we might just show Merchants here, or fetch rooms for top merchants.
+            // Current Mock had both. Let's map Merchants to ReservationItem (Restaurant type)
+
+            const restaurantItems = merchants.map(m => ({
+                id: m.id,
+                type: 'restaurant',
+                name: m.name,
+                restaurantId: m.id,
+                restaurantName: m.name,
+                imageUrl: m.image_url,
+                cuisineType: [], // Not in simple DTO
+                avgPrice: 0, // Not in simple DTO
+                rating: m.rating ? m.rating / 10 : 0,
+                reviewCount: 0,
+                businessHours: { open: '00:00', close: '23:59' }, // Default
+                facilities: [],
+                availableRooms: 0,
+                address: '地址未知', // Not in simple DTO
+                distanceMeters: m.distance_meters,
+                tags: [m.biz_status]
+            })) as any[] // Cast to any to match ReservationItem loosely or update ReservationItem type
+
+            // Use Adapter if possible, but Adapter expects ReservationItemDTO which matches the mock structure.
+            // We might need to update Adapter or just manually map here since backend API structure is different (Merchants vs Mock Reservation Items)
+            
+            // Let's try to use the fetched merchants as the source of truth for now.
+            // And maybe fetch rooms for the first few merchants to populate "Room" type items?
+            // This is a bit complex without a dedicated "Search Reservation" API.
+            // We will stick to displaying Merchants as Restaurants for now.
+            
+            const items = reset ? restaurantItems : [...this.data.items, ...restaurantItems]
+            
+            this.setData({
+                items,
+                loading: false,
+                hasMore: false // No paging in getMerchants yet
+            })
+
+            this.filterItems()
+
+        } catch (error) {
+            console.error('Load reservation items failed:', error)
+            wx.showToast({ title: '加载失败', icon: 'none' })
+            this.setData({ loading: false })
+        }
+    },
+
+    onTabChange(e: WechatMiniprogram.CustomEvent) {
+        const { value } = e.detail
+        this.setData({ activeTab: value })
+        this.filterItems()
+    },
+
+    onSearch(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ keyword: e.detail.value })
+        this.filterItems()
+    },
+
+    filterItems() {
+        const { items, activeTab, keyword } = this.data
+        let filtered = items
+
+        // Filter by tab
+        if (activeTab !== 'all') {
+            filtered = filtered.filter(item => item.type === activeTab)
+        }
+
+        // Filter by keyword
+        if (keyword) {
+            filtered = filtered.filter(item => {
+                if (item.type === 'room') {
+                    return item.name.includes(keyword) || item.restaurantName.includes(keyword)
+                } else {
+                    return item.name.includes(keyword)
+                }
+            })
+        }
+
+        this.setData({ filteredItems: filtered })
+    },
+
+    showTimePicker() {
+        this.setData({ timePickerVisible: true })
+    },
+
+    hideTimePicker() {
+        this.setData({ timePickerVisible: false })
+    },
+
+    onTimeConfirm(e: WechatMiniprogram.CustomEvent) {
+        const { value, label } = e.detail
+
+        let dateLabel = ''
+        let timeLabel = ''
+
+        if (label && label.length === 2) {
+            dateLabel = label[0]
+            timeLabel = label[1]
+        } else {
+            const dateOpt = this.data.dateOptions.find(opt => opt.value === value[0])
+            const timeOpt = this.data.timeOptions.find(opt => opt.value === value[1])
+            dateLabel = dateOpt?.label || ''
+            timeLabel = timeOpt?.label || ''
+        }
+
+        this.setData({
+            selectedTime: `${dateLabel} ${timeLabel}`,
+            timePickerVisible: false,
+            timePickerValue: value
+        })
+    },
+
+    showGuestPicker() {
+        this.setData({ guestPickerVisible: true })
+    },
+
+    hideGuestPicker() {
+        this.setData({ guestPickerVisible: false })
+    },
+
+    onGuestConfirm(e: WechatMiniprogram.CustomEvent) {
+        const { value } = e.detail
+        console.log('Guest picker value:', value)
+
+        this.setData({
+            guestCount: value[0],
+            guestPickerVisible: false,
+            guestPickerValue: value
+        })
+    },
+
+    onItemTap(e: WechatMiniprogram.CustomEvent) {
+        const { id } = e.detail
+        wx.showToast({ title: `查看详情: ${id}`, icon: 'none' })
+    }
+})

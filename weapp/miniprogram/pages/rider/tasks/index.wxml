@@ -1,0 +1,20 @@
+<custom-navbar title="任务大厅" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <t-loading wx:if="{{loading && tasks.length === 0}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading && tasks.length === 0}}" class="empty">
+    <t-empty description="暂无待抢任务" />
+  </view>
+
+  <view class="tasks-list">
+    <view wx:for="{{tasks}}" wx:key="id" class="task-item">
+      <!-- Force status to 'PENDING' or 0 logic for delivery-card to show 'Grab' if backend returns something else -->
+      <!-- Actually delivery-card should handle the status -->
+      <delivery-card task="{{item}}" bind:action="onTaskAction" />
+    </view>
+  </view>
+  
+  <t-loading wx:if="{{loading && tasks.length > 0}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
+  <view wx:if="{{!hasMore && tasks.length > 0}}" class="no-more">没有更多了</view>
+</view>

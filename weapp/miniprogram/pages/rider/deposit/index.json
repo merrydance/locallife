@@ -1,0 +1,10 @@
+{
+    "navigationBarTitleText": "我的押金",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

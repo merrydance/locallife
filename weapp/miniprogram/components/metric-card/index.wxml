@@ -1,0 +1,12 @@
+<view class="metric-card">
+  <view class="label">{{label}}</view>
+  <view class="value-row">
+    <text class="value">{{value}}</text>
+  </view>
+  <view class="trend-row" wx:if="{{trend !== 0}}">
+    <text class="trend-label">较昨日</text>
+    <text class="trend-value {{trend > 0 ? 'up' : 'down'}}">
+      {{trend > 0 ? '+' : ''}}{{trendValue}}
+    </text>
+  </view>
+</view>

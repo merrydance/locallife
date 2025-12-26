@@ -1,0 +1,11 @@
+<view class="header-bar">
+  <view class="location">
+    <image class="location-icon" src="/assets/tabbar/takeout_active.png" /> <!-- Temp Icon -->
+    <text class="arrow">></text>
+  </view>
+  
+  <view class="search-box" bindtap="onSearch">
+    <icon type="search" size="14" color="#999" />
+    <text class="placeholder">搜索想吃的...</text>
+  </view>
+</view>

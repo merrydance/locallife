@@ -1,0 +1,287 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.detail-content {
+  padding-bottom: 24rpx;
+}
+
+.status-section {
+  background: #fff;
+  padding: 48rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.status-text {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.status-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.merchant-section,
+.address-section,
+.items-section,
+.cost-section,
+.info-section {
+  background: #fff;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.merchant-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.merchant-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 16rpx;
+}
+
+.address-text {
+  font-size: 28rpx;
+  color: #333;
+  display: block;
+  margin-bottom: 16rpx;
+}
+
+.contact-info {
+  display: flex;
+  gap: 24rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.item-row:last-child {
+  border-bottom: none;
+}
+
+.item-image {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+}
+
+.item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.item-name {
+  font-size: 28rpx;
+  color: #333;
+}
+
+.item-price {
+  font-size: 24rpx;
+  color: #E34D59;
+}
+
+.item-quantity {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.cost-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  font-size: 28rpx;
+}
+
+.cost-row .label {
+  color: #666;
+}
+
+.cost-row .value {
+  color: #333;
+}
+
+.cost-row .value.discount {
+  color: #00A870;
+}
+
+.cost-row.total {
+  border-top: 1rpx solid #F0F0F0;
+  margin-top: 8rpx;
+  padding-top: 16rpx;
+}
+
+.cost-row.total .label {
+  font-weight: bold;
+  color: #333;
+}
+
+.cost-row.total .value {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #E34D59;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  font-size: 24rpx;
+}
+
+.info-row .label {
+  color: #666;
+}
+
+.info-row .value {
+  color: #333;
+}
+
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16rpx 24rpx;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -4rpx 12rpx rgba(0,0,0,0.08);
+}
+
+.cancel-btn {
+  width: 100%;
+}
+
+
+/* 底部操作按钮 */
+.footer-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24rpx 32rpx;
+  background: #fff;
+  box-shadow: 0 -2rpx 16rpx rgba(0, 0, 0, 0.08);
+  display: flex;
+  gap: 24rpx;
+  z-index: 100;
+}
+
+.footer-actions t-button {
+  flex: 1;
+}
+
+/* 订单时间线 */
+.timeline-section {
+  background: #fff;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.timeline-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 24rpx;
+}
+
+.timeline-row:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  background: #dfe3f4;
+  margin-right: 20rpx;
+  margin-top: 4rpx;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.timeline-dot::after {
+  content: '';
+  position: absolute;
+  width: 2rpx;
+  height: 60rpx;
+  background: #e9ecf7;
+  left: 50%;
+  top: 24rpx;
+  transform: translateX(-50%);
+}
+
+.timeline-row:last-child .timeline-dot::after {
+  display: none;
+}
+
+.timeline-dot.done {
+  background: #ff912c;
+}
+
+.timeline-body {
+  flex: 1;
+  padding-bottom: 12rpx;
+}
+
+.timeline-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4rpx;
+}
+
+.timeline-title {
+  font-size: 28rpx;
+  color: #1d213b;
+  font-weight: 600;
+}
+
+.timeline-time {
+  font-size: 24rpx;
+  color: #8b93b0;
+}
+
+.timeline-desc {
+  font-size: 26rpx;
+  color: #4c5775;
+}
+
+.secondary-btn {
+  flex: 1;
+  margin-right: 16rpx;
+}
+
+.primary-btn {
+  flex: 1;
+}

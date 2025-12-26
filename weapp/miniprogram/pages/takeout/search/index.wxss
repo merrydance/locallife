@@ -1,0 +1,106 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.search-section {
+  background: #fff;
+  padding: 16rpx 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.tabs-section {
+  background: #fff;
+  margin-bottom: 16rpx;
+}
+
+@media (min-width: 750px) {
+  .responsive-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background: #fff;
+    min-height: calc(100vh - 88px);
+    box-shadow: var(--shadow-sm);
+  }
+  .search-section {
+    padding: 24px !important;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .tabs-section {
+    margin-bottom: 0 !important;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .results {
+    padding: 24px !important;
+  }
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.results {
+  padding: 0 24rpx;
+}
+
+.empty {
+  padding: 100rpx 0;
+}
+
+.dish-item,
+.restaurant-item {
+  display: flex;
+  gap: 16rpx;
+  padding: 24rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.dish-image,
+.restaurant-image {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.dish-info,
+.restaurant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.dish-name,
+.restaurant-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.dish-shop {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.dish-meta,
+.restaurant-meta {
+  display: flex;
+  gap: 16rpx;
+  font-size: 22rpx;
+  color: #666;
+}
+
+.rating {
+  color: #FF9500;
+}
+
+.dish-price {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #E34D59;
+}

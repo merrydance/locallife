@@ -1,0 +1,11 @@
+{
+    "navigationBarTitleText": "编辑菜品",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

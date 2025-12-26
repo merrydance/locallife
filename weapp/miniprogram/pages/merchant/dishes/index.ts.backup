@@ -1,0 +1,138 @@
+import { isLargeScreen } from '../../../utils/responsive'
+import { getMerchantDishes, upsertDish, DishDTO } from '../../../api/merchant'
+
+const app = getApp<IAppOption>()
+
+Page({
+    data: {
+        allDishes: [] as DishDTO[], // Store all dishes
+        dishes: [] as DishDTO[], // Displayed dishes
+        categories: [] as any[],
+        activeCategoryId: 'all',
+        isLargeScreen: false,
+        navBarHeight: 88,
+        loading: false,
+        merchantId: ''
+    },
+
+    onLoad() {
+        this.setData({ isLargeScreen: isLargeScreen() })
+        
+        if (app.globalData.merchantId) {
+            this.setData({ merchantId: app.globalData.merchantId })
+            this.loadDishes()
+        } else if (app.globalData.userInfo) {
+             this.handleNoMerchantId()
+        } else {
+            app.userInfoReadyCallback = () => {
+                if (app.globalData.merchantId) {
+                    this.setData({ merchantId: app.globalData.merchantId })
+                    this.loadDishes()
+                } else {
+                    this.handleNoMerchantId()
+                }
+            }
+        }
+    },
+
+    handleNoMerchantId() {
+        if (app.globalData.userRole !== 'merchant') {
+             wx.showToast({ title: '无权限访问', icon: 'none' })
+             setTimeout(() => wx.navigateBack(), 1500)
+        }
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    async loadDishes() {
+        if (!this.data.merchantId) return
+        
+        this.setData({ loading: true })
+
+        try {
+            const dishes = await getMerchantDishes(this.data.merchantId)
+            
+            // Extract categories
+            const categoryMap = new Map<string, string>()
+            dishes.forEach(d => {
+                if (d.category_id) {
+                    categoryMap.set(d.category_id, `分类 ${d.category_id.slice(-4)}`)
+                }
+            })
+            
+            const categories = [
+                { id: 'all', name: '全部' },
+                ...Array.from(categoryMap.entries()).map(([id, name]) => ({ id, name }))
+            ]
+
+            // Process dishes for display (handle missing stock/sales)
+            const processedDishes = dishes.map(d => ({
+                ...d,
+                stock: d.stock ?? 0,
+                month_sales: d.month_sales ?? 0
+            }))
+
+            this.setData({
+                categories,
+                allDishes: processedDishes,
+                loading: false
+            })
+            
+            this.filterDishes()
+
+        } catch (error) {
+            console.error('Load dishes failed:', error)
+            wx.showToast({ title: '加载失败', icon: 'error' })
+            this.setData({ loading: false })
+        }
+    },
+
+    filterDishes() {
+        const { allDishes, activeCategoryId } = this.data
+        if (activeCategoryId === 'all') {
+            this.setData({ dishes: allDishes })
+        } else {
+            this.setData({ dishes: allDishes.filter(d => d.category_id === activeCategoryId) })
+        }
+    },
+
+    onCategoryChange(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ activeCategoryId: e.detail.value })
+        this.filterDishes()
+    },
+
+    onAddDish() {
+        wx.navigateTo({ url: '/pages/merchant/dishes/edit/index' })
+    },
+
+    onEditDish(e: WechatMiniprogram.CustomEvent) {
+        const { id } = e.currentTarget.dataset
+        wx.navigateTo({ url: `/pages/merchant/dishes/edit/index?id=${id}` })
+    },
+
+    async onToggleStatus(e: WechatMiniprogram.CustomEvent) {
+        const { id } = e.currentTarget.dataset
+        const dish = this.data.allDishes.find(d => d.id === id)
+        if (!dish || !this.data.merchantId) return
+
+        const newStatus = dish.status === 'ON_SHELF' ? 'OFF_SHELF' : 'ON_SHELF'
+        
+        wx.showLoading({ title: '更新中' })
+        try {
+            await upsertDish(this.data.merchantId, {
+                ...dish,
+                status: newStatus
+            })
+            
+            wx.showToast({ title: newStatus === 'ON_SHELF' ? '已上架' : '已下架', icon: 'success' })
+            this.loadDishes() // Reload to refresh
+        } catch (error) {
+            console.error('Toggle status failed', error)
+            wx.showToast({ title: '操作失败', icon: 'none' })
+        } finally {
+            wx.hideLoading()
+        }
+    }
+})

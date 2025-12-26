@@ -1,0 +1,10 @@
+{
+    "navigationBarTitleText": "管理中心",
+    "navigationStyle": "custom",
+    "usingComponents": {
+        "custom-navbar": "../../../components/custom-navbar/index",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group"
+    }
+}

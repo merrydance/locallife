@@ -1,0 +1,148 @@
+@import "../../../../styles/lds.wxss";
+
+/* Table Management Workstation (LDS) */
+
+.lds-workspace-wrapper {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+.lds-full-constraint {
+  width: 100%;
+  max-width: 1440px;
+  height: 100%;
+  max-height: 900px;
+  background: var(--lds-bg-container);
+  border-radius: var(--lds-radius-lg);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+  display: grid;
+  grid-template-columns: 500px 1fr; /* Custom for Table Management */
+  overflow: hidden;
+}
+
+.lds-pane-monitor { background: #f8fafc; }
+.lds-pane-config { background: #fff; }
+
+.lds-table-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.lds-stat-mini {
+  flex: 1;
+  text-align: center;
+}
+
+.lds-table-grid-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 16px;
+}
+
+.lds-table-box {
+  aspect-ratio: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.lds-table-box.lds-selected {
+  border-color: var(--lds-primary);
+  box-shadow: 0 0 0 2px var(--lds-primary);
+}
+
+.lds-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lds-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.lds-status-dot.available { background: #059669; }
+.lds-status-dot.occupied { background: #e11d48; }
+
+.lds-table-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.lds-qr-preview-box {
+  width: 100%;
+  aspect-ratio: 2;
+  background: #f8fafc;
+  border: 1px dashed var(--lds-border);
+  border-radius: var(--lds-radius-md);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.lds-qr-img {
+  width: 180px;
+  height: 180px;
+}
+
+.lds-qr-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* LDS Property Panel Gaps */
+.lds-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lds-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lds-form-label {
+  font-size: var(--lds-font-xs) !important;
+  font-weight: 700;
+  color: var(--lds-text-secondary);
+  text-transform: uppercase;
+}
+
+.lds-form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.flex-1 { flex: 1; }
+.lds-m-l-4 { margin-left: 16px; }
+.lds-m-t-4 { margin-top: 16px; }
+
+/* Mobile Guidance Identical to others */
+.lds-mobile-guidance {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #fff;
+}
+
+.guidance-box {
+  width: 80%;
+  text-align: center;
+}

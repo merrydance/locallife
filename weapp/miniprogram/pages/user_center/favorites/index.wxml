@@ -1,0 +1,53 @@
+<custom-navbar title="我的收藏" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- Tab切换 -->
+  <view class="tabs">
+    <view class="tab-item {{activeTab === 'dishes' ? 'active' : ''}}" data-value="dishes" bindtap="onTabChange">菜品</view>
+    <view class="tab-item {{activeTab === 'merchants' ? 'active' : ''}}" data-value="merchants" bindtap="onTabChange">餐厅</view>
+  </view>
+
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading}}" class="favorites-list">
+    <view wx:if="{{favorites.length === 0}}" class="empty">
+      <t-empty description="暂无收藏" />
+    </view>
+
+    <view wx:else>
+      <view 
+        wx:for="{{favorites}}" 
+        wx:key="id" 
+        class="favorite-item"
+      >
+        <view 
+          class="item-content"
+          data-id="{{item.id}}"
+          data-type="{{item.type}}"
+          bindtap="onItemClick"
+        >
+          <t-image src="{{item.image}}" mode="aspectFill" width="160rpx" height="160rpx" class="item-image" />
+          <view class="item-info">
+            <view class="item-header">
+              <text class="item-name">{{item.name}}</text>
+              <t-tag size="small" variant="light">{{item.type === 'DISH' ? '菜品' : '餐厅'}}</t-tag>
+            </view>
+            <text class="item-desc">{{item.desc}}</text>
+            <view class="item-bottom">
+              <text wx:if="{{item.type === 'DISH'}}" class="price">¥{{item.price / 100}}</text>
+              <text wx:else class="rating">⭐ {{item.rating}}</text>
+            </view>
+          </view>
+        </view>
+        <view 
+          class="remove-btn"
+          data-id="{{item.id}}"
+          data-type="{{item.type}}"
+          catchtap="onRemoveFavorite"
+        >
+          <t-icon name="heart-filled" size="40rpx" color="#e34d59" />
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

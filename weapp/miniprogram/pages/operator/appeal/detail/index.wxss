@@ -1,0 +1,62 @@
+.container {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 24rpx;
+  padding-bottom: 120rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+}
+
+.row {
+  margin-bottom: 24rpx;
+  display: flex;
+}
+
+.label {
+  color: #999;
+  width: 160rpx;
+  flex-shrink: 0;
+}
+
+.value {
+  color: #333;
+  flex: 1;
+}
+
+.content {
+  line-height: 1.5;
+}
+
+.images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.img {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 8rpx;
+}
+
+.footer-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  padding: 24rpx 32rpx;
+  display: flex;
+  gap: 24rpx;
+  box-shadow: 0 -2rpx 12rpx rgba(0,0,0,0.05);
+}
+
+t-button {
+    flex: 1;
+}

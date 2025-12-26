@@ -1,0 +1,30 @@
+<view class="container">
+    <view class="score-card">
+        <view class="chart-box">
+             <!-- Using t-progress in circle mode as a simple gauge -->
+            <t-progress theme="circle" percentage="{{chartValue}}" stroke-width="12" track-color="#f0f0f0" color="{{gradientColor}}" />
+            <view class="score-text">
+                <text class="num">{{score.current_score || '--'}}</text>
+                <text class="label">信用分</text>
+            </view>
+        </view>
+        <view class="level">当前等级：{{score.level || '未知'}}</view>
+    </view>
+
+    <view class="history">
+        <view class="title">信用记录</view>
+        <view class="list">
+             <view class="item" wx:for="{{history}}" wx:key="id">
+                <view class="left">
+                    <text class="action">{{item.change_reason}}</text>
+                    <text class="time">{{item.created_at}}</text>
+                </view>
+                <view class="right {{item.change_amount > 0 ? 'plus' : 'minus'}}">
+                    {{item.change_amount > 0 ? '+' : ''}}{{item.change_amount}}
+                </view>
+             </view>
+             
+             <t-empty wx:if="{{history.length === 0}}" icon="info-circle-filled" description="暂无信用记录" />
+        </view>
+    </view>
+</view>

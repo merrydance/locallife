@@ -1,0 +1,26 @@
+*.log
+.vscode
+app.env
+certs/
+*.pem
+*.key
+*.crt
+locallife-rest
+locallife
+simplebank
+
+# Test output
+coverage.out
+test_e2e.sh
+
+# User uploads (runtime data)
+api/uploads/
+uploads/
+
+# Build and test artifacts
+server
+*.test
+api.test
+
+# Large data files
+regions_*.json

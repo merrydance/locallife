@@ -1,0 +1,13 @@
+{
+    "navigationBarTitleText": "餐厅详情",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

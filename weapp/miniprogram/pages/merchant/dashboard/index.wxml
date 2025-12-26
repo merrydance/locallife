@@ -1,0 +1,46 @@
+<!-- 商家工作台 v3.0 - 响应式四状态重构 -->
+<view class="dashboard-container">
+  
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="skeleton-container">
+    <t-skeleton theme="paragraph" loading="{{true}}" row-col="{{skeletonRowCol}}" />
+  </view>
+
+  <block wx:else>
+    <!-- 1. 手机端 (Mobile < 750px) -->
+    <match-media max-width="749">
+      <custom-navbar title="{{merchantName || '商家中心'}}" bind:navheight="onNavHeight" />
+      <scroll-view scroll-y class="main-scroll" style="padding-top: {{navBarHeight}}px;">
+        <include src="./templates/mobile-bi.wxml" />
+      </scroll-view>
+    </match-media>
+
+    <!-- 2. 平板端 (Tablet 750px ~ 1279px) -->
+    <match-media min-width="750" max-width="1279">
+      <view class="responsive-container tablet-layout">
+        <!-- 复用现有的 v2 分栏布局的简化版 -->
+        <view class="v2-dashboard-layout">
+           <include src="./templates/tablet-dual-pane.wxml" />
+        </view>
+      </view>
+    </match-media>
+
+    <!-- 3. PC窗口 (PC-Window 1280px ~ 1599px) -->
+    <match-media min-width="1280" max-width="1599">
+      <view class="responsive-container pc-window-layout">
+        <view class="v2-dashboard-layout">
+           <include src="./templates/pc-content.wxml" />
+        </view>
+      </view>
+    </match-media>
+
+    <!-- 4. PC全屏 (PC-Full >= 1600px) -->
+    <match-media min-width="1600">
+      <include src="./templates/pc-full-triple-pane.wxml" />
+    </match-media>
+  </block>
+
+</view>
+
+<!-- 共享组件库 (Template 容器，保持在底部) -->
+<import src="./templates/shared-templates.wxml" />

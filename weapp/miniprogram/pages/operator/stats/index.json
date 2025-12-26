@@ -1,0 +1,6 @@
+{
+    "navigationBarTitleText": "平台看板",
+    "usingComponents": {
+        "t-empty": "tdesign-miniprogram/empty/empty"
+    }
+}

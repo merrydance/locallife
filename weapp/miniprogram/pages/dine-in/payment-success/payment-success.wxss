@@ -1,0 +1,230 @@
+/* 堂食支付成功页面样式 */
+.payment-success-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40rpx 30rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 成功状态区域 */
+.success-section {
+  text-align: center;
+  margin-bottom: 40rpx;
+}
+
+.success-icon {
+  font-size: 120rpx;
+  margin-bottom: 20rpx;
+}
+
+.success-title {
+  display: block;
+  font-size: 48rpx;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12rpx;
+}
+
+.success-subtitle {
+  display: block;
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* 订单信息区域 */
+.order-info-section {
+  margin-bottom: 30rpx;
+}
+
+.info-card {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 30rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.info-value {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.info-value.amount {
+  color: #ff6b35;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+/* 温馨提示区域 */
+.tips-section {
+  margin-bottom: 30rpx;
+}
+
+.tips-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 20rpx;
+  padding: 30rpx;
+}
+
+.tips-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.tips-icon {
+  font-size: 32rpx;
+  margin-right: 12rpx;
+}
+
+.tips-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.tips-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.tips-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* 服务推广区域 */
+.promotion-section {
+  flex: 1;
+  margin-bottom: 30rpx;
+}
+
+.promotion-header {
+  text-align: center;
+  margin-bottom: 30rpx;
+}
+
+.promotion-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8rpx;
+}
+
+.promotion-subtitle {
+  display: block;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.promotion-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.promotion-card {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 30rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.promotion-card:active {
+  transform: scale(0.98);
+}
+
+.promotion-card.takeout {
+  border-left: 8rpx solid #52c41a;
+}
+
+.promotion-card.reservation {
+  border-left: 8rpx solid #1890ff;
+}
+
+.card-icon {
+  font-size: 64rpx;
+  margin-right: 24rpx;
+}
+
+.card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.card-desc {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 8rpx;
+}
+
+.card-feature {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.card-arrow {
+  font-size: 28rpx;
+  color: #ccc;
+}
+
+/* 操作按钮区域 */
+.action-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.action-btn {
+  height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, #52c41a, #73d13d);
+  color: #fff;
+  box-shadow: 0 8rpx 24rpx rgba(82, 196, 26, 0.3);
+}
+
+.action-btn.secondary {
+  background: rgba(255, 255, 255, 0.9);
+  color: #667eea;
+  border: 2rpx solid rgba(255, 255, 255, 0.5);
+}

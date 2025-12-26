@@ -1,0 +1,27 @@
+<view class="container">
+  <view class="address-list" wx:if="{{addresses.length > 0}}">
+    <view class="address-card" wx:for="{{addresses}}" wx:key="id">
+      <view class="content" bind:tap="onEdit" data-id="{{item.id}}">
+        <view class="info-row">
+            <text class="name">{{item.contact_name}}</text>
+            <text class="phone">{{item.contact_phone}}</text>
+            <t-tag wx:if="{{item.tag}}" size="small" variant="light" theme="primary">{{item.tag}}</t-tag>
+            <t-tag wx:if="{{item.is_default}}" size="small" theme="danger">默认</t-tag>
+        </view>
+        <text class="address-text">{{item.province + item.city + item.district + item.address}}</text>
+      </view>
+      
+      <view class="action" catch:tap="onEdit" data-id="{{item.id}}">
+        <t-icon name="edit-1" size="40rpx" color="#999" />
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:elif="{{!loading}}">
+    <t-empty icon="location" description="暂无收货地址" />
+  </view>
+
+  <view class="footer">
+    <t-button theme="primary" size="large" block icon="add" bind:tap="onAdd">新增收货地址</t-button>
+  </view>
+</view>

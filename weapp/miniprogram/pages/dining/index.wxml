@@ -1,0 +1,69 @@
+<custom-navbar title="堂食点餐" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+  
+  <view wx:if="{{!loading && session}}" class="content">
+    <!-- 桌台信息 -->
+    <view class="table-info">
+      <view class="info-row">
+        <text class="label">餐厅:</text>
+        <text class="value">{{session.merchant_name}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">桌台:</text>
+        <text class="value">{{session.table_name}}</text>
+      </view>
+      <t-button class="call-btn" size="small" icon="service" bindtap="onCallWaiter">呼叫服务员</t-button>
+    </view>
+
+    <!-- 菜品列表 -->
+    <view class="dishes-container">
+      <!-- 左侧分类 -->
+      <scroll-view class="category-sidebar" scroll-y>
+        <view 
+          wx:for="{{categories}}" 
+          wx:key="id"
+          class="category-item {{activeCategoryId === item.id ? 'active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onCategoryChange"
+        >
+          {{item.name}}
+        </view>
+      </scroll-view>
+
+      <!-- 右侧菜品 -->
+      <scroll-view class="dishes-list" scroll-y>
+        <view wx:for="{{dishes}}" wx:key="id" wx:if="{{item.category_id === activeCategoryId}}" class="dish-item">
+          <t-image class="dish-image" src="{{item.image_url}}" mode="aspectFill" />
+          <view class="dish-info">
+            <text class="dish-name">{{item.name}}</text>
+            <text class="dish-desc">{{item.description}}</text>
+            <view class="dish-meta">
+              <text class="rating">⭐{{item.rating}}</text>
+              <text class="price">¥{{item.price / 100}}</text>
+            </view>
+          </view>
+          <t-button 
+            class="add-btn" 
+            size="small" 
+            icon="add" 
+            shape="circle" 
+            theme="primary"
+            data-id="{{item.id}}"
+            bindtap="onAddCart"
+          />
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>
+
+<!-- 购物车栏 -->
+<view wx:if="{{!loading && session && cartCount > 0}}" class="cart-bar">
+  <view class="cart-info">
+    <text class="cart-count">🛒 {{cartCount}}件</text>
+    <text class="cart-price">¥{{cartPrice / 100}}</text>
+  </view>
+  <t-button class="submit-btn" theme="primary" bindtap="onSubmitOrder">下单</t-button>
+</view>

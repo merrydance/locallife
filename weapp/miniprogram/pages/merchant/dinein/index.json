@@ -1,0 +1,10 @@
+{
+    "navigationBarTitleText": "堂食管理",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

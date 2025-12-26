@@ -1,0 +1,100 @@
+<wxs module="utils">
+module.exports = {
+  getCategoryName: function(categories, categoryId) {
+    if (!categories || categories.length === 0 || !categoryId) {
+      return '请选择分类';
+    }
+    for (var i = 0; i < categories.length; i++) {
+      if (categories[i].id === categoryId) {
+        return categories[i].name;
+      }
+    }
+    return '请选择分类';
+  }
+}
+</wxs>
+
+<custom-navbar title="{{isEdit ? '编辑菜品' : '新增菜品'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading}}" class="form-container">
+    <t-cell-group>
+      <t-cell title="菜品名称" required>
+        <input 
+          class="input" 
+          placeholder="请输入菜品名称" 
+          value="{{form.name}}"
+          data-field="name"
+          bindinput="onInputChange"
+        />
+      </t-cell>
+
+      <t-cell title="分类" required>
+        <picker 
+          mode="selector" 
+          range="{{categories}}" 
+          range-key="name"
+          value="{{utils.getCategoryIndex(categories, form.category_id)}}"
+          bindchange="onCategoryChange"
+        >
+          <view class="picker">
+            {{utils.getCategoryName(categories, form.category_id)}}
+          </view>
+        </picker>
+      </t-cell>
+
+      <t-cell title="价格(元)" required>
+        <input 
+          class="input" 
+          type="digit"
+          placeholder="0.00" 
+          value="{{form.price}}"
+          data-field="price"
+          bindinput="onInputChange"
+        />
+      </t-cell>
+
+      <t-cell title="库存">
+        <input 
+          class="input" 
+          type="number"
+          placeholder="0" 
+          value="{{form.stock}}"
+          data-field="stock"
+          bindinput="onInputChange"
+        />
+      </t-cell>
+
+      <t-cell title="描述">
+        <textarea 
+          class="textarea" 
+          placeholder="请输入菜品描述" 
+          value="{{form.description}}"
+          data-field="description"
+          bindinput="onInputChange"
+        />
+      </t-cell>
+
+      <t-cell title="图片">
+        <t-button size="small" bindtap="onChooseImage">选择图片</t-button>
+      </t-cell>
+    </t-cell-group>
+
+    <view wx:if="{{form.image_url}}" class="image-preview">
+      <t-image src="{{form.image_url}}" mode="aspectFill" />
+    </view>
+  </view>
+</view>
+
+<view class="submit-bar">
+  <t-button 
+    class="submit-btn" 
+    theme="primary" 
+    loading="{{submitting}}"
+    bindtap="onSubmit"
+  >
+    {{isEdit ? '保存' : '创建'}}
+  </t-button>
+</view>

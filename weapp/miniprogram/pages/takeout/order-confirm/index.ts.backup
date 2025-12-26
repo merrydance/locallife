@@ -1,0 +1,159 @@
+import CartService from '../../../services/cart'
+import { getAddressList } from '../../../api/address'
+import { createOrder, previewOrder, CreateOrderRequest } from '../../../api/order'
+
+Page({
+    data: {
+        cart: null as any,
+        address: null as any,
+        remark: '',
+        deliveryTime: 'ASAP',
+        navBarHeight: 88,
+        loading: false,
+        previewData: null as any
+    },
+
+    onLoad() {
+        this.loadCart()
+        this.loadDefaultAddress()
+    },
+
+    onShow() {
+        // If returning from address selection, we might have a selectedAddressId
+        const pages = getCurrentPages()
+        const currPage = pages[pages.length - 1]
+        if (currPage.data.selectedAddressId) {
+             this.loadAddressById(currPage.data.selectedAddressId)
+             // clear it
+             currPage.setData({ selectedAddressId: null })
+        }
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    loadCart() {
+        const cart = CartService.getCart()
+        this.setData({ cart })
+        this.updateOrderPreview()
+    },
+
+    async loadDefaultAddress() {
+        try {
+             const addresses = await getAddressList()
+             if (addresses && addresses.length > 0) {
+                 const defaultAddr = addresses.find(a => a.is_default) || addresses[0]
+                 this.setData({ address: defaultAddr })
+                 this.updateOrderPreview()
+             }
+        } catch (error) {
+            console.error('Load address failed', error)
+        }
+    },
+
+    async loadAddressById(id: string) {
+         try {
+             const addresses = await getAddressList() // Ideally use getAddressDetail or find from cached list
+             const addr = addresses.find(a => a.id === id)
+             if (addr) {
+                 this.setData({ address: addr })
+                 this.updateOrderPreview()
+             }
+        } catch (error) {
+            console.error('Load address failed', error)
+        }
+    },
+
+    onSelectAddress() {
+        wx.navigateTo({ url: '/pages/user_center/addresses/index?select=true' })
+    },
+
+    onRemarkInput(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ remark: e.detail.value })
+    },
+
+    onDeliveryTimeChange(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ deliveryTime: e.detail.value })
+    },
+
+    async updateOrderPreview() {
+        const { cart, address } = this.data
+        const CartService = require('../../../services/cart').default
+        const merchantId = CartService.getMerchantId()
+
+        if (!cart || cart.totalCount === 0 || !merchantId) return
+
+        const requestData: CreateOrderRequest = {
+            merchant_id: merchantId,
+            items: cart.items.map((item: any) => ({
+                dish_id: item.dishId,
+                quantity: item.quantity,
+                extra_options: []
+            })),
+            order_type: 'DELIVERY',
+            address_id: address?.id
+        }
+
+        try {
+            const preview = await previewOrder(requestData)
+            this.setData({ previewData: preview })
+        } catch (e) {
+            console.error('Preview failed', e)
+        }
+    },
+
+    async onSubmitOrder() {
+        const { cart, address, remark } = this.data
+        const CartService = require('../../../services/cart').default
+        const merchantId = CartService.getMerchantId()
+
+        if (!address) {
+            wx.showToast({ title: '请选择收货地址', icon: 'none' })
+            return
+        }
+
+        if (cart.totalCount === 0) {
+            wx.showToast({ title: '购物车为空', icon: 'none' })
+            return
+        }
+
+        if (!merchantId) {
+            wx.showToast({ title: '商户信息丢失', icon: 'none' })
+            return
+        }
+
+        this.setData({ loading: true })
+
+        try {
+            // Construct Request
+            const requestData: CreateOrderRequest = {
+                merchant_id: merchantId,
+                items: cart.items.map((item: any) => ({
+                    dish_id: item.dishId,
+                    quantity: item.quantity,
+                    extra_options: []
+                })),
+                order_type: 'DELIVERY',
+                address_id: address.id,
+                comment: remark
+            }
+
+            const order = await createOrder(requestData)
+
+            wx.showToast({ title: '下单成功', icon: 'success' })
+
+            // 清空购物车
+            CartService.clear()
+
+            // 跳转到订单详情
+            setTimeout(() => {
+                wx.redirectTo({ url: `/pages/orders/detail/index?id=${order.id}` })
+            }, 1500)
+        } catch (error) {
+            console.error('Create order failed:', error)
+            wx.showToast({ title: '下单失败', icon: 'error' })
+            this.setData({ loading: false })
+        }
+    }
+})

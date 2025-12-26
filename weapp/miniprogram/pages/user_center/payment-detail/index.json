@@ -1,0 +1,9 @@
+{
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty"
+    }
+}

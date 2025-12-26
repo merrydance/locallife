@@ -1,0 +1,16 @@
+{
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-upload": "tdesign-miniprogram/upload/upload",
+        "t-picker": "tdesign-miniprogram/picker/picker",
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-textarea": "tdesign-miniprogram/textarea/textarea",
+        "t-steps": "tdesign-miniprogram/steps/steps",
+        "t-step-item": "tdesign-miniprogram/step-item/step-item",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "document-uploader": "/components/document-uploader/index"
+    }
+}

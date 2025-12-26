@@ -1,0 +1,474 @@
+# Casbin Policy for LocalLife Platform
+# Format: p, subject, object, action
+# 
+# Roles:
+# - admin: Platform administrator (full access)
+# - operator: Regional operator (manages specific regions)
+# - merchant_owner: Merchant owner (manages their own store)
+# - merchant_staff: Merchant staff (limited merchant access)
+# - rider: Delivery rider (manages their deliveries)
+# - customer: Regular user (basic user access)
+#
+# Role inheritance (g): child, parent
+# - admin inherits all permissions (no parent needed)
+# - operator, merchant_owner, rider, merchant_staff inherit from customer
+#
+
+# =============================================================================
+# Role Inheritance
+# =============================================================================
+g, operator, customer
+g, merchant_owner, customer
+g, merchant_staff, customer
+g, rider, customer
+
+# =============================================================================
+# Admin Policies - Platform administration (full access)
+# =============================================================================
+# Platform Statistics
+p, admin, /v1/platform/stats/*, GET
+
+# Merchant Application Review
+p, admin, /v1/admin/merchants/applications, GET
+p, admin, /v1/admin/merchants/applications/review, POST
+
+# Rider Management
+p, admin, /v1/admin/riders, GET
+p, admin, /v1/admin/riders/:rider_id/approve, POST
+p, admin, /v1/admin/riders/:rider_id/reject, POST
+
+# Trust Score Management (admin-only actions)
+p, admin, /v1/trust-score/claims/:id/review, PATCH
+p, admin, /v1/trust-score/merchants/:id/suspend, PATCH
+p, admin, /v1/trust-score/fraud/detect, POST
+
+# =============================================================================
+# Operator Policies - Regional management
+# =============================================================================
+# Regional Statistics
+p, operator, /v1/operator/regions/:region_id/stats, GET
+p, operator, /v1/operator/regions/:region_id/peak-hours, POST
+p, operator, /v1/operator/regions/:region_id/peak-hours, GET
+
+# Settlement Management
+p, operator, /v1/operator/settlements, GET
+p, operator, /v1/operator/settlements/:id, GET
+p, operator, /v1/operator/settlements, POST
+p, operator, /v1/operator/settlements/:id/confirm, POST
+
+# Multi-dimension Analysis
+p, operator, /v1/operator/merchants/ranking, GET
+p, operator, /v1/operator/riders/ranking, GET
+p, operator, /v1/operator/trend/daily, GET
+p, operator, /v1/operator/peak-hours/:id, DELETE
+
+# Merchant Management (List, Detail, Suspend, Resume)
+p, operator, /v1/operator/merchants, GET
+p, operator, /v1/operator/merchants/:id, GET
+p, operator, /v1/operator/merchants/:id/suspend, POST
+p, operator, /v1/operator/merchants/:id/resume, POST
+
+# Rider Management (List, Detail, Suspend, Resume)
+p, operator, /v1/operator/riders, GET
+p, operator, /v1/operator/riders/:id, GET
+p, operator, /v1/operator/riders/:id/suspend, POST
+p, operator, /v1/operator/riders/:id/resume, POST
+
+# Appeals Management
+p, operator, /v1/operator/appeals, GET
+p, operator, /v1/operator/appeals/:id, GET
+p, operator, /v1/operator/appeals/:id/review, POST
+
+# Operator Finance
+p, operator, /v1/operators/me/finance/overview, GET
+p, operator, /v1/operators/me/commission, GET
+
+# Operator Ecommerce Applyment (WeChat Secondary Merchant)
+p, operator, /v1/operator/applyment/bindbank, POST
+p, operator, /v1/operator/applyment/status, GET
+
+# Delivery Fee Config Management
+p, operator, /v1/delivery-fee/regions/:region_id/config, POST
+p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
+
+# Region Recommendation Config
+p, operator, /v1/regions/:id/recommendation-config, GET
+p, operator, /v1/regions/:id/recommendation-config, PATCH
+
+# Review Moderation
+p, operator, /v1/reviews/:id, DELETE
+
+# =============================================================================
+# Merchant Owner Policies - Store management
+# =============================================================================
+# Merchant Profile
+p, merchant_owner, /v1/merchants/applications, POST
+p, merchant_owner, /v1/merchants/applications/me, GET
+p, merchant_owner, /v1/merchants/me, GET
+p, merchant_owner, /v1/merchants/me, PATCH
+p, merchant_owner, /v1/merchants/me/status, GET
+p, merchant_owner, /v1/merchants/me/status, PATCH
+p, merchant_owner, /v1/merchants/me/business-hours, GET
+p, merchant_owner, /v1/merchants/me/business-hours, PUT
+p, merchant_owner, /v1/merchants/me/membership-settings, GET
+p, merchant_owner, /v1/merchants/me/membership-settings, PUT
+p, merchant_owner, /v1/merchants/images/upload, POST
+
+# Dish Management
+p, merchant_owner, /v1/dishes/categories, POST
+p, merchant_owner, /v1/dishes/categories, GET
+p, merchant_owner, /v1/dishes/categories/:id, PATCH
+p, merchant_owner, /v1/dishes/categories/:id, DELETE
+p, merchant_owner, /v1/dishes, POST
+p, merchant_owner, /v1/dishes, GET
+p, merchant_owner, /v1/dishes/:id, GET
+p, merchant_owner, /v1/dishes/:id, PUT
+p, merchant_owner, /v1/dishes/:id, DELETE
+p, merchant_owner, /v1/dishes/:id/status, PATCH
+p, merchant_owner, /v1/dishes/batch/status, PATCH
+p, merchant_owner, /v1/dishes/:id/customizations, GET
+p, merchant_owner, /v1/dishes/:id/customizations, PUT
+p, merchant_owner, /v1/dishes/:id/specs, PUT
+
+# Combo Management
+p, merchant_owner, /v1/combos, POST
+p, merchant_owner, /v1/combos, GET
+p, merchant_owner, /v1/combos/:id, GET
+p, merchant_owner, /v1/combos/:id, PUT
+p, merchant_owner, /v1/combos/:id/online, PUT
+p, merchant_owner, /v1/combos/:id, DELETE
+p, merchant_owner, /v1/combos/:id/dishes, POST
+p, merchant_owner, /v1/combos/:id/dishes/:dish_id, DELETE
+
+# Inventory Management
+p, merchant_owner, /v1/inventory, POST
+p, merchant_owner, /v1/inventory, GET
+p, merchant_owner, /v1/inventory, PUT
+p, merchant_owner, /v1/inventory/:dish_id, PATCH
+p, merchant_owner, /v1/inventory/check, POST
+p, merchant_owner, /v1/inventory/stats, GET
+
+# Table Management
+p, merchant_owner, /v1/tables, POST
+p, merchant_owner, /v1/tables/:id, GET
+p, merchant_owner, /v1/tables, GET
+p, merchant_owner, /v1/tables/:id, PATCH
+p, merchant_owner, /v1/tables/:id/status, PATCH
+p, merchant_owner, /v1/tables/:id, DELETE
+p, merchant_owner, /v1/tables/:id/tags, POST
+p, merchant_owner, /v1/tables/:id/tags/:tag_id, DELETE
+p, merchant_owner, /v1/tables/:id/tags, GET
+p, merchant_owner, /v1/tables/:id/qrcode, GET
+
+# Delivery Promotions
+p, merchant_owner, /v1/delivery-fee/merchants/:id/promotions, POST
+p, merchant_owner, /v1/delivery-fee/merchants/:id/promotions, GET
+p, merchant_owner, /v1/delivery-fee/promotions/:id, DELETE
+
+# Reservation Management (Merchant)
+p, merchant_owner, /v1/reservations/merchant, GET
+p, merchant_owner, /v1/reservations/:id/confirm, POST
+p, merchant_owner, /v1/reservations/:id/complete, POST
+p, merchant_owner, /v1/reservations/:id/no-show, POST
+p, merchant_owner, /v1/reservations/merchant/stats, GET
+
+# Order Management (Merchant)
+p, merchant_owner, /v1/merchant/orders, GET
+p, merchant_owner, /v1/merchant/orders/:id, GET
+p, merchant_owner, /v1/merchant/orders/:id/accept, POST
+p, merchant_owner, /v1/merchant/orders/:id/reject, POST
+p, merchant_owner, /v1/merchant/orders/:id/ready, POST
+p, merchant_owner, /v1/merchant/orders/:id/complete, POST
+p, merchant_owner, /v1/merchant/orders/stats, GET
+
+# Kitchen Display System
+p, merchant_owner, /v1/kitchen/orders, GET
+p, merchant_owner, /v1/kitchen/orders/:id, GET
+p, merchant_owner, /v1/kitchen/orders/:id/preparing, POST
+p, merchant_owner, /v1/kitchen/orders/:id/ready, POST
+
+# Claims & Appeals (Merchant)
+p, merchant_owner, /v1/merchant/claims, GET
+p, merchant_owner, /v1/merchant/claims/:id, GET
+p, merchant_owner, /v1/merchant/appeals, POST
+p, merchant_owner, /v1/merchant/appeals, GET
+p, merchant_owner, /v1/merchant/appeals/:id, GET
+
+# Refunds (Merchant)
+p, merchant_owner, /v1/refunds, POST
+p, merchant_owner, /v1/refunds/:id, GET
+
+# Merchant Statistics
+p, merchant_owner, /v1/merchant/stats/daily, GET
+p, merchant_owner, /v1/merchant/stats/overview, GET
+p, merchant_owner, /v1/merchant/stats/dishes/top, GET
+p, merchant_owner, /v1/merchant/stats/customers, GET
+p, merchant_owner, /v1/merchant/stats/customers/:user_id, GET
+p, merchant_owner, /v1/merchant/stats/hourly, GET
+p, merchant_owner, /v1/merchant/stats/sources, GET
+p, merchant_owner, /v1/merchant/stats/repurchase, GET
+p, merchant_owner, /v1/merchant/stats/categories, GET
+
+# Merchant Finance
+p, merchant_owner, /v1/merchant/finance/overview, GET
+p, merchant_owner, /v1/merchant/finance/orders, GET
+p, merchant_owner, /v1/merchant/finance/service-fees, GET
+p, merchant_owner, /v1/merchant/finance/promotions, GET
+p, merchant_owner, /v1/merchant/finance/daily, GET
+p, merchant_owner, /v1/merchant/finance/settlements, GET
+
+# Merchant Devices (Printers)
+p, merchant_owner, /v1/merchant/devices, POST
+p, merchant_owner, /v1/merchant/devices, GET
+p, merchant_owner, /v1/merchant/devices/:id, GET
+p, merchant_owner, /v1/merchant/devices/:id, PUT
+p, merchant_owner, /v1/merchant/devices/:id, DELETE
+p, merchant_owner, /v1/merchant/devices/:id/test, POST
+
+# Merchant Display Config
+p, merchant_owner, /v1/merchant/display-config, GET
+p, merchant_owner, /v1/merchant/display-config, PUT
+
+# Reviews (Merchant)
+p, merchant_owner, /v1/reviews/merchants/:id/all, GET
+p, merchant_owner, /v1/reviews/:id/reply, POST
+
+# Vouchers
+p, merchant_owner, /v1/merchants/:id/vouchers, POST
+p, merchant_owner, /v1/merchants/:id/vouchers, GET
+p, merchant_owner, /v1/merchants/:id/vouchers/active, GET
+p, merchant_owner, /v1/merchants/:id/vouchers/:id, PATCH
+p, merchant_owner, /v1/merchants/:id/vouchers/:id, DELETE
+
+# Discounts
+p, merchant_owner, /v1/merchants/:id/discounts, POST
+p, merchant_owner, /v1/merchants/:id/discounts, GET
+p, merchant_owner, /v1/merchants/:id/discounts/active, GET
+p, merchant_owner, /v1/merchants/:id/discounts/:id, GET
+p, merchant_owner, /v1/merchants/:id/discounts/:id, PATCH
+p, merchant_owner, /v1/merchants/:id/discounts/:id, DELETE
+p, merchant_owner, /v1/merchants/:id/discounts/applicable, GET
+p, merchant_owner, /v1/merchants/:id/discounts/best, GET
+
+# Recharge Rules
+p, merchant_owner, /v1/merchants/:id/recharge-rules, POST
+p, merchant_owner, /v1/merchants/:id/recharge-rules, GET
+p, merchant_owner, /v1/merchants/:id/recharge-rules/active, GET
+p, merchant_owner, /v1/merchants/:id/recharge-rules/:id, PATCH
+p, merchant_owner, /v1/merchants/:id/recharge-rules/:id, DELETE
+
+# Trust Score (Merchant Recovery)
+p, merchant_owner, /v1/trust-score/recovery, POST
+p, merchant_owner, /v1/trust-score/appeals, POST
+
+# =============================================================================
+# Merchant Staff Policies - Limited store access
+# =============================================================================
+# Order Operations (read-only + status updates)
+p, merchant_staff, /v1/merchant/orders, GET
+p, merchant_staff, /v1/merchant/orders/:id, GET
+p, merchant_staff, /v1/merchant/orders/:id/accept, POST
+p, merchant_staff, /v1/merchant/orders/:id/ready, POST
+p, merchant_staff, /v1/merchant/orders/:id/complete, POST
+
+# Kitchen Display System
+p, merchant_staff, /v1/kitchen/orders, GET
+p, merchant_staff, /v1/kitchen/orders/:id, GET
+p, merchant_staff, /v1/kitchen/orders/:id/preparing, POST
+p, merchant_staff, /v1/kitchen/orders/:id/ready, POST
+
+# Inventory (read-only + update)
+p, merchant_staff, /v1/inventory, GET
+p, merchant_staff, /v1/inventory/:dish_id, PATCH
+p, merchant_staff, /v1/inventory/stats, GET
+
+# Reservations (read-only + confirm)
+p, merchant_staff, /v1/reservations/merchant, GET
+p, merchant_staff, /v1/reservations/:id/confirm, POST
+p, merchant_staff, /v1/reservations/:id/complete, POST
+
+# Tables (read-only)
+p, merchant_staff, /v1/tables, GET
+p, merchant_staff, /v1/tables/:id, GET
+
+# =============================================================================
+# Rider Policies - Delivery management
+# =============================================================================
+# Rider Registration & Profile
+p, rider, /v1/rider/apply, POST
+p, rider, /v1/rider/me, GET
+
+# Deposit Management
+p, rider, /v1/rider/deposit, GET
+p, rider, /v1/rider/deposit, POST
+p, rider, /v1/rider/withdraw, POST
+p, rider, /v1/rider/deposits, GET
+
+# Online/Offline Status
+p, rider, /v1/rider/status, GET
+p, rider, /v1/rider/online, POST
+p, rider, /v1/rider/offline, POST
+
+# Location Updates
+p, rider, /v1/rider/location, POST
+
+# Order Exception Handling
+p, rider, /v1/rider/orders/:id/delay, POST
+p, rider, /v1/rider/orders/:id/exception, POST
+
+# Premium Score (High-value Order Qualification)
+p, rider, /v1/rider/score, GET
+p, rider, /v1/rider/score/history, GET
+
+# Claims & Appeals (Rider)
+p, rider, /v1/rider/claims, GET
+p, rider, /v1/rider/claims/:id, GET
+p, rider, /v1/rider/appeals, POST
+p, rider, /v1/rider/appeals, GET
+p, rider, /v1/rider/appeals/:id, GET
+
+# Delivery Operations
+p, rider, /v1/delivery/recommend, GET
+p, rider, /v1/delivery/grab/:order_id, POST
+p, rider, /v1/delivery/active, GET
+p, rider, /v1/delivery/history, GET
+p, rider, /v1/delivery/:delivery_id/start-pickup, POST
+p, rider, /v1/delivery/:delivery_id/confirm-pickup, POST
+p, rider, /v1/delivery/:delivery_id/start-delivery, POST
+p, rider, /v1/delivery/:delivery_id/confirm-delivery, POST
+p, rider, /v1/delivery/order/:order_id, GET
+p, rider, /v1/delivery/:delivery_id/track, GET
+p, rider, /v1/delivery/:delivery_id/rider-location, GET
+
+# Trust Score (Rider Recovery)
+p, rider, /v1/trust-score/recovery, POST
+p, rider, /v1/trust-score/appeals, POST
+
+# =============================================================================
+# Customer Policies - Basic user access
+# =============================================================================
+# User Profile
+p, customer, /v1/users/me, GET
+p, customer, /v1/users/me, PATCH
+p, customer, /v1/auth/bind-phone, POST
+
+# Operator Application (any user can apply to become operator)
+p, customer, /v1/operator/application, POST
+p, customer, /v1/operator/application, GET
+p, customer, /v1/operator/application/region, PUT
+p, customer, /v1/operator/application/basic, PUT
+p, customer, /v1/operator/application/license/ocr, POST
+p, customer, /v1/operator/application/idcard/ocr, POST
+p, customer, /v1/operator/application/submit, POST
+p, customer, /v1/operator/application/reset, POST
+
+# Addresses
+p, customer, /v1/addresses, POST
+p, customer, /v1/addresses, GET
+p, customer, /v1/addresses/:id, GET
+p, customer, /v1/addresses/:id, PATCH
+p, customer, /v1/addresses/:id/default, PATCH
+p, customer, /v1/addresses/:id, DELETE
+
+# View Merchants (public data)
+p, customer, /v1/merchants/:id/rooms, GET
+p, customer, /v1/merchants/:id/promotions, GET
+
+# Rooms
+p, customer, /v1/rooms/:id, GET
+p, customer, /v1/rooms/:id/availability, GET
+
+# Reservations (User)
+p, customer, /v1/reservations, POST
+p, customer, /v1/reservations/me, GET
+p, customer, /v1/reservations/:id, GET
+p, customer, /v1/reservations/:id/cancel, POST
+p, customer, /v1/reservations/:id/add-dishes, POST
+
+# Orders (User)
+p, customer, /v1/orders/calculate, GET
+p, customer, /v1/orders, POST
+p, customer, /v1/orders, GET
+p, customer, /v1/orders/:id, GET
+p, customer, /v1/orders/:id/cancel, POST
+p, customer, /v1/orders/:id/urge, POST
+p, customer, /v1/orders/:id/confirm, POST
+
+# Payments
+p, customer, /v1/payments, POST
+p, customer, /v1/payments, GET
+p, customer, /v1/payments/:id, GET
+p, customer, /v1/payments/:id/close, POST
+p, customer, /v1/payments/:id/refunds, GET
+
+# Notifications
+p, customer, /v1/notifications, GET
+p, customer, /v1/notifications/unread/count, GET
+p, customer, /v1/notifications/:id/read, PUT
+p, customer, /v1/notifications/read-all, PUT
+p, customer, /v1/notifications/:id, DELETE
+p, customer, /v1/notifications/preferences, GET
+p, customer, /v1/notifications/preferences, PUT
+
+# WebSocket
+p, customer, /v1/ws, GET
+
+# Trust Score (View)
+p, customer, /v1/trust-score/profiles/:role/:id, GET
+p, customer, /v1/trust-score/history/:role/:id, GET
+p, customer, /v1/trust-score/claims, POST
+p, customer, /v1/trust-score/food-safety/report, POST
+
+# Claims (User)
+p, customer, /v1/claims, GET
+p, customer, /v1/claims/:id, GET
+
+# Cart
+p, customer, /v1/cart, GET
+p, customer, /v1/cart/items, POST
+p, customer, /v1/cart/items/:id, PATCH
+p, customer, /v1/cart/items/:id, DELETE
+p, customer, /v1/cart/clear, POST
+p, customer, /v1/cart/calculate, POST
+
+# Favorites
+p, customer, /v1/favorites/merchants, POST
+p, customer, /v1/favorites/merchants, GET
+p, customer, /v1/favorites/merchants/:id, DELETE
+p, customer, /v1/favorites/dishes, POST
+p, customer, /v1/favorites/dishes, GET
+p, customer, /v1/favorites/dishes/:id, DELETE
+
+# Browse History
+p, customer, /v1/history/browse, GET
+
+# Membership
+p, customer, /v1/memberships, POST
+p, customer, /v1/memberships/recharge, POST
+p, customer, /v1/memberships, GET
+p, customer, /v1/memberships/:id, GET
+p, customer, /v1/memberships/:id/transactions, GET
+
+# Reviews
+p, customer, /v1/reviews, POST
+p, customer, /v1/reviews/:id, GET
+p, customer, /v1/reviews/me, GET
+p, customer, /v1/reviews/merchants/:id, GET
+
+# User Behaviors
+p, customer, /v1/behaviors/track, POST
+
+# Recommendations
+p, customer, /v1/recommendations/dishes, GET
+p, customer, /v1/recommendations/combos, GET
+p, customer, /v1/recommendations/merchants, GET
+
+# Vouchers (User)
+p, customer, /v1/vouchers/:voucher_id/claim, POST
+p, customer, /v1/vouchers/me, GET
+p, customer, /v1/vouchers/available/:merchant_id, GET
+p, customer, /v1/vouchers/available, GET
+
+# Delivery Fee (Public)
+p, customer, /v1/delivery-fee/regions/:region_id/config, GET
+p, customer, /v1/delivery-fee/calculate, POST

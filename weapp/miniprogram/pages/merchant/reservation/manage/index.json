@@ -1,0 +1,15 @@
+{
+    "navigationBarTitleText": "预订管理",
+    "enablePullDownRefresh": true,
+    "usingComponents": {
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-dialog": "tdesign-miniprogram/dialog/dialog",
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

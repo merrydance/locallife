@@ -1,0 +1,105 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.printers-container {
+  padding: 24rpx;
+}
+
+.empty {
+  padding: 100rpx 0;
+}
+
+.printers-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24rpx;
+}
+
+@media (min-width: 750px) {
+  .printers-container {
+    padding: 16px !important;
+  }
+  .printers-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px !important;
+  }
+  .printer-card {
+    padding: 16px !important;
+    border-radius: 8px !important;
+  }
+  .printer-name {
+    font-size: 16px !important;
+  }
+  .detail-row {
+    font-size: 14px !important;
+    gap: 12px !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .printers-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.printer-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.04);
+}
+
+.printer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.printer-info {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.printer-name {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.printer-details {
+  margin-bottom: 16rpx;
+}
+
+.detail-row {
+  display: flex;
+  gap: 16rpx;
+  padding: 8rpx 0;
+  font-size: 24rpx;
+}
+
+.label {
+  color: #666;
+}
+
+.value {
+  color: #333;
+  font-weight: 500;
+}
+
+.printer-actions {
+  display: flex;
+  gap: 16rpx;
+  justify-content: flex-end;
+}

@@ -1,0 +1,544 @@
+/* KDS后厨显示系统样式 - 适配大屏显示 */
+
+.kds-container {
+  width: 100%;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20rpx;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: #fff;
+}
+
+.main-content {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 顶部工具栏 */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 30rpx;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.toolbar-left .title {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 16rpx;
+}
+
+/* 统计信息栏 */
+.stats-bar {
+  display: flex;
+  gap: 20rpx;
+  padding: 20rpx 30rpx;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.stat-label {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.stat-value {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1890ff;
+}
+
+/* 订单看板 */
+.order-board {
+  flex: 1;
+  display: flex;
+  flex-direction: column; /* Default stack for mobile */
+  gap: 20rpx;
+  overflow: hidden;
+}
+
+.order-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 24rpx 30rpx;
+  color: #fff;
+  font-weight: bold;
+}
+
+.new-header {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.preparing-header {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.ready-header {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.column-title {
+  font-size: 32rpx;
+}
+
+.column-content {
+  flex: 1;
+  padding: 20rpx;
+  overflow-y: auto;
+}
+
+/* 订单卡片 */
+.order-card {
+  background: #fff;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
+  border-left: 6rpx solid transparent;
+}
+
+.new-order {
+  border-left-color: #f5576c;
+}
+
+.preparing-order {
+  border-left-color: #00f2fe;
+}
+
+.preparing-order.overdue {
+  border-left-color: #ff4d4f;
+  background: #fff1f0;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 2rpx 12rpx rgba(255, 77, 79, 0.3);
+  }
+  50% {
+    box-shadow: 0 4rpx 20rpx rgba(255, 77, 79, 0.6);
+  }
+}
+
+.ready-order {
+  border-left-color: #52c41a;
+}
+
+.order-card:active {
+  transform: scale(0.98);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.order-no {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.table-info {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 16rpx;
+  padding: 12rpx;
+  background: #f5f5f5;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+  color: #666;
+}
+
+.order-items {
+  margin-bottom: 16rpx;
+}
+
+.dish-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.dish-item:last-child {
+  border-bottom: none;
+}
+
+.dish-name {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.dish-quantity {
+  font-size: 28rpx;
+  color: #1890ff;
+  font-weight: bold;
+  margin-left: 16rpx;
+}
+
+.order-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+  padding: 12rpx;
+  background: #fff7e6;
+  border-radius: 8rpx;
+  margin-bottom: 16rpx;
+  font-size: 24rpx;
+  color: #fa8c16;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.order-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 订单详情弹窗 */
+.detail-popup {
+  width: 80%;
+  max-width: 800rpx;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 16rpx;
+  overflow: hidden;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.modal-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.modal-body {
+  flex: 1;
+  padding: 30rpx;
+  overflow-y: auto;
+}
+
+/* 响应式适配 - 平板和大屏 */
+@media (min-width: 750px) {
+  .order-board {
+    flex-direction: row !important; /* Row for large screens */
+  }
+  .kds-container {
+    padding: 16px !important;
+  }
+
+  .toolbar-left .title {
+    font-size: 24px !important;
+  }
+
+  .order-card {
+    padding: 16px !important;
+  }
+
+  .order-no {
+    font-size: 16px !important;
+  }
+
+  .dish-name,
+  .dish-quantity {
+    font-size: 16px !important;
+  }
+  
+  .column-title {
+    font-size: 18px !important;
+  }
+
+  /* Asset & Typography Stabilization Caps */
+  .toolbar {
+    padding: 16px 24px !important;
+    height: 64px !important;
+  }
+  .stats-bar {
+    padding: 12px 24px !important;
+  }
+  .stat-value {
+    font-size: 20px !important;
+  }
+  .order-card {
+    padding: 16px !important;
+    border-radius: 8px !important;
+  }
+  .card-header .t-tag {
+    height: 24px !important;
+    font-size: 12px !important;
+  }
+  .t-icon {
+    font-size: 20px !important; /* Lock kitchen icons */
+  }
+}
+
+/* 桌面大屏适配 */
+@media (min-width: 1280px) {
+  .kds-container {
+    padding: 24px !important;
+    max-width: 2400px !important;
+    margin: 0 auto !important;
+  }
+
+  .toolbar {
+    padding: 16px 24px !important;
+  }
+
+  .toolbar-left .title {
+    font-size: 28px !important;
+  }
+
+  .stats-bar {
+    padding: 16px 24px !important;
+  }
+
+  .stat-value {
+    font-size: 20px !important;
+  }
+
+  .stat-label {
+    font-size: 14px !important;
+  }
+
+  .order-board {
+    gap: 16px !important;
+  }
+
+  .order-column {
+    border-radius: 10px !important;
+  }
+
+  .column-header {
+    padding: 16px 20px !important;
+  }
+
+  .column-title {
+    font-size: 20px !important;
+  }
+
+  .column-content {
+    padding: 16px !important;
+  }
+
+  .order-card {
+    padding: 20px !important;
+    margin-bottom: 16px !important;
+    border-radius: 8px !important;
+  }
+
+  .order-no {
+    font-size: 18px !important;
+  }
+
+  .dish-name,
+  .dish-quantity {
+    font-size: 18px !important;
+  }
+
+  .table-info {
+    font-size: 15px !important;
+    padding: 8px !important;
+  }
+
+  .order-notes {
+    font-size: 14px !important;
+    padding: 8px !important;
+  }
+}
+
+/* 空状态 */
+.column-content t-empty {
+  padding: 60rpx 0;
+}
+
+/* ========== PC-Full SaaS Layout (>= 1600px) ========== */
+@media (min-width: 1600px) {
+  .pc-saas-layout {
+    display: flex;
+    min-height: 100vh;
+    background: #f0f2f5;
+  }
+
+  .saas-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    transition: margin-left 0.2s ease;
+  }
+
+  .saas-kds-content {
+    flex: 1;
+    margin-top: 56px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 24px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .saas-kds-content .main-content {
+    height: calc(100vh - 80px);
+  }
+
+  .saas-kds-content .toolbar {
+    background: rgba(255, 255, 255, 0.98);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  .saas-kds-content .order-board {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+  }
+
+  .saas-kds-content .order-column {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+}
+
+/* 中等屏幕引导页样式 */
+.kds-medium-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.kds-guidance {
+  background: #fff;
+  padding: 60px;
+  border-radius: 16px;
+  text-align: center;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+
+.guidance-title {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  color: #262626;
+  margin: 24px 0 16px;
+}
+
+.guidance-desc {
+  display: block;
+  font-size: 15px;
+  color: #8c8c8c;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.guidance-actions {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 手机端小屏引导样式 */
+.lds-mobile-guidance {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 32rpx;
+}
+
+.lds-mobile-guidance .guidance-box {
+  background: #fff;
+  padding: 60rpx;
+  border-radius: 24rpx;
+  text-align: center;
+}
+
+.lds-text-lg {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #262626;
+  margin-top: 32rpx;
+}
+
+.lds-text-secondary {
+  font-size: 28rpx;
+  color: #8c8c8c;
+  line-height: 1.6;
+}
+
+.lds-m-b-2 { margin-bottom: 16rpx; }
+.lds-m-b-4 { margin-bottom: 32rpx; }
+

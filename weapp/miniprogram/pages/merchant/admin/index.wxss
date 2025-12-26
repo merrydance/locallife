@@ -1,0 +1,81 @@
+/* 管理中心样式 */
+
+.admin-container {
+  min-height: 100vh;
+  background-color: #F5F6F7;
+}
+
+.main-content {
+  padding: 24rpx;
+}
+
+.section {
+  margin-bottom: 32rpx;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20rpx;
+  padding-left: 16rpx;
+  border-left: 6rpx solid #0052D9;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx 20rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.menu-icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.menu-icon.orders { background: linear-gradient(135deg, #0052D9 0%, #409EFF 100%); }
+.menu-icon.dishes { background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); }
+.menu-icon.tables { background: linear-gradient(135deg, #00A870 0%, #36D9A0 100%); }
+.menu-icon.dinein { background: linear-gradient(135deg, #EBB105 0%, #FFD43B 100%); }
+.menu-icon.kitchen { background: linear-gradient(135deg, #722ED1 0%, #A855F7 100%); }
+.menu-icon.printers { background: linear-gradient(135deg, #64748B 0%, #94A3B8 100%); }
+.menu-icon.analytics { background: linear-gradient(135deg, #0891B2 0%, #22D3EE 100%); }
+.menu-icon.inventory { background: linear-gradient(135deg, #059669 0%, #34D399 100%); }
+.menu-icon.finance { background: linear-gradient(135deg, #0052D9 0%, #409EFF 100%); }
+.menu-icon.marketing { background: linear-gradient(135deg, #E11D48 0%, #FB7185 100%); }
+.menu-icon.review { background: linear-gradient(135deg, #F59E0B 0%, #FCD34D 100%); }
+.menu-icon.reservations { background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%); }
+
+.menu-text {
+  font-size: 24rpx;
+  color: #333;
+}
+
+/* 响应式 */
+@media (min-width: 750px) {
+  .menu-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .menu-grid {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}

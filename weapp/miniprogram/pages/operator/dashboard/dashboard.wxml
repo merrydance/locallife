@@ -1,0 +1,179 @@
+<view class="operator-dashboard">
+  <!-- 加载状态 -->
+  <t-loading wx:if="{{loading}}" theme="circular" size="large" text="加载中..." />
+
+  <view wx:else class="dashboard-content">
+    <!-- 运营商信息卡片 -->
+    <view class="info-card">
+      <view class="info-header">
+        <text class="info-name">{{operatorInfo.name}}</text>
+        <t-tag theme="success" size="small">{{operatorInfo.status === 'active' ? '正常' : '暂停'}}</t-tag>
+      </view>
+      <view class="info-details">
+        <text class="info-item">管理区域: {{operatorInfo.region_ids.length}}个</text>
+        <text class="info-item">佣金比例: {{operatorInfo.commission_rate}}%</text>
+      </view>
+    </view>
+
+    <!-- 财务概览 -->
+    <view class="finance-card" bindtap="onFinanceDetailTap">
+      <view class="card-header">
+        <text class="card-title">财务概览</text>
+        <t-icon name="chevron-right" size="20px" />
+      </view>
+      <view class="finance-grid">
+        <view class="finance-item">
+          <text class="finance-label">今日佣金</text>
+          <text class="finance-value primary">{{formatAmount(financeOverview.today_commission)}}</text>
+        </view>
+        <view class="finance-item">
+          <text class="finance-label">本月佣金</text>
+          <text class="finance-value">{{formatAmount(financeOverview.month_commission)}}</text>
+        </view>
+        <view class="finance-item">
+          <text class="finance-label">待结算</text>
+          <text class="finance-value warning">{{formatAmount(financeOverview.pending_settlement)}}</text>
+        </view>
+        <view class="finance-item">
+          <text class="finance-label">已结算</text>
+          <text class="finance-value success">{{formatAmount(financeOverview.settled_amount)}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 区域选择 -->
+    <view class="region-selector">
+      <text class="selector-label">选择区域:</text>
+      <picker mode="selector" range="{{regionStats}}" range-key="region_name" value="{{selectedRegionId}}" bindchange="onRegionChange">
+        <view class="picker-value">
+          {{regionStats[selectedRegionId].region_name}}
+          <t-icon name="chevron-down" size="16px" />
+        </view>
+      </picker>
+    </view>
+
+    <!-- 数据概览 -->
+    <view class="stats-grid">
+      <!-- 商户统计 -->
+      <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/merchants/list/list">
+        <view class="stat-header">
+          <t-icon name="shop" size="24px" color="#1890ff" />
+          <text class="stat-title">商户管理</text>
+        </view>
+        <view class="stat-content">
+          <view class="stat-row">
+            <text class="stat-label">总数</text>
+            <text class="stat-value">{{merchantSummary.total}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">活跃</text>
+            <text class="stat-value success">{{merchantSummary.active}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">暂停</text>
+            <text class="stat-value warning">{{merchantSummary.suspended}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">待审核</text>
+            <text class="stat-value">{{merchantSummary.pending}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 骑手统计 -->
+      <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/riders/list/list">
+        <view class="stat-header">
+          <t-icon name="user" size="24px" color="#52c41a" />
+          <text class="stat-title">骑手管理</text>
+        </view>
+        <view class="stat-content">
+          <view class="stat-row">
+            <text class="stat-label">总数</text>
+            <text class="stat-value">{{riderSummary.total}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">在线</text>
+            <text class="stat-value success">{{riderSummary.online}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">活跃</text>
+            <text class="stat-value">{{riderSummary.active}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">暂停</text>
+            <text class="stat-value warning">{{riderSummary.suspended}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 申诉统计 -->
+      <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/appeals/list/list">
+        <view class="stat-header">
+          <t-icon name="service" size="24px" color="#faad14" />
+          <text class="stat-title">客诉处理</text>
+        </view>
+        <view class="stat-content">
+          <view class="stat-row">
+            <text class="stat-label">总申诉</text>
+            <text class="stat-value">{{appealSummary.totalAppeals}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">待处理</text>
+            <text class="stat-value warning">{{appealSummary.pendingAppeals}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">平均处理时长</text>
+            <text class="stat-value">{{appealSummary.avgResolutionTime}}分钟</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">满意度</text>
+            <text class="stat-value success">{{formatPercentage(appealSummary.satisfactionRate * 20)}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 数据分析 -->
+      <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/analytics/dashboard/dashboard">
+        <view class="stat-header">
+          <t-icon name="chart" size="24px" color="#722ed1" />
+          <text class="stat-title">数据分析</text>
+        </view>
+        <view class="stat-content">
+          <view class="stat-row">
+            <text class="stat-label">订单总数</text>
+            <text class="stat-value">{{financeOverview.order_count}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">GMV</text>
+            <text class="stat-value">{{formatAmount(financeOverview.gmv)}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">活跃商户</text>
+            <text class="stat-value">{{financeOverview.active_merchant_count}}</text>
+          </view>
+          <view class="stat-row">
+            <text class="stat-label">佣金率</text>
+            <text class="stat-value">{{financeOverview.commission_rate}}%</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 快捷操作 -->
+    <view class="quick-actions">
+      <view class="section-title">快捷操作</view>
+      <view class="action-grid">
+        <view
+          wx:for="{{quickActions}}"
+          wx:key="id"
+          class="action-item"
+          bindtap="onQuickActionTap"
+          data-url="{{item.url}}"
+        >
+          <t-icon name="{{item.icon}}" size="32px" />
+          <text class="action-label">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

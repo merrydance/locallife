@@ -1,0 +1,36 @@
+<view class="container">
+  <view class="form-group">
+    <t-input label="店铺名称" placeholder="请输入店铺名称" value="{{formData.name}}" bind:change="onInput" data-field="name" />
+    <t-input label="联系电话" placeholder="请输入联系电话" type="number" value="{{formData.phone}}" bind:change="onInput" data-field="phone" />
+    <t-input label="店铺地址" placeholder="请输入详细地址" value="{{formData.address}}" bind:change="onInput" data-field="address" />
+    
+    <t-cell title="营业时间">
+        <view class="time-range" slot="note">
+            <picker mode="time" value="{{formData.start_time}}" bindchange="onTimeChange" data-field="start_time">
+                <view class="time-picker">{{formData.start_time}}</view>
+            </picker>
+            <text class="separator">-</text>
+            <picker mode="time" value="{{formData.end_time}}" bindchange="onTimeChange" data-field="end_time">
+                 <view class="time-picker">{{formData.end_time}}</view>
+            </picker>
+        </view>
+    </t-cell>
+
+    <t-textarea label="店铺公告" placeholder="请输入店铺公告" value="{{formData.description}}" bind:change="onInput" data-field="description" maxlength="100" />
+    
+    <view class="upload-row">
+        <text class="label">店铺图片 (第一张将作为Logo)</text>
+        <t-upload
+            mediaType="{{['image']}}"
+            max="{{3}}"
+            files="{{fileList}}"
+            bind:add="onAddFile"
+            bind:remove="onRemoveFile"
+        />
+    </view>
+  </view>
+
+  <view class="footer">
+    <t-button theme="primary" size="large" block bind:tap="onSave">保存修改</t-button>
+  </view>
+</view>

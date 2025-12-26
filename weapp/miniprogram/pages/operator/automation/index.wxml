@@ -1,0 +1,33 @@
+<custom-navbar title="自动化配置" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading}}" class="automation-list">
+    <view class="automation-grid">
+      <view wx:for="{{automations}}" wx:key="id" class="auto-card">
+        <view class="card-header">
+          <text class="auto-name">{{item.name}}</text>
+          <t-switch value="{{item.status === 'ACTIVE'}}" bindchange="onToggleStatus" data-id="{{item.id}}" />
+        </view>
+        
+        <text class="desc">{{item.desc}}</text>
+        
+        <view class="detail-box">
+          <view class="detail-row">
+            <text class="label">触发条件:</text>
+            <text class="value">{{item.trigger}}</text>
+          </view>
+          <view class="detail-row">
+            <text class="label">判断逻辑:</text>
+            <text class="value">{{item.condition}}</text>
+          </view>
+          <view class="detail-row">
+            <text class="label">执行动作:</text>
+            <text class="value">{{item.action}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

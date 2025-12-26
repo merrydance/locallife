@@ -1,0 +1,125 @@
+<custom-navbar title="财务对账" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="finance-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 1. 手机端 (Mobile) -->
+  <match-media max-width="749">
+    <view class="mobile-finance-view">
+      <view class="balance-card">
+        <text class="label">可提现余额</text>
+        <text class="value">¥{{stats.total_balance}}</text>
+        <t-button theme="primary" size="small" block shape="round" class="withdraw-btn">立即提现</t-button>
+      </view>
+      <t-cell-group theme="card">
+        <t-cell 
+          wx:for="{{settlementList}}" 
+          wx:key="id" 
+          title="{{item.date}} 结算" 
+          note="¥{{item.amount}}" 
+          description="{{item.order_count}} 笔订单" 
+          arrow 
+        />
+      </t-cell-group>
+    </view>
+  </match-media>
+
+  <!-- 2. 平板及 PC 布局 (Tablet / PC-Window / PC-Full) -->
+  <match-media min-width="750">
+    <view class="desktop-finance-layout">
+      <!-- 左侧：结算概览与列表 -->
+      <view class="finance-sidebar">
+        <view class="account-overview">
+          <text class="sidebar-label">账户概览</text>
+          <view class="overview-grid">
+            <view class="overview-item">
+              <text class="l">总余额</text>
+              <text class="v highlight">¥{{stats.total_balance}}</text>
+            </view>
+            <view class="overview-item">
+              <text class="l">待结算</text>
+              <text class="v">¥{{stats.pending_settle}}</text>
+            </view>
+          </view>
+          <t-button block theme="primary" size="small" class="sidebar-btn">申请提现</t-button>
+        </view>
+
+        <view class="settlement-list-pane">
+           <text class="sidebar-label">对账单列表</text>
+           <scroll-view scroll-y class="sidebar-scroll">
+              <view 
+                wx:for="{{settlementList}}" 
+                wx:key="id" 
+                class="settle-item-card {{selectedSettlement.id === item.id ? 'active' : ''}}"
+                bindtap="onSelectSettlement"
+                data-item="{{item}}"
+              >
+                <view class="card-row">
+                   <text class="date">{{item.date}}</text>
+                   <text class="amt">¥{{item.amount}}</text>
+                </view>
+                <view class="card-row bottom">
+                   <text class="count">{{item.order_count}} 笔交易</text>
+                   <t-tag size="extra-small" variant="light" theme="success">已结算</t-tag>
+                </view>
+              </view>
+           </scroll-view>
+        </view>
+      </view>
+
+      <!-- 右侧：详尽对账详情 -->
+      <view class="finance-detail-area">
+        <view wx:if="{{!selectedSettlement}}" class="detail-empty">
+           <t-icon name="undertake" size="120rpx" color="#e2e8f0" />
+           <text>选择左侧账单查看明细</text>
+        </view>
+        <view wx:else class="settlement-full-detail">
+           <view class="detail-hero">
+              <view class="hero-main">
+                 <text class="hero-title">{{selectedSettlement.date}} 结算概览</text>
+                 <text class="hero-id">流水号: {{selectedSettlement.id}}</text>
+              </view>
+              <t-button variant="outline" icon="share">导出明细</t-button>
+           </view>
+
+           <view class="stats-grid">
+              <view class="stat-card">
+                 <text class="l">实付总额</text>
+                 <text class="v">¥{{selectedSettlement.amount + 200}}</text>
+              </view>
+              <view class="stat-card">
+                 <text class="l">平台佣金 (6%)</text>
+                 <text class="v negative">- ¥214.8</text>
+              </view>
+              <view class="stat-card highlight">
+                 <text class="l">实结转入</text>
+                 <text class="v">¥{{selectedSettlement.amount}}</text>
+              </view>
+           </view>
+
+           <view class="order-list-card">
+              <text class="card-title">交易流水明细</text>
+              <view class="detail-table">
+                 <view class="tr th">
+                    <text class="td-time">支付时间</text>
+                    <text class="td-type">类型</text>
+                    <text class="td-order">关联单号</text>
+                    <text class="td-amt">交易金额</text>
+                 </view>
+                 <view class="tr">
+                    <text class="td-time">12:30:15</text>
+                    <text class="td-type">外卖支付</text>
+                    <text class="td-order">#202311200001</text>
+                    <text class="td-amt">¥88.50</text>
+                 </view>
+                 <view class="tr">
+                    <text class="td-time">13:15:22</text>
+                    <text class="td-type">堂食扫码</text>
+                    <text class="td-order">#202311200002</text>
+                    <text class="td-amt">¥156.00</text>
+                 </view>
+              </view>
+           </view>
+        </view>
+      </view>
+    </view>
+  </match-media>
+</view>

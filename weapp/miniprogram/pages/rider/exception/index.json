@@ -1,0 +1,14 @@
+{
+    "navigationBarTitleText": "异常上报",
+    "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-dialog": "tdesign-miniprogram/dialog/dialog",
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-textarea": "tdesign-miniprogram/textarea/textarea",
+        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
+        "t-radio": "tdesign-miniprogram/radio/radio",
+        "t-upload": "tdesign-miniprogram/upload/upload"
+    }
+}

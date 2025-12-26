@@ -1,0 +1,21 @@
+[Unit]
+Description=LocalLife API Server
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/sam/locallife
+# Load runtime env from workspace (app.env is ignored by git)
+EnvironmentFile=/home/sam/locallife/app.env
+User=sam
+Group=sam
+ExecStart=/usr/local/bin/locallife
+Restart=always
+RestartSec=2
+
+# Hardening (keep minimal to avoid breaking things)
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

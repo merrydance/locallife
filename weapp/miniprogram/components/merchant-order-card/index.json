@@ -1,0 +1,8 @@
+{
+    "component": true,
+    "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-icon": "tdesign-miniprogram/icon/icon"
+    }
+}

@@ -1,0 +1,411 @@
+/**
+ * 全局通用样式变量
+ * 基于8rpx栅格系统,确保整个应用的间距、尺寸一致性
+ */
+
+/* ==================== 间距系统 (8rpx基础单位) ==================== */
+
+/* 内边距 padding */
+.p-0 { padding: 0 !important; }
+.p-1 { padding: 8rpx !important; }
+.p-2 { padding: 16rpx !important; }
+.p-3 { padding: 24rpx !important; }
+.p-4 { padding: 32rpx !important; }
+.p-5 { padding: 40rpx !important; }
+.p-6 { padding: 48rpx !important; }
+
+/* 水平内边距 */
+.px-0 { padding-left: 0 !important; padding-right: 0 !important; }
+.px-1 { padding-left: 8rpx !important; padding-right: 8rpx !important; }
+.px-2 { padding-left: 16rpx !important; padding-right: 16rpx !important; }
+.px-3 { padding-left: 24rpx !important; padding-right: 24rpx !important; }
+.px-4 { padding-left: 32rpx !important; padding-right: 32rpx !important; }
+.px-5 { padding-left: 40rpx !important; padding-right: 40rpx !important; }
+
+/* 垂直内边距 */
+.py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
+.py-1 { padding-top: 8rpx !important; padding-bottom: 8rpx !important; }
+.py-2 { padding-top: 16rpx !important; padding-bottom: 16rpx !important; }
+.py-3 { padding-top: 24rpx !important; padding-bottom: 24rpx !important; }
+.py-4 { padding-top: 32rpx !important; padding-bottom: 32rpx !important; }
+.py-5 { padding-top: 40rpx !important; padding-bottom: 40rpx !important; }
+
+/* 单向内边距 */
+.pt-0 { padding-top: 0 !important; }
+.pt-1 { padding-top: 8rpx !important; }
+.pt-2 { padding-top: 16rpx !important; }
+.pt-3 { padding-top: 24rpx !important; }
+.pt-4 { padding-top: 32rpx !important; }
+.pt-5 { padding-top: 40rpx !important; }
+.pt-6 { padding-top: 48rpx !important; }
+
+.pb-0 { padding-bottom: 0 !important; }
+.pb-1 { padding-bottom: 8rpx !important; }
+.pb-2 { padding-bottom: 16rpx !important; }
+.pb-3 { padding-bottom: 24rpx !important; }
+.pb-4 { padding-bottom: 32rpx !important; }
+.pb-5 { padding-bottom: 40rpx !important; }
+.pb-6 { padding-bottom: 48rpx !important; }
+.pb-25 { padding-bottom: 200rpx !important; } /* 固定底栏专用 */
+
+.pl-0 { padding-left: 0 !important; }
+.pl-1 { padding-left: 8rpx !important; }
+.pl-2 { padding-left: 16rpx !important; }
+.pl-3 { padding-left: 24rpx !important; }
+
+.pr-0 { padding-right: 0 !important; }
+.pr-1 { padding-right: 8rpx !important; }
+.pr-2 { padding-right: 16rpx !important; }
+.pr-3 { padding-right: 24rpx !important; }
+
+/* 外边距 margin */
+.m-0 { margin: 0 !important; }
+.m-1 { margin: 8rpx !important; }
+.m-2 { margin: 16rpx !important; }
+.m-3 { margin: 24rpx !important; }
+.m-4 { margin: 32rpx !important; }
+.m-5 { margin: 40rpx !important; }
+.m-6 { margin: 48rpx !important; }
+
+/* 水平外边距 */
+.mx-0 { margin-left: 0 !important; margin-right: 0 !important; }
+.mx-1 { margin-left: 8rpx !important; margin-right: 8rpx !important; }
+.mx-2 { margin-left: 16rpx !important; margin-right: 16rpx !important; }
+.mx-3 { margin-left: 24rpx !important; margin-right: 24rpx !important; }
+.mx-4 { margin-left: 32rpx !important; margin-right: 32rpx !important; }
+.mx-auto { margin-left: auto !important; margin-right: auto !important; }
+
+/* 垂直外边距 */
+.my-0 { margin-top: 0 !important; margin-bottom: 0 !important; }
+.my-1 { margin-top: 8rpx !important; margin-bottom: 8rpx !important; }
+.my-2 { margin-top: 16rpx !important; margin-bottom: 16rpx !important; }
+.my-3 { margin-top: 24rpx !important; margin-bottom: 24rpx !important; }
+.my-4 { margin-top: 32rpx !important; margin-bottom: 32rpx !important; }
+
+/* 单向外边距 */
+.mt-0 { margin-top: 0 !important; }
+.mt-1 { margin-top: 8rpx !important; }
+.mt-2 { margin-top: 16rpx !important; }
+.mt-3 { margin-top: 24rpx !important; }
+.mt-4 { margin-top: 32rpx !important; }
+.mt-5 { margin-top: 40rpx !important; }
+.mt-6 { margin-top: 48rpx !important; }
+
+.mb-0 { margin-bottom: 0 !important; }
+.mb-1 { margin-bottom: 8rpx !important; }
+.mb-2 { margin-bottom: 16rpx !important; }
+.mb-3 { margin-bottom: 24rpx !important; }
+.mb-4 { margin-bottom: 32rpx !important; }
+.mb-5 { margin-bottom: 40rpx !important; }
+.mb-6 { margin-bottom: 48rpx !important; }
+
+.ml-0 { margin-left: 0 !important; }
+.ml-1 { margin-left: 8rpx !important; }
+.ml-2 { margin-left: 16rpx !important; }
+.ml-3 { margin-left: 24rpx !important; }
+
+.mr-0 { margin-right: 0 !important; }
+.mr-1 { margin-right: 8rpx !important; }
+.mr-2 { margin-right: 16rpx !important; }
+.mr-3 { margin-right: 24rpx !important; }
+
+/* ==================== 容器通用样式 ==================== */
+
+/* 页面容器 */
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page, #F6F6F6);
+  box-sizing: border-box;
+}
+
+/* 表单容器 */
+.form-container {
+  padding: 24rpx;
+}
+
+/* 列表容器 */
+.list-container {
+  padding: 24rpx;
+}
+
+/* 内容容器 */
+.content-container {
+  padding: 24rpx;
+}
+
+/* 卡片容器 */
+.card-container {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+/* ==================== 分节标题 ==================== */
+
+.section-header {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+  margin: 32rpx 0 24rpx;
+  padding-left: 16rpx;
+  border-left: 6rpx solid var(--td-brand-color, #FF6B58);
+  line-height: 1.4;
+}
+
+.section-header:first-child {
+  margin-top: 0;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16rpx;
+}
+
+/* ==================== 固定底栏 ==================== */
+
+.fixed-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -4rpx 16rpx rgba(0,0,0,0.08);
+  z-index: 100;
+}
+
+/* 有固定底栏的页面,需要底部padding */
+.has-fixed-bottom {
+  padding-bottom: 200rpx !important;
+}
+
+/* ==================== 上传区域 ==================== */
+
+.upload-group {
+  margin-bottom: 32rpx;
+  background: #fff;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+.upload-item {
+  margin-bottom: 24rpx;
+}
+
+.upload-item:last-child {
+  margin-bottom: 0;
+}
+
+.upload-label {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+  margin-bottom: 16rpx;
+  display: flex;
+  align-items: center;
+}
+
+.upload-label.required::before {
+  content: '*';
+  color: var(--td-error-color, #FF6B58);
+  margin-right: 4rpx;
+  font-size: 32rpx;
+}
+
+/* ==================== 表单输入 ==================== */
+
+.input-field,
+.picker-field {
+  text-align: right;
+  font-size: 28rpx;
+  color: #333;
+  width: 100%;
+  max-width: 420rpx;
+}
+
+.picker-text {
+  text-align: right;
+  font-size: 28rpx;
+  color: #333;
+  max-width: 420rpx;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.placeholder {
+  color: #999;
+}
+
+/* ==================== 间隙 Gap ==================== */
+
+.gap-0 { gap: 0 !important; }
+.gap-1 { gap: 8rpx !important; }
+.gap-2 { gap: 16rpx !important; }
+.gap-3 { gap: 24rpx !important; }
+.gap-4 { gap: 32rpx !important; }
+
+/* ==================== 圆角 ==================== */
+
+.rounded-none { border-radius: 0 !important; }
+.rounded-sm { border-radius: 8rpx !important; }
+.rounded { border-radius: 12rpx !important; }
+.rounded-lg { border-radius: 16rpx !important; }
+.rounded-xl { border-radius: 24rpx !important; }
+.rounded-full { border-radius: 9999rpx !important; }
+
+/* ==================== 阴影 ==================== */
+
+.shadow-none { box-shadow: none !important; }
+.shadow-sm { box-shadow: 0 2rpx 4rpx rgba(0,0,0,0.04) !important; }
+.shadow { box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04) !important; }
+.shadow-md { box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06) !important; }
+.shadow-lg { box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.08) !important; }
+
+/* ==================== 显示/隐藏 ==================== */
+
+.hidden { display: none !important; }
+.block { display: block !important; }
+.flex { display: flex !important; }
+.inline-flex { display: inline-flex !important; }
+
+/* ==================== Flex布局 ==================== */
+
+.flex-row { flex-direction: row !important; }
+.flex-col { flex-direction: column !important; }
+.flex-wrap { flex-wrap: wrap !important; }
+.flex-nowrap { flex-wrap: nowrap !important; }
+
+.items-start { align-items: flex-start !important; }
+.items-center { align-items: center !important; }
+.items-end { align-items: flex-end !important; }
+.items-stretch { align-items: stretch !important; }
+
+.justify-start { justify-content: flex-start !important; }
+.justify-center { justify-content: center !important; }
+.justify-end { justify-content: flex-end !important; }
+.justify-between { justify-content: space-between !important; }
+.justify-around { justify-content: space-around !important; }
+
+.flex-1 { flex: 1 !important; }
+.flex-auto { flex: auto !important; }
+.flex-none { flex: none !important; }
+
+/* ==================== 文本对齐 ==================== */
+
+.text-left { text-align: left !important; }
+.text-center { text-align: center !important; }
+.text-right { text-align: right !important; }
+
+/* ==================== 字体大小 ==================== */
+
+.text-xs { font-size: 20rpx !important; }
+.text-sm { font-size: 24rpx !important; }
+.text-base { font-size: 28rpx !important; }
+.text-lg { font-size: 32rpx !important; }
+.text-xl { font-size: 36rpx !important; }
+.text-2xl { font-size: 40rpx !important; }
+
+/* ==================== 字体粗细 ==================== */
+
+.font-normal { font-weight: normal !important; }
+.font-medium { font-weight: 500 !important; }
+.font-semibold { font-weight: 600 !important; }
+.font-bold { font-weight: bold !important; }
+
+/* ==================== 颜色 ==================== */
+
+.text-primary { color: var(--td-brand-color, #FF6B58) !important; }
+.text-success { color: var(--td-success-color, #00897B) !important; }
+.text-warning { color: var(--td-warning-color, #FFC107) !important; }
+.text-error { color: var(--td-error-color, #E34D59) !important; }
+.text-gray { color: #999 !important; }
+.text-dark { color: #333 !important; }
+.text-white { color: #fff !important; }
+
+.bg-primary { background-color: var(--td-brand-color, #FF6B58) !important; }
+.bg-white { background-color: #fff !important; }
+.bg-gray { background-color: #F6F6F6 !important; }
+
+/* ==================== 宽度 ==================== */
+
+.w-full { width: 100% !important; }
+.w-auto { width: auto !important; }
+.w-screen { width: 100vw !important; }
+
+/* ==================== 高度 ==================== */
+
+.h-full { height: 100% !important; }
+.h-screen { height: 100vh !important; }
+.h-auto { height: auto !important; }
+
+/* ==================== 定位 ==================== */
+
+.relative { position: relative !important; }
+.absolute { position: absolute !important; }
+.fixed { position: fixed !important; }
+.sticky { position: sticky !important; }
+
+/* ==================== 响应式 ==================== */
+
+/* iPad及以上 */
+@media (min-width: 768px) {
+  .md-px-4 { padding-left: 32rpx !important; padding-right: 32rpx !important; }
+  .md-px-5 { padding-left: 40rpx !important; padding-right: 40rpx !important; }
+  .md-px-6 { padding-left: 48rpx !important; padding-right: 48rpx !important; }
+}
+
+/* iPad Pro及以上 (1024px) */
+@media (min-width: 1024px) {
+  .lg-px-6 { padding-left: 48rpx !important; padding-right: 48rpx !important; }
+  .lg-px-8 { padding-left: 64rpx !important; padding-right: 64rpx !important; }
+}
+
+/* ==================== 大屏字号与间距锁定 (防止过度缩放) ==================== */
+@media (min-width: 750px) {
+  /* 字体大小锁定 */
+  .text-xs { font-size: 11px !important; }
+  .text-sm { font-size: 13px !important; }
+  .text-base { font-size: 15px !important; }
+  .text-lg { font-size: 18px !important; }
+  .text-xl { font-size: 20px !important; }
+  .text-2xl { font-size: 24px !important; }
+
+  /* 标题大小锁定 */
+  .section-header {
+    font-size: 18px !important;
+    margin: 24px 0 16px !important;
+    border-left-width: 4px !important;
+  }
+  .section-title {
+    font-size: 15px !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* 通用间距上限锁定 (基于px) */
+  .p-1 { padding: 4px !important; }
+  .p-2 { padding: 8px !important; }
+  .p-3 { padding: 12px !important; }
+  .p-4 { padding: 16px !important; }
+  .p-5 { padding: 20px !important; }
+  .p-6 { padding: 24px !important; }
+
+  .m-1 { margin: 4px !important; }
+  .m-2 { margin: 8px !important; }
+  .m-3 { margin: 12px !important; }
+  .m-4 { margin: 16px !important; }
+  .m-5 { margin: 20px !important; }
+  .m-6 { margin: 24px !important; }
+
+  /* 卡片圆角固定 */
+  .card-container, .section-card, .order-card, .dish-card, .table-card {
+    border-radius: 12px !important;
+    padding: 16px !important;
+  }
+}

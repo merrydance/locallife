@@ -1,0 +1,105 @@
+import { Dish, DishResponse } from '../models/dish'
+import { DishSummary as ApiDishSummary } from '../api/dish'
+
+import { getPublicImageUrl } from '../utils/image'
+
+export class DishAdapter {
+  /**
+   * 将菜品响应DTO转换为视图模型 - 基于swagger api.dishResponse
+   */
+  static toViewModel(dto: DishResponse): Dish {
+    return {
+      id: dto.id,
+      name: dto.name,
+      imageUrl: getPublicImageUrl(dto.image_url),
+      price: dto.price,
+      priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+      shopName: '商户名称', // 需要从商户信息获取
+      merchantId: dto.merchant_id,
+      attributes: dto.ingredients?.map(ing => ing.name) || [],
+      spicyLevel: 0, // 从tags中解析辣度
+      salesBadge: '', // 菜品详情中没有销量信息
+      ratingDisplay: '0.0', // 菜品详情中没有评分信息
+      distance: '距离未知',
+      deliveryTimeDisplay: DishAdapter.formatDeliveryTime(dto.prepare_time),
+      deliveryFeeDisplay: '配送费待定',
+      discountRule: '',
+      tags: dto.tags?.map(tag => tag.name) || [],
+      isPremade: dto.tags?.some(tag => tag.name.includes('预制')) || false,
+      customization_groups: dto.customization_groups,
+      member_price: dto.member_price,
+      is_available: dto.is_available,
+      prepare_time: dto.prepare_time
+    }
+  }
+
+  /**
+   * 将菜品摘要DTO转换为视图模型 - 基于swagger api.dishSummary (用于Feed流)
+   */
+  static fromSummaryDTO(dto: ApiDishSummary): Dish {
+    return {
+      id: dto.id,
+      name: dto.name,
+      imageUrl: getPublicImageUrl(dto.image_url),
+      price: dto.price,
+      priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+      shopName: dto.merchant_name || '未知商家',
+      merchantId: dto.merchant_id,
+      attributes: [], // 摘要数据中没有配料信息
+      spicyLevel: 0, // 从tags中解析辣度
+      salesBadge: DishAdapter.formatSales(dto.monthly_sales || 0),
+      ratingDisplay: '0.0', // 摘要数据中没有评分
+      distance: DishAdapter.formatDistance(dto.distance || 0),
+      deliveryTimeDisplay: '配送时间待定',
+      deliveryFeeDisplay: DishAdapter.formatDeliveryFee(dto.estimated_delivery_fee || 0),
+      discountRule: '',
+      tags: dto.tags || [],
+      isPremade: dto.tags?.includes('预制') || false,
+      distance_meters: dto.distance || 0,
+      member_price: dto.member_price,
+      is_available: dto.is_available
+    }
+  }
+
+  // 兼容性：保留旧方法名
+  static fromFeedDTO = DishAdapter.fromSummaryDTO
+
+  static formatSales(sales: number): string {
+    if (sales >= 1000) {
+      return `月销${(sales / 1000).toFixed(1)}k`
+    }
+    return `月销${sales}`
+  }
+
+  static formatDistance(meters?: number): string {
+    if (!meters || meters === 0) {
+      return '距离未知'
+    }
+    if (meters < 1000) {
+      return `${meters}m`
+    }
+    return `${(meters / 1000).toFixed(1)}km`
+  }
+
+  static formatDeliveryTime(minutes?: number): string {
+    if (!minutes || minutes === 0) {
+      return '时间待定'
+    }
+    return `${minutes}分钟`
+  }
+
+  static formatDeliveryFee(fee: number): string {
+    if (fee === 0) {
+      return '免代取费'
+    }
+    return `代取${(fee / 100).toFixed(0)}元`
+  }
+
+  static formatDiscountRule(threshold: number, discountAmount?: number): string {
+    if (threshold > 0) {
+      const discount = discountAmount || Math.floor(threshold / 10 / 100)
+      return `满${(threshold / 100).toFixed(0)}返${discount}元`
+    }
+    return ''
+  }
+}

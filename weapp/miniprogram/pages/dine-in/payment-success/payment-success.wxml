@@ -1,0 +1,86 @@
+<!--堂食支付成功页面-->
+<view class="payment-success-container">
+  <!-- 成功状态 -->
+  <view class="success-section">
+    <view class="success-icon">✅</view>
+    <text class="success-title">支付成功</text>
+    <text class="success-subtitle">您的订单已提交，请耐心等待</text>
+  </view>
+
+  <!-- 订单信息 -->
+  <view class="order-info-section">
+    <view class="info-card">
+      <view class="info-row">
+        <text class="info-label">订单编号</text>
+        <text class="info-value">{{orderId}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">支付金额</text>
+        <text class="info-value amount">¥{{paymentAmount}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">用餐桌台</text>
+        <text class="info-value">{{tableInfo.table_number}}号桌</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">商户名称</text>
+        <text class="info-value">{{merchantInfo.name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 温馨提示 -->
+  <view class="tips-section">
+    <view class="tips-card">
+      <view class="tips-header">
+        <text class="tips-icon">💡</text>
+        <text class="tips-title">温馨提示</text>
+      </view>
+      <view class="tips-content">
+        <text class="tips-text">• 请保持手机畅通，商家会及时为您制作美食</text>
+        <text class="tips-text">• 如有疑问可联系商家或呼叫服务员</text>
+        <text class="tips-text">• {{countdown}}秒后自动跳转到订单详情</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 服务推广广告位 -->
+  <view class="promotion-section">
+    <view class="promotion-header">
+      <text class="promotion-title">🎉 发现更多便民服务</text>
+      <text class="promotion-subtitle">让生活更便捷</text>
+    </view>
+    
+    <view class="promotion-cards">
+      <view class="promotion-card takeout" bindtap="goToTakeout">
+        <view class="card-icon">🚚</view>
+        <view class="card-content">
+          <text class="card-title">外卖配送</text>
+          <text class="card-desc">足不出户，美食到家</text>
+          <text class="card-feature">30分钟快速送达</text>
+        </view>
+        <view class="card-arrow">></view>
+      </view>
+      
+      <view class="promotion-card reservation" bindtap="goToReservation">
+        <view class="card-icon">🏠</view>
+        <view class="card-content">
+          <text class="card-title">包间预定</text>
+          <text class="card-desc">聚餐聚会，提前预约</text>
+          <text class="card-feature">多种包间任您选择</text>
+        </view>
+        <view class="card-arrow">></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="action-section">
+    <button class="action-btn primary" bindtap="goToOrderDetail">
+      查看订单详情
+    </button>
+    <button class="action-btn secondary" bindtap="goToHome">
+      返回首页
+    </button>
+  </view>
+</view>

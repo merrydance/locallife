@@ -1,0 +1,149 @@
+<!-- 会员管理页面 -->
+<!-- 手机端/小屏引导 -->
+<match-media max-width="1279">
+  <view class="lds-mobile-guidance lds-root">
+    <view class="guidance-box">
+      <t-icon name="user" size="100px" color="var(--lds-primary)" />
+      <view class="lds-text-lg lds-m-b-2">会员管理中心</view>
+      <view class="lds-text-secondary lds-m-b-4">会员数据分析与管理功能建议在电脑端使用，以获得更好的数据展示效果。</view>
+      <t-button block theme="primary" variant="outline" shape="round" bindtap="onBack">返回工作台</t-button>
+    </view>
+  </view>
+</match-media>
+
+<!-- 桌面端：LDS 会员管理工作站 -->
+<match-media min-width="1280">
+  <view class="lds-root lds-workspace-wrapper">
+    <view class="lds-workspace-card lds-full-constraint lds-member-grid">
+      
+      <!-- LDS Pane A: 统计概览 (Stats Overview) -->
+      <view class="lds-pane lds-pane-nav">
+        <view class="lds-pane-header">
+          <t-icon name="chart-pie" size="20px" color="var(--lds-primary)" />
+          <text class="lds-text-md" style="margin-left: 10px;">会员概览</text>
+        </view>
+        <view class="lds-pane-content lds-p-4">
+          <!-- 核心指标 -->
+          <view class="lds-stat-card lds-card lds-p-4 lds-m-b-4">
+            <text class="lds-text-xs lds-text-secondary">总会员数</text>
+            <text class="lds-text-xl">{{stats.total_customers || 0}}</text>
+          </view>
+          <view class="lds-stat-card lds-card lds-p-4 lds-m-b-4">
+            <text class="lds-text-xs lds-text-secondary">复购率</text>
+            <text class="lds-text-xl" style="color: var(--lds-success);">{{formatPercentage(stats.repurchase_rate)}}</text>
+          </view>
+          <view class="lds-stat-card lds-card lds-p-4 lds-m-b-4">
+            <text class="lds-text-xs lds-text-secondary">平均复购间隔</text>
+            <text class="lds-text-lg">{{stats.avg_repurchase_interval || 0}}天</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- LDS Pane B: 会员列表 (Master List) -->
+      <view class="lds-pane lds-pane-master">
+        <view class="lds-pane-header">
+          <t-search 
+            placeholder="搜索会员..." 
+            shape="round" 
+            bind:change="onSearch" 
+            style="width: 100%;"
+          />
+        </view>
+        <view class="lds-pane-content">
+          <view wx:if="{{loading}}" class="lds-loading-state lds-p-6">
+            <t-loading theme="dots" size="20px" />
+          </view>
+          <view 
+            wx:for="{{members}}" 
+            wx:key="user_id" 
+            class="lds-member-card lds-hoverable {{selectedMember.user_id === item.user_id ? 'lds-selected' : ''}}"
+            bindtap="onSelectMember"
+            data-item="{{item}}"
+          >
+            <view class="lds-member-main">
+              <view class="lds-member-row">
+                <text class="lds-text-md">{{item.username || '匿名会员'}}</text>
+                <t-tag size="extra-small" theme="primary" variant="light">{{item.total_orders}}单</t-tag>
+              </view>
+              <view class="lds-member-meta lds-text-xs lds-text-secondary">
+                <text class="lds-text-primary-color">¥{{formatAmount(item.total_spent)}}</text>
+                <text style="margin-left: 12px;">均单 ¥{{formatAmount(item.avg_order_value)}}</text>
+              </view>
+            </view>
+          </view>
+          <t-empty wx:if="{{!loading && members.length === 0}}" icon="user" description="暂无会员数据" />
+        </view>
+        <view class="lds-pane-footer lds-p-4">
+          <view class="lds-pagination">
+            <t-button size="small" variant="outline" disabled="{{page <= 1}}" bindtap="onPrevPage">上一页</t-button>
+            <text class="lds-text-xs lds-text-secondary">第 {{page}} 页</text>
+            <t-button size="small" variant="outline" disabled="{{!hasMore}}" bindtap="onNextPage">下一页</t-button>
+          </view>
+        </view>
+      </view>
+
+      <!-- LDS Pane C: 会员详情 (Detail Panel) -->
+      <view class="lds-pane lds-pane-editor">
+        <view wx:if="{{!selectedMember}}" class="lds-editor-placeholder">
+          <t-icon name="user-circle" size="48px" color="var(--lds-border)" />
+          <view class="lds-text-secondary lds-m-t-4">选择左侧会员查看详情</view>
+        </view>
+
+        <view wx:else class="lds-editor-container">
+          <view class="lds-pane-header lds-p-4">
+            <view class="lds-editor-title-box">
+              <text class="lds-text-lg">{{selectedMember.username || '匿名会员'}}</text>
+            </view>
+          </view>
+
+          <view class="lds-pane-content lds-p-6">
+            <!-- 消费概览 -->
+            <view class="lds-card lds-p-4 lds-m-b-4">
+              <text class="lds-text-sm lds-text-md lds-m-b-4" style="display: block;">消费概览</text>
+              <view class="lds-detail-grid">
+                <view class="lds-detail-item">
+                  <text class="lds-text-xs lds-text-secondary">累计消费</text>
+                  <text class="lds-text-lg lds-text-primary-color">¥{{formatAmount(selectedMember.total_spent)}}</text>
+                </view>
+                <view class="lds-detail-item">
+                  <text class="lds-text-xs lds-text-secondary">订单数量</text>
+                  <text class="lds-text-lg">{{selectedMember.total_orders}}</text>
+                </view>
+                <view class="lds-detail-item">
+                  <text class="lds-text-xs lds-text-secondary">客单价</text>
+                  <text class="lds-text-lg">¥{{formatAmount(selectedMember.avg_order_value)}}</text>
+                </view>
+                <view class="lds-detail-item">
+                  <text class="lds-text-xs lds-text-secondary">最近下单</text>
+                  <text class="lds-text-md">{{selectedMember.last_order_date || '-'}}</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- 会员标签 -->
+            <view class="lds-card lds-p-4 lds-m-b-4">
+              <text class="lds-text-sm lds-text-md lds-m-b-4" style="display: block;">会员画像</text>
+              <view class="lds-tag-group">
+                <t-tag wx:if="{{selectedMember.total_orders >= 10}}" theme="success" variant="light">忠实顾客</t-tag>
+                <t-tag wx:if="{{selectedMember.avg_order_value >= 10000}}" theme="warning" variant="light">高消费</t-tag>
+                <t-tag wx:if="{{selectedMember.total_orders < 3}}" theme="default" variant="light">新客户</t-tag>
+              </view>
+            </view>
+
+            <!-- 喜好菜品 (如果有详情数据) -->
+            <view wx:if="{{memberDetail && memberDetail.favorite_dishes}}" class="lds-card lds-p-4">
+              <text class="lds-text-sm lds-text-md lds-m-b-4" style="display: block;">偏好菜品</text>
+              <view class="lds-dish-list">
+                <view wx:for="{{memberDetail.favorite_dishes}}" wx:key="dish_id" class="lds-dish-item lds-p-2">
+                  <text>{{item.dish_name}}</text>
+                  <text class="lds-text-xs lds-text-secondary">点过 {{item.order_count}} 次</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+    </view>
+  </view>
+</match-media>

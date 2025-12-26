@@ -1,0 +1,114 @@
+<!-- 商户 PC 端侧边栏导航 -->
+<view class="sidebar {{collapsed ? 'collapsed' : ''}}">
+  <!-- Logo区域 -->
+  <view class="sidebar-logo" bindtap="onLogoTap">
+    <image class="logo-icon" src="/assets/icons/logo.png" mode="aspectFit" />
+    <text wx:if="{{!collapsed}}" class="logo-text">LocalLife</text>
+  </view>
+
+  <!-- 导航菜单 -->
+  <scroll-view scroll-y class="sidebar-menu">
+    <!-- 运营模块 -->
+    <view class="menu-group">
+      <view wx:if="{{!collapsed}}" class="group-label">运营</view>
+      <view 
+        wx:for="{{operationMenus}}" 
+        wx:key="path" 
+        class="menu-item {{currentPath === item.path ? 'active' : ''}}"
+        bindtap="onMenuTap"
+        data-path="{{item.path}}"
+      >
+        <view class="menu-icon">
+          <image src="{{item.icon}}" mode="aspectFit" class="icon-img" />
+        </view>
+        <text wx:if="{{!collapsed}}" class="menu-text">{{item.name}}</text>
+        <view wx:if="{{item.badge && !collapsed}}" class="menu-badge">{{item.badge}}</view>
+      </view>
+    </view>
+
+    <view class="menu-divider"></view>
+
+    <!-- 商品模块 -->
+    <view class="menu-group">
+      <view wx:if="{{!collapsed}}" class="group-label">商品</view>
+      <view 
+        wx:for="{{productMenus}}" 
+        wx:key="path" 
+        class="menu-item {{currentPath === item.path ? 'active' : ''}}"
+        bindtap="onMenuTap"
+        data-path="{{item.path}}"
+      >
+        <view class="menu-icon">
+          <image src="{{item.icon}}" mode="aspectFit" class="icon-img" />
+        </view>
+        <text wx:if="{{!collapsed}}" class="menu-text">{{item.name}}</text>
+      </view>
+    </view>
+
+    <view class="menu-divider"></view>
+
+    <!-- 营销模块 -->
+    <view class="menu-group">
+      <view wx:if="{{!collapsed}}" class="group-label">营销</view>
+      <view 
+        wx:for="{{marketingMenus}}" 
+        wx:key="path" 
+        class="menu-item {{currentPath === item.path ? 'active' : ''}}"
+        bindtap="onMenuTap"
+        data-path="{{item.path}}"
+      >
+        <view class="menu-icon">
+          <image src="{{item.icon}}" mode="aspectFit" class="icon-img" />
+        </view>
+        <text wx:if="{{!collapsed}}" class="menu-text">{{item.name}}</text>
+      </view>
+    </view>
+
+    <view class="menu-divider"></view>
+
+    <!-- 数据模块 -->
+    <view class="menu-group">
+      <view wx:if="{{!collapsed}}" class="group-label">数据</view>
+      <view 
+        wx:for="{{dataMenus}}" 
+        wx:key="path" 
+        class="menu-item {{currentPath === item.path ? 'active' : ''}}"
+        bindtap="onMenuTap"
+        data-path="{{item.path}}"
+      >
+        <view class="menu-icon">
+          <image src="{{item.icon}}" mode="aspectFit" class="icon-img" />
+        </view>
+        <text wx:if="{{!collapsed}}" class="menu-text">{{item.name}}</text>
+      </view>
+    </view>
+
+    <view class="menu-divider"></view>
+
+    <!-- 设置模块 -->
+    <view class="menu-group">
+      <view wx:if="{{!collapsed}}" class="group-label">设置</view>
+      <view 
+        wx:for="{{settingMenus}}" 
+        wx:key="path" 
+        class="menu-item {{currentPath === item.path ? 'active' : ''}}"
+        bindtap="onMenuTap"
+        data-path="{{item.path}}"
+      >
+        <view class="menu-icon">
+          <image src="{{item.icon}}" mode="aspectFit" class="icon-img" />
+        </view>
+        <text wx:if="{{!collapsed}}" class="menu-text">{{item.name}}</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 折叠按钮 -->
+  <view class="sidebar-collapse" bindtap="onCollapseTap">
+    <image 
+      src="{{collapsed ? '/assets/icons/expand.png' : '/assets/icons/collapse.png'}}" 
+      mode="aspectFit" 
+      class="collapse-icon"
+    />
+  </view>
+</view>

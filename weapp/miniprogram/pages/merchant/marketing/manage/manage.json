@@ -1,0 +1,24 @@
+{
+    "navigationBarTitleText": "营销活动管理",
+    "navigationBarBackgroundColor": "#1890ff",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f5f5f5",
+    "enablePullDownRefresh": false,
+    "disableScroll": true,
+    "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-popup": "tdesign-miniprogram/popup/popup",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-radio": "tdesign-miniprogram/radio/radio",
+        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
+        "t-switch": "tdesign-miniprogram/switch/switch"
+    }
+}

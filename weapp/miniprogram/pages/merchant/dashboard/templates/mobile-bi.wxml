@@ -1,0 +1,55 @@
+<!-- 手机端：纯 BI 看板 -->
+<view class="mobile-bi-container">
+  <!-- 顶部状态栏区域 (对齐珊瑚色调) -->
+  <view class="bi-header">
+    <view class="header-content">
+      <text class="greeting">早安, {{merchantName || '店长'}}</text>
+      <text class="date">{{currentDate}}</text>
+    </view>
+  </view>
+
+  <!-- 今日核心指标 -->
+  <view class="bi-stats-grid">
+    <ll-stats-card 
+      label="今日营收" 
+      value="¥{{stats.todayRevenue / 100}}" 
+      trend="{{stats.revenueGrowth}}" 
+      icon="money-circle"
+      variant="primary"
+    />
+    <ll-stats-card 
+      label="今日订单" 
+      value="{{stats.todayOrders}}" 
+      icon="order"
+      variant="secondary"
+    />
+  </view>
+
+  <!-- 实时趋势图 (占位) -->
+  <view class="bi-chart-card">
+    <view class="card-header">
+      <text class="card-title">经营趋势</text>
+      <t-icon name="chart-bar" size="32rpx" color="#999" />
+    </view>
+    <view class="chart-placeholder">
+       <text>图表加载中...</text>
+    </view>
+  </view>
+
+  <!-- 紧急通知 -->
+  <view class="bi-alert-section" wx:if="{{alerts.length > 0}}">
+    <view class="section-header">
+      <text>重要通知</text>
+      <t-tag size="extra-small" theme="danger" variant="light">{{alerts.length}}</t-tag>
+    </view>
+    <t-cell-group theme="card">
+      <t-cell 
+        wx:for="{{alerts}}" 
+        wx:key="id"
+        title="{{item.text}}"
+        leftIcon="{{item.icon}}"
+        bordered="{{false}}"
+      />
+    </t-cell-group>
+  </view>
+</view>

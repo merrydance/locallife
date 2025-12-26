@@ -1,0 +1,21 @@
+# 依赖
+node_modules/
+miniprogram_npm/
+
+# 构建产物
+dist/
+build/
+
+# 第三方库
+libs/
+typings/
+
+# 配置文件
+*.config.js
+project.*.config.json
+
+# 脚本
+scripts/
+
+# 备份文件
+*.backup

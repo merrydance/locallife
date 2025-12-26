@@ -1,0 +1,13 @@
+<view class="map-container">
+  <map 
+    id="deliveryMap"
+    class="map"
+    longitude="{{rider ? rider.longitude : (merchant ? merchant.longitude : 116.397)}}"
+    latitude="{{rider ? rider.latitude : (merchant ? merchant.latitude : 39.909)}}"
+    scale="14"
+    markers="{{markers}}"
+    polyline="{{polyline}}"
+    include-points="{{includePoints}}"
+    show-location
+  />
+</view>

@@ -1,0 +1,56 @@
+<custom-navbar title="经营健康分" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading}}" class="content">
+    <!-- 健康分卡片 -->
+    <view class="health-card">
+      <view class="score-ring {{score >= 90 ? 'good' : (score >= 60 ? 'warning' : 'danger')}}">
+        <text class="score-value">{{score}}</text>
+        <text class="score-label">健康分</text>
+      </view>
+      <view class="health-info">
+        <text class="health-level">{{level}}</text>
+        <text class="health-desc">{{levelDesc}}</text>
+      </view>
+    </view>
+
+    <!-- 核心指标 -->
+    <view class="section">
+      <view class="section-title">核心指标</view>
+      <view class="metrics-grid">
+        <view wx:for="{{metrics}}" wx:key="label" class="metric-item">
+          <text class="metric-value {{item.status === 'GOOD' ? 'good' : (item.status === 'WARNING' ? 'warning' : 'danger')}}">{{item.value}}</text>
+          <text class="metric-label">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 违规记录 -->
+    <view class="section">
+      <view class="section-title">违规/预警记录</view>
+      <view class="violations-list">
+        <view wx:if="{{violations.length === 0}}" class="empty">
+          <t-empty description="暂无违规记录，继续保持" />
+        </view>
+        
+        <view wx:else>
+          <view wx:for="{{violations}}" wx:key="id" class="violation-card">
+            <view class="card-header">
+              <t-tag theme="{{item.type === 'WARNING' ? 'warning' : 'danger'}}" variant="light">
+                {{item.type === 'WARNING' ? '预警' : '违规'}}
+              </t-tag>
+              <text class="time">{{item.created_at}}</text>
+            </view>
+            <text class="title">{{item.title}}</text>
+            <text class="desc">{{item.desc}}</text>
+            <view class="card-footer">
+              <t-button size="small" theme="default" data-id="{{item.id}}" bindtap="onAppeal">申诉</t-button>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

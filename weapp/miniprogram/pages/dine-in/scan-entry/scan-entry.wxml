@@ -1,0 +1,129 @@
+<!--扫码点餐入口页面-->
+<view class="scan-entry-container">
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="loading-container">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">正在获取桌台信息...</text>
+  </view>
+
+  <!-- 错误状态 -->
+  <view wx:elif="{{error}}" class="error-container">
+    <image class="error-icon" src="/assets/icons/error.png" mode="aspectFit"></image>
+    <text class="error-text">{{error}}</text>
+    <button class="retry-btn" bindtap="rescan">重新扫码</button>
+  </view>
+
+  <!-- 桌台信息 -->
+  <view wx:else class="table-info-container">
+    <!-- 商户头部 -->
+    <view class="merchant-header">
+      <image class="merchant-logo" src="{{merchantInfo.logo_url}}" mode="aspectFill"></image>
+      <view class="merchant-info">
+        <text class="merchant-name">{{merchantInfo.name}}</text>
+        <text class="merchant-category">{{merchantInfo.category}}</text>
+        <view class="merchant-rating">
+          <view class="stars">
+            <block wx:for="{{5}}" wx:key="index">
+              <text class="star {{index < merchantInfo.rating ? 'filled' : ''}}">★</text>
+            </block>
+          </view>
+          <text class="rating-text">{{merchantInfo.rating}}</text>
+        </view>
+      </view>
+      <view class="merchant-action" bindtap="viewMerchantInfo">
+        <text class="action-text">查看详情</text>
+        <text class="action-arrow">></text>
+      </view>
+    </view>
+
+    <!-- 桌台信息卡片 -->
+    <view class="table-card">
+      <view class="table-header">
+        <view class="table-number">
+          <text class="table-label">桌号</text>
+          <text class="table-value">{{tableInfo.table_number}}</text>
+        </view>
+        <view class="table-capacity">
+          <text class="capacity-icon">👥</text>
+          <text class="capacity-text">{{tableInfo.capacity}}人桌</text>
+        </view>
+      </view>
+      
+      <view class="table-status">
+        <view class="status-indicator {{tableInfo.status}}"></view>
+        <text class="status-text">
+          {{tableInfo.status === 'available' ? '可用' : 
+            tableInfo.status === 'occupied' ? '使用中' : '已预订'}}
+        </text>
+      </view>
+
+      <!-- 桌台状态说明 -->
+      <view class="table-tips">
+        <text class="tips-icon">💡</text>
+        <text class="tips-text">
+          {{tableInfo.status === 'available' ? '您可以开始点餐了' : 
+            tableInfo.status === 'occupied' ? '此桌正在使用中，请确认是否为您的桌台' : 
+            '此桌已被预订，请联系服务员'}}
+        </text>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="action-buttons">
+      <button 
+        class="start-dining-btn {{tableInfo.status !== 'available' ? 'disabled' : ''}}" 
+        bindtap="startDining"
+        disabled="{{tableInfo.status !== 'available'}}"
+      >
+        {{tableInfo.status === 'available' ? '开始点餐' : '桌台不可用'}}
+      </button>
+      
+      <view class="secondary-actions">
+        <button class="secondary-btn" bindtap="rescan">重新扫码</button>
+        <button class="secondary-btn" open-type="share">分享给好友</button>
+      </view>
+    </view>
+
+    <!-- 商户营业信息 -->
+    <view class="business-info">
+      <view class="info-item">
+        <text class="info-label">营业时间</text>
+        <text class="info-value">{{merchantInfo.business_hours || '09:00-22:00'}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">联系电话</text>
+        <text class="info-value">{{merchantInfo.phone || '暂无'}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">商户地址</text>
+        <text class="info-value">{{merchantInfo.address || '暂无'}}</text>
+      </view>
+    </view>
+
+    <!-- 服务推广广告位 -->
+    <view class="service-promotion">
+      <view class="promotion-header">
+        <text class="promotion-title">🎉 更多便民服务</text>
+      </view>
+      <view class="promotion-services">
+        <view class="service-card takeout" bindtap="goToTakeout">
+          <view class="service-icon">🚚</view>
+          <view class="service-info">
+            <text class="service-name">外卖配送</text>
+            <text class="service-desc">足不出户，美食到家</text>
+          </view>
+          <view class="service-arrow">></view>
+        </view>
+        
+        <view class="service-card reservation" bindtap="goToReservation">
+          <view class="service-icon">🏠</view>
+          <view class="service-info">
+            <text class="service-name">包间预定</text>
+            <text class="service-desc">聚餐聚会，提前预约</text>
+          </view>
+          <view class="service-arrow">></view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

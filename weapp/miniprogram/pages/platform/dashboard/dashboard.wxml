@@ -1,0 +1,40 @@
+<custom-navbar title="平台管理大屏" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="platform-dashboard" style="padding-top: {{navBarHeight}}px;">
+  <!-- 加载状态 -->
+  <t-loading wx:if="{{loading}}" theme="circular" size="large" text="加载中..." class="loading-container" />
+
+  <block wx:else>
+    <!-- 1. 手机端布局 (Mobile) -->
+    <match-media max-width="749">
+      <scroll-view scroll-y class="dashboard-scroll" refresher-enabled refresher-triggered="{{refreshing}}" bindrefresherrefresh="onRefresh" style="height: calc(100vh - {{navBarHeight}}px);">
+        <view class="responsive-container">
+          <include src="./templates/mobile-content.wxml" />
+        </view>
+      </scroll-view>
+    </match-media>
+
+    <!-- 2. 平板端布局 (Tablet) -->
+    <match-media min-width="750" max-width="1279">
+      <scroll-view scroll-y class="dashboard-scroll" style="height: calc(100vh - {{navBarHeight}}px);">
+        <view class="responsive-container">
+          <include src="./templates/tablet-content.wxml" />
+        </view>
+      </scroll-view>
+    </match-media>
+
+    <!-- 3. PC窗口布局 (PC-Window) -->
+    <match-media min-width="1280" max-width="1599">
+      <view class="responsive-container">
+        <include src="./templates/pc-content.wxml" />
+      </view>
+    </match-media>
+
+    <!-- 4. PC全屏布局 (PC-Full) -->
+    <match-media min-width="1600">
+      <view class="pc-full-constraint">
+        <include src="./templates/pc-content-full.wxml" />
+      </view>
+    </match-media>
+  </block>
+</view>

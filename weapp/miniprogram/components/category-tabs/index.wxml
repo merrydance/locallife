@@ -1,0 +1,12 @@
+<scroll-view class="category-tabs" scroll-x enable-flex scroll-with-animation>
+  <view 
+    wx:for="{{categories}}" 
+    wx:key="id" 
+    class="tab-item {{activeId === item.id ? 'active' : ''}}"
+    data-id="{{item.id}}"
+    bindtap="onTabClick"
+  >
+    <text class="tab-text">{{item.name}}</text>
+    <view class="active-line" wx:if="{{activeId === item.id}}"></view>
+  </view>
+</scroll-view>

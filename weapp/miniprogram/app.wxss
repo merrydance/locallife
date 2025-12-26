@@ -1,0 +1,291 @@
+/** app.wxss **/
+@import './styles/font-fix.wxss';
+@import './styles/common.wxss';
+
+/**
+ * 基于color_guide.md的配色方案
+ * 使用TDesign的CSS变量系统 + 自定义品牌变量
+ */
+page {
+  /* ========== TDesign主题色覆盖 ========== */
+  /* 品牌主色 - 活力珊瑚 #FF6B58 (30%使用) */
+  --td-brand-color: #FF6B58;
+  --td-brand-color-1: #FFF5F3;
+  --td-brand-color-2: #FFE8E5;
+  --td-brand-color-3: #FFD4CE;
+  --td-brand-color-4: #FFBFB6;
+  --td-brand-color-5: #FFAA9E;
+  --td-brand-color-6: #FF9586;
+  --td-brand-color-7: #FF806E;
+  --td-brand-color-8: #FF6B58;
+  --td-brand-color-9: #E66A5C;
+  --td-brand-color-10: #CC5E50;
+  
+  --td-brand-color-light: #FF8A75;
+  --td-brand-color-focus: #E66A5C;
+  --td-brand-color-disabled: #FFBFB6;
+  
+  /* 辅助色 - 极客深青 #00897B (10%使用) */
+  --td-success-color: #00897B;
+  --td-success-color-1: #E6F7F5;
+  --td-success-color-5: #4DB6AC;
+  --td-success-color-7: #00897B;
+  
+  /* 强调色 - 日光芥末 #FFC107 (10%使用) */
+  --td-warning-color: #FFC107;
+  --td-warning-color-1: #FFF9E6;
+  --td-warning-color-5: #FFD54F;
+  --td-warning-color-7: #FFC107;
+  
+  /* 错误色 - 警示红 #E53935 */
+  --td-error-color: #E53935;
+  --td-error-color-1: #FFEBEE;
+  --td-error-color-5: #EF5350;
+  --td-error-color-7: #E53935;
+  
+  /* ========== 背景色 (60%使用) ========== */
+  --td-bg-color-page: #FAFAFA;        /* 陶瓷白 - 页面背景 */
+  --td-bg-color-container: #FFFFFF;   /* 纯白 - 卡片背景 */
+  --td-bg-color-secondarycontainer: #F5F5F5;
+  
+  /* ========== 文字颜色 ========== */
+  --td-text-color-primary: #333333;    /* 炭黑 - 主标题 */
+  --td-text-color-secondary: #666666;  /* 副标题 */
+  --td-text-color-placeholder: #999999; /* 占位文字 */
+  --td-text-color-disabled: #CCCCCC;   /* 禁用 */
+  --td-text-color-anti: rgba(255, 255, 255, 0.87); /* 白色文字 */
+  
+  /* ========== 自定义品牌变量 ========== */
+  /* 用于价格、促销等特殊场景 */
+  --brand-coral: #FF6B58;
+  --brand-coral-gradient: linear-gradient(135deg, #FF8A75 0%, #FF6B58 100%);
+  --brand-teal: #00897B;
+  --brand-mustard: #FFC107;
+  
+  /* 阴影 */
+  --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.12);
+}
+
+/* ========== 深色模式 ========== */
+page[data-theme="dark"] {
+  /* 品牌色微调（深色模式下更柔和） */
+  --td-brand-color: #FF8A7A;
+  --td-brand-color-8: #FF8A7A;
+  
+  /* 背景色 */
+  --td-bg-color-page: #121212;
+  --td-bg-color-container: #1E1E1E;
+  --td-bg-color-secondarycontainer: #2C2C2C;
+  
+  /* 文字颜色 */
+  --td-text-color-primary: #E0E0E0;
+  --td-text-color-secondary: #B0B0B0;
+  --td-text-color-placeholder: #808080;
+  --td-text-color-disabled: #606060;
+  
+  /* 边框 */
+  --td-border-level-1-color: #3C3C3C;
+  --td-border-level-2-color: #2C2C2C;
+  
+  /* 辅助色调整 */
+  --td-success-color: #26A69A;
+  --td-warning-color: #FFD54F;
+  --td-error-color: #FF6B6B;
+  
+  /* 品牌色 */
+  --brand-coral: #FF8A7A;
+  --brand-coral-gradient: linear-gradient(135deg, #FF9B8B 0%, #FF8A7A 100%);
+  --brand-teal: #26A69A;
+  --brand-mustard: #FFD54F;
+  
+  /* 阴影（深色模式下更明显） */
+  --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4rpx 12rpx rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.5);
+}
+
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 200rpx 0;
+  box-sizing: border-box;
+} 
+@media (min-width: 750px) {
+  /* ==========================================================================
+     Phase 1: Global Variable Sink (Standardization)
+     Locking all rpx-based scaling to fixed px for Tablet/PC.
+     ========================================================================== */
+  page {
+    /* 1. 基础布局 & 间距 (Standard Spacers) */
+    --td-spacer-1: 4px !important;
+    --td-spacer-2: 8px !important;
+    --td-spacer-3: 12px !important;
+    --td-spacer-4: 16px !important;
+    --td-spacer-5: 20px !important;
+    --td-spacer-6: 24px !important;
+    
+    /* 2. 核心字号 (Typography Lock) */
+    --td-font-size-xs: 11px !important;
+    --td-font-size-s: 13px !important;
+    --td-font-size-m: 14px !important;
+    --td-font-size-l: 16px !important;
+    --td-font-size-xl: 18px !important;
+    --td-font-size-2xl: 24px !important;
+
+    /* 3. 圆角系统 (Radius System) */
+    --td-radius-small: 4px !important;
+    --td-radius-default: 6px !important;
+    --td-radius-medium: 8px !important;
+    --td-radius-large: 12px !important;
+    --td-radius-extra-large: 16px !important;
+
+    /* 4. TDesign 组件专有锁定 */
+    /* Navbar & Tabbar */
+    --td-navbar-height: 64px !important;
+    --td-tab-item-height: 48px !important;
+    
+    /* Search Box */
+    --td-search-height: 36px !important;
+    --td-search-padding-h: 12px !important;
+    --td-search-bg-color: var(--td-bg-color-secondarycontainer) !important;
+    
+    /* Cells */
+    --td-cell-height: auto !important;
+    --td-cell-min-height: 56px !important;
+    --td-cell-vertical-padding: 16px !important;
+    --td-cell-horizontal-padding: 24px !important;
+    --td-cell-title-font-size: 16px !important;
+    --td-cell-note-font-size: 14px !important;
+    --td-cell-description-font-size: 13px !important;
+
+    /* Buttons */
+    --td-button-medium-height: 40px !important;
+    --td-button-large-height: 48px !important;
+    --td-button-small-height: 32px !important;
+    
+    /* Icons & Tags */
+    --td-icon-size-xs: 12px !important;
+    --td-icon-size-s: 16px !important;
+    --td-icon-size-m: 20px !important;
+    --td-icon-size-l: 24px !important;
+    --td-icon-size-xl: 32px !important;
+    --td-tag-medium-height: 24px !important;
+    --td-tag-large-height: 32px !important;
+
+    /* Inputs & Controls */
+    --td-switch-height: 24px !important;
+    --td-checkbox-size: 20px !important;
+    --td-radio-size: 20px !important;
+  }
+
+  /* 基础元素强制转换 - 覆盖 rpx */
+  text, view, button, input, textarea {
+    font-size: 14px; 
+  }
+
+  /* 图标类锁定 */
+  .t-icon, .icon, [class*="icon-"] {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 20px !important;
+  }
+  
+  /* ==========================================================================
+     Phase 2: Component Deep Stabilization
+     Preventing TDesign internal classes from scaling.
+     ========================================================================== */
+
+  /* 1. Search Component Internal Lock */
+  .t-search, .t-search__input-container {
+    height: 36px !important;
+    border-radius: 18px !important;
+  }
+  .t-search__input {
+    font-size: 14px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    line-height: 36px !important;
+  }
+  .t-search__search-icon, .t-search__clear-icon {
+    font-size: 18px !important;
+  }
+
+  /* 2. Tabs Component Internal Lock */
+  .t-tabs__wrapper, .t-tabs__scroll, .t-tabs__nav {
+    height: 48px !important;
+  }
+  .t-tabs__item {
+    font-size: 15px !important;
+    height: 48px !important;
+    line-height: 48px !important;
+    padding: 0 24px !important;
+  }
+  .t-tabs__item--active {
+    font-weight: 600 !important;
+    color: var(--td-brand-color) !important;
+    font-size: 16px !important;
+  }
+  .t-tabs__track {
+    height: 3px !important;
+    border-radius: 1.5px !important;
+  }
+
+  /* 2.1 Grid Component Internal Lock */
+  .t-grid-item__text {
+    font-size: 14px !important;
+    margin-top: 8px !important;
+    color: var(--td-text-color-primary) !important;
+  }
+  .t-grid-item__image {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .t-grid-item--card {
+    border-radius: 12px !important;
+    padding: 16px !important;
+  }
+
+  /* 3. Empty State Internal Lock */
+  .t-empty__image {
+    width: 120px !important;
+    height: 120px !important;
+  }
+  .t-empty__description {
+    font-size: 14px !important;
+    margin-top: 12px !important;
+    color: var(--td-text-color-secondary) !important;
+  }
+
+  /* 4. Responsive Container Patterns */
+  .card, .card-container, .t-cell-group, .panel-content {
+    max-width: 1200px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box !important;
+    border-radius: 12px !important;
+  }
+  
+  /* Force Cell Alignment */
+  .t-cell {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+    min-height: 64px !important;
+  }
+  .t-cell__title, .t-cell__note {
+    font-size: 16px !important;
+  }
+  .t-cell__description {
+    font-size: 14px !important;
+    color: var(--td-text-color-secondary) !important;
+  }
+
+  /* 5. Navigation Bar Caps */
+  .custom-navbar {
+    height: 64px !important;
+  }
+}

@@ -1,0 +1,13 @@
+<import src="./shared-templates.wxml" />
+<view class="v2-dashboard-layout tablet-view">
+  <view class="pane-split">
+     <view class="pane-left">
+        <view class="pane-header">订单监控</view>
+        <template is="order-view" data="{{pendingOrders}}" />
+     </view>
+     <view class="pane-right">
+        <view class="pane-header">桌台状态</view>
+        <template is="table-view" data="{{tableStats, tableGroups}}" />
+     </view>
+  </view>
+</view>

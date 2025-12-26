@@ -1,0 +1,35 @@
+<view class="container">
+  <view class="header">配送费规则配置</view>
+  
+  <view class="section">
+    <view class="section-title">基础计费</view>
+    <t-input label="基础配送费(元)" type="digit" value="{{config.base_fee}}" bind:change="onInput" data-field="base_fee" />
+    <t-input label="基础距离(米)" type="number" value="{{config.base_distance}}" bind:change="onInput" data-field="base_distance" />
+  </view>
+
+  <view class="section">
+    <view class="section-title">距离加价</view>
+    <t-input label="超距离加价(元)" type="digit" value="{{config.extra_distance_fee}}" bind:change="onInput" data-field="extra_distance_fee" />
+    <t-input label="加价单位距离(米)" type="number" value="{{config.extra_distance_unit}}" bind:change="onInput" data-field="extra_distance_unit" />
+  </view>
+
+  <view class="section">
+    <view class="section-title">夜间加价</view>
+    <t-input label="夜间附加费(元)" type="digit" value="{{config.night_surcharge}}" bind:change="onInput" data-field="night_surcharge" />
+    <t-cell title="夜间时段">
+        <view class="time-range" slot="note">
+            <picker mode="time" value="{{config.night_start}}" bindchange="onTimeChange" data-field="night_start">
+                <view class="time-picker">{{config.night_start}}</view>
+            </picker>
+            <text class="separator">-</text>
+             <picker mode="time" value="{{config.night_end}}" bindchange="onTimeChange" data-field="night_end">
+                <view class="time-picker">{{config.night_end}}</view>
+            </picker>
+        </view>
+    </t-cell>
+  </view>
+
+  <view class="footer">
+    <t-button theme="primary" size="large" block bind:tap="onSave">保存配置</t-button>
+  </view>
+</view>

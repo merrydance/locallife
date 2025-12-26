@@ -1,0 +1,12 @@
+<view class="map-container">
+  <map 
+    id="deliveryMap"
+    latitude="{{latitude}}"
+    longitude="{{longitude}}"
+    scale="15"
+    markers="{{markers}}"
+    polyline="{{polyline}}"
+    show-location
+    style="width: 100%; height: 100%;"
+  ></map>
+</view>

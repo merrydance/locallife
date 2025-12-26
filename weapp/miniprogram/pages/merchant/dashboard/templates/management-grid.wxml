@@ -1,0 +1,32 @@
+<!-- 全量管理入口网格 -->
+<view class="management-grid-container">
+  <view class="grid-section">
+    <view class="section-title">核心业务</view>
+    <t-grid column="{{gridColumn}}" border="{{false}}">
+      <t-grid-item text="菜品管理" icon="gift" bindtap="goToDishes" />
+      <t-grid-item text="桌台管理" icon="table" bindtap="goToTables" />
+      <t-grid-item text="套餐管理" icon="view-module" bindtap="goToCombos" />
+      <t-grid-item text="订单中心" icon="view-list" bindtap="goToOrders" />
+    </t-grid>
+  </view>
+
+  <view class="grid-section" style="margin-top: 32rpx;">
+    <view class="section-title">经营赋能</view>
+    <t-grid column="{{gridColumn}}" border="{{false}}">
+      <t-grid-item text="后厨端" icon="desktop" bindtap="goToKitchen" />
+      <t-grid-item text="库存管理" icon="root-list" bindtap="goToInventory" />
+      <t-grid-item text="会员管理" icon="usergroup" bindtap="goToMembers" />
+      <t-grid-item text="营销推广" icon="ticket" bindtap="goToMarketing" />
+    </t-grid>
+  </view>
+
+  <view class="grid-section" style="margin-top: 32rpx;">
+    <view class="section-title">系统支撑</view>
+    <t-grid column="{{gridColumn}}" border="{{false}}">
+      <t-grid-item text="财务结算" icon="money-circle" bindtap="goToFinance" />
+      <t-grid-item text="评价管理" icon="chat" bindtap="goToReviews" />
+      <t-grid-item text="店铺设置" icon="setting" bindtap="goToSettings" />
+      <t-grid-item text="超级管理" icon="dam-one" bindtap="goToAdmin" />
+    </t-grid>
+  </view>
+</view>
