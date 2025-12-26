@@ -222,6 +222,7 @@ export interface UpdateComboSetRequest extends Record<string, unknown> {
     is_online?: boolean                          // 是否上架
     name?: string                                // 套餐名称，最大100字符
     dishes?: ComboDishInput[]                    // 可选：更新套餐菜品列表（带数量）
+    tag_ids?: number[]                           // 可选：更新属性标签ID列表（最多10个）
 }
 
 /**
@@ -233,6 +234,7 @@ export interface CreateComboSetRequest extends Record<string, unknown> {
     is_online?: boolean                          // 是否上架
     name: string                                 // 套餐名称，最大100字符（必填）
     dish_ids?: number[]                          // 套餐包含的菜品ID列表
+    tag_ids?: number[]                           // 属性标签ID列表（最多10个）
 }
 
 // ==================== 库存数据类型定义 ====================

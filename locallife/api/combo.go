@@ -30,6 +30,7 @@ type createComboSetRequest struct {
 	IsOnline      bool             `json:"is_online"`                                         // 是否上线
 	DishIDs       []int64          `json:"dish_ids" binding:"max=50"`                         // 向后兼容：只传菜品ID（数量默认为1）
 	Dishes        []comboDishInput `json:"dishes" binding:"max=50"`                           // 推荐：传菜品ID和数量
+	TagIDs        []int64          `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`     // 属性标签ID列表（最多10个）
 }
 
 type comboSetResponse struct {
@@ -136,6 +137,7 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 		ComboPrice:    req.ComboPrice,
 		IsOnline:      req.IsOnline,
 		Dishes:        dishesWithQty,
+		TagIDs:        req.TagIDs,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -389,6 +391,7 @@ type updateComboSetRequest struct {
 	ComboPrice  *int64           `json:"combo_price" binding:"omitempty,gt=0,max=100000000"` // 套餐价格（分）
 	IsOnline    *bool            `json:"is_online"`                                          // 是否上架
 	Dishes      []comboDishInput `json:"dishes" binding:"omitempty,max=50"`                  // 可选：更新套餐菜品列表
+	TagIDs      []int64          `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`      // 可选：更新属性标签列表
 }
 
 // updateComboSet godoc
@@ -539,6 +542,28 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 				ComboID:  uriReq.ID,
 				DishID:   d.DishID,
 				Quantity: int16(qty),
+			})
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+		}
+	}
+
+	// 如果请求中包含标签列表，则同步更新标签
+	if req.TagIDs != nil {
+		// 先删除所有旧标签关联
+		err = server.store.RemoveAllComboTags(ctx, uriReq.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		// 添加新的标签关联
+		for _, tagID := range req.TagIDs {
+			_, err = server.store.AddComboTag(ctx, db.AddComboTagParams{
+				ComboID: uriReq.ID,
+				TagID:   tagID,
 			})
 			if err != nil {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

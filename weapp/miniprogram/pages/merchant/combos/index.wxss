@@ -960,3 +960,51 @@ page {
   color: var(--text-muted);
   font-size: 14px;
 }
+
+/* ========== 属性标签选择器 ========== */
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #f5f5f5;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+  user-select: none;
+}
+
+.tag-item:hover {
+  border-color: var(--primary);
+  background: #f0f5ff;
+}
+
+.tag-item.selected {
+  background: rgba(24, 144, 255, 0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tag-name {
+  font-size: 13px;
+}
+
+.tag-check {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.tags-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 12px 0;
+}
+

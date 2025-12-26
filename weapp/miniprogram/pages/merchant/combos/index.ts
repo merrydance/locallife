@@ -7,7 +7,7 @@
  * - DELETE /v1/combos/{id}/dishes/{dish_id} - 移除菜品
  */
 
-import { ComboManagementService, ComboSetResponse, ComboSetWithDetailsResponse, DishManagementService, DishResponse } from '../../../api/dish'
+import { ComboManagementService, ComboSetResponse, ComboSetWithDetailsResponse, DishManagementService, DishResponse, TagService, TagInfo } from '../../../api/dish'
 import { logger } from '../../../utils/logger'
 
 const app = getApp<IAppOption>()
@@ -48,6 +48,10 @@ Page({
         pickerSelectedIds: [] as number[],
         pickerDishCount: 0,
 
+        // 属性标签
+        availableTags: [] as TagInfo[],
+        selectedTagIds: [] as number[],
+
         // 计算字段
         originalPrice: ''
     },
@@ -69,13 +73,24 @@ Page({
         if (merchantId) {
             await this.loadCombos()
             await this.loadAllDishes()
+            await this.loadAvailableTags()
         } else {
             app.userInfoReadyCallback = async () => {
                 if (app.globalData.merchantId) {
                     await this.loadCombos()
                     await this.loadAllDishes()
+                    await this.loadAvailableTags()
                 }
             }
+        }
+    },
+
+    async loadAvailableTags() {
+        try {
+            const tags = await TagService.listDishTags()
+            this.setData({ availableTags: tags })
+        } catch (error) {
+            logger.error('加载标签失败', error, 'Combos')
         }
     },
 
@@ -154,9 +169,14 @@ Page({
         try {
             const detail = await ComboManagementService.getComboDetail(id)
             console.log('[Combos] 套餐详情:', JSON.stringify(detail))
+
+            // 回填已有标签
+            const tagIds = (detail.tags || []).map((t: any) => t.id)
+
             this.setData({
                 selectedCombo: { ...detail, dish_count: detail.dishes?.length || 0 },
-                isAdding: false
+                isAdding: false,
+                selectedTagIds: tagIds
             })
             this.calculateOriginalPrice()
         } catch (error) {
@@ -188,9 +208,11 @@ Page({
                 description: '',
                 combo_price: 0,
                 is_online: true,
-                dishes: []
+                dishes: [],
+                tags: []
             } as ComboItem,
-            originalPrice: ''
+            originalPrice: '',
+            selectedTagIds: []  // 清空标签选中
         })
     },
 
@@ -256,7 +278,8 @@ Page({
                     description: selectedCombo.description || '',
                     combo_price: selectedCombo.combo_price,
                     is_online: selectedCombo.is_online !== false,
-                    dishes: dishes
+                    dishes: dishes,
+                    tag_ids: this.data.selectedTagIds  // 包含标签
                 })
                 wx.hideLoading()
                 wx.showToast({ title: '创建成功', icon: 'success', duration: 2000 })
@@ -271,7 +294,8 @@ Page({
                     description: selectedCombo.description || '',
                     combo_price: selectedCombo.combo_price,
                     is_online: selectedCombo.is_online,
-                    dishes: dishes
+                    dishes: dishes,
+                    tag_ids: this.data.selectedTagIds  // 包含标签
                 })
                 wx.hideLoading()
                 wx.showToast({ title: '保存成功', icon: 'success', duration: 2000 })
@@ -461,6 +485,27 @@ Page({
         })
 
         this.calculateOriginalPrice()
+    },
+
+    // ========== 标签选择 ==========
+    onTagToggle(e: any) {
+        const tagId = e.currentTarget.dataset.id
+        const { selectedTagIds } = this.data
+
+        let newTagIds: number[]
+        if (selectedTagIds.includes(tagId)) {
+            // 已选中，移除
+            newTagIds = selectedTagIds.filter(id => id !== tagId)
+        } else {
+            // 未选中，添加（最多10个）
+            if (selectedTagIds.length >= 10) {
+                wx.showToast({ title: '最多选择10个标签', icon: 'none' })
+                return
+            }
+            newTagIds = [...selectedTagIds, tagId]
+        }
+
+        this.setData({ selectedTagIds: newTagIds })
     }
 })
 

@@ -1,5 +1,18 @@
 <!-- 套餐管理 - 桌面级 SaaS 界面（两栏布局） -->
 
+<!-- WXS 模块 - 处理数组操作 -->
+<wxs module="utils">
+  module.exports = {
+    contains: function(arr, id) {
+      if (!arr || !arr.length) return false;
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i] === id) return true;
+      }
+      return false;
+    }
+  }
+</wxs>
+
 <match-media max-width="1599">
   <view class="desktop-only-notice">
     <view class="notice-box">
@@ -170,6 +183,26 @@
                     bindtap="onToggleOnline"
                   >
                     <view class="toggle-handle"></view>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 属性标签 -->
+              <view class="form-section">
+                <view class="section-title">属性标签</view>
+                <view class="tags-container">
+                  <view 
+                    wx:for="{{availableTags}}" 
+                    wx:key="id" 
+                    class="tag-item {{utils.contains(selectedTagIds, item.id) ? 'selected' : ''}}"
+                    bindtap="onTagToggle"
+                    data-id="{{item.id}}"
+                  >
+                    <text class="tag-name">{{item.name}}</text>
+                    <text class="tag-check" wx:if="{{utils.contains(selectedTagIds, item.id)}}">✓</text>
+                  </view>
+                  <view wx:if="{{availableTags.length === 0}}" class="tags-empty">
+                    <text>暂无可用标签</text>
                   </view>
                 </view>
               </view>

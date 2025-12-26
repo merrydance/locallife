@@ -22,12 +22,14 @@ type CreateComboSetTxParams struct {
 	ComboPrice    int64
 	IsOnline      bool
 	Dishes        []DishWithQuantity // 菜品列表（带数量）
+	TagIDs        []int64            // 标签ID列表
 }
 
 // CreateComboSetTxResult contains the result of creating a combo set
 type CreateComboSetTxResult struct {
 	ComboSet ComboSet
 	Dishes   []ComboDish
+	Tags     []ComboTag
 }
 
 // CreateComboSetTx creates a combo set with its dish associations in a single transaction.
@@ -67,6 +69,19 @@ func (store *SQLStore) CreateComboSetTx(ctx context.Context, arg CreateComboSetT
 				return fmt.Errorf("add combo dish %d: %w", dish.DishID, err)
 			}
 			result.Dishes = append(result.Dishes, cd)
+		}
+
+		// Step 3: Add tag associations
+		result.Tags = make([]ComboTag, 0, len(arg.TagIDs))
+		for _, tagID := range arg.TagIDs {
+			ct, err := q.AddComboTag(ctx, AddComboTagParams{
+				ComboID: result.ComboSet.ID,
+				TagID:   tagID,
+			})
+			if err != nil {
+				return fmt.Errorf("add combo tag %d: %w", tagID, err)
+			}
+			result.Tags = append(result.Tags, ct)
 		}
 
 		return nil
