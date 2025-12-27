@@ -1,0 +1,24 @@
+/* 开关组件样式 */
+@import '../../styles/merchant-saas.wxss';
+
+.form-toggle-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.form-toggle-wrapper.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.toggle-label {
+  font-size: 13px;
+  color: var(--saas-text-secondary, #595959);
+}
+
+/* .toggle 和 .toggle-handle 样式继承自 merchant-saas.wxss */
+
+.toggle.disabled {
+  cursor: not-allowed;
+}

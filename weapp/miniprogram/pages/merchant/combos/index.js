@@ -40,6 +40,11 @@ Page({
         allDishes: [],
         filteredDishes: [],
         dishSearchKeyword: '',
+        pickerSelectedIds: [],
+        pickerDishCount: 0,
+        // 属性标签
+        availableTags: [],
+        selectedTagIds: [],
         // 计算字段
         originalPrice: ''
     },
@@ -58,14 +63,27 @@ Page({
             if (merchantId) {
                 yield this.loadCombos();
                 yield this.loadAllDishes();
+                yield this.loadAvailableTags();
             }
             else {
                 app.userInfoReadyCallback = () => __awaiter(this, void 0, void 0, function* () {
                     if (app.globalData.merchantId) {
                         yield this.loadCombos();
                         yield this.loadAllDishes();
+                        yield this.loadAvailableTags();
                     }
                 });
+            }
+        });
+    },
+    loadAvailableTags() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const tags = yield dish_1.TagService.listDishTags();
+                this.setData({ availableTags: tags });
+            }
+            catch (error) {
+                logger_1.logger.error('加载标签失败', error, 'Combos');
             }
         });
     },
@@ -73,28 +91,23 @@ Page({
         return __awaiter(this, void 0, void 0, function* () {
             this.setData({ loading: true });
             try {
+                console.log('[Combos] 开始加载套餐列表...');
                 const response = yield dish_1.ComboManagementService.listCombos({
                     page_id: 1,
                     page_size: 50
                 });
-                // 获取每个套餐的详情以填充菜品数量
-                const combosWithDetails = yield Promise.all(response.combos.map((combo) => __awaiter(this, void 0, void 0, function* () {
-                    var _a;
-                    try {
-                        const detail = yield dish_1.ComboManagementService.getComboDetail(combo.id);
-                        return Object.assign(Object.assign({}, detail), { dish_count: ((_a = detail.dishes) === null || _a === void 0 ? void 0 : _a.length) || 0 });
-                    }
-                    catch (_b) {
-                        return Object.assign(Object.assign({}, combo), { dishes: [], dish_count: 0 });
-                    }
-                })));
+                console.log('[Combos] API 响应:', JSON.stringify(response));
+                // 后端返回的是 combo_sets 字段
+                const combos = (response.combo_sets || []).map(combo => (Object.assign(Object.assign({}, combo), { dishes: [], dish_count: 0 })));
+                console.log('[Combos] 加载套餐成功，数量:', combos.length);
                 this.setData({
-                    combos: combosWithDetails,
-                    filteredCombos: combosWithDetails,
+                    combos,
+                    filteredCombos: combos,
                     loading: false
                 });
             }
             catch (error) {
+                console.error('[Combos] 加载套餐失败:', error);
                 logger_1.logger.error('加载套餐失败', error, 'Combos');
                 this.setData({ loading: false });
             }
@@ -102,17 +115,20 @@ Page({
     },
     loadAllDishes() {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 const response = yield dish_1.DishManagementService.listDishes({
                     page_id: 1,
-                    page_size: 200
+                    page_size: 50
                 });
+                console.log('[Combos] 加载菜品成功，数量:', ((_a = response.dishes) === null || _a === void 0 ? void 0 : _a.length) || 0);
                 this.setData({
-                    allDishes: response.dishes,
-                    filteredDishes: response.dishes
+                    allDishes: response.dishes || [],
+                    filteredDishes: response.dishes || []
                 });
             }
             catch (error) {
+                console.error('[Combos] 加载菜品失败:', error);
                 logger_1.logger.error('加载菜品失败', error, 'Combos');
             }
         });
@@ -133,16 +149,33 @@ Page({
     },
     onSelectCombo(e) {
         const item = e.currentTarget.dataset.item;
+        // 立即设置选中状态，提供即时反馈
+        this.setData({
+            selectedCombo: item,
+            isAdding: false,
+            selectedTagIds: []
+        });
+        // 然后异步加载完整详情
         this.loadComboDetail(item.id);
     },
     loadComboDetail(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
+            const requestedId = id; // 记录本次请求的套餐ID
             try {
                 const detail = yield dish_1.ComboManagementService.getComboDetail(id);
+                console.log('[Combos] 套餐详情:', JSON.stringify(detail));
+                // 检查是否已经选择了其他套餐（防止旧请求覆盖新选择）
+                if (((_a = this.data.selectedCombo) === null || _a === void 0 ? void 0 : _a.id) !== requestedId) {
+                    console.log('[loadComboDetail] 已选择其他套餐，忽略旧响应', requestedId);
+                    return;
+                }
+                // 回填已有标签
+                const tagIds = (detail.tags || []).map((t) => t.id);
+                // 更新完整数据
                 this.setData({
-                    selectedCombo: Object.assign(Object.assign({}, detail), { dish_count: ((_a = detail.dishes) === null || _a === void 0 ? void 0 : _a.length) || 0 }),
-                    isAdding: false
+                    selectedCombo: Object.assign(Object.assign({}, detail), { dish_count: ((_b = detail.dishes) === null || _b === void 0 ? void 0 : _b.length) || 0 }),
+                    selectedTagIds: tagIds
                 });
                 this.calculateOriginalPrice();
             }
@@ -153,11 +186,16 @@ Page({
     },
     calculateOriginalPrice() {
         const { selectedCombo } = this.data;
-        if (!selectedCombo || !selectedCombo.dishes) {
+        if (!selectedCombo || !selectedCombo.dishes || selectedCombo.dishes.length === 0) {
             this.setData({ originalPrice: '' });
             return;
         }
-        const total = selectedCombo.dishes.reduce((sum, d) => sum + (d.price || 0), 0);
+        // 计算总价：单价 × 数量
+        const total = selectedCombo.dishes.reduce((sum, d) => {
+            const price = d.dish_price || d.price || 0;
+            const qty = d.quantity || 1;
+            return sum + (price * qty);
+        }, 0);
         this.setData({ originalPrice: (total / 100).toFixed(2) });
     },
     onAddCombo() {
@@ -169,9 +207,11 @@ Page({
                 description: '',
                 combo_price: 0,
                 is_online: true,
-                dishes: []
+                dishes: [],
+                tags: []
             },
-            originalPrice: ''
+            originalPrice: '',
+            selectedTagIds: [] // 清空标签选中
         });
     },
     onCancelEdit() {
@@ -205,7 +245,6 @@ Page({
     },
     onSaveCombo() {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const { selectedCombo, isAdding } = this.data;
             if (!selectedCombo)
                 return;
@@ -219,40 +258,57 @@ Page({
                 return;
             }
             this.setData({ saving: true });
+            wx.showLoading({ title: '保存中...' });
             try {
                 if (isAdding) {
-                    // 创建套餐
-                    const dishIds = ((_a = selectedCombo.dishes) === null || _a === void 0 ? void 0 : _a.map((d) => d.id)) || [];
+                    // 创建套餐：传递带数量的菜品列表
+                    const dishes = (selectedCombo.dishes || []).map((d) => ({
+                        dish_id: d.dish_id || d.id,
+                        quantity: d.quantity || 1
+                    }));
                     yield dish_1.ComboManagementService.createCombo({
                         name: selectedCombo.name.trim(),
                         description: selectedCombo.description || '',
                         combo_price: selectedCombo.combo_price,
                         is_online: selectedCombo.is_online !== false,
-                        dish_ids: dishIds
+                        dishes: dishes,
+                        tag_ids: this.data.selectedTagIds // 包含标签
                     });
-                    wx.showToast({ title: '创建成功', icon: 'success' });
+                    wx.hideLoading();
+                    wx.showToast({ title: '创建成功', icon: 'success', duration: 2000 });
                 }
                 else {
-                    // 更新套餐
+                    // 更新套餐：传递带数量的菜品列表
+                    const dishes = (selectedCombo.dishes || []).map((d) => ({
+                        dish_id: d.dish_id || d.id,
+                        quantity: d.quantity || 1
+                    }));
                     yield dish_1.ComboManagementService.updateCombo(selectedCombo.id, {
                         name: selectedCombo.name.trim(),
                         description: selectedCombo.description || '',
                         combo_price: selectedCombo.combo_price,
-                        is_online: selectedCombo.is_online
+                        is_online: selectedCombo.is_online,
+                        dishes: dishes,
+                        tag_ids: this.data.selectedTagIds // 包含标签
                     });
-                    wx.showToast({ title: '保存成功', icon: 'success' });
+                    wx.hideLoading();
+                    wx.showToast({ title: '保存成功', icon: 'success', duration: 2000 });
                 }
                 this.setData({
                     isAdding: false,
-                    selectedCombo: null
+                    selectedCombo: null,
+                    saving: false
                 });
-                yield this.loadCombos();
+                // 延迟刷新列表，让 Toast 有时间显示
+                setTimeout(() => {
+                    this.loadCombos();
+                }, 500);
             }
             catch (error) {
+                wx.hideLoading();
+                console.error('[Combos] 保存失败:', error);
                 logger_1.logger.error('保存套餐失败', error, 'Combos');
-                wx.showToast({ title: error.message || '保存失败', icon: 'error' });
-            }
-            finally {
+                wx.showToast({ title: error.message || '保存失败', icon: 'error', duration: 2000 });
                 this.setData({ saving: false });
             }
         });
@@ -271,16 +327,15 @@ Page({
                 wx.showLoading({ title: '删除中...' });
                 try {
                     yield dish_1.ComboManagementService.deleteCombo(selectedCombo.id);
+                    wx.hideLoading();
                     wx.showToast({ title: '已删除', icon: 'success' });
                     this.setData({ selectedCombo: null });
                     yield this.loadCombos();
                 }
                 catch (error) {
+                    wx.hideLoading();
                     logger_1.logger.error('删除套餐失败', error, 'Combos');
                     wx.showToast({ title: '删除失败', icon: 'error' });
-                }
-                finally {
-                    wx.hideLoading();
                 }
             }
         });
@@ -288,14 +343,20 @@ Page({
     // ========== 菜品选择弹窗 ==========
     onOpenDishPicker() {
         const { selectedCombo, allDishes } = this.data;
-        const selectedIds = new Set(((selectedCombo === null || selectedCombo === void 0 ? void 0 : selectedCombo.dishes) || []).map((d) => d.id));
-        // 标记已选中的菜品
-        const dishesWithSelection = allDishes.map(d => (Object.assign(Object.assign({}, d), { selected: selectedIds.has(d.id) })));
+        // 从当前套餐获取已选菜品及数量（使用后端格式 dish_id）
+        const dishQuantityMap = new Map();
+        ((selectedCombo === null || selectedCombo === void 0 ? void 0 : selectedCombo.dishes) || []).forEach((d) => {
+            // 兼容两种格式：dish_id（后端格式）和 id（前端格式）
+            const dishId = d.dish_id || d.id;
+            dishQuantityMap.set(dishId, d.quantity || 1);
+        });
+        const dishesWithQuantity = allDishes.map(d => (Object.assign(Object.assign({}, d), { quantity: dishQuantityMap.get(d.id) || 0 })));
         this.setData({
             showDishPicker: true,
-            filteredDishes: dishesWithSelection,
+            filteredDishes: dishesWithQuantity,
             dishSearchKeyword: ''
         });
+        this.updatePickerDishCount();
     },
     onCloseDishPicker() {
         this.setData({ showDishPicker: false });
@@ -303,27 +364,64 @@ Page({
     onDishSearch(e) {
         const keyword = e.detail.value.toLowerCase();
         this.setData({ dishSearchKeyword: keyword });
-        const { allDishes, selectedCombo } = this.data;
-        const selectedIds = new Set(((selectedCombo === null || selectedCombo === void 0 ? void 0 : selectedCombo.dishes) || []).map((d) => d.id));
-        let filtered = allDishes.map(d => (Object.assign(Object.assign({}, d), { selected: selectedIds.has(d.id) })));
+        this.updateFilteredDishes(keyword);
+    },
+    updateFilteredDishes(keyword = '') {
+        const { allDishes, filteredDishes } = this.data;
+        // 保留当前的数量设置
+        const qtyMap = new Map(filteredDishes.map(d => [d.id, d.quantity || 0]));
+        let filtered = allDishes.map(d => (Object.assign(Object.assign({}, d), { quantity: qtyMap.get(d.id) || 0 })));
         if (keyword) {
             filtered = filtered.filter(d => d.name.toLowerCase().includes(keyword));
         }
         this.setData({ filteredDishes: filtered });
     },
-    onSelectDish(e) {
+    // 点击菜品名称快速添加/移除
+    onToggleDish(e) {
         const item = e.currentTarget.dataset.item;
         const { filteredDishes } = this.data;
-        const updated = filteredDishes.map(d => (Object.assign(Object.assign({}, d), { selected: d.id === item.id ? !d.selected : d.selected })));
+        const updated = filteredDishes.map(d => (Object.assign(Object.assign({}, d), { quantity: d.id === item.id ? (d.quantity ? 0 : 1) : d.quantity })));
         this.setData({ filteredDishes: updated });
+        this.updatePickerDishCount();
+    },
+    // 增加数量
+    onIncreaseDishQty(e) {
+        const dishId = e.currentTarget.dataset.id;
+        const { filteredDishes } = this.data;
+        const updated = filteredDishes.map(d => (Object.assign(Object.assign({}, d), { quantity: d.id === dishId ? (d.quantity || 0) + 1 : d.quantity })));
+        this.setData({ filteredDishes: updated });
+        this.updatePickerDishCount();
+    },
+    // 减少数量
+    onDecreaseDishQty(e) {
+        const dishId = e.currentTarget.dataset.id;
+        const { filteredDishes } = this.data;
+        const updated = filteredDishes.map(d => (Object.assign(Object.assign({}, d), { quantity: d.id === dishId ? Math.max(0, (d.quantity || 0) - 1) : d.quantity })));
+        this.setData({ filteredDishes: updated });
+        this.updatePickerDishCount();
+    },
+    // 更新已选菜品数量统计（优化：直接从 filteredDishes 统计）
+    updatePickerDishCount() {
+        const { filteredDishes } = this.data;
+        const count = filteredDishes.filter(d => (d.quantity || 0) > 0).length;
+        this.setData({ pickerDishCount: count });
     },
     onConfirmDishSelection() {
-        const { filteredDishes, selectedCombo, allDishes } = this.data;
-        // 合并选中状态到所有菜品
-        const selectionMap = new Map(filteredDishes.map(d => [d.id, d.selected]));
-        const allWithSelection = allDishes.map(d => (Object.assign(Object.assign({}, d), { selected: selectionMap.has(d.id) ? selectionMap.get(d.id) : false })));
-        // 获取所有选中的菜品
-        const selectedDishes = allWithSelection.filter(d => d.selected);
+        const { filteredDishes, allDishes, selectedCombo } = this.data;
+        if (!selectedCombo)
+            return;
+        // 合并数量到完整列表
+        const qtyMap = new Map(filteredDishes.map(d => [d.id, d.quantity || 0]));
+        // 获取所有数量 > 0 的菜品，并转换为后端格式（dish_id, dish_name, dish_price）
+        const selectedDishes = allDishes
+            .map(d => ({
+            dish_id: d.id,
+            dish_name: d.name,
+            dish_price: d.price,
+            dish_image_url: d.image_url,
+            quantity: qtyMap.get(d.id) || 0
+        }))
+            .filter(d => d.quantity > 0);
         this.setData({
             'selectedCombo.dishes': selectedDishes,
             showDishPicker: false
@@ -335,10 +433,30 @@ Page({
         const { selectedCombo } = this.data;
         if (!selectedCombo)
             return;
-        const updatedDishes = (selectedCombo.dishes || []).filter((d) => d.id !== dishId);
+        // 使用 dish_id 字段进行过滤（后端格式）
+        const updatedDishes = (selectedCombo.dishes || []).filter((d) => d.dish_id !== dishId);
         this.setData({
             'selectedCombo.dishes': updatedDishes
         });
         this.calculateOriginalPrice();
+    },
+    // ========== 标签选择 ==========
+    onTagToggle(e) {
+        const tagId = e.currentTarget.dataset.id;
+        const { selectedTagIds } = this.data;
+        let newTagIds;
+        if (selectedTagIds.includes(tagId)) {
+            // 已选中，移除
+            newTagIds = selectedTagIds.filter(id => id !== tagId);
+        }
+        else {
+            // 未选中，添加（最多10个）
+            if (selectedTagIds.length >= 10) {
+                wx.showToast({ title: '最多选择10个标签', icon: 'none' });
+                return;
+            }
+            newTagIds = [...selectedTagIds, tagId];
+        }
+        this.setData({ selectedTagIds: newTagIds });
     }
 });

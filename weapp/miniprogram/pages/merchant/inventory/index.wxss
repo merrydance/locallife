@@ -1,161 +1,354 @@
-@import "../../../styles/responsive.wxss";
+/* 库存管理 - 桌面级 SaaS 样式 */
 
-.inventory-container {
+/* 变量定义 */
+page {
+  --primary: #1890ff;
+  --primary-light: #40a9ff;
+  --primary-bg: rgba(24, 144, 255, 0.1);
+  --success: #52c41a;
+  --success-bg: #f6ffed;
+  --warning: #faad14;
+  --warning-bg: #fffbe6;
+  --danger: #ff4d4f;
+  --text-primary: #262626;
+  --text-secondary: #595959;
+  --text-muted: #8c8c8c;
+  --bg-base: #f5f5f5;
+  --bg-component: #ffffff;
+  --border: #e8e8e8;
+  --radius: 8px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* 桌面端提示 */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--bg-base);
+  padding: 20px;
+}
+
+.notice-box {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.notice-icon { font-size: 64px; margin-bottom: 16px; }
+.notice-title { display: block; font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.notice-desc { display: block; color: var(--text-muted); margin-bottom: 24px; }
+.btn-back {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+/* SaaS 布局 */
+.saas-layout {
   min-height: 100vh;
-  background: #f5f6f7;
+  background: var(--bg-base);
 }
 
-/* --- Mobile View --- */
-.mobile-view {
-  padding: 24rpx;
-}
-.search-bar {
-  margin-bottom: 24rpx;
+.main-area {
+  transition: margin-left 0.2s;
+  min-height: 100vh;
 }
 
-/* --- Tablet/PC Split View --- */
-.desktop-split-view {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  height: calc(100vh - 100px); /* 动态高度 */
-  overflow: hidden;
-  background: #fff;
-  border-top: 1rpx solid #eef2f6;
+/* 页面容器 - 两栏布局 */
+.page-container {
+  display: flex;
+  gap: 20px;
+  padding: 76px 20px 20px 20px;
+  min-height: calc(100vh - 56px);
 }
 
-.list-pane {
-  border-right: 1rpx solid #eef2f6;
+/* 左侧分类面板 */
+.category-panel {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--bg-component);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  height: fit-content;
+  position: sticky;
+  top: 76px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 6px;
+  transition: background 0.15s ease-out;
+}
+
+.category-item:hover {
+  background: #f5f5f5;
+}
+
+.category-item.active {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.category-name {
+  font-size: 13px;
+}
+
+.category-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.category-item.active .category-count {
+  background: var(--primary);
+  color: white;
+}
+
+/* 右侧库存面板 */
+.inventory-panel {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
 
-.pane-header {
-  padding: 32rpx;
-  font-weight: 700;
-  font-size: 32rpx;
-  border-bottom: 1rpx solid #f8fafc;
+.panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: var(--bg-component);
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
 }
 
-.pane-scroll {
+/* 提示文字 */
+.inventory-hint {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #1890ff;
+}
+
+.header-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.title-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.title-date {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* 保存按钮 */
+.btn-save {
+  padding: 8px 20px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-muted);
+}
+
+.btn-save.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.btn-save[disabled] {
+  opacity: 0.5;
+}
+
+.header-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stat-item.success .stat-value { color: var(--success); }
+.stat-item.warning .stat-value { color: var(--warning); }
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 库存内容区 */
+.inventory-content {
   flex: 1;
   overflow-y: auto;
 }
 
-.inventory-item-card {
-  padding: 32rpx;
-  border-bottom: 1rpx solid #fcfcfc;
-  transition: all 0.2s;
-}
-
-.inventory-item-card.active {
-  background: #eff6ff;
-  border-left: 8rpx solid #0052d9;
-}
-
-.item-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.item-name {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.item-cat {
-  font-size: 22rpx;
-  color: #94a3b8;
-  margin-top: 8rpx;
-  display: block;
-}
-
-/* --- Detail Pane --- */
-.detail-pane {
-  background: #f8fafc;
-  padding: 40rpx;
-  overflow-y: auto;
-}
-
-.empty-detail {
+.loading-state, .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  color: #ccc;
-  gap: 20rpx;
+  padding: 80px 20px;
+  color: var(--text-muted);
 }
 
-.detail-header {
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-text { font-size: 14px; }
+
+/* ========== CSS Grid 布局 ========== */
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+/* 库存卡片 */
+.inventory-card {
+  background: var(--bg-component);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.inventory-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+.card-image {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  background: #f5f5f5;
+}
+
+.card-info {
+  padding: 12px 14px 8px;
+}
+
+.card-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-price {
+  display: block;
+  font-size: 13px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+
+/* 库存输入区 */
+.card-inventory {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 40rpx;
+  padding: 10px 14px;
+  background: #fafafa;
+  border-top: 1px solid var(--border);
 }
 
-.detail-title {
-  font-size: 40rpx;
-  font-weight: 800;
-  color: #0f172a;
+.inventory-label {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
-.detail-subtitle {
-  display: block;
-  font-size: 24rpx;
-  color: #64748b;
-  margin-top: 8rpx;
+.inventory-input {
+  width: 80px;
+  height: 32px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  background: white;
 }
 
-.detail-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 32rpx;
-  margin-bottom: 40rpx;
+.inventory-input:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-bg);
 }
 
-.stat-box {
-  background: #fff;
-  padding: 32rpx;
-  border-radius: 16rpx;
-  box-shadow: 0 4px 10rpx rgba(0,0,0,0.02);
+.inventory-input.unlimited {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success);
 }
 
-.stat-box .label { font-size: 24rpx; color: #64748b; display: block; }
-.stat-box .value { font-size: 36rpx; font-weight: 700; color: #1e293b; margin-top: 12rpx; display: block; }
-.stat-box .value.highlight { color: #0052d9; }
-
-.action-card {
-  background: #fff;
-  padding: 40rpx;
-  border-radius: 16rpx;
+.inventory-input.sold-out {
+  color: var(--danger);
+  background: #fff1f0;
+  border-color: var(--danger);
 }
 
-.card-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 32rpx;
-  display: block;
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.action-btns {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24rpx;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* PC-Full 增强 */
-@media (min-width: 1600px) {
-  .desktop-split-view {
-    grid-template-columns: 400px 1fr;
-    max-width: 1440px;
-    margin: 24px auto;
-    border-radius: 24rpx;
-    box-shadow: 0 10px 40rpx rgba(0,0,0,0.05);
-  }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }

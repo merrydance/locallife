@@ -58,6 +58,31 @@ class TagService {
             return this.listTags('customization');
         });
     }
+    /**
+     * 创建标签
+     * POST /v1/tags
+     */
+    static createTag(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: '/v1/tags',
+                method: 'POST',
+                data
+            });
+        });
+    }
+    /**
+     * 删除标签
+     * DELETE /v1/tags/:id
+     */
+    static deleteTag(id) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield (0, request_1.request)({
+                url: `/v1/tags/${id}`,
+                method: 'DELETE'
+            });
+        });
+    }
 }
 exports.TagService = TagService;
 // ==================== 菜品管理服务 ====================
@@ -144,13 +169,13 @@ class DishManagementService {
     }
     /**
      * 批量更新菜品状态
-     * PATCH /v1/dishes/batch/status (使用PUT方法)
+     * PATCH /v1/dishes/batch/status
      */
     static batchUpdateDishStatus(data) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield (0, request_1.request)({
                 url: '/v1/dishes/batch/status',
-                method: 'PUT',
+                method: 'PATCH',
                 data
             });
         });

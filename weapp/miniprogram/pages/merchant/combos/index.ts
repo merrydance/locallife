@@ -162,20 +162,37 @@ Page({
 
     onSelectCombo(e: any) {
         const item = e.currentTarget.dataset.item
+
+        // 立即设置选中状态，提供即时反馈
+        this.setData({
+            selectedCombo: item,
+            isAdding: false,
+            selectedTagIds: []
+        })
+
+        // 然后异步加载完整详情
         this.loadComboDetail(item.id)
     },
 
     async loadComboDetail(id: number) {
+        const requestedId = id  // 记录本次请求的套餐ID
+
         try {
             const detail = await ComboManagementService.getComboDetail(id)
             console.log('[Combos] 套餐详情:', JSON.stringify(detail))
 
+            // 检查是否已经选择了其他套餐（防止旧请求覆盖新选择）
+            if (this.data.selectedCombo?.id !== requestedId) {
+                console.log('[loadComboDetail] 已选择其他套餐，忽略旧响应', requestedId)
+                return
+            }
+
             // 回填已有标签
             const tagIds = (detail.tags || []).map((t: any) => t.id)
 
+            // 更新完整数据
             this.setData({
                 selectedCombo: { ...detail, dish_count: detail.dishes?.length || 0 },
-                isAdding: false,
                 selectedTagIds: tagIds
             })
             this.calculateOriginalPrice()

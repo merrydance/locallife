@@ -33,6 +33,7 @@ Page({
         dishes: [],
         allDishes: [],
         selectedDish: null,
+        selectedDishId: null, // 用于列表高亮，比对比整个对象更快
         // 状态
         loading: true,
         saving: false,
@@ -50,7 +51,15 @@ Page({
         selectedTagIds: [],
         // 批量操作
         isMultiSelectMode: false,
-        selectedDishIds: []
+        selectedDishIds: [],
+        // 定制选项 - 简化版
+        customizationTags: [], // 可用的定制标签
+        selectedCustomizationTagIds: [], // 已选中的定制标签 ID
+        selectedCustomizationOptions: [], // 已选中的定制选项（带加价）
+        // 标签管理弹窗
+        showTagManager: false,
+        tagManagerType: 'dish',
+        newTagName: ''
     },
     onLoad() {
         this.initData();
@@ -69,6 +78,7 @@ Page({
                 yield this.loadCategories();
                 yield this.loadDishes();
                 yield this.loadAvailableTags();
+                yield this.loadCustomizationTags();
             }
             else {
                 // 等待商户信息
@@ -77,6 +87,7 @@ Page({
                         yield this.loadCategories();
                         yield this.loadDishes();
                         yield this.loadAvailableTags();
+                        yield this.loadCustomizationTags();
                     }
                 });
             }
@@ -108,6 +119,18 @@ Page({
             const newIds = selectedTagIds.filter(id => id !== tagId);
             this.setData({ selectedTagIds: newIds });
         }
+    },
+    // 加载定制标签
+    loadCustomizationTags() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const tags = yield dish_1.TagService.listCustomizationTags();
+                this.setData({ customizationTags: tags });
+            }
+            catch (error) {
+                logger_1.logger.error('加载定制标签失败', error, 'Dishes');
+            }
+        });
     },
     loadCategories() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -213,18 +236,107 @@ Page({
         }
     },
     onSelectDish(e) {
-        const dish = e.currentTarget.dataset.item;
-        // 处理分类数据回填
-        const { categories } = this.data;
-        const category = categories.find((c) => c.id === dish.category_id);
-        const categoryIndex = categories.findIndex((c) => c.id === dish.category_id);
-        // 回填已有标签
-        const tagIds = (dish.tags || []).map((t) => t.id);
-        this.setData({
-            selectedDish: Object.assign(Object.assign({}, dish), { category_name: (category === null || category === void 0 ? void 0 : category.name) || dish.category_name || '' }),
-            isAdding: false,
-            categoryPickerIndex: categoryIndex >= 0 ? categoryIndex : 0,
-            selectedTagIds: tagIds
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            const dishFromList = e.currentTarget.dataset.item;
+            const { categories } = this.data;
+            const requestedDishId = dishFromList.id; // 记录本次请求的菜品ID
+            // 第一步：只设置 ID，这是最快的操作，立即给用户视觉反馈
+            this.setData({ selectedDishId: requestedDishId });
+            // 第二步：设置完整选中状态
+            this.setData({
+                selectedDish: dishFromList,
+                isAdding: false,
+                selectedTagIds: [],
+                selectedCustomizationTagIds: [],
+                selectedCustomizationOptions: []
+            });
+            // 从API获取完整的菜品信息（包含标签和定制选项）
+            let dish = dishFromList;
+            try {
+                dish = yield dish_1.DishManagementService.getDishDetail(dishFromList.id);
+            }
+            catch (error) {
+                logger_1.logger.error('获取菜品详情失败，使用列表数据', error, 'Dishes');
+            }
+            // 检查是否已经选择了其他菜品（防止旧请求覆盖新选择）
+            if (((_a = this.data.selectedDish) === null || _a === void 0 ? void 0 : _a.id) !== requestedDishId) {
+                console.log('[onSelectDish] 已选择其他菜品，忽略旧响应', requestedDishId);
+                return;
+            }
+            // 处理图片URL - 需要转换为完整URL用于显示
+            let imageUrlDisplay = dish.image_url;
+            if (dish.image_url) {
+                try {
+                    imageUrlDisplay = yield (0, image_security_1.resolveImageURL)(dish.image_url);
+                }
+                catch (error) {
+                    logger_1.logger.error('解析图片URL失败', error, 'Dishes');
+                }
+            }
+            // 再次检查（图片加载也是异步的）
+            if (((_b = this.data.selectedDish) === null || _b === void 0 ? void 0 : _b.id) !== requestedDishId) {
+                return;
+            }
+            // 处理分类数据回填
+            const category = categories.find((c) => c.id === dish.category_id);
+            const categoryIndex = categories.findIndex((c) => c.id === dish.category_id);
+            // 回填已有属性标签
+            const tagIds = (dish.tags || []).map((t) => t.id);
+            // 回填定制选项 - 直接从 getDishDetail 返回的 customization_groups 中提取
+            const customizationOptions = [];
+            const customizationTagIds = [];
+            if (dish.customization_groups && dish.customization_groups.length > 0) {
+                for (const group of dish.customization_groups) {
+                    for (const opt of (group.options || [])) {
+                        customizationOptions.push({
+                            tag_id: opt.tag_id,
+                            tag_name: opt.tag_name,
+                            extra_price: opt.extra_price || 0,
+                            sort_order: opt.sort_order || 0
+                        });
+                        customizationTagIds.push(opt.tag_id);
+                    }
+                }
+            }
+            this.setData({
+                selectedDish: Object.assign(Object.assign({}, dish), { category_name: (category === null || category === void 0 ? void 0 : category.name) || dish.category_name || '', image_url_display: imageUrlDisplay // 用于显示的完整URL
+                 }),
+                isAdding: false,
+                categoryPickerIndex: categoryIndex >= 0 ? categoryIndex : 0,
+                selectedTagIds: tagIds,
+                selectedCustomizationTagIds: customizationTagIds,
+                selectedCustomizationOptions: customizationOptions
+            });
+        });
+    },
+    // 加载菜品定制选项 - 保留用于新建菜品后刷新
+    loadDishCustomizations(dishId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const result = yield dish_1.DishManagementService.getDishCustomizations(dishId);
+                // 从所有分组中提取选项到扁平列表
+                const options = [];
+                const tagIds = [];
+                for (const group of (result || [])) {
+                    for (const opt of (group.options || [])) {
+                        options.push({
+                            tag_id: opt.tag_id,
+                            tag_name: opt.tag_name,
+                            extra_price: opt.extra_price || 0,
+                            sort_order: opt.sort_order || 0
+                        });
+                        tagIds.push(opt.tag_id);
+                    }
+                }
+                this.setData({
+                    selectedCustomizationTagIds: tagIds,
+                    selectedCustomizationOptions: options
+                });
+            }
+            catch (error) {
+                logger_1.logger.error('加载定制选项失败', error, 'Dishes');
+            }
         });
     },
     onAddDish() {
@@ -336,7 +448,21 @@ Page({
             const imageUrl = this.extractImagePath(selectedDish.image_url);
             try {
                 if (isAdding) {
-                    // 创建菜品（包含标签）
+                    // 构建定制选项分组（如果有选中的定制标签）
+                    let customizationGroups = undefined;
+                    if (this.data.selectedCustomizationOptions.length > 0) {
+                        customizationGroups = [{
+                                name: '定制选项',
+                                is_required: false,
+                                sort_order: 0,
+                                options: this.data.selectedCustomizationOptions.map((o, i) => ({
+                                    tag_id: o.tag_id,
+                                    extra_price: o.extra_price || 0,
+                                    sort_order: i
+                                }))
+                            }];
+                    }
+                    // 创建菜品（包含标签和定制选项）
                     yield dish_1.DishManagementService.createDish({
                         name: selectedDish.name.trim(),
                         description: selectedDish.description || '',
@@ -348,7 +474,8 @@ Page({
                         is_available: selectedDish.is_available !== false,
                         prepare_time: selectedDish.prepare_time || 10,
                         sort_order: selectedDish.sort_order || 0,
-                        tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined
+                        tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined,
+                        customization_groups: customizationGroups
                     });
                     wx.showToast({ title: '创建成功', icon: 'success' });
                 }
@@ -364,13 +491,20 @@ Page({
                         is_online: selectedDish.is_online,
                         is_available: selectedDish.is_available,
                         prepare_time: selectedDish.prepare_time || 10,
-                        sort_order: selectedDish.sort_order || 0
+                        sort_order: selectedDish.sort_order || 0,
+                        tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : []
                     });
+                    // 保存定制选项
+                    if (this.data.selectedCustomizationOptions.length > 0 || selectedDish.id) {
+                        yield this.saveDishCustomizations();
+                    }
                     wx.showToast({ title: '保存成功', icon: 'success' });
                 }
                 this.setData({
                     isAdding: false,
-                    selectedDish: null // 清除选中状态
+                    selectedDish: null, // 清除选中状态
+                    selectedCustomizationTagIds: [], // 清除定制选项
+                    selectedCustomizationOptions: []
                 });
                 yield this.loadDishes();
             }
@@ -603,6 +737,173 @@ Page({
                     wx.hideLoading();
                 }
             }
+        });
+    },
+    // ========== 定制选项管理 (简化版) ==========
+    // 切换定制标签选中状态
+    onCustomizationTagToggle(e) {
+        const tagId = e.currentTarget.dataset.id;
+        const tagName = e.currentTarget.dataset.name;
+        const { selectedCustomizationTagIds, selectedCustomizationOptions } = this.data;
+        const index = selectedCustomizationTagIds.indexOf(tagId);
+        if (index === -1) {
+            // 添加标签
+            const newOption = {
+                tag_id: tagId,
+                tag_name: tagName,
+                extra_price: 0,
+                sort_order: selectedCustomizationOptions.length
+            };
+            this.setData({
+                selectedCustomizationTagIds: [...selectedCustomizationTagIds, tagId],
+                selectedCustomizationOptions: [...selectedCustomizationOptions, newOption]
+            });
+        }
+        else {
+            // 移除标签
+            const newTagIds = selectedCustomizationTagIds.filter((id) => id !== tagId);
+            const newOptions = selectedCustomizationOptions.filter((o) => o.tag_id !== tagId);
+            this.setData({
+                selectedCustomizationTagIds: newTagIds,
+                selectedCustomizationOptions: newOptions
+            });
+        }
+    },
+    // 修改定制选项加价
+    onCustomizationPriceChange(e) {
+        const tagId = e.currentTarget.dataset.tagId;
+        const value = e.detail.value;
+        const priceInCents = value ? Math.round(parseFloat(value) * 100) : 0;
+        const { selectedCustomizationOptions } = this.data;
+        const index = selectedCustomizationOptions.findIndex((o) => o.tag_id === tagId);
+        if (index >= 0) {
+            this.setData({
+                [`selectedCustomizationOptions[${index}].extra_price`]: priceInCents
+            });
+        }
+    },
+    // 保存定制选项 - 简化版
+    saveDishCustomizations() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { selectedDish, selectedCustomizationOptions } = this.data;
+            console.log('[DEBUG] saveDishCustomizations 被调用', {
+                dishId: selectedDish === null || selectedDish === void 0 ? void 0 : selectedDish.id,
+                optionsCount: selectedCustomizationOptions.length,
+                options: selectedCustomizationOptions
+            });
+            if (!selectedDish || !selectedDish.id) {
+                console.log('[DEBUG] saveDishCustomizations 跳过：无有效菜品ID');
+                return;
+            }
+            // 如果没有选中任何定制选项，清空定制
+            if (selectedCustomizationOptions.length === 0) {
+                try {
+                    console.log('[DEBUG] 清空定制选项');
+                    yield dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups: [] });
+                    return true;
+                }
+                catch (error) {
+                    logger_1.logger.error('保存定制选项失败', error, 'Dishes');
+                    throw error;
+                }
+            }
+            // 创建单一默认分组存储所有选项
+            const groups = [{
+                    name: '定制选项',
+                    is_required: false,
+                    sort_order: 0,
+                    options: selectedCustomizationOptions.map((o, i) => ({
+                        tag_id: o.tag_id,
+                        extra_price: o.extra_price || 0,
+                        sort_order: i
+                    }))
+                }];
+            console.log('[DEBUG] 保存定制选项', { groups });
+            try {
+                yield dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups });
+                console.log('[DEBUG] 保存定制选项成功');
+                return true;
+            }
+            catch (error) {
+                logger_1.logger.error('保存定制选项失败', error, 'Dishes');
+                throw error;
+            }
+        });
+    },
+    // ========== 标签管理 ==========
+    onOpenTagManager(e) {
+        const type = e.currentTarget.dataset.type || 'dish';
+        this.setData({
+            showTagManager: true,
+            tagManagerType: type,
+            newTagName: ''
+        });
+    },
+    onCloseTagManager() {
+        this.setData({
+            showTagManager: false,
+            newTagName: ''
+        });
+    },
+    onNewTagNameInput(e) {
+        this.setData({ newTagName: e.detail.value });
+    },
+    onAddTag() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { newTagName, tagManagerType } = this.data;
+            const name = newTagName.trim();
+            if (!name) {
+                wx.showToast({ title: '请输入标签名称', icon: 'none' });
+                return;
+            }
+            try {
+                yield dish_1.TagService.createTag({
+                    name,
+                    type: tagManagerType
+                });
+                wx.showToast({ title: '添加成功', icon: 'success' });
+                this.setData({ newTagName: '' });
+                // 刷新标签列表
+                if (tagManagerType === 'dish') {
+                    yield this.loadAvailableTags();
+                }
+                else {
+                    yield this.loadCustomizationTags();
+                }
+            }
+            catch (error) {
+                logger_1.logger.error('添加标签失败', error, 'Dishes');
+                wx.showToast({ title: '添加失败', icon: 'error' });
+            }
+        });
+    },
+    onDeleteTag(e) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id, name } = e.currentTarget.dataset;
+            const { tagManagerType } = this.data;
+            wx.showModal({
+                title: '确认删除',
+                content: `确定要删除标签"${name}"吗？`,
+                success: (res) => __awaiter(this, void 0, void 0, function* () {
+                    if (res.confirm) {
+                        try {
+                            yield dish_1.TagService.deleteTag(id);
+                            wx.showToast({ title: '删除成功', icon: 'success' });
+                            // 刷新标签列表
+                            if (tagManagerType === 'dish') {
+                                yield this.loadAvailableTags();
+                            }
+                            else {
+                                yield this.loadCustomizationTags();
+                            }
+                        }
+                        catch (error) {
+                            logger_1.logger.error('删除标签失败', error, 'Dishes');
+                            wx.showToast({ title: '删除失败', icon: 'error' });
+                        }
+                    }
+                })
+            });
         });
     }
 });

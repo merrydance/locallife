@@ -1,0 +1,10 @@
+<!-- 开关组件 -->
+<view class="form-toggle-wrapper {{disabled ? 'disabled' : ''}}">
+  <text class="toggle-label" wx:if="{{label}}">{{label}}</text>
+  <view 
+    class="toggle {{value ? 'on' : ''}} {{disabled ? 'disabled' : ''}}" 
+    bindtap="onToggle"
+  >
+    <view class="toggle-handle"></view>
+  </view>
+</view>

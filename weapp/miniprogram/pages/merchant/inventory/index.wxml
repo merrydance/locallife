@@ -1,103 +1,111 @@
-<custom-navbar title="库存管理" showBack="{{true}}" bind:navheight="onNavHeight">
-  <view slot="right" wx:if="{{deviceType === 'pc-full' || deviceType === 'desktop'}}">
-    <t-button size="small" variant="text" icon="refresh" bindtap="fetchInventory" />
-  </view>
-</custom-navbar>
+<!-- 库存管理 - 桌面级 SaaS 界面 -->
 
-<view class="inventory-container" style="padding-top: {{navBarHeight}}px;">
-  <!-- 1. 手机端布局 (Mobile) -->
-  <match-media max-width="749">
-    <view class="mobile-view">
-      <view class="search-bar">
-        <t-search placeholder="搜索原材料/批次" shape="round" bind:change="onSearch" />
+<view class="saas-layout">
+    <!-- 侧边栏 -->
+    <merchant-sidebar 
+      current-path="inventory" 
+      collapsed="{{sidebarCollapsed}}"
+      bind:collapse="onSidebarCollapse"
+    />
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        merchant-name="{{merchantName}}"
+        is-open="{{isOpen}}"
+        sidebar-width="{{sidebarCollapsed ? 64 : 200}}"
+      />
+
+      <!-- 页面内容 - 两栏布局 -->
+      <view class="page-container inventory-page">
+        <!-- 左侧分类列表 -->
+        <view class="category-panel">
+          <view class="panel-title">菜品分类</view>
+          <view class="category-list">
+            <view 
+              class="category-item {{activeCategoryId === 'all' ? 'active' : ''}}"
+              bindtap="onSelectCategory"
+              data-id="all"
+            >
+              <text class="category-name">全部菜品</text>
+              <text class="category-count">{{allDishes.length}}</text>
+            </view>
+            <view 
+              wx:for="{{categories}}"
+              wx:key="id"
+              class="category-item {{activeCategoryId === item.id ? 'active' : ''}}"
+              bindtap="onSelectCategory"
+              data-id="{{item.id}}"
+            >
+              <text class="category-name">{{item.name}}</text>
+              <text class="category-count">{{item.dish_count || 0}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 右侧库存网格 -->
+        <view class="inventory-panel">
+          <!-- 工具栏 -->
+          <view class="panel-header">
+            <view class="header-title">
+              <text class="title-text">今日库存</text>
+              <text class="title-date">{{todayDate}}</text>
+            </view>
+            <button 
+              class="btn-save {{hasChanges ? 'active' : ''}}"
+              disabled="{{!hasChanges || saving}}"
+              bindtap="saveChanges"
+            >
+              {{saving ? '保存中...' : ('保存修改' + (changedDishIds.length > 0 ? '(' + changedDishIds.length + ')' : ''))}}
+            </button>
+          </view>
+          
+          <!-- 提示文字 -->
+          <view class="inventory-hint">
+            <text>💡 不填写库存默认为无限量供应。填写库存可防止当日超卖。</text>
+          </view>
+
+          <!-- 库存网格 -->
+          <view class="inventory-content">
+            <view wx:if="{{loading}}" class="loading-state">
+              <text>加载中...</text>
+            </view>
+            <view wx:elif="{{filteredDishes.length === 0}}" class="empty-state">
+              <text class="empty-icon">📦</text>
+              <text class="empty-text">暂无菜品</text>
+            </view>
+            <view wx:else class="inventory-grid">
+              <view 
+                wx:for="{{filteredDishes}}"
+                wx:key="id"
+                class="inventory-card"
+              >
+                <image 
+                  class="card-image" 
+                  src="{{item.image_url || '/assets/images/dish-placeholder.png'}}" 
+                  mode="aspectFill"
+                />
+                <view class="card-info">
+                  <text class="card-name">{{item.name}}</text>
+                  <text class="card-price">¥{{item.price / 100}}</text>
+                </view>
+                <view class="card-inventory">
+                  <text class="inventory-label">库存</text>
+                  <input 
+                    class="inventory-input {{item.inventory === 0 ? 'sold-out' : ''}}"
+                    type="text"
+                    value="{{item.inventory === -1 ? '' : item.inventory}}"
+                    placeholder="无限"
+                    data-dish-id="{{item.id}}"
+                    data-dish-name="{{item.name}}"
+                    bindinput="onInventoryInput"
+                  />
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
       </view>
-      <t-cell-group theme="card">
-        <t-cell 
-          wx:for="{{inventoryList}}" 
-          wx:key="id"
-          title="{{item.name}}"
-          description="当前库存: {{item.stock}} {{item.unit}}"
-          note="{{item.status === 'danger' ? '严重缺货' : (item.status === 'warning' ? '低库存' : '')}}"
-          note-props="{{ { theme: item.status === 'danger' ? 'danger' : 'warning' } }}"
-          arrow
-          bindtap="onItemTap"
-          data-item="{{item}}"
-        />
-      </t-cell-group>
     </view>
-  </match-media>
-
-  <!-- 2. 平板以上布局 (Tablet / PC-Window / PC-Full) -->
-  <match-media min-width="750">
-    <view class="desktop-split-view">
-      <!-- 左侧列表栏 -->
-      <view class="list-pane">
-        <view class="pane-header">
-           <text>原材料清单</text>
-           <t-button size="extra-small" theme="primary" variant="outline">导出报表</t-button>
-        </view>
-        <scroll-view scroll-y class="pane-scroll">
-          <view 
-            wx:for="{{inventoryList}}" 
-            wx:key="id" 
-            class="inventory-item-card {{selectedItem.id === item.id ? 'active' : ''}}"
-            bindtap="onItemTap"
-            data-item="{{item}}"
-          >
-            <view class="item-main">
-              <text class="item-name">{{item.name}}</text>
-              <t-tag size="extra-small" variant="light" theme="{{item.status === 'danger' ? 'danger' : (item.status === 'warning' ? 'warning' : 'success')}}">
-                {{item.stock}} {{item.unit}}
-              </t-tag>
-            </view>
-            <text class="item-cat">{{item.category}}</text>
-          </view>
-        </scroll-view>
-      </view>
-
-      <!-- 核心工作区 (详情与动态调整) -->
-      <view class="detail-pane">
-        <view wx:if="{{!selectedItem}}" class="empty-detail">
-          <t-icon name="info-circle" size="80rpx" color="#ccc" />
-          <text>请在左侧选择原材料以查看详情</text>
-        </view>
-        <view wx:else class="detail-content">
-          <view class="detail-header">
-            <view>
-              <text class="detail-title">{{selectedItem.name}}</text>
-              <text class="detail-subtitle">隶属分类: {{selectedItem.category}}</text>
-            </view>
-            <t-button theme="primary" icon="edit" size="small">编辑档案</t-button>
-          </view>
-
-          <!-- 数据概览 -->
-          <view class="detail-stats">
-            <view class="stat-box">
-              <text class="label">当前实时库存</text>
-              <text class="value highlight">{{selectedItem.stock}} {{selectedItem.unit}}</text>
-            </view>
-            <view class="stat-box">
-              <text class="label">安全库存阈值</text>
-              <text class="value">{{selectedItem.min_stock}} {{selectedItem.unit}}</text>
-            </view>
-            <view class="stat-box">
-              <text class="label">本月消耗量</text>
-              <text class="value">128.5 {{selectedItem.unit}}</text>
-            </view>
-          </view>
-
-          <!-- 快速入库/盘点 -->
-          <view class="action-card">
-            <text class="card-title">快速库存调整</text>
-            <view class="action-btns">
-               <t-button block theme="primary" variant="outline" data-id="{{selectedItem.id}}" data-delta="10" bindtap="onQuickAdjust">+ 10 单位入库</t-button>
-               <t-button block theme="danger" variant="outline" data-id="{{selectedItem.id}}" data-delta="-1" bindtap="onQuickAdjust">- 1 单位损耗</t-button>
-            </view>
-          </view>
-        </view>
-      </view>
-    </view>
-  </match-media>
 </view>
-
-<t-fab wx:if="{{deviceType === 'mobile'}}" icon="add" bind:click="onAdd" />

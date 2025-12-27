@@ -1,0 +1,35 @@
+<!-- 表单输入组件 -->
+<view class="form-input-wrapper">
+  <!-- 标签 -->
+  <label class="form-label" wx:if="{{label}}">
+    {{label}}
+    <text class="required" wx:if="{{required}}">*</text>
+  </label>
+  
+  <!-- 单行输入 -->
+  <input 
+    wx:if="{{!multiline}}"
+    class="form-input {{disabled ? 'disabled' : ''}}"
+    type="{{type}}"
+    value="{{value}}"
+    placeholder="{{placeholder}}"
+    disabled="{{disabled}}"
+    maxlength="{{maxlength}}"
+    bindinput="onInput"
+    bindblur="onBlur"
+  />
+  
+  <!-- 多行输入 -->
+  <textarea 
+    wx:else
+    class="form-textarea {{disabled ? 'disabled' : ''}}"
+    style="min-height: {{minHeight}}px;"
+    value="{{value}}"
+    placeholder="{{placeholder}}"
+    disabled="{{disabled}}"
+    maxlength="{{maxlength}}"
+    bindinput="onInput"
+    bindblur="onBlur"
+    auto-height
+  />
+</view>

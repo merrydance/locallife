@@ -1,7 +1,8 @@
 {
     "usingComponents": {
         "merchant-sidebar": "/components/merchant-sidebar/index",
-        "merchant-header": "/components/merchant-header/index"
+        "merchant-header": "/components/merchant-header/index",
+        "tag-selector": "../components/tag-selector/index"
     },
     "navigationStyle": "custom",
     "enablePullDownRefresh": false

@@ -102,7 +102,7 @@
                 <view 
                   wx:for="{{dishes}}" 
                   wx:key="id" 
-                  class="dish-card {{selectedDish.id === item.id ? 'selected' : ''}} {{isMultiSelectMode && utils.contains(selectedDishIds, item.id) ? 'checked' : ''}}"
+                  class="dish-card {{selectedDishId === item.id ? 'selected' : ''}} {{isMultiSelectMode && utils.contains(selectedDishIds, item.id) ? 'checked' : ''}}"
                   bindtap="onDishTap"
                   data-item="{{item}}"
                   data-id="{{item.id}}"

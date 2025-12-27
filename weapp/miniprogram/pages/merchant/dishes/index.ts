@@ -32,6 +32,7 @@ Page({
     dishes: [] as DishItem[],
     allDishes: [] as DishItem[],
     selectedDish: null as DishItem | null,
+    selectedDishId: null as number | null,  // 用于列表高亮，比对比整个对象更快
 
     // 状态
     loading: true,
@@ -260,8 +261,12 @@ Page({
   async onSelectDish(e: any) {
     const dishFromList = e.currentTarget.dataset.item
     const { categories } = this.data
+    const requestedDishId = dishFromList.id  // 记录本次请求的菜品ID
 
-    // 立即先设置选中状态，避免需要双击
+    // 第一步：只设置 ID，这是最快的操作，立即给用户视觉反馈
+    this.setData({ selectedDishId: requestedDishId })
+
+    // 第二步：设置完整选中状态
     this.setData({
       selectedDish: dishFromList,
       isAdding: false,
@@ -278,6 +283,12 @@ Page({
       logger.error('获取菜品详情失败，使用列表数据', error, 'Dishes')
     }
 
+    // 检查是否已经选择了其他菜品（防止旧请求覆盖新选择）
+    if (this.data.selectedDish?.id !== requestedDishId) {
+      console.log('[onSelectDish] 已选择其他菜品，忽略旧响应', requestedDishId)
+      return
+    }
+
     // 处理图片URL - 需要转换为完整URL用于显示
     let imageUrlDisplay = dish.image_url
     if (dish.image_url) {
@@ -286,6 +297,11 @@ Page({
       } catch (error) {
         logger.error('解析图片URL失败', error, 'Dishes')
       }
+    }
+
+    // 再次检查（图片加载也是异步的）
+    if (this.data.selectedDish?.id !== requestedDishId) {
+      return
     }
 
     // 处理分类数据回填
