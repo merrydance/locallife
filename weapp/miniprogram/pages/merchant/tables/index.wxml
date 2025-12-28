@@ -1,0 +1,387 @@
+<!-- 桌台管理 - 桌面级 SaaS 界面（两栏布局 + 两步向导） -->
+
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问桌台管理</text>
+      <button class="btn-back" bindtap="goBack">返回工作台</button>
+    </view>
+  </view>
+</match-media>
+
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+    <merchant-sidebar 
+      current-path="tables" 
+      collapsed="{{sidebarCollapsed}}"
+      bind:collapse="onSidebarCollapse"
+    />
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        merchant-name="{{merchantName}}"
+        is-open="{{isOpen}}"
+        sidebar-width="{{sidebarCollapsed ? 64 : 200}}"
+      />
+
+      <!-- 页面内容 - 两栏布局 -->
+      <view class="page-container table-page">
+        <!-- 左侧桌台列表区 -->
+        <view class="list-panel">
+          <view class="panel-header">
+            <text class="panel-title">桌台列表 ({{tables.length}})</text>
+            <button class="btn-add" bindtap="onAddTable">+ 添加桌台</button>
+          </view>
+
+          <!-- 筛选栏 -->
+          <view class="filter-bar">
+            <view class="filter-tabs">
+              <view 
+                class="filter-tab {{activeType === '' ? 'active' : ''}}"
+                data-type=""
+                bindtap="onTypeFilter"
+              >全部</view>
+              <view 
+                class="filter-tab {{activeType === 'table' ? 'active' : ''}}"
+                data-type="table"
+                bindtap="onTypeFilter"
+              >桌台</view>
+              <view 
+                class="filter-tab {{activeType === 'room' ? 'active' : ''}}"
+                data-type="room"
+                bindtap="onTypeFilter"
+              >包间</view>
+            </view>
+          </view>
+
+          <!-- 列表 -->
+          <view class="list-scroll">
+            <view wx:if="{{loading}}" class="loading-state">
+              <text>加载中...</text>
+            </view>
+            <view wx:elif="{{filteredTables.length === 0}}" class="empty-state">
+              <text class="empty-icon">🪑</text>
+              <text class="empty-text">暂无桌台</text>
+              <text class="empty-hint">点击上方按钮添加第一个桌台</text>
+            </view>
+            <view wx:else class="table-cards">
+              <view 
+                wx:for="{{filteredTables}}" 
+                wx:key="id" 
+                class="table-card {{selectedTable.id === item.id ? 'selected' : ''}}"
+                bindtap="onSelectTable"
+                data-item="{{item}}"
+              >
+                <view class="card-main">
+                  <view class="card-title-row">
+                    <text class="card-title">{{item.table_no}}</text>
+                    <view class="card-type {{item.table_type}}">
+                      {{item.table_type === 'room' ? '包间' : '桌台'}}
+                    </view>
+                  </view>
+                  <view class="card-meta">
+                    <text class="card-capacity">{{item.capacity}}人</text>
+                    <view class="card-status {{item.status}}">
+                      {{item.status === 'available' ? '可用' : (item.status === 'occupied' ? '占用' : '禁用')}}
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 右侧编辑面板 -->
+        <view class="editor-panel">
+          <!-- 空状态提示 -->
+          <view wx:if="{{!selectedTable && !isAdding}}" class="editor-placeholder">
+            <text class="placeholder-icon">👆</text>
+            <text class="placeholder-text">选择桌台进行编辑</text>
+          </view>
+
+          <!-- 编辑/添加内容 -->
+          <view wx:else class="editor-content">
+            <!-- 头部：标题 + 步骤指示器 + 操作按钮 -->
+            <view class="editor-header">
+              <view class="header-left">
+                <text class="editor-title">{{isAdding ? '添加桌台' : '编辑桌台'}}</text>
+                <!-- 步骤指示器（仅添加模式） -->
+                <view class="step-indicator" wx:if="{{isAdding}}">
+                  <view class="step {{currentStep >= 1 ? 'active' : ''}}">
+                    <text class="step-num">1</text>
+                    <text class="step-label">基本信息</text>
+                  </view>
+                  <view class="step-line"></view>
+                  <view class="step {{currentStep >= 2 ? 'active' : ''}}">
+                    <text class="step-num">2</text>
+                    <text class="step-label">图片与标签</text>
+                  </view>
+                </view>
+              </view>
+              <view class="editor-actions">
+                <button class="btn-cancel" bindtap="onCancelEdit">取消</button>
+                <!-- 添加模式：下一步/完成 -->
+                <block wx:if="{{isAdding}}">
+                  <button 
+                    wx:if="{{currentStep === 1}}" 
+                    class="btn-save" 
+                    bindtap="onNextStep" 
+                    disabled="{{saving}}"
+                  >{{saving ? '保存中...' : '下一步'}}</button>
+                  <button 
+                    wx:else 
+                    class="btn-save" 
+                    bindtap="onFinishAdd"
+                  >完成</button>
+                </block>
+                <!-- 编辑模式：保存 -->
+                <button 
+                  wx:else 
+                  class="btn-save" 
+                  bindtap="onSaveTable" 
+                  disabled="{{saving}}"
+                >{{saving ? '保存中...' : '保存'}}</button>
+              </view>
+            </view>
+
+            <view class="editor-form">
+              <!-- ========== 第一步：基本信息 ========== -->
+              <view wx:if="{{currentStep === 1 || !isAdding}}">
+                <view class="form-section">
+                  <view class="section-title">基本信息</view>
+                  
+                  <!-- 桌台类型（仅添加时可改） -->
+                  <view class="form-group" wx:if="{{isAdding}}">
+                    <label class="form-label">桌台类型 <text class="required">*</text></label>
+                    <view class="type-selector">
+                      <view 
+                        class="type-option {{selectedTable.table_type === 'table' ? 'active' : ''}}"
+                        data-type="table"
+                        bindtap="onSelectType"
+                      >
+                        <text class="type-label">桌台</text>
+                      </view>
+                      <view 
+                        class="type-option {{selectedTable.table_type === 'room' ? 'active' : ''}}"
+                        data-type="room"
+                        bindtap="onSelectType"
+                      >
+                        <text class="type-label">包间</text>
+                      </view>
+                    </view>
+                  </view>
+
+                  <!-- 桌号 -->
+                  <view class="form-group">
+                    <label class="form-label">桌号/房号 <text class="required">*</text></label>
+                    <input 
+                      class="form-input" 
+                      placeholder="例如：A01、VIP包间1" 
+                      value="{{selectedTable.table_no}}"
+                      data-field="table_no"
+                      bindinput="onFieldChange"
+                    />
+                  </view>
+
+                  <!-- 容纳人数 -->
+                  <view class="form-group">
+                    <label class="form-label">容纳人数 <text class="required">*</text></label>
+                    <input 
+                      class="form-input" 
+                      type="number"
+                      placeholder="请输入人数" 
+                      value="{{selectedTable.capacity}}"
+                      data-field="capacity"
+                      bindinput="onNumberFieldChange"
+                    />
+                  </view>
+
+                  <!-- 最低消费（包间） -->
+                  <view class="form-group" wx:if="{{selectedTable.table_type === 'room'}}">
+                    <label class="form-label">最低消费（元）</label>
+                    <input 
+                      class="form-input" 
+                      type="digit"
+                      placeholder="不填则无最低消费" 
+                      value="{{minimumSpendYuan}}"
+                      bindinput="onMinSpendChange"
+                    />
+                  </view>
+
+                  <!-- 描述 -->
+                  <view class="form-group">
+                    <label class="form-label">描述</label>
+                    <textarea 
+                      class="form-textarea" 
+                      placeholder="可填写位置、特点等信息（选填）" 
+                      value="{{selectedTable.description}}"
+                      data-field="description"
+                      bindinput="onFieldChange"
+                      maxlength="500"
+                    />
+                  </view>
+                </view>
+
+                <!-- 状态设置（仅编辑模式） -->
+                <view class="form-section" wx:if="{{!isAdding}}">
+                  <view class="section-title">状态设置</view>
+                  <view class="form-group">
+                    <label class="form-label">桌台状态</label>
+                    <view class="status-selector">
+                      <view 
+                        class="status-option {{selectedTable.status === 'available' ? 'active' : ''}}"
+                        data-status="available"
+                        bindtap="onSelectStatus"
+                      >可用</view>
+                      <view 
+                        class="status-option {{selectedTable.status === 'disabled' ? 'active' : ''}}"
+                        data-status="disabled"
+                        bindtap="onSelectStatus"
+                      >禁用</view>
+                    </view>
+                  </view>
+                </view>
+              </view>
+
+              <!-- ========== 第二步：图片与标签 ========== -->
+              <view wx:if="{{currentStep === 2 && isAdding}}">
+                <!-- 图片管理 -->
+                <view class="form-section">
+                  <view class="section-title">桌台图片</view>
+                  <view class="image-upload-area">
+                    <view class="upload-list">
+                      <view 
+                        class="upload-item" 
+                        wx:for="{{tableImages}}" 
+                        wx:key="id"
+                      >
+                        <image class="upload-image" src="{{item.image_url}}" mode="aspectFill" />
+                        <view class="upload-actions">
+                          <view 
+                            class="upload-action {{item.is_primary ? 'primary' : ''}}" 
+                            data-id="{{item.id}}"
+                            bindtap="onSetPrimaryImage"
+                          >{{item.is_primary ? '主图' : '设为主图'}}</view>
+                          <view 
+                            class="upload-action delete" 
+                            data-id="{{item.id}}"
+                            bindtap="onDeleteImage"
+                          >删除</view>
+                        </view>
+                      </view>
+                      <view class="upload-add" bindtap="onUploadImage">
+                        <text class="add-icon">+</text>
+                        <text class="add-text">上传图片</text>
+                      </view>
+                    </view>
+                  </view>
+                </view>
+
+                <!-- 标签管理 -->
+                <view class="form-section">
+                  <view class="section-title">桌台标签</view>
+                  <view class="tags-area">
+                    <view class="tag-list">
+                      <view 
+                        class="tag-item" 
+                        wx:for="{{tableTags}}" 
+                        wx:key="id"
+                      >
+                        <text>{{item.name}}</text>
+                        <text class="tag-remove" data-id="{{item.id}}" bindtap="onRemoveTag">×</text>
+                      </view>
+                    </view>
+                    <view class="tag-add">
+                      <input 
+                        class="tag-input" 
+                        placeholder="输入标签名称" 
+                        value="{{newTagName}}"
+                        bindinput="onTagNameInput"
+                      />
+                      <button class="btn-add-tag" bindtap="onAddTag">添加</button>
+                    </view>
+                  </view>
+                </view>
+
+                <!-- 二维码 -->
+                <view class="form-section">
+                  <view class="section-title">桌台二维码</view>
+                  <view class="qrcode-area">
+                    <view wx:if="{{qrCodeUrl}}" class="qrcode-preview">
+                      <image class="qrcode-image" src="{{qrCodeUrl}}" mode="aspectFit" />
+                      <button class="btn-download-qr" bindtap="onDownloadQRCode">下载二维码</button>
+                    </view>
+                    <view wx:else class="qrcode-generate">
+                      <button class="btn-generate-qr" bindtap="onGenerateQRCode">生成二维码</button>
+                    </view>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 编辑模式下也显示图片/标签/二维码区域 -->
+              <block wx:if="{{!isAdding && selectedTable.id}}">
+                <!-- 图片管理 -->
+                <view class="form-section">
+                  <view class="section-title">桌台图片</view>
+                  <view class="image-upload-area">
+                    <view class="upload-list">
+                      <view 
+                        class="upload-item" 
+                        wx:for="{{tableImages}}" 
+                        wx:key="id"
+                      >
+                        <image class="upload-image" src="{{item.image_url}}" mode="aspectFill" />
+                        <view class="upload-actions">
+                          <view 
+                            class="upload-action {{item.is_primary ? 'primary' : ''}}" 
+                            data-id="{{item.id}}"
+                            bindtap="onSetPrimaryImage"
+                          >{{item.is_primary ? '主图' : '设为主图'}}</view>
+                          <view 
+                            class="upload-action delete" 
+                            data-id="{{item.id}}"
+                            bindtap="onDeleteImage"
+                          >删除</view>
+                        </view>
+                      </view>
+                      <view class="upload-add" bindtap="onUploadImage">
+                        <text class="add-icon">+</text>
+                        <text class="add-text">上传图片</text>
+                      </view>
+                    </view>
+                  </view>
+                </view>
+
+                <!-- 二维码 -->
+                <view class="form-section">
+                  <view class="section-title">桌台二维码</view>
+                  <view class="qrcode-area">
+                    <view wx:if="{{qrCodeUrl}}" class="qrcode-preview">
+                      <image class="qrcode-image" src="{{qrCodeUrl}}" mode="aspectFit" bindtap="onPreviewQRCode" />
+                      <text class="qrcode-hint">点击图片预览，右键可保存</text>
+                      <button class="btn-download-qr" bindtap="onDownloadQRCode">下载二维码</button>
+                    </view>
+                    <view wx:else class="qrcode-generate">
+                      <button class="btn-generate-qr" bindtap="onGenerateQRCode">生成二维码</button>
+                    </view>
+                  </view>
+                </view>
+
+                <!-- 删除操作（仅编辑模式） -->
+                <view class="form-section danger-zone">
+                  <view class="section-title">危险操作</view>
+                  <button class="btn-delete" bindtap="onDeleteTable">删除此桌台</button>
+                </view>
+              </block>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>

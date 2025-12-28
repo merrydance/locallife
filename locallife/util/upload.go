@@ -376,3 +376,25 @@ func (u *FileUploader) FileExists(relativePath string) bool {
 	_, err := os.Stat(filePath)
 	return err == nil
 }
+
+// SaveQRCodeImage 保存二维码图片（PNG格式）
+// dir: uploads/public/merchants/{merchant_id}/qrcodes/
+func (u *FileUploader) SaveQRCodeImage(merchantID int64, filename string, pngData []byte) (string, error) {
+	// 生成目录路径
+	dir := filepath.Join(u.config.BaseDir, "public", "merchants", fmt.Sprintf("%d", merchantID), "qrcodes")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	// 完整文件路径
+	filePath := filepath.Join(dir, filename)
+
+	// 写入文件
+	if err := os.WriteFile(filePath, pngData, 0644); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+
+	// 返回相对路径
+	relativePath := filepath.Join(u.config.BaseDir, "public", "merchants", fmt.Sprintf("%d", merchantID), "qrcodes", filename)
+	return filepath.ToSlash(relativePath), nil
+}

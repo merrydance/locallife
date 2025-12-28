@@ -214,7 +214,7 @@ export class TableManagementService {
     async updateTable(tableId: number, tableData: UpdateTableRequest): Promise<TableResponse> {
         return request({
             url: `/v1/tables/${tableId}`,
-            method: 'PUT',
+            method: 'PATCH',
             data: tableData
         })
     }
@@ -238,7 +238,7 @@ export class TableManagementService {
     async updateTableStatus(tableId: number, statusData: UpdateTableStatusRequest): Promise<TableResponse> {
         return request({
             url: `/v1/tables/${tableId}/status`,
-            method: 'PUT',
+            method: 'PATCH',
             data: statusData
         })
     }

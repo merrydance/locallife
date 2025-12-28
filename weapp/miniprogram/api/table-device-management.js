@@ -77,7 +77,7 @@ class TableManagementService {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
                 url: `/v1/tables/${tableId}`,
-                method: 'PUT',
+                method: 'PATCH',
                 data: tableData
             });
         });
@@ -103,7 +103,7 @@ class TableManagementService {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
                 url: `/v1/tables/${tableId}/status`,
-                method: 'PUT',
+                method: 'PATCH',
                 data: statusData
             });
         });

@@ -25,6 +25,11 @@ type WechatClient interface {
 
 	// OCRPrintedText 通用印刷体识别（用于食品经营许可证等）
 	OCRPrintedText(ctx context.Context, imgFile multipart.File) (*PrintedTextOCRResponse, error)
+
+	// GetWXACodeUnlimited 获取小程序码（不限量版本）
+	// scene: 场景参数，page: 跳转页面路径
+	// 返回PNG图片数据
+	GetWXACodeUnlimited(ctx context.Context, req *WXACodeRequest) ([]byte, error)
 }
 
 // PaymentClientInterface 微信支付客户端接口（小程序直连支付）

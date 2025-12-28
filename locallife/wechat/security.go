@@ -3,8 +3,8 @@ package wechat
 import (
 	"bytes"
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 const (
@@ -156,6 +158,63 @@ func (c *Client) ImgSecCheck(ctx context.Context, imgFile multipart.File) error 
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	// 40001/40014: access_token无效或过期，需要刷新token并重试
+	if result.ErrCode == 40001 || result.ErrCode == 40014 {
+		// 强制获取新token（调用fetchAccessToken绕过缓存）
+		newTokenResp, err := c.fetchAccessToken(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to refresh access token: %w", err)
+		}
+
+		// 更新缓存
+		expiresAt := time.Now().Add(time.Duration(newTokenResp.ExpiresIn) * time.Second)
+		_, _ = c.store.UpsertWechatAccessToken(ctx, db.UpsertWechatAccessTokenParams{
+			AppType:     "mp",
+			AccessToken: newTokenResp.AccessToken,
+			ExpiresAt:   expiresAt,
+		})
+
+		// 用新token重试一次
+		retryURL := fmt.Sprintf(imgSecCheckURL, newTokenResp.AccessToken)
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+		partHeader := make(textproto.MIMEHeader)
+		partHeader.Set("Content-Disposition", fmt.Sprintf(`form-data; name="media"; filename="%s"`, filename))
+		partHeader.Set("Content-Type", contentType)
+		part, err := writer.CreatePart(partHeader)
+		if err != nil {
+			return fmt.Errorf("failed to create multipart part on retry: %w", err)
+		}
+		if _, err := io.Copy(part, bytes.NewReader(imgData)); err != nil {
+			return fmt.Errorf("failed to copy image data on retry: %w", err)
+		}
+		if err := writer.Close(); err != nil {
+			return fmt.Errorf("failed to close multipart writer on retry: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, retryURL, &buf)
+		if err != nil {
+			return fmt.Errorf("failed to create retry request: %w", err)
+		}
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to send retry request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		respBody, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read retry response: %w", err)
+		}
+
+		if err := json.Unmarshal(respBody, &result); err != nil {
+			return fmt.Errorf("failed to unmarshal retry response: %w", err)
+		}
+	}
+
 	if result.ErrCode != 0 {
 		// 40006: invalid media size (common for slightly-over-1MB images on legacy endpoint)
 		if result.ErrCode == 40006 {

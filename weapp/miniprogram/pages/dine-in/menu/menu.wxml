@@ -6,13 +6,21 @@
     <text class="loading-text">正在加载菜单...</text>
   </view>
 
+  <!-- 错误状态 -->
+  <view wx:elif="{{hasError}}" class="error-container">
+    <view class="error-icon">📋</view>
+    <text class="error-title">无法加载菜单</text>
+    <text class="error-message">{{errorMessage}}</text>
+    <button class="error-btn" bindtap="goBack">返回首页</button>
+  </view>
+
   <!-- 主要内容 -->
   <view wx:else class="menu-content">
     <!-- 桌台信息栏 -->
     <view class="table-info-bar">
       <view class="table-info">
-        <text class="table-number">{{tableInfo.table_number}}号桌</text>
-        <text class="merchant-name">{{tableInfo.merchant_name}}</text>
+        <text class="table-number">{{tableInfo.table_no || tableNo}}号桌</text>
+        <text class="merchant-name">{{merchantInfo.name}}</text>
       </view>
       <view class="table-actions">
         <button class="action-btn" bindtap="callWaiter">

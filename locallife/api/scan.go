@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
 )
 
 // =============================================================================
@@ -329,14 +332,14 @@ func formatDiscountDesc(minAmount, discountValue int64) string {
 
 // generateTableQRCodeResponse 生成二维码响应
 type generateTableQRCodeResponse struct {
-	QrCodeUrl  string `json:"qr_code_url" example:"https://api.example.com/v1/scan/table?merchant_id=1&table_no=T01"`
+	QrCodeUrl  string `json:"qr_code_url" example:"https://api.example.com/uploads/qrcodes/m1_t123.png"`
 	TableNo    string `json:"table_no" example:"T01"`
 	MerchantID int64  `json:"merchant_id" example:"1"`
 }
 
 // generateTableQRCode godoc
 // @Summary 生成桌台二维码
-// @Description 为指定桌台生成扫码点餐二维码URL。仅桌台所属商户可调用。
+// @Description 为指定桌台生成微信小程序码。扫码后跳转到堂食菜单页面。仅桌台所属商户可调用。
 // @Tags 桌台管理
 // @Accept json
 // @Produce json
@@ -379,18 +382,53 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
-	// 生成扫码URL（实际生产中需要配置基础URL）
-	// 格式: https://your-domain.com/v1/scan/table?merchant_id=xxx&table_no=xxx
-	baseURL := server.config.WebBaseURL
-	if baseURL == "" {
-		baseURL = "https://api.example.com"
+	// 如果已有二维码URL，直接返回
+	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" {
+		ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
+			QrCodeUrl:  normalizeUploadURLForClient(table.QrCodeUrl.String),
+			TableNo:    table.TableNo,
+			MerchantID: merchant.ID,
+		})
+		return
 	}
-	scanURL := baseURL + "/v1/scan/table?merchant_id=" + strconv.FormatInt(merchant.ID, 10) + "&table_no=" + table.TableNo
+
+	// 调用微信API生成小程序码
+	// scene参数只允许：数字、英文字母、下划线、减号，最大32字符
+	// 格式: m_商户ID-t_桌号
+	scene := "m_" + strconv.FormatInt(merchant.ID, 10) + "-t_" + table.TableNo
+	if len(scene) > 32 {
+		// 如果超长，使用桌台ID
+		scene = "tid_" + strconv.FormatInt(tableID, 10)
+	}
+
+	checkPath := false
+	wxaReq := &wechat.WXACodeRequest{
+		Scene:      scene,
+		Page:       "pages/dine-in/menu/menu", // 堂食菜单页面
+		CheckPath:  &checkPath,                // 跳过页面验证 (开发时使用)
+		EnvVersion: "develop",                 // 开发版 (正式发布后改为 release)
+		Width:      430,
+	}
+
+	pngData, err := server.wechatClient.GetWXACodeUnlimited(ctx, wxaReq)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("生成小程序码失败: %w", err)))
+		return
+	}
+
+	// 保存PNG图片到文件系统
+	filename := fmt.Sprintf("qrcode_m%d_t%d.png", merchant.ID, tableID)
+	uploader := util.NewFileUploader("uploads")
+	relativePath, err := uploader.SaveQRCodeImage(merchant.ID, filename, pngData)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("保存二维码图片失败: %w", err)))
+		return
+	}
 
 	// 更新桌台的二维码URL
 	_, err = server.store.UpdateTable(ctx, db.UpdateTableParams{
 		ID:        tableID,
-		QrCodeUrl: pgtype.Text{String: scanURL, Valid: true},
+		QrCodeUrl: pgtype.Text{String: relativePath, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -398,7 +436,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
-		QrCodeUrl:  scanURL,
+		QrCodeUrl:  normalizeUploadURLForClient(relativePath),
 		TableNo:    table.TableNo,
 		MerchantID: merchant.ID,
 	})
