@@ -1,113 +1,705 @@
+/* 商户预订管理页面样式 - PC-SaaS 风格 */
+
+/* ==================== 布局 ==================== */
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
+  background: #f5f7fa;
 }
 
-.tabs-section {
-  background: #fff;
-  margin-bottom: 16rpx;
-}
-
-.loading {
+.pc-saas-layout {
   display: flex;
+}
+
+.main-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.pc-saas-layout .main-content {
+  margin-left: 220px;
+}
+
+/* ==================== 页面标题 ==================== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+/* ==================== 统计卡片 ==================== */
+.stats-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  flex: 1;
+  min-width: 120px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.stat-card.warning .stat-value {
+  color: #f59e0b;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #6366f1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ==================== Tab 切换 ==================== */
+.tabs-container {
+  display: flex;
+  gap: 8px;
+  background: #fff;
+  padding: 8px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.tab-item {
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #6b7280;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.tab-item:hover {
+  background: #f3f4f6;
+}
+
+.tab-item.active {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-weight: 500;
+}
+
+/* ==================== 筛选栏 ==================== */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 10px;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.filter-value {
+  font-size: 13px;
+  color: #1a1a2e;
+  font-weight: 500;
+}
+
+.filter-icon {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.filter-clear {
+  font-size: 13px;
+  color: #6366f1;
+  cursor: pointer;
+}
+
+/* ==================== 预订列表 ==================== */
+.reservations-list {
+  min-height: 300px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 100rpx 0;
+  padding: 60px 20px;
+  color: #6b7280;
+  gap: 12px;
 }
 
-.reservations-container {
-  padding: 24rpx;
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
-.empty {
-  padding: 100rpx 0;
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-.reservations-grid {
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  gap: 16px;
+}
+
+.empty-icon {
+  font-size: 48px;
+}
+
+.empty-text {
+  font-size: 15px;
+  color: #6b7280;
+}
+
+/* ==================== 预订卡片 ==================== */
+.reservation-cards {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 24rpx;
-}
-
-@media (min-width: 750px) {
-  .reservations-container {
-    padding: 16px !important;
-  }
-  .reservations-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px !important;
-  }
-  .reservation-card {
-    padding: 16px !important;
-    border-radius: 8px !important;
-  }
-  .customer-name {
-    font-size: 16px !important;
-  }
-  .info-row {
-    font-size: 14px !important;
-  }
-  .value.price {
-    font-size: 16px !important;
-  }
-}
-
-@media (min-width: 1280px) {
-  .reservations-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
 }
 
 .reservation-card {
   background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.04);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.reservation-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f3f4f6;
 }
 
-.customer-name {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #333;
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
+.table-no {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.guest-count {
+  font-size: 13px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* 状态标签 */
+.status-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.status-warning {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.status-info {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.status-primary {
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+
+.status-success {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.status-error {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.status-default {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* 卡片内容 */
 .card-body {
-  margin-bottom: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 8rpx 0;
-  font-size: 24rpx;
+  align-items: center;
 }
 
-.label {
-  color: #666;
+.info-label {
+  font-size: 13px;
+  color: #9ca3af;
 }
 
-.value {
-  color: #333;
+.info-value {
+  font-size: 13px;
+  color: #374151;
   font-weight: 500;
 }
 
-.value.price {
-  color: #E34D59;
-  font-size: 28rpx;
+.info-value.price {
+  color: #dc2626;
 }
 
+/* 卡片操作 */
 .card-actions {
   display: flex;
-  gap: 16rpx;
+  gap: 8px;
   justify-content: flex-end;
-  padding-top: 16rpx;
-  border-top: 1rpx solid #F0F0F0;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+/* ==================== 按钮样式 ==================== */
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-primary.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-outline {
+  background: #fff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-outline:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.btn-outline.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-success.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* ==================== 弹窗样式 ==================== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s;
+}
+
+.modal-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.95);
+  transition: transform 0.3s;
+}
+
+.modal-overlay.show .modal-content {
+  transform: scale(1);
+}
+
+.detail-modal {
+  max-width: 420px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.modal-close {
+  font-size: 24px;
+  color: #9ca3af;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.modal-close:hover {
+  background: #f3f4f6;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #f3f4f6;
+}
+
+/* ==================== 表单样式 ==================== */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-group.half {
+  flex: 1;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: #374151;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1a1a2e;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  border-color: #6366f1;
+  outline: none;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  min-height: 80px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.form-picker {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.picker-arrow {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+/* 来源按钮组 */
+.source-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.source-btn {
+  flex: 1;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.source-btn:hover {
+  background: #e5e7eb;
+}
+
+.source-btn.active {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-weight: 500;
+}
+
+/* 包间选择列表 */
+.table-select-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.table-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 16px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.table-option:hover {
+  background: #e5e7eb;
+}
+
+.table-option.active {
+  background: #e0e7ff;
+  border-color: #6366f1;
+}
+
+.table-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.table-info {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.table-option.active .table-name {
+  color: #4f46e5;
+}
+
+.no-tables {
+  padding: 16px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+/* ==================== 详情弹窗 ==================== */
+.detail-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.detail-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.detail-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: #1a1a2e;
+  font-weight: 500;
+}
+
+.detail-value.price {
+  color: #dc2626;
+}
+
+/* ==================== 响应式 ==================== */
+@media (max-width: 768px) {
+  .main-content {
+    padding: 16px;
+  }
+
+  .pc-saas-layout .main-content {
+    margin-left: 0;
+  }
+
+  .stats-row {
+    flex-wrap: wrap;
+  }
+
+  .stat-card {
+    min-width: calc(50% - 8px);
+    flex: none;
+  }
+
+  .reservation-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-right {
+    width: 100%;
+  }
+
+  .header-right .btn-primary {
+    width: 100%;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .form-group.half {
+    flex: none;
+  }
 }

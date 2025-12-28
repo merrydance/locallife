@@ -1210,6 +1210,12 @@ type TableReservation struct {
 	CancelReason    pgtype.Text        `json:"cancel_reason"`
 	CreatedAt       time.Time          `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	// 顾客到店签到时间
+	CheckedInAt pgtype.Timestamptz `json:"checked_in_at"`
+	// 厨房开始制作时间
+	CookingStartedAt pgtype.Timestamptz `json:"cooking_started_at"`
+	// 预订来源：online(线上)、phone(电话)、walkin(现场)、merchant(商户代订)
+	Source pgtype.Text `json:"source"`
 }
 
 type TableTag struct {

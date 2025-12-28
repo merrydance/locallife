@@ -240,3 +240,87 @@ SELECT COUNT(*) FROM table_reservations
 WHERE table_id = $1 
   AND reservation_date >= CURRENT_DATE
   AND status IN ('pending', 'paid', 'confirmed');
+
+-- name: UpdateReservationToCheckedIn :one
+-- 顾客到店签到
+UPDATE table_reservations
+SET status = 'checked_in',
+    checked_in_at = now(),
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateReservationCookingStarted :one
+-- 标记开始起菜
+UPDATE table_reservations
+SET cooking_started_at = now(),
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: CreateTableReservationByMerchant :one
+-- 商户代客创建预订（无需支付，直接 confirmed 状态）
+INSERT INTO table_reservations (
+    table_id,
+    user_id,
+    merchant_id,
+    reservation_date,
+    reservation_time,
+    guest_count,
+    contact_name,
+    contact_phone,
+    payment_mode,
+    deposit_amount,
+    prepaid_amount,
+    refund_deadline,
+    payment_deadline,
+    notes,
+    status,
+    source,
+    confirmed_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'confirmed', $15, now()
+) RETURNING *;
+
+-- name: UpdateReservation :one
+-- 商户修改预订信息
+UPDATE table_reservations
+SET 
+    table_id = COALESCE(sqlc.narg(table_id), table_id),
+    reservation_date = COALESCE(sqlc.narg(reservation_date), reservation_date),
+    reservation_time = COALESCE(sqlc.narg(reservation_time), reservation_time),
+    guest_count = COALESCE(sqlc.narg(guest_count), guest_count),
+    contact_name = COALESCE(sqlc.narg(contact_name), contact_name),
+    contact_phone = COALESCE(sqlc.narg(contact_phone), contact_phone),
+    notes = COALESCE(sqlc.narg(notes), notes),
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: GetReservationStatsEnhanced :one
+-- 获取增强的预订统计（包含 checked_in）
+SELECT 
+    COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
+    COUNT(*) FILTER (WHERE status = 'paid') as paid_count,
+    COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed_count,
+    COUNT(*) FILTER (WHERE status = 'checked_in') as checked_in_count,
+    COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
+    COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count,
+    COUNT(*) FILTER (WHERE status = 'expired') as expired_count,
+    COUNT(*) FILTER (WHERE status = 'no_show') as no_show_count
+FROM table_reservations
+WHERE merchant_id = $1;
+
+-- name: ListTodayReservationsByMerchant :many
+-- 获取今日预订列表
+SELECT 
+    tr.*,
+    t.table_no,
+    t.table_type
+FROM table_reservations tr
+INNER JOIN tables t ON tr.table_id = t.id
+WHERE tr.merchant_id = $1 
+  AND tr.reservation_date = CURRENT_DATE
+  AND tr.status IN ('paid', 'confirmed', 'checked_in')
+ORDER BY tr.reservation_time, t.table_no;
+

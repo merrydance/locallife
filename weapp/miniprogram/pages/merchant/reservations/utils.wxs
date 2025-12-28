@@ -1,0 +1,57 @@
+/**
+ * 预订页面 WXS 工具函数
+ */
+
+// 获取状态文本
+function getStatusText(status) {
+  var map = {
+    'pending': '待支付',
+    'paid': '已支付',
+    'confirmed': '已确认',
+    'checked_in': '已到店',
+    'completed': '已完成',
+    'cancelled': '已取消',
+    'expired': '已过期',
+    'no_show': '未到店'
+  }
+  return map[status] || status
+}
+
+// 获取状态样式类
+function getStatusClass(status) {
+  var map = {
+    'pending': 'status-warning',
+    'paid': 'status-info',
+    'confirmed': 'status-primary',
+    'checked_in': 'status-success',
+    'completed': 'status-default',
+    'cancelled': 'status-error',
+    'expired': 'status-default',
+    'no_show': 'status-error'
+  }
+  return map[status] || ''
+}
+
+// 获取来源文本
+function getSourceText(source) {
+  var map = {
+    'online': '线上预订',
+    'phone': '电话预订',
+    'walkin': '现场预订',
+    'merchant': '商户代订'
+  }
+  return source ? (map[source] || source) : ''
+}
+
+// 格式化金额（分转元）
+function formatAmount(amount) {
+  if (!amount) return '0.00'
+  return (amount / 100).toFixed(2)
+}
+
+module.exports = {
+  getStatusText: getStatusText,
+  getStatusClass: getStatusClass,
+  getSourceText: getSourceText,
+  formatAmount: formatAmount
+}

@@ -476,14 +476,19 @@ func (server *Server) setupRouter() {
 		reservationsGroup.GET("/:id", server.getReservation)
 		// 注：支付由支付网关回调触发，预定支付通过通用支付订单接口处理
 		reservationsGroup.POST("/:id/cancel", server.cancelReservation)
-		reservationsGroup.POST("/:id/add-dishes", server.addDishesToReservation) // 追加菜品
+		reservationsGroup.POST("/:id/add-dishes", server.addDishesToReservation)     // 追加菜品
+		reservationsGroup.POST("/:id/checkin", server.checkInReservation)            // 到店签到
+		reservationsGroup.POST("/:id/start-cooking", server.startCookingReservation) // 起菜通知
 
 		// 商户管理
 		reservationsGroup.GET("/merchant", server.listMerchantReservations)
+		reservationsGroup.GET("/merchant/today", server.listTodayReservations) // 今日预订
+		reservationsGroup.GET("/merchant/stats", server.getReservationStats)
+		reservationsGroup.POST("/merchant/create", server.merchantCreateReservation) // 商户代客创建
+		reservationsGroup.PUT("/:id/update", server.merchantUpdateReservation)       // 商户修改预订
 		reservationsGroup.POST("/:id/confirm", server.confirmReservation)
 		reservationsGroup.POST("/:id/complete", server.completeReservation)
 		reservationsGroup.POST("/:id/no-show", server.markNoShow)
-		reservationsGroup.GET("/merchant/stats", server.getReservationStats)
 	}
 
 	// M7: 订单管理路由

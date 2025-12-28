@@ -296,6 +296,8 @@ type Querier interface {
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateTable(ctx context.Context, arg CreateTableParams) (Table, error)
 	CreateTableReservation(ctx context.Context, arg CreateTableReservationParams) (TableReservation, error)
+	// 商户代客创建预订（无需支付，直接 confirmed 状态）
+	CreateTableReservationByMerchant(ctx context.Context, arg CreateTableReservationByMerchantParams) (TableReservation, error)
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	// ==========================================
 	// trust_score_changes（信任分变更日志）
@@ -681,6 +683,8 @@ type Querier interface {
 	GetReservationStats(ctx context.Context, merchantID int64) (GetReservationStatsRow, error)
 	// Get reservation statistics for a merchant within date range
 	GetReservationStatsByDateRange(ctx context.Context, arg GetReservationStatsByDateRangeParams) (GetReservationStatsByDateRangeRow, error)
+	// 获取增强的预订统计（包含 checked_in）
+	GetReservationStatsEnhanced(ctx context.Context, merchantID int64) (GetReservationStatsEnhancedRow, error)
 	GetReview(ctx context.Context, id int64) (Review, error)
 	GetReviewByOrderID(ctx context.Context, orderID int64) (Review, error)
 	GetRider(ctx context.Context, id int64) (Rider, error)
@@ -1031,6 +1035,8 @@ type Querier interface {
 	ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]Table, error)
 	ListTablesByTag(ctx context.Context, tagID int64) ([]Table, error)
 	ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, error)
+	// 获取今日预订列表
+	ListTodayReservationsByMerchant(ctx context.Context, merchantID int64) ([]ListTodayReservationsByMerchantRow, error)
 	ListUserActiveSessions(ctx context.Context, userID int64) ([]Session, error)
 	ListUserAddresses(ctx context.Context, userID int64) ([]UserAddress, error)
 	ListUserAvailableVouchers(ctx context.Context, arg ListUserAvailableVouchersParams) ([]ListUserAvailableVouchersRow, error)
@@ -1250,8 +1256,14 @@ type Querier interface {
 	UpdateRegion(ctx context.Context, arg UpdateRegionParams) (Region, error)
 	// 更新区县的和风天气 LocationID（首次查询后缓存）
 	UpdateRegionQweatherLocationID(ctx context.Context, arg UpdateRegionQweatherLocationIDParams) error
+	// 商户修改预订信息
+	UpdateReservation(ctx context.Context, arg UpdateReservationParams) (TableReservation, error)
+	// 标记开始起菜
+	UpdateReservationCookingStarted(ctx context.Context, id int64) (TableReservation, error)
 	UpdateReservationStatus(ctx context.Context, arg UpdateReservationStatusParams) (TableReservation, error)
 	UpdateReservationToCancelled(ctx context.Context, arg UpdateReservationToCancelledParams) (TableReservation, error)
+	// 顾客到店签到
+	UpdateReservationToCheckedIn(ctx context.Context, id int64) (TableReservation, error)
 	UpdateReservationToCompleted(ctx context.Context, id int64) (TableReservation, error)
 	UpdateReservationToConfirmed(ctx context.Context, id int64) (TableReservation, error)
 	UpdateReservationToExpired(ctx context.Context, id int64) (TableReservation, error)

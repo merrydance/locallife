@@ -1,12 +1,7 @@
 {
-    "navigationBarTitleText": "预定管理",
     "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "t-tabs": "tdesign-miniprogram/tabs/tabs",
-        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
-        "t-tag": "tdesign-miniprogram/tag/tag",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading"
-    }
+        "merchant-sidebar": "/components/merchant-sidebar/index",
+        "custom-navbar": "/components/custom-navbar/index"
+    },
+    "navigationStyle": "custom"
 }
