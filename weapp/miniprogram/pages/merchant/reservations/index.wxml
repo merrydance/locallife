@@ -1,154 +1,101 @@
-<!-- 商户预订管理页面 - PC-SaaS 风格 -->
+<!-- 商户预订管理页面 - PC-SaaS 左右分栏风格 -->
 <wxs src="./utils.wxs" module="utils" />
 
 <!-- 移动端导航 -->
 <custom-navbar wx:if="{{!isLargeScreen}}" title="预订管理" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container {{isLargeScreen ? 'pc-saas-layout' : ''}}" style="{{!isLargeScreen ? 'padding-top:' + navBarHeight + 'px' : ''}}">
-  <!-- PC 侧边栏 -->
+  <!-- PC 侧边栏 (一级导航) -->
   <merchant-sidebar wx:if="{{isLargeScreen}}" activeMenu="reservations" />
 
   <!-- 主内容区 -->
   <view class="main-content">
-    <!-- 页面标题栏 -->
-    <view class="page-header">
-      <view class="header-left">
-        <text class="page-title">预订管理</text>
-        <text class="page-subtitle">管理包间预订、到店核销</text>
-      </view>
-      <view class="header-right">
-        <button class="btn-primary" bindtap="onShowCreateModal">+ 新建预订</button>
-      </view>
-    </view>
-
-    <!-- 统计卡片 -->
-    <view class="stats-row" wx:if="{{stats}}">
-      <view class="stat-card">
-        <text class="stat-value">{{stats.pending_count + stats.paid_count}}</text>
-        <text class="stat-label">待处理</text>
-      </view>
-      <view class="stat-card">
-        <text class="stat-value">{{stats.confirmed_count}}</text>
-        <text class="stat-label">已确认</text>
-      </view>
-      <view class="stat-card">
-        <text class="stat-value">{{stats.checked_in_count || 0}}</text>
-        <text class="stat-label">已到店</text>
-      </view>
-      <view class="stat-card">
-        <text class="stat-value">{{stats.completed_count}}</text>
-        <text class="stat-label">已完成</text>
-      </view>
-      <view class="stat-card warning">
-        <text class="stat-value">{{stats.no_show_count}}</text>
-        <text class="stat-label">未到店</text>
-      </view>
-    </view>
-
-    <!-- Tab 切换 -->
-    <view class="tabs-container">
-      <view class="tab-item {{activeTab === 'today' ? 'active' : ''}}" data-tab="today" bindtap="onTabChange">今日</view>
-      <view class="tab-item {{activeTab === 'all' ? 'active' : ''}}" data-tab="all" bindtap="onTabChange">全部</view>
-      <view class="tab-item {{activeTab === 'pending' ? 'active' : ''}}" data-tab="pending" bindtap="onTabChange">待确认</view>
-      <view class="tab-item {{activeTab === 'confirmed' ? 'active' : ''}}" data-tab="confirmed" bindtap="onTabChange">已确认</view>
-      <view class="tab-item {{activeTab === 'completed' ? 'active' : ''}}" data-tab="completed" bindtap="onTabChange">已完成</view>
-    </view>
-
-    <!-- 筛选栏 -->
-    <view class="filter-bar" wx:if="{{activeTab === 'all'}}">
-      <picker mode="date" value="{{filterDate}}" bindchange="onDateChange">
-        <view class="filter-item">
-          <text class="filter-label">日期:</text>
-          <text class="filter-value">{{filterDate || '全部'}}</text>
-          <text class="filter-icon">▼</text>
+    <view class="content-wrapper">
+      
+      <!-- 左侧：日历选择区 -->
+      <view class="left-panel">
+        <view class="panel-header">
+          <text class="panel-title">日期选择</text>
         </view>
-      </picker>
-      <view class="filter-clear" wx:if="{{filterDate}}" bindtap="onClearDate">清除筛选</view>
-    </view>
-
-    <!-- 预订列表 -->
-    <view class="reservations-list">
-      <!-- 加载中 -->
-      <view wx:if="{{loading}}" class="loading-container">
-        <view class="loading-spinner"></view>
-        <text>加载中...</text>
-      </view>
-
-      <!-- 空状态 -->
-      <view wx:elif="{{reservations.length === 0}}" class="empty-state">
-        <text class="empty-icon">📅</text>
-        <text class="empty-text">暂无预订记录</text>
-        <button class="btn-primary small" bindtap="onShowCreateModal">创建预订</button>
-      </view>
-
-      <!-- 预订卡片 -->
-      <view wx:else class="reservation-cards">
-        <view wx:for="{{reservations}}" wx:key="id" class="reservation-card" data-id="{{item.id}}" bindtap="onViewDetail">
-          <!-- 卡片头部 -->
-          <view class="card-header">
-            <view class="card-title">
-              <text class="table-no">{{item.table_no || '包间'}}</text>
-              <text class="guest-count">{{item.guest_count}}人</text>
+        <view class="calendar-wrapper">
+          <!-- TODO: 这里可以封装成独立的日历组件，暂时用简单实现 -->
+          <view class="calendar-header">
+            <view class="month-selector">
+              <text>{{currentYear}}年{{currentMonth}}月</text>
             </view>
-            <view class="status-tag {{utils.getStatusClass(item.status)}}">{{utils.getStatusText(item.status)}}</view>
+            <view class="today-btn" bindtap="onSelectToday">回到今天</view>
           </view>
-
-          <!-- 卡片内容 -->
-          <view class="card-body">
-            <view class="info-row">
-              <text class="info-label">联系人</text>
-              <text class="info-value">{{item.contact_name}}</text>
+          <view class="calendar-grid">
+            <view class="weekday-row">
+              <text>日</text><text>一</text><text>二</text><text>三</text><text>四</text><text>五</text><text>六</text>
             </view>
-            <view class="info-row">
-              <text class="info-label">电话</text>
-              <text class="info-value">{{item.contact_phone}}</text>
+            <view class="days-grid">
+              <!-- 空白填充 -->
+              <view wx:for="{{emptyDays}}" wx:key="index" class="day-cell empty"></view>
+              <!-- 日期 -->
+              <view wx:for="{{daysInMonth}}" wx:key="day" 
+                    class="day-cell {{item.day === selectedDay && item.month === selectedMonth ? 'active' : ''}} {{item.isToday ? 'today' : ''}} {{item.disabled ? 'disabled' : ''}}"
+                    data-date="{{item.fullDate}}"
+                    data-disabled="{{item.disabled}}"
+                    bindtap="onDateSelect">
+                <text class="day-num">{{item.day}}</text>
+                <view class="day-dot" wx:if="{{item.hasReservations}}"></view>
+              </view>
             </view>
-            <view class="info-row">
-              <text class="info-label">时间</text>
-              <text class="info-value">{{item.reservation_date}} {{item.reservation_time}}</text>
-            </view>
-            <view class="info-row" wx:if="{{item.deposit_amount || item.prepaid_amount}}">
-              <text class="info-label">金额</text>
-              <text class="info-value price">¥{{utils.formatAmount(item.deposit_amount || item.prepaid_amount)}}</text>
-            </view>
-            <view class="info-row" wx:if="{{item.source}}">
-              <text class="info-label">来源</text>
-              <text class="info-value">{{utils.getSourceText(item.source)}}</text>
-            </view>
-          </view>
-
-          <!-- 卡片操作 -->
-          <view class="card-actions" catchtap="">
-            <!-- 待支付状态 -->
-            <block wx:if="{{item.status === 'pending'}}">
-              <button class="btn-outline small" data-id="{{item.id}}" catchtap="onCancelReservation">取消</button>
-            </block>
-
-            <!-- 已支付状态 -->
-            <block wx:elif="{{item.status === 'paid'}}">
-              <button class="btn-outline small" data-id="{{item.id}}" catchtap="onCancelReservation">取消退款</button>
-              <button class="btn-primary small" data-id="{{item.id}}" catchtap="onConfirmReservation">确认</button>
-            </block>
-
-            <!-- 已确认状态 -->
-            <block wx:elif="{{item.status === 'confirmed'}}">
-              <button class="btn-outline small" data-id="{{item.id}}" catchtap="onMarkNoShow">未到店</button>
-              <button class="btn-success small" data-id="{{item.id}}" catchtap="onCheckIn">到店签到</button>
-            </block>
-
-            <!-- 已签到状态 -->
-            <block wx:elif="{{item.status === 'checked_in'}}">
-              <button class="btn-outline small" data-id="{{item.id}}" catchtap="onStartCooking">通知起菜</button>
-              <button class="btn-primary small" data-id="{{item.id}}" catchtap="onCompleteReservation">完成</button>
-            </block>
           </view>
         </view>
       </view>
+
+      <!-- 右侧：桌台状态区 -->
+      <view class="right-panel">
+        <view class="panel-header">
+          <view class="header-left">
+            <text class="panel-title">{{selectedDateDisplay}} 预订概览</text>
+            <view class="stats-tags">
+              <view class="stat-tag"><view class="dot pending"></view>待处理</view>
+              <view class="stat-tag"><view class="dot confirmed"></view>已确认</view>
+              <view class="stat-tag"><view class="dot checked_in"></view>已到店</view>
+            </view>
+          </view>
+          <!-- 移除新建按钮 -->
+          <view class="header-right"></view>
+        </view>
+
+        <!-- 桌台平铺视图 -->
+        <scroll-view scroll-y class="tables-grid-scroll">
+          <view class="tables-grid">
+            <view wx:for="{{tableViews}}" wx:key="id" class="table-card" bindtap="onKeyTableTap" data-id="{{item.id}}">
+              <view class="table-card-header">
+                <text class="table-name">{{item.table_no}}</text>
+                <text class="table-capacity">{{item.capacity}}人桌</text>
+              </view>
+              
+              <!-- 只有当有预订时才显示列表 -->
+              <view class="table-reservations" wx:if="{{item.todayReservations && item.todayReservations.length > 0}}">
+                <view wx:for="{{item.todayReservations}}" wx:for-item="res" wx:key="id" 
+                      class="mini-res-item {{utils.getStatusClass(res.status)}}"
+                      catchtap="onViewDetail" data-id="{{res.id}}">
+                  <text class="res-time">{{res.reservation_time}}</text>
+                  <text class="res-name">{{res.contact_name}}</text>
+                  <text class="res-status">{{utils.getStatusText(res.status)}}</text>
+                </view>
+              </view>
+              
+              <!-- 空闲状态 -->
+              <view class="table-empty" wx:else>
+                <text class="empty-text">当前空闲</text>
+                <view class="add-icon">+</view>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
     </view>
   </view>
 </view>
 
-<!-- 创建预订弹窗 -->
+<!-- 创建预订弹窗 (复用之前的逻辑，样式微调) -->
 <view class="modal-overlay {{showCreateModal ? 'show' : ''}}" catchtap="onCloseCreateModal">
   <view class="modal-content" catchtap="onModalContentTap">
     <view class="modal-header">
@@ -156,142 +103,112 @@
       <text class="modal-close" bindtap="onCloseCreateModal">×</text>
     </view>
     <view class="modal-body">
-      <view class="form-group">
-        <text class="form-label">包间 * ({{tables.length}}个可选)</text>
-        <view class="table-select-list" wx:if="{{tables.length}}">
-          <view wx:for="{{tables}}" wx:key="id" 
-                class="table-option {{createForm.table_id === item.id ? 'active' : ''}}" 
-                data-table="{{item}}" 
-                bindtap="onTableOptionTap">
-            <text class="table-name">{{item.table_no}}</text>
-            <text class="table-info">{{item.capacity}}人</text>
-          </view>
+      <!-- 已选信息展示 -->
+      <view class="selected-info-bar">
+        <view class="info-item">
+          <text class="label">日期</text>
+          <text class="value">{{createForm.date}}</text>
         </view>
-        <view class="no-tables" wx:else>
-          <text>暂无可用包间</text>
+        <view class="info-item">
+          <text class="label">包间</text>
+          <text class="value">{{selectedTableName || '未选择'}}</text>
         </view>
       </view>
 
       <view class="form-row">
-        <view class="form-group half">
-          <text class="form-label">日期 *</text>
-          <input class="form-input" type="text" value="{{createForm.date}}" data-field="date" bindinput="onFormInput" placeholder="YYYY-MM-DD" />
-        </view>
         <view class="form-group half">
           <text class="form-label">时间 *</text>
-          <input class="form-input" type="text" value="{{createForm.time}}" data-field="time" bindinput="onFormInput" placeholder="HH:MM" />
+          <!-- 替换为时间选择列表而不是输入框 -->
+          <view class="time-select-list">
+             <view wx:for="{{timeOptions}}" wx:key="value" 
+                   class="time-option {{createForm.time === item.value ? 'active' : ''}} {{item.disabled ? 'disabled' : ''}}" 
+                   bindtap="onTimeSelect" 
+                   data-time="{{item.value}}"
+                   data-disabled="{{item.disabled}}">
+               {{item.value}}
+             </view>
+          </view>
         </view>
-      </view>
-
-      <view class="form-row">
         <view class="form-group half">
           <text class="form-label">人数 *</text>
-          <input class="form-input" type="number" value="{{createForm.guest_count}}" data-field="guest_count" bindinput="onGuestCountChange" placeholder="用餐人数" />
-        </view>
-        <view class="form-group half">
-          <text class="form-label">来源</text>
-          <view class="source-buttons">
-            <view class="source-btn {{createForm.source === 'phone' ? 'active' : ''}}" data-source="phone" bindtap="onSourceTap">电话</view>
-            <view class="source-btn {{createForm.source === 'walkin' ? 'active' : ''}}" data-source="walkin" bindtap="onSourceTap">现场</view>
-            <view class="source-btn {{createForm.source === 'merchant' ? 'active' : ''}}" data-source="merchant" bindtap="onSourceTap">代订</view>
+          <view class="count-stepper">
+            <view class="stepper-btn" bindtap="onGuestCountDec">-</view>
+            <input class="stepper-input" type="number" value="{{createForm.guest_count}}" disabled />
+            <view class="stepper-btn" bindtap="onGuestCountInc">+</view>
           </view>
         </view>
       </view>
 
       <view class="form-group">
-        <text class="form-label">联系人 *</text>
-        <input class="form-input" value="{{createForm.contact_name}}" data-field="contact_name" bindinput="onFormInput" placeholder="顾客姓名" />
+        <text class="form-label">来源</text>
+        <view class="source-buttons">
+          <view class="source-btn {{createForm.source === 'phone' ? 'active' : ''}}" data-source="phone" bindtap="onSourceTap">电话预订</view>
+          <view class="source-btn {{createForm.source === 'walkin' ? 'active' : ''}}" data-source="walkin" bindtap="onSourceTap">现场顾客</view>
+          <view class="source-btn {{createForm.source === 'merchant' ? 'active' : ''}}" data-source="merchant" bindtap="onSourceTap">商户代订</view>
+        </view>
       </view>
 
-      <view class="form-group">
-        <text class="form-label">联系电话 *</text>
-        <input class="form-input" type="number" value="{{createForm.contact_phone}}" data-field="contact_phone" bindinput="onFormInput" placeholder="手机号码" />
+      <view class="form-row">
+        <view class="form-group half">
+           <text class="form-label">联系人 *</text>
+           <input class="form-input" value="{{createForm.contact_name}}" data-field="contact_name" bindinput="onFormInput" placeholder="请输入姓名" />
+        </view>
+        <view class="form-group half">
+           <text class="form-label">电话 *</text>
+           <input class="form-input" type="number" value="{{createForm.contact_phone}}" data-field="contact_phone" bindinput="onFormInput" placeholder="请输入手机号" />
+        </view>
       </view>
 
       <view class="form-group">
         <text class="form-label">备注</text>
-        <textarea class="form-textarea" value="{{createForm.notes}}" data-field="notes" bindinput="onFormInput" placeholder="特殊要求、备注信息等" />
+        <textarea class="form-textarea" value="{{createForm.notes}}" data-field="notes" bindinput="onFormInput" placeholder="备注信息..." />
       </view>
     </view>
     <view class="modal-footer">
       <button class="btn-outline" bindtap="onCloseCreateModal">取消</button>
-      <button class="btn-primary" bindtap="onSubmitCreate">创建预订</button>
+      <button class="btn-primary" bindtap="onSubmitCreate">确定创建</button>
     </view>
   </view>
 </view>
 
-<!-- 预订详情弹窗 -->
+<!-- 详情弹窗 -->
 <view class="modal-overlay {{showDetailModal ? 'show' : ''}}" catchtap="onCloseDetailModal">
   <view class="modal-content detail-modal" catchtap="onModalContentTap" wx:if="{{selectedReservation}}">
-    <view class="modal-header">
+     <view class="modal-header">
       <text class="modal-title">预订详情</text>
       <text class="modal-close" bindtap="onCloseDetailModal">×</text>
     </view>
     <view class="modal-body">
-      <view class="detail-section">
-        <view class="detail-row">
-          <text class="detail-label">预订ID</text>
-          <text class="detail-value">{{selectedReservation.id}}</text>
-        </view>
-        <view class="detail-row">
+       <view class="detail-row">
           <text class="detail-label">状态</text>
           <text class="detail-value status-tag {{utils.getStatusClass(selectedReservation.status)}}">{{utils.getStatusText(selectedReservation.status)}}</text>
-        </view>
-        <view class="detail-row">
-          <text class="detail-label">包间</text>
-          <text class="detail-value">{{selectedReservation.table_no}}</text>
-        </view>
-        <view class="detail-row">
-          <text class="detail-label">时间</text>
-          <text class="detail-value">{{selectedReservation.reservation_date}} {{selectedReservation.reservation_time}}</text>
-        </view>
-        <view class="detail-row">
-          <text class="detail-label">人数</text>
-          <text class="detail-value">{{selectedReservation.guest_count}}人</text>
-        </view>
-      </view>
-
-      <view class="detail-section">
-        <view class="detail-row">
-          <text class="detail-label">联系人</text>
-          <text class="detail-value">{{selectedReservation.contact_name}}</text>
-        </view>
-        <view class="detail-row">
+       </view>
+       <view class="detail-row">
+          <text class="detail-label">顾客</text>
+          <text class="detail-value">{{selectedReservation.contact_name}} ({{selectedReservation.guest_count}}人)</text>
+       </view>
+       <view class="detail-row">
           <text class="detail-label">电话</text>
           <text class="detail-value">{{selectedReservation.contact_phone}}</text>
-        </view>
-      </view>
-
-      <view class="detail-section" wx:if="{{selectedReservation.deposit_amount || selectedReservation.prepaid_amount}}">
-        <view class="detail-row">
-          <text class="detail-label">定金</text>
-          <text class="detail-value price">¥{{utils.formatAmount(selectedReservation.deposit_amount)}}</text>
-        </view>
-        <view class="detail-row" wx:if="{{selectedReservation.prepaid_amount}}">
-          <text class="detail-label">预付</text>
-          <text class="detail-value price">¥{{utils.formatAmount(selectedReservation.prepaid_amount)}}</text>
-        </view>
-      </view>
-
-      <view class="detail-section" wx:if="{{selectedReservation.notes}}">
-        <view class="detail-row">
+       </view>
+       <view class="detail-row">
+          <text class="detail-label">时间</text>
+          <text class="detail-value">{{selectedReservation.reservation_time}}</text>
+       </view>
+       <view class="detail-row" wx:if="{{selectedReservation.notes}}">
           <text class="detail-label">备注</text>
           <text class="detail-value">{{selectedReservation.notes}}</text>
-        </view>
-      </view>
-
-      <view class="detail-section">
-        <view class="detail-row">
-          <text class="detail-label">创建时间</text>
-          <text class="detail-value">{{selectedReservation.created_at}}</text>
-        </view>
-        <view class="detail-row" wx:if="{{selectedReservation.source}}">
-          <text class="detail-label">预订来源</text>
-          <text class="detail-value">{{utils.getSourceText(selectedReservation.source)}}</text>
-        </view>
-      </view>
+       </view>
     </view>
     <view class="modal-footer">
+      <button class="btn-danger" 
+              wx:if="{{selectedReservation.status === 'pending' || selectedReservation.status === 'paid' || selectedReservation.status === 'confirmed'}}" 
+              bindtap="onCancelReservation" 
+              data-id="{{selectedReservation.id}}">取消预订</button>
+      <button class="btn-primary" 
+              wx:if="{{selectedReservation.status === 'confirmed' || selectedReservation.status === 'paid'}}" 
+              bindtap="onCheckIn" 
+              data-id="{{selectedReservation.id}}">签到</button>
       <button class="btn-outline" bindtap="onCloseDetailModal">关闭</button>
     </view>
   </view>

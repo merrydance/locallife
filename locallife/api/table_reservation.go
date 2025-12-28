@@ -523,7 +523,7 @@ type listMerchantReservationsRequest struct {
 	Date     string `form:"date,omitempty"`                                                                                        // YYYY-MM-DD
 	Status   string `form:"status,omitempty" binding:"omitempty,oneof=pending paid confirmed completed cancelled expired no_show"` // 状态筛选
 	PageID   int32  `form:"page_id" binding:"required,min=1"`
-	PageSize int32  `form:"page_size" binding:"required,min=5,max=50"`
+	PageSize int32  `form:"page_size" binding:"required,min=5,max=200"`
 }
 
 // listMerchantReservations 商户查看预定列表

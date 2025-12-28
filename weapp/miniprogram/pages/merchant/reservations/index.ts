@@ -11,13 +11,23 @@ import {
   type ReservationStats,
   type MerchantCreateReservationRequest
 } from '@/api/reservation'
-import { getPrivateRooms } from '@/api/table-device-management'
+import { tableManagementService } from '@/api/table-device-management'
 
 interface TableOption {
   id: number
   table_no: string
   table_type: string
   capacity: number
+  todayReservations?: ReservationResponse[] // 当日预订
+}
+
+interface CalendarDay {
+  day: number
+  month: number
+  year: number
+  fullDate: string // YYYY-MM-DD
+  isToday: boolean
+  hasReservations: boolean
 }
 
 Page({
@@ -26,25 +36,29 @@ Page({
     isLargeScreen: false,
     navBarHeight: 88,
 
-    // 状态
-    loading: false,
-    activeTab: 'today' as 'today' | 'all' | 'pending' | 'confirmed' | 'completed',
+    // 日历数据
+    currentYear: 2023,
+    currentMonth: 1,
+    daysInMonth: [] as CalendarDay[],
+    emptyDays: [] as number[], // 月初空白天数
+    selectedDate: '', // YYYY-MM-DD
+    selectedDay: 1,
+    selectedMonth: 1,
+    selectedDateDisplay: '', // 例如 "12月28日"
 
-    // 数据
+    // 业务数据
+    loading: false,
     reservations: [] as ReservationResponse[],
     stats: null as ReservationStats | null,
     tables: [] as TableOption[],
-
-    // 筛选
-    filterDate: '',
-    filterStatus: '',
+    tableViews: [] as TableOption[], // 整合了预订信息的桌台视图数据
 
     // 创建预订弹窗
     showCreateModal: false,
     createForm: {
       table_id: 0,
       date: '',
-      time: '',
+      time: '12:00',
       guest_count: 2,
       contact_name: '',
       contact_phone: '',
@@ -52,33 +66,119 @@ Page({
       notes: ''
     },
     selectedTableName: '', // 已选桌台名称
+    timeOptions: [] as { value: string, disabled: boolean }[],
 
     // 详情弹窗
     showDetailModal: false,
     selectedReservation: null as ReservationResponse | null
   },
 
-  onLoad() {
+  async onLoad() {
     this.setData({ isLargeScreen: isLargeScreen() })
-    this.loadStats()
-    this.loadReservations()
-    this.loadTables()
+    this.initCalendar() // 初始化为今天
+    await this.loadTables() // 先加载桌台
+    this.refreshData() // 再加载预订数据
   },
 
   onShow() {
-    if (this.data.reservations.length > 0) {
-      this.loadReservations()
-    }
+    // 移除自动刷新，避免重复请求
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  // ==================== 数据加载 ====================
+  // ==================== 日历核心逻辑 ====================
+
+  initCalendar(dateStr?: string) {
+    const today = new Date()
+    const targetDate = dateStr ? new Date(dateStr) : today
+    const year = targetDate.getFullYear()
+    const month = targetDate.getMonth() + 1
+    const day = targetDate.getDate()
+
+    // 格式化当前选中日期
+    const fullDate = `${year}-${('0' + month).slice(-2)}-${('0' + day).slice(-2)}`
+
+    // 生成当月数据
+    this.generateMonthDays(year, month)
+
+    this.setData({
+      currentYear: year,
+      currentMonth: month,
+      selectedDate: fullDate,
+      selectedDay: day,
+      selectedMonth: month,
+      selectedDateDisplay: `${month}月${day}日`
+    })
+  },
+
+  generateMonthDays(year: number, month: number) {
+    // 获取当月1号是星期几
+    const firstDay = new Date(year, month - 1, 1).getDay()
+    // 获取当月总天数
+    const lastDay = new Date(year, month, 0).getDate()
+
+    // 空白天占位
+    const emptyDays = Array(firstDay).fill(0)
+
+    const days: CalendarDay[] = []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayTime = today.getTime()
+
+    for (let i = 1; i <= lastDay; i++) {
+      const fullDate = `${year}-${('0' + month).slice(-2)}-${('0' + i).slice(-2)}`
+      const dateTime = new Date(year, month - 1, i).getTime()
+
+      days.push({
+        day: i,
+        month: month,
+        year: year,
+        fullDate: fullDate,
+        isToday: dateTime === todayTime,
+        hasReservations: false,
+        disabled: dateTime < todayTime
+      } as any)
+    }
+
+    this.setData({
+      daysInMonth: days,
+      emptyDays: emptyDays
+    })
+  },
+
+  onDateSelect(e: WechatMiniprogram.TouchEvent) {
+    const { date, disabled } = e.currentTarget.dataset
+    if (disabled) return
+    if (date === this.data.selectedDate) return
+
+    const d = new Date(date)
+    this.setData({
+      selectedDate: date,
+      selectedDay: d.getDate(),
+      selectedMonth: d.getMonth() + 1,
+      selectedDateDisplay: `${d.getMonth() + 1}月${d.getDate()}日`
+    })
+    this.refreshData()
+  },
+
+  onSelectToday() {
+    this.initCalendar()
+    this.refreshData()
+  },
+
+  // ==================== 数据加载与整合 ====================
+
+  async refreshData() {
+    // 并行加载统计和预订列表
+    this.loadStats()
+    this.loadReservations()
+  },
 
   async loadStats() {
     try {
+      // 注意：这里可能需要传日期参数，如果后端支持的话。暂时先不传。
       const stats = await ReservationService.getReservationStats()
       this.setData({ stats })
     } catch (error) {
@@ -87,79 +187,111 @@ Page({
   },
 
   async loadReservations() {
-    const { activeTab, filterDate, filterStatus } = this.data
+    const { selectedDate } = this.data
     this.setData({ loading: true })
 
     try {
-      let reservations: ReservationResponse[] = []
-
-      if (activeTab === 'today') {
-        const result = await ReservationService.getTodayReservations()
-        reservations = result.reservations || []
-      } else {
-        const params: any = { page_id: 1, page_size: 50 }
-        if (filterDate) params.date = filterDate
-        if (activeTab !== 'all') params.status = activeTab
-        if (filterStatus) params.status = filterStatus
-
-        const result = await ReservationService.getMerchantReservations(params)
-        reservations = result.reservations || []
+      const params: any = {
+        page_id: 1,
+        page_size: 100, // 尽量拉取当天所有
+        date: selectedDate
       }
+      const result = await ReservationService.getMerchantReservations(params)
+      const reservations = result.reservations || []
 
-      this.setData({ reservations, loading: false })
+      this.setData({ reservations })
+      this.mergeReservationsToTables(reservations)
+
     } catch (error) {
       logger.error('加载预订列表失败', error, 'reservations')
       wx.showToast({ title: '加载失败', icon: 'error' })
+    } finally {
       this.setData({ loading: false })
     }
   },
 
-
-
   async loadTables() {
     try {
-      const tables = await getPrivateRooms()
+      // 获取所有类型的桌台
+      const response = await tableManagementService.listTables()
+      const tables = response.tables || []
       this.setData({ tables })
+      // 如果已经有预订数据，则进行合并；否则只显示桌台
+      this.mergeReservationsToTables(this.data.reservations)
     } catch (error) {
       logger.error('加载桌台列表失败', error, 'reservations')
     }
   },
 
-  // ==================== Tab 切换 ====================
+  mergeReservationsToTables(reservations: ReservationResponse[]) {
+    const { tables } = this.data
+    if (!tables || tables.length === 0) return
 
-  onTabChange(e: WechatMiniprogram.TouchEvent) {
-    const tab = e.currentTarget.dataset.tab as string
-    this.setData({ activeTab: tab as any })
-    this.loadReservations()
+    const tableViews = tables.map(table => {
+      // 过滤出该桌台的当日预订
+      const tableReservations = reservations.filter(r =>
+        r.table_id === table.id &&
+        // 排除已取消和未到店（看需求，是否要显示已取消但在时间轴上占位的？通常不显示）
+        ['confirmed', 'checked_in', 'pending', 'paid', 'completed'].includes(r.status)
+      )
+
+      // 按时间排序
+      tableReservations.sort((a, b) => a.reservation_time.localeCompare(b.reservation_time))
+
+      return {
+        ...table,
+        todayReservations: tableReservations
+      }
+    })
+
+    this.setData({ tableViews })
   },
 
-  // ==================== 筛选 ====================
+  // ==================== 创建预订交互 ====================
 
-  onDateChange(e: WechatMiniprogram.PickerChange) {
-    this.setData({ filterDate: e.detail.value as string })
-    this.loadReservations()
-  },
-
-  onClearDate() {
-    this.setData({ filterDate: '' })
-    this.loadReservations()
-  },
-
-  // ==================== 创建预订 ====================
-
-  onShowCreateModal() {
+  generateTimeOptions(date: string) {
+    const times = ['11:00', '12:00', '13:00', '17:00', '18:00', '19:00']
+    const now = new Date()
     const today = new Date()
-    const dateStr = today.toISOString().split('T')[0]
-    const timeStr = '12:00'
+    today.setHours(0, 0, 0, 0)
+    const selected = new Date(date)
+    selected.setHours(0, 0, 0, 0)
+
+    const isToday = selected.getTime() === today.getTime()
+    const currentHour = now.getHours()
+    const currentMinute = now.getMinutes()
+
+    const options = times.map(t => {
+      let disabled = false
+      if (selected.getTime() < today.getTime()) {
+        disabled = true // 过去日期全禁
+      } else if (isToday) {
+        const [h, m] = t.split(':').map(Number)
+        if (h < currentHour || (h === currentHour && m < currentMinute)) {
+          disabled = true
+        }
+      }
+      return { value: t, disabled }
+    })
+    this.setData({ timeOptions: options })
+  },
+
+  onKeyTableTap(e: WechatMiniprogram.TouchEvent) {
+    const id = e.currentTarget.dataset.id as number
+    const table = this.data.tables.find(t => t.id === id)
+
+    if (!table) return
+
+    this.generateTimeOptions(this.data.selectedDate)
 
     this.setData({
       showCreateModal: true,
-      selectedTableName: '',
+      selectedTableName: table.table_no,
       createForm: {
-        table_id: 0,
-        date: dateStr,
-        time: timeStr,
-        guest_count: 2,
+        table_id: table.id,
+        date: this.data.selectedDate, // 自动填充选中日期
+        time: '12:00', // 默认时间
+        guest_count: table.capacity || 2,
         contact_name: '',
         contact_phone: '',
         source: 'phone',
@@ -168,13 +300,34 @@ Page({
     })
   },
 
+  onTimeSelect(e: WechatMiniprogram.TouchEvent) {
+    const { time, disabled } = e.currentTarget.dataset
+    if (disabled) return
+    this.setData({ 'createForm.time': time })
+  },
+
+  onGuestCountInc() {
+    this.setData({ 'createForm.guest_count': this.data.createForm.guest_count + 1 })
+  },
+
+  onGuestCountDec() {
+    const current = this.data.createForm.guest_count
+    if (current > 1) {
+      this.setData({ 'createForm.guest_count': current - 1 })
+    }
+  },
+
+  onSourceTap(e: WechatMiniprogram.TouchEvent) {
+    const source = e.currentTarget.dataset.source as 'phone' | 'walkin' | 'merchant'
+    this.setData({ 'createForm.source': source })
+  },
+
   onCloseCreateModal() {
     this.setData({ showCreateModal: false })
   },
 
-  // 空函数，用于阻止事件冒泡
   onModalContentTap() {
-    // 不执行任何操作，仅阻止冒泡
+    // 阻止冒泡
   },
 
   onFormInput(e: WechatMiniprogram.Input) {
@@ -183,33 +336,6 @@ Page({
     this.setData({
       [`createForm.${field}`]: value
     })
-  },
-
-  onTableOptionTap(e: WechatMiniprogram.TouchEvent) {
-    const table = e.currentTarget.dataset.table as TableOption
-    if (table) {
-      this.setData({
-        'createForm.table_id': table.id,
-        selectedTableName: table.table_no
-      })
-    }
-  },
-
-  onDateSelect(e: WechatMiniprogram.PickerChange) {
-    this.setData({ 'createForm.date': e.detail.value as string })
-  },
-
-  onTimeSelect(e: WechatMiniprogram.PickerChange) {
-    this.setData({ 'createForm.time': e.detail.value as string })
-  },
-
-  onSourceTap(e: WechatMiniprogram.TouchEvent) {
-    const source = e.currentTarget.dataset.source as 'phone' | 'walkin' | 'merchant'
-    this.setData({ 'createForm.source': source })
-  },
-
-  onGuestCountChange(e: WechatMiniprogram.Input) {
-    this.setData({ 'createForm.guest_count': Number(e.detail.value) || 2 })
   },
 
   async onSubmitCreate() {
@@ -235,8 +361,7 @@ Page({
       wx.hideLoading()
       wx.showToast({ title: '创建成功', icon: 'success' })
       this.setData({ showCreateModal: false })
-      this.loadReservations()
-      this.loadStats()
+      this.refreshData() // 刷新数据
     } catch (error) {
       wx.hideLoading()
       logger.error('创建预订失败', error, 'reservations')
@@ -244,8 +369,8 @@ Page({
     }
   },
 
-  // ==================== 预订详情 ====================
-
+  // ==================== 自定义详情查看 ====================
+  // 为了防止点击卡片触发 "新建"，在详情点击时使用 catchtap
   onViewDetail(e: WechatMiniprogram.TouchEvent) {
     const id = e.currentTarget.dataset.id as number
     const reservation = this.data.reservations.find(r => r.id === id)
@@ -261,192 +386,42 @@ Page({
     this.setData({ showDetailModal: false, selectedReservation: null })
   },
 
-  // ==================== 预订操作 ====================
-
-  async onConfirmReservation(e: WechatMiniprogram.TouchEvent) {
-    const id = e.currentTarget.dataset.id as number
-
-    wx.showModal({
-      title: '确认预订',
-      content: '确定要确认此预订吗？',
-      success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
-          try {
-            await ReservationService.confirmReservation(id)
-            wx.hideLoading()
-            wx.showToast({ title: '已确认', icon: 'success' })
-            this.loadReservations()
-            this.loadStats()
-          } catch (error) {
-            wx.hideLoading()
-            wx.showToast({ title: '操作失败', icon: 'error' })
-          }
-        }
-      }
-    })
-  },
-
+  // 详情页操作
   async onCheckIn(e: WechatMiniprogram.TouchEvent) {
-    const id = e.currentTarget.dataset.id as number
-
-    wx.showModal({
-      title: '到店签到',
-      content: '确定顾客已到店吗？',
-      success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
-          try {
-            await ReservationService.checkIn(id)
-            wx.hideLoading()
-            wx.showToast({ title: '已签到', icon: 'success' })
-            this.loadReservations()
-            this.loadStats()
-          } catch (error) {
-            wx.hideLoading()
-            wx.showToast({ title: '操作失败', icon: 'error' })
-          }
-        }
-      }
-    })
-  },
-
-  async onStartCooking(e: WechatMiniprogram.TouchEvent) {
-    const id = e.currentTarget.dataset.id as number
-
-    wx.showModal({
-      title: '起菜通知',
-      content: '确定通知厨房开始制作吗？',
-      success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
-          try {
-            await ReservationService.startCooking(id)
-            wx.hideLoading()
-            wx.showToast({ title: '已通知厨房', icon: 'success' })
-            this.loadReservations()
-          } catch (error) {
-            wx.hideLoading()
-            wx.showToast({ title: '操作失败', icon: 'error' })
-          }
-        }
-      }
-    })
-  },
-
-  async onCompleteReservation(e: WechatMiniprogram.TouchEvent) {
-    const id = e.currentTarget.dataset.id as number
-
-    wx.showModal({
-      title: '完成预订',
-      content: '确定顾客已离店，完成此预订吗？',
-      success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
-          try {
-            await ReservationService.completeReservation(id)
-            wx.hideLoading()
-            wx.showToast({ title: '已完成', icon: 'success' })
-            this.loadReservations()
-            this.loadStats()
-          } catch (error) {
-            wx.hideLoading()
-            wx.showToast({ title: '操作失败', icon: 'error' })
-          }
-        }
-      }
-    })
-  },
-
-  async onMarkNoShow(e: WechatMiniprogram.TouchEvent) {
-    const id = e.currentTarget.dataset.id as number
-
-    wx.showModal({
-      title: '标记未到店',
-      content: '确定标记此预订为未到店吗？定金将被没收。',
-      success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
-          try {
-            await ReservationService.markNoShow(id)
-            wx.hideLoading()
-            wx.showToast({ title: '已标记', icon: 'success' })
-            this.loadReservations()
-            this.loadStats()
-          } catch (error) {
-            wx.hideLoading()
-            wx.showToast({ title: '操作失败', icon: 'error' })
-          }
-        }
-      }
-    })
+    const id = e.currentTarget.dataset.id
+    try {
+      await ReservationService.checkIn(id)
+      wx.showToast({ title: '签到成功' })
+      this.setData({ showDetailModal: false })
+      this.refreshData()
+    } catch (error) {
+      wx.showToast({ title: '操作失败', icon: 'none' })
+    }
   },
 
   async onCancelReservation(e: WechatMiniprogram.TouchEvent) {
-    const id = e.currentTarget.dataset.id as number
-
+    const id = e.currentTarget.dataset.id
     wx.showModal({
-      title: '取消预订',
-      content: '确定要取消此预订吗？已支付的将自动退款。',
+      title: '提示',
+      content: '确定要取消该预订吗？',
       success: async (res) => {
         if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
+          wx.showLoading({ title: '取消中' })
           try {
-            await ReservationService.cancelReservation(id, '商户取消')
+            await ReservationService.cancelReservation(id, '商户主动取消')
             wx.hideLoading()
-            wx.showToast({ title: '已取消', icon: 'success' })
-            this.loadReservations()
-            this.loadStats()
+            wx.showToast({ title: '已取消' })
+            this.setData({ showDetailModal: false })
+            this.refreshData()
           } catch (error) {
             wx.hideLoading()
-            wx.showToast({ title: '操作失败', icon: 'error' })
+            logger.error('取消预订失败', error, 'reservations')
+            wx.showToast({ title: '取消失败', icon: 'none' })
           }
         }
       }
     })
   },
 
-  // ==================== 辅助方法 ====================
-
-  getStatusText(status: string): string {
-    const map: Record<string, string> = {
-      pending: '待支付',
-      paid: '已支付',
-      confirmed: '已确认',
-      checked_in: '已到店',
-      completed: '已完成',
-      cancelled: '已取消',
-      expired: '已过期',
-      no_show: '未到店'
-    }
-    return map[status] || status
-  },
-
-  getStatusClass(status: string): string {
-    const map: Record<string, string> = {
-      pending: 'status-warning',
-      paid: 'status-info',
-      confirmed: 'status-primary',
-      checked_in: 'status-success',
-      completed: 'status-default',
-      cancelled: 'status-error',
-      expired: 'status-default',
-      no_show: 'status-error'
-    }
-    return map[status] || ''
-  },
-
-  getSourceText(source?: string): string {
-    const map: Record<string, string> = {
-      online: '线上预订',
-      phone: '电话预订',
-      walkin: '现场预订',
-      merchant: '商户代订'
-    }
-    return source ? (map[source] || source) : ''
-  },
-
-  formatAmount(amount: number): string {
-    return (amount / 100).toFixed(2)
-  }
+  // ... 其他辅助函数 ...
 })
