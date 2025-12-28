@@ -1,0 +1,296 @@
+<!-- 代金券管理页面 - 桌面级 SaaS 界面 -->
+<wxs module="utils">
+  module.exports = {
+    formatAmount: function(amount) {
+      return (amount / 100).toFixed(2)
+    },
+    formatDate: function(dateStr) {
+      if (!dateStr) return '-'
+      return dateStr.slice(0, 10)
+    },
+    hasOrderType: function(types, type) {
+      if (!types) return false
+      for (var i = 0; i < types.length; i++) {
+        if (types[i] === type) return true
+      }
+      return false
+    }
+  }
+</wxs>
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🎫</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问代金券管理</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+    <merchant-sidebar 
+      current-path="vouchers" 
+      collapsed="{{sidebarCollapsed}}"
+      bind:collapse="onSidebarCollapse"
+    />
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        sidebar-width="{{sidebarCollapsed ? 64 : 200}}"
+      />
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 顶部操作栏 -->
+        <view class="page-header">
+          <view class="page-title">
+            <text class="title-icon">🎫</text>
+            <text class="title-text">代金券管理</text>
+            <text class="title-count">共 {{vouchers.length}} 张</text>
+          </view>
+          <button class="btn-primary" bindtap="onAddVoucher">+ 新建代金券</button>
+        </view>
+
+        <!-- 加载状态 -->
+        <view wx:if="{{loading}}" class="loading-state">
+          <view class="loading-spinner"></view>
+          <text>加载中...</text>
+        </view>
+
+        <!-- 空状态 -->
+        <view wx:elif="{{vouchers.length === 0}}" class="empty-state">
+          <text class="empty-icon">📦</text>
+          <text class="empty-text">暂无代金券</text>
+          <text class="empty-hint">点击"新建代金券"创建您的第一张代金券</text>
+        </view>
+
+        <!-- 代金券列表 -->
+        <view wx:else class="voucher-grid">
+          <view 
+            wx:for="{{vouchers}}" wx:key="id" 
+            class="voucher-card {{item.is_active ? '' : 'inactive'}}"
+          >
+            <!-- 卡片头部 -->
+            <view class="voucher-header">
+              <view class="voucher-amount">
+                <text class="amount-prefix">¥</text>
+                <text class="amount-value">{{utils.formatAmount(item.amount)}}</text>
+              </view>
+              <view class="voucher-status {{item.statusClass}}">{{item.statusText}}</view>
+            </view>
+
+            <!-- 卡片内容 -->
+            <view class="voucher-body">
+              <text class="voucher-name">{{item.name}}</text>
+              <text class="voucher-code">券码: {{item.code}}</text>
+              <text class="voucher-condition">满 ¥{{utils.formatAmount(item.min_order_amount)}} 可用</text>
+              <view class="voucher-scenes">
+                <text class="scene-tag" wx:if="{{utils.hasOrderType(item.allowed_order_types, 'dine_in')}}">堂食</text>
+                <text class="scene-tag" wx:if="{{utils.hasOrderType(item.allowed_order_types, 'takeout')}}">外卖</text>
+                <text class="scene-tag" wx:if="{{utils.hasOrderType(item.allowed_order_types, 'reservation')}}">预订</text>
+              </view>
+            </view>
+
+            <!-- 卡片数据 -->
+            <view class="voucher-stats">
+              <view class="stat-item">
+                <text class="stat-value">{{item.claimed_quantity}}/{{item.total_quantity}}</text>
+                <text class="stat-label">领取/总量</text>
+              </view>
+              <view class="stat-item">
+                <text class="stat-value">{{item.used_quantity}}</text>
+                <text class="stat-label">已使用</text>
+              </view>
+            </view>
+
+            <!-- 有效期 -->
+            <view class="voucher-validity">
+              {{utils.formatDate(item.valid_from)}} ~ {{utils.formatDate(item.valid_until)}}
+            </view>
+
+            <!-- 操作按钮 -->
+            <view class="voucher-actions">
+              <view class="action-btn" bindtap="onToggleVoucherStatus" data-voucher="{{item}}">
+                {{item.is_active ? '停用' : '启用'}}
+              </view>
+              <view class="action-btn" bindtap="onEditVoucher" data-voucher="{{item}}">编辑</view>
+              <view class="action-btn danger" catchtap="onDeleteVoucher" data-voucher="{{item}}">删除</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 代金券编辑弹窗 -->
+<view class="modal-overlay {{showModal ? 'show' : ''}}" catchtap="onCloseModal">
+  <view class="modal-content" catchtap="onModalContentTap">
+    <view class="modal-header">
+      <text class="modal-title">{{editingVoucher ? '编辑代金券' : '新建代金券'}}</text>
+      <text class="modal-close" bindtap="onCloseModal">×</text>
+    </view>
+    <view class="modal-body">
+      <!-- 基本信息 -->
+      <view class="form-section-title">基本信息</view>
+      <view class="form-group">
+        <text class="form-label">代金券名称</text>
+        <input 
+          class="form-input" 
+          placeholder="例如: 新人专享券" 
+          value="{{form.name}}"
+          data-field="name"
+          bindinput="onFormInput"
+        />
+      </view>
+      <view class="form-row">
+        <view class="form-group half">
+          <text class="form-label">券码</text>
+          <input 
+            class="form-input" 
+            placeholder="例如: NEW100"
+            disabled="{{!!editingVoucher}}"
+            value="{{form.code}}"
+            data-field="code"
+            bindinput="onFormInput"
+          />
+        </view>
+        <view class="form-group half">
+          <text class="form-label">发行数量</text>
+          <input 
+            class="form-input" 
+            type="number" 
+            placeholder="例如: 100" 
+            value="{{form.total_quantity}}"
+            data-field="total_quantity"
+            bindinput="onFormInput"
+          />
+        </view>
+      </view>
+
+      <!-- 优惠设置 -->
+      <view class="form-section-title">优惠设置</view>
+      <view class="form-row">
+        <view class="form-group half">
+          <text class="form-label">优惠金额 (元)</text>
+          <input 
+            class="form-input" 
+            type="digit" 
+            placeholder="例如: 10" 
+            value="{{form.amount}}"
+            data-field="amount"
+            bindinput="onFormInput"
+          />
+        </view>
+        <view class="form-group half">
+          <text class="form-label">最低消费 (元)</text>
+          <input 
+            class="form-input" 
+            type="digit" 
+            placeholder="例如: 50" 
+            value="{{form.min_order_amount}}"
+            data-field="min_order_amount"
+            bindinput="onFormInput"
+          />
+        </view>
+      </view>
+
+      <!-- 适用场景 -->
+      <view class="form-section-title">适用场景</view>
+      <view class="scene-selector">
+        <view 
+          wx:for="{{orderTypeOptions}}" wx:key="value"
+          class="scene-chip {{utils.hasOrderType(form.allowed_order_types, item.value) ? 'active' : ''}}"
+          bindtap="onOrderTypeToggle"
+          data-type="{{item.value}}"
+        >
+          {{item.label}}
+        </view>
+      </view>
+
+      <!-- 有效期 -->
+      <view class="form-section-title">有效期</view>
+      <view class="form-row">
+        <view class="form-group half">
+          <text class="form-label">开始日期</text>
+          <view 
+            class="form-input date-input" 
+            bindtap="onOpenCalendar"
+            data-field="valid_from"
+          >
+            <text class="{{form.valid_from ? '' : 'placeholder'}}">{{form.valid_from || '请选择'}}</text>
+            <text class="date-icon">📅</text>
+          </view>
+        </view>
+        <view class="form-group half">
+          <text class="form-label">结束日期</text>
+          <view 
+            class="form-input date-input" 
+            bindtap="onOpenCalendar"
+            data-field="valid_until"
+          >
+            <text class="{{form.valid_until ? '' : 'placeholder'}}">{{form.valid_until || '请选择'}}</text>
+            <text class="date-icon">📅</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 描述 -->
+      <view class="form-group">
+        <text class="form-label">使用说明 (选填)</text>
+        <textarea 
+          class="form-textarea" 
+          placeholder="例如: 仅限堂食订单使用，每人限用一张" 
+          value="{{form.description}}"
+          data-field="description"
+          bindinput="onFormInput"
+        />
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-outline" bindtap="onCloseModal">取消</button>
+      <button class="btn-primary" bindtap="onSaveVoucher">保存</button>
+    </view>
+  </view>
+</view>
+
+<!-- 日历选择器弹窗 -->
+<view class="calendar-overlay {{showCalendar ? 'show' : ''}}" catchtap="onCloseCalendar">
+  <view class="calendar-popup" catchtap="onCalendarContentTap">
+    <view class="calendar-header">
+      <view class="calendar-nav" bindtap="onPrevMonth">‹</view>
+      <text class="calendar-title">{{calendarYear}}年{{calendarMonth}}月</text>
+      <view class="calendar-nav" bindtap="onNextMonth">›</view>
+    </view>
+    <view class="calendar-weekdays">
+      <text class="weekday">日</text>
+      <text class="weekday">一</text>
+      <text class="weekday">二</text>
+      <text class="weekday">三</text>
+      <text class="weekday">四</text>
+      <text class="weekday">五</text>
+      <text class="weekday">六</text>
+    </view>
+    <view class="calendar-days">
+      <view 
+        wx:for="{{calendarDays}}" wx:key="index"
+        class="day-cell {{item.disabled ? 'disabled' : ''}} {{item.selected ? 'selected' : ''}} {{item.today ? 'today' : ''}} {{!item.currentMonth ? 'other-month' : ''}}"
+        bindtap="{{item.disabled ? '' : 'onSelectCalendarDay'}}"
+        data-date="{{item.date}}"
+      >
+        {{item.day}}
+      </view>
+    </view>
+    <view class="calendar-footer">
+      <view class="calendar-today-btn" bindtap="onSelectToday">今天</view>
+    </view>
+  </view>
+</view>

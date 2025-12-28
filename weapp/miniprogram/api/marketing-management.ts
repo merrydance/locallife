@@ -166,9 +166,8 @@ export class VoucherManagementService {
         page_size: number                          // 每页数量（必填，5-50）
     }): Promise<VoucherResponse[]> {
         return await request({
-            url: `/v1/merchants/${merchantId}/vouchers`,
-            method: 'GET',
-            data: params
+            url: `/v1/merchants/${merchantId}/vouchers?page_id=${params.page_id}&page_size=${params.page_size}`,
+            method: 'GET'
         })
     }
 
@@ -209,6 +208,35 @@ export class VoucherManagementService {
             method: 'DELETE'
         })
     }
+
+    /**
+     * 更新优惠券
+     * PATCH /v1/merchants/{id}/vouchers/{voucher_id}
+     */
+    static async updateVoucher(
+        merchantId: number,
+        voucherId: number,
+        data: UpdateVoucherRequest
+    ): Promise<VoucherResponse> {
+        return await request({
+            url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
+            method: 'PATCH',
+            data
+        })
+    }
+}
+
+/**
+ * 更新优惠券请求 - 对齐 api.updateVoucherRequest
+ */
+export interface UpdateVoucherRequest extends Record<string, unknown> {
+    name?: string                                // 优惠券名称
+    description?: string                         // 优惠券描述
+    total_quantity?: number                      // 总发行量
+    valid_from?: string                          // 生效时间
+    valid_until?: string                         // 失效时间
+    is_active?: boolean                          // 是否激活
+    allowed_order_types?: string[]               // 允许的订单类型
 }
 
 // ==================== 充值规则管理服务 ====================

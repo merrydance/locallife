@@ -140,10 +140,13 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 }
 
 // listMerchantVouchersRequest 获取商户代金券列表请求
-type listMerchantVouchersRequest struct {
+type listMerchantVouchersURIRequest struct {
 	MerchantID int64 `uri:"id" binding:"required,min=1"`
-	PageID     int32 `form:"page_id" binding:"required,min=1"`
-	PageSize   int32 `form:"page_size" binding:"required,min=5,max=50"`
+}
+
+type listMerchantVouchersQueryRequest struct {
+	PageID   int32 `form:"page_id" binding:"required,min=1"`
+	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
 // listMerchantVouchers godoc
@@ -162,20 +165,21 @@ type listMerchantVouchersRequest struct {
 // @Router /v1/merchants/{id}/vouchers [get]
 // @Security BearerAuth
 func (server *Server) listMerchantVouchers(ctx *gin.Context) {
-	var req listMerchantVouchersRequest
-	if err := ctx.ShouldBindUri(&req); err != nil {
+	var uriReq listMerchantVouchersURIRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
-	if err := ctx.ShouldBindQuery(&req); err != nil {
+	var queryReq listMerchantVouchersQueryRequest
+	if err := ctx.ShouldBindQuery(&queryReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
 	vouchers, err := server.store.ListMerchantVouchers(ctx, db.ListMerchantVouchersParams{
-		MerchantID: req.MerchantID,
-		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		MerchantID: uriReq.MerchantID,
+		Limit:      queryReq.PageSize,
+		Offset:     (queryReq.PageID - 1) * queryReq.PageSize,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

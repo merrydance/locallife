@@ -83,7 +83,7 @@ Component({
         dishes: '/pages/merchant/dishes/index',
         combos: '/pages/merchant/combos/index',
         inventory: '/pages/merchant/inventory/index',
-        vouchers: '/pages/merchant/marketing/vouchers',
+        vouchers: '/pages/merchant/vouchers/index',
         discounts: '/pages/merchant/marketing/discounts',
         members: '/pages/merchant/members/index',
         'membership-settings': '/pages/merchant/membership-settings/index',
