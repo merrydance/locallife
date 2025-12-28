@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
+
+	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 const (
@@ -43,12 +46,44 @@ type WXACodeResponse struct {
 // 返回PNG图片数据
 func (c *Client) GetWXACodeUnlimited(ctx context.Context, req *WXACodeRequest) ([]byte, error) {
 	// 获取Access Token
-	accessToken, err := c.GetAccessToken(ctx, "miniprogram")
+	accessToken, err := c.GetAccessToken(ctx, "mp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}
 
-	// 构建请求
+	body, err := c.doWXACodeRequest(ctx, accessToken, req)
+	if err != nil {
+		// 检查是否是 40001/40014 token 错误
+		if apiErr, ok := err.(*APIError); ok && (apiErr.Code == 40001 || apiErr.Code == 40014) {
+			// 强制刷新 token 并重试
+			newTokenResp, fetchErr := c.fetchAccessToken(ctx)
+			if fetchErr != nil {
+				return nil, fmt.Errorf("failed to refresh access token: %w", fetchErr)
+			}
+
+			// 更新缓存
+			expiresAt := time.Now().Add(time.Duration(newTokenResp.ExpiresIn) * time.Second)
+			_, _ = c.store.UpsertWechatAccessToken(ctx, db.UpsertWechatAccessTokenParams{
+				AppType:     "mp",
+				AccessToken: newTokenResp.AccessToken,
+				ExpiresAt:   expiresAt,
+			})
+
+			// 重试
+			body, err = c.doWXACodeRequest(ctx, newTokenResp.AccessToken, req)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	return body, nil
+}
+
+// doWXACodeRequest 执行二维码生成请求
+func (c *Client) doWXACodeRequest(ctx context.Context, accessToken string, req *WXACodeRequest) ([]byte, error) {
 	url := fmt.Sprintf("%s?access_token=%s", getWXACodeUnlimitedURL, accessToken)
 
 	reqBody, err := json.Marshal(req)

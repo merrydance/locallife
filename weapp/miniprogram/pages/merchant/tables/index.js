@@ -16,6 +16,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
  * 第二步：图片上传、标签管理、二维码
  */
 const table_device_management_1 = require("../../../api/table-device-management");
+const dish_1 = require("../../../api/dish");
 const logger_1 = require("../../../utils/logger");
 const image_security_1 = require("../../../utils/image-security");
 const request_1 = require("../../../utils/request");
@@ -51,9 +52,12 @@ Page({
         minimumSpendYuan: '',
         // 第二步数据
         tableImages: [],
-        tableTags: [],
-        newTagName: '',
-        qrCodeUrl: ''
+        qrCodeUrl: '',
+        // 标签管理
+        availableTableTags: [], // 可用标签列表
+        selectedTagIds: [], // 已选标签ID
+        showTagManager: false, // 显示标签管理弹窗
+        newTagName: '' // 新标签名称
     },
     onLoad() {
         this.initData();
@@ -68,13 +72,19 @@ Page({
             const merchantId = app.globalData.merchantId;
             if (merchantId) {
                 this.setData({ merchantName: app.globalData.merchantName || '' });
-                yield this.loadTables();
+                yield Promise.all([
+                    this.loadTables(),
+                    this.loadAvailableTableTags()
+                ]);
             }
             else {
                 app.userInfoReadyCallback = () => __awaiter(this, void 0, void 0, function* () {
                     if (app.globalData.merchantId) {
                         this.setData({ merchantName: app.globalData.merchantName || '' });
-                        yield this.loadTables();
+                        yield Promise.all([
+                            this.loadTables(),
+                            this.loadAvailableTableTags()
+                        ]);
                     }
                 });
             }
@@ -116,13 +126,15 @@ Page({
         return __awaiter(this, void 0, void 0, function* () {
             const item = e.currentTarget.dataset.item;
             const minSpend = item.minimum_spend ? String(item.minimum_spend / 100) : '';
+            // 提取已选标签 ID
+            const selectedTagIds = (item.tags || []).map((t) => t.id);
             this.setData({
                 selectedTable: Object.assign({}, item),
                 isAdding: false,
                 currentStep: 1,
                 minimumSpendYuan: minSpend,
                 tableImages: [],
-                tableTags: [],
+                selectedTagIds,
                 qrCodeUrl: ''
             });
             // 加载图片和二维码
@@ -407,42 +419,84 @@ Page({
         });
     },
     // ========== 标签管理 ==========
+    loadAvailableTableTags() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const tags = yield dish_1.TagService.listTags('table');
+                this.setData({ availableTableTags: tags });
+            }
+            catch (error) {
+                logger_1.logger.error('加载标签列表失败', error, 'Tables');
+            }
+        });
+    },
+    // 切换标签选中状态
+    onTagToggle(e) {
+        const tagId = e.currentTarget.dataset.id;
+        const { selectedTagIds } = this.data;
+        const index = selectedTagIds.indexOf(tagId);
+        let newIds;
+        if (index === -1) {
+            newIds = [...selectedTagIds, tagId];
+        }
+        else {
+            newIds = selectedTagIds.filter(id => id !== tagId);
+        }
+        this.setData({ selectedTagIds: newIds });
+    },
+    // 打开标签管理弹窗
+    onOpenTagManager() {
+        this.setData({ showTagManager: true });
+    },
+    // 关闭标签管理弹窗
+    onCloseTagManager() {
+        this.setData({ showTagManager: false, newTagName: '' });
+    },
+    // 输入新标签名
     onTagNameInput(e) {
         this.setData({ newTagName: e.detail.value });
     },
-    onAddTag() {
+    // 创建新标签
+    onCreateTag() {
         return __awaiter(this, void 0, void 0, function* () {
-            const { newTagName, selectedTable } = this.data;
-            const tableId = selectedTable === null || selectedTable === void 0 ? void 0 : selectedTable.id;
-            if (!tableId || !newTagName.trim()) {
+            const { newTagName } = this.data;
+            if (!newTagName.trim()) {
                 wx.showToast({ title: '请输入标签名称', icon: 'none' });
                 return;
             }
             try {
-                const newTag = yield table_device_management_1.tableManagementService.addTableTag(tableId, { name: newTagName.trim() });
+                const newTag = yield dish_1.TagService.createTag({ name: newTagName.trim(), type: 'table' });
                 this.setData({
-                    tableTags: [...this.data.tableTags, newTag],
+                    availableTableTags: [...this.data.availableTableTags, newTag],
                     newTagName: ''
                 });
-                wx.showToast({ title: '标签已添加', icon: 'success' });
+                wx.showToast({ title: '标签已创建', icon: 'success' });
             }
             catch (error) {
-                logger_1.logger.error('添加标签失败', error, 'Tables');
-                wx.showToast({ title: '添加失败', icon: 'none' });
+                logger_1.logger.error('创建标签失败', error, 'Tables');
+                wx.showToast({ title: '创建失败', icon: 'none' });
             }
         });
     },
-    onRemoveTag(e) {
+    // 删除标签
+    onDeleteTag(e) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const tagId = e.currentTarget.dataset.id;
-            const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
-            if (!tableId || !tagId)
+            const tagName = e.currentTarget.dataset.name;
+            const res = yield new Promise(resolve => {
+                wx.showModal({
+                    title: '确认删除',
+                    content: `确定要删除标签"${tagName}"吗？`,
+                    success: resolve
+                });
+            });
+            if (!res.confirm)
                 return;
             try {
-                yield table_device_management_1.tableManagementService.deleteTableTag(tableId, tagId);
+                yield dish_1.TagService.deleteTag(tagId);
                 this.setData({
-                    tableTags: this.data.tableTags.filter(t => t.id !== tagId)
+                    availableTableTags: this.data.availableTableTags.filter(t => t.id !== tagId),
+                    selectedTagIds: this.data.selectedTagIds.filter(id => id !== tagId)
                 });
                 wx.showToast({ title: '标签已删除', icon: 'success' });
             }
@@ -473,20 +527,54 @@ Page({
             }
         });
     },
+    onPreviewQRCode() {
+        const { qrCodeUrl } = this.data;
+        if (!qrCodeUrl)
+            return;
+        wx.previewImage({
+            urls: [qrCodeUrl],
+            current: qrCodeUrl
+        });
+    },
     onDownloadQRCode() {
         const { qrCodeUrl } = this.data;
         if (!qrCodeUrl) {
             wx.showToast({ title: '无二维码', icon: 'none' });
             return;
         }
-        // PC 端复制链接到剪贴板
-        wx.setClipboardData({
-            data: qrCodeUrl,
-            success: () => {
-                wx.showToast({ title: '链接已复制', icon: 'success' });
+        wx.showLoading({ title: '下载中...' });
+        wx.downloadFile({
+            url: qrCodeUrl,
+            success: (res) => {
+                wx.hideLoading();
+                if (res.statusCode === 200 && res.tempFilePath) {
+                    // 打开文件让用户选择保存位置
+                    wx.openDocument({
+                        filePath: res.tempFilePath,
+                        showMenu: true, // 显示右上角菜单可保存
+                        success: () => { },
+                        fail: () => {
+                            // openDocument 失败则预览
+                            wx.previewImage({
+                                urls: [qrCodeUrl],
+                                current: qrCodeUrl
+                            });
+                            wx.showToast({ title: '请右键图片保存', icon: 'none', duration: 2000 });
+                        }
+                    });
+                }
+                else {
+                    wx.showToast({ title: '下载失败', icon: 'none' });
+                }
             },
             fail: () => {
-                wx.showToast({ title: '复制失败', icon: 'none' });
+                wx.hideLoading();
+                // 下载失败，直接预览
+                wx.previewImage({
+                    urls: [qrCodeUrl],
+                    current: qrCodeUrl
+                });
+                wx.showToast({ title: '请右键图片保存', icon: 'none', duration: 2000 });
             }
         });
     },

@@ -292,6 +292,18 @@ func (server *Server) listTables(ctx *gin.Context) {
 	}
 	for i, t := range tables {
 		resp.Tables[i] = newTableResponse(t)
+
+		// 加载每个桌台的标签
+		tags, err := server.store.ListTableTags(ctx, t.ID)
+		if err == nil && len(tags) > 0 {
+			resp.Tables[i].Tags = make([]tagInfo, len(tags))
+			for j, tag := range tags {
+				resp.Tables[i].Tags[j] = tagInfo{
+					ID:   tag.TagID,
+					Name: tag.TagName,
+				}
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -411,6 +423,7 @@ type updateTableRequest struct {
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
 	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
 	Status       *string `json:"status,omitempty" binding:"omitempty,oneof=available occupied disabled"`
+	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
 }
 
 // updateTable godoc
@@ -499,6 +512,28 @@ func (server *Server) updateTable(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 处理标签关联
+	if req.TagIds != nil {
+		// 删除现有标签关联
+		err = server.store.RemoveAllTableTags(ctx, uriReq.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		// 添加新的标签关联
+		for _, tagID := range req.TagIds {
+			_, err = server.store.AddTableTag(ctx, db.AddTableTagParams{
+				TableID: uriReq.ID,
+				TagID:   tagID,
+			})
+			if err != nil {
+				// 忽略重复或无效的标签ID
+				continue
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, newTableResponse(updatedTable))

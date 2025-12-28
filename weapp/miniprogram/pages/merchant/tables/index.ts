@@ -12,6 +12,7 @@ import {
     TableImageResponse,
     TagInfo
 } from '../../../api/table-device-management'
+import { TagService } from '../../../api/dish'
 import { logger } from '../../../utils/logger'
 import { resolveImageURL } from '../../../utils/image-security'
 import { API_BASE } from '../../../utils/request'
@@ -56,9 +57,13 @@ Page({
 
         // 第二步数据
         tableImages: [] as TableImageResponse[],
-        tableTags: [] as TagInfo[],
-        newTagName: '',
-        qrCodeUrl: ''
+        qrCodeUrl: '',
+
+        // 标签管理
+        availableTableTags: [] as TagInfo[],  // 可用标签列表
+        selectedTagIds: [] as number[],        // 已选标签ID
+        showTagManager: false,                 // 显示标签管理弹窗
+        newTagName: ''                         // 新标签名称
     },
 
     onLoad() {
@@ -76,12 +81,18 @@ Page({
 
         if (merchantId) {
             this.setData({ merchantName: (app.globalData as any).merchantName || '' })
-            await this.loadTables()
+            await Promise.all([
+                this.loadTables(),
+                this.loadAvailableTableTags()
+            ])
         } else {
             app.userInfoReadyCallback = async () => {
                 if (app.globalData.merchantId) {
                     this.setData({ merchantName: (app.globalData as any).merchantName || '' })
-                    await this.loadTables()
+                    await Promise.all([
+                        this.loadTables(),
+                        this.loadAvailableTableTags()
+                    ])
                 }
             }
         }
@@ -125,13 +136,16 @@ Page({
         const item = e.currentTarget.dataset.item as TableResponse
         const minSpend = item.minimum_spend ? String(item.minimum_spend / 100) : ''
 
+        // 提取已选标签 ID
+        const selectedTagIds = (item.tags || []).map((t: TagInfo) => t.id)
+
         this.setData({
             selectedTable: { ...item },
             isAdding: false,
             currentStep: 1,
             minimumSpendYuan: minSpend,
             tableImages: [],
-            tableTags: [],
+            selectedTagIds,
             qrCodeUrl: ''
         })
 
@@ -174,7 +188,7 @@ Page({
             currentStep: 1,
             minimumSpendYuan: '',
             tableImages: [],
-            tableTags: [],
+            selectedTagIds: [],
             newTagName: '',
             qrCodeUrl: ''
         })
@@ -290,7 +304,8 @@ Page({
                 capacity: selectedTable.capacity,
                 description: selectedTable.description?.trim() || undefined,
                 minimum_spend: selectedTable.minimum_spend || undefined,
-                status: selectedTable.status as 'available' | 'occupied' | 'disabled'
+                status: selectedTable.status as 'available' | 'occupied' | 'disabled',
+                tag_ids: this.data.selectedTagIds  // 添加标签ID列表
             }
 
             await tableManagementService.updateTable(selectedTable.id, updateData)
@@ -426,46 +441,93 @@ Page({
     },
 
     // ========== 标签管理 ==========
+    async loadAvailableTableTags() {
+        try {
+            const tags = await TagService.listTags('table')
+            this.setData({ availableTableTags: tags })
+        } catch (error) {
+            logger.error('加载标签列表失败', error, 'Tables')
+        }
+    },
+
+    // 切换标签选中状态
+    onTagToggle(e: WechatMiniprogram.TouchEvent) {
+        const tagId = Number(e.currentTarget.dataset.id)
+        const { selectedTagIds } = this.data
+        const index = selectedTagIds.indexOf(tagId)
+
+        let newIds: number[]
+        if (index === -1) {
+            newIds = [...selectedTagIds, tagId]
+        } else {
+            newIds = selectedTagIds.filter(id => id !== tagId)
+        }
+
+        this.setData({ selectedTagIds: newIds })
+    },
+
+    // 打开标签管理弹窗
+    onOpenTagManager() {
+        this.setData({ showTagManager: true })
+    },
+
+    // 关闭标签管理弹窗
+    onCloseTagManager() {
+        this.setData({ showTagManager: false, newTagName: '' })
+    },
+
+    // 阻止事件冒泡
+    stopPropagation() {
+        // 空函数，仅用于阻止事件冒泡
+    },
+
+    // 输入新标签名
     onTagNameInput(e: WechatMiniprogram.Input) {
         this.setData({ newTagName: e.detail.value })
     },
 
-    async onAddTag() {
-        const { newTagName, selectedTable } = this.data
-        const tableId = selectedTable?.id
-
-        if (!tableId || !newTagName.trim()) {
+    // 创建新标签
+    async onCreateTag() {
+        const { newTagName } = this.data
+        if (!newTagName.trim()) {
             wx.showToast({ title: '请输入标签名称', icon: 'none' })
             return
         }
 
         try {
-            const newTag = await tableManagementService.addTableTag(tableId, { name: newTagName.trim() })
-
+            const newTag = await TagService.createTag({ name: newTagName.trim(), type: 'table' })
             this.setData({
-                tableTags: [...this.data.tableTags, newTag],
+                availableTableTags: [...this.data.availableTableTags, newTag],
                 newTagName: ''
             })
-
-            wx.showToast({ title: '标签已添加', icon: 'success' })
+            wx.showToast({ title: '标签已创建', icon: 'success' })
         } catch (error) {
-            logger.error('添加标签失败', error, 'Tables')
-            wx.showToast({ title: '添加失败', icon: 'none' })
+            logger.error('创建标签失败', error, 'Tables')
+            wx.showToast({ title: '创建失败', icon: 'none' })
         }
     },
 
-    async onRemoveTag(e: WechatMiniprogram.TouchEvent) {
-        const tagId = e.currentTarget.dataset.id
-        const tableId = this.data.selectedTable?.id
-        if (!tableId || !tagId) return
+    // 删除标签
+    async onDeleteTag(e: WechatMiniprogram.TouchEvent) {
+        const tagId = e.currentTarget.dataset.id as number
+        const tagName = e.currentTarget.dataset.name as string
+
+        const res = await new Promise<WechatMiniprogram.ShowModalSuccessCallbackResult>(resolve => {
+            wx.showModal({
+                title: '确认删除',
+                content: `确定要删除标签"${tagName}"吗？`,
+                success: resolve
+            })
+        })
+
+        if (!res.confirm) return
 
         try {
-            await tableManagementService.deleteTableTag(tableId, tagId)
-
+            await TagService.deleteTag(tagId)
             this.setData({
-                tableTags: this.data.tableTags.filter(t => t.id !== tagId)
+                availableTableTags: this.data.availableTableTags.filter(t => t.id !== tagId),
+                selectedTagIds: this.data.selectedTagIds.filter(id => id !== tagId)
             })
-
             wx.showToast({ title: '标签已删除', icon: 'success' })
         } catch (error) {
             logger.error('删除标签失败', error, 'Tables')
@@ -483,7 +545,13 @@ Page({
             const res = await tableManagementService.getTableQRCode(tableId)
             wx.hideLoading()
 
-            this.setData({ qrCodeUrl: res.qr_code_url })
+            // 解析二维码URL为完整路径
+            let qrCodeUrl = ''
+            if (res.qr_code_url) {
+                qrCodeUrl = await resolveImageURL(res.qr_code_url)
+            }
+
+            this.setData({ qrCodeUrl })
             wx.showToast({ title: '二维码已生成', icon: 'success' })
         } catch (error) {
             wx.hideLoading()

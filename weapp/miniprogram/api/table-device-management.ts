@@ -38,6 +38,7 @@ export interface UpdateTableRequest extends Record<string, unknown> {
     qr_code_url?: string
     status?: 'available' | 'occupied' | 'disabled'
     table_no?: string
+    tag_ids?: number[]  // 标签ID列表
 }
 
 /** 桌台标签信息 - 基于swagger api.tagInfo */

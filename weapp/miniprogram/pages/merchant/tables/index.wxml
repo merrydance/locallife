@@ -1,5 +1,17 @@
 <!-- 桌台管理 - 桌面级 SaaS 界面（两栏布局 + 两步向导） -->
 
+<wxs module="utils">
+module.exports = {
+  contains: function(arr, val) {
+    if (!arr || !arr.length) return false;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] == val) return true;
+    }
+    return false;
+  }
+}
+</wxs>
+
 <match-media max-width="1599">
   <view class="desktop-only-notice">
     <view class="notice-box">
@@ -284,26 +296,23 @@
 
                 <!-- 标签管理 -->
                 <view class="form-section">
-                  <view class="section-title">桌台标签</view>
-                  <view class="tags-area">
-                    <view class="tag-list">
-                      <view 
-                        class="tag-item" 
-                        wx:for="{{tableTags}}" 
-                        wx:key="id"
-                      >
-                        <text>{{item.name}}</text>
-                        <text class="tag-remove" data-id="{{item.id}}" bindtap="onRemoveTag">×</text>
-                      </view>
+                  <view class="section-title">
+                    <text>桌台标签</text>
+                    <text class="section-action" bindtap="onOpenTagManager">管理标签</text>
+                  </view>
+                  <view class="tags-container">
+                    <view 
+                      wx:for="{{availableTableTags}}" 
+                      wx:key="id"
+                      class="tag-item {{utils.contains(selectedTagIds, item.id) ? 'selected' : ''}}"
+                      data-id="{{item.id}}"
+                      bindtap="onTagToggle"
+                    >
+                      <text class="tag-name">{{item.name}}</text>
+                      <text class="tag-check" wx:if="{{utils.contains(selectedTagIds, item.id)}}">✓</text>
                     </view>
-                    <view class="tag-add">
-                      <input 
-                        class="tag-input" 
-                        placeholder="输入标签名称" 
-                        value="{{newTagName}}"
-                        bindinput="onTagNameInput"
-                      />
-                      <button class="btn-add-tag" bindtap="onAddTag">添加</button>
+                    <view wx:if="{{availableTableTags.length === 0}}" class="tags-empty">
+                      暂无标签，点击右侧"管理标签"添加
                     </view>
                   </view>
                 </view>
@@ -313,7 +322,8 @@
                   <view class="section-title">桌台二维码</view>
                   <view class="qrcode-area">
                     <view wx:if="{{qrCodeUrl}}" class="qrcode-preview">
-                      <image class="qrcode-image" src="{{qrCodeUrl}}" mode="aspectFit" />
+                      <image class="qrcode-image" src="{{qrCodeUrl}}" mode="aspectFit" bindtap="onPreviewQRCode" />
+                      <text class="qrcode-hint">点击图片预览，右键可保存</text>
                       <button class="btn-download-qr" bindtap="onDownloadQRCode">下载二维码</button>
                     </view>
                     <view wx:else class="qrcode-generate">
@@ -357,6 +367,29 @@
                   </view>
                 </view>
 
+                <!-- 标签管理 -->
+                <view class="form-section">
+                  <view class="section-title">
+                    <text>桌台标签</text>
+                    <text class="section-action" bindtap="onOpenTagManager">管理标签</text>
+                  </view>
+                  <view class="tags-container">
+                    <view 
+                      wx:for="{{availableTableTags}}" 
+                      wx:key="id"
+                      class="tag-item {{utils.contains(selectedTagIds, item.id) ? 'selected' : ''}}"
+                      data-id="{{item.id}}"
+                      bindtap="onTagToggle"
+                    >
+                      <text class="tag-name">{{item.name}}</text>
+                      <text class="tag-check" wx:if="{{utils.contains(selectedTagIds, item.id)}}">✓</text>
+                    </view>
+                    <view wx:if="{{availableTableTags.length === 0}}" class="tags-empty">
+                      暂无标签，点击右侧"管理标签"添加
+                    </view>
+                  </view>
+                </view>
+
                 <!-- 二维码 -->
                 <view class="form-section">
                   <view class="section-title">桌台二维码</view>
@@ -385,3 +418,37 @@
     </view>
   </view>
 </match-media>
+
+<!-- 标签管理弹窗 -->
+<view class="modal-overlay" wx:if="{{showTagManager}}" catchtap="onCloseTagManager">
+  <view class="modal-content tag-manager-modal" catchtap="stopPropagation">
+    <view class="modal-header">
+      <text class="modal-title">标签管理</text>
+      <text class="modal-close" bindtap="onCloseTagManager">×</text>
+    </view>
+    
+    <view class="add-tag-row">
+      <input 
+        class="tag-input" 
+        placeholder="输入新标签名称" 
+        value="{{newTagName}}"
+        bindinput="onTagNameInput"
+      />
+      <button class="btn-add-tag" bindtap="onCreateTag">添加</button>
+    </view>
+    
+    <view class="tag-list-scroll">
+      <view 
+        wx:for="{{availableTableTags}}" 
+        wx:key="id"
+        class="tag-list-item"
+      >
+        <text class="tag-list-name">{{item.name}}</text>
+        <text class="tag-list-delete" bindtap="onDeleteTag" data-id="{{item.id}}" data-name="{{item.name}}">删除</text>
+      </view>
+      <view wx:if="{{availableTableTags.length === 0}}" class="tag-list-empty">
+        暂无标签，请在上方添加
+      </view>
+    </view>
+  </view>
+</view>

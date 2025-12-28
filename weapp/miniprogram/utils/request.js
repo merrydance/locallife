@@ -44,7 +44,7 @@ function uploadFile(filePath, url = '/upload/image', name = 'file', formData = {
                         // If not JSON, probably error page or simple string
                         data = res.data;
                     }
-                    if (res.statusCode === 200) {
+                    if (res.statusCode === 200 || res.statusCode === 201) {
                         // Verify code if it exists in envelope
                         if (data && typeof data === 'object' && data.code !== undefined) {
                             if (data.code === 0) {
@@ -192,7 +192,7 @@ function request(options) {
                 request_manager_1.requestManager.register(requestId, task, context);
             });
             // 检查HTTP状态码
-            if (result.statusCode !== 200) {
+            if (result.statusCode !== 200 && result.statusCode !== 201) {
                 // 特殊处理 401 Unauthorized
                 if (result.statusCode === 401) {
                     logger_1.logger.warn('Token无效(HTTP 401),尝试自动刷新', undefined, 'request');
