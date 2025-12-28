@@ -28,13 +28,16 @@ interface CalendarDay {
   fullDate: string // YYYY-MM-DD
   isToday: boolean
   hasReservations: boolean
+  disabled: boolean
 }
 
 Page({
   data: {
     // 布局
     isLargeScreen: false,
+    sidebarCollapsed: false,
     navBarHeight: 88,
+    merchantName: '',
 
     // 日历数据
     currentYear: 2023,
@@ -81,7 +84,14 @@ Page({
   },
 
   onShow() {
-    // 移除自动刷新，避免重复请求
+    // 从其他页面返回时刷新数据（如取消预订后返回）
+    if (this.data.selectedDate) {
+      this.refreshData()
+    }
+  },
+
+  onSidebarCollapse(e: WechatMiniprogram.CustomEvent) {
+    this.setData({ sidebarCollapsed: e.detail.collapsed })
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
@@ -139,7 +149,7 @@ Page({
         isToday: dateTime === todayTime,
         hasReservations: false,
         disabled: dateTime < todayTime
-      } as any)
+      })
     }
 
     this.setData({
@@ -166,6 +176,28 @@ Page({
   onSelectToday() {
     this.initCalendar()
     this.refreshData()
+  },
+
+  onPrevMonth() {
+    let { currentYear, currentMonth } = this.data
+    currentMonth -= 1
+    if (currentMonth < 1) {
+      currentMonth = 12
+      currentYear -= 1
+    }
+    this.setData({ currentYear, currentMonth })
+    this.generateMonthDays(currentYear, currentMonth)
+  },
+
+  onNextMonth() {
+    let { currentYear, currentMonth } = this.data
+    currentMonth += 1
+    if (currentMonth > 12) {
+      currentMonth = 1
+      currentYear += 1
+    }
+    this.setData({ currentYear, currentMonth })
+    this.generateMonthDays(currentYear, currentMonth)
   },
 
   // ==================== 数据加载与整合 ====================

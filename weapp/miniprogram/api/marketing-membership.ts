@@ -262,7 +262,7 @@ export class RechargeRuleManagementService {
     async updateRechargeRule(merchantId: number, ruleId: number, ruleData: UpdateRechargeRuleRequest): Promise<RechargeRuleResponse> {
         return request({
             url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
-            method: 'PUT',
+            method: 'PATCH',
             data: ruleData
         })
     }

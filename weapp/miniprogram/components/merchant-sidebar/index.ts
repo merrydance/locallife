@@ -39,7 +39,8 @@ Component({
     marketingMenus: [
       { name: '优惠券', path: 'vouchers', icon: '/assets/icons/menu/voucher.png' },
       { name: '折扣活动', path: 'discounts', icon: '/assets/icons/menu/discount.png' },
-      { name: '会员设置', path: 'members', icon: '/assets/icons/menu/member.png' }
+      { name: '会员管理', path: 'members', icon: '/assets/icons/menu/member.png' },
+      { name: '会员设置', path: 'membership-settings', icon: '/assets/icons/menu/member.png' }
     ],
     // 数据模块菜单
     dataMenus: [
@@ -85,6 +86,7 @@ Component({
         vouchers: '/pages/merchant/marketing/vouchers',
         discounts: '/pages/merchant/marketing/discounts',
         members: '/pages/merchant/members/index',
+        'membership-settings': '/pages/merchant/membership-settings/index',
         analytics: '/pages/merchant/analytics/index',
         finance: '/pages/merchant/finance/index',
         settings: '/pages/merchant/settings/index',

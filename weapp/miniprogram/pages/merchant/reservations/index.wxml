@@ -1,101 +1,122 @@
-<!-- 商户预订管理页面 - PC-SaaS 左右分栏风格 -->
+<!-- 商户预订管理页面 - 桌面级 SaaS 界面 -->
 <wxs src="./utils.wxs" module="utils" />
 
-<!-- 移动端导航 -->
-<custom-navbar wx:if="{{!isLargeScreen}}" title="预订管理" showBack="{{true}}" bind:navheight="onNavHeight" />
-
-<view class="page-container {{isLargeScreen ? 'pc-saas-layout' : ''}}" style="{{!isLargeScreen ? 'padding-top:' + navBarHeight + 'px' : ''}}">
-  <!-- PC 侧边栏 (一级导航) -->
-  <merchant-sidebar wx:if="{{isLargeScreen}}" activeMenu="reservations" />
-
-  <!-- 主内容区 -->
-  <view class="main-content">
-    <view class="content-wrapper">
-      
-      <!-- 左侧：日历选择区 -->
-      <view class="left-panel">
-        <view class="panel-header">
-          <text class="panel-title">日期选择</text>
-        </view>
-        <view class="calendar-wrapper">
-          <!-- TODO: 这里可以封装成独立的日历组件，暂时用简单实现 -->
-          <view class="calendar-header">
-            <view class="month-selector">
-              <text>{{currentYear}}年{{currentMonth}}月</text>
-            </view>
-            <view class="today-btn" bindtap="onSelectToday">回到今天</view>
-          </view>
-          <view class="calendar-grid">
-            <view class="weekday-row">
-              <text>日</text><text>一</text><text>二</text><text>三</text><text>四</text><text>五</text><text>六</text>
-            </view>
-            <view class="days-grid">
-              <!-- 空白填充 -->
-              <view wx:for="{{emptyDays}}" wx:key="index" class="day-cell empty"></view>
-              <!-- 日期 -->
-              <view wx:for="{{daysInMonth}}" wx:key="day" 
-                    class="day-cell {{item.day === selectedDay && item.month === selectedMonth ? 'active' : ''}} {{item.isToday ? 'today' : ''}} {{item.disabled ? 'disabled' : ''}}"
-                    data-date="{{item.fullDate}}"
-                    data-disabled="{{item.disabled}}"
-                    bindtap="onDateSelect">
-                <text class="day-num">{{item.day}}</text>
-                <view class="day-dot" wx:if="{{item.hasReservations}}"></view>
-              </view>
-            </view>
-          </view>
-        </view>
-      </view>
-
-      <!-- 右侧：桌台状态区 -->
-      <view class="right-panel">
-        <view class="panel-header">
-          <view class="header-left">
-            <text class="panel-title">{{selectedDateDisplay}} 预订概览</text>
-            <view class="stats-tags">
-              <view class="stat-tag"><view class="dot pending"></view>待处理</view>
-              <view class="stat-tag"><view class="dot confirmed"></view>已确认</view>
-              <view class="stat-tag"><view class="dot checked_in"></view>已到店</view>
-            </view>
-          </view>
-          <!-- 移除新建按钮 -->
-          <view class="header-right"></view>
-        </view>
-
-        <!-- 桌台平铺视图 -->
-        <scroll-view scroll-y class="tables-grid-scroll">
-          <view class="tables-grid">
-            <view wx:for="{{tableViews}}" wx:key="id" class="table-card" bindtap="onKeyTableTap" data-id="{{item.id}}">
-              <view class="table-card-header">
-                <text class="table-name">{{item.table_no}}</text>
-                <text class="table-capacity">{{item.capacity}}人桌</text>
-              </view>
-              
-              <!-- 只有当有预订时才显示列表 -->
-              <view class="table-reservations" wx:if="{{item.todayReservations && item.todayReservations.length > 0}}">
-                <view wx:for="{{item.todayReservations}}" wx:for-item="res" wx:key="id" 
-                      class="mini-res-item {{utils.getStatusClass(res.status)}}"
-                      catchtap="onViewDetail" data-id="{{res.id}}">
-                  <text class="res-time">{{res.reservation_time}}</text>
-                  <text class="res-name">{{res.contact_name}}</text>
-                  <text class="res-status">{{utils.getStatusText(res.status)}}</text>
-                </view>
-              </view>
-              
-              <!-- 空闲状态 -->
-              <view class="table-empty" wx:else>
-                <text class="empty-text">当前空闲</text>
-                <view class="add-icon">+</view>
-              </view>
-            </view>
-          </view>
-        </scroll-view>
-      </view>
-
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问预订管理</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
     </view>
   </view>
-</view>
+</match-media>
 
-<!-- 创建预订弹窗 (复用之前的逻辑，样式微调) -->
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+    <merchant-sidebar 
+      current-path="reservations" 
+      collapsed="{{sidebarCollapsed}}"
+      bind:collapse="onSidebarCollapse"
+    />
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        merchant-name="{{merchantName}}"
+        sidebar-width="{{sidebarCollapsed ? 64 : 200}}"
+      />
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 左侧：日历选择区 -->
+        <view class="left-panel">
+          <view class="panel-header">
+            <text class="panel-title">日期选择</text>
+          </view>
+          <view class="calendar-wrapper">
+            <view class="calendar-header">
+              <view class="month-nav">
+                <view class="nav-arrow" bindtap="onPrevMonth">‹</view>
+                <text class="month-text">{{currentYear}}年{{currentMonth}}月</text>
+                <view class="nav-arrow" bindtap="onNextMonth">›</view>
+              </view>
+              <view class="today-btn" bindtap="onSelectToday">回到今天</view>
+            </view>
+            <view class="calendar-grid">
+              <view class="weekday-row">
+                <text>日</text><text>一</text><text>二</text><text>三</text><text>四</text><text>五</text><text>六</text>
+              </view>
+              <view class="days-grid">
+                <!-- 空白填充 -->
+                <view wx:for="{{emptyDays}}" wx:key="index" class="day-cell empty"></view>
+                <!-- 日期 -->
+                <view wx:for="{{daysInMonth}}" wx:key="day" 
+                      class="day-cell {{item.day === selectedDay && item.month === selectedMonth ? 'active' : ''}} {{item.isToday ? 'today' : ''}} {{item.disabled ? 'disabled' : ''}}"
+                      data-date="{{item.fullDate}}"
+                      data-disabled="{{item.disabled}}"
+                      bindtap="onDateSelect">
+                  <text class="day-num">{{item.day}}</text>
+                  <view class="day-dot" wx:if="{{item.hasReservations}}"></view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 右侧：桌台状态区 -->
+        <view class="right-panel">
+          <view class="panel-header">
+            <view class="header-left">
+              <text class="panel-title">{{selectedDateDisplay}} 预订概览</text>
+              <view class="stats-tags">
+                <view class="stat-tag"><view class="dot pending"></view>待处理</view>
+                <view class="stat-tag"><view class="dot confirmed"></view>已确认</view>
+                <view class="stat-tag"><view class="dot checked_in"></view>已到店</view>
+              </view>
+            </view>
+            <view class="header-right"></view>
+          </view>
+
+          <!-- 桌台平铺视图 -->
+          <scroll-view scroll-y class="tables-grid-scroll">
+            <view class="tables-grid">
+              <view wx:for="{{tableViews}}" wx:key="id" class="table-card" bindtap="onKeyTableTap" data-id="{{item.id}}">
+                <view class="table-card-header">
+                  <text class="table-name">{{item.table_no}}</text>
+                  <text class="table-capacity">{{item.capacity}}人桌</text>
+                </view>
+                
+                <!-- 只有当有预订时才显示列表 -->
+                <view class="table-reservations" wx:if="{{item.todayReservations && item.todayReservations.length > 0}}">
+                  <view wx:for="{{item.todayReservations}}" wx:for-item="res" wx:key="id" 
+                        class="mini-res-item {{utils.getStatusClass(res.status)}}"
+                        catchtap="onViewDetail" data-id="{{res.id}}">
+                    <text class="res-time">{{res.reservation_time}}</text>
+                    <text class="res-name">{{res.contact_name}}</text>
+                    <text class="res-status">{{utils.getStatusText(res.status)}}</text>
+                  </view>
+                </view>
+                
+                <!-- 空闲状态 -->
+                <view class="table-empty" wx:else>
+                  <text class="empty-text">当前空闲</text>
+                  <view class="add-icon">+</view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 创建预订弹窗 -->
 <view class="modal-overlay {{showCreateModal ? 'show' : ''}}" catchtap="onCloseCreateModal">
   <view class="modal-content" catchtap="onModalContentTap">
     <view class="modal-header">
@@ -118,7 +139,6 @@
       <view class="form-row">
         <view class="form-group half">
           <text class="form-label">时间 *</text>
-          <!-- 替换为时间选择列表而不是输入框 -->
           <view class="time-select-list">
              <view wx:for="{{timeOptions}}" wx:key="value" 
                    class="time-option {{createForm.time === item.value ? 'active' : ''}} {{item.disabled ? 'disabled' : ''}}" 
