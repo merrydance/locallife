@@ -35,7 +35,7 @@ Page({
 
     // ========== 后厨与设备 ==========
     goToKitchen() {
-        wx.navigateTo({ url: '/pages/merchant/kitchen/display/display' })
+        wx.navigateTo({ url: '/pages/merchant/kds/index' })
     },
 
     goToPrinters() {

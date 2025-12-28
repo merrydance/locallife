@@ -76,7 +76,7 @@ Component({
       const pageMap: Record<string, string> = {
         dashboard: '/pages/merchant/dashboard/index',
         orders: '/pages/merchant/orders/index',
-        kitchen: '/pages/merchant/kitchen/index',
+        kitchen: '/pages/merchant/kds/index',
         tables: '/pages/merchant/tables/index',
         reservations: '/pages/merchant/reservations/index',
         dishes: '/pages/merchant/dishes/index',

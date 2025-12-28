@@ -756,7 +756,7 @@ Page({
   },
 
   goToKitchen() {
-    wx.navigateTo({ url: '/pages/merchant/kitchen/display/display' })
+    wx.navigateTo({ url: '/pages/merchant/kds/index' })
   },
 
   goToAdmin() {
