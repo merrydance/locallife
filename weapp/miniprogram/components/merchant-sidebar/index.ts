@@ -40,7 +40,7 @@ Component({
       { name: '优惠券', path: 'vouchers', icon: '/assets/icons/menu/voucher.png' },
       { name: '折扣活动', path: 'discounts', icon: '/assets/icons/menu/discount.png' },
       { name: '会员管理', path: 'members', icon: '/assets/icons/menu/member.png' },
-      { name: '会员设置', path: 'membership-settings', icon: '/assets/icons/menu/member.png' }
+      { name: '储值管理', path: 'membership-settings', icon: '/assets/icons/menu/member.png' }
     ],
     // 数据模块菜单
     dataMenus: [

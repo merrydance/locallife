@@ -1,5 +1,5 @@
 /**
- * 会员设置管理页面
+ * 储值管理页面
  * 功能：储值使用场景设置、充值规则管理
  * 遵循 PC-SaaS 布局规范
  */
@@ -54,7 +54,21 @@ Page({
         ],
 
         // 商户ID
-        merchantId: 0
+        merchantId: 0,
+
+        // 日历选择器状态
+        showCalendar: false,
+        calendarField: '' as string,
+        calendarYear: 2024,
+        calendarMonth: 1,
+        calendarDays: [] as Array<{
+            day: number
+            date: string
+            disabled: boolean
+            selected: boolean
+            today: boolean
+            currentMonth: boolean
+        }>
     },
 
     async onLoad() {
@@ -159,10 +173,10 @@ Page({
     // ==================== 充值规则操作 ====================
 
     onAddRule() {
-        // 默认有效期：今天到一年后
+        // 默认有效期：今天到一个月后
         const today = new Date()
-        const nextYear = new Date()
-        nextYear.setFullYear(nextYear.getFullYear() + 1)
+        const nextMonth = new Date()
+        nextMonth.setMonth(nextMonth.getMonth() + 1)
 
         this.setData({
             showRuleModal: true,
@@ -171,7 +185,7 @@ Page({
                 recharge_amount: '',
                 bonus_amount: '',
                 valid_from: this.formatDate(today),
-                valid_until: this.formatDate(nextYear)
+                valid_until: this.formatDate(nextMonth)
             }
         })
     },
@@ -203,9 +217,120 @@ Page({
         this.setData({ [`ruleForm.${field}`]: e.detail.value })
     },
 
-    onDateChange(e: WechatMiniprogram.PickerChange) {
+    // ==================== 日历选择器 ====================
+
+    onOpenCalendar(e: WechatMiniprogram.TouchEvent) {
         const field = e.currentTarget.dataset.field as string
-        this.setData({ [`ruleForm.${field}`]: e.detail.value })
+        const currentValue = this.data.ruleForm[field as keyof typeof this.data.ruleForm] as string
+
+        let year: number, month: number
+        if (currentValue) {
+            const parts = currentValue.split('-')
+            year = parseInt(parts[0], 10)
+            month = parseInt(parts[1], 10)
+        } else {
+            const now = new Date()
+            year = now.getFullYear()
+            month = now.getMonth() + 1
+        }
+
+        this.setData({
+            showCalendar: true,
+            calendarField: field,
+            calendarYear: year,
+            calendarMonth: month
+        })
+        this.generateCalendarDays()
+    },
+
+    onCloseCalendar() {
+        this.setData({ showCalendar: false })
+    },
+
+    onCalendarContentTap() {
+        // 阻止冒泡
+    },
+
+    onPrevMonth() {
+        let { calendarYear, calendarMonth } = this.data
+        calendarMonth--
+        if (calendarMonth < 1) {
+            calendarMonth = 12
+            calendarYear--
+        }
+        this.setData({ calendarYear, calendarMonth })
+        this.generateCalendarDays()
+    },
+
+    onNextMonth() {
+        let { calendarYear, calendarMonth } = this.data
+        calendarMonth++
+        if (calendarMonth > 12) {
+            calendarMonth = 1
+            calendarYear++
+        }
+        this.setData({ calendarYear, calendarMonth })
+        this.generateCalendarDays()
+    },
+
+    generateCalendarDays() {
+        const { calendarYear, calendarMonth, calendarField, ruleForm } = this.data
+        const selectedValue = ruleForm[calendarField as keyof typeof ruleForm] as string
+        const today = this.formatDate(new Date())
+
+        const firstDay = new Date(calendarYear, calendarMonth - 1, 1)
+        const lastDay = new Date(calendarYear, calendarMonth, 0)
+        const startWeekday = firstDay.getDay()
+        const daysInMonth = lastDay.getDate()
+
+        const days: typeof this.data.calendarDays = []
+        const pad = (n: number) => ('0' + n).slice(-2)
+
+        // 上月填充
+        const prevMonth = new Date(calendarYear, calendarMonth - 1, 0)
+        const prevDays = prevMonth.getDate()
+        for (let i = startWeekday - 1; i >= 0; i--) {
+            const day = prevDays - i
+            const m = calendarMonth === 1 ? 12 : calendarMonth - 1
+            const y = calendarMonth === 1 ? calendarYear - 1 : calendarYear
+            const date = `${y}-${pad(m)}-${pad(day)}`
+            days.push({ day, date, disabled: false, selected: date === selectedValue, today: date === today, currentMonth: false })
+        }
+
+        // 当月
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = `${calendarYear}-${pad(calendarMonth)}-${pad(day)}`
+            days.push({ day, date, disabled: false, selected: date === selectedValue, today: date === today, currentMonth: true })
+        }
+
+        // 下月填充
+        const remaining = 42 - days.length
+        for (let day = 1; day <= remaining; day++) {
+            const m = calendarMonth === 12 ? 1 : calendarMonth + 1
+            const y = calendarMonth === 12 ? calendarYear + 1 : calendarYear
+            const date = `${y}-${pad(m)}-${pad(day)}`
+            days.push({ day, date, disabled: false, selected: date === selectedValue, today: date === today, currentMonth: false })
+        }
+
+        this.setData({ calendarDays: days })
+    },
+
+    onSelectCalendarDay(e: WechatMiniprogram.TouchEvent) {
+        const date = e.currentTarget.dataset.date as string
+        const field = this.data.calendarField
+        this.setData({
+            [`ruleForm.${field}`]: date,
+            showCalendar: false
+        })
+    },
+
+    onSelectToday() {
+        const today = this.formatDate(new Date())
+        const field = this.data.calendarField
+        this.setData({
+            [`ruleForm.${field}`]: today,
+            showCalendar: false
+        })
     },
 
     async onSaveRule() {
@@ -226,6 +351,12 @@ Page({
 
         if (!ruleForm.valid_from || !ruleForm.valid_until) {
             wx.showToast({ title: '请选择有效期', icon: 'none' })
+            return
+        }
+
+        // 检查日期顺序
+        if (ruleForm.valid_until < ruleForm.valid_from) {
+            wx.showToast({ title: '活动结束日期应晚于开始日期', icon: 'none' })
             return
         }
 
