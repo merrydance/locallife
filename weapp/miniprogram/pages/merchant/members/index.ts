@@ -1,266 +1,259 @@
 /**
  * 会员管理页面
- * 基于 MerchantStatsService 实现会员数据展示与分析
- * 遵循 LDS 工作站布局规范
+ * 使用新的 /merchants/:id/members API 展示会员余额和交易记录
  */
 
-import {
-    MerchantStatsService,
-    AnalyticsAdapter,
-    type CustomerStatsResponse,
-    type RepurchaseStatsResponse
-} from '@/api/merchant-analytics';
-import { responsiveBehavior } from '@/utils/responsive';
+import { request } from '@/utils/request'
 
-// 会员详情响应类型 (根据 swagger.json customerDetailResponse)
-interface MemberDetailResponse {
-    user_id: number;
-    username: string;
-    total_orders: number;
-    total_spent: number;
-    avg_order_value: number;
-    last_order_date: string;
-    favorite_dishes?: Array<{
-        dish_id: number;
-        dish_name: string;
-        order_count: number;
-    }>;
+// 会员响应类型
+interface MemberResponse {
+    user_id: number
+    full_name: string
+    phone: string
+    avatar_url: string
+    membership_id: number
+    balance: number
+    total_recharged: number
+    total_consumed: number
+    created_at: string
+}
+
+// 交易记录类型
+interface TransactionResponse {
+    id: number
+    membership_id: number
+    type: string
+    amount: number
+    balance_after: number
+    related_order_id?: number
+    notes?: string
+    created_at: string
+}
+
+// 会员详情响应类型
+interface MemberDetailResponse extends MemberResponse {
+    transactions: TransactionResponse[]
+}
+
+// 会员管理服务
+const MemberService = {
+    // 获取会员列表
+    async listMembers(merchantId: number, pageId: number, pageSize: number): Promise<MemberResponse[]> {
+        return request<MemberResponse[]>({
+            url: `/v1/merchants/${merchantId}/members`,
+            method: 'GET',
+            data: { page_id: pageId, page_size: pageSize }
+        })
+    },
+
+    // 获取会员详情
+    async getMemberDetail(merchantId: number, userId: number): Promise<MemberDetailResponse> {
+        return request<MemberDetailResponse>({
+            url: `/v1/merchants/${merchantId}/members/${userId}`,
+            method: 'GET'
+        })
+    },
+
+    // 调整余额
+    async adjustBalance(merchantId: number, userId: number, amount: number, notes: string): Promise<MemberResponse> {
+        return request<MemberResponse>({
+            url: `/v1/merchants/${merchantId}/members/${userId}/balance`,
+            method: 'POST',
+            data: { amount, notes }
+        })
+    }
 }
 
 Page({
-    behaviors: [responsiveBehavior],
     data: {
-        // 会员数据
-        members: [] as CustomerStatsResponse[],
-        selectedMember: null as CustomerStatsResponse | null,
-        memberDetail: null as MemberDetailResponse | null,
+        merchantId: 0,
+        sidebarCollapsed: false,
 
-        // 统计数据
-        stats: {
-            total_customers: 0,
-            repurchase_customers: 0,
-            repurchase_rate: 0,
-            avg_repurchase_interval: 0
-        } as RepurchaseStatsResponse,
-
-        // 分页
-        page: 1,
+        // 会员列表
+        members: [] as MemberResponse[],
+        loading: true,
+        pageId: 1,
         pageSize: 20,
         hasMore: true,
 
-        // 搜索
-        searchKeyword: '',
+        // 选中的会员
+        selectedMember: null as MemberDetailResponse | null,
+        showDetailModal: false,
+        detailLoading: false,
 
-        // 日期范围 (默认最近90天)
-        dateRange: {
-            start_date: '',
-            end_date: ''
+        // 余额调整
+        showAdjustModal: false,
+        adjustForm: {
+            amount: '',
+            notes: '',
+            type: 'add' as 'add' | 'deduct'
         },
-
-        // 界面状态
-        loading: true
+        adjusting: false
     },
 
     onLoad() {
-        this.initPage();
+        this.initData()
     },
 
-    onShow() {
-        // 如果已经加载过，刷新数据
-        if (this.data.members.length > 0) {
-            this.loadMembers(true);
-        }
-    },
+    async initData() {
+        const app = getApp<IAppOption>()
+        const merchantId = app.globalData.merchantId
 
-    /**
-     * 初始化页面
-     */
-    async initPage() {
-        // 设置默认日期范围（最近90天）
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 90);
-
-        this.setData({
-            dateRange: {
-                start_date: this.formatDate(startDate),
-                end_date: this.formatDate(endDate)
+        if (merchantId) {
+            this.setData({ merchantId: Number(merchantId) })
+            await this.loadMembers()
+        } else {
+            app.userInfoReadyCallback = async () => {
+                if (app.globalData.merchantId) {
+                    this.setData({ merchantId: Number(app.globalData.merchantId) })
+                    await this.loadMembers()
+                }
             }
-        });
-
-        try {
-            this.setData({ loading: true });
-            await Promise.all([
-                this.loadStats(),
-                this.loadMembers(true)
-            ]);
-        } catch (error: any) {
-            console.error('初始化页面失败:', error);
-            wx.showToast({
-                title: error.message || '加载失败',
-                icon: 'error'
-            });
-        } finally {
-            this.setData({ loading: false });
         }
     },
 
-    /**
-     * 加载统计数据
-     */
-    async loadStats() {
-        try {
-            const { dateRange } = this.data;
-            const stats = await MerchantStatsService.getRepurchaseStats(dateRange);
-            this.setData({ stats });
-        } catch (error: any) {
-            console.error('加载统计数据失败:', error);
-        }
+    onSidebarCollapse(e: any) {
+        this.setData({ sidebarCollapsed: e.detail.collapsed })
     },
 
-    /**
-     * 加载会员列表
-     */
-    async loadMembers(reset: boolean = false) {
+    // 加载会员列表
+    async loadMembers(loadMore = false) {
+        const { merchantId, pageId, pageSize, members } = this.data
+
+        if (!loadMore) {
+            this.setData({ loading: true, pageId: 1, members: [] })
+        }
+
         try {
-            const { dateRange, page, pageSize } = this.data;
-
-            if (reset) {
-                this.setData({ page: 1, members: [], hasMore: true });
-            }
-
-            const result = await MerchantStatsService.getCustomerStats({
-                ...dateRange,
-                page_id: reset ? 1 : page,
-                page_size: pageSize
-            });
-
-            const newMembers = reset ? result : [...this.data.members, ...result];
-
+            const result = await MemberService.listMembers(merchantId, loadMore ? pageId : 1, pageSize)
             this.setData({
-                members: newMembers,
+                members: loadMore ? [...members, ...result] : result,
                 hasMore: result.length === pageSize,
-                page: reset ? 2 : page + 1
-            });
-
+                pageId: loadMore ? pageId + 1 : 2,
+                loading: false
+            })
         } catch (error: any) {
-            console.error('加载会员列表失败:', error);
-            wx.showToast({
-                title: '加载会员失败',
-                icon: 'error'
-            });
+            console.error('加载会员列表失败:', error)
+            wx.showToast({ title: error.message || '加载失败', icon: 'none' })
+            this.setData({ loading: false })
         }
     },
 
-    /**
-     * 选择会员
-     */
-    onSelectMember(e: any) {
-        const member = e.currentTarget.dataset.item as CustomerStatsResponse;
-        this.setData({
-            selectedMember: member,
-            memberDetail: null // 清空详情，触发重新加载
-        });
-
-        // 加载会员详情
-        this.loadMemberDetail(member.user_id);
+    // 加载更多
+    onLoadMore() {
+        if (this.data.hasMore && !this.data.loading) {
+            this.loadMembers(true)
+        }
     },
 
-    /**
-     * 加载会员详情
-     */
-    async loadMemberDetail(userId: number) {
+    // 查看会员详情
+    async onViewMember(e: any) {
+        const userId = e.currentTarget.dataset.userId
+        const { merchantId } = this.data
+
+        this.setData({ showDetailModal: true, detailLoading: true, selectedMember: null })
+
         try {
-            // 注意：这个 API 可能需要在 merchant-analytics.ts 中添加
-            // 目前使用已有的客户统计数据作为详情
-            // 真实场景应调用 GET /v1/merchant/stats/customers/{user_id}
-
-            // 暂时使用选中的会员数据作为详情
-            const { selectedMember } = this.data;
-            if (selectedMember) {
-                this.setData({
-                    memberDetail: {
-                        user_id: selectedMember.user_id,
-                        username: selectedMember.username,
-                        total_orders: selectedMember.total_orders,
-                        total_spent: selectedMember.total_spent,
-                        avg_order_value: selectedMember.avg_order_value,
-                        last_order_date: selectedMember.last_order_date,
-                        favorite_dishes: [] // TODO: 从详情 API 获取
-                    }
-                });
-            }
+            const detail = await MemberService.getMemberDetail(merchantId, userId)
+            this.setData({ selectedMember: detail, detailLoading: false })
         } catch (error: any) {
-            console.error('加载会员详情失败:', error);
+            console.error('加载会员详情失败:', error)
+            wx.showToast({ title: error.message || '加载失败', icon: 'none' })
+            this.setData({ detailLoading: false })
         }
     },
 
-    /**
-     * 搜索会员
-     */
-    onSearch(e: any) {
-        const keyword = e.detail.value;
-        this.setData({ searchKeyword: keyword });
-
-        // TODO: 后端搜索支持，目前前端过滤
-        // 实际应用中应调用带 keyword 参数的 API
+    // 关闭详情弹窗
+    onCloseDetail() {
+        this.setData({ showDetailModal: false, selectedMember: null })
     },
 
-    /**
-     * 上一页
-     */
-    onPrevPage() {
-        const { page } = this.data;
-        if (page > 2) {
-            this.setData({ page: page - 2 });
-            this.loadMembers(false);
+    // 打开余额调整弹窗
+    onOpenAdjust(e: any) {
+        const userId = e.currentTarget.dataset.userId
+        // 先关闭详情弹窗
+        this.setData({
+            showDetailModal: false,
+            showAdjustModal: true,
+            adjustForm: { amount: '', notes: '', type: 'add' }
+        })
+    },
+
+    // 关闭余额调整弹窗
+    onCloseAdjust() {
+        this.setData({ showAdjustModal: false })
+    },
+
+    // 调整类型切换
+    onAdjustTypeChange(e: any) {
+        const type = e.currentTarget.dataset.type
+        this.setData({ 'adjustForm.type': type })
+    },
+
+    // 输入金额
+    onAmountInput(e: any) {
+        this.setData({ 'adjustForm.amount': e.detail.value })
+    },
+
+    // 输入备注
+    onNotesInput(e: any) {
+        this.setData({ 'adjustForm.notes': e.detail.value })
+    },
+
+    // 提交余额调整
+    async onSubmitAdjust() {
+        const { merchantId, selectedMember, adjustForm } = this.data
+
+        if (!selectedMember) return
+
+        const amountYuan = parseFloat(adjustForm.amount)
+        if (isNaN(amountYuan) || amountYuan <= 0) {
+            wx.showToast({ title: '请输入有效金额', icon: 'none' })
+            return
+        }
+        if (!adjustForm.notes.trim()) {
+            wx.showToast({ title: '请输入调整原因', icon: 'none' })
+            return
+        }
+
+        const amountFen = Math.round(amountYuan * 100)
+        const finalAmount = adjustForm.type === 'add' ? amountFen : -amountFen
+
+        this.setData({ adjusting: true })
+
+        try {
+            await MemberService.adjustBalance(merchantId, selectedMember.user_id, finalAmount, adjustForm.notes)
+            wx.showToast({ title: '调整成功', icon: 'success' })
+            this.setData({ showAdjustModal: false })
+            this.loadMembers() // 刷新列表
+        } catch (error: any) {
+            console.error('余额调整失败:', error)
+            wx.showToast({ title: error.message || '调整失败', icon: 'none' })
+        } finally {
+            this.setData({ adjusting: false })
         }
     },
 
-    /**
-     * 下一页
-     */
-    onNextPage() {
-        const { hasMore } = this.data;
-        if (hasMore) {
-            this.loadMembers(false);
+    // 格式化金额
+    formatAmount(fen: number): string {
+        return (fen / 100).toFixed(2)
+    },
+
+    // 格式化日期
+    formatDate(dateStr: string): string {
+        if (!dateStr) return '-'
+        return dateStr.slice(0, 10)
+    },
+
+    // 格式化交易类型
+    formatTxType(type: string): string {
+        const map: Record<string, string> = {
+            'recharge': '充值',
+            'consume': '消费',
+            'refund': '退款',
+            'adjustment_credit': '余额增加',
+            'adjustment_debit': '余额扣减'
         }
-    },
-
-    /**
-     * 返回工作台
-     */
-    onBack() {
-        wx.navigateBack({
-            fail: () => {
-                wx.redirectTo({ url: '/pages/merchant/dashboard/index' });
-            }
-        });
-    },
-
-    // ==================== 工具方法 ====================
-
-    /**
-     * 格式化日期
-     */
-    formatDate(date: Date): string {
-        const year = date.getFullYear();
-        const month = ('0' + (date.getMonth() + 1)).slice(-2);
-        const day = ('0' + date.getDate()).slice(-2);
-        return `${year}-${month}-${day}`;
-    },
-
-    /**
-     * 格式化金额
-     */
-    formatAmount(amount: number): string {
-        return AnalyticsAdapter.formatAmount(amount);
-    },
-
-    /**
-     * 格式化百分比
-     */
-    formatPercentage(value: number): string {
-        return AnalyticsAdapter.formatPercentage(value);
+        return map[type] || type
     }
-});
+})

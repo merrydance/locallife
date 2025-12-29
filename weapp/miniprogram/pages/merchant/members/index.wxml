@@ -1,149 +1,251 @@
-<!-- 会员管理页面 -->
-<!-- 手机端/小屏引导 -->
-<match-media max-width="1279">
-  <view class="lds-mobile-guidance lds-root">
-    <view class="guidance-box">
-      <t-icon name="user" size="100px" color="var(--lds-primary)" />
-      <view class="lds-text-lg lds-m-b-2">会员管理中心</view>
-      <view class="lds-text-secondary lds-m-b-4">会员数据分析与管理功能建议在电脑端使用，以获得更好的数据展示效果。</view>
-      <t-button block theme="primary" variant="outline" shape="round" bindtap="onBack">返回工作台</t-button>
+<!-- 会员管理页面 - PC-SaaS 布局 -->
+<wxs module="utils">
+  module.exports = {
+    formatAmount: function(fen) {
+      return (fen / 100).toFixed(2)
+    },
+    formatDate: function(dateStr) {
+      if (!dateStr) return '-'
+      return dateStr.slice(0, 10)
+    },
+    formatTxType: function(type) {
+      var map = {
+        'recharge': '充值',
+        'consume': '消费',
+        'refund': '退款',
+        'adjustment_credit': '余额增加',
+        'adjustment_debit': '余额扣减'
+      }
+      return map[type] || type
+    }
+  }
+</wxs>
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">👥</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问会员管理</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
     </view>
   </view>
 </match-media>
 
-<!-- 桌面端：LDS 会员管理工作站 -->
-<match-media min-width="1280">
-  <view class="lds-root lds-workspace-wrapper">
-    <view class="lds-workspace-card lds-full-constraint lds-member-grid">
-      
-      <!-- LDS Pane A: 统计概览 (Stats Overview) -->
-      <view class="lds-pane lds-pane-nav">
-        <view class="lds-pane-header">
-          <t-icon name="chart-pie" size="20px" color="var(--lds-primary)" />
-          <text class="lds-text-md" style="margin-left: 10px;">会员概览</text>
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+    <merchant-sidebar 
+      current-path="members" 
+      collapsed="{{sidebarCollapsed}}"
+      bind:collapse="onSidebarCollapse"
+    />
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+      <!-- 顶部栏 -->
+      <merchant-header sidebar-width="{{sidebarCollapsed ? 64 : 200}}" />
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 页面标题栏 -->
+        <view class="page-header">
+          <view class="page-title">
+            <text class="title-icon">👥</text>
+            <text class="title-text">会员管理</text>
+          </view>
         </view>
-        <view class="lds-pane-content lds-p-4">
-          <!-- 核心指标 -->
-          <view class="lds-stat-card lds-card lds-p-4 lds-m-b-4">
-            <text class="lds-text-xs lds-text-secondary">总会员数</text>
-            <text class="lds-text-xl">{{stats.total_customers || 0}}</text>
+
+        <!-- 加载状态 -->
+        <view wx:if="{{loading}}" class="loading-state">
+          <view class="loading-spinner"></view>
+          <text>加载中...</text>
+        </view>
+
+        <!-- 会员列表 -->
+        <view wx:else class="member-list">
+          <!-- 空状态 -->
+          <view wx:if="{{members.length === 0}}" class="empty-state">
+            <text class="empty-icon">📭</text>
+            <text class="empty-text">暂无会员</text>
+            <text class="empty-hint">当用户充值成为您的会员后，将在此显示</text>
           </view>
-          <view class="lds-stat-card lds-card lds-p-4 lds-m-b-4">
-            <text class="lds-text-xs lds-text-secondary">复购率</text>
-            <text class="lds-text-xl" style="color: var(--lds-success);">{{formatPercentage(stats.repurchase_rate)}}</text>
+
+          <!-- 会员表格 -->
+          <view wx:else class="member-table">
+            <view class="table-header">
+              <text class="col-name">会员</text>
+              <text class="col-phone">手机号</text>
+              <text class="col-balance">余额</text>
+              <text class="col-recharged">累计充值</text>
+              <text class="col-consumed">累计消费</text>
+              <text class="col-date">加入时间</text>
+              <text class="col-action">操作</text>
+            </view>
+            <view 
+              wx:for="{{members}}" 
+              wx:key="membership_id" 
+              class="table-row"
+            >
+              <view class="col-name">
+                <image wx:if="{{item.avatar_url}}" class="member-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
+                <view wx:else class="member-avatar-placeholder">👤</view>
+                <text class="member-name">{{item.full_name || '匿名用户'}}</text>
+              </view>
+              <text class="col-phone">{{item.phone || '-'}}</text>
+              <text class="col-balance balance-value">¥{{utils.formatAmount(item.balance)}}</text>
+              <text class="col-recharged">¥{{utils.formatAmount(item.total_recharged)}}</text>
+              <text class="col-consumed">¥{{utils.formatAmount(item.total_consumed)}}</text>
+              <text class="col-date">{{utils.formatDate(item.created_at)}}</text>
+              <view class="col-action">
+                <button class="btn-sm btn-primary" data-user-id="{{item.user_id}}" bindtap="onViewMember">详情</button>
+              </view>
+            </view>
           </view>
-          <view class="lds-stat-card lds-card lds-p-4 lds-m-b-4">
-            <text class="lds-text-xs lds-text-secondary">平均复购间隔</text>
-            <text class="lds-text-lg">{{stats.avg_repurchase_interval || 0}}天</text>
+
+          <!-- 加载更多 -->
+          <view wx:if="{{members.length > 0}}" class="load-more">
+            <button wx:if="{{hasMore}}" class="btn-outline" bindtap="onLoadMore">加载更多</button>
+            <text wx:else class="no-more">没有更多了</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 会员详情弹窗 -->
+<view wx:if="{{showDetailModal}}" class="modal-mask" bindtap="onCloseDetail">
+  <view class="modal-content detail-modal" catchtap>
+    <view class="modal-header">
+      <text class="modal-title">会员详情</text>
+      <view class="modal-close" bindtap="onCloseDetail">×</view>
+    </view>
+    
+    <view wx:if="{{detailLoading}}" class="modal-loading">
+      <view class="loading-spinner"></view>
+    </view>
+    
+    <view wx:elif="{{selectedMember}}" class="modal-body">
+      <!-- 会员信息 -->
+      <view class="detail-section">
+        <view class="detail-row">
+          <image wx:if="{{selectedMember.avatar_url}}" class="detail-avatar" src="{{selectedMember.avatar_url}}" mode="aspectFill" />
+          <view wx:else class="detail-avatar-placeholder">👤</view>
+          <view class="detail-info">
+            <text class="detail-name">{{selectedMember.full_name || '匿名用户'}}</text>
+            <text class="detail-phone">{{selectedMember.phone || '未绑定手机'}}</text>
           </view>
         </view>
       </view>
 
-      <!-- LDS Pane B: 会员列表 (Master List) -->
-      <view class="lds-pane lds-pane-master">
-        <view class="lds-pane-header">
-          <t-search 
-            placeholder="搜索会员..." 
-            shape="round" 
-            bind:change="onSearch" 
-            style="width: 100%;"
-          />
+      <!-- 余额信息 -->
+      <view class="detail-section balance-section">
+        <view class="balance-card">
+          <text class="balance-label">当前余额</text>
+          <text class="balance-amount">¥{{utils.formatAmount(selectedMember.balance)}}</text>
         </view>
-        <view class="lds-pane-content">
-          <view wx:if="{{loading}}" class="lds-loading-state lds-p-6">
-            <t-loading theme="dots" size="20px" />
+        <view class="balance-stats">
+          <view class="stat-item">
+            <text class="stat-label">累计充值</text>
+            <text class="stat-value">¥{{utils.formatAmount(selectedMember.total_recharged)}}</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-label">累计消费</text>
+            <text class="stat-value">¥{{utils.formatAmount(selectedMember.total_consumed)}}</text>
+          </view>
+        </view>
+        <button class="btn-primary btn-adjust" data-user-id="{{selectedMember.user_id}}" bindtap="onOpenAdjust">调整余额</button>
+      </view>
+
+      <!-- 交易记录 -->
+      <view class="detail-section">
+        <text class="section-title">最近交易</text>
+        <view wx:if="{{selectedMember.transactions.length === 0}}" class="no-transactions">
+          暂无交易记录
+        </view>
+        <view wx:else class="transaction-list">
+          <view wx:for="{{selectedMember.transactions}}" wx:key="id" class="transaction-item">
+            <view class="tx-left">
+              <text class="tx-type">{{utils.formatTxType(item.type)}}</text>
+              <text class="tx-notes">{{item.notes || '-'}}</text>
+            </view>
+            <view class="tx-right">
+              <text class="tx-amount {{item.amount >= 0 ? 'positive' : 'negative'}}">
+                {{item.amount >= 0 ? '+' : ''}}¥{{utils.formatAmount(item.amount)}}
+              </text>
+              <text class="tx-date">{{utils.formatDate(item.created_at)}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- 余额调整弹窗 -->
+<view wx:if="{{showAdjustModal}}" class="modal-mask" bindtap="onCloseAdjust">
+  <view class="modal-content adjust-modal" catchtap>
+    <view class="modal-header">
+      <text class="modal-title">调整余额</text>
+      <view class="modal-close" bindtap="onCloseAdjust">×</view>
+    </view>
+    
+    <view class="modal-body">
+      <!-- 调整类型 -->
+      <view class="form-group">
+        <text class="form-label">调整类型</text>
+        <view class="type-selector">
+          <view 
+            class="type-option {{adjustForm.type === 'add' ? 'active' : ''}}" 
+            data-type="add" 
+            bindtap="onAdjustTypeChange"
+          >
+            <text class="type-icon">➕</text>
+            <text>增加余额</text>
           </view>
           <view 
-            wx:for="{{members}}" 
-            wx:key="user_id" 
-            class="lds-member-card lds-hoverable {{selectedMember.user_id === item.user_id ? 'lds-selected' : ''}}"
-            bindtap="onSelectMember"
-            data-item="{{item}}"
+            class="type-option {{adjustForm.type === 'deduct' ? 'active' : ''}}" 
+            data-type="deduct" 
+            bindtap="onAdjustTypeChange"
           >
-            <view class="lds-member-main">
-              <view class="lds-member-row">
-                <text class="lds-text-md">{{item.username || '匿名会员'}}</text>
-                <t-tag size="extra-small" theme="primary" variant="light">{{item.total_orders}}单</t-tag>
-              </view>
-              <view class="lds-member-meta lds-text-xs lds-text-secondary">
-                <text class="lds-text-primary-color">¥{{formatAmount(item.total_spent)}}</text>
-                <text style="margin-left: 12px;">均单 ¥{{formatAmount(item.avg_order_value)}}</text>
-              </view>
-            </view>
-          </view>
-          <t-empty wx:if="{{!loading && members.length === 0}}" icon="user" description="暂无会员数据" />
-        </view>
-        <view class="lds-pane-footer lds-p-4">
-          <view class="lds-pagination">
-            <t-button size="small" variant="outline" disabled="{{page <= 1}}" bindtap="onPrevPage">上一页</t-button>
-            <text class="lds-text-xs lds-text-secondary">第 {{page}} 页</text>
-            <t-button size="small" variant="outline" disabled="{{!hasMore}}" bindtap="onNextPage">下一页</t-button>
+            <text class="type-icon">➖</text>
+            <text>扣减余额</text>
           </view>
         </view>
       </view>
 
-      <!-- LDS Pane C: 会员详情 (Detail Panel) -->
-      <view class="lds-pane lds-pane-editor">
-        <view wx:if="{{!selectedMember}}" class="lds-editor-placeholder">
-          <t-icon name="user-circle" size="48px" color="var(--lds-border)" />
-          <view class="lds-text-secondary lds-m-t-4">选择左侧会员查看详情</view>
-        </view>
-
-        <view wx:else class="lds-editor-container">
-          <view class="lds-pane-header lds-p-4">
-            <view class="lds-editor-title-box">
-              <text class="lds-text-lg">{{selectedMember.username || '匿名会员'}}</text>
-            </view>
-          </view>
-
-          <view class="lds-pane-content lds-p-6">
-            <!-- 消费概览 -->
-            <view class="lds-card lds-p-4 lds-m-b-4">
-              <text class="lds-text-sm lds-text-md lds-m-b-4" style="display: block;">消费概览</text>
-              <view class="lds-detail-grid">
-                <view class="lds-detail-item">
-                  <text class="lds-text-xs lds-text-secondary">累计消费</text>
-                  <text class="lds-text-lg lds-text-primary-color">¥{{formatAmount(selectedMember.total_spent)}}</text>
-                </view>
-                <view class="lds-detail-item">
-                  <text class="lds-text-xs lds-text-secondary">订单数量</text>
-                  <text class="lds-text-lg">{{selectedMember.total_orders}}</text>
-                </view>
-                <view class="lds-detail-item">
-                  <text class="lds-text-xs lds-text-secondary">客单价</text>
-                  <text class="lds-text-lg">¥{{formatAmount(selectedMember.avg_order_value)}}</text>
-                </view>
-                <view class="lds-detail-item">
-                  <text class="lds-text-xs lds-text-secondary">最近下单</text>
-                  <text class="lds-text-md">{{selectedMember.last_order_date || '-'}}</text>
-                </view>
-              </view>
-            </view>
-
-            <!-- 会员标签 -->
-            <view class="lds-card lds-p-4 lds-m-b-4">
-              <text class="lds-text-sm lds-text-md lds-m-b-4" style="display: block;">会员画像</text>
-              <view class="lds-tag-group">
-                <t-tag wx:if="{{selectedMember.total_orders >= 10}}" theme="success" variant="light">忠实顾客</t-tag>
-                <t-tag wx:if="{{selectedMember.avg_order_value >= 10000}}" theme="warning" variant="light">高消费</t-tag>
-                <t-tag wx:if="{{selectedMember.total_orders < 3}}" theme="default" variant="light">新客户</t-tag>
-              </view>
-            </view>
-
-            <!-- 喜好菜品 (如果有详情数据) -->
-            <view wx:if="{{memberDetail && memberDetail.favorite_dishes}}" class="lds-card lds-p-4">
-              <text class="lds-text-sm lds-text-md lds-m-b-4" style="display: block;">偏好菜品</text>
-              <view class="lds-dish-list">
-                <view wx:for="{{memberDetail.favorite_dishes}}" wx:key="dish_id" class="lds-dish-item lds-p-2">
-                  <text>{{item.dish_name}}</text>
-                  <text class="lds-text-xs lds-text-secondary">点过 {{item.order_count}} 次</text>
-                </view>
-              </view>
-            </view>
-          </view>
-        </view>
+      <!-- 金额 -->
+      <view class="form-group">
+        <text class="form-label">金额（元）</text>
+        <input 
+          class="form-input" 
+          type="digit" 
+          placeholder="请输入金额" 
+          value="{{adjustForm.amount}}"
+          bindinput="onAmountInput"
+        />
       </view>
 
+      <!-- 备注 -->
+      <view class="form-group">
+        <text class="form-label">调整原因</text>
+        <textarea 
+          class="form-textarea" 
+          placeholder="请输入调整原因，如：退款、补偿等" 
+          value="{{adjustForm.notes}}"
+          bindinput="onNotesInput"
+        />
+      </view>
+    </view>
+
+    <view class="modal-footer">
+      <button class="btn-cancel" bindtap="onCloseAdjust">取消</button>
+      <button class="btn-primary" disabled="{{adjusting}}" bindtap="onSubmitAdjust">
+        {{adjusting ? '处理中...' : '确认调整'}}
+      </button>
     </view>
   </view>
-</match-media>
+</view>

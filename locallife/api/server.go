@@ -951,6 +951,19 @@ func (server *Server) setupRouter() {
 		voucherGroup.DELETE("/:voucher_id", server.deleteVoucher)
 	}
 
+	// 商户会员管理（查看会员列表、详情、调整余额）
+	merchantMembersGroup := authGroup.Group("/merchants/:id/members")
+	{
+		// 查询商户的会员列表
+		merchantMembersGroup.GET("", server.listMerchantMembers)
+
+		// 获取会员详情（含交易记录）
+		merchantMembersGroup.GET("/:user_id", server.getMerchantMemberDetail)
+
+		// 调整会员余额（退款/扣减）
+		merchantMembersGroup.POST("/:user_id/balance", server.adjustMemberBalance)
+	}
+
 	// 用户优惠券操作
 	userVoucherGroup := authGroup.Group("/vouchers")
 	{

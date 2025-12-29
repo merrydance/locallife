@@ -952,3 +952,361 @@ func (server *Server) updateMerchantMembershipSettings(ctx *gin.Context) {
 		MaxDeductionPercent: settings.MaxDeductionPercent,
 	})
 }
+
+// ==================== 商户会员管理 ====================
+
+// listMerchantMembersUriRequest 获取商户会员列表 URI 参数
+type listMerchantMembersUriRequest struct {
+	MerchantID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// listMerchantMembersQueryRequest 获取商户会员列表 Query 参数
+type listMerchantMembersQueryRequest struct {
+	PageID   int32 `form:"page_id" binding:"required,min=1"`
+	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
+}
+
+// merchantMemberResponse 商户会员响应
+type merchantMemberResponse struct {
+	UserID         int64     `json:"user_id"`
+	FullName       string    `json:"full_name"`
+	Phone          string    `json:"phone"`
+	AvatarURL      string    `json:"avatar_url"`
+	MembershipID   int64     `json:"membership_id"`
+	Balance        int64     `json:"balance"`
+	TotalRecharged int64     `json:"total_recharged"`
+	TotalConsumed  int64     `json:"total_consumed"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// listMerchantMembers godoc
+// @Summary 获取商户会员列表
+// @Description 商户获取本店所有会员的列表（含余额、消费统计）
+// @Tags 会员管理-商户
+// @Produce json
+// @Param id path int true "商户ID"
+// @Param page_id query int true "页码" minimum(1)
+// @Param page_size query int true "每页数量" minimum(5) maximum(50)
+// @Success 200 {array} merchantMemberResponse "会员列表"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "非商户用户"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{id}/members [get]
+// @Security BearerAuth
+func (server *Server) listMerchantMembers(ctx *gin.Context) {
+	var uriReq listMerchantMembersUriRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	var queryReq listMerchantMembersQueryRequest
+	if err := ctx.ShouldBindQuery(&queryReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 验证商户权限
+	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+		return
+	}
+	if merchantID != uriReq.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+		return
+	}
+
+	members, err := server.store.ListMerchantMembers(ctx, db.ListMerchantMembersParams{
+		MerchantID: merchantID,
+		Limit:      queryReq.PageSize,
+		Offset:     (queryReq.PageID - 1) * queryReq.PageSize,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	rsp := make([]merchantMemberResponse, len(members))
+	for i, m := range members {
+		phone := ""
+		if m.Phone.Valid {
+			phone = m.Phone.String
+		}
+		avatarURL := ""
+		if m.AvatarUrl.Valid {
+			avatarURL = m.AvatarUrl.String
+		}
+		rsp[i] = merchantMemberResponse{
+			UserID:         m.UserID,
+			FullName:       m.FullName,
+			Phone:          phone,
+			AvatarURL:      avatarURL,
+			MembershipID:   m.ID,
+			Balance:        m.Balance,
+			TotalRecharged: m.TotalRecharged,
+			TotalConsumed:  m.TotalConsumed,
+			CreatedAt:      m.CreatedAt,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
+}
+
+// getMerchantMemberDetailRequest 获取商户会员详情请求
+type getMerchantMemberDetailRequest struct {
+	MerchantID int64 `uri:"id" binding:"required,min=1"`
+	UserID     int64 `uri:"user_id" binding:"required,min=1"`
+}
+
+// merchantMemberDetailResponse 商户会员详情响应
+type merchantMemberDetailResponse struct {
+	UserID         int64                 `json:"user_id"`
+	FullName       string                `json:"full_name"`
+	Phone          string                `json:"phone"`
+	AvatarURL      string                `json:"avatar_url"`
+	MembershipID   int64                 `json:"membership_id"`
+	Balance        int64                 `json:"balance"`
+	TotalRecharged int64                 `json:"total_recharged"`
+	TotalConsumed  int64                 `json:"total_consumed"`
+	CreatedAt      time.Time             `json:"created_at"`
+	Transactions   []transactionResponse `json:"transactions"`
+}
+
+// getMerchantMemberDetail godoc
+// @Summary 获取商户会员详情
+// @Description 商户获取指定会员的详细信息和交易记录
+// @Tags 会员管理-商户
+// @Produce json
+// @Param id path int true "商户ID"
+// @Param user_id path int true "用户ID"
+// @Success 200 {object} merchantMemberDetailResponse "会员详情"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "非商户用户"
+// @Failure 404 {object} ErrorResponse "会员不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{id}/members/{user_id} [get]
+// @Security BearerAuth
+func (server *Server) getMerchantMemberDetail(ctx *gin.Context) {
+	var req getMerchantMemberDetailRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 验证商户权限
+	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+		return
+	}
+	if merchantID != req.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+		return
+	}
+
+	// 获取会员信息
+	membership, err := server.store.GetMembershipByMerchantAndUser(ctx, db.GetMembershipByMerchantAndUserParams{
+		MerchantID: merchantID,
+		UserID:     req.UserID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 获取用户信息
+	user, err := server.store.GetUser(ctx, req.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 获取交易记录（最近20条）
+	transactions, err := server.store.ListMembershipTransactions(ctx, db.ListMembershipTransactionsParams{
+		MembershipID: membership.ID,
+		Limit:        20,
+		Offset:       0,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	txRsp := make([]transactionResponse, len(transactions))
+	for i, tx := range transactions {
+		txRsp[i] = convertTransaction(tx)
+	}
+
+	phone := ""
+	if user.Phone.Valid {
+		phone = user.Phone.String
+	}
+	avatarURL := ""
+	if user.AvatarUrl.Valid {
+		avatarURL = user.AvatarUrl.String
+	}
+
+	ctx.JSON(http.StatusOK, merchantMemberDetailResponse{
+		UserID:         user.ID,
+		FullName:       user.FullName,
+		Phone:          phone,
+		AvatarURL:      avatarURL,
+		MembershipID:   membership.ID,
+		Balance:        membership.Balance,
+		TotalRecharged: membership.TotalRecharged,
+		TotalConsumed:  membership.TotalConsumed,
+		CreatedAt:      membership.CreatedAt,
+		Transactions:   txRsp,
+	})
+}
+
+// adjustMemberBalanceRequest 调整会员余额请求
+type adjustMemberBalanceRequest struct {
+	MerchantID int64 `uri:"id" binding:"required,min=1"`
+	UserID     int64 `uri:"user_id" binding:"required,min=1"`
+}
+
+// adjustMemberBalanceBody 调整会员余额请求体
+type adjustMemberBalanceBody struct {
+	Amount int64  `json:"amount" binding:"required"` // 正数增加，负数扣减
+	Notes  string `json:"notes" binding:"required,min=1,max=200"`
+}
+
+// adjustMemberBalance godoc
+// @Summary 调整会员余额
+// @Description 商户调整会员余额（正数为增加/退款，负数为扣减）
+// @Tags 会员管理-商户
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Param user_id path int true "用户ID"
+// @Param request body adjustMemberBalanceBody true "调整信息"
+// @Success 200 {object} merchantMemberResponse "更新后的会员信息"
+// @Failure 400 {object} ErrorResponse "参数错误或余额不足"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "非商户用户"
+// @Failure 404 {object} ErrorResponse "会员不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{id}/members/{user_id}/balance [post]
+// @Security BearerAuth
+func (server *Server) adjustMemberBalance(ctx *gin.Context) {
+	var uriReq adjustMemberBalanceRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var bodyReq adjustMemberBalanceBody
+	if err := ctx.ShouldBindJSON(&bodyReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if bodyReq.Amount == 0 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("amount cannot be zero")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 验证商户权限
+	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+		return
+	}
+	if merchantID != uriReq.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+		return
+	}
+
+	// 获取会员信息
+	membership, err := server.store.GetMembershipByMerchantAndUserForUpdate(ctx, db.GetMembershipByMerchantAndUserForUpdateParams{
+		MerchantID: merchantID,
+		UserID:     uriReq.UserID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	var updatedMembership db.MerchantMembership
+	var txType string
+
+	if bodyReq.Amount > 0 {
+		// 增加余额（退款/充值调整）
+		updatedMembership, err = server.store.IncrementMembershipBalance(ctx, db.IncrementMembershipBalanceParams{
+			ID:      membership.ID,
+			Balance: bodyReq.Amount,
+		})
+		txType = "adjustment_credit"
+	} else {
+		// 扣减余额
+		if membership.Balance < -bodyReq.Amount {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("insufficient balance")))
+			return
+		}
+		updatedMembership, err = server.store.DecrementMembershipBalance(ctx, db.DecrementMembershipBalanceParams{
+			ID:      membership.ID,
+			Balance: -bodyReq.Amount,
+		})
+		txType = "adjustment_debit"
+	}
+
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 记录交易流水
+	_, err = server.store.CreateMembershipTransaction(ctx, db.CreateMembershipTransactionParams{
+		MembershipID:   membership.ID,
+		Type:           txType,
+		Amount:         bodyReq.Amount,
+		BalanceAfter:   updatedMembership.Balance,
+		RelatedOrderID: pgtype.Int8{},
+		RechargeRuleID: pgtype.Int8{},
+		Notes:          pgtype.Text{String: bodyReq.Notes, Valid: true},
+	})
+	if err != nil {
+		// 流水记录失败不影响主流程
+		fmt.Printf("failed to create transaction log: %v\n", err)
+	}
+
+	// 获取用户信息用于响应
+	user, _ := server.store.GetUser(ctx, uriReq.UserID)
+	phone := ""
+	if user.Phone.Valid {
+		phone = user.Phone.String
+	}
+	avatarURL := ""
+	if user.AvatarUrl.Valid {
+		avatarURL = user.AvatarUrl.String
+	}
+
+	ctx.JSON(http.StatusOK, merchantMemberResponse{
+		UserID:         user.ID,
+		FullName:       user.FullName,
+		Phone:          phone,
+		AvatarURL:      avatarURL,
+		MembershipID:   updatedMembership.ID,
+		Balance:        updatedMembership.Balance,
+		TotalRecharged: updatedMembership.TotalRecharged,
+		TotalConsumed:  updatedMembership.TotalConsumed,
+		CreatedAt:      updatedMembership.CreatedAt,
+	})
+}
