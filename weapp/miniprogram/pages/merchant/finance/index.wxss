@@ -1,0 +1,248 @@
+/* 财务管理页面样式 - PC-SaaS 风格 */
+
+/* 小屏提示 */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.notice-box {
+  background: white;
+  padding: 48px 64px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.notice-icon { font-size: 64px; margin-bottom: 16px; }
+.notice-title { display: block; font-size: 20px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
+.notice-desc { display: block; font-size: 14px; color: #666; margin-bottom: 24px; }
+.btn-back {
+  display: inline-block;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* 大屏布局 */
+.saas-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease;
+}
+
+.page-container {
+  flex: 1;
+  padding: 24px 32px;
+  margin-top: 60px;
+  overflow-y: auto;
+}
+
+/* 页面标题 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-icon { font-size: 28px; }
+.title-text { font-size: 24px; font-weight: 600; color: #1a1a2e; }
+
+/* 日期范围选择 */
+.date-range-picker {
+  display: flex;
+  gap: 8px;
+  background: white;
+  padding: 4px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.range-option {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.range-option.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+/* Tab 导航 */
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  background: white;
+  padding: 6px;
+  border-radius: 10px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tab-item {
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-item.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 500;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Tab 内容 */
+.tab-content {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* 概览网格 */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.overview-card {
+  background: #f8f9fc;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+.overview-card.large {
+  grid-column: span 2;
+}
+
+.card-label {
+  display: block;
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.card-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+}
+
+.card-value.primary { color: #667eea; }
+.card-value.success { color: #52c41a; }
+.card-value.warning { color: #faad14; }
+.card-value.danger { color: #ff4d4f; }
+
+/* 数据表格 */
+.data-table {
+  width: 100%;
+}
+
+.table-header, .table-row {
+  display: flex;
+  padding: 14px 0;
+  font-size: 14px;
+  align-items: center;
+}
+
+.table-header {
+  border-bottom: 2px solid #eee;
+  font-weight: 600;
+  color: #666;
+}
+
+.table-row {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.table-row:hover {
+  background: #fafbfc;
+}
+
+.table-row:last-child { border-bottom: none; }
+
+.empty-hint {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 14px;
+}
+
+/* 表格列宽 */
+.col-date { width: 100px; }
+.col-id { width: 80px; }
+.col-source { width: 80px; }
+.col-type { width: 80px; }
+.col-count { width: 80px; text-align: center; }
+.col-amount { flex: 1; }
+.col-gmv { flex: 1; }
+.col-income { flex: 1; }
+.col-fee { width: 100px; }
+.col-total { width: 100px; }
+.col-platform { width: 100px; }
+.col-operator { width: 100px; }
+.col-subtotal { flex: 1; }
+.col-delivery { width: 100px; }
+.col-discount { width: 100px; }
+.col-status { width: 80px; text-align: center; }
+.col-time { width: 100px; color: #999; }
+
+/* 成功/危险颜色 */
+.success { color: #52c41a; }
+.danger { color: #ff4d4f; }
+
+/* 状态标签 */
+.status-pending { color: #faad14; }
+.status-processing { color: #1890ff; }
+.status-finished { color: #52c41a; }
+.status-failed { color: #ff4d4f; }
