@@ -120,29 +120,34 @@ func (server *Server) getDiscountRule(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, rsp)
 }
 
-// listMerchantDiscountRulesRequest 获取商户满减规则列表请求
-type listMerchantDiscountRulesRequest struct {
+// listMerchantDiscountRulesURIRequest 获取商户满减规则列表URI请求
+type listMerchantDiscountRulesURIRequest struct {
 	MerchantID int64 `uri:"id" binding:"required,min=1"`
-	PageID     int32 `form:"page_id" binding:"required,min=1"`
-	PageSize   int32 `form:"page_size" binding:"required,min=5,max=50"`
+}
+
+// listMerchantDiscountRulesQueryRequest 获取商户满减规则列表Query请求
+type listMerchantDiscountRulesQueryRequest struct {
+	PageID   int32 `form:"page_id" binding:"required,min=1"`
+	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
 // listMerchantDiscountRules 获取商户满减规则列表
 func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
-	var req listMerchantDiscountRulesRequest
-	if err := ctx.ShouldBindUri(&req); err != nil {
+	var uriReq listMerchantDiscountRulesURIRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
-	if err := ctx.ShouldBindQuery(&req); err != nil {
+	var queryReq listMerchantDiscountRulesQueryRequest
+	if err := ctx.ShouldBindQuery(&queryReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
 	rules, err := server.store.ListMerchantDiscountRules(ctx, db.ListMerchantDiscountRulesParams{
-		MerchantID: req.MerchantID,
-		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		MerchantID: uriReq.MerchantID,
+		Limit:      queryReq.PageSize,
+		Offset:     (queryReq.PageID - 1) * queryReq.PageSize,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

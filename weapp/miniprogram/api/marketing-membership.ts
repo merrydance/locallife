@@ -19,7 +19,7 @@ export type UsableScene = 'takeout' | 'dine_in' | 'reservation' | 'all'
 /** 创建优惠券请求 - 基于swagger api.createVoucherRequest */
 export interface CreateVoucherRequest extends Record<string, unknown> {
     name: string
-    code: string
+    code?: string
     amount: number
     total_quantity: number
     valid_from: string

@@ -1,0 +1,281 @@
+<!-- 满减活动管理页面 - 桌面级 SaaS 界面 -->
+<wxs module="utils">
+  module.exports = {
+    formatYuan: function(fen) {
+      return (fen / 100).toFixed(2)
+    },
+    formatDate: function(dateStr) {
+      if (!dateStr) return '-'
+      return dateStr.slice(0, 10)
+    },
+    getRuleStatus: function(rule) {
+      if (!rule.is_active) return 'inactive'
+      var now = getDate().getTime()
+      var start = getDate(rule.valid_from).getTime()
+      var end = getDate(rule.valid_until).getTime()
+      if (now < start) return 'pending'
+      if (now > end) return 'expired'
+      return 'active'
+    },
+    getRuleStatusText: function(rule) {
+      if (!rule.is_active) return '已停用'
+      var now = getDate().getTime()
+      var start = getDate(rule.valid_from).getTime()
+      var end = getDate(rule.valid_until).getTime()
+      if (now < start) return '待开始'
+      if (now > end) return '已结束'
+      return '进行中'
+    }
+  }
+</wxs>
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">📢</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问满减活动管理</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+    <merchant-sidebar 
+      current-path="discounts" 
+      collapsed="{{sidebarCollapsed}}"
+      bind:collapse="onSidebarCollapse"
+    />
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        sidebar-width="{{sidebarCollapsed ? 64 : 200}}"
+      />
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 顶部操作栏 -->
+        <view class="page-header">
+          <view class="page-title">
+            <text class="title-icon">📢</text>
+            <text class="title-text">满减活动</text>
+            <text class="title-count">共 {{rules.length}} 个</text>
+          </view>
+          <button class="btn-primary" bindtap="showCreateModal">+ 新建活动</button>
+        </view>
+
+        <!-- 加载状态 -->
+        <view wx:if="{{loading}}" class="loading-state">
+          <view class="loading-spinner"></view>
+          <text>加载中...</text>
+        </view>
+
+        <!-- 空状态 -->
+        <view wx:elif="{{rules.length === 0}}" class="empty-state">
+          <text class="empty-icon">🎁</text>
+          <text class="empty-text">暂无满减活动</text>
+          <text class="empty-hint">创建满减活动吸引更多顾客下单</text>
+          <button class="btn-primary" bindtap="showCreateModal">创建第一个活动</button>
+        </view>
+
+        <!-- 活动列表 -->
+        <view wx:else class="rule-grid">
+          <view 
+            wx:for="{{rules}}" wx:key="id" 
+            class="rule-card {{utils.getRuleStatus(item)}}"
+          >
+            <!-- 卡片头部 -->
+            <view class="rule-header">
+              <view class="rule-amount">
+                <text class="amount-prefix">满</text>
+                <text class="amount-value">¥{{utils.formatYuan(item.min_order_amount)}}</text>
+                <text class="amount-prefix">减</text>
+                <text class="amount-value discount">¥{{utils.formatYuan(item.discount_amount)}}</text>
+              </view>
+              <view class="rule-status {{utils.getRuleStatus(item)}}">{{utils.getRuleStatusText(item)}}</view>
+            </view>
+
+            <!-- 卡片内容 -->
+            <view class="rule-body">
+              <text class="rule-name">{{item.name}}</text>
+              <text class="rule-desc" wx:if="{{item.description}}">{{item.description}}</text>
+              
+              <!-- 叠加设置 -->
+              <view class="rule-stack-tags">
+                <text class="stack-tag {{item.can_stack_with_voucher ? 'enabled' : 'disabled'}}">
+                  {{item.can_stack_with_voucher ? '✓' : '✗'}} 代金券
+                </text>
+                <text class="stack-tag {{item.can_stack_with_membership ? 'enabled' : 'disabled'}}">
+                  {{item.can_stack_with_membership ? '✓' : '✗'}} 余额支付
+                </text>
+              </view>
+            </view>
+
+            <!-- 有效期 -->
+            <view class="rule-validity">
+              {{utils.formatDate(item.valid_from)}} ~ {{utils.formatDate(item.valid_until)}}
+            </view>
+
+            <!-- 操作按钮 -->
+            <view class="rule-actions">
+              <view class="action-btn" bindtap="handleToggleActive" data-id="{{item.id}}" data-active="{{item.is_active}}">
+                {{item.is_active ? '停用' : '启用'}}
+              </view>
+              <view class="action-btn" bindtap="handleEdit" data-rule="{{item}}">编辑</view>
+              <view class="action-btn danger" catchtap="handleDelete" data-id="{{item.id}}">删除</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 新建/编辑弹窗 -->
+<view class="modal-overlay {{showModal ? 'show' : ''}}" catchtap="hideModal">
+  <view class="modal-content" catchtap="onModalContentTap">
+    <view class="modal-header">
+      <text class="modal-title">{{editingRule ? '编辑活动' : '新建活动'}}</text>
+      <text class="modal-close" bindtap="hideModal">×</text>
+    </view>
+    <view class="modal-body">
+      <!-- 活动名称 -->
+      <view class="form-group">
+        <text class="form-label">活动名称 *</text>
+        <input 
+          class="form-input" 
+          placeholder="例如: 夏日特惠满减" 
+          value="{{formData.name}}"
+          data-field="name"
+          bindinput="onInputChange"
+        />
+      </view>
+
+      <!-- 活动描述 -->
+      <view class="form-group">
+        <text class="form-label">活动描述</text>
+        <textarea 
+          class="form-textarea" 
+          placeholder="可选，描述活动详情" 
+          value="{{formData.description}}"
+          data-field="description"
+          bindinput="onInputChange"
+        />
+      </view>
+
+      <!-- 满减金额 -->
+      <view class="form-row">
+        <view class="form-group half">
+          <text class="form-label">满（元）*</text>
+          <input 
+            class="form-input" 
+            type="digit" 
+            placeholder="例如: 100" 
+            value="{{formData.minOrderAmount}}"
+            data-field="minOrderAmount"
+            bindinput="onInputChange"
+          />
+        </view>
+        <view class="form-group half">
+          <text class="form-label">减（元）*</text>
+          <input 
+            class="form-input" 
+            type="digit" 
+            placeholder="例如: 20" 
+            value="{{formData.discountAmount}}"
+            data-field="discountAmount"
+            bindinput="onInputChange"
+          />
+        </view>
+      </view>
+
+      <!-- 有效期 -->
+      <view class="form-row">
+        <view class="form-group half">
+          <text class="form-label">开始日期 *</text>
+          <view 
+            class="form-input date-input" 
+            bindtap="onOpenCalendar"
+            data-field="validFrom"
+          >
+            <text class="{{formData.validFrom ? '' : 'placeholder'}}">{{formData.validFrom || '请选择'}}</text>
+            <text class="date-icon">📅</text>
+          </view>
+        </view>
+        <view class="form-group half">
+          <text class="form-label">结束日期 *</text>
+          <view 
+            class="form-input date-input" 
+            bindtap="onOpenCalendar"
+            data-field="validUntil"
+          >
+            <text class="{{formData.validUntil ? '' : 'placeholder'}}">{{formData.validUntil || '请选择'}}</text>
+            <text class="date-icon">📅</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 叠加设置 -->
+      <view class="form-section-title">叠加设置</view>
+      <view class="switch-group">
+        <view class="switch-item" bindtap="toggleSwitch" data-field="canStackWithVoucher">
+          <text class="switch-label">可与代金券叠加</text>
+          <view class="switch-toggle {{formData.canStackWithVoucher ? 'on' : ''}}">
+            <view class="switch-handle"></view>
+          </view>
+        </view>
+        <view class="switch-item" bindtap="toggleSwitch" data-field="canStackWithMembership">
+          <text class="switch-label">可用余额支付</text>
+          <view class="switch-toggle {{formData.canStackWithMembership ? 'on' : ''}}">
+            <view class="switch-handle"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-outline" bindtap="hideModal">取消</button>
+      <button class="btn-primary" bindtap="handleSubmit" loading="{{submitting}}">
+        {{editingRule ? '保存' : '创建'}}
+      </button>
+    </view>
+  </view>
+</view>
+
+<!-- 日历选择器弹窗 -->
+<view class="calendar-overlay {{showCalendar ? 'show' : ''}}" catchtap="onCloseCalendar">
+  <view class="calendar-popup" catchtap="onCalendarContentTap">
+    <view class="calendar-header">
+      <view class="calendar-nav" bindtap="onPrevMonth">‹</view>
+      <text class="calendar-title">{{calendarYear}}年{{calendarMonth}}月</text>
+      <view class="calendar-nav" bindtap="onNextMonth">›</view>
+    </view>
+    <view class="calendar-weekdays">
+      <text class="weekday">日</text>
+      <text class="weekday">一</text>
+      <text class="weekday">二</text>
+      <text class="weekday">三</text>
+      <text class="weekday">四</text>
+      <text class="weekday">五</text>
+      <text class="weekday">六</text>
+    </view>
+    <view class="calendar-days">
+      <view 
+        wx:for="{{calendarDays}}" wx:key="index"
+        class="day-cell {{item.disabled ? 'disabled' : ''}} {{item.selected ? 'selected' : ''}} {{item.today ? 'today' : ''}} {{!item.currentMonth ? 'other-month' : ''}}"
+        bindtap="{{item.disabled ? '' : 'onSelectCalendarDay'}}"
+        data-date="{{item.date}}"
+      >
+        {{item.day}}
+      </view>
+    </view>
+    <view class="calendar-footer">
+      <view class="calendar-today-btn" bindtap="onSelectToday">今天</view>
+    </view>
+  </view>
+</view>

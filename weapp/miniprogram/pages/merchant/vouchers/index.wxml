@@ -151,29 +151,16 @@
           bindinput="onFormInput"
         />
       </view>
-      <view class="form-row">
-        <view class="form-group half">
-          <text class="form-label">券码</text>
-          <input 
-            class="form-input" 
-            placeholder="例如: NEW100"
-            disabled="{{!!editingVoucher}}"
-            value="{{form.code}}"
-            data-field="code"
-            bindinput="onFormInput"
-          />
-        </view>
-        <view class="form-group half">
-          <text class="form-label">发行数量</text>
-          <input 
-            class="form-input" 
-            type="number" 
-            placeholder="例如: 100" 
-            value="{{form.total_quantity}}"
-            data-field="total_quantity"
-            bindinput="onFormInput"
-          />
-        </view>
+      <view class="form-group">
+        <text class="form-label">发行数量</text>
+        <input 
+          class="form-input" 
+          type="number" 
+          placeholder="例如: 100" 
+          value="{{form.total_quantity}}"
+          data-field="total_quantity"
+          bindinput="onFormInput"
+        />
       </view>
 
       <!-- 优惠设置 -->

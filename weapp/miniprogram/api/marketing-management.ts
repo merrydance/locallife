@@ -34,7 +34,7 @@ export interface VoucherResponse {
 export interface CreateVoucherRequest extends Record<string, unknown> {
     allowed_order_types?: string[]               // 允许的订单类型
     amount: number                               // 优惠金额（必填）
-    code: string                                 // 优惠券码（必填）
+    code?: string                                // 优惠券码（可选，后端自动生成）
     description?: string                         // 优惠券描述
     min_order_amount?: number                    // 最低订单金额
     name: string                                 // 优惠券名称（必填）
@@ -237,6 +237,119 @@ export interface UpdateVoucherRequest extends Record<string, unknown> {
     valid_until?: string                         // 失效时间
     is_active?: boolean                          // 是否激活
     allowed_order_types?: string[]               // 允许的订单类型
+}
+
+// ==================== 满减规则管理服务 ====================
+
+/**
+ * 满减规则响应 - 对齐 api.discountRuleResponse
+ */
+export interface DiscountRuleResponse {
+    id: number
+    merchant_id: number
+    name: string                                 // 活动名称
+    description?: string                         // 活动描述
+    min_order_amount: number                     // 最低消费（分）
+    discount_amount: number                      // 减免金额（分）
+    can_stack_with_voucher: boolean              // 可与代金券叠加
+    can_stack_with_membership: boolean           // 可与会员余额叠加
+    valid_from: string                           // 活动开始时间
+    valid_until: string                          // 活动结束时间
+    is_active: boolean                           // 是否启用
+    created_at: string
+}
+
+/**
+ * 创建满减规则请求 - 对齐 api.createDiscountRuleRequest
+ */
+export interface CreateDiscountRuleRequest extends Record<string, unknown> {
+    name: string                                 // 活动名称（必填）
+    description?: string                         // 活动描述
+    min_order_amount: number                     // 满X元（分，必填）
+    discount_amount: number                      // 减Y元（分，必填，需 < min_order_amount）
+    can_stack_with_voucher?: boolean             // 可与代金券叠加（默认 false）
+    can_stack_with_membership?: boolean          // 可与会员余额叠加（默认 false）
+    valid_from: string                           // 活动开始时间
+    valid_until: string                          // 活动结束时间
+}
+
+/**
+ * 更新满减规则请求 - 对齐 api.updateDiscountRuleRequest
+ */
+export interface UpdateDiscountRuleRequest extends Record<string, unknown> {
+    id: number                                   // 规则ID（必填）
+    name?: string                                // 活动名称
+    description?: string                         // 活动描述
+    min_order_amount?: number                    // 满X元（分）
+    discount_amount?: number                     // 减Y元（分）
+    can_stack_with_voucher?: boolean             // 可与代金券叠加
+    can_stack_with_membership?: boolean          // 可与会员余额叠加
+    valid_from?: string                          // 活动开始时间
+    valid_until?: string                         // 活动结束时间
+    is_active?: boolean                          // 是否启用
+}
+
+/**
+ * 满减规则管理服务
+ */
+export class DiscountRuleManagementService {
+
+    /**
+     * 获取满减规则列表
+     * GET /v1/merchants/{id}/discounts
+     */
+    static async getDiscountRuleList(merchantId: number, params: {
+        page_id: number
+        page_size: number
+    }): Promise<DiscountRuleResponse[]> {
+        return await request({
+            url: `/v1/merchants/${merchantId}/discounts?page_id=${params.page_id}&page_size=${params.page_size}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 创建满减规则
+     * POST /v1/merchants/{merchantId}/discounts
+     */
+    static async createDiscountRule(
+        merchantId: number,
+        data: CreateDiscountRuleRequest
+    ): Promise<DiscountRuleResponse> {
+        return await request({
+            url: `/v1/merchants/${merchantId}/discounts`,
+            method: 'POST',
+            data
+        })
+    }
+
+    /**
+     * 更新满减规则
+     * PATCH /v1/merchants/{merchantId}/discounts/{id}
+     * 后端要求 id 必须在请求体中
+     */
+    static async updateDiscountRule(
+        merchantId: number,
+        ruleId: number,
+        data: Partial<UpdateDiscountRuleRequest>
+    ): Promise<DiscountRuleResponse> {
+        return await request({
+            url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+            method: 'PATCH',
+            data: { id: ruleId, ...data }
+        })
+    }
+
+    /**
+     * 删除满减规则
+     * DELETE /v1/merchants/{merchantId}/discounts/{id}
+     */
+    static async deleteDiscountRule(merchantId: number, ruleId: number): Promise<{ message: string }> {
+        return await request({
+            url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+            method: 'DELETE'
+        })
+    }
 }
 
 // ==================== 充值规则管理服务 ====================

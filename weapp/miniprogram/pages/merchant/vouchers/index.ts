@@ -206,10 +206,6 @@ Page({
             wx.showToast({ title: '请输入代金券名称', icon: 'none' })
             return
         }
-        if (!editingVoucher && !form.code.trim()) {
-            wx.showToast({ title: '请输入券码', icon: 'none' })
-            return
-        }
         const amount = parseFloat(form.amount)
         if (isNaN(amount) || amount <= 0) {
             wx.showToast({ title: '请输入有效的优惠金额', icon: 'none' })
@@ -251,7 +247,6 @@ Page({
             } else {
                 const request: CreateVoucherRequest = {
                     name: form.name,
-                    code: form.code.toUpperCase(),
                     amount: Math.round(amount * 100),
                     min_order_amount: Math.round(minAmount * 100),
                     total_quantity: quantity,

@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "merchant-sidebar": "/components/merchant-sidebar/index",
+    "merchant-header": "/components/merchant-header/index"
+  }
+}

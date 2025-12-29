@@ -84,7 +84,7 @@ Component({
         combos: '/pages/merchant/combos/index',
         inventory: '/pages/merchant/inventory/index',
         vouchers: '/pages/merchant/vouchers/index',
-        discounts: '/pages/merchant/marketing/discounts',
+        discounts: '/pages/merchant/discounts/index',
         members: '/pages/merchant/members/index',
         'membership-settings': '/pages/merchant/membership-settings/index',
         analytics: '/pages/merchant/analytics/index',

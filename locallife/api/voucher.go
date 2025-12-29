@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 
@@ -18,7 +19,7 @@ import (
 
 // createVoucherRequest 创建代金券请求
 type createVoucherRequest struct {
-	Code              string    `json:"code" binding:"required,min=1,max=50"`
+	Code              string    `json:"code" binding:"max=50"` // 可选，若未提供则自动生成
 	Name              string    `json:"name" binding:"required,min=1,max=100"`
 	Description       string    `json:"description" binding:"max=500"`
 	Amount            int64     `json:"amount" binding:"required,min=1,max=100000000"`       // 最大100万元(分)
@@ -117,9 +118,15 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 		}
 	}
 
+	// 如果未提供券码，自动生成 UUID
+	voucherCode := req.Code
+	if voucherCode == "" {
+		voucherCode = uuid.New().String()[:8] // 使用 UUID 前 8 位作为简短券码
+	}
+
 	voucher, err := server.store.CreateVoucher(ctx, db.CreateVoucherParams{
 		MerchantID:        merchantID,
-		Code:              req.Code,
+		Code:              voucherCode,
 		Name:              req.Name,
 		Description:       pgtype.Text{String: req.Description, Valid: req.Description != ""},
 		Amount:            req.Amount,
