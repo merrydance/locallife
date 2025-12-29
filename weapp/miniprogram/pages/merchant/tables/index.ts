@@ -253,7 +253,8 @@ Page({
                 table_type: selectedTable.table_type as 'table' | 'room',
                 capacity: selectedTable.capacity,
                 description: selectedTable.description?.trim() || undefined,
-                minimum_spend: selectedTable.minimum_spend || undefined
+                minimum_spend: selectedTable.minimum_spend || undefined,
+                tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined
             }
 
             const newTable = await tableManagementService.createTable(createData)
@@ -273,11 +274,24 @@ Page({
         }
     },
 
-    onFinishAdd() {
+    async onFinishAdd() {
+        // 如果有选择标签，保存到已创建的桌台
+        const { selectedTable, selectedTagIds } = this.data
+        if (selectedTable?.id && selectedTagIds.length > 0) {
+            try {
+                await tableManagementService.updateTable(selectedTable.id, {
+                    tag_ids: selectedTagIds
+                })
+            } catch (error) {
+                logger.error('保存标签失败', error, 'Tables')
+            }
+        }
+
         this.setData({
             selectedTable: null,
             isAdding: false,
-            currentStep: 1
+            currentStep: 1,
+            selectedTagIds: []  // 重置标签选择
         })
         this.loadTables()
     },

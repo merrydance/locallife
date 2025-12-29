@@ -27,6 +27,7 @@ export interface CreateTableRequest extends Record<string, unknown> {
     description?: string
     minimum_spend?: number
     qr_code_url?: string
+    tag_ids?: number[]  // 标签ID列表
 }
 
 /** 更新桌台请求 - 基于swagger api.updateTableRequest */

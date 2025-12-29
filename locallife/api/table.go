@@ -23,6 +23,7 @@ type createTableRequest struct {
 	Description  *string `json:"description" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
 	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
+	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
 }
 
 type tableResponse struct {
@@ -149,6 +150,20 @@ func (server *Server) createTable(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 处理标签关联
+	if len(req.TagIds) > 0 {
+		for _, tagID := range req.TagIds {
+			_, err = server.store.AddTableTag(ctx, db.AddTableTagParams{
+				TableID: table.ID,
+				TagID:   tagID,
+			})
+			if err != nil {
+				// 忽略重复或无效的标签ID，继续处理其他标签
+				continue
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, newTableResponse(table))

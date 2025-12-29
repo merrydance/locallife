@@ -1,143 +1,71 @@
 /**
- * 餐厅工作台首页
- * 响应式设计：PC(堂食桌台+外卖订单) / 手机(经营速览+快捷入口)
+ * 商户工作台 v4.0 - 全屏沉浸式设计
+ * 简化版：专注当日经营，三栏布局，WebSocket实时更新
  */
 
 import { MerchantManagementService } from '../../../api/merchant'
 import { getTables, Table } from '../../../api/merchant-table-device-management'
 import { MerchantStatsService } from '../../../api/merchant-analytics'
+import { MerchantOrderManagementService } from '../../../api/order-management'
 import { WebSocketUtils, RealtimeUtils, WebSocketMessage } from '../../../api/websocket-realtime'
 import { logger } from '../../../utils/logger'
-import { responsiveBehavior, isLargeScreen, getPlatformInfo } from '../../../utils/responsive'
 
 const app = getApp<IAppOption>()
 
-// 桌台分组
-interface TableGroup {
-  name: string
-  type: string
-  tables: Table[]
-}
-
-// 订单项 (基于 swagger api.orderResponse)
-interface OrderItem {
-  id: number
-  order_no: string
-  status: string  // paid, preparing, ready, completed, cancelled
-  order_type: string  // dinein, takeout
-  total_amount: number
-  items: { name: string; quantity: number }[]
-  table_no?: string
-  customer_name?: string
-  created_at: string
-}
-
-// 提醒项
-interface AlertItem {
-  id: string
-  type: 'order' | 'table'
-  icon: string
-  text: string
-  time: string
-  data?: any
-}
-
-import { DeviceType } from '../../../utils/responsive'
-
 Page({
-  behaviors: [responsiveBehavior],
   data: {
-    loading: true,
-    navBarHeight: 0,
-
-    // Tab 切换
-    activeTab: 'overview' as 'overview' | 'dinein' | 'orders',
-
-    // 骨架屏配置
-    skeletonRowCol: [
-      { width: '100%', height: '200rpx' },
-      [{ width: '48%', height: '160rpx' }, { width: '48%', height: '160rpx', marginLeft: '4%' }],
-      { width: '100%', height: '300rpx', marginTop: '24rpx' }
-    ],
-
-    // 滑动操作按钮
-    orderSwipeRight: [
-      { text: '接单', className: 'swipe-btn-accept' },
-      { text: '详情', className: 'swipe-btn-detail' }
-    ],
-
     // 商户信息
-    merchantId: '',
     merchantName: '',
     isOpen: false,
-
-    // 状态
     currentDate: '',
+
+    // WebSocket 状态
+    wsConnected: false,
 
     // 统计数据
     stats: {
       todayRevenue: 0,
-      todayOrders: 0,
-      revenueGrowth: 0
+      todayOrders: 0
+    },
+    revenueDisplay: '0.00',
+
+    // 订单标签
+    orderTab: 'all' as 'all' | 'paid' | 'preparing' | 'ready',
+
+    // 状态计数
+    statusCounts: {
+      paid: 0,
+      preparing: 0,
+      ready: 0
     },
 
+    // 订单数据
+    pendingOrders: [] as any[],
+    filteredOrders: [] as any[],
+
     // 桌台数据
-    tableGroups: [] as TableGroup[],
+    tableGroups: [] as any[],
     tableStats: {
       total: 0,
       available: 0,
       occupied: 0
-    },
-    selectedTable: null as any,
-    statusOptions: [
-      { value: 'available', label: '开闲', theme: 'success', icon: 'check-circle' },
-      { value: 'occupied', label: '开台', theme: 'warning', icon: 'play-circle' },
-      { value: 'disabled', label: '关台', theme: 'default', icon: 'minus-circle' }
-    ],
-
-    // 订单数据
-    pendingOrders: [] as OrderItem[],
-    pendingCount: 0,
-
-    // 订单分类
-    orderCategory: 'all' as 'all' | 'dinein' | 'takeout' | 'book',
-    filteredOrders: [] as OrderItem[],
-
-    // 提醒列表
-    alerts: [] as AlertItem[],
-
-    // 响应式状态
-    deviceType: 'mobile' as DeviceType,
-    gridColumn: 4,
-
-    // 系统日期
-    todayDate: '',
-
-    // PC SaaS 布局状态
-    sidebarCollapsed: false,
-    ownerName: '',
-    avatarUrl: '',
-    unreadNotifications: 0
+    }
   },
 
   onLoad() {
-    this.updateSystemDate()
-    this.setData({
-      currentDate: new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
-    })
-    // 移除 manual deviceType 设置，由 responsiveBehavior 自动注入
+    this.updateDate()
     this.loadData()
   },
 
   onShow() {
-    // 每次显示时刷新数据
-    if (!this.data.loading) {
-      this.refreshData()
+    if (this.data.merchantName) {
+      this.loadOrders()
+      this.loadTables()
     }
   },
 
   onHide() {
-    // 页面隐藏时可选择断开 WebSocket
+    // 页面隐藏时保持连接
   },
 
   onUnload() {
@@ -145,280 +73,43 @@ Page({
     WebSocketUtils.closeAll()
   },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    const height = e.detail.navBarHeight
-    // @ts-ignore
-    const statusBarHeight = this.data.statusBarHeight || 0;
-    if (height !== undefined && height !== this.data.navBarHeight) {
-      this.setData({
-        navBarHeight: height,
-        navBarContentHeight: height - statusBarHeight
-      })
-    }
-  },
-
-  onResize() {
-    // 处理屏幕旋转或窗口缩放
-    const { getDeviceInfo } = require('../../../utils/responsive');
-    const { type } = getDeviceInfo();
-    if (type !== this.data.deviceType) {
-      logger.info('布局发生变更，重新评估 WebSocket', { old: this.data.deviceType, new: type }, 'Dashboard')
-      this.setData({ deviceType: type });
-      this.connectWebSocket();
-    }
-  },
-
-  /**
-   * 更新系统日期 (格式化)
-   */
-  updateSystemDate() {
+  updateDate() {
     const now = new Date()
-    const year = now.getFullYear()
-    const month = now.getMonth() + 1
-    const day = now.getDate()
     const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-    const weekDay = weekDays[now.getDay()]
-
-    this.setData({
-      todayDate: `${year}年${month}月${day}日 ${weekDay}`
-    })
+    const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${weekDays[now.getDay()]}`
+    this.setData({ currentDate: dateStr })
   },
 
-  /**
-   * Tab 切换
-   */
-  onTabChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ activeTab: e.detail.value })
-  },
-
-  /**
-   * 订单滑动操作点击
-   */
-  onOrderSwipeClick(e: WechatMiniprogram.CustomEvent) {
-    const { index } = e.detail
-    const orderId = e.currentTarget.dataset.id
-
-    if (index === 0) {
-      // 接单
-      this.onAcceptOrder({ currentTarget: { dataset: { id: orderId } } } as any)
-    } else {
-      // 详情
-      wx.navigateTo({ url: `/pages/merchant/orders/detail/detail?id=${orderId}` })
-    }
-  },
-
-  /**
-   * 加载所有数据
-   */
   async loadData() {
-    this.setData({
-      loading: true,
-      gridColumn: isLargeScreen() ? 3 : 4
-    })
-
     try {
-      // 先加载商户信息
       await this.loadMerchantInfo()
-
-      // 并行加载其他数据
       await Promise.all([
-        this.loadMerchantStatus(),
-        this.loadTables(),
+        this.loadStats(),
         this.loadOrders(),
-        this.loadStats()
+        this.loadTables()
       ])
-
-      // WebSocket 连接是可选的，不阻塞页面加载
-      this.connectWebSocket().catch(() => {
-        // WebSocket 连接失败不影响页面正常使用
-      })
-
+      // 营业中时连接 WebSocket
+      if (this.data.isOpen) {
+        this.connectWebSocket()
+      }
     } catch (error) {
-      logger.error('加载数据失败', error, 'Dashboard.loadData')
+      logger.error('加载数据失败', error, 'Dashboard')
       wx.showToast({ title: '加载失败', icon: 'none' })
-    } finally {
-      this.setData({ loading: false })
     }
   },
 
-  /**
-   * 刷新数据
-   */
-  async refreshData() {
-    try {
-      await Promise.all([
-        this.loadMerchantStatus(),
-        this.loadTables(),
-        this.loadOrders()
-      ])
-    } catch (error) {
-      logger.error('刷新数据失败', error, 'Dashboard.refreshData')
-    }
-  },
-
-  /**
-   * 加载商户信息
-   */
   async loadMerchantInfo() {
-    try {
-      const merchantInfo = await MerchantManagementService.getMerchantInfo()
-
-      if (merchantInfo) {
-        // 更新 UI 数据
-        this.setData({
-          merchantId: String(merchantInfo.id),
-          merchantName: merchantInfo.name,
-          isOpen: merchantInfo.is_open
-        })
-
-        // 更新全局状态 (原子化操作)
-        app.globalData.merchantId = String(merchantInfo.id)
-        app.globalData.userRole = 'merchant'
-        if (!app.globalData.userId) {
-          app.globalData.userId = merchantInfo.owner_user_id;
-        }
-
-        // 保存所有者 ID 作为备用（某些鉴权场景可能需要）
-        (this as any)._merchantOwnerId = merchantInfo.owner_user_id;
-      }
-    } catch (error) {
-      logger.error('加载商户信息失败', error, 'Dashboard.loadMerchantInfo')
-      // 如果获取失败，可能不是商户，跳转到入驻页
-      this.handleNotMerchant()
-    }
-  },
-
-  /**
-   * 加载商户营业状态
-   */
-  async loadMerchantStatus() {
-    try {
-      const status = await MerchantManagementService.getMerchantStatus()
-      this.setData({ isOpen: status.is_open })
-    } catch (error) {
-      logger.error('加载营业状态失败', error, 'Dashboard.loadMerchantStatus')
-    }
-  },
-
-  /**
-   * 加载桌台数据
-   * 使用 GET /v1/tables API
-   */
-  async loadTables() {
-    try {
-      const response = await getTables({})
-      const tables = response.tables || []
-
-      // 按类型分组：餐桌和包间
-      const tablesByType = new Map<string, Table[]>()
-
-      tables.forEach((table: Table) => {
-        const type = table.table_type || 'table'
-        if (!tablesByType.has(type)) {
-          tablesByType.set(type, [])
-        }
-        tablesByType.get(type)!.push(table)
-      })
-
-      // 转换为分组数组
-      const tableGroups: TableGroup[] = []
-
-      if (tablesByType.has('table')) {
-        tableGroups.push({
-          name: '餐桌区',
-          type: 'table',
-          tables: tablesByType.get('table')!
-        })
-      }
-
-      if (tablesByType.has('room')) {
-        tableGroups.push({
-          name: '包间',
-          type: 'room',
-          tables: tablesByType.get('room')!
-        })
-      }
-
-      // 统计桌台状态
-      const tableStats = {
-        total: tables.length,
-        available: tables.filter((t: Table) => t.status === 'available').length,
-        occupied: tables.filter((t: Table) => t.status === 'occupied').length
-      }
-
-      this.setData({ tableGroups, tableStats })
-
-    } catch (error) {
-      logger.error('加载桌台失败', error, 'Dashboard.loadTables')
-    }
-  },
-
-  /**
-   * 加载订单数据
-   * TODO: 使用 GET /v1/merchant/orders API
-   */
-  async loadOrders() {
-    try {
-      // TODO: 调用真实 API
-      // const response = await getMerchantOrders({ page_id: 1, page_size: 20, status: 'paid' })
-
-      // 暂时使用空数据，等待 API 集成
-      const orders: OrderItem[] = []
-
-      // 生成提醒
-      const alerts: AlertItem[] = []
-
-      orders.filter(o => o.status === 'paid').forEach(order => {
-        alerts.push({
-          id: `order-${order.id}`,
-          type: 'order',
-          icon: 'notification',
-          text: `新${order.order_type === 'takeout' ? '外卖' : '堂食'}订单 #${order.order_no}`,
-          time: '刚刚',
-          data: order
-        })
-      })
-
+    const info = await MerchantManagementService.getMerchantInfo()
+    if (info) {
       this.setData({
-        pendingOrders: orders,
-        pendingCount: orders.filter(o => o.status === 'paid').length,
-        alerts
-      }, () => {
-        this.filterOrders(); // Initial filter
+        merchantName: info.name,
+        isOpen: info.is_open
       })
-
-    } catch (error) {
-      logger.error('加载订单失败', error, 'Dashboard.loadOrders')
+      app.globalData.merchantId = String(info.id)
+      app.globalData.userRole = 'merchant'
     }
   },
 
-  /**
-   * 切换订单分类
-   */
-  onOrderCategoryChange(e: any) {
-    const category = e.detail.value || e.currentTarget.dataset.value;
-    this.setData({ orderCategory: category }, () => {
-      this.filterOrders();
-    });
-  },
-
-  /**
-   * 过滤订单
-   */
-  filterOrders() {
-    const { pendingOrders, orderCategory } = this.data;
-    let filtered = pendingOrders;
-
-    if (orderCategory !== 'all') {
-      filtered = pendingOrders.filter(order => order.order_type === orderCategory);
-    }
-
-    this.setData({ filteredOrders: filtered });
-  },
-
-  /**
-   * 加载统计数据
-   */
   async loadStats() {
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -426,341 +117,305 @@ Page({
         start_date: today,
         end_date: today
       })
-
       if (stats) {
+        const revenue = stats.total_revenue || 0
         this.setData({
           stats: {
-            todayRevenue: stats.total_revenue || 0,
-            todayOrders: stats.total_orders || 0,
-            revenueGrowth: Math.round((stats.growth_rate || 0) * 100)
-          }
+            todayRevenue: revenue,
+            todayOrders: stats.total_orders || 0
+          },
+          revenueDisplay: (revenue / 100).toFixed(2)
         })
       }
     } catch (error) {
-      logger.error('加载统计失败', error, 'Dashboard.loadStats')
-      // 容错处理：即使 API 失败也显示 0，不报错影响用户使用
-      this.setData({
-        stats: {
-          todayRevenue: 0,
-          todayOrders: 0,
-          revenueGrowth: 0
-        }
-      })
+      logger.error('加载统计失败', error, 'Dashboard')
     }
   },
 
-  /**
-   * 连接 WebSocket 接收实时推送
-   */
-  async connectWebSocket() {
-    const { deviceType } = this.data
-    const platform = getPlatformInfo();
-    const merchantId = this.data.merchantId || app.globalData.merchantId;
+  async loadOrders() {
+    try {
+      const orders = await MerchantOrderManagementService.getOrderList({
+        page_id: 1,
+        page_size: 50
+      })
 
-    logger.debug('WebSocket 接入评估', { deviceType, platform: platform.type, merchantId }, 'Dashboard.connectWebSocket')
+      // 订单类型和状态映射
+      const typeMap: Record<string, string> = {
+        'takeout': '外卖',
+        'dine_in': '堂食',
+        'takeaway': '自取',
+        'reservation': '预订'
+      }
+      const statusMap: Record<string, string> = {
+        'paid': '待接单',
+        'preparing': '制作中',
+        'ready': '待取餐'
+      }
 
-    // 准入规则：
-    // 1. 只有非手机布局（Tablet / Desktop / PC-Full）才在页面初始化时尝试连接
-    //    由于 1024px 宽度的显示器会被判定为 'tablet'，所以它们会自动建立连接。
-    // 2. 只有真正的手机布局 (deviceType === 'mobile') 才跳过，
-    //    这样你在模拟器选 iPhone 时，deviceType 就是 'mobile'，逻辑就会生效。
-    if (deviceType === 'mobile') {
-      logger.info('手机小屏布局，跳过 WebSocket 连接', { deviceType, platform: platform.type }, 'Dashboard')
-      return
+      // 过滤和格式化
+      const pendingOrders = (orders || [])
+        .filter((o: any) => ['paid', 'preparing', 'ready'].includes(o.status))
+        .map((o: any) => {
+          let createdTime = ''
+          if (o.created_at) {
+            const d = new Date(o.created_at)
+            const h = d.getHours()
+            const m = d.getMinutes()
+            createdTime = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m
+          }
+          return {
+            id: o.id,
+            order_no: o.order_no,
+            status: o.status,
+            status_text: statusMap[o.status] || o.status,
+            order_type: o.order_type,
+            order_type_text: typeMap[o.order_type] || o.order_type,
+            total_amount: o.total_amount,
+            amount_display: (o.total_amount / 100).toFixed(2),
+            items_summary: o.items?.slice(0, 2).map((i: any) => i.name).join('、') || '订单商品',
+            table_no: o.table_no,
+            created_at: o.created_at,
+            created_time: createdTime
+          }
+        })
+
+      const statusCounts = {
+        paid: pendingOrders.filter((o: any) => o.status === 'paid').length,
+        preparing: pendingOrders.filter((o: any) => o.status === 'preparing').length,
+        ready: pendingOrders.filter((o: any) => o.status === 'ready').length
+      }
+
+      this.setData({ pendingOrders, statusCounts })
+      this.filterOrders()
+    } catch (error) {
+      logger.error('加载订单失败', error, 'Dashboard')
     }
+  },
 
-    logger.info('准备建立 WebSocket 连接', { deviceType, platform: platform.type }, 'Dashboard')
+  // 切换订单标签
+  switchOrderTab(e: any) {
+    const tab = e.currentTarget.dataset.tab
+    this.setData({ orderTab: tab })
+    this.filterOrders()
+  },
 
-    // 检查是否已经建立了连接，如果已连接则复用
-    if (WebSocketUtils.isConnected()) {
-      logger.info('WebSocket 已建立或正在开启中，复用该连接', undefined, 'Dashboard')
+  // 筛选订单
+  filterOrders() {
+    const { pendingOrders, orderTab } = this.data
+    let filtered = pendingOrders
+    if (orderTab !== 'all') {
+      filtered = pendingOrders.filter((o: any) => o.status === orderTab)
+    }
+    this.setData({ filteredOrders: filtered })
+  },
+
+  async loadTables() {
+    try {
+      const response = await getTables({})
+      const tables = response.tables || []
+
+      const statusClassMap: Record<string, string> = {
+        'available': 'status-available',
+        'occupied': 'status-occupied',
+        'reserved': 'status-reserved',
+        'disabled': 'status-disabled'
+      }
+      const statusTextMap: Record<string, string> = {
+        'available': '空闲',
+        'occupied': '就餐中',
+        'reserved': '已预订',
+        'disabled': '停用'
+      }
+
+      const formattedTables = tables.map((t: Table) => ({
+        ...t,
+        status_class: statusClassMap[t.status] || '',
+        status_text: statusTextMap[t.status] || t.status
+      }))
+
+      // 分组：散台和包间
+      const tablesByType = new Map<string, any[]>()
+      formattedTables.forEach((table: any) => {
+        const type = table.table_type || 'table'
+        if (!tablesByType.has(type)) {
+          tablesByType.set(type, [])
+        }
+        tablesByType.get(type)!.push(table)
+      })
+
+      const tableGroups: any[] = []
+      if (tablesByType.has('table')) {
+        tableGroups.push({ name: '散台', type: 'table', tables: tablesByType.get('table')! })
+      }
+      if (tablesByType.has('room')) {
+        tableGroups.push({ name: '包间', type: 'room', tables: tablesByType.get('room')! })
+      }
+
+      const tableStats = {
+        total: tables.length,
+        available: tables.filter((t: Table) => t.status === 'available').length,
+        occupied: tables.filter((t: Table) => t.status === 'occupied').length
+      }
+
+      this.setData({ tableGroups, tableStats })
+    } catch (error) {
+      logger.error('加载桌台失败', error, 'Dashboard')
+    }
+  },
+
+  // WebSocket 连接
+  async connectWebSocket() {
+    const merchantId = app.globalData.merchantId
+    const userId = app.globalData.userId
+
+    if (!merchantId) {
+      logger.warn('商户ID不存在，跳过WebSocket连接', {}, 'Dashboard')
       return
     }
 
     try {
-      // 这里的 merchantId 实际上是实体的 ID
-      if (!merchantId) {
-        logger.warn('商户ID不存在，跳过WebSocket连接', {}, 'Dashboard')
-        return
-      }
-
-      // 获取当前登录用户 ID（用于握手鉴权，必须与 Token 的身份一致）
-      const currentUserId = app.globalData.userId;
-
-      if (!currentUserId) {
-        logger.warn('当前用户信息尚未加载，WebSocket 鉴权可能失败', {}, 'Dashboard')
-      }
-
-      // 为商户初始化实时通信
       await RealtimeUtils.initializeForMerchant(
-        Number(currentUserId || 0),
+        Number(userId || 0),
         Number(merchantId),
         {
           onOpen: () => {
-            logger.info('WebSocket 连接成功', { userId: currentUserId, merchantId }, 'Dashboard')
+            logger.info('WebSocket 连接成功', { merchantId }, 'Dashboard')
+            this.setData({ wsConnected: true })
           },
           onMessage: (msg: WebSocketMessage) => {
             this.handleWebSocketMessage(msg)
           },
           onNotification: (notif: any) => {
-            logger.info('收到系统通知', notif, 'Dashboard.WebSocket')
-            // 如果通知内容包含“订单”，则刷新订单列表
             if (notif.title?.includes('订单') || notif.content?.includes('订单')) {
               this.loadOrders()
               wx.vibrateShort({ type: 'medium' })
             }
           },
           onOrderUpdate: (orderData: any) => {
-            logger.info('收到订单更新', orderData, 'Dashboard.WebSocket')
+            logger.info('收到订单更新', orderData, 'Dashboard')
             this.loadOrders()
+            this.loadStats()
             wx.vibrateShort({ type: 'medium' })
           }
         }
       )
     } catch (error) {
-      logger.error('WebSocket 连接失败', error, 'Dashboard.connectWebSocket')
+      logger.error('WebSocket 连接失败', error, 'Dashboard')
+      this.setData({ wsConnected: false })
     }
   },
 
-  /**
-   * 处理 WebSocket 消息
-   */
   handleWebSocketMessage(msg: WebSocketMessage) {
-    if (msg.type === 'new_order' || (msg.type === 'notification' && (msg.data?.title?.includes('订单') || msg.data?.content?.includes('订单')))) {
-      // 新订单通知
+    if (msg.type === 'new_order' || msg.type === 'order_update') {
       wx.vibrateShort({ type: 'medium' })
       this.loadOrders()
-
-      if (msg.data?.title) {
-        wx.showToast({ title: msg.data.title, icon: 'none' })
-      }
+      this.loadStats()
     } else if (msg.type === 'table_status_change') {
-      // 桌台状态变化
       this.loadTables()
-    } else if (msg.type === 'notification') {
-      // 其他普通通知
-      if (msg.data?.title) {
-        wx.showToast({ title: msg.data.title, icon: 'none' })
-      }
     }
   },
 
-  /**
-   * 非商户处理
-   */
-  handleNotMerchant() {
-    wx.showModal({
-      title: '无法访问',
-      content: '您可能还未完成商户入驻，或商户审核尚未通过',
-      confirmText: '去入驻',
-      cancelText: '返回首页',
-      success: (res) => {
-        if (res.confirm) {
-          wx.redirectTo({ url: '/pages/register/merchant/index' })
-        } else {
-          wx.switchTab({ url: '/pages/takeout/index' })
-        }
-      }
-    })
-  },
-
-  /**
-   * 切换营业状态
-   */
+  // 切换营业状态
   async onToggleStatus() {
     const newStatus = !this.data.isOpen
-
     try {
-      await MerchantManagementService.updateMerchantStatus({
-        is_open: newStatus
-      })
-
+      await MerchantManagementService.updateMerchantStatus({ is_open: newStatus })
       this.setData({ isOpen: newStatus })
       wx.showToast({ title: newStatus ? '已开始营业' : '已暂停营业', icon: 'none' })
+
+      // 营业状态变化时管理 WebSocket
+      if (newStatus) {
+        this.connectWebSocket()
+      } else {
+        WebSocketUtils.closeAll()
+        this.setData({ wsConnected: false })
+      }
     } catch (error) {
-      logger.error('切换营业状态失败', error, 'Dashboard.onToggleStatus')
       wx.showToast({ title: '操作失败', icon: 'none' })
     }
   },
 
-  /**
-   * 点击桌台 - 集成监控逻辑
-   */
-  onTableTap(e: any) {
-    const id = e.currentTarget.dataset.id;
-    let table: any = null;
-
-    // 兼容性替代 flatMap
-    for (let i = 0; i < this.data.tableGroups.length; i++) {
-      const found = this.data.tableGroups[i].tables.find((t: any) => t.id === id);
-      if (found) {
-        table = found;
-        break;
-      }
-    }
-
-    if (isLargeScreen()) {
-      this.setData({ selectedTable: table });
-    } else {
-      // 手机端跳转
-      wx.navigateTo({
-        url: `/pages/merchant/tables/manage/manage?tableId=${id}`
-      })
-    }
+  // 订单操作
+  onOrderTap(e: any) {
+    const id = e.currentTarget.dataset.id
+    wx.navigateTo({ url: `/pages/merchant/orders/index?highlight=${id}` })
   },
 
-  onDeselectTable() {
-    this.setData({ selectedTable: null });
-  },
-
-  async updateTableStatusAction(e: any) {
-    const { status } = e.currentTarget.dataset;
-    const { selectedTable } = this.data;
-    if (!selectedTable) return;
-
-    wx.showLoading({ title: '指挥执行中...' });
+  async onAcceptOrder(e: any) {
+    const id = e.currentTarget.dataset.id
     try {
-      const { updateTableStatus } = require('../../../api/merchant-table-device-management');
-      await updateTableStatus(selectedTable.id, status);
-
-      wx.showToast({ title: '操作成功', icon: 'success' });
-      await this.loadTables(); // 刷新数据
-
-      // 更新当前选中的桌台状态 (兼容性查找)
-      let updatedTable: any = null;
-      for (let i = 0; i < this.data.tableGroups.length; i++) {
-        const found = this.data.tableGroups[i].tables.find((t: any) => t.id === selectedTable.id);
-        if (found) {
-          updatedTable = found;
-          break;
-        }
-      }
-      this.setData({ selectedTable: updatedTable });
-    } catch (error) {
-      logger.error('Dashboard.updateTableStatus', error);
-      wx.showToast({ title: '同步失败', icon: 'none' });
-    } finally {
-      wx.hideLoading();
-    }
-  },
-
-  /**
-   * 接单
-   * 使用 POST /v1/merchant/orders/{id}/accept
-   */
-  async onAcceptOrder(e: WechatMiniprogram.TouchEvent) {
-    const orderId = e.currentTarget.dataset.id
-
-    try {
-      wx.showLoading({ title: '接单中...' })
-
-      // TODO: 调用真实 API
-      // await acceptMerchantOrder(orderId)
-
-      wx.hideLoading()
-      wx.showToast({ title: '接单成功', icon: 'success' })
+      await MerchantOrderManagementService.acceptOrder(id)
+      wx.showToast({ title: '已接单', icon: 'success' })
       this.loadOrders()
     } catch (error) {
-      wx.hideLoading()
-      logger.error('接单失败', error, 'Dashboard.onAcceptOrder')
       wx.showToast({ title: '接单失败', icon: 'none' })
     }
   },
 
-  /**
-   * 出餐
-   * 使用 POST /v1/merchant/orders/{id}/ready
-   */
-  async onReadyOrder(e: WechatMiniprogram.TouchEvent) {
-    const orderId = e.currentTarget.dataset.id
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-
-      // TODO: 调用真实 API
-      // await readyMerchantOrder(orderId)
-
-      wx.hideLoading()
-      wx.showToast({ title: '已出餐', icon: 'success' })
-      this.loadOrders()
-    } catch (error) {
-      wx.hideLoading()
-      logger.error('出餐失败', error, 'Dashboard.onReadyOrder')
-      wx.showToast({ title: '操作失败', icon: 'none' })
-    }
-  },
-
-  /**
-   * 点击提醒
-   */
-  onAlertTap(e: WechatMiniprogram.TouchEvent) {
-    const item = e.currentTarget.dataset.item as AlertItem
-
-    if (item.type === 'order') {
-      wx.navigateTo({ url: '/pages/merchant/orders/index' })
-    } else if (item.type === 'table') {
-      this.goToTables()
-    }
-  },
-
-  // ========== 侧边栏控制方法 ==========
-
-  /**
-   * 侧边栏折叠/展开
-   */
-  onSidebarCollapse(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ sidebarCollapsed: e.detail.collapsed })
-  },
-
-  /**
-   * 侧边栏菜单点击（由组件内部处理导航，这里可做额外逻辑）
-   */
-  onSidebarMenuChange(e: WechatMiniprogram.CustomEvent) {
-    const { path } = e.detail
-    logger.info('菜单切换', { path }, 'Dashboard.onSidebarMenuChange')
-  },
-
-  /**
-   * 拒单
-   */
-  onRejectOrder(e: WechatMiniprogram.TouchEvent) {
-    const orderId = e.currentTarget.dataset.id
+  async onRejectOrder(e: any) {
+    const id = e.currentTarget.dataset.id
     wx.showModal({
-      title: '确认拒单',
-      content: '拒单后订单将取消，确定要拒绝此订单吗？',
+      title: '拒单原因',
+      editable: true,
+      placeholderText: '请输入拒单原因',
       success: async (res) => {
-        if (res.confirm) {
+        if (res.confirm && res.content) {
           try {
-            wx.showLoading({ title: '处理中...' })
-            // TODO: 调用拒单 API
-            wx.hideLoading()
-            wx.showToast({ title: '已拒单', icon: 'none' })
+            await MerchantOrderManagementService.rejectOrder(id, { reason: res.content })
+            wx.showToast({ title: '已拒单', icon: 'success' })
             this.loadOrders()
           } catch (error) {
-            wx.hideLoading()
-            wx.showToast({ title: '操作失败', icon: 'none' })
+            wx.showToast({ title: '拒单失败', icon: 'none' })
           }
         }
       }
     })
   },
 
-  // ========== 导航方法 ==========
-
-  goToTables() {
-    wx.navigateTo({ url: '/pages/merchant/tables/manage/manage' })
+  async onReadyOrder(e: any) {
+    const id = e.currentTarget.dataset.id
+    try {
+      await MerchantOrderManagementService.markOrderReady(id)
+      wx.showToast({ title: '已出餐', icon: 'success' })
+      this.loadOrders()
+    } catch (error) {
+      wx.showToast({ title: '操作失败', icon: 'none' })
+    }
   },
 
-  goToOrders() {
-    wx.navigateTo({ url: '/pages/merchant/orders/index' })
+  // 桌台操作
+  onTableTap(e: any) {
+    const id = e.currentTarget.dataset.id
+    wx.navigateTo({ url: `/pages/merchant/tables/index?tableId=${id}` })
+  },
+
+  // 快捷导航
+  goToInventory() {
+    wx.navigateTo({ url: '/pages/merchant/inventory/index' })
+  },
+
+  goToMembers() {
+    wx.navigateTo({ url: '/pages/merchant/members/index' })
+  },
+
+  goToReservations() {
+    wx.navigateTo({ url: '/pages/merchant/reservations/index' })
   },
 
   goToKitchen() {
     wx.navigateTo({ url: '/pages/merchant/kds/index' })
   },
 
-  goToAdmin() {
-    wx.navigateTo({ url: '/pages/merchant/admin/index' })
+  goToStats() {
+    wx.navigateTo({ url: '/pages/merchant/analytics/index' })
+  },
+
+  goToFinance() {
+    wx.navigateTo({ url: '/pages/merchant/finance/index' })
+  },
+
+  goToSettings() {
+    wx.navigateTo({ url: '/pages/merchant/settings/index' })
   },
 
   goToDishes() {
@@ -771,31 +426,11 @@ Page({
     wx.navigateTo({ url: '/pages/merchant/combos/index' })
   },
 
-  goToStats() {
-    wx.navigateTo({ url: '/pages/merchant/analytics/index' })
-  },
-
-  goToSettings() {
-    wx.navigateTo({ url: '/pages/merchant/profile/index' })
-  },
-
-  goToInventory() {
-    wx.navigateTo({ url: '/pages/merchant/inventory/index' })
-  },
-
-  goToMembers() {
-    wx.navigateTo({ url: '/pages/merchant/members/index' })
+  goToTables() {
+    wx.navigateTo({ url: '/pages/merchant/tables/index' })
   },
 
   goToMarketing() {
-    wx.navigateTo({ url: '/pages/merchant/marketing/manage/manage' })
-  },
-
-  goToFinance() {
-    wx.navigateTo({ url: '/pages/merchant/finance/settlement' })
-  },
-
-  goToReviews() {
-    wx.navigateTo({ url: '/pages/merchant/review/index' })
+    wx.navigateTo({ url: '/pages/merchant/vouchers/index' })
   }
 })
