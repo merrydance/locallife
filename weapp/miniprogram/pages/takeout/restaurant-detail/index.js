@@ -226,8 +226,8 @@ Page({
         const CartService = require('../../../services/cart').default;
         const cart = CartService.getCart();
         this.setData({
-            cartCount: cart.totalCount,
-            cartPrice: cart.totalPrice
+            cartCount: (cart === null || cart === void 0 ? void 0 : cart.total_count) || 0,
+            cartPrice: (cart === null || cart === void 0 ? void 0 : cart.subtotal) || 0
         });
     },
     onCheckout() {

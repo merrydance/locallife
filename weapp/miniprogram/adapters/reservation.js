@@ -11,10 +11,13 @@ class ReservationAdapter {
      */
     static formatStatus(status) {
         const statusMap = {
-            'pending': '待确认',
+            'pending': '待支付',
+            'paid': '已支付',
             'confirmed': '已确认',
+            'checked_in': '已到店',
             'completed': '已完成',
             'cancelled': '已取消',
+            'expired': '已过期',
             'no_show': '未到店'
         };
         return statusMap[status] || status;
@@ -25,9 +28,12 @@ class ReservationAdapter {
     static getStatusTheme(status) {
         const themeMap = {
             'pending': 'warning',
+            'paid': 'primary',
             'confirmed': 'primary',
+            'checked_in': 'success',
             'completed': 'success',
             'cancelled': 'default',
+            'expired': 'default',
             'no_show': 'danger'
         };
         return themeMap[status] || 'default';

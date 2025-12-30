@@ -37,23 +37,22 @@
   border-radius: 3rpx;
 }
 
+/* PC 端尺寸锁定 - 保持视觉一致性 */
 @media (min-width: 750px) {
   .category-tabs {
-    height: 48px !important; /* Standardize to 48px */
-    padding: 0 32px !important;
+    height: 44px !important;
+    padding: 0 16px !important;
   }
   .tab-item {
-    font-size: 14px !important;
-    padding: 0 24px !important;
-    height: 100% !important;
+    font-size: 13px !important;
+    padding: 0 12px !important;
   }
   .tab-item.active {
-    font-size: 14px !important;
-    font-weight: 600 !important;
+    font-size: 13px !important;
   }
   .active-line {
-    bottom: 0 !important;
-    width: 24px !important;
+    bottom: 8px !important;
+    width: 20px !important;
     height: 3px !important;
   }
 }

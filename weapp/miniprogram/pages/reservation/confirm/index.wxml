@@ -1,6 +1,6 @@
 <custom-navbar title="确认预定" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
   <!-- 房间信息 -->
   <view class="room-info">
     <text class="room-name">{{roomName}}</text>

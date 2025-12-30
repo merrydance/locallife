@@ -93,32 +93,30 @@
   font-weight: 500;
 }
 
+/* PC 端尺寸锁定 - 保持视觉一致性 */
 @media (min-width: 750px) {
   .restaurant-card {
-    gap: 16px !important;
-    padding: 16px !important;
-    border-radius: 12px !important;
-    margin-bottom: 0 !important;
+    gap: 12px !important;
+    padding: 12px !important;
+    border-radius: 8px !important;
+    margin-bottom: 12px !important;
   }
   .restaurant-image {
-    width: 120px !important;
-    height: 100px !important;
-    border-radius: 8px !important;
+    width: 100px !important;
+    height: 80px !important;
+    border-radius: 6px !important;
   }
   .restaurant-name {
-    font-size: 16px !important;
+    font-size: 14px !important;
   }
   .rating {
-    font-size: 13px !important;
+    font-size: 12px !important;
   }
   .row-2 {
-    font-size: 13px !important;
-    gap: 8px !important;
-  }
-  .distance {
     font-size: 12px !important;
+    gap: 6px !important;
   }
-  .row-3, .rooms {
-    font-size: 12px !important;
+  .distance, .row-3, .rooms {
+    font-size: 11px !important;
   }
 }

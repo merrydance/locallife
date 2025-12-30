@@ -175,7 +175,7 @@ Page({
             currentStep: 1,
             minimumSpendYuan: '',
             tableImages: [],
-            tableTags: [],
+            selectedTagIds: [],
             newTagName: '',
             qrCodeUrl: ''
         });
@@ -233,7 +233,8 @@ Page({
                     table_type: selectedTable.table_type,
                     capacity: selectedTable.capacity,
                     description: ((_b = selectedTable.description) === null || _b === void 0 ? void 0 : _b.trim()) || undefined,
-                    minimum_spend: selectedTable.minimum_spend || undefined
+                    minimum_spend: selectedTable.minimum_spend || undefined,
+                    tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined
                 };
                 const newTable = yield table_device_management_1.tableManagementService.createTable(createData);
                 this.setData({
@@ -252,12 +253,27 @@ Page({
         });
     },
     onFinishAdd() {
-        this.setData({
-            selectedTable: null,
-            isAdding: false,
-            currentStep: 1
+        return __awaiter(this, void 0, void 0, function* () {
+            // 如果有选择标签，保存到已创建的桌台
+            const { selectedTable, selectedTagIds } = this.data;
+            if ((selectedTable === null || selectedTable === void 0 ? void 0 : selectedTable.id) && selectedTagIds.length > 0) {
+                try {
+                    yield table_device_management_1.tableManagementService.updateTable(selectedTable.id, {
+                        tag_ids: selectedTagIds
+                    });
+                }
+                catch (error) {
+                    logger_1.logger.error('保存标签失败', error, 'Tables');
+                }
+            }
+            this.setData({
+                selectedTable: null,
+                isAdding: false,
+                currentStep: 1,
+                selectedTagIds: [] // 重置标签选择
+            });
+            this.loadTables();
         });
-        this.loadTables();
     },
     // ========== 保存（编辑模式） ==========
     onSaveTable() {
@@ -281,7 +297,8 @@ Page({
                     capacity: selectedTable.capacity,
                     description: ((_c = selectedTable.description) === null || _c === void 0 ? void 0 : _c.trim()) || undefined,
                     minimum_spend: selectedTable.minimum_spend || undefined,
-                    status: selectedTable.status
+                    status: selectedTable.status,
+                    tag_ids: this.data.selectedTagIds // 添加标签ID列表
                 };
                 yield table_device_management_1.tableManagementService.updateTable(selectedTable.id, updateData);
                 this.setData({ saving: false });
@@ -432,7 +449,7 @@ Page({
     },
     // 切换标签选中状态
     onTagToggle(e) {
-        const tagId = e.currentTarget.dataset.id;
+        const tagId = Number(e.currentTarget.dataset.id);
         const { selectedTagIds } = this.data;
         const index = selectedTagIds.indexOf(tagId);
         let newIds;
@@ -451,6 +468,10 @@ Page({
     // 关闭标签管理弹窗
     onCloseTagManager() {
         this.setData({ showTagManager: false, newTagName: '' });
+    },
+    // 阻止事件冒泡
+    stopPropagation() {
+        // 空函数，仅用于阻止事件冒泡
     },
     // 输入新标签名
     onTagNameInput(e) {
@@ -517,7 +538,12 @@ Page({
                 wx.showLoading({ title: '生成中...' });
                 const res = yield table_device_management_1.tableManagementService.getTableQRCode(tableId);
                 wx.hideLoading();
-                this.setData({ qrCodeUrl: res.qr_code_url });
+                // 解析二维码URL为完整路径
+                let qrCodeUrl = '';
+                if (res.qr_code_url) {
+                    qrCodeUrl = yield (0, image_security_1.resolveImageURL)(res.qr_code_url);
+                }
+                this.setData({ qrCodeUrl });
                 wx.showToast({ title: '二维码已生成', icon: 'success' });
             }
             catch (error) {

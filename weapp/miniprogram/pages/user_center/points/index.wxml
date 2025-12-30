@@ -1,6 +1,6 @@
 <custom-navbar title="我的积分" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px;">
   <!-- 积分概览 -->
   <view class="header-section">
     <view class="points-display">

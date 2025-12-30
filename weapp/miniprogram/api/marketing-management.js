@@ -13,7 +13,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MarketingAdapter = exports.PromotionService = exports.MembershipSettingsService = exports.RechargeRuleManagementService = exports.VoucherManagementService = void 0;
+exports.MarketingAdapter = exports.PromotionService = exports.MembershipSettingsService = exports.RechargeRuleManagementService = exports.DiscountRuleManagementService = exports.VoucherManagementService = void 0;
 const request_1 = require("../utils/request");
 // ==================== 优惠券管理服务 ====================
 /**
@@ -27,9 +27,8 @@ class VoucherManagementService {
     static getVoucherList(merchantId, params) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/vouchers`,
-                method: 'GET',
-                data: params
+                url: `/v1/merchants/${merchantId}/vouchers?page_id=${params.page_id}&page_size=${params.page_size}`,
+                method: 'GET'
             });
         });
     }
@@ -71,8 +70,78 @@ class VoucherManagementService {
             });
         });
     }
+    /**
+     * 更新优惠券
+     * PATCH /v1/merchants/{id}/vouchers/{voucher_id}
+     */
+    static updateVoucher(merchantId, voucherId, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
+                method: 'PATCH',
+                data
+            });
+        });
+    }
 }
 exports.VoucherManagementService = VoucherManagementService;
+/**
+ * 满减规则管理服务
+ */
+class DiscountRuleManagementService {
+    /**
+     * 获取满减规则列表
+     * GET /v1/merchants/{id}/discounts
+     */
+    static getDiscountRuleList(merchantId, params) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: `/v1/merchants/${merchantId}/discounts?page_id=${params.page_id}&page_size=${params.page_size}`,
+                method: 'GET'
+            });
+        });
+    }
+    /**
+     * 创建满减规则
+     * POST /v1/merchants/{merchantId}/discounts
+     */
+    static createDiscountRule(merchantId, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: `/v1/merchants/${merchantId}/discounts`,
+                method: 'POST',
+                data
+            });
+        });
+    }
+    /**
+     * 更新满减规则
+     * PATCH /v1/merchants/{merchantId}/discounts/{id}
+     * 后端要求 id 必须在请求体中
+     */
+    static updateDiscountRule(merchantId, ruleId, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+                method: 'PATCH',
+                data: Object.assign({ id: ruleId }, data)
+            });
+        });
+    }
+    /**
+     * 删除满减规则
+     * DELETE /v1/merchants/{merchantId}/discounts/{id}
+     */
+    static deleteDiscountRule(merchantId, ruleId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+                method: 'DELETE'
+            });
+        });
+    }
+}
+exports.DiscountRuleManagementService = DiscountRuleManagementService;
 // ==================== 充值规则管理服务 ====================
 /**
  * 充值规则管理服务

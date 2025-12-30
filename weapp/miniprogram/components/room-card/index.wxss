@@ -92,7 +92,7 @@
     gap: 16px !important;
     padding: 16px !important;
     border-radius: 12px !important;
-    margin-bottom: 0 !important; /* Grid handles spacing */
+    margin-bottom: 12px !important; /* 恢复间距，因为不再使用grid */
   }
   .room-image {
     width: 120px !important;

@@ -229,8 +229,8 @@ Page({
     const CartService = require('../../../services/cart').default
     const cart = CartService.getCart()
     this.setData({
-      cartCount: cart.totalCount,
-      cartPrice: cart.totalPrice
+      cartCount: cart?.total_count || 0,
+      cartPrice: cart?.subtotal || 0
     })
   },
 

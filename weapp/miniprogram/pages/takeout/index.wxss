@@ -1,6 +1,54 @@
-@import "../../styles/responsive.wxss";
+@import '../../styles/responsive.wxss';
+
+/* PC 端提示样式 */
+.pc-notice-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ff6b58 0%, #ff8a6b 100%);
+  padding: 40px;
+}
+
+.pc-notice-card {
+  background: white;
+  padding: 60px 80px;
+  border-radius: 24px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.pc-notice-icon {
+  font-size: 64px;
+  display: block;
+}
+
+.pc-notice-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  display: block;
+}
+
+.pc-notice-desc {
+  font-size: 16px;
+  color: #666;
+  display: block;
+}
+
+.pc-notice-hint {
+  font-size: 14px;
+  color: #999;
+  display: block;
+  margin-top: 8px;
+}
 
 /* 外卖首页 - 基于color_guide.md配色 */
+/* 注意：顾客端统一使用手机设计，大屏通过 customer-page-container 锁定宽度 */
 
 /* ========== 页面容器 (60% 陶瓷白背景) ========== */
 .page-container {
@@ -13,45 +61,10 @@
   background: var(--td-bg-color-container);  /* 纯白卡片 */
 }
 
-@media (min-width: 750px) {
-  .search-section {
-    padding: 0 32px 12px !important;
-    height: 64px !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: sticky;
-    top: 64px !important; /* Below Navbar */
-    z-index: 100;
-    background: var(--td-bg-color-container) !important;
-    box-sizing: border-box;
-  }
-  .search-section .t-search {
-    width: 100% !important;
-    max-width: 640px !important; /* Refined from 800px to 640px for balance */
-  }
-}
-
 /* ========== Tabs区域 ========== */
 .tabs-section {
   background: var(--td-bg-color-container);
   margin-bottom: 16rpx;
-}
-
-@media (min-width: 750px) {
-  .tabs-section {
-    padding: 0 32px !important;
-    height: 48px !important;
-    margin-bottom: 8px !important;
-    position: sticky;
-    top: 128px !important; /* Below Navbar + Search */
-    z-index: 99;
-    background: var(--td-bg-color-container) !important;
-    box-sizing: border-box;
-  }
-  .tabs-section .t-tabs {
-    height: 48px !important;
-  }
 }
 
 /* ========== 分类导航 ========== */
@@ -60,39 +73,12 @@
   margin-bottom: 16rpx;
 }
 
-@media (min-width: 768px) {
-  .category-section {
-    padding: 0 48rpx;
-  }
-}
-
 /* ========== 内容区域 ========== */
 .content-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
   padding: 0 24rpx 24rpx;
-}
-
-/* 响应式网格布局已由 responsive-grid-3 接管 */
-
-/* Asset Stabilization Caps */
-@media (min-width: 750px) {
-  .package-image {
-    width: 80px !important;
-    height: 80px !important;
-    border-radius: 6px !important;
-  }
-  .package-name {
-    font-size: 16px !important;
-  }
-  .package-price {
-    font-size: 18px !important;
-  }
-  .location-guide-icon {
-    font-size: 48px !important;
-  }
-  .no-more {
-    font-size: 14px !important;
-    padding: 24px 0 !important;
-  }
 }
 
 /* ========== 骨架屏 ========== */
@@ -127,12 +113,14 @@
   display: flex;
   flex-direction: column;
   gap: 8rpx;
+  min-width: 0;  /* 关键：允许flex子项收缩 */
 }
 
 .package-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 12rpx;
 }
 
 .package-name {
@@ -140,6 +128,10 @@
   font-size: 28rpx;
   font-weight: 500;
   color: var(--td-text-color-primary);  /* #333 炭黑 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;  /* 单行显示 */
+  min-width: 0;  /* 允许收缩 */
 }
 
 /* 30% 品牌主色 - 价格使用活力珊瑚 */
@@ -147,6 +139,8 @@
   font-size: 32rpx;
   font-weight: bold;
   color: var(--brand-coral);  /* #FF6B58 活力珊瑚 */
+  flex-shrink: 0;  /* 防止价格被压缩 */
+  white-space: nowrap;
 }
 
 .package-original-price {
@@ -155,38 +149,20 @@
   text-decoration: line-through;
 }
 
-.package-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8rpx;
-  font-size: 22rpx;
+.package-desc {
+  font-size: 24rpx;
   color: var(--td-text-color-secondary);  /* #666 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 8rpx;
 }
 
-.package-item::after {
-  content: '、';
-}
-
-.package-item:last-child::after {
-  content: '';
-}
-
-.package-meta {
+.package-footer {
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  font-size: 22rpx;
-  color: var(--td-text-color-secondary);
-}
-
-/* 10% 强调色 - 评分使用日光芥末 */
-.package-meta .rating {
-  color: var(--brand-mustard);  /* #FFC107 日光芥末 */
-  font-weight: 500;
-}
-
-.package-meta .dot {
-  color: var(--td-text-color-placeholder);
+  gap: 16rpx;
+  margin-top: 12rpx;
 }
 
 .loading-wrapper {

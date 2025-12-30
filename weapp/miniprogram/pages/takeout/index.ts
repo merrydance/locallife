@@ -468,7 +468,10 @@ Page({
         name: combo.name,
         description: combo.description || '',
         price: combo.combo_price,
+        priceDisplay: (combo.combo_price / 100).toFixed(2),
         original_price: combo.combo_price, // 后端暂无原价字段
+        originalPriceDisplay: (combo.combo_price / 100).toFixed(2),
+        image_url: '', // 后端暂无图片字段
         is_online: combo.is_online
       }))
 
@@ -543,6 +546,15 @@ Page({
   onMerchantClick(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.detail
     Navigation.toRestaurantDetail(id)
+  },
+
+  /**
+     * 点击套餐卡片 - 暂时提示（后续可跳转到套餐详情）
+     */
+  onPackageTap(e: WechatMiniprogram.TouchEvent) {
+    const id = e.currentTarget.dataset.id
+    wx.showToast({ title: `套餐ID: ${id}`, icon: 'none' })
+    // TODO: Navigation.toComboDetail(id)
   },
 
   /**

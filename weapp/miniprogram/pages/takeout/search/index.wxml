@@ -1,6 +1,6 @@
 <custom-navbar title="搜索" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px;">
   <view class="responsive-container">
   <!-- 搜索框 -->
   <view class="search-section">

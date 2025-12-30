@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/websocket"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -27,19 +29,30 @@ type createTableRequest struct {
 }
 
 type tableResponse struct {
-	ID                   int64      `json:"id"`
-	MerchantID           int64      `json:"merchant_id"`
-	TableNo              string     `json:"table_no"`
-	TableType            string     `json:"table_type"`
-	Capacity             int16      `json:"capacity"`
-	Description          *string    `json:"description,omitempty"`
-	MinimumSpend         *int64     `json:"minimum_spend,omitempty"`
-	QrCodeUrl            *string    `json:"qr_code_url,omitempty"`
-	Status               string     `json:"status"`
-	CurrentReservationID *int64     `json:"current_reservation_id,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            *time.Time `json:"updated_at,omitempty"`
-	Tags                 []tagInfo  `json:"tags,omitempty"`
+	ID                   int64             `json:"id"`
+	MerchantID           int64             `json:"merchant_id"`
+	TableNo              string            `json:"table_no"`
+	TableType            string            `json:"table_type"`
+	Capacity             int16             `json:"capacity"`
+	Description          *string           `json:"description,omitempty"`
+	MinimumSpend         *int64            `json:"minimum_spend,omitempty"`
+	QrCodeUrl            *string           `json:"qr_code_url,omitempty"`
+	Status               string            `json:"status"`
+	CurrentReservationID *int64            `json:"current_reservation_id,omitempty"`
+	CurrentReservation   *reservationBrief `json:"current_reservation,omitempty"` // 当前预订信息
+	CreatedAt            time.Time         `json:"created_at"`
+	UpdatedAt            *time.Time        `json:"updated_at,omitempty"`
+	Tags                 []tagInfo         `json:"tags,omitempty"`
+}
+
+// reservationBrief 预订简要信息
+type reservationBrief struct {
+	ID              int64   `json:"id"`
+	ContactName     string  `json:"contact_name"`
+	ContactPhone    string  `json:"contact_phone"`
+	GuestCount      int16   `json:"guest_count"`
+	ReservationTime string  `json:"reservation_time"`
+	Notes           *string `json:"notes,omitempty"`
 }
 
 // tableTagInfo 桌台标签信息（包含类型）
@@ -316,6 +329,33 @@ func (server *Server) listTables(ctx *gin.Context) {
 				resp.Tables[i].Tags[j] = tagInfo{
 					ID:   tag.TagID,
 					Name: tag.TagName,
+				}
+			}
+		}
+
+		// 加载当前预订信息
+		if t.CurrentReservationID.Valid {
+			reservation, err := server.store.GetTableReservation(ctx, t.CurrentReservationID.Int64)
+			if err == nil {
+				var notes *string
+				if reservation.Notes.Valid {
+					notes = &reservation.Notes.String
+				}
+				// 格式化时间：pgtype.Time 存储的是微秒
+				resTimeStr := ""
+				if reservation.ReservationTime.Valid {
+					microseconds := reservation.ReservationTime.Microseconds
+					hours := microseconds / 3600000000
+					minutes := (microseconds % 3600000000) / 60000000
+					resTimeStr = fmt.Sprintf("%02d:%02d", hours, minutes)
+				}
+				resp.Tables[i].CurrentReservation = &reservationBrief{
+					ID:              reservation.ID,
+					ContactName:     reservation.ContactName,
+					ContactPhone:    reservation.ContactPhone,
+					GuestCount:      reservation.GuestCount,
+					ReservationTime: resTimeStr,
+					Notes:           notes,
 				}
 			}
 		}
@@ -631,6 +671,20 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// WebSocket 推送桌台状态变更
+	if server.wsHub != nil {
+		tableData, _ := json.Marshal(map[string]any{
+			"id":       updatedTable.ID,
+			"table_no": updatedTable.TableNo,
+			"status":   updatedTable.Status,
+		})
+		server.wsHub.SendToMerchant(merchant.ID, websocket.Message{
+			Type:      "table_status_change",
+			Data:      tableData,
+			Timestamp: time.Now(),
+		})
 	}
 
 	ctx.JSON(http.StatusOK, newTableResponse(updatedTable))

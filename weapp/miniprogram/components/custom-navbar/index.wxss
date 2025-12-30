@@ -97,7 +97,7 @@
   flex-shrink: 0;
 }
 
-/* ==================== 大屏适配锁定 (防止过度缩放) ==================== */
+/* PC 端尺寸锁定 - 保持视觉一致性 */
 @media (min-width: 750px) {
   .nav-bar {
     padding: 0 16px !important;

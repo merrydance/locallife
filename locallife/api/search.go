@@ -19,14 +19,14 @@ import (
 // ========================= Request/Response Types ============================
 
 type searchDishesRequest struct {
-	Keyword    string `form:"keyword" binding:"required,min=1,max=100"`
+	Keyword    string `form:"keyword" binding:"omitempty,max=100"`   // 可选：为空时返回全部
 	MerchantID *int64 `form:"merchant_id" binding:"omitempty,min=1"` // 可选：在特定商户内搜索
 	PageID     int32  `form:"page_id" binding:"required,min=1"`
 	PageSize   int32  `form:"page_size" binding:"required,min=1,max=50"`
 }
 
 type searchMerchantsRequest struct {
-	Keyword       string   `form:"keyword" binding:"required,min=1,max=100"`
+	Keyword       string   `form:"keyword" binding:"omitempty,max=100"` // 可选：为空时返回全部
 	PageID        int32    `form:"page_id" binding:"required,min=1"`
 	PageSize      int32    `form:"page_size" binding:"required,min=1,max=50"`
 	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度

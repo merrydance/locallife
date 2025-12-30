@@ -1,6 +1,6 @@
 <custom-navbar title="购物车" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
   <!-- 购物车列表 -->
   <view wx:if="{{items.length > 0}}" class="cart-list">
     <view class="cart-header">

@@ -4,7 +4,7 @@
  */
 
 import { MerchantManagementService } from '../../../api/merchant'
-import { getTables, Table } from '../../../api/merchant-table-device-management'
+import { getTables, Table, updateTableStatus } from '../../../api/merchant-table-device-management'
 import { MerchantStatsService } from '../../../api/merchant-analytics'
 import { MerchantOrderManagementService } from '../../../api/order-management'
 import { WebSocketUtils, RealtimeUtils, WebSocketMessage } from '../../../api/websocket-realtime'
@@ -49,7 +49,11 @@ Page({
       total: 0,
       available: 0,
       occupied: 0
-    }
+    },
+
+    // 桌台弹窗
+    showTablePopup: false,
+    activeTable: null as any
   },
 
   onLoad() {
@@ -329,9 +333,32 @@ Page({
       } else {
         WebSocketUtils.closeAll()
         this.setData({ wsConnected: false })
+
+        // 打烊时释放所有桌台
+        this.releaseAllTables()
       }
     } catch (error) {
       wx.showToast({ title: '操作失败', icon: 'none' })
+    }
+  },
+
+  // 释放所有桌台（打烊时调用）
+  async releaseAllTables() {
+    try {
+      const response = await getTables()
+      const allTables = response.tables || []
+      const occupiedTables = allTables.filter((t: Table) => t.status === 'occupied')
+
+      if (occupiedTables.length > 0) {
+        // 批量更新所有占用的桌台为可用
+        for (const table of occupiedTables) {
+          await updateTableStatus(table.id, 'available')
+        }
+        logger.info(`打烊释放了 ${occupiedTables.length} 个桌台`, null, 'Dashboard')
+        this.loadTables()
+      }
+    } catch (error) {
+      logger.error('释放桌台失败', error, 'Dashboard')
     }
   },
 
@@ -383,7 +410,49 @@ Page({
     }
   },
 
-  // 桌台操作
+  // 桌台操作 - 点击显示弹窗
+  onTableCardTap(e: any) {
+    const table = e.currentTarget.dataset.table
+    this.setData({
+      showTablePopup: true,
+      activeTable: table
+    })
+  },
+
+  closeTablePopup() {
+    this.setData({
+      showTablePopup: false,
+      activeTable: null
+    })
+  },
+
+  async setTableStatus(e: any) {
+    const newStatus = e.currentTarget.dataset.status
+    const { activeTable } = this.data
+    if (!activeTable?.id) return
+
+    try {
+      await updateTableStatus(activeTable.id, newStatus)
+      wx.showToast({ title: '状态已更新', icon: 'success' })
+      this.closeTablePopup()
+      this.loadTables()
+    } catch (error) {
+      logger.error('更新桌台状态失败', error, 'Dashboard')
+      wx.showToast({ title: '更新失败', icon: 'none' })
+    }
+  },
+
+  // 跳转到预订管理页面添加预订
+  goToAddReservation() {
+    const { activeTable } = this.data
+    this.closeTablePopup()
+    // 跳转到预订页面，带上桌台ID参数
+    wx.navigateTo({
+      url: `/pages/merchant/reservations/index?tableId=${activeTable?.id}&openAdd=true`
+    })
+  },
+
+  // 旧的导航方法（保留用于快捷入口）
   onTableTap(e: any) {
     const id = e.currentTarget.dataset.id
     wx.navigateTo({ url: `/pages/merchant/tables/index?tableId=${id}` })

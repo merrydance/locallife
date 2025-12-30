@@ -108,8 +108,8 @@
               <view class="group-tables">
                 <view wx:for="{{group.tables}}" wx:key="id" wx:for-item="table"
                       class="table-card {{table.status_class}}"
-                      bindtap="onTableTap" data-id="{{table.id}}">
-                  <view class="table-no">{{table.table_number}}</view>
+                      bindtap="onTableCardTap" data-table="{{table}}">
+                  <view class="table-no">{{table.table_no}}</view>
                   <view class="table-status">{{table.status_text}}</view>
                   <view class="table-info">
                     <text wx:if="{{table.capacity}}">{{table.capacity}}人座</text>
@@ -118,6 +118,42 @@
               </view>
             </view>
           </block>
+        </view>
+      </view>
+
+      <!-- 桌台状态操作弹窗 -->
+      <view wx:if="{{showTablePopup}}" class="table-popup-mask" bindtap="closeTablePopup">
+        <view class="table-popup" catchtap="">
+          <view class="popup-header">
+            <text class="popup-title">{{activeTable.table_no}}</text>
+            <text class="popup-close" bindtap="closeTablePopup">×</text>
+          </view>
+          <view class="popup-info">
+            <text>当前状态：{{activeTable.status_text}}</text>
+            <text wx:if="{{activeTable.capacity}}">容量：{{activeTable.capacity}}人</text>
+          </view>
+          
+          <!-- 预订信息（如果有） -->
+          <view wx:if="{{activeTable.reservation}}" class="popup-reservation-info">
+            <view class="res-line"><text class="res-label">预订人：</text>{{activeTable.reservation.contact_name}}</view>
+            <view class="res-line"><text class="res-label">电话：</text>{{activeTable.reservation.contact_phone}}</view>
+            <view class="res-line"><text class="res-label">人数：</text>{{activeTable.reservation.guest_count}}人</view>
+            <view class="res-line"><text class="res-label">时间：</text>{{activeTable.reservation.reservation_time}}</view>
+          </view>
+          
+          <view class="popup-actions">
+            <button wx:if="{{activeTable.status !== 'available'}}" 
+                    class="popup-btn available" bindtap="setTableStatus" data-status="available">
+              设为空闲（离场）
+            </button>
+            <button wx:if="{{activeTable.status !== 'occupied'}}" 
+                    class="popup-btn occupied" bindtap="setTableStatus" data-status="occupied">
+              设为就餐中
+            </button>
+            <button class="popup-btn reserved" bindtap="goToAddReservation">
+              添加预订
+            </button>
+          </view>
         </view>
       </view>
 

@@ -114,22 +114,16 @@ page[data-theme="dark"] {
   justify-content: space-between;
   padding: 200rpx 0;
   box-sizing: border-box;
-} 
+}
+
+/* 
+ * PC 端字体和间距锁定
+ * 防止 rpx 在大屏上过度放大，保持视觉比例一致
+ * 注意：仅锁定尺寸变量，不改变布局结构
+ */
 @media (min-width: 750px) {
-  /* ==========================================================================
-     Phase 1: Global Variable Sink (Standardization)
-     Locking all rpx-based scaling to fixed px for Tablet/PC.
-     ========================================================================== */
   page {
-    /* 1. 基础布局 & 间距 (Standard Spacers) */
-    --td-spacer-1: 4px !important;
-    --td-spacer-2: 8px !important;
-    --td-spacer-3: 12px !important;
-    --td-spacer-4: 16px !important;
-    --td-spacer-5: 20px !important;
-    --td-spacer-6: 24px !important;
-    
-    /* 2. 核心字号 (Typography Lock) */
+    /* 字号锁定 - 防止文字过大 */
     --td-font-size-xs: 11px !important;
     --td-font-size-s: 13px !important;
     --td-font-size-m: 14px !important;
@@ -137,155 +131,32 @@ page[data-theme="dark"] {
     --td-font-size-xl: 18px !important;
     --td-font-size-2xl: 24px !important;
 
-    /* 3. 圆角系统 (Radius System) */
+    /* 间距锁定 */
+    --td-spacer-1: 4px !important;
+    --td-spacer-2: 8px !important;
+    --td-spacer-3: 12px !important;
+    --td-spacer-4: 16px !important;
+    --td-spacer-5: 20px !important;
+    --td-spacer-6: 24px !important;
+
+    /* 圆角锁定 */
     --td-radius-small: 4px !important;
     --td-radius-default: 6px !important;
     --td-radius-medium: 8px !important;
     --td-radius-large: 12px !important;
-    --td-radius-extra-large: 16px !important;
 
-    /* 4. TDesign 组件专有锁定 */
-    /* Navbar & Tabbar */
-    --td-navbar-height: 64px !important;
-    --td-tab-item-height: 48px !important;
-    
-    /* Search Box */
-    --td-search-height: 36px !important;
-    --td-search-padding-h: 12px !important;
-    --td-search-bg-color: var(--td-bg-color-secondarycontainer) !important;
-    
-    /* Cells */
-    --td-cell-height: auto !important;
-    --td-cell-min-height: 56px !important;
-    --td-cell-vertical-padding: 16px !important;
-    --td-cell-horizontal-padding: 24px !important;
-    --td-cell-title-font-size: 16px !important;
-    --td-cell-note-font-size: 14px !important;
-    --td-cell-description-font-size: 13px !important;
-
-    /* Buttons */
+    /* TDesign 组件尺寸锁定 */
     --td-button-medium-height: 40px !important;
     --td-button-large-height: 48px !important;
     --td-button-small-height: 32px !important;
-    
-    /* Icons & Tags */
-    --td-icon-size-xs: 12px !important;
-    --td-icon-size-s: 16px !important;
-    --td-icon-size-m: 20px !important;
-    --td-icon-size-l: 24px !important;
-    --td-icon-size-xl: 32px !important;
     --td-tag-medium-height: 24px !important;
     --td-tag-large-height: 32px !important;
-
-    /* Inputs & Controls */
-    --td-switch-height: 24px !important;
-    --td-checkbox-size: 20px !important;
-    --td-radio-size: 20px !important;
   }
 
-  /* 基础元素强制转换 - 覆盖 rpx */
-  text, view, button, input, textarea {
-    font-size: 14px; 
-  }
-
-  /* 图标类锁定 */
-  .t-icon, .icon, [class*="icon-"] {
-    width: 20px !important;
-    height: 20px !important;
-    font-size: 20px !important;
-  }
-  
-  /* ==========================================================================
-     Phase 2: Component Deep Stabilization
-     Preventing TDesign internal classes from scaling.
-     ========================================================================== */
-
-  /* 1. Search Component Internal Lock */
-  .t-search, .t-search__input-container {
-    height: 36px !important;
-    border-radius: 18px !important;
-  }
-  .t-search__input {
-    font-size: 14px !important;
-    height: 36px !important;
-    min-height: 36px !important;
-    line-height: 36px !important;
-  }
-  .t-search__search-icon, .t-search__clear-icon {
-    font-size: 18px !important;
-  }
-
-  /* 2. Tabs Component Internal Lock */
-  .t-tabs__wrapper, .t-tabs__scroll, .t-tabs__nav {
-    height: 48px !important;
-  }
-  .t-tabs__item {
-    font-size: 15px !important;
-    height: 48px !important;
-    line-height: 48px !important;
-    padding: 0 24px !important;
-  }
-  .t-tabs__item--active {
-    font-weight: 600 !important;
-    color: var(--td-brand-color) !important;
-    font-size: 16px !important;
-  }
-  .t-tabs__track {
-    height: 3px !important;
-    border-radius: 1.5px !important;
-  }
-
-  /* 2.1 Grid Component Internal Lock */
-  .t-grid-item__text {
-    font-size: 14px !important;
-    margin-top: 8px !important;
-    color: var(--td-text-color-primary) !important;
-  }
-  .t-grid-item__image {
-    width: 32px !important;
-    height: 32px !important;
-  }
-  .t-grid-item--card {
-    border-radius: 12px !important;
-    padding: 16px !important;
-  }
-
-  /* 3. Empty State Internal Lock */
-  .t-empty__image {
-    width: 120px !important;
-    height: 120px !important;
-  }
-  .t-empty__description {
-    font-size: 14px !important;
-    margin-top: 12px !important;
-    color: var(--td-text-color-secondary) !important;
-  }
-
-  /* 4. Responsive Container Patterns */
-  .card, .card-container, .t-cell-group, .panel-content {
-    max-width: 1200px !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
-    box-sizing: border-box !important;
-    border-radius: 12px !important;
-  }
-  
-  /* Force Cell Alignment */
-  .t-cell {
-    padding-left: 24px !important;
-    padding-right: 24px !important;
-    min-height: 64px !important;
-  }
-  .t-cell__title, .t-cell__note {
-    font-size: 16px !important;
-  }
-  .t-cell__description {
-    font-size: 14px !important;
-    color: var(--td-text-color-secondary) !important;
-  }
-
-  /* 5. Navigation Bar Caps */
-  .custom-navbar {
-    height: 64px !important;
+  /* 基础字体锁定 */
+  text, view {
+    font-size: 14px;
   }
 }
+
+

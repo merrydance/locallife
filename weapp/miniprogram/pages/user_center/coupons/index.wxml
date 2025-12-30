@@ -1,6 +1,6 @@
 <custom-navbar title="优惠券" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px;">
   <view class="tabs-section">
     <t-tabs value="{{activeTab}}" bind:change="onTabChange">
       <t-tab-panel label="可领取" value="AVAILABLE" />

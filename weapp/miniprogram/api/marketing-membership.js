@@ -150,7 +150,7 @@ class RechargeRuleManagementService {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
                 url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
-                method: 'PUT',
+                method: 'PATCH',
                 data: ruleData
             });
         });

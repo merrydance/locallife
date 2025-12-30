@@ -1,6 +1,6 @@
 <custom-navbar title="我的评价" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px;">
   <t-tabs value="{{activeTab}}" bind:change="onTabChange" sticky>
     <t-tab-panel label="待评价" value="{{0}}" />
     <t-tab-panel label="已评价" value="{{1}}" />

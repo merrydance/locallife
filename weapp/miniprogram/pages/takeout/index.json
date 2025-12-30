@@ -4,6 +4,8 @@
     "renderer": "skyline",
     "componentFramework": "glass-easel",
     "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
         "custom-navbar": "/components/custom-navbar/index",
         "category-tabs": "../../components/category-tabs/index",
         "dish-card": "../../components/dish-card/index",

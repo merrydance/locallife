@@ -1,6 +1,6 @@
 <custom-navbar title="我的收藏" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px;">
   <!-- Tab切换 -->
   <view class="tabs">
     <view class="tab-item {{activeTab === 'dishes' ? 'active' : ''}}" data-value="dishes" bindtap="onTabChange">菜品</view>
