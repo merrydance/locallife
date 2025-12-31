@@ -48,6 +48,7 @@ export interface DishSummary {
     merchant_longitude: number                   // 商户经度
     merchant_region_id: number                   // 商户区域ID
     distance?: number                            // 距离（米）
+    estimated_delivery_time?: number             // 预估配送时间（秒）
     estimated_delivery_fee?: number              // 预估配送费（分）
     monthly_sales?: number                       // 近30天销量
 }

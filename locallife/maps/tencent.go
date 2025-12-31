@@ -340,6 +340,15 @@ func (c *TencentMapClient) doRequest(ctx context.Context, reqURL string) ([]byte
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	// 调试日志：打印响应体（隐藏 key）
+	debugURL := reqURL
+	if idx := len(debugURL) - 40; idx > 0 {
+		// 简单隐藏 key
+		debugURL = debugURL[:idx] + "key=***"
+	}
+	fmt.Printf("[TencentMap] Request: %s\n", debugURL)
+	fmt.Printf("[TencentMap] Response: %s\n", string(body))
+
 	var apiResp apiResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)

@@ -2706,6 +2706,21 @@ func (mr *MockStoreMockRecorder) CreateTableReservation(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTableReservation", reflect.TypeOf((*MockStore)(nil).CreateTableReservation), ctx, arg)
 }
 
+// CreateTableReservationByMerchant mocks base method.
+func (m *MockStore) CreateTableReservationByMerchant(ctx context.Context, arg db.CreateTableReservationByMerchantParams) (db.TableReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateTableReservationByMerchant", ctx, arg)
+	ret0, _ := ret[0].(db.TableReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateTableReservationByMerchant indicates an expected call of CreateTableReservationByMerchant.
+func (mr *MockStoreMockRecorder) CreateTableReservationByMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTableReservationByMerchant", reflect.TypeOf((*MockStore)(nil).CreateTableReservationByMerchant), ctx, arg)
+}
+
 // CreateTag mocks base method.
 func (m *MockStore) CreateTag(ctx context.Context, arg db.CreateTagParams) (db.Tag, error) {
 	m.ctrl.T.Helper()
@@ -6504,6 +6519,21 @@ func (mr *MockStoreMockRecorder) GetReservationStatsByDateRange(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReservationStatsByDateRange", reflect.TypeOf((*MockStore)(nil).GetReservationStatsByDateRange), ctx, arg)
 }
 
+// GetReservationStatsEnhanced mocks base method.
+func (m *MockStore) GetReservationStatsEnhanced(ctx context.Context, merchantID int64) (db.GetReservationStatsEnhancedRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReservationStatsEnhanced", ctx, merchantID)
+	ret0, _ := ret[0].(db.GetReservationStatsEnhancedRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReservationStatsEnhanced indicates an expected call of GetReservationStatsEnhanced.
+func (mr *MockStoreMockRecorder) GetReservationStatsEnhanced(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReservationStatsEnhanced", reflect.TypeOf((*MockStore)(nil).GetReservationStatsEnhanced), ctx, merchantID)
+}
+
 // GetReview mocks base method.
 func (m *MockStore) GetReview(ctx context.Context, id int64) (db.Review, error) {
 	m.ctrl.T.Helper()
@@ -10204,6 +10234,21 @@ func (mr *MockStoreMockRecorder) ListTags(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTags", reflect.TypeOf((*MockStore)(nil).ListTags), ctx, arg)
 }
 
+// ListTodayReservationsByMerchant mocks base method.
+func (m *MockStore) ListTodayReservationsByMerchant(ctx context.Context, merchantID int64) ([]db.ListTodayReservationsByMerchantRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTodayReservationsByMerchant", ctx, merchantID)
+	ret0, _ := ret[0].([]db.ListTodayReservationsByMerchantRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTodayReservationsByMerchant indicates an expected call of ListTodayReservationsByMerchant.
+func (mr *MockStoreMockRecorder) ListTodayReservationsByMerchant(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTodayReservationsByMerchant", reflect.TypeOf((*MockStore)(nil).ListTodayReservationsByMerchant), ctx, merchantID)
+}
+
 // ListUserActiveSessions mocks base method.
 func (m *MockStore) ListUserActiveSessions(ctx context.Context, userID int64) ([]db.Session, error) {
 	m.ctrl.T.Helper()
@@ -12771,6 +12816,36 @@ func (mr *MockStoreMockRecorder) UpdateRegionQweatherLocationID(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRegionQweatherLocationID", reflect.TypeOf((*MockStore)(nil).UpdateRegionQweatherLocationID), ctx, arg)
 }
 
+// UpdateReservation mocks base method.
+func (m *MockStore) UpdateReservation(ctx context.Context, arg db.UpdateReservationParams) (db.TableReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReservation", ctx, arg)
+	ret0, _ := ret[0].(db.TableReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateReservation indicates an expected call of UpdateReservation.
+func (mr *MockStoreMockRecorder) UpdateReservation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReservation", reflect.TypeOf((*MockStore)(nil).UpdateReservation), ctx, arg)
+}
+
+// UpdateReservationCookingStarted mocks base method.
+func (m *MockStore) UpdateReservationCookingStarted(ctx context.Context, id int64) (db.TableReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReservationCookingStarted", ctx, id)
+	ret0, _ := ret[0].(db.TableReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateReservationCookingStarted indicates an expected call of UpdateReservationCookingStarted.
+func (mr *MockStoreMockRecorder) UpdateReservationCookingStarted(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReservationCookingStarted", reflect.TypeOf((*MockStore)(nil).UpdateReservationCookingStarted), ctx, id)
+}
+
 // UpdateReservationStatus mocks base method.
 func (m *MockStore) UpdateReservationStatus(ctx context.Context, arg db.UpdateReservationStatusParams) (db.TableReservation, error) {
 	m.ctrl.T.Helper()
@@ -12799,6 +12874,21 @@ func (m *MockStore) UpdateReservationToCancelled(ctx context.Context, arg db.Upd
 func (mr *MockStoreMockRecorder) UpdateReservationToCancelled(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReservationToCancelled", reflect.TypeOf((*MockStore)(nil).UpdateReservationToCancelled), ctx, arg)
+}
+
+// UpdateReservationToCheckedIn mocks base method.
+func (m *MockStore) UpdateReservationToCheckedIn(ctx context.Context, id int64) (db.TableReservation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReservationToCheckedIn", ctx, id)
+	ret0, _ := ret[0].(db.TableReservation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateReservationToCheckedIn indicates an expected call of UpdateReservationToCheckedIn.
+func (mr *MockStoreMockRecorder) UpdateReservationToCheckedIn(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReservationToCheckedIn", reflect.TypeOf((*MockStore)(nil).UpdateReservationToCheckedIn), ctx, id)
 }
 
 // UpdateReservationToCompleted mocks base method.

@@ -50,7 +50,7 @@ export class DishAdapter {
       salesBadge: DishAdapter.formatSales(dto.monthly_sales || 0),
       ratingDisplay: '0.0', // 摘要数据中没有评分
       distance: DishAdapter.formatDistance(dto.distance || 0),
-      deliveryTimeDisplay: '配送时间待定',
+      deliveryTimeDisplay: DishAdapter.formatDeliveryTimeSeconds(dto.estimated_delivery_time || 0),
       deliveryFeeDisplay: DishAdapter.formatDeliveryFee(dto.estimated_delivery_fee || 0),
       discountRule: '',
       tags: dto.tags || [],
@@ -86,6 +86,22 @@ export class DishAdapter {
       return '时间待定'
     }
     return `${minutes}分钟`
+  }
+
+  static formatDeliveryTimeSeconds(seconds?: number): string {
+    if (!seconds || seconds === 0) {
+      return '时间待定'
+    }
+    const minutes = Math.round(seconds / 60)
+    if (minutes < 60) {
+      return `约${minutes}分钟`
+    }
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    if (remainingMinutes === 0) {
+      return `约${hours}小时`
+    }
+    return `约${hours}小时${remainingMinutes}分`
   }
 
   static formatDeliveryFee(fee: number): string {

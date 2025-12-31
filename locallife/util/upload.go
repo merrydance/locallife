@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -277,6 +278,7 @@ func (u *FileUploader) UploadOperatorImage(userID int64, category string, file m
 
 // UploadReviewImage 上传用户评价图片
 // dir: uploads/reviews/{user_id}/
+// 自动转换为 WebP 格式节省带宽
 func (u *FileUploader) UploadReviewImage(userID int64, file multipart.File, header *multipart.FileHeader) (string, error) {
 	// 验证文件大小
 	if header.Size > u.config.MaxSize {
@@ -308,13 +310,30 @@ func (u *FileUploader) UploadReviewImage(userID int64, file multipart.File, head
 		os.Remove(filePath)
 		return "", fmt.Errorf("failed to copy file: %w", err)
 	}
+	dst.Close() // 关闭文件以便 WebP 转换可以读取
 
-	relativePath := filepath.Join(u.config.BaseDir, "reviews", fmt.Sprintf("%d", userID), filename)
+	// 转换为 WebP 格式
+	finalPath := filePath
+	if CanConvertToWebP(ext) && IsWebPSupported() {
+		converter := NewWebPConverter()
+		webpPath, err := converter.ConvertToWebP(filePath, "")
+		if err != nil {
+			log.Warn().Err(err).Str("file", filePath).Msg("WebP conversion failed, keeping original")
+		} else {
+			// 删除原文件，使用 WebP
+			os.Remove(filePath)
+			finalPath = webpPath
+			filename = strings.TrimSuffix(filename, ext) + ".webp"
+		}
+	}
+
+	relativePath := filepath.Join(u.config.BaseDir, "reviews", fmt.Sprintf("%d", userID), filepath.Base(finalPath))
 	return filepath.ToSlash(relativePath), nil
 }
 
 // UploadPublicMerchantAssetImage 上传用于对外展示的商户素材图片（菜品/桌台/包间等）。
 // dir: uploads/public/merchants/{merchant_id}/{category}/
+// 自动转换为 WebP 格式节省带宽
 func (u *FileUploader) UploadPublicMerchantAssetImage(merchantID int64, category string, file multipart.File, header *multipart.FileHeader) (string, error) {
 	if header.Size > u.config.MaxSize {
 		return "", fmt.Errorf("file size exceeds limit: %d bytes (max: %d)", header.Size, u.config.MaxSize)
@@ -343,8 +362,23 @@ func (u *FileUploader) UploadPublicMerchantAssetImage(merchantID int64, category
 		os.Remove(filePath)
 		return "", fmt.Errorf("failed to copy file: %w", err)
 	}
+	dst.Close() // 关闭文件以便 WebP 转换可以读取
 
-	relativePath := filepath.Join(u.config.BaseDir, "public", "merchants", fmt.Sprintf("%d", merchantID), category, filename)
+	// 转换为 WebP 格式
+	finalPath := filePath
+	if CanConvertToWebP(ext) && IsWebPSupported() {
+		converter := NewWebPConverter()
+		webpPath, err := converter.ConvertToWebP(filePath, "")
+		if err != nil {
+			log.Warn().Err(err).Str("file", filePath).Msg("WebP conversion failed, keeping original")
+		} else {
+			// 删除原文件，使用 WebP
+			os.Remove(filePath)
+			finalPath = webpPath
+		}
+	}
+
+	relativePath := filepath.Join(u.config.BaseDir, "public", "merchants", fmt.Sprintf("%d", merchantID), category, filepath.Base(finalPath))
 	return filepath.ToSlash(relativePath), nil
 }
 

@@ -139,8 +139,9 @@ type dishSummary struct {
 	Tags         []string `json:"tags"`          // 菜品标签
 
 	// 距离与运费（需要用户位置）
-	Distance             *int   `json:"distance,omitempty"`               // 距离（米）
-	EstimatedDeliveryFee *int64 `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分）
+	Distance              *int   `json:"distance,omitempty"`                // 距离（米）
+	EstimatedDeliveryTime *int   `json:"estimated_delivery_time,omitempty"` // 预估配送时间（秒）
+	EstimatedDeliveryFee  *int64 `json:"estimated_delivery_fee,omitempty"`  // 预估配送费（分）
 }
 
 // recommendDishes godoc
@@ -852,6 +853,7 @@ func (server *Server) calculateDishDistancesAndFees(ctx *gin.Context, dishes []d
 
 	// 构建商户位置列表（去重）
 	merchantDistances := make(map[int64]int)   // merchantID -> distance
+	merchantDurations := make(map[int64]int)   // merchantID -> duration (seconds)
 	merchantRegionIDs := make(map[int64]int64) // merchantID -> regionID
 	var merchantLocs []maps.Location
 	var merchantIDs []int64
@@ -864,6 +866,7 @@ func (server *Server) calculateDishDistancesAndFees(ctx *gin.Context, dishes []d
 			})
 			merchantIDs = append(merchantIDs, d.MerchantID)
 			merchantDistances[d.MerchantID] = -1 // 标记为待计算
+			merchantDurations[d.MerchantID] = -1
 			merchantRegionIDs[d.MerchantID] = d.MerchantRegionID
 		}
 	}
@@ -882,23 +885,29 @@ func (server *Server) calculateDishDistancesAndFees(ctx *gin.Context, dishes []d
 		return
 	}
 
-	// 更新商户距离映射
+	// 更新商户距离和时间映射
 	for i, row := range result.Rows {
 		if i >= len(merchantIDs) {
 			break
 		}
 		if len(row.Elements) > 0 {
 			merchantDistances[merchantIDs[i]] = row.Elements[0].Distance
+			merchantDurations[merchantIDs[i]] = row.Elements[0].Duration
 		}
 	}
 
-	// 为每个菜品计算距离和运费（使用菜品实际价格）
+	// 为每个菜品计算距离、时间和运费（使用菜品实际价格）
 	for i := range dishes {
 		dist, ok := merchantDistances[dishes[i].MerchantID]
 		if !ok || dist < 0 {
 			continue
 		}
 		dishes[i].Distance = &dist
+
+		// 设置配送时间
+		if dur, ok := merchantDurations[dishes[i].MerchantID]; ok && dur > 0 {
+			dishes[i].EstimatedDeliveryTime = &dur
+		}
 
 		// 使用菜品的实际价格计算运费
 		// 如果有会员价则使用会员价，否则使用原价
