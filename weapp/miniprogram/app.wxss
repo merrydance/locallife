@@ -66,6 +66,22 @@ page {
   --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.12);
+
+  /* ========== 消费侧卡片设计 Token ========== */
+  /* 仅用于消费侧组件，不影响商户侧 */
+  --customer-card-padding: 20rpx;
+  --customer-card-gap: 20rpx;
+  --customer-card-margin: 12rpx;
+  --customer-card-radius: 16rpx;
+  --customer-card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+  --customer-card-shadow-active: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  --customer-image-size: 180rpx;
+  --customer-image-radius: 12rpx;
+  --customer-title-size: 28rpx;
+  --customer-subtitle-size: 24rpx;
+  --customer-caption-size: 22rpx;
+  --customer-section-gap: 12rpx;
+  --customer-page-padding: 20rpx;
 }
 
 /* ========== 深色模式 ========== */

@@ -1,24 +1,25 @@
-/* 菜品卡片 */
+/* 菜品卡片 - 使用消费侧统一设计 Token */
+
 .dish-card {
   display: flex;
-  gap: 20rpx;
-  padding: 20rpx;
+  gap: var(--customer-card-gap);
+  padding: var(--customer-card-padding);
   background: #fff;
-  border-radius: 16rpx;
-  margin-bottom: 12rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+  border-radius: var(--customer-card-radius);
+  margin-bottom: var(--customer-card-margin);
+  box-shadow: var(--customer-card-shadow);
   transition: all 0.2s ease;
 }
 
 .dish-card:active {
   transform: scale(0.98);
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  box-shadow: var(--customer-card-shadow-active);
 }
 
 .dish-image {
-  width: 180rpx;
-  height: 180rpx;
-  border-radius: 12rpx;
+  width: var(--customer-image-size);
+  height: var(--customer-image-size);
+  border-radius: var(--customer-image-radius);
   flex-shrink: 0;
 }
 
@@ -26,7 +27,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 8rpx;
   min-width: 0;
 }
 
@@ -37,9 +38,16 @@
   gap: 16rpx;
 }
 
+.row-2, .row-3, .row-4, .row-5 {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
 .shop-dish-name {
   flex: 1;
-  font-size: 28rpx;
+  font-size: var(--customer-title-size);
   font-weight: 500;
   color: #333;
   overflow: hidden;
@@ -47,71 +55,41 @@
   white-space: nowrap;
 }
 
-.row-2 {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  font-size: 26rpx;
-}
-
 .price {
+  font-size: var(--customer-title-size);
   font-weight: bold;
-  color: #FF6B58;
+  color: var(--brand-coral);
 }
 
 .separator {
-  color: #999;
+  color: #ddd;
   margin: 0 4rpx;
 }
 
 .sales {
   color: #666;
-  font-size: 24rpx;
-}
-
-.row-3 {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  font-size: 22rpx;
-  color: #666;
+  font-size: var(--customer-subtitle-size);
 }
 
 .distance, .delivery-time {
-  color: #666;
-  font-size: 22rpx;
-}
-
-.row-4 {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  flex-wrap: wrap;
-  font-size: 22rpx;
+  color: #999;
+  font-size: var(--customer-caption-size);
 }
 
 .delivery-fee {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #666;
-  padding: 2rpx 10rpx;
+  padding: 4rpx 12rpx;
   background: #f5f5f5;
-  border-radius: 4rpx;
+  border-radius: 6rpx;
 }
 
 .discount {
-  font-size: 22rpx;
-  color: #ff6b58;
-  padding: 2rpx 10rpx;
-  background: #fff5f4;
-  border-radius: 4rpx;
-}
-
-.row-5 {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  flex-wrap: wrap;
-  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: var(--brand-coral);
+  padding: 4rpx 12rpx;
+  background: #FFF5F3;
+  border-radius: 6rpx;
 }
 
 .add-btn {
@@ -121,11 +99,4 @@
 
 .add-btn:active {
   transform: scale(0.9);
-  animation: pulse 0.3s ease;
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
 }

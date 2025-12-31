@@ -1,11 +1,13 @@
+/* 餐厅卡片 - 统一设计规范 */
+
 .restaurant-card {
   display: flex;
-  gap: 24rpx;
-  padding: 24rpx;
+  gap: 20rpx;
+  padding: 20rpx;
   background: #fff;
   border-radius: 16rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+  margin-bottom: 12rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
 }
 
@@ -14,9 +16,10 @@
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
 }
 
+/* 图片 - 与其他卡片统一 180x180 */
 .restaurant-image {
-  width: 240rpx;
-  height: 200rpx;
+  width: 180rpx;
+  height: 180rpx;
   border-radius: 12rpx;
   flex-shrink: 0;
 }
@@ -25,7 +28,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 8rpx;
   min-width: 0;
 }
 
@@ -36,6 +39,14 @@
   gap: 16rpx;
 }
 
+.row-2, .row-3 {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+/* 标题 */
 .restaurant-name {
   flex: 1;
   font-size: 28rpx;
@@ -46,6 +57,7 @@
   white-space: nowrap;
 }
 
+/* 评分 */
 .rating {
   font-size: 24rpx;
   color: #FFC107;
@@ -53,42 +65,25 @@
   flex-shrink: 0;
 }
 
-.row-2 {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  font-size: 26rpx;
+.cuisine, .distance {
+  font-size: 24rpx;
   color: #666;
 }
 
-.cuisine {
-  color: #666;
-}
-
+/* 价格 */
 .avg-price {
+  font-size: 28rpx;
   font-weight: bold;
   color: #FF6B58;
 }
 
 .separator {
-  color: #999;
+  color: #ddd;
   margin: 0 4rpx;
 }
 
-.distance {
-  font-size: 24rpx;
-}
-
-.row-3 {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  flex-wrap: wrap;
-  font-size: 22rpx;
-}
-
 .rooms {
-  color: #00897B;
   font-size: 22rpx;
+  color: #00897B;
   font-weight: 500;
 }

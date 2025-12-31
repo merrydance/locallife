@@ -1,8 +1,8 @@
-/* 预订页面 */
+/* 预订页面 - 使用统一设计 Token */
 
 /* Skyline 滚动容器 */
 .page-scroll {
-  background-color: #f5f5f5;
+  background-color: #FAFAFA;
   box-sizing: border-box;
 }
 
@@ -10,9 +10,9 @@
 .top-bar {
   display: flex;
   align-items: center;
-  padding: 16rpx 24rpx;
+  padding: var(--customer-card-margin) var(--customer-page-padding);
   background: #fff;
-  gap: 16rpx;
+  gap: var(--customer-card-margin);
 }
 
 .filter-btn-new {
@@ -26,24 +26,14 @@
 /* Tabs Section */
 .tabs-section {
   background: #fff;
-  margin-bottom: 16rpx;
+  margin-bottom: 12rpx;
 }
 
-/* Listings */
-.listings {
-  padding: 0 24rpx 24rpx;
-}
-
-.skeleton-container {
+/* 内容区域 - 与 takeout 完全一致 */
+.content-section {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-}
-
-.list-container {
-  display: flex;
-  flex-direction: column;
-  gap: 24rpx;
+  padding: 12rpx 20rpx 24rpx;
 }
 
 .loading-more {
@@ -54,9 +44,9 @@
 
 .no-more {
   text-align: center;
-  padding: 40rpx 0;
+  padding: 32rpx 0;
   color: #999;
-  font-size: 28rpx;
+  font-size: var(--customer-subtitle-size);
 }
 
 /* Filter Drawer */
@@ -84,7 +74,7 @@
 
 .drawer-content {
   flex: 1;
-  padding: 24rpx;
+  padding: var(--customer-page-padding);
 }
 
 .filter-group {
@@ -92,7 +82,7 @@
 }
 
 .group-title {
-  font-size: 28rpx;
+  font-size: var(--customer-title-size);
   font-weight: 500;
   color: #333;
   margin-bottom: 16rpx;
@@ -106,8 +96,8 @@
 
 .drawer-footer {
   display: flex;
-  gap: 24rpx;
-  padding: 24rpx;
+  gap: var(--customer-page-padding);
+  padding: var(--customer-page-padding);
   border-top: 1rpx solid #f0f0f0;
 }
 

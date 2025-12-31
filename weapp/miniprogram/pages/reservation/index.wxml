@@ -38,12 +38,12 @@
     </t-tabs>
   </view>
 
-  <!-- Listings -->
-  <view class="listings">
+  <!-- 内容区域 - 与 takeout 一致的结构 -->
+  <view class="content-section">
     <!-- Skeleton Loading -->
-    <view wx:if="{{loading && itemList.length === 0}}" class="skeleton-container">
+    <block wx:if="{{loading && itemList.length === 0}}">
       <card-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
-    </view>
+    </block>
 
     <!-- Empty State -->
     <t-empty 
@@ -52,35 +52,30 @@
       icon="info-circle-filled"
     />
 
-    <!-- List Content -->
-    <block wx:else>
-      <view class="list-container">
-        <!-- Room Cards -->
-        <block wx:if="{{activeTab === 'room'}}">
-          <room-card 
-            wx:for="{{itemList}}" 
-            wx:key="id" 
-            room="{{item}}"
-            bind:tap="onItemTap"
-            data-id="{{item.id}}"
-          />
-        </block>
-
-        <!-- Restaurant Cards -->
-        <block wx:if="{{activeTab === 'restaurant'}}">
-          <restaurant-card 
-            wx:for="{{itemList}}" 
-            wx:key="id" 
-            restaurant="{{item}}"
-            bind:tap="onItemTap"
-            data-id="{{item.id}}"
-          />
-        </block>
-      </view>
-      
-      <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
-      <view wx:if="{{!hasMore && itemList.length > 0}}" class="no-more">没有更多了</view>
+    <!-- Room Cards -->
+    <block wx:elif="{{activeTab === 'room'}}">
+      <room-card 
+        wx:for="{{itemList}}" 
+        wx:key="id" 
+        room="{{item}}"
+        bind:tap="onItemTap"
+        data-id="{{item.id}}"
+      />
     </block>
+
+    <!-- Restaurant Cards -->
+    <block wx:elif="{{activeTab === 'restaurant'}}">
+      <restaurant-card 
+        wx:for="{{itemList}}" 
+        wx:key="id" 
+        restaurant="{{item}}"
+        bind:tap="onItemTap"
+        data-id="{{item.id}}"
+      />
+    </block>
+    
+    <t-loading wx:if="{{loading && itemList.length > 0}}" theme="circular" size="40rpx" class="loading-more" text="加载中..." />
+    <view wx:if="{{!hasMore && itemList.length > 0}}" class="no-more">没有更多了</view>
   </view>
 </scroll-view>
 

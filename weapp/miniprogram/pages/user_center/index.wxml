@@ -8,68 +8,73 @@
   enhanced="{{true}}"
   show-scrollbar="{{false}}"
 >
-  <view class="content-wrapper">
+  <!-- 内容区域 - 与其他页面一致的结构 -->
+  <view class="content-section">
     <!-- User Profile Card -->
-    <view class="profile-section">
-      <view class="user-card">
-        <button class="avatar-wrapper" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
-          <auth-image wx:if="{{userInfo.avatarUrl}}" class="avatar" src="{{userInfo.avatarUrl}}" mode="aspectFill" />
-          <t-icon wx:else name="user" size="48rpx" color="#999" />
-        </button>
-        <view class="info-wrapper">
-          <input type="nickname" class="nickname-input" placeholder="请输入昵称" value="{{userInfo.nickName}}" bind:change="onNicknameChange" bind:blur="onNicknameChange" />
-        </view>
+    <view class="user-card">
+      <button class="avatar-wrapper" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
+        <auth-image wx:if="{{userInfo.avatarUrl}}" class="avatar" src="{{userInfo.avatarUrl}}" mode="aspectFill" />
+        <t-icon wx:else name="user" size="48rpx" color="#999" />
+      </button>
+      <view class="info-wrapper">
+        <input type="nickname" class="nickname-input" placeholder="请输入昵称" value="{{userInfo.nickName}}" bind:change="onNicknameChange" bind:blur="onNicknameChange" />
       </view>
     </view>
 
     <!-- Workbenches (for registered roles) -->
-    <view class="section" wx:if="{{workbenches.length > 0}}">
-      <view class="section-title">工作台</view>
-      <t-grid column="2" border="{{false}}">
-        <t-grid-item 
-          wx:for="{{workbenches}}" 
-          wx:key="id"
-          text="{{item.name}}"
-          icon="{{item.icon}}"
-          bind:click="onWorkbenchTap"
-          data-path="{{item.path}}"
-        />
-      </t-grid>
+    <view wx:if="{{workbenches.length > 0}}" class="card-section">
+      <view class="card-title">工作台</view>
+      <view class="card-body">
+        <t-grid column="2" border="{{false}}">
+          <t-grid-item 
+            wx:for="{{workbenches}}" 
+            wx:key="id"
+            text="{{item.name}}"
+            icon="{{item.icon}}"
+            bind:click="onWorkbenchTap"
+            data-path="{{item.path}}"
+          />
+        </t-grid>
+      </view>
     </view>
 
     <!-- Common Functions -->
-    <view class="section">
-      <view class="section-title">常用功能</view>
-      <t-cell-group theme="card">
-        <t-cell title="我的订单" arrow hover bind:click="onMyOrders" />
-        <t-cell title="我的预订" arrow hover bind:click="onMyReservations" />
-        <t-cell title="地址管理" arrow hover bind:click="onAddresses" />
-        <t-cell title="积分中心" arrow hover bind:click="onPoints" />
-        <t-cell title="优惠券" arrow hover bind:click="onCoupons" />
-        <t-cell title="收藏夹" arrow hover bind:click="onFavorites" />
-        <t-cell title="会员中心" arrow hover bind:click="onMembership" />
-        <t-cell title="我的评价" arrow hover bind:click="onMyReviews" />
-        <t-cell title="钱包" arrow hover bind:click="onWallet" />
-        <t-cell title="信用分" arrow hover bind:click="onCredit" />
-        <t-cell title="联系客服" arrow hover bind:click="onContact" />
-      </t-cell-group>
+    <view class="card-section">
+      <view class="card-title">常用功能</view>
+      <view class="card-body">
+        <t-cell-group>
+          <t-cell title="我的订单" arrow hover bind:click="onMyOrders" />
+          <t-cell title="我的预订" arrow hover bind:click="onMyReservations" />
+          <t-cell title="地址管理" arrow hover bind:click="onAddresses" />
+          <t-cell title="积分中心" arrow hover bind:click="onPoints" />
+          <t-cell title="优惠券" arrow hover bind:click="onCoupons" />
+          <t-cell title="收藏夹" arrow hover bind:click="onFavorites" />
+          <t-cell title="会员中心" arrow hover bind:click="onMembership" />
+          <t-cell title="我的评价" arrow hover bind:click="onMyReviews" />
+          <t-cell title="钱包" arrow hover bind:click="onWallet" />
+          <t-cell title="信用分" arrow hover bind:click="onCredit" />
+          <t-cell title="联系客服" arrow hover bind:click="onContact" />
+        </t-cell-group>
+      </view>
     </view>
 
     <!-- Registration Options -->
-    <view class="section">
-      <view class="section-title">入驻申请</view>
-      <t-cell-group theme="card">
-        <t-cell 
-          wx:for="{{registrationOptions}}" 
-          wx:key="id"
-          title="{{item.name}}"
-          description="{{item.desc}}"
-          arrow
-          hover
-          bind:click="onRegisterTap"
-          data-id="{{item.id}}"
-        />
-      </t-cell-group>
+    <view class="card-section">
+      <view class="card-title">入驻申请</view>
+      <view class="card-body">
+        <t-cell-group>
+          <t-cell 
+            wx:for="{{registrationOptions}}" 
+            wx:key="id"
+            title="{{item.name}}"
+            description="{{item.desc}}"
+            arrow
+            hover
+            bind:click="onRegisterTap"
+            data-id="{{item.id}}"
+          />
+        </t-cell-group>
+      </view>
     </view>
   </view>
 </scroll-view>
