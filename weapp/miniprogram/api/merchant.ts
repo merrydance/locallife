@@ -418,22 +418,43 @@ export interface RecommendMerchantsResponse {
 }
 
 /**
- * 获取推荐商户 - 基于 /v1/recommendations/merchants
- * 返回格式：{ merchants: [], algorithm, expired_at }
+ * 推荐商户请求参数
  */
-export async function getRecommendedMerchants(params?: {
+export interface RecommendMerchantsParams {
   user_latitude?: number
   user_longitude?: number
   limit?: number
-}): Promise<MerchantSummary[]> {
-  const response = await request<RecommendMerchantsResponse>({
+  page?: number
+}
+
+/**
+ * 推荐商户结果（包含分页信息）
+ */
+export interface RecommendMerchantsResult {
+  merchants: MerchantSummary[]
+  has_more: boolean
+  page: number
+  total_count: number
+}
+
+/**
+ * 获取推荐商户 - 基于 /v1/recommendations/merchants
+ * 支持分页，返回包含 has_more 的完整响应
+ */
+export async function getRecommendedMerchants(params?: RecommendMerchantsParams): Promise<RecommendMerchantsResult> {
+  const response = await request<RecommendMerchantsResponse & { has_more?: boolean; page?: number; total_count?: number }>({
     url: '/v1/recommendations/merchants',
     method: 'GET',
     data: params,
-    useCache: true,
+    useCache: params?.page === 1 || !params?.page,
     cacheTTL: 3 * 60 * 1000 // 3分钟缓存
   })
-  return response.merchants || []
+  return {
+    merchants: response.merchants || [],
+    has_more: response.has_more ?? false,
+    page: response.page ?? 1,
+    total_count: response.total_count ?? 0
+  }
 }
 
 // ==================== 商户基础管理适配器 ====================

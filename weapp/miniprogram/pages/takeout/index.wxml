@@ -1,11 +1,15 @@
 <custom-navbar title="外卖" location="{{address}}" bind:locationchange="onLocationChange" />
 
-<!-- Skyline 需要用 scroll-view 实现页面滚动 -->
+<!-- Skyline 需要用 scroll-view 实现页面滚动和下拉刷新 -->
 <scroll-view 
   scroll-y 
   class="page-scroll" 
   style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
   bindscrolltolower="onReachBottom"
+  lower-threshold="200"
+  refresher-enabled="{{true}}"
+  refresher-triggered="{{refresherTriggered}}"
+  bindrefresherrefresh="onRefresh"
   enhanced="{{true}}"
   show-scrollbar="{{false}}"
 >

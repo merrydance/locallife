@@ -19,6 +19,7 @@ Page({
     hasMore: true,
     page: 1,
     pageSize: 10,
+    refresherTriggered: false,
 
     // Applied Filters (The actual filters used for API calls)
     appliedFilters: {
@@ -213,6 +214,22 @@ Page({
     if (this.data.hasMore) {
       this.setData({ page: this.data.page + 1 })
       this.loadItems(false)
+    }
+  },
+
+  /**
+   * scroll-view 下拉刷新事件处理
+   * 在 Skyline 模式下实现下拉刷新
+   */
+  async onRefresh() {
+    this.setData({ refresherTriggered: true, page: 1 })
+
+    try {
+      await this.loadItems(true)
+    } finally {
+      setTimeout(() => {
+        this.setData({ refresherTriggered: false })
+      }, 300)
     }
   },
 

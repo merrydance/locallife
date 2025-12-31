@@ -157,6 +157,17 @@ export async function getCartSummary(): Promise<CartSummaryResponse> {
 }
 
 /**
+ * 获取用户所有商户的购物车（完整信息）
+ * 返回包含 carts 数组和 summary 的完整响应
+ */
+export async function getUserCarts(): Promise<UserCartsResponse> {
+    return request({
+        url: '/v1/cart/summary',
+        method: 'GET'
+    })
+}
+
+/**
  * 添加商品到购物车
  * @param item 商品信息
  */
@@ -211,6 +222,19 @@ export async function clearCart(merchantId?: number): Promise<void> {
 export async function calculateCart(params: CalculateCartRequest): Promise<CalculateCartResponse> {
     return request({
         url: '/v1/cart/calculate',
+        method: 'POST',
+        data: params
+    })
+}
+
+/**
+ * 预览合单结算
+ * 多商户合单结算预览，返回各商户子单和合计金额
+ * @param params 合单结算请求
+ */
+export async function previewCombinedCheckout(params: CombinedCheckoutRequest): Promise<CombinedCheckoutResponse> {
+    return request({
+        url: '/v1/cart/combined-checkout/preview',
         method: 'POST',
         data: params
     })

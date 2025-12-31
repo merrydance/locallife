@@ -14,6 +14,7 @@ import { getRecommendedCombos, ComboSetResponse } from '../../api/dish'
 import { getStableBarHeights } from '../../utils/responsive'
 
 const PAGE_CONTEXT = 'takeout_index'
+const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
 
 Page({
   data: {
@@ -33,8 +34,18 @@ Page({
     hasMore: true,
     loading: false,
     // 位置状态
-    needLocation: false // 是否需要用户手动定位
+    needLocation: false, // 是否需要用户手动定位
+    // 下拉刷新状态
+    refresherTriggered: false,
+    // 预加载状态
+    isPrefetching: false
   },
+
+  // 预加载缓存 (不放在 data 中以免触发渲染)
+  _prefetchedDishes: [] as any[],
+  _prefetchedRestaurants: [] as any[],
+  _prefetchedPackages: [] as any[],
+  _prefetchHasMore: true,
 
   onLoad() {
     // 设置导航栏高度和滚动区域高度
@@ -348,7 +359,9 @@ Page({
 
   async loadDishes(reset = false) {
     if (reset) {
-      // 重置时才全量更新
+      // 重置时清空缓存和数据
+      this._prefetchedDishes = []
+      this._prefetchHasMore = true
       this.setData({
         page: 1,
         dishes: [],
@@ -357,31 +370,47 @@ Page({
     }
 
     try {
-      // 调用后端接口
       const app = getApp<IAppOption>()
-      const feedData = await getRecommendedDishes({
-        user_latitude: app.globalData.latitude || undefined,
-        user_longitude: app.globalData.longitude || undefined,
-        limit: 20
-      })
+      const currentPage = reset ? 1 : this.data.page
+      let newDishes: Dish[] = []
+      let hasMore = true
 
-      // 适配器转换
-      const newDishes = feedData.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
+      // 1. 优先使用预加载的缓存数据（无延迟）
+      if (!reset && this._prefetchedDishes.length > 0) {
+        newDishes = this._prefetchedDishes
+        hasMore = this._prefetchHasMore
+        this._prefetchedDishes = [] // 清空缓存
+      } else {
+        // 2. 没有缓存则请求当前页
+        const result = await getRecommendedDishes({
+          user_latitude: app.globalData.latitude || undefined,
+          user_longitude: app.globalData.longitude || undefined,
+          limit: PAGE_SIZE,
+          page: currentPage
+        })
+        newDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
+        hasMore = result.has_more
+      }
 
+      // 更新视图
       if (reset) {
         this.setData({
           dishes: newDishes as any[],
-          hasMore: feedData.length >= 20
+          hasMore
         })
       } else {
-        // 优化：使用数组拼接替代局部更新，性能更好
         this.setData({
           dishes: [...this.data.dishes, ...newDishes],
-          hasMore: feedData.length >= 20
+          hasMore
         })
       }
 
-      // 预加载图片（低优先级，不阻塞渲染）
+      // 3. 异步预加载下一页（不阻塞当前渲染）
+      if (hasMore) {
+        this.prefetchNextDishes(currentPage + 1)
+      }
+
+      // 预加载图片
       const { preloadImages } = require('../../utils/image')
       const imageUrls = newDishes.map((dish: Dish) => dish.imageUrl).filter(Boolean)
       setTimeout(() => {
@@ -393,22 +422,48 @@ Page({
     }
   },
 
+  /**
+   * 预加载下一页菜品（后台静默执行）
+   */
+  async prefetchNextDishes(nextPage: number) {
+    if (this.data.isPrefetching || this._prefetchedDishes.length > 0) return
+
+    this.setData({ isPrefetching: true })
+    try {
+      const app = getApp<IAppOption>()
+      const result = await getRecommendedDishes({
+        user_latitude: app.globalData.latitude || undefined,
+        user_longitude: app.globalData.longitude || undefined,
+        limit: PAGE_SIZE,
+        page: nextPage
+      })
+      this._prefetchedDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
+      this._prefetchHasMore = result.has_more
+    } catch (error) {
+      logger.debug('预加载下一页失败', error, 'Takeout.prefetchNextDishes')
+    } finally {
+      this.setData({ isPrefetching: false })
+    }
+  },
+
   async loadRestaurants(reset = false) {
     if (reset) {
       this.setData({ page: 1, restaurants: [], hasMore: true })
     }
 
     try {
-      // 使用推荐商户接口
+      // 使用推荐商户接口，传递当前页码
       const app = getApp<IAppOption>()
-      const merchants = await getRecommendedMerchants({
+      const currentPage = reset ? 1 : this.data.page
+      const result = await getRecommendedMerchants({
         user_latitude: app.globalData.latitude || undefined,
         user_longitude: app.globalData.longitude || undefined,
-        limit: 20
+        limit: PAGE_SIZE,
+        page: currentPage
       })
 
       // Map for enrichment (if lat/lng available)
-      const merchantsForEnrich = merchants.map((m) => ({
+      const merchantsForEnrich = result.merchants.map((m) => ({
         ...m,
         merchant_latitude: m.latitude,
         merchant_longitude: m.longitude
@@ -416,11 +471,11 @@ Page({
 
       const enrichedMerchants = await enrichMerchantsWithDistance(merchantsForEnrich)
 
-      const restaurantViewModels = enrichedMerchants.map((m) => ({
+      const restaurantViewModels = enrichedMerchants.map((m: any) => ({
         id: m.id,
         name: m.name,
         imageUrl: m.logo_url,
-        cuisineType: m.tags.slice(0, 2),
+        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
         avgPrice: 0,
         avgPriceDisplay: '人均未知',
         rating: 0,
@@ -432,22 +487,19 @@ Page({
         businessHoursDisplay: '营业中',
         availableRooms: 0,
         availableRoomsBadge: '',
-        tags: m.tags.slice(0, 3)
+        tags: m.tags ? m.tags.slice(0, 3) : []
       }))
 
       if (reset) {
         this.setData({
           restaurants: restaurantViewModels,
-          hasMore: false
+          hasMore: result.has_more
         })
       } else {
-        // 分页加载使用局部更新
-        const startIndex = this.data.restaurants.length
-        const updates: any = { hasMore: false }
-        restaurantViewModels.forEach((restaurant, index) => {
-          updates[`restaurants[${startIndex + index}]`] = restaurant
+        this.setData({
+          restaurants: [...this.data.restaurants, ...restaurantViewModels],
+          hasMore: result.has_more
         })
-        this.setData(updates)
       }
 
       // 预加载图片
@@ -469,10 +521,11 @@ Page({
     }
 
     try {
-      // 调用后端推荐套餐接口
-      const combos = await getRecommendedCombos({ limit: 20 })
+      // 调用后端推荐套餐接口，传递当前页码
+      const currentPage = reset ? 1 : this.data.page
+      const result = await getRecommendedCombos({ limit: PAGE_SIZE, page: currentPage })
 
-      const packageViewModels = combos.map((combo: ComboSetResponse) => ({
+      const packageViewModels = result.combos.map((combo: ComboSetResponse) => ({
         id: combo.id,
         name: combo.name,
         description: combo.description || '',
@@ -487,15 +540,13 @@ Page({
       if (reset) {
         this.setData({
           packages: packageViewModels,
-          hasMore: false
+          hasMore: result.has_more
         })
       } else {
-        const startIndex = this.data.packages.length
-        const updates: any = { hasMore: false }
-        packageViewModels.forEach((pkg, index) => {
-          updates[`packages[${startIndex + index}]`] = pkg
+        this.setData({
+          packages: [...this.data.packages, ...packageViewModels],
+          hasMore: result.has_more
         })
-        this.setData(updates)
       }
     } catch (error) {
       logger.error('加载套餐失败', error, 'Takeout.loadPackages')
@@ -654,6 +705,26 @@ Page({
 
   _lastLoadTime: 0 as number,
 
+  /**
+   * scroll-view 下拉刷新事件处理
+   * 在 Skyline 模式下替代 onPullDownRefresh
+   */
+  async onRefresh() {
+    this.setData({ refresherTriggered: true, page: 1 })
+
+    try {
+      await this.loadData()
+    } finally {
+      // 延迟关闭刷新动画，给用户视觉反馈
+      setTimeout(() => {
+        this.setData({ refresherTriggered: false })
+      }, 300)
+    }
+  },
+
+  /**
+   * 页面下拉刷新事件（WebView 兼容）
+   */
   onPullDownRefresh() {
     this.setData({ page: 1 })
     this.loadData().then(() => {

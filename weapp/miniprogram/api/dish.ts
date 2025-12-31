@@ -1028,24 +1028,45 @@ export interface RecommendedDishesResponse {
 }
 
 /**
- * 获取推荐菜品 - 基于 /v1/recommendations/dishes
+ * 推荐菜品请求参数
  */
-export async function getRecommendedDishes(params?: {
+export interface RecommendDishesParams {
     merchant_id?: number
     limit?: number
+    page?: number              // 页码，从1开始
     user_latitude?: number
     user_longitude?: number
-}): Promise<DishSummary[]> {
-    const response = await request<RecommendedDishesResponse>({
+}
+
+/**
+ * 推荐菜品响应（包含分页信息）
+ */
+export interface RecommendDishesResult {
+    dishes: DishSummary[]
+    has_more: boolean
+    page: number
+    total_count: number
+}
+
+/**
+ * 获取推荐菜品 - 基于 /v1/recommendations/dishes
+ * 支持分页，返回包含 has_more 的完整响应
+ */
+export async function getRecommendedDishes(params?: RecommendDishesParams): Promise<RecommendDishesResult> {
+    const response = await request<RecommendedDishesResponse & { has_more?: boolean; page?: number; total_count?: number }>({
         url: '/v1/recommendations/dishes',
         method: 'GET',
         data: params,
-        useCache: true,
+        useCache: params?.page === 1 || !params?.page,  // 只缓存第一页
         cacheTTL: 3 * 60 * 1000 // 3分钟缓存
     })
-    // 后端返回 { dishes: [], algorithm: "...", expired_at: "..." }
-    // 提取 dishes 数组返回
-    return response.dishes || []
+    // 返回完整响应，包含分页信息
+    return {
+        dishes: response.dishes || [],
+        has_more: response.has_more ?? false,
+        page: response.page ?? 1,
+        total_count: response.total_count ?? 0
+    }
 }
 
 /**
@@ -1058,22 +1079,42 @@ export interface RecommendedCombosResponse {
 }
 
 /**
- * 获取推荐套餐 - 基于 /v1/recommendations/combos
+ * 推荐套餐请求参数
  */
-export async function getRecommendedCombos(params?: {
+export interface RecommendCombosParams {
     merchant_id?: number
     limit?: number
-}): Promise<ComboSetResponse[]> {
-    const response = await request<RecommendedCombosResponse>({
+    page?: number
+}
+
+/**
+ * 推荐套餐结果（包含分页信息）
+ */
+export interface RecommendCombosResult {
+    combos: ComboSetResponse[]
+    has_more: boolean
+    page: number
+    total_count: number
+}
+
+/**
+ * 获取推荐套餐 - 基于 /v1/recommendations/combos
+ * 支持分页，返回包含 has_more 的完整响应
+ */
+export async function getRecommendedCombos(params?: RecommendCombosParams): Promise<RecommendCombosResult> {
+    const response = await request<RecommendedCombosResponse & { has_more?: boolean; page?: number; total_count?: number }>({
         url: '/v1/recommendations/combos',
         method: 'GET',
         data: params,
-        useCache: true,
+        useCache: params?.page === 1 || !params?.page,
         cacheTTL: 3 * 60 * 1000 // 3分钟缓存
     })
-    // 后端返回 { combos: [], algorithm: "...", expired_at: "..." }
-    // 提取 combos 数组返回
-    return response.combos || []
+    return {
+        combos: response.combos || [],
+        has_more: response.has_more ?? false,
+        page: response.page ?? 1,
+        total_count: response.total_count ?? 0
+    }
 }
 
 // ==================== 导出默认服务 ====================

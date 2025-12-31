@@ -102,14 +102,18 @@ func (server *Server) trackBehavior(ctx *gin.Context) {
 
 type recommendRequest struct {
 	Limit         int32    `form:"limit" binding:"omitempty,min=1,max=50"`
+	Page          int32    `form:"page" binding:"omitempty,min=1"`     // 页码，从1开始
 	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
 	UserLongitude *float64 `form:"user_longitude" binding:"omitempty"` // 用户当前经度
 }
 
 type recommendDishesResponse struct {
-	Dishes    []dishSummary `json:"dishes"`
-	Algorithm string        `json:"algorithm"`
-	ExpiredAt string        `json:"expired_at"`
+	Dishes     []dishSummary `json:"dishes"`
+	Algorithm  string        `json:"algorithm"`
+	ExpiredAt  string        `json:"expired_at"`
+	HasMore    bool          `json:"has_more"`    // 是否有更多数据
+	Page       int32         `json:"page"`        // 当前页码
+	TotalCount int           `json:"total_count"` // 本次返回的数量
 }
 
 type recommendDishesAPIResponse struct {
@@ -166,14 +170,17 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 		return
 	}
 
-	// 默认推荐20个
+	// 默认值
 	if req.Limit == 0 {
 		req.Limit = 20
+	}
+	if req.Page == 0 {
+		req.Page = 1
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 生成新的推荐
+	// 生成新的推荐（获取足够多的数据用于分页）
 	recommender := algorithm.NewPersonalizedRecommender(server.store)
 	config := algorithm.DefaultPersonalizedConfig()
 
@@ -183,18 +190,36 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 		config = algorithm.NewUserPersonalizedConfig() // 新用户使用不同配置
 	}
 
+	// 获取更多推荐用于分页（最多200个）
+	totalLimit := int(req.Page) * int(req.Limit)
+	if totalLimit > 200 {
+		totalLimit = 200
+	}
+
 	// 生成推荐
-	dishIDs, err := recommender.RecommendDishes(ctx, authPayload.UserID, config, int(req.Limit))
+	allDishIDs, err := recommender.RecommendDishes(ctx, authPayload.UserID, config, totalLimit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
+	// 计算分页偏移
+	offset := (int(req.Page) - 1) * int(req.Limit)
+	end := offset + int(req.Limit)
+	if offset >= len(allDishIDs) {
+		offset = len(allDishIDs)
+	}
+	if end > len(allDishIDs) {
+		end = len(allDishIDs)
+	}
+	dishIDs := allDishIDs[offset:end]
+	hasMore := end < len(allDishIDs)
+
 	// 保存推荐结果到数据库（5分钟过期）
 	expiredAt := time.Now().Add(5 * time.Minute)
 	_, _ = server.store.SaveRecommendations(ctx, db.SaveRecommendationsParams{
 		UserID:    authPayload.UserID,
-		DishIds:   dishIDs,
+		DishIds:   allDishIDs, // 保存完整列表
 		Algorithm: "ee-algorithm",
 		ExpiredAt: expiredAt,
 	})
@@ -259,9 +284,12 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 		Code:    0,
 		Message: "ok",
 		Data: recommendDishesResponse{
-			Dishes:    dishes,
-			Algorithm: "ee-algorithm",
-			ExpiredAt: expiredAt.Format(time.RFC3339),
+			Dishes:     dishes,
+			Algorithm:  "ee-algorithm",
+			ExpiredAt:  expiredAt.Format(time.RFC3339),
+			HasMore:    hasMore,
+			Page:       req.Page,
+			TotalCount: len(dishes),
 		},
 	})
 }
@@ -292,9 +320,12 @@ type comboSummary struct {
 }
 
 type recommendCombosResponse struct {
-	Combos    []comboSummary `json:"combos"`
-	Algorithm string         `json:"algorithm"`
-	ExpiredAt string         `json:"expired_at"`
+	Combos     []comboSummary `json:"combos"`
+	Algorithm  string         `json:"algorithm"`
+	ExpiredAt  string         `json:"expired_at"`
+	HasMore    bool           `json:"has_more"`
+	Page       int32          `json:"page"`
+	TotalCount int            `json:"total_count"`
 }
 
 // recommendCombos godoc
@@ -322,17 +353,38 @@ func (server *Server) recommendCombos(ctx *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 10
 	}
+	if req.Page == 0 {
+		req.Page = 1
+	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 获取更多推荐用于分页
+	totalLimit := int(req.Page) * int(req.Limit)
+	if totalLimit > 100 {
+		totalLimit = 100
+	}
 
 	// 生成套餐推荐
 	recommender := algorithm.NewPersonalizedRecommender(server.store)
 	config := algorithm.DefaultPersonalizedConfig()
-	comboIDs, err := recommender.RecommendCombos(ctx, authPayload.UserID, config, int(req.Limit))
+	allComboIDs, err := recommender.RecommendCombos(ctx, authPayload.UserID, config, totalLimit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	// 计算分页偏移
+	offset := (int(req.Page) - 1) * int(req.Limit)
+	end := offset + int(req.Limit)
+	if offset >= len(allComboIDs) {
+		offset = len(allComboIDs)
+	}
+	if end > len(allComboIDs) {
+		end = len(allComboIDs)
+	}
+	comboIDs := allComboIDs[offset:end]
+	hasMore := end < len(allComboIDs)
 
 	// 批量查询套餐详情（使用新的丰富查询）
 	combos := make([]comboSummary, 0)
@@ -392,9 +444,12 @@ func (server *Server) recommendCombos(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, recommendCombosResponse{
-		Combos:    combos,
-		Algorithm: "ee-algorithm",
-		ExpiredAt: time.Now().Add(5 * time.Minute).Format(time.RFC3339),
+		Combos:     combos,
+		Algorithm:  "ee-algorithm",
+		ExpiredAt:  time.Now().Add(5 * time.Minute).Format(time.RFC3339),
+		HasMore:    hasMore,
+		Page:       req.Page,
+		TotalCount: len(combos),
 	})
 }
 
@@ -414,9 +469,12 @@ type merchantSummary struct {
 }
 
 type recommendMerchantsResponse struct {
-	Merchants []merchantSummary `json:"merchants"`
-	Algorithm string            `json:"algorithm"`
-	ExpiredAt string            `json:"expired_at"`
+	Merchants  []merchantSummary `json:"merchants"`
+	Algorithm  string            `json:"algorithm"`
+	ExpiredAt  string            `json:"expired_at"`
+	HasMore    bool              `json:"has_more"`
+	Page       int32             `json:"page"`
+	TotalCount int               `json:"total_count"`
 }
 
 // recommendMerchants godoc
@@ -444,17 +502,38 @@ func (server *Server) recommendMerchants(ctx *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 10
 	}
+	if req.Page == 0 {
+		req.Page = 1
+	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 获取更多推荐用于分页
+	totalLimit := int(req.Page) * int(req.Limit)
+	if totalLimit > 100 {
+		totalLimit = 100
+	}
 
 	// 生成商户推荐
 	recommender := algorithm.NewPersonalizedRecommender(server.store)
 	config := algorithm.DefaultPersonalizedConfig()
-	merchantIDs, err := recommender.RecommendMerchants(ctx, authPayload.UserID, config, int(req.Limit))
+	allMerchantIDs, err := recommender.RecommendMerchants(ctx, authPayload.UserID, config, totalLimit)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	// 计算分页偏移
+	offset := (int(req.Page) - 1) * int(req.Limit)
+	end := offset + int(req.Limit)
+	if offset >= len(allMerchantIDs) {
+		offset = len(allMerchantIDs)
+	}
+	if end > len(allMerchantIDs) {
+		end = len(allMerchantIDs)
+	}
+	merchantIDs := allMerchantIDs[offset:end]
+	hasMore := end < len(allMerchantIDs)
 
 	// 批量查询商户详情（使用新的丰富查询）
 	merchants := make([]merchantSummary, 0)
@@ -503,9 +582,12 @@ func (server *Server) recommendMerchants(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, recommendMerchantsResponse{
-		Merchants: merchants,
-		Algorithm: "ee-algorithm",
-		ExpiredAt: time.Now().Add(5 * time.Minute).Format(time.RFC3339),
+		Merchants:  merchants,
+		Algorithm:  "ee-algorithm",
+		ExpiredAt:  time.Now().Add(5 * time.Minute).Format(time.RFC3339),
+		HasMore:    hasMore,
+		Page:       req.Page,
+		TotalCount: len(merchants),
 	})
 }
 
