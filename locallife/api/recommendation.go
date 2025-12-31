@@ -190,8 +190,9 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 		config = algorithm.NewUserPersonalizedConfig() // 新用户使用不同配置
 	}
 
-	// 获取更多推荐用于分页（最多200个）
-	totalLimit := int(req.Page) * int(req.Limit)
+	// 获取更多推荐用于分页（获取比当前页需要的多一页，用于判断 hasMore）
+	// 例如：page=1, limit=10 时，获取 2 * 10 = 20 个，这样可以判断是否有下一页
+	totalLimit := (int(req.Page) + 1) * int(req.Limit)
 	if totalLimit > 200 {
 		totalLimit = 200
 	}
@@ -213,7 +214,8 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 		end = len(allDishIDs)
 	}
 	dishIDs := allDishIDs[offset:end]
-	hasMore := end < len(allDishIDs)
+	// hasMore: 如果获取的总数据超过当前页结束位置，说明还有更多
+	hasMore := len(allDishIDs) > end
 
 	// 保存推荐结果到数据库（5分钟过期）
 	expiredAt := time.Now().Add(5 * time.Minute)
@@ -359,8 +361,8 @@ func (server *Server) recommendCombos(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取更多推荐用于分页
-	totalLimit := int(req.Page) * int(req.Limit)
+	// 获取更多推荐用于分页（获取比当前页需要的多一页，用于判断 hasMore）
+	totalLimit := (int(req.Page) + 1) * int(req.Limit)
 	if totalLimit > 100 {
 		totalLimit = 100
 	}
@@ -508,8 +510,8 @@ func (server *Server) recommendMerchants(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取更多推荐用于分页
-	totalLimit := int(req.Page) * int(req.Limit)
+	// 获取更多推荐用于分页（获取比当前页需要的多一页，用于判断 hasMore）
+	totalLimit := (int(req.Page) + 1) * int(req.Limit)
 	if totalLimit > 100 {
 		totalLimit = 100
 	}

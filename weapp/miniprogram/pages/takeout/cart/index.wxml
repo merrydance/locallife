@@ -12,11 +12,17 @@
       <!-- 商户头部 -->
       <view class="merchant-header">
         <view class="merchant-info" bindtap="onToggleMerchant" data-cart-id="{{item.cartId}}">
-          <t-checkbox checked="{{selectedCartIds.indexOf(item.cartId) > -1}}" />
+          <t-checkbox 
+            value="{{item.cartId}}" 
+            checked="{{item.selected}}"
+            borderless
+            t-class="custom-checkbox"
+            t-class-icon="custom-checkbox-icon"
+          />
           <image wx:if="{{item.merchantLogo}}" class="merchant-logo" src="{{item.merchantLogo}}" mode="aspectFill" />
           <text class="merchant-name">{{item.merchantName}}</text>
         </view>
-        <text class="clear-btn" bindtap="onClearMerchant" data-merchant-id="{{item.merchantId}}">清空</text>
+        <text class="clear-btn" bindtap="onClearMerchant" data-merchant-id="{{item.merchantId}}">清空本店</text>
       </view>
 
       <!-- 商品列表 -->

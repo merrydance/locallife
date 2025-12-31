@@ -85,6 +85,8 @@ Page({
             totalAmountDisplay: '¥0.00'
           }
         })
+        // 重要：空购物车也要同步到全局状态
+        this.syncToGlobalStore()
         return
       }
 
@@ -121,11 +123,34 @@ Page({
       // 计算各商户代取费
       await this.calculateDeliveryFees()
       this.calculateCheckoutTotal()
+
+      // 同步到全局状态，让其他页面（如外卖首页）能感知购物车变化
+      this.syncToGlobalStore()
     } catch (error) {
       logger.error('Failed to load carts', error, 'cart.loadAllCarts')
       this.setData({ loading: false })
       wx.showToast({ title: '加载购物车失败', icon: 'none' })
     }
+  },
+
+  /**
+   * 同步购物车状态到全局存储
+   */
+  syncToGlobalStore() {
+    const { globalStore } = require('@/utils/global-store')
+    const { summary, merchantGroups } = this.data
+
+    // 计算总数量
+    const totalCount = merchantGroups.reduce((sum, group) => sum + group.itemCount, 0)
+
+    globalStore.set('cart', {
+      items: [],  // 多商户模式下不使用单一 items 列表
+      totalCount: totalCount,
+      totalPrice: summary.totalAmount,
+      totalPriceDisplay: summary.totalAmountDisplay
+    })
+
+    logger.debug('Cart synced to globalStore', { totalCount }, 'cart.syncToGlobalStore')
   },
 
   /**
@@ -231,7 +256,7 @@ Page({
    */
   onToggleMerchant(e: WechatMiniprogram.CustomEvent) {
     const { cartId } = e.currentTarget.dataset
-    const { selectedCartIds } = this.data
+    const { selectedCartIds, merchantGroups } = this.data
 
     const index = selectedCartIds.indexOf(cartId)
     if (index > -1) {
@@ -240,7 +265,16 @@ Page({
       selectedCartIds.push(cartId)
     }
 
-    this.setData({ selectedCartIds })
+    // 同时更新 merchantGroups 中对应项的 selected 状态
+    const updatedGroups = merchantGroups.map(group => ({
+      ...group,
+      selected: selectedCartIds.includes(group.cartId)
+    }))
+
+    this.setData({
+      selectedCartIds,
+      merchantGroups: updatedGroups
+    })
     this.calculateCheckoutTotal()
   },
 

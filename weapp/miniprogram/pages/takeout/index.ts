@@ -577,16 +577,25 @@ Page({
 
   updateCartDisplay() {
     const cart = CartService.getCart()
-    if (cart) {
+    if (cart && cart.total_count > 0) {
       this.setData({
         cartTotalCount: cart.total_count,
         cartTotalPrice: cart.subtotal
       })
     } else {
-      this.setData({
-        cartTotalCount: 0,
-        cartTotalPrice: 0
-      })
+      // 从 globalStore 读取（购物车页面同步的数据）
+      const globalCart = globalStore.get('cart')
+      if (globalCart && globalCart.totalCount > 0) {
+        this.setData({
+          cartTotalCount: globalCart.totalCount,
+          cartTotalPrice: globalCart.totalPrice
+        })
+      } else {
+        this.setData({
+          cartTotalCount: 0,
+          cartTotalPrice: 0
+        })
+      }
     }
   },
 
@@ -685,20 +694,14 @@ Page({
     }
     this._lastLoadTime = now
 
-    // 增加页码
+    // 增加页码 (loadData 会设置 loading: true)
     const nextPage = this.data.page + 1
-    this.setData({
-      page: nextPage,
-      loading: true
-    })
+    this.setData({ page: nextPage })
 
     // 加载数据，失败时回滚页码
     this.loadData().catch(() => {
       logger.error('加载更多失败，回滚页码', { page: nextPage }, 'Takeout.onReachBottom')
-      this.setData({
-        page: nextPage - 1,
-        loading: false
-      })
+      this.setData({ page: nextPage - 1 })
       wx.showToast({ title: '加载失败，请重试', icon: 'none' })
     })
   },
