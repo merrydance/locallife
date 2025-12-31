@@ -2,13 +2,10 @@ import Navigation from '../../utils/navigation'
 import { updateUserInfo, getUserInfo } from '../../api/auth'
 import { logger } from '../../utils/logger'
 import { UploadService } from '../../api/upload'
-import { responsiveBehavior } from '../../utils/responsive'
-// import { MerchantManagementService } from '../../api/merchant' // Removed dependency
 
 const app = getApp<IAppOption>()
 
 Page({
-  behaviors: [responsiveBehavior],
   data: {
     userInfo: {
       nickName: '微信用户',

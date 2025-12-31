@@ -1,11 +1,10 @@
-/* 自定义导航栏 - 30% 品牌主色 (活力珊瑚渐变) */
+/* 自定义导航栏 */
 .custom-navbar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 9999;
-  /* 使用"晨曦"微渐变 - 让导航栏更有质感 */
   background: linear-gradient(135deg, #FF8A75 0%, #FF6B58 100%);
   box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.1);
 }
@@ -60,14 +59,13 @@
   overflow: hidden;
 }
 
-/* 移除位置图标,只显示文字 */
 .location-icon {
   display: none;
 }
 
 .location-text {
   font-size: 26rpx;
-  color: rgba(255, 255, 255, 0.87);  /* 87%透明度白色 */
+  color: rgba(255, 255, 255, 0.87);
   white-space: nowrap;
 }
 
@@ -90,36 +88,9 @@
 .nav-title {
   font-size: 32rpx;
   font-weight: bold;
-  color: rgba(255, 255, 255, 0.87);  /* 87%透明度白色 */
+  color: rgba(255, 255, 255, 0.87);
 }
 
 .nav-right {
   flex-shrink: 0;
-}
-
-/* PC 端尺寸锁定 - 保持视觉一致性 */
-@media (min-width: 750px) {
-  .nav-bar {
-    padding: 0 16px !important;
-  }
-  
-  .back-button {
-    width: 32px !important;
-    height: 32px !important;
-  }
-  
-  .back-icon {
-    font-size: 24px !important;
-    width: 32px !important;
-    height: 32px !important;
-    line-height: 32px !important;
-  }
-  
-  .nav-title {
-    font-size: 16px !important;
-  }
-  
-  .location-text {
-    font-size: 13px !important;
-  }
 }

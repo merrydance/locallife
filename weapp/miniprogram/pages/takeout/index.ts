@@ -11,12 +11,11 @@ import { ErrorHandler } from '../../utils/error-handler'
 import { globalStore } from '../../utils/global-store'
 import { requestManager } from '../../utils/request-manager'
 import { getRecommendedCombos, ComboSetResponse } from '../../api/dish'
-import { responsiveBehavior } from '../../utils/responsive'
+import { getStableBarHeights } from '../../utils/responsive'
 
 const PAGE_CONTEXT = 'takeout_index'
 
 Page({
-  behaviors: [responsiveBehavior],
   data: {
     activeTab: 'dishes' as 'dishes' | 'restaurants' | 'packages',
     dishes: [] as Dish[],
@@ -37,7 +36,9 @@ Page({
   },
 
   onLoad() {
-    // 移除 manual navBarHeight 设置，由 responsiveBehavior 自动注入
+    // 设置导航栏高度
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
 
     // 立即加载分类
     this.loadCategories()

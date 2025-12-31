@@ -1,20 +1,18 @@
-/* 菜品卡片 - 遵循60-30-10配色法则 */
-
-/* 60% - 背景与留白 */
+/* 菜品卡片 */
 .dish-card {
   display: flex;
   gap: 24rpx;
   padding: 24rpx;
-  background: var(--td-bg-color-container);  /* 纯白卡片 */
+  background: #fff;
   border-radius: 16rpx;
   margin-bottom: 24rpx;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease;
 }
 
 .dish-card:active {
   transform: scale(0.98);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
 }
 
 .dish-image {
@@ -39,12 +37,11 @@
   gap: 16rpx;
 }
 
-/* 文字层级 - 炭黑主标题 */
 .shop-dish-name {
   flex: 1;
   font-size: 28rpx;
   font-weight: 500;
-  color: var(--td-text-color-primary);  /* #333 炭黑 */
+  color: #333;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -57,29 +54,27 @@
   font-size: 26rpx;
 }
 
-/* 30% - 品牌主色用于价格 */
 .price {
   font-weight: bold;
-  color: var(--brand-coral);  /* #FF6B58 活力珊瑚 */
+  color: #FF6B58;
 }
 
 .separator {
-  color: var(--td-text-color-placeholder);  /* #999 */
+  color: #999;
   margin: 0 4rpx;
 }
 
 .sales {
-  color: var(--td-text-color-secondary);  /* #666 */
+  color: #666;
   font-size: 24rpx;
 }
 
-/* 距离和配送时间行 */
 .row-3 {
   display: flex;
   align-items: center;
   gap: 16rpx;
   font-size: 22rpx;
-  color: var(--td-text-color-secondary);
+  color: #666;
 }
 
 .distance, .delivery-time {
@@ -87,7 +82,6 @@
   font-size: 22rpx;
 }
 
-/* 代取费和满返行 */
 .row-4 {
   display: flex;
   align-items: center;
@@ -96,7 +90,6 @@
   font-size: 22rpx;
 }
 
-/* 代取费信息 */
 .delivery-fee {
   font-size: 22rpx;
   color: #666;
@@ -105,7 +98,6 @@
   border-radius: 4rpx;
 }
 
-/* 满返信息 */
 .discount {
   font-size: 22rpx;
   color: #ff6b58;
@@ -114,7 +106,6 @@
   border-radius: 4rpx;
 }
 
-/* 标签行 */
 .row-5 {
   display: flex;
   align-items: center;
@@ -134,37 +125,7 @@
 }
 
 @keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-/* PC 端尺寸锁定 - 保持视觉一致性 */
-@media (min-width: 750px) {
-  .dish-card {
-    gap: 12px !important;
-    padding: 12px !important;
-    border-radius: 8px !important;
-    margin-bottom: 12px !important;
-  }
-  .dish-image {
-    width: 80px !important;
-    height: 80px !important;
-    border-radius: 6px !important;
-  }
-  .shop-dish-name {
-    font-size: 14px !important;
-  }
-  .price {
-    font-size: 16px !important;
-  }
-  .row-2, .sales, .row-3, .distance, .delivery-time, .row-4, .delivery-fee, .discount {
-    font-size: 12px !important;
-  }
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }

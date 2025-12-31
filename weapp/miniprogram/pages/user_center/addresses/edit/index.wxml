@@ -1,4 +1,4 @@
-<view class="page-container customer-page-container">
+<view class="page-container">
   <view class="form-group">
     <t-input
       label="联系人"

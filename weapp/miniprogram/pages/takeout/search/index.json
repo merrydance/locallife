@@ -1,5 +1,7 @@
 {
     "navigationBarTitleText": "搜索",
+    "renderer": "skyline",
+    "componentFramework": "glass-easel",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-search": "tdesign-miniprogram/search/search",

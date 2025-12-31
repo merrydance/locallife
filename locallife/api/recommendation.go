@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
+	"github.com/rs/zerolog/log"
 )
 
 // numericToFloat64 将pgtype.Numeric转换为float64
@@ -877,6 +878,7 @@ func (server *Server) calculateDishDistancesAndFees(ctx *gin.Context, dishes []d
 	// 批量计算距离（骑行模式）
 	result, err := server.mapClient.GetDistanceMatrix(ctx, merchantLocs, userLoc, "bicycling")
 	if err != nil {
+		log.Warn().Err(err).Msg("failed to calculate dish distances via Tencent Map API")
 		return
 	}
 

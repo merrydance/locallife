@@ -2,16 +2,16 @@
   display: flex;
   gap: 24rpx;
   padding: 24rpx;
-  background: var(--td-bg-color-container);
+  background: #fff;
   border-radius: 16rpx;
   margin-bottom: 24rpx;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease;
 }
 
 .restaurant-card:active {
   transform: scale(0.98);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
 }
 
 .restaurant-image {
@@ -40,7 +40,7 @@
   flex: 1;
   font-size: 28rpx;
   font-weight: 500;
-  color: var(--td-text-color-primary);  /* #333 */
+  color: #333;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -48,7 +48,7 @@
 
 .rating {
   font-size: 24rpx;
-  color: var(--brand-mustard);  /* #FFC107 */
+  color: #FFC107;
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -58,20 +58,20 @@
   align-items: center;
   gap: 12rpx;
   font-size: 26rpx;
-  color: var(--td-text-color-secondary);  /* #666 */
+  color: #666;
 }
 
 .cuisine {
-  color: var(--td-text-color-secondary);
+  color: #666;
 }
 
 .avg-price {
   font-weight: bold;
-  color: var(--brand-coral);  /* #FF6B58 */
+  color: #FF6B58;
 }
 
 .separator {
-  color: var(--td-text-color-placeholder);  /* #999 */
+  color: #999;
   margin: 0 4rpx;
 }
 
@@ -88,35 +88,7 @@
 }
 
 .rooms {
-  color: var(--brand-teal);  /* #00897B */
+  color: #00897B;
   font-size: 22rpx;
   font-weight: 500;
-}
-
-/* PC 端尺寸锁定 - 保持视觉一致性 */
-@media (min-width: 750px) {
-  .restaurant-card {
-    gap: 12px !important;
-    padding: 12px !important;
-    border-radius: 8px !important;
-    margin-bottom: 12px !important;
-  }
-  .restaurant-image {
-    width: 100px !important;
-    height: 80px !important;
-    border-radius: 6px !important;
-  }
-  .restaurant-name {
-    font-size: 14px !important;
-  }
-  .rating {
-    font-size: 12px !important;
-  }
-  .row-2 {
-    font-size: 12px !important;
-    gap: 6px !important;
-  }
-  .distance, .row-3, .rooms {
-    font-size: 11px !important;
-  }
 }

@@ -1,5 +1,7 @@
 {
     "navigationBarTitleText": "预定",
+    "renderer": "skyline",
+    "componentFramework": "glass-easel",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "room-card": "../../components/room-card/index",

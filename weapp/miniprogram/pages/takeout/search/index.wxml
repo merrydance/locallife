@@ -1,7 +1,12 @@
 <custom-navbar title="搜索" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px;">
-  <view class="responsive-container">
+<scroll-view 
+  scroll-y 
+  class="page-scroll" 
+  style="height: calc(100vh - {{navBarHeight}}px); padding-top: {{navBarHeight}}px;"
+  enhanced="{{true}}"
+  show-scrollbar="{{false}}"
+>
   <!-- 搜索框 -->
   <view class="search-section">
     <t-search 
@@ -74,6 +79,5 @@
         </view>
       </view>
     </view>
-    </view>
-</view>
-</view>
+  </view>
+</scroll-view>

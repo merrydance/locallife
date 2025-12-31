@@ -6,19 +6,22 @@
 import { searchDishes, DishSummary } from '../../../api/dish'
 import { searchMerchants, MerchantSummary } from '../../../api/merchant'
 import { DishAdapter } from '../../../adapters/dish'
-import { responsiveBehavior } from '../../../utils/responsive'
+import { getStableBarHeights } from '../../../utils/responsive'
 
 Page({
-  behaviors: [responsiveBehavior],
   data: {
     keyword: '',
     activeTab: 'dishes' as 'dishes' | 'restaurants',
     dishes: [] as any[],
     restaurants: [] as any[],
-    loading: false
+    loading: false,
+    navBarHeight: 88
   },
 
   onLoad(options: any) {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+
     if (options.keyword) {
       this.setData({ keyword: options.keyword })
       this.onSearch()

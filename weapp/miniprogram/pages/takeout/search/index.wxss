@@ -1,6 +1,8 @@
-.page-container {
-  min-height: 100vh;
+/* 搜索页面 */
+
+.page-scroll {
   background: #F6F6F6;
+  box-sizing: border-box;
 }
 
 .search-section {
@@ -12,27 +14,6 @@
 .tabs-section {
   background: #fff;
   margin-bottom: 16rpx;
-}
-
-@media (min-width: 750px) {
-  .responsive-container {
-    max-width: 800px;
-    margin: 0 auto;
-    background: #fff;
-    min-height: calc(100vh - 88px);
-    box-shadow: var(--shadow-sm);
-  }
-  .search-section {
-    padding: 24px !important;
-    border-bottom: 1px solid #f0f0f0;
-  }
-  .tabs-section {
-    margin-bottom: 0 !important;
-    border-bottom: 1px solid #f0f0f0;
-  }
-  .results {
-    padding: 24px !important;
-  }
 }
 
 .loading {

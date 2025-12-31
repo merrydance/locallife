@@ -1,6 +1,6 @@
 <custom-navbar title="确认订单" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 160rpx;">
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 160rpx;">
   <!-- 收货地址 -->
   <view class="address-section" bindtap="onSelectAddress">
     <view wx:if="{{address}}" class="address-content">

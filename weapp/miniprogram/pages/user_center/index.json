@@ -1,5 +1,7 @@
 {
     "navigationBarTitleText": "我的",
+    "renderer": "skyline",
+    "componentFramework": "glass-easel",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-cell": "tdesign-miniprogram/cell/cell",

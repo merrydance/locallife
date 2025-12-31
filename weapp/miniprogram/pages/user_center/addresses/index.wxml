@@ -4,7 +4,7 @@
   </view>
 </custom-navbar>
 
-<view class="page-container customer-page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
   <!-- 骨架屏 -->
   <view wx:if="{{loading && addresses.length === 0}}" class="skeleton-container">
     <list-skeleton wx:for="{{[1,2,3,4]}}" wx:key="*this" show-avatar="{{false}}" />
