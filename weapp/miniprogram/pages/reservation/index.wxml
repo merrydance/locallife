@@ -4,7 +4,7 @@
 <scroll-view 
   scroll-y 
   class="page-scroll" 
-  style="height: calc(100vh - {{navBarHeight}}px); padding-top: {{navBarHeight}}px;"
+  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
   bindscrolltolower="onReachBottom"
   enhanced="{{true}}"
   show-scrollbar="{{false}}"

@@ -13,6 +13,7 @@ Page({
 
     // UI State
     navBarHeight: 88,
+    scrollViewHeight: 600,
     address: '定位中...',
     loading: false,
     hasMore: true,
@@ -61,7 +62,13 @@ Page({
   },
 
   onLoad() {
-    this.setData({ navBarHeight: globalStore.get('navBarHeight') })
+    // 计算导航栏高度和滚动区域高度
+    const navBarHeight = globalStore.get('navBarHeight') || 88
+    const windowInfo = wx.getWindowInfo()
+    // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
+    const scrollViewHeight = windowInfo.windowHeight - navBarHeight
+
+    this.setData({ navBarHeight, scrollViewHeight })
     this.generateDateOptions()
 
     const loc = app.globalData.location

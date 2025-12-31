@@ -27,6 +27,7 @@ Page({
     cartTotalPrice: 0,
     address: '点此获取位置',
     navBarHeight: 88,
+    scrollViewHeight: 600, // 动态计算
     searchKeyword: '',
     page: 1,
     hasMore: true,
@@ -36,9 +37,16 @@ Page({
   },
 
   onLoad() {
-    // 设置导航栏高度
+    // 设置导航栏高度和滚动区域高度
     const { navBarHeight } = getStableBarHeights()
-    this.setData({ navBarHeight })
+    const windowInfo = wx.getWindowInfo()
+    // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
+    const scrollViewHeight = windowInfo.windowHeight - navBarHeight
+
+    this.setData({
+      navBarHeight,
+      scrollViewHeight
+    })
 
     // 立即加载分类
     this.loadCategories()

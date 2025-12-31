@@ -28,8 +28,7 @@
 .content-section {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-  padding: 0 24rpx 24rpx;
+  padding: 12rpx 20rpx 24rpx;
 }
 
 /* ========== 套餐卡片 ========== */

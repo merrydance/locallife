@@ -4,7 +4,7 @@
 <scroll-view 
   scroll-y 
   class="page-scroll" 
-  style="height: calc(100vh - {{navBarHeight}}px); padding-top: {{navBarHeight}}px;"
+  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
   bindscrolltolower="onReachBottom"
   enhanced="{{true}}"
   show-scrollbar="{{false}}"
@@ -105,8 +105,8 @@
     </view>
   </view>
   
-  <!-- 底部安全区占位 -->
-  <view style="height: 140rpx;"></view>
+  <!-- 底部安全区占位 (仅购物车显示时) -->
+  <view wx:if="{{activeTab === 'dishes' && cartTotalCount > 0}}" style="height: 120rpx;"></view>
 </scroll-view>
 
 <!-- 购物车栏 -->
