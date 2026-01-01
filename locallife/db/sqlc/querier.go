@@ -352,6 +352,8 @@ type Querier interface {
 	DeleteDish(ctx context.Context, id int64) error
 	DeleteDishCustomizationGroup(ctx context.Context, id int64) error
 	DeleteDishCustomizationOption(ctx context.Context, id int64) error
+	// 删除指定标签的所有菜品关联（用于清理过期的自动标签）
+	DeleteDishTagByTagID(ctx context.Context, tagID int64) error
 	DeleteExpiredNotifications(ctx context.Context) error
 	DeleteExpiredRecommendations(ctx context.Context) error
 	DeleteExpiredSessions(ctx context.Context) error
@@ -480,6 +482,12 @@ type Querier interface {
 	// 根据菜系获取菜品ID（用于基于偏好推荐）
 	// 注：当前merchants表无cuisine_type字段，简化为按价格区间查询热门菜品
 	GetDishIDsByCuisines(ctx context.Context, arg GetDishIDsByCuisinesParams) ([]int64, error)
+	// 获取带有指定标签的菜品ID列表（用于推荐过滤）
+	GetDishIDsByTagID(ctx context.Context, tagID int64) ([]int64, error)
+	// 获取有指定标签的所有菜品ID
+	GetDishIDsWithTag(ctx context.Context, tagID int64) ([]int64, error)
+	// 获取单个菜品的复购率（用于过滤）
+	GetDishRepurchaseRate(ctx context.Context, dishID pgtype.Int8) (GetDishRepurchaseRateRow, error)
 	GetDishWithCustomizations(ctx context.Context, id int64) (GetDishWithCustomizationsRow, error)
 	GetDishWithDetails(ctx context.Context, id int64) (GetDishWithDetailsRow, error)
 	// 批量获取菜品详情（用于推荐结果）
@@ -499,6 +507,8 @@ type Querier interface {
 	GetFraudPattern(ctx context.Context, id int64) (FraudPattern, error)
 	GetFraudPatternsByDevice(ctx context.Context, arg GetFraudPatternsByDeviceParams) ([]FraudPattern, error)
 	GetFraudPatternsByUsers(ctx context.Context, dollar_1 []int64) ([]FraudPattern, error)
+	// 获取热卖菜品ID列表（近7天销量 >= 指定阈值）
+	GetHotSellingDishIDs(ctx context.Context, quantity int16) ([]int64, error)
 	// 订单时段分布
 	GetHourlyDistribution(ctx context.Context, arg GetHourlyDistributionParams) ([]GetHourlyDistributionRow, error)
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
@@ -647,6 +657,9 @@ type Querier interface {
 	GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrderNo string) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (ProfitSharingOrder, error)
 	GetProfitSharingOrderForUpdate(ctx context.Context, id int64) (ProfitSharingOrder, error)
+	// 获取无投诉的高质量菜品ID列表
+	// 条件: 销量>=指定阈值, 近30天无投诉, 商户无食品安全事故
+	GetQualityDishIDs(ctx context.Context, quantity int16) ([]int64, error)
 	// 获取随机菜品（用于推荐探索）
 	GetRandomDishes(ctx context.Context, limit int32) ([]int64, error)
 	// 实时大盘数据(最近24小时)
@@ -731,6 +744,8 @@ type Querier interface {
 	GetSession(ctx context.Context, id int64) (Session, error)
 	GetSessionByAccessToken(ctx context.Context, accessToken string) (Session, error)
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (Session, error)
+	// 根据名称获取系统标签
+	GetSystemTagByName(ctx context.Context, name string) (Tag, error)
 	GetTable(ctx context.Context, id int64) (Table, error)
 	GetTableByMerchantAndNo(ctx context.Context, arg GetTableByMerchantAndNoParams) (Table, error)
 	GetTableForUpdate(ctx context.Context, id int64) (Table, error)
@@ -1302,6 +1317,8 @@ type Querier interface {
 	UpdateUserRoleStatus(ctx context.Context, arg UpdateUserRoleStatusParams) (UserRole, error)
 	UpdateUserTrustScore(ctx context.Context, arg UpdateUserTrustScoreParams) error
 	UpdateVoucher(ctx context.Context, arg UpdateVoucherParams) (Voucher, error)
+	// 添加或更新菜品标签关联
+	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertRecommendationConfig(ctx context.Context, arg UpsertRecommendationConfigParams) (RecommendationConfig, error)

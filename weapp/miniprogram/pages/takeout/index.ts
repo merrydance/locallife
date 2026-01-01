@@ -1,7 +1,7 @@
 import { DishAdapter } from '../../adapters/dish'
 import { Dish } from '../../models/dish'
 import { Category } from '../../models/category'
-import { getRecommendedDishes, DishSummary } from '../../api/dish'
+import { getRecommendedDishes, DishSummary, getTags } from '../../api/dish'
 import { getRecommendedMerchants } from '../../api/merchant'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
@@ -321,19 +321,43 @@ Page({
       activeTab: value,
       page: 1
     })
+    // 切换 Tab 时重新加载对应类型的标签
+    this.loadCategories()
     this.loadData()
   },
 
-  loadCategories() {
-    const categories: Category[] = [
-      { id: '1', name: '热销' },
-      { id: '2', name: '超值' },
-      { id: '3', name: '主食' },
-      { id: '4', name: '小吃' },
-      { id: '5', name: '饮品' },
-      { id: '6', name: '时蔬' }
-    ]
-    this.setData({ categories })
+  async loadCategories() {
+    // 根据当前 Tab 获取对应类型的标签
+    const { activeTab } = this.data
+    let tagType = 'dish' // 默认菜品标签
+    if (activeTab === 'packages') {
+      tagType = 'combo'
+    } else if (activeTab === 'restaurants') {
+      tagType = 'merchant'
+    }
+
+    try {
+      const tags = await getTags(tagType)
+      // 添加"全部"选项作为第一个
+      const categories: Category[] = [
+        { id: '', name: '全部' },
+        ...tags.map(tag => ({ id: String(tag.id), name: tag.name }))
+      ]
+      this.setData({
+        categories,
+        activeCategoryId: '' // 默认选中"全部"
+      })
+    } catch (error) {
+      console.error('加载标签失败', error)
+      // 后备：硬编码标签
+      const categories: Category[] = [
+        { id: '', name: '全部' },
+        { id: '1', name: '热销' },
+        { id: '2', name: '主食' },
+        { id: '3', name: '小吃' }
+      ]
+      this.setData({ categories, activeCategoryId: '' })
+    }
   },
 
   async loadData() {
@@ -383,12 +407,19 @@ Page({
         this._prefetchedDishes = [] // 清空缓存
       } else {
         // 2. 没有缓存则请求当前页
-        const result = await getRecommendedDishes({
+        // 获取选中的标签ID用于过滤（空字符串表示"全部"，不传 tag_id）
+        const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null
+        const params: any = {
           user_latitude: app.globalData.latitude || undefined,
           user_longitude: app.globalData.longitude || undefined,
           limit: PAGE_SIZE,
           page: currentPage
-        })
+        }
+        // 只有选择了具体标签时才传 tag_id
+        if (tagId && !isNaN(tagId)) {
+          params.tag_id = tagId
+        }
+        const result = await getRecommendedDishes(params)
         newDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
         hasMore = result.has_more
       }
@@ -557,7 +588,12 @@ Page({
 
   onTabCategoryChange(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.detail
-    this.setData({ activeCategoryId: id })
+    this.setData({
+      activeCategoryId: id,
+      page: 1  // 重置页码
+    })
+    // 切换标签时重新加载数据（带标签过滤）
+    this.loadData()
   },
 
   async onAddCart(e: WechatMiniprogram.CustomEvent) {

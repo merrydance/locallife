@@ -103,6 +103,7 @@ func (server *Server) trackBehavior(ctx *gin.Context) {
 type recommendRequest struct {
 	Limit         int32    `form:"limit" binding:"omitempty,min=1,max=50"`
 	Page          int32    `form:"page" binding:"omitempty,min=1"`     // 页码，从1开始
+	TagID         *int64   `form:"tag_id" binding:"omitempty,min=1"`   // 按标签ID过滤
 	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
 	UserLongitude *float64 `form:"user_longitude" binding:"omitempty"` // 用户当前经度
 }
@@ -203,6 +204,29 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	// 按标签过滤（如果指定了 tag_id）
+	// 注意：直接使用有该标签的菜品，而不是从推荐结果中过滤
+	// 这样可以确保用户选择标签后总能看到有该标签的菜品
+	if req.TagID != nil {
+		taggedDishIDs, err := server.store.GetDishIDsByTagID(ctx, *req.TagID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		log.Info().
+			Int64("tag_id", *req.TagID).
+			Int("tagged_dish_count", len(taggedDishIDs)).
+			Interface("tagged_dish_ids", taggedDishIDs).
+			Msg("Tag filtering: using tagged dishes directly")
+
+		// 直接使用有该标签的菜品ID（不再从推荐结果中过滤）
+		allDishIDs = taggedDishIDs
+	}
+
+	// 按系统标签优先级排序：推荐 > 热卖 > 无标签
+	allDishIDs = server.sortDishIDsByTagPriority(ctx, allDishIDs)
 
 	// 计算分页偏移
 	offset := (int(req.Page) - 1) * int(req.Limit)
@@ -1172,4 +1196,64 @@ func (server *Server) calculateRoomDistances(ctx *gin.Context, rooms []exploreRo
 			rooms[i].Distance = &dist
 		}
 	}
+}
+
+// sortDishIDsByTagPriority 按系统标签优先级排序菜品ID
+// 优先级: 推荐 > 热卖 > 无标签
+// 保持同一优先级内的原有顺序（稳定排序）
+func (server *Server) sortDishIDsByTagPriority(ctx *gin.Context, dishIDs []int64) []int64 {
+	if len(dishIDs) == 0 {
+		return dishIDs
+	}
+
+	// 获取推荐和热卖标签ID
+	recommendTag, err1 := server.store.GetSystemTagByName(ctx, "推荐")
+	hotSellingTag, err2 := server.store.GetSystemTagByName(ctx, "热卖")
+
+	// 如果标签不存在，返回原顺序
+	if err1 != nil && err2 != nil {
+		return dishIDs
+	}
+
+	// 获取有这两个标签的菜品ID
+	recommendedDishIDs := make(map[int64]bool)
+	hotSellingDishIDs := make(map[int64]bool)
+
+	if err1 == nil {
+		ids, err := server.store.GetDishIDsWithTag(ctx, recommendTag.ID)
+		if err == nil {
+			for _, id := range ids {
+				recommendedDishIDs[id] = true
+			}
+		}
+	}
+
+	if err2 == nil {
+		ids, err := server.store.GetDishIDsWithTag(ctx, hotSellingTag.ID)
+		if err == nil {
+			for _, id := range ids {
+				hotSellingDishIDs[id] = true
+			}
+		}
+	}
+
+	// 按优先级分组
+	var recommended, hotSelling, others []int64
+	for _, id := range dishIDs {
+		if recommendedDishIDs[id] {
+			recommended = append(recommended, id)
+		} else if hotSellingDishIDs[id] {
+			hotSelling = append(hotSelling, id)
+		} else {
+			others = append(others, id)
+		}
+	}
+
+	// 合并结果：推荐 > 热卖 > 其他
+	result := make([]int64, 0, len(dishIDs))
+	result = append(result, recommended...)
+	result = append(result, hotSelling...)
+	result = append(result, others...)
+
+	return result
 }

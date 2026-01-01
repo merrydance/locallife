@@ -595,3 +595,13 @@ WHERE d.merchant_id = $1
   AND d.is_online = true
   AND d.deleted_at IS NULL
 ORDER BY d.category_id, d.sort_order ASC, d.id ASC;
+
+-- name: GetDishIDsByTagID :many
+-- 获取带有指定标签的菜品ID列表（用于推荐过滤）
+SELECT DISTINCT d.id
+FROM dishes d
+JOIN dish_tags dt ON d.id = dt.dish_id
+WHERE dt.tag_id = $1
+  AND d.is_online = true
+  AND d.is_available = true
+  AND d.deleted_at IS NULL;

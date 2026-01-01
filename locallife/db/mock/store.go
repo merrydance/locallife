@@ -3245,6 +3245,20 @@ func (mr *MockStoreMockRecorder) DeleteDishCustomizationOption(ctx, id any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDishCustomizationOption", reflect.TypeOf((*MockStore)(nil).DeleteDishCustomizationOption), ctx, id)
 }
 
+// DeleteDishTagByTagID mocks base method.
+func (m *MockStore) DeleteDishTagByTagID(ctx context.Context, tagID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDishTagByTagID", ctx, tagID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteDishTagByTagID indicates an expected call of DeleteDishTagByTagID.
+func (mr *MockStoreMockRecorder) DeleteDishTagByTagID(ctx, tagID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDishTagByTagID", reflect.TypeOf((*MockStore)(nil).DeleteDishTagByTagID), ctx, tagID)
+}
+
 // DeleteExpiredNotifications mocks base method.
 func (m *MockStore) DeleteExpiredNotifications(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -4629,6 +4643,51 @@ func (mr *MockStoreMockRecorder) GetDishIDsByCuisines(ctx, arg any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDishIDsByCuisines", reflect.TypeOf((*MockStore)(nil).GetDishIDsByCuisines), ctx, arg)
 }
 
+// GetDishIDsByTagID mocks base method.
+func (m *MockStore) GetDishIDsByTagID(ctx context.Context, tagID int64) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDishIDsByTagID", ctx, tagID)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDishIDsByTagID indicates an expected call of GetDishIDsByTagID.
+func (mr *MockStoreMockRecorder) GetDishIDsByTagID(ctx, tagID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDishIDsByTagID", reflect.TypeOf((*MockStore)(nil).GetDishIDsByTagID), ctx, tagID)
+}
+
+// GetDishIDsWithTag mocks base method.
+func (m *MockStore) GetDishIDsWithTag(ctx context.Context, tagID int64) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDishIDsWithTag", ctx, tagID)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDishIDsWithTag indicates an expected call of GetDishIDsWithTag.
+func (mr *MockStoreMockRecorder) GetDishIDsWithTag(ctx, tagID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDishIDsWithTag", reflect.TypeOf((*MockStore)(nil).GetDishIDsWithTag), ctx, tagID)
+}
+
+// GetDishRepurchaseRate mocks base method.
+func (m *MockStore) GetDishRepurchaseRate(ctx context.Context, dishID pgtype.Int8) (db.GetDishRepurchaseRateRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDishRepurchaseRate", ctx, dishID)
+	ret0, _ := ret[0].(db.GetDishRepurchaseRateRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDishRepurchaseRate indicates an expected call of GetDishRepurchaseRate.
+func (mr *MockStoreMockRecorder) GetDishRepurchaseRate(ctx, dishID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDishRepurchaseRate", reflect.TypeOf((*MockStore)(nil).GetDishRepurchaseRate), ctx, dishID)
+}
+
 // GetDishWithCustomizations mocks base method.
 func (m *MockStore) GetDishWithCustomizations(ctx context.Context, id int64) (db.GetDishWithCustomizationsRow, error) {
 	m.ctrl.T.Helper()
@@ -4837,6 +4896,21 @@ func (m *MockStore) GetFraudPatternsByUsers(ctx context.Context, dollar_1 []int6
 func (mr *MockStoreMockRecorder) GetFraudPatternsByUsers(ctx, dollar_1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFraudPatternsByUsers", reflect.TypeOf((*MockStore)(nil).GetFraudPatternsByUsers), ctx, dollar_1)
+}
+
+// GetHotSellingDishIDs mocks base method.
+func (m *MockStore) GetHotSellingDishIDs(ctx context.Context, quantity int16) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHotSellingDishIDs", ctx, quantity)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHotSellingDishIDs indicates an expected call of GetHotSellingDishIDs.
+func (mr *MockStoreMockRecorder) GetHotSellingDishIDs(ctx, quantity any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHotSellingDishIDs", reflect.TypeOf((*MockStore)(nil).GetHotSellingDishIDs), ctx, quantity)
 }
 
 // GetHourlyDistribution mocks base method.
@@ -6234,6 +6308,21 @@ func (mr *MockStoreMockRecorder) GetProfitSharingOrderForUpdate(ctx, id any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingOrderForUpdate", reflect.TypeOf((*MockStore)(nil).GetProfitSharingOrderForUpdate), ctx, id)
 }
 
+// GetQualityDishIDs mocks base method.
+func (m *MockStore) GetQualityDishIDs(ctx context.Context, quantity int16) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetQualityDishIDs", ctx, quantity)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetQualityDishIDs indicates an expected call of GetQualityDishIDs.
+func (mr *MockStoreMockRecorder) GetQualityDishIDs(ctx, quantity any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQualityDishIDs", reflect.TypeOf((*MockStore)(nil).GetQualityDishIDs), ctx, quantity)
+}
+
 // GetRandomDishes mocks base method.
 func (m *MockStore) GetRandomDishes(ctx context.Context, limit int32) ([]int64, error) {
 	m.ctrl.T.Helper()
@@ -6952,6 +7041,21 @@ func (m *MockStore) GetSessionByRefreshToken(ctx context.Context, refreshToken s
 func (mr *MockStoreMockRecorder) GetSessionByRefreshToken(ctx, refreshToken any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSessionByRefreshToken", reflect.TypeOf((*MockStore)(nil).GetSessionByRefreshToken), ctx, refreshToken)
+}
+
+// GetSystemTagByName mocks base method.
+func (m *MockStore) GetSystemTagByName(ctx context.Context, name string) (db.Tag, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSystemTagByName", ctx, name)
+	ret0, _ := ret[0].(db.Tag)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSystemTagByName indicates an expected call of GetSystemTagByName.
+func (mr *MockStoreMockRecorder) GetSystemTagByName(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemTagByName", reflect.TypeOf((*MockStore)(nil).GetSystemTagByName), ctx, name)
 }
 
 // GetTable mocks base method.
@@ -13365,6 +13469,20 @@ func (m *MockStore) UpdateVoucher(ctx context.Context, arg db.UpdateVoucherParam
 func (mr *MockStoreMockRecorder) UpdateVoucher(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateVoucher", reflect.TypeOf((*MockStore)(nil).UpdateVoucher), ctx, arg)
+}
+
+// UpsertDishTag mocks base method.
+func (m *MockStore) UpsertDishTag(ctx context.Context, arg db.UpsertDishTagParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertDishTag", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpsertDishTag indicates an expected call of UpsertDishTag.
+func (mr *MockStoreMockRecorder) UpsertDishTag(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertDishTag", reflect.TypeOf((*MockStore)(nil).UpsertDishTag), ctx, arg)
 }
 
 // UpsertMerchantMembershipSettings mocks base method.

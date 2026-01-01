@@ -583,6 +583,37 @@ func (q *Queries) GetDishIDsByCuisines(ctx context.Context, arg GetDishIDsByCuis
 	return items, nil
 }
 
+const getDishIDsByTagID = `-- name: GetDishIDsByTagID :many
+SELECT DISTINCT d.id
+FROM dishes d
+JOIN dish_tags dt ON d.id = dt.dish_id
+WHERE dt.tag_id = $1
+  AND d.is_online = true
+  AND d.is_available = true
+  AND d.deleted_at IS NULL
+`
+
+// 获取带有指定标签的菜品ID列表（用于推荐过滤）
+func (q *Queries) GetDishIDsByTagID(ctx context.Context, tagID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getDishIDsByTagID, tagID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDishWithCustomizations = `-- name: GetDishWithCustomizations :one
 SELECT 
   d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at,

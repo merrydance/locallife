@@ -14,6 +14,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/merrydance/locallife/api"
+	"github.com/merrydance/locallife/autotag"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
 	"github.com/merrydance/locallife/util"
@@ -28,7 +29,7 @@ import (
 // @title           LocalLife API
 // @version         1.0
 // @description     本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。
-// @description     
+// @description
 // @description     【图片URL约定】API 中的图片字段（如 image_url / avatar_url / logo_url）通常返回以 /uploads/ 开头的路径。
 // @description     - 公共展示素材（例如菜品/桌台/包间/评价图片、商户logo等）可直接通过 GET /uploads/... 访问。
 // @description     - 敏感材料（证照、身份证、健康证等）必须先调用 POST /v1/uploads/sign 获取短期签名URL，再用该URL下载。
@@ -122,6 +123,7 @@ func main() {
 
 	taskDistributor := runTaskProcessor(ctx, waitGroup, config, redisOpt, store)
 	runWeatherScheduler(ctx, waitGroup, config, store, weatherCache)
+	runAutoTagScheduler(ctx, waitGroup, store)
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
 
 	err = waitGroup.Wait()
@@ -227,6 +229,29 @@ func runWeatherScheduler(
 	waitGroup.Go(func() error {
 		<-ctx.Done()
 		log.Info().Msg("graceful shutdown weather scheduler")
+		scheduler.Stop()
+		return nil
+	})
+}
+
+// runAutoTagScheduler starts the auto-tagging scheduler
+func runAutoTagScheduler(
+	ctx context.Context,
+	waitGroup *errgroup.Group,
+	store db.Store,
+) {
+	// 创建自动标签调度器
+	scheduler := autotag.NewScheduler(store)
+
+	// 启动调度器
+	if err := scheduler.Start(); err != nil {
+		log.Error().Err(err).Msg("failed to start auto-tag scheduler")
+		return
+	}
+
+	waitGroup.Go(func() error {
+		<-ctx.Done()
+		log.Info().Msg("graceful shutdown auto-tag scheduler")
 		scheduler.Stop()
 		return nil
 	})

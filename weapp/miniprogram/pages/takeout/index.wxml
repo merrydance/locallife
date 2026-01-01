@@ -31,8 +31,8 @@
     </t-tabs>
   </view>
 
-  <!-- 分类导航 (仅菜品列表显示) -->
-  <view wx:if="{{activeTab === 'dishes'}}" class="category-section">
+  <!-- 分类导航 (有标签时显示，只有"全部"时隐藏) -->
+  <view wx:if="{{categories.length > 1}}" class="category-section">
     <category-tabs 
       categories="{{categories}}"
       activeId="{{activeCategoryId}}"

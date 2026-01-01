@@ -1034,6 +1034,7 @@ export interface RecommendDishesParams {
     merchant_id?: number
     limit?: number
     page?: number              // 页码，从1开始
+    tag_id?: number            // 按标签ID过滤
     user_latitude?: number
     user_longitude?: number
 }
@@ -1115,6 +1116,36 @@ export async function getRecommendedCombos(params?: RecommendCombosParams): Prom
         page: response.page ?? 1,
         total_count: response.total_count ?? 0
     }
+}
+
+// ==================== 标签 API ====================
+
+/**
+ * 标签响应
+ */
+export interface Tag {
+    id: number
+    name: string
+    type: string
+    sort_order: number
+}
+
+/**
+ * 获取标签列表 - 基于 /v1/tags
+ * @param type 标签类型: dish, combo, merchant, attribute, customization
+ */
+export async function getTags(type: string): Promise<Tag[]> {
+    interface TagsResponse {
+        tags: Tag[]
+    }
+    const response = await request<TagsResponse>({
+        url: '/v1/tags',
+        method: 'GET',
+        data: { type },
+        useCache: true,
+        cacheTTL: 10 * 60 * 1000 // 10分钟缓存
+    })
+    return response.tags || []
 }
 
 // ==================== 导出默认服务 ====================
