@@ -7,7 +7,7 @@
     <!-- Left: Back Button or Location -->
     <view class="nav-left">
       <view wx:if="{{showBack}}" class="back-button" bindtap="onBackTap">
-        <text class="back-icon">‹</text>
+        <image class="back-icon" src="/assets/icons/arrow-left.svg" mode="aspectFit" />
       </view>
       <view wx:elif="{{showLocation}}" class="location-wrapper" bindtap="onLocationTap">
         <text class="location-icon">📍</text>

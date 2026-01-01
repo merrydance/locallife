@@ -26,6 +26,7 @@
   align-items: center;
 }
 
+/* 返回按钮 - 使用 flexbox 完美居中 */
 .back-button {
   display: flex;
   align-items: center;
@@ -41,14 +42,10 @@
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* 返回图标 - 使用图片确保完美居中 */
 .back-icon {
-  font-size: 48rpx;
-  color: rgba(255, 255, 255, 0.87);
-  font-weight: bold;
-  width: 56rpx;
-  height: 56rpx;
-  line-height: 56rpx;
-  text-align: center;
+  width: 28rpx;
+  height: 28rpx;
 }
 
 .location-wrapper {
