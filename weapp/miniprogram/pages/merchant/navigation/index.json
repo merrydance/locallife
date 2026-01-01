@@ -1,0 +1,6 @@
+{
+    "navigationBarTitleText": "应用导航",
+    "usingComponents": {
+        "merchant-header": "../../../components/merchant-header/index"
+    }
+}

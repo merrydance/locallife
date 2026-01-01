@@ -7,6 +7,10 @@ Component({
     totalCount: {
       type: Number,
       value: 0
+    },
+    deliveryFee: {
+      type: Number,
+      value: 0
     }
   },
 

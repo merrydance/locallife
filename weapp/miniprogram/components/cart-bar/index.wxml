@@ -10,7 +10,7 @@
       <text class="currency">¥</text>
       <text class="total-price">{{totalPrice / 100}}</text>
     </view>
-    <view class="delivery-tip">预估配送费 ¥0</view>
+    <view class="delivery-tip">{{deliveryFee > 0 ? '预估配送费 ¥' + deliveryFee / 100 : '结算时计算配送费'}}</view>
   </view>
   
   <view class="checkout-btn {{totalCount > 0 ? 'active' : ''}}" bindtap="onCheckout">

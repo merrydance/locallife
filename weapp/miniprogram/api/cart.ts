@@ -57,6 +57,8 @@ export interface UpdateCartItemRequest extends Record<string, unknown> {
 export interface CalculateCartRequest extends Record<string, unknown> {
     merchant_id: number
     address_id?: number       // 配送地址ID，用于计算配送费
+    latitude?: number         // 用户当前位置纬度（address_id的fallback）
+    longitude?: number        // 用户当前位置经度（address_id的fallback）
     voucher_id?: number       // 优惠券ID，用于计算优惠
 }
 

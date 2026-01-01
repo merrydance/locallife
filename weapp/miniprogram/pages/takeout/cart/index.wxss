@@ -11,11 +11,21 @@
   height: 60vh;
 }
 
+/* 空状态容器 - 垂直水平居中 */
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 200rpx);  /* 减去导航栏和底部栏高度 */
+}
+
 /* 商户分组 */
 .cart-groups {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+  padding-top: 24rpx;  /* 与导航栏的间距 */
   padding-bottom: 40rpx;
 }
 
@@ -207,7 +217,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20rpx 16rpx 20rpx 32rpx;
+  padding: 20rpx 24rpx 20rpx 32rpx;  /* 右侧24rpx更紧凑 */
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
   background: #fff;
   box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.08);
@@ -238,4 +248,11 @@
 
 .checkout-btn {
   flex-shrink: 0;
+}
+
+/* TDesign t-button 内部样式 (通过 t-class) */
+.checkout-btn-inner {
+  margin: 0 !important;
+  padding-left: 40rpx !important;
+  padding-right: 40rpx !important;
 }

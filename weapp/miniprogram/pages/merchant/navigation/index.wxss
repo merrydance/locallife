@@ -1,0 +1,110 @@
+/* 全局容器 */
+.nav-container {
+  height: 100vh;
+  background: #f0f2f5;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-area {
+  flex: 1;
+  padding-top: 56px; /* Header height */
+}
+
+.content-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* 页面标题 */
+.page-header {
+  margin-bottom: 32px;
+}
+
+.page-title {
+  display: block;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 8px;
+}
+
+.page-desc {
+  font-size: 14px;
+  color: #8c8c8c;
+}
+
+/* 分组样式 */
+.group-section {
+  margin-bottom: 40px;
+}
+
+.group-header {
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.group-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #666;
+}
+
+/* 网格布局 */
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+/* 卡片样式 */
+.nav-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.nav-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  border-color: #e6f7ff;
+}
+
+.icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.text-box {
+  flex: 1;
+}
+
+.nav-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #262626;
+}
+
+.arrow-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.3;
+}
+
+.nav-card:hover .arrow-icon {
+  opacity: 0.8;
+}

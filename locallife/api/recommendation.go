@@ -993,16 +993,11 @@ func (server *Server) calculateDishDistancesAndFees(ctx *gin.Context, dishes []d
 			dishes[i].EstimatedDeliveryTime = &dur
 		}
 
-		// 使用菜品的实际价格计算运费
-		// 如果有会员价则使用会员价，否则使用原价
-		// 价格为0时只是跳过货值加价，其他系数（时段、天气、距离）仍正常计算
-		orderAmount := dishes[i].Price
-		if dishes[i].MemberPrice != nil && *dishes[i].MemberPrice > 0 {
-			orderAmount = *dishes[i].MemberPrice
-		}
-
+		// 预览展示时使用 0 作为订单金额，展示基础运费（不含货值加价）
+		// 实际运费会在结算时根据真实订单金额重新计算
+		// 这样同一商户的所有菜品展示统一的基础代取费
 		regionID := merchantRegionIDs[dishes[i].MerchantID]
-		feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, dishes[i].MerchantID, int32(dist), orderAmount)
+		feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, dishes[i].MerchantID, int32(dist), 0)
 		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
 			dishes[i].EstimatedDeliveryFee = &feeResult.FinalFee
 		}
@@ -1061,12 +1056,10 @@ func (server *Server) calculateComboDistancesAndFees(ctx *gin.Context, combos []
 		}
 		combos[i].Distance = &dist
 
-		// 使用套餐的实际售价计算运费
-		// 价格为0时只是跳过货值加价，其他系数（时段、天气、距离）仍正常计算
-		orderAmount := combos[i].ComboPrice
-
+		// 预览展示时使用 0 作为订单金额，展示基础运费（不含货值加价）
+		// 实际运费会在结算时根据真实订单金额重新计算
 		regionID := merchantRegionIDs[combos[i].MerchantID]
-		feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, combos[i].MerchantID, int32(dist), orderAmount)
+		feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, combos[i].MerchantID, int32(dist), 0)
 		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
 			combos[i].EstimatedDeliveryFee = &feeResult.FinalFee
 		}

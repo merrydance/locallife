@@ -199,18 +199,23 @@ Page({
     const { merchantGroups } = this.data
     if (merchantGroups.length === 0) return
 
-    // 获取用户默认地址用于计算代取费
+    // 获取用户地址或当前位置用于计算代取费
     const app = getApp()
     const addressId = app.globalData?.selectedAddressId || app.globalData?.defaultAddressId
+    const latitude = app.globalData?.latitude
+    const longitude = app.globalData?.longitude
 
     const updatedGroups = [...merchantGroups]
 
     for (let i = 0; i < updatedGroups.length; i++) {
       const group = updatedGroups[i]
       try {
+        // 优先使用 address_id，fallback 到当前位置坐标
         const result = await CartAPI.calculateCart({
           merchant_id: group.merchantId,
-          address_id: addressId || undefined
+          address_id: addressId || undefined,
+          latitude: !addressId && latitude ? latitude : undefined,
+          longitude: !addressId && longitude ? longitude : undefined
         })
 
         // 更新代取费信息
@@ -283,10 +288,21 @@ Page({
    */
   async onIncrease(e: WechatMiniprogram.CustomEvent) {
     const { itemId } = e.currentTarget.dataset
+    const currentQuantity = this.getItemQuantity(itemId)
+    const newQuantity = currentQuantity + 1
+
+    // 先更新本地状态（乐观更新）
+    this.updateLocalQuantity(itemId, newQuantity)
+
     try {
-      await CartAPI.updateCartItem(itemId, { quantity: this.getItemQuantity(itemId) + 1 })
-      await this.loadAllCarts()
+      await CartAPI.updateCartItem(itemId, { quantity: newQuantity })
+      // 更新小计和总价
+      this.recalculateSubtotals()
+      // 重新计算代取费（后端根据订单金额计算）
+      this.calculateDeliveryFees()
     } catch (error) {
+      // 回滚本地状态
+      this.updateLocalQuantity(itemId, currentQuantity)
       wx.showToast({ title: '更新失败', icon: 'none' })
     }
   },
@@ -296,16 +312,32 @@ Page({
    */
   async onDecrease(e: WechatMiniprogram.CustomEvent) {
     const { itemId } = e.currentTarget.dataset
-    const quantity = this.getItemQuantity(itemId)
+    const currentQuantity = this.getItemQuantity(itemId)
+
+    if (currentQuantity <= 1) {
+      // 删除商品需要重新加载列表
+      try {
+        await CartAPI.removeFromCart(itemId)
+        await this.loadAllCarts()
+      } catch (error) {
+        wx.showToast({ title: '删除失败', icon: 'none' })
+      }
+      return
+    }
+
+    const newQuantity = currentQuantity - 1
+
+    // 乐观更新
+    this.updateLocalQuantity(itemId, newQuantity)
 
     try {
-      if (quantity <= 1) {
-        await CartAPI.removeFromCart(itemId)
-      } else {
-        await CartAPI.updateCartItem(itemId, { quantity: quantity - 1 })
-      }
-      await this.loadAllCarts()
+      await CartAPI.updateCartItem(itemId, { quantity: newQuantity })
+      this.recalculateSubtotals()
+      // 重新计算代取费
+      this.calculateDeliveryFees()
     } catch (error) {
+      // 回滚
+      this.updateLocalQuantity(itemId, currentQuantity)
       wx.showToast({ title: '更新失败', icon: 'none' })
     }
   },
@@ -322,6 +354,53 @@ Page({
   },
 
   /**
+   * 本地更新商品数量（乐观更新）
+   */
+  updateLocalQuantity(itemId: number, newQuantity: number) {
+    const { merchantGroups } = this.data
+
+    for (let i = 0; i < merchantGroups.length; i++) {
+      const itemIndex = merchantGroups[i].items.findIndex(item => item.id === itemId)
+      if (itemIndex !== -1) {
+        // 使用路径更新避免重新渲染整个列表
+        this.setData({
+          [`merchantGroups[${i}].items[${itemIndex}].quantity`]: newQuantity
+        })
+        return
+      }
+    }
+  },
+
+  /**
+   * 重新计算各商户小计和总计
+   */
+  recalculateSubtotals() {
+    const { merchantGroups } = this.data
+
+    // 批量更新对象
+    const updates: Record<string, unknown> = {}
+
+    for (let i = 0; i < merchantGroups.length; i++) {
+      const group = merchantGroups[i]
+      const subtotal = group.items.reduce((sum, item) => {
+        return sum + (item.unitPrice * item.quantity)
+      }, 0)
+
+      updates[`merchantGroups[${i}].subtotal`] = subtotal
+      updates[`merchantGroups[${i}].subtotalDisplay`] = `¥${(subtotal / 100).toFixed(2)}`
+    }
+
+    // 一次性更新所有值
+    this.setData(updates)
+
+    // 重新计算结算总价
+    this.calculateCheckoutTotal()
+
+    // 同步到全局 store
+    this.syncToGlobalStore()
+  },
+
+  /**
    * 清空某个商户的购物车
    */
   async onClearMerchant(e: WechatMiniprogram.CustomEvent) {
@@ -334,7 +413,25 @@ Page({
         if (res.confirm) {
           try {
             await CartAPI.clearCart(merchantId)
-            await this.loadAllCarts()
+
+            // 本地移除该商户分组，避免重新加载整个页面
+            const { merchantGroups, selectedCartIds } = this.data
+            const groupIndex = merchantGroups.findIndex(g => g.merchantId === merchantId)
+
+            if (groupIndex !== -1) {
+              const removedGroup = merchantGroups[groupIndex]
+              const newGroups = merchantGroups.filter((_, i) => i !== groupIndex)
+              const newSelectedIds = selectedCartIds.filter(id => id !== removedGroup.cartId)
+
+              this.setData({
+                merchantGroups: newGroups,
+                selectedCartIds: newSelectedIds
+              })
+
+              // 重新计算总价并同步
+              this.calculateCheckoutTotal()
+              this.syncToGlobalStore()
+            }
           } catch (error) {
             wx.showToast({ title: '清空失败', icon: 'none' })
           }

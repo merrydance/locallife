@@ -65,13 +65,14 @@
   </view>
 
   <!-- 空状态 -->
-  <t-empty 
-    wx:else
-    icon="cart"
-    description="购物车是空的"
-  >
-    <t-button theme="primary" size="large" bindtap="onBackToTakeout">去逛逛</t-button>
-  </t-empty>
+  <view wx:else class="empty-container">
+    <t-empty 
+      icon="cart"
+      description="购物车是空的"
+    >
+      <t-button theme="primary" size="large" bindtap="onBackToTakeout">去逛逛</t-button>
+    </t-empty>
+  </view>
 </view>
 
 <!-- 底部结算栏 -->
@@ -91,6 +92,7 @@
     size="large" 
     disabled="{{selectedCartIds.length === 0}}"
     bindtap="onCheckout"
+    t-class="checkout-btn-inner"
   >
     去结算
   </t-button>

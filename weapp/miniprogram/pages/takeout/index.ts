@@ -4,6 +4,7 @@ import { Category } from '../../models/category'
 import { getRecommendedDishes, DishSummary } from '../../api/dish'
 import { getRecommendedMerchants } from '../../api/merchant'
 import CartService from '../../services/cart'
+import { getUserCarts } from '../../api/cart'
 import { enrichMerchantsWithDistance } from '../../utils/geo'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
@@ -569,33 +570,45 @@ Page({
       })
 
       if (success) {
-        this.updateCartDisplay()
+        await this.updateCartDisplay()
         wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 })
       }
     }
   },
 
-  updateCartDisplay() {
-    const cart = CartService.getCart()
-    if (cart && cart.total_count > 0) {
+  async updateCartDisplay() {
+    try {
+      console.log('[updateCartDisplay] 开始调用API')
+      // 直接从后端获取最新购物车汇总，确保数据准确
+      const userCarts = await getUserCarts()
+
+      console.log('[updateCartDisplay] API返回:', JSON.stringify(userCarts))
+
+      const totalCount = userCarts.summary?.total_items || 0
+      const totalPrice = userCarts.summary?.total_amount || 0
+
+      console.log('[updateCartDisplay] 设置数据:', { totalCount, totalPrice, activeTab: this.data.activeTab })
+
       this.setData({
-        cartTotalCount: cart.total_count,
-        cartTotalPrice: cart.subtotal
+        cartTotalCount: totalCount,
+        cartTotalPrice: totalPrice
       })
-    } else {
-      // 从 globalStore 读取（购物车页面同步的数据）
-      const globalCart = globalStore.get('cart')
-      if (globalCart && globalCart.totalCount > 0) {
-        this.setData({
-          cartTotalCount: globalCart.totalCount,
-          cartTotalPrice: globalCart.totalPrice
-        })
-      } else {
-        this.setData({
-          cartTotalCount: 0,
-          cartTotalPrice: 0
-        })
-      }
+
+      // 同时更新 globalStore 供其他组件使用
+      globalStore.set('cart', {
+        items: [],
+        totalCount: totalCount,
+        totalPrice: totalPrice,
+        totalPriceDisplay: `¥${(totalPrice / 100).toFixed(2)}`
+      })
+    } catch (error) {
+      // API 调用失败时重置为 0
+      console.error('[updateCartDisplay] 错误:', error)
+      logger.warn('获取购物车汇总失败', error, 'Takeout.updateCartDisplay')
+      this.setData({
+        cartTotalCount: 0,
+        cartTotalPrice: 0
+      })
     }
   },
 

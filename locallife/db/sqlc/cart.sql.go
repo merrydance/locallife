@@ -240,7 +240,7 @@ func (q *Queries) GetCartItemByCombo(ctx context.Context, arg GetCartItemByCombo
 
 const getCartItemByDishAndCustomizations = `-- name: GetCartItemByDishAndCustomizations :one
 SELECT id, cart_id, dish_id, combo_id, quantity, customizations, created_at, updated_at FROM cart_items
-WHERE cart_id = $1 AND dish_id = $2 AND customizations = $3
+WHERE cart_id = $1 AND dish_id = $2 AND customizations IS NOT DISTINCT FROM $3
 `
 
 type GetCartItemByDishAndCustomizationsParams struct {

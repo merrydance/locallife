@@ -108,7 +108,8 @@ export class DishAdapter {
     if (fee === 0) {
       return '免代取费'
     }
-    return `代取${(fee / 100).toFixed(0)}元`
+    // 添加"起"表示这是起步价，实际费用可能因订单金额而更高
+    return `代取${(fee / 100).toFixed(0)}元起`
   }
 
   static formatDiscountRule(threshold: number, discountAmount?: number): string {

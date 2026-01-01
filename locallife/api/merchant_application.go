@@ -1634,9 +1634,7 @@ func parseChineseAddress(addr string) parsedAddress {
 
 	// 清理Detail开头的"城"字（如"县城向阳街" -> "向阳街"）
 	// 这是因为有些地址写成"XX县城XX路"的格式
-	if strings.HasPrefix(detail, "城") {
-		detail = strings.TrimPrefix(detail, "城")
-	}
+	detail = strings.TrimPrefix(detail, "城")
 
 	result.Detail = detail
 

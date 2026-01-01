@@ -118,7 +118,7 @@ ORDER BY c.updated_at DESC;
 
 -- name: GetCartItemByDishAndCustomizations :one
 SELECT * FROM cart_items
-WHERE cart_id = $1 AND dish_id = $2 AND customizations = $3;
+WHERE cart_id = $1 AND dish_id = $2 AND customizations IS NOT DISTINCT FROM $3;
 
 -- name: GetCartItemByCombo :one
 SELECT * FROM cart_items

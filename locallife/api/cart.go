@@ -581,6 +581,10 @@ type calculateCartRequest struct {
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
 	// 配送地址ID (选填，用于计算配送费)
 	AddressID *int64 `json:"address_id" binding:"omitempty,min=1"`
+	// 用户当前位置纬度 (选填，当无地址时作为fallback)
+	Latitude *float64 `json:"latitude" binding:"omitempty"`
+	// 用户当前位置经度 (选填，当无地址时作为fallback)
+	Longitude *float64 `json:"longitude" binding:"omitempty"`
 	// 优惠券ID (选填，用于计算优惠)
 	VoucherID *int64 `json:"voucher_id" binding:"omitempty,min=1"`
 }
@@ -679,7 +683,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	meetsMinOrder := true
 	// 起送金额暂不实现，后续可从商户配置或配送费配置中获取
 
-	// 计算配送费（如果提供了地址）
+	// 计算配送费（如果提供了地址或坐标）
 	var deliveryFee int64
 	var deliveryFeeDiscount int64
 	if req.AddressID != nil {
@@ -718,6 +722,38 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 				deliveryFee = feeResult.FinalFee
 				deliveryFeeDiscount = feeResult.PromotionDiscount
 			}
+		}
+	} else if req.Latitude != nil && req.Longitude != nil {
+		// 用户未选择地址但传入了当前位置坐标，使用坐标计算配送费
+		distance := int32(3000) // 默认3公里
+		if merchant.Latitude.Valid && merchant.Longitude.Valid {
+			fromLoc := maps.Location{
+				Lat: numericToFloat64(merchant.Latitude),
+				Lng: numericToFloat64(merchant.Longitude),
+			}
+			toLoc := maps.Location{
+				Lat: *req.Latitude,
+				Lng: *req.Longitude,
+			}
+			if server.mapClient != nil {
+				routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
+				if err == nil && routeResult != nil {
+					distance = int32(routeResult.Distance)
+				}
+			}
+		}
+
+		// 调用配送费计算
+		feeResult, err := server.calculateDeliveryFeeInternal(
+			ctx,
+			merchant.RegionID,
+			merchant.ID,
+			distance,
+			subtotal,
+		)
+		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
+			deliveryFee = feeResult.FinalFee
+			deliveryFeeDiscount = feeResult.PromotionDiscount
 		}
 	}
 

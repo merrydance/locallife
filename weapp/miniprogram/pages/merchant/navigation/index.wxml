@@ -1,0 +1,31 @@
+<view class="nav-container">
+  <merchant-header showBack="{{true}}"></merchant-header>
+  
+  <scroll-view scroll-y class="main-area">
+    <view class="content-wrapper">
+      <view class="page-header">
+        <text class="page-title">全部应用</text>
+        <text class="page-desc">商户管理后台功能导航</text>
+      </view>
+
+      <view wx:for="{{groups}}" wx:key="title" class="group-section">
+        <view class="group-header">
+          <text class="group-title">{{item.title}}</text>
+        </view>
+        
+        <view class="grid-container">
+          <view wx:for="{{item.items}}" wx:for-item="subItem" wx:key="name" 
+                class="nav-card" bindtap="navigateTo" data-url="{{subItem.url}}">
+            <view class="icon-box" style="background: {{subItem.color}}15">
+              <text class="nav-icon">{{subItem.icon}}</text>
+            </view>
+            <view class="text-box">
+              <text class="nav-name">{{subItem.name}}</text>
+            </view>
+            <image class="arrow-icon" src="/assets/icons/arrow-right.png" mode="aspectFit" />
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

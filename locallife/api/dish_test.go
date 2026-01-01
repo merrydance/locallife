@@ -788,13 +788,3 @@ func requireBodyMatchDishCategory(t *testing.T, body *bytes.Buffer, category db.
 	require.Equal(t, category.ID, gotCategory.ID)
 	require.Equal(t, category.Name, gotCategory.Name)
 }
-
-func requireBodyMatchDishCategories(t *testing.T, body *bytes.Buffer, categories []db.DishCategory) {
-	data, err := io.ReadAll(body)
-	require.NoError(t, err)
-
-	var gotResponse listDishCategoriesResponse
-	err = json.Unmarshal(data, &gotResponse)
-	require.NoError(t, err)
-	require.Len(t, gotResponse.Categories, len(categories))
-}
