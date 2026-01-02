@@ -510,10 +510,6 @@ Page({
         cuisineType: m.tags ? m.tags.slice(0, 2) : [],
         avgPrice: 0,
         avgPriceDisplay: '人均未知',
-        rating: 0,
-        ratingDisplay: '暂无评分',
-        reviewCount: 0,
-        reviewBadge: '评价暂无',
         distance: DishAdapter.formatDistance(m.distance),
         address: m.address,
         businessHoursDisplay: '营业中',
@@ -687,9 +683,9 @@ Page({
   },
 
   /**
-     * 搜索功能 - 支持关键词过滤或跳转搜索页
+     * 搜索功能 - 内联搜索，直接在当前页面显示结果
      */
-  onSearch(e: WechatMiniprogram.CustomEvent) {
+  async onSearch(e: WechatMiniprogram.CustomEvent) {
     const keyword = e.detail.value?.trim() || ''
 
     // 如果关键词为空，恢复原列表
@@ -699,36 +695,124 @@ Page({
       return
     }
 
-    this.setData({ searchKeyword: keyword })
+    this.setData({
+      searchKeyword: keyword,
+      loading: true
+    })
 
-    // 方案1: 跳转到独立搜索页
-    Navigation.toSearch({ keyword, type: this.data.activeTab })
-
-    // 方案2: 在当前页面过滤（可选）
-    // this.filterDataByKeyword(keyword)
+    try {
+      await this.searchInline(keyword)
+    } catch (error) {
+      console.error('搜索失败:', error)
+      wx.showToast({ title: '搜索失败', icon: 'error' })
+    } finally {
+      this.setData({ loading: false })
+    }
   },
 
   /**
-     * 本地搜索过滤（可选方案）
-     */
-  filterDataByKeyword(keyword: string) {
-    const { activeTab, dishes, restaurants } = this.data
+   * 内联搜索 - 根据当前 Tab 搜索对应内容
+   */
+  async searchInline(keyword: string) {
+    const { activeTab } = this.data
+    const app = getApp<IAppOption>()
 
     if (activeTab === 'dishes') {
-      const filtered = dishes.filter((dish: any) =>
-        dish.name?.includes(keyword) ||
-        dish.shopName?.includes(keyword)
-      )
-      this.setData({ dishes: filtered })
-    } else if (activeTab === 'restaurants') {
-      const filtered = restaurants.filter((restaurant: any) =>
-        restaurant.name?.includes(keyword)
-      )
-      this.setData({ restaurants: filtered })
-    }
+      // 搜索菜品 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
+      const result = await getRecommendedDishes({
+        keyword,
+        page: 1,
+        limit: 20,
+        user_latitude: app.globalData.latitude ?? undefined,
+        user_longitude: app.globalData.longitude ?? undefined
+      })
 
-    if (this.data.dishes.length === 0 && this.data.restaurants.length === 0) {
-      wx.showToast({ title: '未找到相关结果', icon: 'none' })
+      // 使用 DishAdapter 转换为卡片展示格式（与列表加载保持一致）
+      const adaptedDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
+
+      this.setData({
+        dishes: adaptedDishes as any[],
+        hasMore: result.has_more,
+        page: 1
+      })
+
+      if (result.dishes.length === 0) {
+        wx.showToast({ title: '未找到相关菜品', icon: 'none' })
+      }
+
+    } else if (activeTab === 'restaurants') {
+      // 搜索餐厅 - 复用现有 searchMerchants API
+      const { searchMerchants } = require('../../api/merchant')
+      const result = await searchMerchants({
+        keyword,
+        page_id: 1,
+        page_size: 20,
+        user_latitude: app.globalData.latitude || undefined,
+        user_longitude: app.globalData.longitude || undefined
+      })
+
+      // 转换为与列表一致的展示格式（与 loadRestaurants 保持一致）
+      const restaurants = (result || []).map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        imageUrl: m.logo_url,
+        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
+        avgPrice: 0,
+        avgPriceDisplay: '人均未知',
+        distance: DishAdapter.formatDistance(m.distance),
+        address: m.address,
+        businessHoursDisplay: '营业中',
+        availableRooms: 0,
+        availableRoomsBadge: '',
+        tags: m.tags ? m.tags.slice(0, 3) : []
+      }))
+
+      this.setData({
+        restaurants,
+        hasMore: false,
+        page: 1
+      })
+
+      if (restaurants.length === 0) {
+        wx.showToast({ title: '未找到相关餐厅', icon: 'none' })
+      }
+
+    } else if (activeTab === 'packages') {
+      // 搜索套餐 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
+      const { getRecommendedCombos } = require('../../api/dish')
+      const result = await getRecommendedCombos({
+        keyword,
+        page: 1,
+        limit: 20
+      })
+
+      // 转换为与列表一致的展示格式（与 loadPackages 保持一致）
+      const combos = result.combos || []
+      const packageViewModels = combos.map((combo: any) => ({
+        id: combo.id,
+        name: combo.name,
+        description: combo.description || '',
+        price: combo.combo_price,
+        priceDisplay: (combo.combo_price / 100).toFixed(2),
+        original_price: combo.original_price || combo.combo_price,
+        originalPriceDisplay: ((combo.original_price || combo.combo_price) / 100).toFixed(2),
+        image_url: combo.image_url || '',
+        is_online: combo.is_online,
+        // 新增的丰富字段
+        shopName: combo.merchant_name || '',
+        distance: combo.distance,
+        monthlySales: combo.monthly_sales || 0
+      }))
+
+      this.setData({
+        packages: packageViewModels,
+        hasMore: result.has_more || false,
+        page: 1
+      })
+
+      if (combos.length === 0) {
+        wx.showToast({ title: '未找到相关套餐', icon: 'none' })
+      }
     }
   },
 
@@ -762,7 +846,8 @@ Page({
    * 在 Skyline 模式下替代 onPullDownRefresh
    */
   async onRefresh() {
-    this.setData({ refresherTriggered: true, page: 1 })
+    // 刷新时清空搜索框，恢复推荐列表
+    this.setData({ refresherTriggered: true, page: 1, searchKeyword: '' })
 
     try {
       await this.loadData()
@@ -778,7 +863,8 @@ Page({
    * 页面下拉刷新事件（WebView 兼容）
    */
   onPullDownRefresh() {
-    this.setData({ page: 1 })
+    // 刷新时清空搜索框，恢复推荐列表
+    this.setData({ page: 1, searchKeyword: '' })
     this.loadData().then(() => {
       wx.stopPullDownRefresh()
     })

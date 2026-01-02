@@ -16,11 +16,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.addCartItem = exports.getCartItems = void 0;
 exports.getCart = getCart;
 exports.getCartSummary = getCartSummary;
+exports.getUserCarts = getUserCarts;
 exports.addToCart = addToCart;
 exports.updateCartItem = updateCartItem;
 exports.removeFromCart = removeFromCart;
 exports.clearCart = clearCart;
 exports.calculateCart = calculateCart;
+exports.previewCombinedCheckout = previewCombinedCheckout;
 exports.getCartItemCount = getCartItemCount;
 exports.isCartEmpty = isCartEmpty;
 exports.quickAddToCart = quickAddToCart;
@@ -43,6 +45,18 @@ function getCart(merchantId) {
  * 获取购物车摘要（所有商户）
  */
 function getCartSummary() {
+    return __awaiter(this, void 0, void 0, function* () {
+        return (0, request_1.request)({
+            url: '/v1/cart/summary',
+            method: 'GET'
+        });
+    });
+}
+/**
+ * 获取用户所有商户的购物车（完整信息）
+ * 返回包含 carts 数组和 summary 的完整响应
+ */
+function getUserCarts() {
     return __awaiter(this, void 0, void 0, function* () {
         return (0, request_1.request)({
             url: '/v1/cart/summary',
@@ -110,6 +124,20 @@ function calculateCart(params) {
     return __awaiter(this, void 0, void 0, function* () {
         return (0, request_1.request)({
             url: '/v1/cart/calculate',
+            method: 'POST',
+            data: params
+        });
+    });
+}
+/**
+ * 预览合单结算
+ * 多商户合单结算预览，返回各商户子单和合计金额
+ * @param params 合单结算请求
+ */
+function previewCombinedCheckout(params) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return (0, request_1.request)({
+            url: '/v1/cart/combined-checkout/preview',
             method: 'POST',
             data: params
         });

@@ -987,10 +987,27 @@ export class InventoryManagementService {
 // ==================== 顾客端菜品接口 ====================
 
 /**
+ * 搜索菜品项 - 对齐后端 searchDishResponse
+ */
+export interface SearchDishItem {
+    id: number
+    merchant_id: number
+    category_id?: number
+    name: string
+    description: string
+    image_url: string
+    price: number      // 后端已转换为元
+    member_price?: number
+    is_available: boolean
+    is_online: boolean
+    sort_order: number
+}
+
+/**
  * 搜索菜品响应 - 对齐后端实际返回格式
  */
 export interface SearchDishesResponse {
-    dishes: DishSummary[]
+    dishes: SearchDishItem[]
     total?: number
     page_id?: number
     page_size?: number
@@ -1005,7 +1022,7 @@ export async function searchDishes(params: {
     merchant_id?: number
     page_id: number
     page_size: number
-}): Promise<DishSummary[]> {
+}): Promise<SearchDishItem[]> {
     const response = await request<SearchDishesResponse>({
         url: '/v1/search/dishes',
         method: 'GET',
@@ -1035,6 +1052,7 @@ export interface RecommendDishesParams {
     limit?: number
     page?: number              // 页码，从1开始
     tag_id?: number            // 按标签ID过滤
+    keyword?: string           // 搜索关键词
     user_latitude?: number
     user_longitude?: number
 }
@@ -1086,6 +1104,7 @@ export interface RecommendCombosParams {
     merchant_id?: number
     limit?: number
     page?: number
+    keyword?: string  // 搜索关键词
 }
 
 /**

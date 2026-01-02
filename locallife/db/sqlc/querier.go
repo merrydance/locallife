@@ -1121,6 +1121,10 @@ type Querier interface {
 	// 推荐结果管理
 	// ============================================================================
 	SaveRecommendations(ctx context.Context, arg SaveRecommendationsParams) (Recommendation, error)
+	// 全局套餐搜索，只返回套餐ID（用于推荐接口的关键词过滤）
+	SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
+	// 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
+	SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
 	SearchDishesByName(ctx context.Context, arg SearchDishesByNameParams) ([]Dish, error)
 	// 全局菜品搜索（跨商户），只搜索已批准商户的上架菜品
 	SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]Dish, error)

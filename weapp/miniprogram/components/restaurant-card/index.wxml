@@ -2,10 +2,9 @@
   <t-image class="restaurant-image" src="{{restaurant.imageUrl}}" mode="aspectFill" lazy />
   
   <view class="restaurant-info">
-    <!-- 第1行: 餐厅名 + 评分 -->
+    <!-- 第1行: 餐厅名 -->
     <view class="row-1">
       <text class="restaurant-name">{{restaurant.name}}</text>
-      <text class="rating">⭐{{restaurant.ratingDisplay}}</text>
     </view>
     
     <!-- 第2行: 菜系 | 人均 | 距离 -->

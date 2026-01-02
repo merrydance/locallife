@@ -43,26 +43,6 @@ export class Navigation {
     wx.navigateTo({ url })
   }
 
-  /**
-     * 跳转到搜索页
-     */
-  static toSearch(params?: {
-    keyword?: string
-    type?: string
-  }) {
-    const queryEntries = params
-      ? Object.entries(params).filter(([, value]: [string, string | undefined]) => value !== undefined && value !== '')
-      : []
-
-    const queryString = queryEntries.length
-      ? `?${queryEntries.map(([key, value]: [string, string | undefined]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}`
-      : ''
-
-    wx.navigateTo({
-      url: `/pages/takeout/search/index${queryString}`
-    })
-  }
-
   // ==================== 订单相关 ====================
 
   /**

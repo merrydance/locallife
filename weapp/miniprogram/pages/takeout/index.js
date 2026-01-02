@@ -16,6 +16,7 @@ const dish_1 = require("../../adapters/dish");
 const dish_2 = require("../../api/dish");
 const merchant_1 = require("../../api/merchant");
 const cart_1 = __importDefault(require("../../services/cart"));
+const cart_2 = require("../../api/cart");
 const geo_1 = require("../../utils/geo");
 const navigation_1 = __importDefault(require("../../utils/navigation"));
 const logger_1 = require("../../utils/logger");
@@ -25,8 +26,8 @@ const request_manager_1 = require("../../utils/request-manager");
 const dish_3 = require("../../api/dish");
 const responsive_1 = require("../../utils/responsive");
 const PAGE_CONTEXT = 'takeout_index';
+const PAGE_SIZE = 10; // 每页条数，用于无限滚动分页
 Page({
-    behaviors: [responsive_1.responsiveBehavior],
     data: {
         activeTab: 'dishes',
         dishes: [],
@@ -38,15 +39,33 @@ Page({
         cartTotalPrice: 0,
         address: '点此获取位置',
         navBarHeight: 88,
+        scrollViewHeight: 600, // 动态计算
         searchKeyword: '',
         page: 1,
         hasMore: true,
         loading: false,
         // 位置状态
-        needLocation: false // 是否需要用户手动定位
+        needLocation: false, // 是否需要用户手动定位
+        // 下拉刷新状态
+        refresherTriggered: false,
+        // 预加载状态
+        isPrefetching: false
     },
+    // 预加载缓存 (不放在 data 中以免触发渲染)
+    _prefetchedDishes: [],
+    _prefetchedRestaurants: [],
+    _prefetchedPackages: [],
+    _prefetchHasMore: true,
     onLoad() {
-        // 移除 manual navBarHeight 设置，由 responsiveBehavior 自动注入
+        // 设置导航栏高度和滚动区域高度
+        const { navBarHeight } = (0, responsive_1.getStableBarHeights)();
+        const windowInfo = wx.getWindowInfo();
+        // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
+        const scrollViewHeight = windowInfo.windowHeight - navBarHeight;
+        this.setData({
+            navBarHeight,
+            scrollViewHeight
+        });
         // 立即加载分类
         this.loadCategories();
         // 从全局获取位置信息
@@ -271,18 +290,45 @@ Page({
             activeTab: value,
             page: 1
         });
+        // 切换 Tab 时重新加载对应类型的标签
+        this.loadCategories();
         this.loadData();
     },
     loadCategories() {
-        const categories = [
-            { id: '1', name: '热销' },
-            { id: '2', name: '超值' },
-            { id: '3', name: '主食' },
-            { id: '4', name: '小吃' },
-            { id: '5', name: '饮品' },
-            { id: '6', name: '时蔬' }
-        ];
-        this.setData({ categories });
+        return __awaiter(this, void 0, void 0, function* () {
+            // 根据当前 Tab 获取对应类型的标签
+            const { activeTab } = this.data;
+            let tagType = 'dish'; // 默认菜品标签
+            if (activeTab === 'packages') {
+                tagType = 'combo';
+            }
+            else if (activeTab === 'restaurants') {
+                tagType = 'merchant';
+            }
+            try {
+                const tags = yield (0, dish_2.getTags)(tagType);
+                // 添加"全部"选项作为第一个
+                const categories = [
+                    { id: '', name: '全部' },
+                    ...tags.map(tag => ({ id: String(tag.id), name: tag.name }))
+                ];
+                this.setData({
+                    categories,
+                    activeCategoryId: '' // 默认选中"全部"
+                });
+            }
+            catch (error) {
+                console.error('加载标签失败', error);
+                // 后备：硬编码标签
+                const categories = [
+                    { id: '', name: '全部' },
+                    { id: '1', name: '热销' },
+                    { id: '2', name: '主食' },
+                    { id: '3', name: '小吃' }
+                ];
+                this.setData({ categories, activeCategoryId: '' });
+            }
+        });
     },
     loadData() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -312,7 +358,9 @@ Page({
     loadDishes() {
         return __awaiter(this, arguments, void 0, function* (reset = false) {
             if (reset) {
-                // 重置时才全量更新
+                // 重置时清空缓存和数据
+                this._prefetchedDishes = [];
+                this._prefetchHasMore = true;
                 this.setData({
                     page: 1,
                     dishes: [],
@@ -320,29 +368,52 @@ Page({
                 });
             }
             try {
-                // 调用后端接口
                 const app = getApp();
-                const feedData = yield (0, dish_2.getRecommendedDishes)({
-                    user_latitude: app.globalData.latitude || undefined,
-                    user_longitude: app.globalData.longitude || undefined,
-                    limit: 20
-                });
-                // 适配器转换
-                const newDishes = feedData.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
+                const currentPage = reset ? 1 : this.data.page;
+                let newDishes = [];
+                let hasMore = true;
+                // 1. 优先使用预加载的缓存数据（无延迟）
+                if (!reset && this._prefetchedDishes.length > 0) {
+                    newDishes = this._prefetchedDishes;
+                    hasMore = this._prefetchHasMore;
+                    this._prefetchedDishes = []; // 清空缓存
+                }
+                else {
+                    // 2. 没有缓存则请求当前页
+                    // 获取选中的标签ID用于过滤（空字符串表示"全部"，不传 tag_id）
+                    const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null;
+                    const params = {
+                        user_latitude: app.globalData.latitude || undefined,
+                        user_longitude: app.globalData.longitude || undefined,
+                        limit: PAGE_SIZE,
+                        page: currentPage
+                    };
+                    // 只有选择了具体标签时才传 tag_id
+                    if (tagId && !isNaN(tagId)) {
+                        params.tag_id = tagId;
+                    }
+                    const result = yield (0, dish_2.getRecommendedDishes)(params);
+                    newDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
+                    hasMore = result.has_more;
+                }
+                // 更新视图
                 if (reset) {
                     this.setData({
                         dishes: newDishes,
-                        hasMore: feedData.length >= 20
+                        hasMore
                     });
                 }
                 else {
-                    // 优化：使用数组拼接替代局部更新，性能更好
                     this.setData({
                         dishes: [...this.data.dishes, ...newDishes],
-                        hasMore: feedData.length >= 20
+                        hasMore
                     });
                 }
-                // 预加载图片（低优先级，不阻塞渲染）
+                // 3. 异步预加载下一页（不阻塞当前渲染）
+                if (hasMore) {
+                    this.prefetchNextDishes(currentPage + 1);
+                }
+                // 预加载图片
                 const { preloadImages } = require('../../utils/image');
                 const imageUrls = newDishes.map((dish) => dish.imageUrl).filter(Boolean);
                 setTimeout(() => {
@@ -355,54 +426,76 @@ Page({
             }
         });
     },
+    /**
+     * 预加载下一页菜品（后台静默执行）
+     */
+    prefetchNextDishes(nextPage) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.data.isPrefetching || this._prefetchedDishes.length > 0)
+                return;
+            this.setData({ isPrefetching: true });
+            try {
+                const app = getApp();
+                const result = yield (0, dish_2.getRecommendedDishes)({
+                    user_latitude: app.globalData.latitude || undefined,
+                    user_longitude: app.globalData.longitude || undefined,
+                    limit: PAGE_SIZE,
+                    page: nextPage
+                });
+                this._prefetchedDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
+                this._prefetchHasMore = result.has_more;
+            }
+            catch (error) {
+                logger_1.logger.debug('预加载下一页失败', error, 'Takeout.prefetchNextDishes');
+            }
+            finally {
+                this.setData({ isPrefetching: false });
+            }
+        });
+    },
     loadRestaurants() {
         return __awaiter(this, arguments, void 0, function* (reset = false) {
             if (reset) {
                 this.setData({ page: 1, restaurants: [], hasMore: true });
             }
             try {
-                // 使用推荐商户接口
+                // 使用推荐商户接口，传递当前页码
                 const app = getApp();
-                const merchants = yield (0, merchant_1.getRecommendedMerchants)({
+                const currentPage = reset ? 1 : this.data.page;
+                const result = yield (0, merchant_1.getRecommendedMerchants)({
                     user_latitude: app.globalData.latitude || undefined,
                     user_longitude: app.globalData.longitude || undefined,
-                    limit: 20
+                    limit: PAGE_SIZE,
+                    page: currentPage
                 });
                 // Map for enrichment (if lat/lng available)
-                const merchantsForEnrich = merchants.map((m) => (Object.assign(Object.assign({}, m), { merchant_latitude: m.latitude, merchant_longitude: m.longitude })));
+                const merchantsForEnrich = result.merchants.map((m) => (Object.assign(Object.assign({}, m), { merchant_latitude: m.latitude, merchant_longitude: m.longitude })));
                 const enrichedMerchants = yield (0, geo_1.enrichMerchantsWithDistance)(merchantsForEnrich);
                 const restaurantViewModels = enrichedMerchants.map((m) => ({
                     id: m.id,
                     name: m.name,
                     imageUrl: m.logo_url,
-                    cuisineType: m.tags.slice(0, 2),
+                    cuisineType: m.tags ? m.tags.slice(0, 2) : [],
                     avgPrice: 0,
                     avgPriceDisplay: '人均未知',
-                    rating: 0,
-                    ratingDisplay: '暂无评分',
-                    reviewCount: 0,
-                    reviewBadge: '评价暂无',
                     distance: dish_1.DishAdapter.formatDistance(m.distance),
                     address: m.address,
                     businessHoursDisplay: '营业中',
                     availableRooms: 0,
                     availableRoomsBadge: '',
-                    tags: m.tags.slice(0, 3)
+                    tags: m.tags ? m.tags.slice(0, 3) : []
                 }));
                 if (reset) {
                     this.setData({
                         restaurants: restaurantViewModels,
-                        hasMore: false
+                        hasMore: result.has_more
                     });
                 }
                 else {
-                    // 分页加载使用局部更新
-                    const startIndex = this.data.restaurants.length;
-                    const updates = { hasMore: false };
-                    restaurantViewModels.forEach((restaurant, index) => {
-                        updates[`restaurants[${startIndex + index}]`] = restaurant;
+                    this.setData({
+                        restaurants: [...this.data.restaurants, ...restaurantViewModels],
+                        hasMore: result.has_more
                     });
-                    this.setData(updates);
                 }
                 // 预加载图片
                 const { preloadImages } = require('../../utils/image');
@@ -423,9 +516,10 @@ Page({
                 this.setData({ page: 1, packages: [], hasMore: true });
             }
             try {
-                // 调用后端推荐套餐接口
-                const combos = yield (0, dish_3.getRecommendedCombos)({ limit: 20 });
-                const packageViewModels = combos.map((combo) => ({
+                // 调用后端推荐套餐接口，传递当前页码
+                const currentPage = reset ? 1 : this.data.page;
+                const result = yield (0, dish_3.getRecommendedCombos)({ limit: PAGE_SIZE, page: currentPage });
+                const packageViewModels = result.combos.map((combo) => ({
                     id: combo.id,
                     name: combo.name,
                     description: combo.description || '',
@@ -439,16 +533,14 @@ Page({
                 if (reset) {
                     this.setData({
                         packages: packageViewModels,
-                        hasMore: false
+                        hasMore: result.has_more
                     });
                 }
                 else {
-                    const startIndex = this.data.packages.length;
-                    const updates = { hasMore: false };
-                    packageViewModels.forEach((pkg, index) => {
-                        updates[`packages[${startIndex + index}]`] = pkg;
+                    this.setData({
+                        packages: [...this.data.packages, ...packageViewModels],
+                        hasMore: result.has_more
                     });
-                    this.setData(updates);
                 }
             }
             catch (error) {
@@ -459,7 +551,12 @@ Page({
     },
     onTabCategoryChange(e) {
         const { id } = e.detail;
-        this.setData({ activeCategoryId: id });
+        this.setData({
+            activeCategoryId: id,
+            page: 1 // 重置页码
+        });
+        // 切换标签时重新加载数据（带标签过滤）
+        this.loadData();
     },
     onAddCart(e) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -471,26 +568,45 @@ Page({
                     dishId: String(dish.id)
                 });
                 if (success) {
-                    this.updateCartDisplay();
+                    yield this.updateCartDisplay();
                     wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 });
                 }
             }
         });
     },
     updateCartDisplay() {
-        const cart = cart_1.default.getCart();
-        if (cart) {
-            this.setData({
-                cartTotalCount: cart.total_count,
-                cartTotalPrice: cart.subtotal
-            });
-        }
-        else {
-            this.setData({
-                cartTotalCount: 0,
-                cartTotalPrice: 0
-            });
-        }
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            try {
+                console.log('[updateCartDisplay] 开始调用API');
+                // 直接从后端获取最新购物车汇总，确保数据准确
+                const userCarts = yield (0, cart_2.getUserCarts)();
+                console.log('[updateCartDisplay] API返回:', JSON.stringify(userCarts));
+                const totalCount = ((_a = userCarts.summary) === null || _a === void 0 ? void 0 : _a.total_items) || 0;
+                const totalPrice = ((_b = userCarts.summary) === null || _b === void 0 ? void 0 : _b.total_amount) || 0;
+                console.log('[updateCartDisplay] 设置数据:', { totalCount, totalPrice, activeTab: this.data.activeTab });
+                this.setData({
+                    cartTotalCount: totalCount,
+                    cartTotalPrice: totalPrice
+                });
+                // 同时更新 globalStore 供其他组件使用
+                global_store_1.globalStore.set('cart', {
+                    items: [],
+                    totalCount: totalCount,
+                    totalPrice: totalPrice,
+                    totalPriceDisplay: `¥${(totalPrice / 100).toFixed(2)}`
+                });
+            }
+            catch (error) {
+                // API 调用失败时重置为 0
+                console.error('[updateCartDisplay] 错误:', error);
+                logger_1.logger.warn('获取购物车汇总失败', error, 'Takeout.updateCartDisplay');
+                this.setData({
+                    cartTotalCount: 0,
+                    cartTotalPrice: 0
+                });
+            }
+        });
     },
     // ==================== 导航方法 ====================
     /**
@@ -526,43 +642,131 @@ Page({
         navigation_1.default.toCart();
     },
     /**
-       * 搜索功能 - 支持关键词过滤或跳转搜索页
+       * 搜索功能 - 内联搜索，直接在当前页面显示结果
        */
     onSearch(e) {
-        var _a;
-        const keyword = ((_a = e.detail.value) === null || _a === void 0 ? void 0 : _a.trim()) || '';
-        // 如果关键词为空，恢复原列表
-        if (!keyword) {
-            this.setData({ searchKeyword: '' });
-            this.loadData();
-            return;
-        }
-        this.setData({ searchKeyword: keyword });
-        // 方案1: 跳转到独立搜索页
-        navigation_1.default.toSearch({ keyword, type: this.data.activeTab });
-        // 方案2: 在当前页面过滤（可选）
-        // this.filterDataByKeyword(keyword)
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const keyword = ((_a = e.detail.value) === null || _a === void 0 ? void 0 : _a.trim()) || '';
+            // 如果关键词为空，恢复原列表
+            if (!keyword) {
+                this.setData({ searchKeyword: '' });
+                this.loadData();
+                return;
+            }
+            this.setData({
+                searchKeyword: keyword,
+                loading: true
+            });
+            try {
+                yield this.searchInline(keyword);
+            }
+            catch (error) {
+                console.error('搜索失败:', error);
+                wx.showToast({ title: '搜索失败', icon: 'error' });
+            }
+            finally {
+                this.setData({ loading: false });
+            }
+        });
     },
     /**
-       * 本地搜索过滤（可选方案）
-       */
-    filterDataByKeyword(keyword) {
-        const { activeTab, dishes, restaurants } = this.data;
-        if (activeTab === 'dishes') {
-            const filtered = dishes.filter((dish) => {
-                var _a, _b;
-                return ((_a = dish.name) === null || _a === void 0 ? void 0 : _a.includes(keyword)) ||
-                    ((_b = dish.shopName) === null || _b === void 0 ? void 0 : _b.includes(keyword));
-            });
-            this.setData({ dishes: filtered });
-        }
-        else if (activeTab === 'restaurants') {
-            const filtered = restaurants.filter((restaurant) => { var _a; return (_a = restaurant.name) === null || _a === void 0 ? void 0 : _a.includes(keyword); });
-            this.setData({ restaurants: filtered });
-        }
-        if (this.data.dishes.length === 0 && this.data.restaurants.length === 0) {
-            wx.showToast({ title: '未找到相关结果', icon: 'none' });
-        }
+     * 内联搜索 - 根据当前 Tab 搜索对应内容
+     */
+    searchInline(keyword) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            const { activeTab } = this.data;
+            const app = getApp();
+            if (activeTab === 'dishes') {
+                // 搜索菜品 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
+                const result = yield (0, dish_2.getRecommendedDishes)({
+                    keyword,
+                    page: 1,
+                    limit: 20,
+                    user_latitude: (_a = app.globalData.latitude) !== null && _a !== void 0 ? _a : undefined,
+                    user_longitude: (_b = app.globalData.longitude) !== null && _b !== void 0 ? _b : undefined
+                });
+                // 使用 DishAdapter 转换为卡片展示格式（与列表加载保持一致）
+                const adaptedDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
+                this.setData({
+                    dishes: adaptedDishes,
+                    hasMore: result.has_more,
+                    page: 1
+                });
+                if (result.dishes.length === 0) {
+                    wx.showToast({ title: '未找到相关菜品', icon: 'none' });
+                }
+            }
+            else if (activeTab === 'restaurants') {
+                // 搜索餐厅 - 复用现有 searchMerchants API
+                const { searchMerchants } = require('../../api/merchant');
+                const result = yield searchMerchants({
+                    keyword,
+                    page_id: 1,
+                    page_size: 20,
+                    user_latitude: app.globalData.latitude || undefined,
+                    user_longitude: app.globalData.longitude || undefined
+                });
+                // 转换为与列表一致的展示格式（与 loadRestaurants 保持一致）
+                const restaurants = (result || []).map((m) => ({
+                    id: m.id,
+                    name: m.name,
+                    imageUrl: m.logo_url,
+                    cuisineType: m.tags ? m.tags.slice(0, 2) : [],
+                    avgPrice: 0,
+                    avgPriceDisplay: '人均未知',
+                    distance: dish_1.DishAdapter.formatDistance(m.distance),
+                    address: m.address,
+                    businessHoursDisplay: '营业中',
+                    availableRooms: 0,
+                    availableRoomsBadge: '',
+                    tags: m.tags ? m.tags.slice(0, 3) : []
+                }));
+                this.setData({
+                    restaurants,
+                    hasMore: false,
+                    page: 1
+                });
+                if (restaurants.length === 0) {
+                    wx.showToast({ title: '未找到相关餐厅', icon: 'none' });
+                }
+            }
+            else if (activeTab === 'packages') {
+                // 搜索套餐 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
+                const { getRecommendedCombos } = require('../../api/dish');
+                const result = yield getRecommendedCombos({
+                    keyword,
+                    page: 1,
+                    limit: 20
+                });
+                // 转换为与列表一致的展示格式（与 loadPackages 保持一致）
+                const combos = result.combos || [];
+                const packageViewModels = combos.map((combo) => ({
+                    id: combo.id,
+                    name: combo.name,
+                    description: combo.description || '',
+                    price: combo.combo_price,
+                    priceDisplay: (combo.combo_price / 100).toFixed(2),
+                    original_price: combo.original_price || combo.combo_price,
+                    originalPriceDisplay: ((combo.original_price || combo.combo_price) / 100).toFixed(2),
+                    image_url: combo.image_url || '',
+                    is_online: combo.is_online,
+                    // 新增的丰富字段
+                    shopName: combo.merchant_name || '',
+                    distance: combo.distance,
+                    monthlySales: combo.monthly_sales || 0
+                }));
+                this.setData({
+                    packages: packageViewModels,
+                    hasMore: result.has_more || false,
+                    page: 1
+                });
+                if (combos.length === 0) {
+                    wx.showToast({ title: '未找到相关套餐', icon: 'none' });
+                }
+            }
+        });
     },
     onReachBottom() {
         // 防抖：防止快速滚动触发多次请求
@@ -574,25 +778,42 @@ Page({
             return;
         }
         this._lastLoadTime = now;
-        // 增加页码
+        // 增加页码 (loadData 会设置 loading: true)
         const nextPage = this.data.page + 1;
-        this.setData({
-            page: nextPage,
-            loading: true
-        });
+        this.setData({ page: nextPage });
         // 加载数据，失败时回滚页码
         this.loadData().catch(() => {
             logger_1.logger.error('加载更多失败，回滚页码', { page: nextPage }, 'Takeout.onReachBottom');
-            this.setData({
-                page: nextPage - 1,
-                loading: false
-            });
+            this.setData({ page: nextPage - 1 });
             wx.showToast({ title: '加载失败，请重试', icon: 'none' });
         });
     },
     _lastLoadTime: 0,
+    /**
+     * scroll-view 下拉刷新事件处理
+     * 在 Skyline 模式下替代 onPullDownRefresh
+     */
+    onRefresh() {
+        return __awaiter(this, void 0, void 0, function* () {
+            // 刷新时清空搜索框，恢复推荐列表
+            this.setData({ refresherTriggered: true, page: 1, searchKeyword: '' });
+            try {
+                yield this.loadData();
+            }
+            finally {
+                // 延迟关闭刷新动画，给用户视觉反馈
+                setTimeout(() => {
+                    this.setData({ refresherTriggered: false });
+                }, 300);
+            }
+        });
+    },
+    /**
+     * 页面下拉刷新事件（WebView 兼容）
+     */
     onPullDownRefresh() {
-        this.setData({ page: 1 });
+        // 刷新时清空搜索框，恢复推荐列表
+        this.setData({ page: 1, searchKeyword: '' });
         this.loadData().then(() => {
             wx.stopPullDownRefresh();
         });

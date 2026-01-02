@@ -102,10 +102,11 @@ func (server *Server) trackBehavior(ctx *gin.Context) {
 
 type recommendRequest struct {
 	Limit         int32    `form:"limit" binding:"omitempty,min=1,max=50"`
-	Page          int32    `form:"page" binding:"omitempty,min=1"`     // 页码，从1开始
-	TagID         *int64   `form:"tag_id" binding:"omitempty,min=1"`   // 按标签ID过滤
-	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
-	UserLongitude *float64 `form:"user_longitude" binding:"omitempty"` // 用户当前经度
+	Page          int32    `form:"page" binding:"omitempty,min=1"`      // 页码，从1开始
+	TagID         *int64   `form:"tag_id" binding:"omitempty,min=1"`    // 按标签ID过滤
+	Keyword       *string  `form:"keyword" binding:"omitempty,max=100"` // 搜索关键词
+	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`   // 用户当前纬度
+	UserLongitude *float64 `form:"user_longitude" binding:"omitempty"`  // 用户当前经度
 }
 
 type recommendDishesResponse struct {
@@ -223,6 +224,39 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 
 		// 直接使用有该标签的菜品ID（不再从推荐结果中过滤）
 		allDishIDs = taggedDishIDs
+	}
+
+	// 按关键词过滤（如果指定了 keyword）
+	if req.Keyword != nil && *req.Keyword != "" {
+		searchedDishIDs, err := server.store.SearchDishIDsGlobal(ctx, pgtype.Text{String: *req.Keyword, Valid: true})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		log.Info().
+			Str("keyword", *req.Keyword).
+			Int("searched_dish_count", len(searchedDishIDs)).
+			Msg("Keyword filtering: using searched dishes")
+
+		// 如果已有推荐结果或标签过滤结果，取交集；否则直接使用搜索结果
+		if len(allDishIDs) > 0 {
+			// 取交集：保留既在推荐/标签结果中，又匹配关键词的菜品
+			searchedSet := make(map[int64]bool)
+			for _, id := range searchedDishIDs {
+				searchedSet[id] = true
+			}
+			var filtered []int64
+			for _, id := range allDishIDs {
+				if searchedSet[id] {
+					filtered = append(filtered, id)
+				}
+			}
+			allDishIDs = filtered
+		} else {
+			// 没有推荐结果时，直接使用搜索结果
+			allDishIDs = searchedDishIDs
+		}
 	}
 
 	// 按系统标签优先级排序：推荐 > 热卖 > 无标签
@@ -398,6 +432,37 @@ func (server *Server) recommendCombos(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 按关键词过滤（如果指定了 keyword）
+	if req.Keyword != nil && *req.Keyword != "" {
+		searchedComboIDs, err := server.store.SearchComboIDsGlobal(ctx, pgtype.Text{String: *req.Keyword, Valid: true})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		log.Info().
+			Str("keyword", *req.Keyword).
+			Int("searched_combo_count", len(searchedComboIDs)).
+			Msg("Keyword filtering combos: using searched combos")
+
+		// 如果已有推荐结果，取交集；否则直接使用搜索结果
+		if len(allComboIDs) > 0 {
+			searchedSet := make(map[int64]bool)
+			for _, id := range searchedComboIDs {
+				searchedSet[id] = true
+			}
+			var filtered []int64
+			for _, id := range allComboIDs {
+				if searchedSet[id] {
+					filtered = append(filtered, id)
+				}
+			}
+			allComboIDs = filtered
+		} else {
+			allComboIDs = searchedComboIDs
+		}
 	}
 
 	// 计算分页偏移

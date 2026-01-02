@@ -57,14 +57,6 @@
   white-space: nowrap;
 }
 
-/* 评分 */
-.rating {
-  font-size: 24rpx;
-  color: #FFC107;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
 .cuisine, .distance {
   font-size: 24rpx;
   color: #666;

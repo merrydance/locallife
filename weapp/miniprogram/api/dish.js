@@ -17,6 +17,7 @@ exports.InventoryManagementService = exports.ComboManagementService = exports.Di
 exports.searchDishes = searchDishes;
 exports.getRecommendedDishes = getRecommendedDishes;
 exports.getRecommendedCombos = getRecommendedCombos;
+exports.getTags = getTags;
 const request_1 = require("../utils/request");
 const auth_1 = require("../utils/auth");
 // ==================== 标签管理服务 ====================
@@ -490,36 +491,63 @@ function searchDishes(params) {
 }
 /**
  * 获取推荐菜品 - 基于 /v1/recommendations/dishes
+ * 支持分页，返回包含 has_more 的完整响应
  */
 function getRecommendedDishes(params) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
         const response = yield (0, request_1.request)({
             url: '/v1/recommendations/dishes',
             method: 'GET',
             data: params,
-            useCache: true,
+            useCache: (params === null || params === void 0 ? void 0 : params.page) === 1 || !(params === null || params === void 0 ? void 0 : params.page), // 只缓存第一页
             cacheTTL: 3 * 60 * 1000 // 3分钟缓存
         });
-        // 后端返回 { dishes: [], algorithm: "...", expired_at: "..." }
-        // 提取 dishes 数组返回
-        return response.dishes || [];
+        // 返回完整响应，包含分页信息
+        return {
+            dishes: response.dishes || [],
+            has_more: (_a = response.has_more) !== null && _a !== void 0 ? _a : false,
+            page: (_b = response.page) !== null && _b !== void 0 ? _b : 1,
+            total_count: (_c = response.total_count) !== null && _c !== void 0 ? _c : 0
+        };
     });
 }
 /**
  * 获取推荐套餐 - 基于 /v1/recommendations/combos
+ * 支持分页，返回包含 has_more 的完整响应
  */
 function getRecommendedCombos(params) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
         const response = yield (0, request_1.request)({
             url: '/v1/recommendations/combos',
             method: 'GET',
             data: params,
-            useCache: true,
+            useCache: (params === null || params === void 0 ? void 0 : params.page) === 1 || !(params === null || params === void 0 ? void 0 : params.page),
             cacheTTL: 3 * 60 * 1000 // 3分钟缓存
         });
-        // 后端返回 { combos: [], algorithm: "...", expired_at: "..." }
-        // 提取 combos 数组返回
-        return response.combos || [];
+        return {
+            combos: response.combos || [],
+            has_more: (_a = response.has_more) !== null && _a !== void 0 ? _a : false,
+            page: (_b = response.page) !== null && _b !== void 0 ? _b : 1,
+            total_count: (_c = response.total_count) !== null && _c !== void 0 ? _c : 0
+        };
+    });
+}
+/**
+ * 获取标签列表 - 基于 /v1/tags
+ * @param type 标签类型: dish, combo, merchant, attribute, customization
+ */
+function getTags(type) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const response = yield (0, request_1.request)({
+            url: '/v1/tags',
+            method: 'GET',
+            data: { type },
+            useCache: true,
+            cacheTTL: 10 * 60 * 1000 // 10分钟缓存
+        });
+        return response.tags || [];
     });
 }
 // ==================== 导出默认服务 ====================

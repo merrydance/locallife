@@ -728,6 +728,39 @@ func (q *Queries) RemoveComboTag(ctx context.Context, arg RemoveComboTagParams) 
 	return err
 }
 
+const searchComboIDsGlobal = `-- name: SearchComboIDsGlobal :many
+SELECT cs.id FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+WHERE 
+  m.status = 'approved'
+  AND m.deleted_at IS NULL
+  AND cs.deleted_at IS NULL
+  AND cs.is_online = true
+  AND cs.name ILIKE '%' || $1 || '%'
+ORDER BY cs.created_at DESC
+`
+
+// 全局套餐搜索，只返回套餐ID（用于推荐接口的关键词过滤）
+func (q *Queries) SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error) {
+	rows, err := q.db.Query(ctx, searchComboIDsGlobal, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateComboSet = `-- name: UpdateComboSet :one
 UPDATE combo_sets
 SET

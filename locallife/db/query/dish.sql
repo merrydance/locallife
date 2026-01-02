@@ -167,6 +167,18 @@ WHERE
   AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%';
 
+-- name: SearchDishIDsGlobal :many
+-- 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
+SELECT d.id FROM dishes d
+JOIN merchants m ON d.merchant_id = m.id
+WHERE 
+  m.status = 'approved'
+  AND m.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND d.is_online = true
+  AND d.name ILIKE '%' || $1 || '%'
+ORDER BY d.sort_order ASC, d.name ASC;
+
 -- name: UpdateDish :one
 UPDATE dishes
 SET

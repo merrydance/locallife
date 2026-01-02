@@ -1592,6 +1592,39 @@ func (q *Queries) RemoveDishTag(ctx context.Context, arg RemoveDishTagParams) er
 	return err
 }
 
+const searchDishIDsGlobal = `-- name: SearchDishIDsGlobal :many
+SELECT d.id FROM dishes d
+JOIN merchants m ON d.merchant_id = m.id
+WHERE 
+  m.status = 'approved'
+  AND m.deleted_at IS NULL
+  AND d.deleted_at IS NULL
+  AND d.is_online = true
+  AND d.name ILIKE '%' || $1 || '%'
+ORDER BY d.sort_order ASC, d.name ASC
+`
+
+// 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
+func (q *Queries) SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error) {
+	rows, err := q.db.Query(ctx, searchDishIDsGlobal, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchDishesByName = `-- name: SearchDishesByName :many
 SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at FROM dishes
 WHERE 

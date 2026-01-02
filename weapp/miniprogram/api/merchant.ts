@@ -377,7 +377,7 @@ export class MerchantManagementService {
  * 搜索商户 - 基于 /v1/search/merchants
  * 注意：后端要求 keyword, page_id, page_size 为必填参数
  */
-export function searchMerchants(params: {
+export async function searchMerchants(params: {
   keyword?: string
   page_id?: number
   page_size?: number
@@ -399,13 +399,16 @@ export function searchMerchants(params: {
     requestParams.user_longitude = params.user_longitude
   }
 
-  return request({
+  const response = await request<{ merchants: MerchantSummary[], total?: number }>({
     url: '/v1/search/merchants',
     method: 'GET',
     data: requestParams,
     useCache: true,
     cacheTTL: 2 * 60 * 1000 // 2分钟缓存
   })
+
+  // 后端返回 { merchants: [...], total, page_id, page_size }，解包返回数组
+  return response.merchants || []
 }
 
 /**

@@ -40,20 +40,6 @@ class Navigation {
             : '/pages/takeout/order-confirm/index';
         wx.navigateTo({ url });
     }
-    /**
-       * 跳转到搜索页
-       */
-    static toSearch(params) {
-        const queryEntries = params
-            ? Object.entries(params).filter(([, value]) => value !== undefined && value !== '')
-            : [];
-        const queryString = queryEntries.length
-            ? `?${queryEntries.map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')}`
-            : '';
-        wx.navigateTo({
-            url: `/pages/takeout/search/index${queryString}`
-        });
-    }
     // ==================== 订单相关 ====================
     /**
        * 跳转到订单详情页

@@ -11200,6 +11200,36 @@ func (mr *MockStoreMockRecorder) SaveRecommendations(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveRecommendations", reflect.TypeOf((*MockStore)(nil).SaveRecommendations), ctx, arg)
 }
 
+// SearchComboIDsGlobal mocks base method.
+func (m *MockStore) SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchComboIDsGlobal", ctx, dollar_1)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchComboIDsGlobal indicates an expected call of SearchComboIDsGlobal.
+func (mr *MockStoreMockRecorder) SearchComboIDsGlobal(ctx, dollar_1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchComboIDsGlobal", reflect.TypeOf((*MockStore)(nil).SearchComboIDsGlobal), ctx, dollar_1)
+}
+
+// SearchDishIDsGlobal mocks base method.
+func (m *MockStore) SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchDishIDsGlobal", ctx, dollar_1)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchDishIDsGlobal indicates an expected call of SearchDishIDsGlobal.
+func (mr *MockStoreMockRecorder) SearchDishIDsGlobal(ctx, dollar_1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchDishIDsGlobal", reflect.TypeOf((*MockStore)(nil).SearchDishIDsGlobal), ctx, dollar_1)
+}
+
 // SearchDishesByName mocks base method.
 func (m *MockStore) SearchDishesByName(ctx context.Context, arg db.SearchDishesByNameParams) ([]db.Dish, error) {
 	m.ctrl.T.Helper()

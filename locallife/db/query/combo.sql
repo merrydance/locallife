@@ -241,3 +241,15 @@ WHERE merchant_id = $1
   AND deleted_at IS NULL
   AND is_online = true
 ORDER BY created_at DESC;
+
+-- name: SearchComboIDsGlobal :many
+-- 全局套餐搜索，只返回套餐ID（用于推荐接口的关键词过滤）
+SELECT cs.id FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+WHERE 
+  m.status = 'approved'
+  AND m.deleted_at IS NULL
+  AND cs.deleted_at IS NULL
+  AND cs.is_online = true
+  AND cs.name ILIKE '%' || $1 || '%'
+ORDER BY cs.created_at DESC;

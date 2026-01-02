@@ -16,11 +16,8 @@ const navigation_1 = __importDefault(require("../../utils/navigation"));
 const auth_1 = require("../../api/auth");
 const logger_1 = require("../../utils/logger");
 const upload_1 = require("../../api/upload");
-const responsive_1 = require("../../utils/responsive");
-// import { MerchantManagementService } from '../../api/merchant' // Removed dependency
 const app = getApp();
 Page({
-    behaviors: [responsive_1.responsiveBehavior],
     data: {
         userInfo: {
             nickName: '微信用户',
@@ -33,10 +30,19 @@ Page({
             { id: 'rider', name: '骑手入驻', desc: '成为配送骑手', path: '/pages/register/rider/index' },
             { id: 'operator', name: '运营商入驻', desc: '区域运营合作', path: '/pages/register/operator/index' }
         ],
-        navBarHeight: 88
+        navBarHeight: 88,
+        scrollViewHeight: 600
     },
     onLoad() {
-        // 移除 manual navBarHeight 设置，由 responsiveBehavior 自动注入
+        // 计算导航栏高度和滚动区域高度
+        const windowInfo = wx.getWindowInfo();
+        const menuButton = wx.getMenuButtonBoundingClientRect();
+        const statusBarHeight = windowInfo.statusBarHeight || 0;
+        const navBarContentHeight = menuButton.height + (menuButton.top - statusBarHeight) * 2;
+        const navBarHeight = statusBarHeight + navBarContentHeight;
+        // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
+        const scrollViewHeight = windowInfo.windowHeight - navBarHeight;
+        this.setData({ navBarHeight, scrollViewHeight });
         this.initUserInfo();
     },
     onShow() {

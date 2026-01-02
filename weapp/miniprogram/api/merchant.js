@@ -205,18 +205,24 @@ function searchMerchants(params) {
 }
 /**
  * 获取推荐商户 - 基于 /v1/recommendations/merchants
- * 返回格式：{ merchants: [], algorithm, expired_at }
+ * 支持分页，返回包含 has_more 的完整响应
  */
 function getRecommendedMerchants(params) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
         const response = yield (0, request_1.request)({
             url: '/v1/recommendations/merchants',
             method: 'GET',
             data: params,
-            useCache: true,
+            useCache: (params === null || params === void 0 ? void 0 : params.page) === 1 || !(params === null || params === void 0 ? void 0 : params.page),
             cacheTTL: 3 * 60 * 1000 // 3分钟缓存
         });
-        return response.merchants || [];
+        return {
+            merchants: response.merchants || [],
+            has_more: (_a = response.has_more) !== null && _a !== void 0 ? _a : false,
+            page: (_b = response.page) !== null && _b !== void 0 ? _b : 1,
+            total_count: (_c = response.total_count) !== null && _c !== void 0 ? _c : 0
+        };
     });
 }
 // ==================== 商户基础管理适配器 ====================

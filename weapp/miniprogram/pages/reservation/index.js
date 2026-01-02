@@ -20,11 +20,13 @@ Page({
         activeTab: 'room',
         // UI State
         navBarHeight: 88,
+        scrollViewHeight: 600,
         address: '定位中...',
         loading: false,
         hasMore: true,
         page: 1,
         pageSize: 10,
+        refresherTriggered: false,
         // Applied Filters (The actual filters used for API calls)
         appliedFilters: {
             guestCount: undefined,
@@ -63,7 +65,12 @@ Page({
         ],
     },
     onLoad() {
-        this.setData({ navBarHeight: global_store_1.globalStore.get('navBarHeight') });
+        // 计算导航栏高度和滚动区域高度
+        const navBarHeight = global_store_1.globalStore.get('navBarHeight') || 88;
+        const windowInfo = wx.getWindowInfo();
+        // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
+        const scrollViewHeight = windowInfo.windowHeight - navBarHeight;
+        this.setData({ navBarHeight, scrollViewHeight });
         this.generateDateOptions();
         const loc = app.globalData.location;
         if (loc && loc.name) {
@@ -197,6 +204,23 @@ Page({
             this.setData({ page: this.data.page + 1 });
             this.loadItems(false);
         }
+    },
+    /**
+     * scroll-view 下拉刷新事件处理
+     * 在 Skyline 模式下实现下拉刷新
+     */
+    onRefresh() {
+        return __awaiter(this, void 0, void 0, function* () {
+            this.setData({ refresherTriggered: true, page: 1 });
+            try {
+                yield this.loadItems(true);
+            }
+            finally {
+                setTimeout(() => {
+                    this.setData({ refresherTriggered: false });
+                }, 300);
+            }
+        });
     },
     // ==================== Filter Popup ====================
     showFilterPopup() {
