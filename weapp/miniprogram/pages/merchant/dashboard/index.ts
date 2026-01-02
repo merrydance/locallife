@@ -103,14 +103,19 @@ Page({
   },
 
   async loadMerchantInfo() {
-    const info = await MerchantManagementService.getMerchantInfo()
-    if (info) {
-      this.setData({
-        merchantName: info.name,
-        isOpen: info.is_open
-      })
-      app.globalData.merchantId = String(info.id)
-      app.globalData.userRole = 'merchant'
+    try {
+      const info = await MerchantManagementService.getMerchantInfo();
+      if (info) {
+        this.setData({
+          merchantName: info.name,
+          isOpen: info.is_open
+        });
+        app.globalData.merchantId = String(info.id);
+        app.globalData.userRole = 'merchant';
+      }
+    } catch (error) {
+      wx.showToast({ title: '加载商户失败', icon: 'error' });
+      logger.error('加载商户信息失败', error, 'Dashboard');
     }
   },
 
@@ -501,5 +506,9 @@ Page({
 
   goToMarketing() {
     wx.navigateTo({ url: '/pages/merchant/vouchers/index' })
+  },
+
+  goToNavigation() {
+    wx.navigateTo({ url: '/pages/merchant/navigation/index' })
   }
 })

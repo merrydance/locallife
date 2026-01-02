@@ -1,4 +1,4 @@
-/* 评价管理 - 桌面级 SaaS 样式 */
+/* 运费减免设置 - 桌面级 SaaS 样式 */
 
 /* 小屏提示 */
 .desktop-only-notice {
@@ -53,42 +53,13 @@
 .page-subtitle { font-size: 14px; color: #8c8c8c; }
 
 .page-actions { display: flex; gap: 12px; }
-.btn-refresh {
-  padding: 10px 20px;
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #333;
-}
-
-/* Tabs */
-.tabs-bar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  background: #fff;
-  padding: 8px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-
-.tab-item {
+.btn-add {
   padding: 10px 24px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-item.active {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
-}
-
-.tab-item:hover:not(.active) {
-  background: #f5f5f5;
+  border-radius: 8px;
+  font-size: 14px;
+  border: none;
 }
 
 /* Loading */
@@ -123,126 +94,108 @@
 }
 
 .empty-icon { font-size: 64px; margin-bottom: 16px; }
-.empty-text { font-size: 16px; }
+.empty-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+.empty-hint { font-size: 14px; }
 
-/* 评价列表 */
-.reviews-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+/* 规则列表 */
+.promotions-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
 }
 
-.review-card {
+.promotion-card {
   background: #fff;
   border-radius: 12px;
-  padding: 20px 24px;
+  padding: 20px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-left: 4px solid #52c41a;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.review-header {
+.promotion-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+.promotion-card.inactive {
+  border-left-color: #d9d9d9;
+  opacity: 0.7;
+}
+
+.card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid #e8e8e8;
-}
-
-.user-name {
-  font-size: 15px;
-  font-weight: 500;
-  color: #333;
-}
-
-.rating {
+.promo-name {
   font-size: 16px;
+  font-weight: 600;
+  color: #1a1a2e;
 }
 
-.star { color: #e0e0e0; }
-.star.filled { color: #ffc107; }
-
-.review-content {
-  display: block;
-  font-size: 14px;
-  color: #333;
-  line-height: 1.6;
-  margin-bottom: 8px;
-}
-
-.review-time {
-  display: block;
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 4px;
   font-size: 12px;
+  background: #f5f5f5;
   color: #999;
-  margin-bottom: 12px;
 }
 
-/* 商家回复 */
-.reply-section {
-  background: #f8f9fc;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-top: 12px;
+.status-badge.active {
+  background: #f6ffed;
+  color: #52c41a;
 }
 
-.reply-label {
-  font-size: 12px;
-  color: #667eea;
-  margin-bottom: 6px;
+.card-body {
+  margin-bottom: 16px;
 }
 
-.reply-content {
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
   font-size: 13px;
-  color: #666;
-  line-height: 1.5;
+  color: #8c8c8c;
 }
 
-/* 回复按钮 */
-.review-actions {
+.info-value {
+  font-size: 13px;
+  color: #333;
+}
+
+.info-value.highlight {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
+.card-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 12px;
+  gap: 8px;
 }
 
-.btn-reply {
-  padding: 8px 20px;
+.btn-delete {
+  padding: 6px 16px;
   background: #fff;
-  border: 1px solid #667eea;
-  color: #667eea;
+  border: 1px solid #ff4d4f;
+  color: #ff4d4f;
   border-radius: 6px;
   font-size: 13px;
 }
 
-.btn-reply:hover {
-  background: #667eea;
-  color: #fff;
-}
-
-/* 加载更多 */
-.load-more, .no-more {
-  text-align: center;
-  padding: 20px;
-  color: #999;
-  font-size: 14px;
-}
-
-.load-more {
-  cursor: pointer;
-  color: #667eea;
-}
-
 /* 弹窗 */
-.dialog-mask {
+.modal-mask {
   position: fixed;
   top: 0;
   left: 0;
@@ -255,7 +208,7 @@
   z-index: 1000;
 }
 
-.dialog-box {
+.modal-box {
   background: #fff;
   border-radius: 12px;
   width: 480px;
@@ -263,7 +216,7 @@
   box-shadow: 0 10px 40px rgba(0,0,0,0.2);
 }
 
-.dialog-header {
+.modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -271,13 +224,13 @@
   border-bottom: 1px solid #f0f0f0;
 }
 
-.dialog-title {
+.modal-title {
   font-size: 16px;
   font-weight: 600;
   color: #333;
 }
 
-.dialog-close {
+.modal-close {
   width: 28px;
   height: 28px;
   display: flex;
@@ -288,26 +241,41 @@
   color: #999;
 }
 
-.dialog-close:hover {
+.modal-close:hover {
   background: #f5f5f5;
   color: #333;
 }
 
-.dialog-body {
+.modal-body {
   padding: 20px;
 }
 
-.reply-textarea {
-  width: 100%;
-  height: 120px;
-  padding: 12px;
-  border: 1px solid #d9d9d9;
-  border-radius: 8px;
-  font-size: 14px;
-  resize: none;
+.form-group {
+  margin-bottom: 16px;
 }
 
-.dialog-footer {
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.form-input.picker {
+  background: #fff;
+  color: #333;
+}
+
+.modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -332,4 +300,8 @@
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
   border: none;
+}
+
+.btn-confirm[disabled] {
+  opacity: 0.6;
 }

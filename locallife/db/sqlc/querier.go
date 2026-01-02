@@ -951,6 +951,8 @@ type Querier interface {
 	ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag, error)
 	ListMerchantVouchers(ctx context.Context, arg ListMerchantVouchersParams) ([]Voucher, error)
 	ListMerchants(ctx context.Context, arg ListMerchantsParams) ([]Merchant, error)
+	// 获取用户拥有的所有商户（用于多店铺切换）
+	ListMerchantsByOwner(ctx context.Context, ownerUserID int64) ([]Merchant, error)
 	// ==================== 运营商管理商户 ====================
 	// 按区域列出商户（供运营商管理使用）
 	ListMerchantsByRegion(ctx context.Context, arg ListMerchantsByRegionParams) ([]Merchant, error)

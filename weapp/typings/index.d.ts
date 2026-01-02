@@ -26,6 +26,15 @@ interface IAppOption {
         userRole: 'guest' | 'customer' | 'merchant' | 'rider' | 'operator'
         userId?: number
         merchantId?: string
+        // 多店铺切换支持
+        currentMerchantId?: number
+        merchantInfo?: {
+            id: number
+            name: string
+            logo_url?: string
+            is_open: boolean
+            status: string
+        }
         // 设备平台信息（用于跨平台适配）
         devicePlatform: DevicePlatformInfo | null
         // (内部使用) 上次定位上下文

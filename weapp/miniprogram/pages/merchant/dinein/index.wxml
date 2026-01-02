@@ -1,97 +1,124 @@
-<custom-navbar title="堂食管理" showBack="{{true}}" bind:navheight="onNavHeight" />
+<!-- 堂食管理 - 桌面级 SaaS 界面 -->
 
-<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
 
-  <view wx:if="{{!loading}}" class="content responsive-container">
-    <!-- Mobile: Stacked Layout -->
-    <match-media max-width="749">
-      <view class="stacked-layout">
-        <!-- 桌台状态 -->
-        <view class="section">
-          <view class="section-title">桌台状态</view>
-          <view class="tables-grid">
-            <template is="table-card" wx:for="{{tables}}" wx:key="id" data="{{item}}" />
+<!-- PC 全屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <merchant-header 
+      merchant-name="{{merchantName}}"
+      is-open="{{true}}"
+    />
+
+    <view class="page-container">
+      <!-- 页面头部 -->
+      <view class="page-header">
+        <view class="page-title-section">
+          <text class="page-title">堂食管理</text>
+          <text class="page-subtitle">桌台状态与堂食会话管理</text>
+        </view>
+        <view class="page-actions">
+          <button class="btn-refresh" bindtap="loadData">
+            <text>🔄 刷新</text>
+          </button>
+        </view>
+      </view>
+
+      <!-- Loading -->
+      <view wx:if="{{loading}}" class="loading-container">
+        <view class="loading-spinner"></view>
+        <text>加载中...</text>
+      </view>
+
+      <view wx:else class="content-area">
+        <!-- 统计卡片 -->
+        <view class="stats-cards">
+          <view class="stat-card">
+            <view class="stat-value">{{tableStats.total}}</view>
+            <view class="stat-label">总桌台</view>
+          </view>
+          <view class="stat-card success">
+            <view class="stat-value">{{tableStats.available}}</view>
+            <view class="stat-label">空闲</view>
+          </view>
+          <view class="stat-card warning">
+            <view class="stat-value">{{tableStats.occupied}}</view>
+            <view class="stat-label">使用中</view>
           </view>
         </view>
 
-        <!-- 进行中的会话 -->
-        <view class="section">
-          <view class="section-title">进行中的会话</view>
-          <template is="sessions-list" data="{{sessions}}" />
-        </view>
-      </view>
-    </match-media>
+        <!-- 双栏布局 -->
+        <view class="dual-column">
+          <!-- 左栏：桌台网格 -->
+          <view class="column-left">
+            <view class="section">
+              <view class="section-header">
+                <text class="section-title">🪑 桌台列表</text>
+              </view>
+              
+              <view wx:if="{{tables.length === 0}}" class="empty-state">
+                <text class="empty-icon">🪑</text>
+                <text class="empty-text">暂无桌台数据</text>
+              </view>
 
-    <!-- Tablet/PC: Dual-Column Layout -->
-    <match-media min-width="750">
-      <view class="dual-column-layout">
-        <!-- Left: Table Status Grid -->
-        <view class="left-section">
-          <view class="section-header">
-            <view class="section-title">桌台管理</view>
-            <view class="stats-summary">
-              空闲: <text class="available">{{tableStats.available}}</text> /
-              使用中: <text class="occupied">{{tableStats.occupied}}</text>
+              <view wx:else class="tables-grid">
+                <view wx:for="{{tables}}" wx:key="id" 
+                      class="table-card {{item.status === 'OCCUPIED' ? 'occupied' : (item.status === 'DISABLED' ? 'disabled' : '')}}">
+                  <text class="table-name">{{item.name}}</text>
+                  <text class="table-capacity">{{item.capacity}}人桌</text>
+                  <view class="table-status-tag {{item.status === 'AVAILABLE' ? 'available' : (item.status === 'OCCUPIED' ? 'occupied' : 'disabled')}}">
+                    {{item.status === 'AVAILABLE' ? '空闲' : (item.status === 'OCCUPIED' ? '使用中' : '停用')}}
+                  </view>
+                  <button wx:if="{{item.status === 'AVAILABLE'}}" 
+                          class="btn-open-table" 
+                          data-id="{{item.id}}" 
+                          bindtap="onOpenTable">开台</button>
+                  <button wx:if="{{item.status === 'OCCUPIED'}}" 
+                          class="btn-close-table" 
+                          data-id="{{item.id}}" 
+                          bindtap="onCloseTable">结台</button>
+                </view>
+              </view>
             </view>
           </view>
-          <view class="tables-grid pc-grid">
-            <template is="table-card" wx:for="{{tables}}" wx:key="id" data="{{item}}" />
+
+          <!-- 右栏：进行中会话 -->
+          <view class="column-right">
+            <view class="section">
+              <view class="section-header">
+                <text class="section-title">📋 进行中的会话 ({{sessions.length}})</text>
+              </view>
+              
+              <view wx:if="{{sessions.length === 0}}" class="empty-state">
+                <text class="empty-icon">☕</text>
+                <text class="empty-text">暂无进行中的会话</text>
+              </view>
+
+              <view wx:else class="sessions-list">
+                <view wx:for="{{sessions}}" wx:key="id" class="session-card">
+                  <view class="session-header">
+                    <text class="table-name">{{item.table_name}}</text>
+                    <view class="status-tag active">进行中</view>
+                  </view>
+                  <view class="session-footer">
+                    <button class="btn-checkout" data-id="{{item.id}}" bindtap="onCheckout">结账</button>
+                  </view>
+                </view>
+              </view>
+            </view>
           </view>
         </view>
-
-        <!-- Right: Active Sessions List -->
-        <view class="right-section">
-          <view class="section-header">
-            <view class="section-title">当前会话 ({{sessions.length}})</view>
-          </view>
-          <template is="sessions-list" data="{{sessions}}" />
-        </view>
-      </view>
-    </match-media>
-  </view>
-</view>
-
-<!-- ========== 模版定义 ========== -->
-
-<template name="table-card">
-  <view class="table-card {{item.status === 'OCCUPIED' ? 'occupied' : ''}}">
-    <text class="table-name">{{item.name}}</text>
-    <text class="table-capacity">{{item.capacity}}人桌</text>
-    <t-tag size="small" theme="{{item.status === 'AVAILABLE' ? 'success' : 'warning'}}">
-      {{item.status === 'AVAILABLE' ? '空闲' : '使用中'}}
-    </t-tag>
-    <t-button 
-      wx:if="{{item.status === 'AVAILABLE'}}"
-      class="action-btn"
-      size="small" 
-      theme="primary"
-      data-id="{{item.id}}"
-      bindtap="onOpenTable"
-    >
-      开台
-    </t-button>
-  </view>
-</template>
-
-<template name="sessions-list">
-  <view wx:if="{{sessions.length === 0}}" class="empty">
-    <t-empty description="暂无进行中的会话" />
-  </view>
-  <view wx:else class="sessions-list">
-    <view wx:for="{{sessions}}" wx:key="id" class="session-card">
-      <view class="session-header">
-        <text class="table-name">{{item.table_name}}</text>
-        <t-tag size="small" theme="primary">进行中</t-tag>
-      </view>
-      <view class="session-info">
-        <text class="info-text">人数: {{item.customer_count}}</text>
-        <text class="info-text">开台时间: {{item.created_at}}</text>
-      </view>
-      <view class="session-footer">
-        <text class="total-price">¥{{item.total_price / 100}}</text>
-        <t-button size="small" theme="primary" data-id="{{item.id}}" bindtap="onCheckout">结账</t-button>
       </view>
     </view>
   </view>
-</template>
+</match-media>

@@ -87,6 +87,12 @@ SELECT * FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 LIMIT 1;
 
+-- name: ListMerchantsByOwner :many
+-- 获取用户拥有的所有商户（用于多店铺切换）
+SELECT * FROM merchants
+WHERE owner_user_id = $1 AND deleted_at IS NULL
+ORDER BY created_at ASC;
+
 -- name: ListMerchants :many
 SELECT * FROM merchants
 WHERE status = $1 AND deleted_at IS NULL

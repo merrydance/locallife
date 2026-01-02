@@ -1240,6 +1240,52 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 	return items, nil
 }
 
+const listMerchantsByOwner = `-- name: ListMerchantsByOwner :many
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at FROM merchants
+WHERE owner_user_id = $1 AND deleted_at IS NULL
+ORDER BY created_at ASC
+`
+
+// 获取用户拥有的所有商户（用于多店铺切换）
+func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) ([]Merchant, error) {
+	rows, err := q.db.Query(ctx, listMerchantsByOwner, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Merchant{}
+	for rows.Next() {
+		var i Merchant
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.Phone,
+			&i.Address,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Status,
+			&i.ApplicationData,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+			&i.RegionID,
+			&i.IsOpen,
+			&i.AutoCloseAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMerchantsByRegion = `-- name: ListMerchantsByRegion :many
 
 SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at FROM merchants

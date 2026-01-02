@@ -646,6 +646,36 @@ func (server *Server) getCurrentMerchant(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newMerchantResponse(merchant))
 }
 
+// listMyMerchants godoc
+// @Summary 获取当前用户的所有商户
+// @Description 获取当前用户拥有的所有商户列表（用于多店铺切换）
+// @Tags 商户
+// @Accept json
+// @Produce json
+// @Success 200 {array} merchantResponse "商户列表"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchants/my [get]
+// @Security BearerAuth
+func (server *Server) listMyMerchants(ctx *gin.Context) {
+	// 获取认证信息
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	merchants, err := server.store.ListMerchantsByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 转换为响应格式
+	responses := make([]merchantResponse, len(merchants))
+	for i, m := range merchants {
+		responses[i] = newMerchantResponse(m)
+	}
+
+	ctx.JSON(http.StatusOK, responses)
+}
+
 type updateMerchantRequest struct {
 	Name        *string `json:"name" binding:"omitempty,min=2,max=50"`
 	Description *string `json:"description" binding:"omitempty,max=500"`

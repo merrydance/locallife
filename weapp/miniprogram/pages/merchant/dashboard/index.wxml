@@ -36,6 +36,7 @@
       </view>
     </view>
 
+
     <!-- 主体三栏布局 -->
     <view class="main-content">
       <!-- 左栏：订单流 -->
@@ -233,6 +234,11 @@
           <view class="entry-item" bindtap="goToMarketing">
             <text class="entry-icon">🎯</text>
             <text class="entry-text">营销活动</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToNavigation">
+            <text class="entry-icon">📱</text>
+            <text class="entry-text">全部应用</text>
           </view>
         </view>
       </view>

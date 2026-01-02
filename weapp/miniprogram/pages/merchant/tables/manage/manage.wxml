@@ -14,19 +14,13 @@
 <match-media min-width="1600">
   <view class="pc-saas-layout">
     <!-- 侧边栏 -->
-    <merchant-sidebar 
-      current-path="tables" 
-      collapsed="{{sidebarCollapsed}}"
-      bind:collapse="onSidebarCollapse"
-    />
 
     <!-- 主区域 -->
-    <view class="saas-main" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+    <view class="saas-main" style="margin-left: 0;">
       <!-- 顶部栏 -->
       <merchant-header 
         merchant-name="{{merchantName}}"
         is-open="{{isOpen}}"
-        sidebar-width="{{sidebarCollapsed ? 64 : 200}}"
       />
 
       <!-- 桌台管理内容 -->

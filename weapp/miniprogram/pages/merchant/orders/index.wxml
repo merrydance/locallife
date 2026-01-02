@@ -14,21 +14,12 @@
 
 <match-media min-width="1600">
   <view class="saas-layout">
-    <!-- 侧边栏 -->
-    <merchant-sidebar 
-      current-path="orders" 
-      collapsed="{{sidebarCollapsed}}"
-      pending-order-count="{{statusCounts.paid}}"
-      bind:collapse="onSidebarCollapse"
-    />
-
-    <!-- 主区域 -->
-    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+    <!-- 主区域 (全宽) -->
+    <view class="main-area" style="margin-left: 0;">
       <!-- 顶部栏 -->
       <merchant-header 
         merchant-name="{{merchantName}}"
         is-open="{{isOpen}}"
-        sidebar-width="{{sidebarCollapsed ? 64 : 200}}"
       />
 
       <!-- 页面内容 -->

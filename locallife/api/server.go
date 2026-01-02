@@ -313,6 +313,7 @@ func (server *Server) setupRouter() {
 	authGroup.POST("/merchants/applications", server.createMerchantApplication)
 	authGroup.GET("/merchants/applications/me", server.getUserMerchantApplication)
 	authGroup.GET("/merchants/me", server.getCurrentMerchant)
+	authGroup.GET("/merchants/my", server.listMyMerchants) // 获取用户所有商户（多店铺切换）
 	authGroup.PATCH("/merchants/me", server.updateCurrentMerchant)
 	authGroup.GET("/merchants/me/status", server.getMerchantOpenStatus)
 	authGroup.PATCH("/merchants/me/status", server.updateMerchantOpenStatus)

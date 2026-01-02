@@ -690,3 +690,109 @@
   color: #94a3b8;
   margin-right: 4px;
 }
+
+/* 店铺切换器 */
+.store-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.store-switcher:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.switch-arrow {
+  font-size: 10px;
+  opacity: 0.8;
+  transition: transform 0.2s;
+}
+
+.switch-arrow.rotate {
+  transform: rotate(180deg);
+}
+
+/* 店铺下拉列表 */
+.store-dropdown {
+  position: absolute;
+  top: 64px;
+  left: 32px;
+  min-width: 280px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+  overflow: hidden;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.store-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: #333;
+}
+
+.store-item:hover {
+  background: #f5f5f5;
+}
+
+.store-item.active {
+  background: #e6f7ff;
+}
+
+.item-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.item-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.item-status.open {
+  color: #52c41a;
+  background: #f6ffed;
+}
+
+.item-status.closed {
+  color: #8c8c8c;
+  background: #f5f5f5;
+}
+
+.check-mark {
+  color: #1890ff;
+  font-weight: bold;
+}
+
+/* 下拉框蒙层 */
+.dropdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+}

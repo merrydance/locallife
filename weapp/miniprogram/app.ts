@@ -17,6 +17,15 @@ App<IAppOption>({
     userRole: 'guest',
     userId: undefined as number | undefined,
     merchantId: undefined,
+    // 多店铺切换支持
+    currentMerchantId: undefined as number | undefined,
+    merchantInfo: undefined as {
+      id: number
+      name: string
+      logo_url?: string
+      is_open: boolean
+      status: string
+    } | undefined,
     // 设备平台信息（用于跨平台适配）
     devicePlatform: null as {
       type: string          // platform 原始值

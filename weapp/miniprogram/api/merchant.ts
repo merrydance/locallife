@@ -248,6 +248,20 @@ export class MerchantManagementService {
   }
 
   /**
+   * 获取当前用户拥有的所有商户列表
+   * GET /v1/merchants/my
+   * 用于多店铺切换功能
+   */
+  static async getMyMerchants(): Promise<MerchantResponse[]> {
+    return await request({
+      url: '/v1/merchants/my',
+      method: 'GET',
+      useCache: true,
+      cacheTTL: 5 * 60 * 1000 // 5分钟缓存
+    })
+  }
+
+  /**
    * 更新商户信息
    * PATCH /v1/merchants/me
    * 使用乐观锁防止并发冲突

@@ -44,16 +44,10 @@
 <match-media min-width="1600">
   <view class="saas-layout">
     <!-- 侧边栏 -->
-    <merchant-sidebar 
-      current-path="finance" 
-      collapsed="{{sidebarCollapsed}}"
-      bind:collapse="onSidebarCollapse"
-    />
 
     <!-- 主区域 -->
-    <view class="main-area" style="margin-left: {{sidebarCollapsed ? 64 : 200}}px;">
+    <view class="main-area" style="margin-left: 0;">
       <!-- 顶部栏 -->
-      <merchant-header sidebar-width="{{sidebarCollapsed ? 64 : 200}}" />
 
       <!-- 页面内容 -->
       <view class="page-container">

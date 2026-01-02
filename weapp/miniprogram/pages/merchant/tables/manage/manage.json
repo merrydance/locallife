@@ -3,7 +3,6 @@
     "enablePullDownRefresh": true,
     "disableScroll": false,
     "usingComponents": {
-        "merchant-sidebar": "/components/merchant-sidebar/index",
         "merchant-header": "/components/merchant-header/index",
         "t-button": "tdesign-miniprogram/button/button",
         "t-input": "tdesign-miniprogram/input/input",

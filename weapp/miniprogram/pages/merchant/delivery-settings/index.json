@@ -1,5 +1,5 @@
 {
-    "navigationBarTitleText": "评价管理",
+    "navigationBarTitleText": "运费减免设置",
     "navigationStyle": "custom",
     "usingComponents": {
         "merchant-header": "/components/merchant-header/index"
