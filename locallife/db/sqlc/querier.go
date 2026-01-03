@@ -70,6 +70,7 @@ type Querier interface {
 	CheckOperatorManagesRegion(ctx context.Context, arg CheckOperatorManagesRegionParams) (bool, error)
 	// Check if table has any active reservation for given date and time
 	CheckTableAvailability(ctx context.Context, arg CheckTableAvailabilityParams) (int64, error)
+	CheckUserHasMerchantAccess(ctx context.Context, arg CheckUserHasMerchantAccessParams) (bool, error)
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
@@ -118,6 +119,7 @@ type Querier interface {
 	CountMerchantPromotionOrders(ctx context.Context, arg CountMerchantPromotionOrdersParams) (int64, error)
 	CountMerchantSettlements(ctx context.Context, arg CountMerchantSettlementsParams) (int64, error)
 	CountMerchantSettlementsByStatus(ctx context.Context, arg CountMerchantSettlementsByStatusParams) (int64, error)
+	CountMerchantStaff(ctx context.Context, merchantID int64) (int64, error)
 	// 统计区域内商户数量
 	CountMerchantsByRegion(ctx context.Context, regionID int64) (int64, error)
 	// 统计区域内指定状态的商户数量
@@ -260,6 +262,8 @@ type Querier interface {
 	// merchant_profiles（商户信任画像）
 	// ==========================================
 	CreateMerchantProfile(ctx context.Context, arg CreateMerchantProfileParams) (MerchantProfile, error)
+	// 商户员工管理查询
+	CreateMerchantStaff(ctx context.Context, arg CreateMerchantStaffParams) (MerchantStaff, error)
 	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
 	CreateOperator(ctx context.Context, arg CreateOperatorParams) (Operator, error)
 	// ==================== 运营商入驻申请（草稿模式+人工审核） ====================
@@ -362,6 +366,8 @@ type Querier interface {
 	DeleteMerchant(ctx context.Context, id int64) error
 	DeleteMerchantBusinessHours(ctx context.Context, merchantID int64) error
 	DeleteMerchantPaymentConfig(ctx context.Context, merchantID int64) error
+	DeleteMerchantStaff(ctx context.Context, id int64) error
+	DeleteMerchantStaffByMerchant(ctx context.Context, merchantID int64) error
 	DeleteNotification(ctx context.Context, arg DeleteNotificationParams) error
 	DeleteOldInventory(ctx context.Context, date pgtype.Date) error
 	DeleteOldRiderLocations(ctx context.Context, recordedAt time.Time) error
@@ -580,6 +586,8 @@ type Querier interface {
 	GetMerchantRepurchaseRate(ctx context.Context, arg GetMerchantRepurchaseRateParams) (GetMerchantRepurchaseRateRow, error)
 	// 商户服务费明细
 	GetMerchantServiceFeeDetail(ctx context.Context, arg GetMerchantServiceFeeDetailParams) ([]GetMerchantServiceFeeDetailRow, error)
+	GetMerchantStaff(ctx context.Context, arg GetMerchantStaffParams) (MerchantStaff, error)
+	GetMerchantStaffByID(ctx context.Context, id int64) (MerchantStaff, error)
 	// ==================== 高级查询（使用JOIN和聚合）====================
 	GetMerchantWithTags(ctx context.Context, id int64) (GetMerchantWithTagsRow, error)
 	// 批量获取商户详情
@@ -792,6 +800,7 @@ type Querier interface {
 	// 用户增长统计
 	GetUserGrowthStats(ctx context.Context, arg GetUserGrowthStatsParams) ([]GetUserGrowthStatsRow, error)
 	GetUserMerchantApplication(ctx context.Context, userID int64) (MerchantApplication, error)
+	GetUserMerchantRole(ctx context.Context, arg GetUserMerchantRoleParams) (string, error)
 	// ==================== 用户通知偏好设置 ====================
 	GetUserNotificationPreferences(ctx context.Context, userID int64) (UserNotificationPreference, error)
 	// ============================================================================
@@ -948,6 +957,7 @@ type Querier interface {
 	// 商户结算记录（带日期范围和状态筛选）
 	ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ProfitSharingOrder, error)
 	ListMerchantSpecialHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
+	ListMerchantStaffByMerchant(ctx context.Context, merchantID int64) ([]ListMerchantStaffByMerchantRow, error)
 	ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag, error)
 	ListMerchantVouchers(ctx context.Context, arg ListMerchantVouchersParams) ([]Voucher, error)
 	ListMerchants(ctx context.Context, arg ListMerchantsParams) ([]Merchant, error)
@@ -958,6 +968,7 @@ type Querier interface {
 	ListMerchantsByRegion(ctx context.Context, arg ListMerchantsByRegionParams) ([]Merchant, error)
 	// 按区域和状态列出商户
 	ListMerchantsByRegionWithStatus(ctx context.Context, arg ListMerchantsByRegionWithStatusParams) ([]Merchant, error)
+	ListMerchantsByStaff(ctx context.Context, userID int64) ([]Merchant, error)
 	ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTagParams) ([]Merchant, error)
 	ListMerchantsWithTagCount(ctx context.Context, arg ListMerchantsWithTagCountParams) ([]ListMerchantsWithTagCountRow, error)
 	ListNearbyRiders(ctx context.Context, arg ListNearbyRidersParams) ([]ListNearbyRidersRow, error)
@@ -1234,6 +1245,8 @@ type Querier interface {
 	UpdateMerchantPaymentConfig(ctx context.Context, arg UpdateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	UpdateMerchantProfile(ctx context.Context, arg UpdateMerchantProfileParams) error
 	UpdateMerchantReply(ctx context.Context, arg UpdateMerchantReplyParams) (Review, error)
+	UpdateMerchantStaffRole(ctx context.Context, arg UpdateMerchantStaffRoleParams) (MerchantStaff, error)
+	UpdateMerchantStaffStatus(ctx context.Context, arg UpdateMerchantStaffStatusParams) (MerchantStaff, error)
 	UpdateMerchantStatus(ctx context.Context, arg UpdateMerchantStatusParams) (Merchant, error)
 	UpdateMerchantTrustScore(ctx context.Context, arg UpdateMerchantTrustScoreParams) error
 	UpdateOperator(ctx context.Context, arg UpdateOperatorParams) (Operator, error)

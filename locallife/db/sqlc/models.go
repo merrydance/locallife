@@ -490,6 +490,12 @@ type Merchant struct {
 	// 自动打烊时间（可选）
 	AutoCloseAt pgtype.Timestamptz `json:"auto_close_at"`
 	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	// 是否等待老板绑定（店长代入驻时为true）
+	PendingOwnerBind pgtype.Bool `json:"pending_owner_bind"`
+	// 老板绑定码
+	BindCode pgtype.Text `json:"bind_code"`
+	// 绑定码过期时间
+	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
 }
 
 type MerchantApplication struct {
@@ -642,6 +648,21 @@ type MerchantProfile struct {
 	SuspendedAt   pgtype.Timestamptz `json:"suspended_at"`
 	SuspendUntil  pgtype.Timestamptz `json:"suspend_until"`
 	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+// 商户员工表 - 管理商户与用户的关联关系及角色
+type MerchantStaff struct {
+	ID         int64 `json:"id"`
+	MerchantID int64 `json:"merchant_id"`
+	UserID     int64 `json:"user_id"`
+	// 员工角色: owner=店主, manager=店长, chef=厨师长, cashier=收银员
+	Role string `json:"role"`
+	// 状态: active=启用, disabled=禁用
+	Status string `json:"status"`
+	// 邀请人（店主ID）
+	InvitedBy pgtype.Int8        `json:"invited_by"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type MerchantTag struct {
