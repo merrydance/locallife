@@ -21,6 +21,15 @@ interface PromotionDisplay {
     typeText: string
 }
 
+interface CalendarDay {
+    day: number
+    date: string
+    disabled: boolean
+    selected: boolean
+    today: boolean
+    currentMonth: boolean
+}
+
 Page({
     data: {
         loading: false,
@@ -33,7 +42,14 @@ Page({
             discount_amount: '',
             valid_from: '',
             valid_until: ''
-        }
+        },
+
+        // 日历选择器状态
+        showCalendar: false,
+        calendarField: '' as string,
+        calendarYear: 2024,
+        calendarMonth: 1,
+        calendarDays: [] as CalendarDay[]
     },
 
     onLoad() {
@@ -101,6 +117,11 @@ Page({
 
     hideModal() {
         this.setData({ showModal: false })
+    },
+
+    // 阻止弹窗内部点击关闭弹窗
+    preventClose() {
+        // 空函数，仅用于阻止事件冒泡
     },
 
     formatDate(date: Date): string {
@@ -188,6 +209,122 @@ Page({
                     }
                 }
             }
+        })
+    },
+
+    // ==================== 日历选择器 ====================
+
+    onOpenCalendar(e: any) {
+        const field = e.currentTarget.dataset.field as string
+        const currentValue = this.data.formData[field as keyof typeof this.data.formData] as string
+
+        let year: number, month: number
+        if (currentValue) {
+            const parts = currentValue.split('-')
+            year = parseInt(parts[0], 10)
+            month = parseInt(parts[1], 10)
+        } else {
+            const now = new Date()
+            year = now.getFullYear()
+            month = now.getMonth() + 1
+        }
+
+        this.setData({
+            showCalendar: true,
+            calendarField: field,
+            calendarYear: year,
+            calendarMonth: month
+        })
+        this.generateCalendarDays()
+    },
+
+    onCloseCalendar() {
+        this.setData({ showCalendar: false })
+    },
+
+    onCalendarContentTap() {
+        // 阻止冒泡
+    },
+
+    onPrevMonth() {
+        let { calendarYear, calendarMonth } = this.data
+        calendarMonth--
+        if (calendarMonth < 1) {
+            calendarMonth = 12
+            calendarYear--
+        }
+        this.setData({ calendarYear, calendarMonth })
+        this.generateCalendarDays()
+    },
+
+    onNextMonth() {
+        let { calendarYear, calendarMonth } = this.data
+        calendarMonth++
+        if (calendarMonth > 12) {
+            calendarMonth = 1
+            calendarYear++
+        }
+        this.setData({ calendarYear, calendarMonth })
+        this.generateCalendarDays()
+    },
+
+    generateCalendarDays() {
+        const { calendarYear, calendarMonth, calendarField, formData } = this.data
+        const selectedValue = formData[calendarField as keyof typeof formData] as string
+        const today = this.formatDate(new Date())
+
+        const firstDay = new Date(calendarYear, calendarMonth - 1, 1)
+        const lastDay = new Date(calendarYear, calendarMonth, 0)
+        const startWeekday = firstDay.getDay()
+        const daysInMonth = lastDay.getDate()
+
+        const days: CalendarDay[] = []
+        const pad = (n: number) => ('0' + n).slice(-2)
+
+        // 上月填充
+        const prevMonth = new Date(calendarYear, calendarMonth - 1, 0)
+        const prevDays = prevMonth.getDate()
+        for (let i = startWeekday - 1; i >= 0; i--) {
+            const day = prevDays - i
+            const m = calendarMonth === 1 ? 12 : calendarMonth - 1
+            const y = calendarMonth === 1 ? calendarYear - 1 : calendarYear
+            const date = `${y}-${pad(m)}-${pad(day)}`
+            days.push({ day, date, disabled: false, selected: date === selectedValue, today: date === today, currentMonth: false })
+        }
+
+        // 当月
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = `${calendarYear}-${pad(calendarMonth)}-${pad(day)}`
+            days.push({ day, date, disabled: false, selected: date === selectedValue, today: date === today, currentMonth: true })
+        }
+
+        // 下月填充
+        const remaining = 42 - days.length
+        for (let day = 1; day <= remaining; day++) {
+            const m = calendarMonth === 12 ? 1 : calendarMonth + 1
+            const y = calendarMonth === 12 ? calendarYear + 1 : calendarYear
+            const date = `${y}-${pad(m)}-${pad(day)}`
+            days.push({ day, date, disabled: false, selected: date === selectedValue, today: date === today, currentMonth: false })
+        }
+
+        this.setData({ calendarDays: days })
+    },
+
+    onSelectCalendarDay(e: any) {
+        const date = e.currentTarget.dataset.date as string
+        const field = this.data.calendarField
+        this.setData({
+            [`formData.${field}`]: date,
+            showCalendar: false
+        })
+    },
+
+    onSelectToday() {
+        const today = this.formatDate(new Date())
+        const field = this.data.calendarField
+        this.setData({
+            [`formData.${field}`]: today,
+            showCalendar: false
         })
     }
 })

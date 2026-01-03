@@ -20,6 +20,8 @@ const (
 	merchantKey = "merchant"
 	// Rider 信息存储在 context 中的 key
 	riderKey = "rider"
+	// Merchant staff role 存储在 context 中的 key
+	merchantStaffRoleKey = "merchant_staff_role"
 )
 
 // 系统支持的角色常量
@@ -229,6 +231,82 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 	}
 }
 
+// MerchantStaffMiddleware 创建商户员工验证中间件
+// 验证用户是商户老板或员工，检查细分角色权限，加载商户信息到 context
+// allowedRoles: 允许的细分角色列表（owner, manager, chef, cashier）
+func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+		// 1. 通过 GetMerchantByOwner 获取商户（已支持 merchant_staff 表）
+		merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+					errors.New("you are not associated with any merchant"),
+				))
+				return
+			}
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		// 检查商户状态
+		if merchant.Status != "active" && merchant.Status != "approved" {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+				errors.New("merchant account is not active"),
+			))
+			return
+		}
+
+		// 2. 获取用户在该商户的角色
+		var staffRole string
+
+		// 先检查是否是 owner（owner_user_id 匹配）
+		if merchant.OwnerUserID == authPayload.UserID {
+			staffRole = "owner"
+		} else {
+			// 从 merchant_staff 表获取角色
+			role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+				MerchantID: merchant.ID,
+				UserID:     authPayload.UserID,
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+						errors.New("you are not a staff of this merchant"),
+					))
+					return
+				}
+				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			staffRole = role
+		}
+
+		// 3. 检查角色权限
+		hasPermission := false
+		for _, allowed := range allowedRoles {
+			if staffRole == allowed {
+				hasPermission = true
+				break
+			}
+		}
+
+		if !hasPermission {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+				errors.New("insufficient permissions for this operation"),
+			))
+			return
+		}
+
+		// 4. 缓存到 context
+		ctx.Set(merchantKey, merchant)
+		ctx.Set(merchantStaffRoleKey, staffRole)
+		ctx.Next()
+	}
+}
+
 // RiderMiddleware 创建骑手验证中间件
 // 验证用户是 rider 角色，并加载骑手信息到 context
 // 必须在 RoleMiddleware(RoleRider) 之后使用
@@ -323,4 +401,14 @@ func HasRoleInContext(ctx *gin.Context, role string) bool {
 		}
 	}
 	return false
+}
+
+// GetMerchantStaffRoleFromContext 从 context 获取商户员工角色
+func GetMerchantStaffRoleFromContext(ctx *gin.Context) (string, bool) {
+	val, exists := ctx.Get(merchantStaffRoleKey)
+	if !exists {
+		return "", false
+	}
+	role, ok := val.(string)
+	return role, ok
 }

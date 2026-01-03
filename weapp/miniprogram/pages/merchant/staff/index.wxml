@@ -1,0 +1,233 @@
+<!-- 员工管理页面 - PC-SaaS 布局 -->
+<wxs module="utils">
+  module.exports = {
+    formatDate: function(dateStr) {
+      if (!dateStr) return '-'
+      return dateStr.slice(0, 10)
+    },
+    getRoleName: function(role) {
+      var map = {
+        'owner': '老板',
+        'manager': '店长',
+        'chef': '厨师长',
+        'cashier': '收银员'
+      }
+      return map[role] || role
+    },
+    getRoleIcon: function(role) {
+      var map = {
+        'owner': '👑',
+        'manager': '👔',
+        'chef': '👨‍🍳',
+        'cashier': '💰'
+      }
+      return map[role] || '👤'
+    },
+    getRoleColor: function(role) {
+      var map = {
+        'owner': '#722ed1',
+        'manager': '#1890ff',
+        'chef': '#fa8c16',
+        'cashier': '#52c41a'
+      }
+      return map[role] || '#666'
+    }
+  }
+</wxs>
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">👷</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问员工管理</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: 0;">
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 页面标题栏 -->
+        <view class="page-header">
+          <view class="page-title">
+            <text class="title-icon">👷</text>
+            <text class="title-text">员工管理</text>
+          </view>
+          <button class="btn-primary" bindtap="onGenerateInviteCode">
+            <text class="btn-icon">📨</text>
+            生成邀请码
+          </button>
+        </view>
+
+        <!-- 加载状态 -->
+        <view wx:if="{{loading}}" class="loading-state">
+          <view class="loading-spinner"></view>
+          <text>加载中...</text>
+        </view>
+
+        <!-- 员工列表 -->
+        <view wx:else class="staff-list">
+          <!-- 空状态 -->
+          <view wx:if="{{staffList.length === 0}}" class="empty-state">
+            <text class="empty-icon">👥</text>
+            <text class="empty-text">暂无员工</text>
+            <text class="empty-hint">点击"生成邀请码"邀请员工加入</text>
+          </view>
+
+          <!-- 员工表格 -->
+          <view wx:else class="staff-table">
+            <view class="table-header">
+              <text class="col-name">员工</text>
+              <text class="col-role">角色</text>
+              <text class="col-status">状态</text>
+              <text class="col-date">加入时间</text>
+              <text class="col-action">操作</text>
+            </view>
+            <view 
+              wx:for="{{staffList}}" 
+              wx:key="id" 
+              class="table-row"
+            >
+              <view class="col-name">
+                <image wx:if="{{item.avatar_url}}" class="staff-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
+                <view wx:else class="staff-avatar-placeholder">👤</view>
+                <text class="staff-name">{{item.full_name || '未设置昵称'}}</text>
+              </view>
+              <view class="col-role">
+                <view class="role-tag" style="background: {{utils.getRoleColor(item.role)}}15; color: {{utils.getRoleColor(item.role)}}">
+                  <text class="role-icon">{{utils.getRoleIcon(item.role)}}</text>
+                  <text>{{utils.getRoleName(item.role)}}</text>
+                </view>
+              </view>
+              <text class="col-status {{item.status === 'active' ? 'status-active' : 'status-inactive'}}">
+                {{item.status === 'active' ? '在职' : '已离职'}}
+              </text>
+              <text class="col-date">{{utils.formatDate(item.created_at)}}</text>
+              <view class="col-action">
+                <block wx:if="{{item.role !== 'owner'}}">
+                  <button class="btn-sm btn-edit" data-id="{{item.id}}" bindtap="onEditRole">修改角色</button>
+                  <button class="btn-sm btn-danger" data-id="{{item.id}}" bindtap="onDeleteStaff">移除</button>
+                </block>
+                <text wx:else class="owner-badge">店铺所有者</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 邀请码弹窗 -->
+<view wx:if="{{showInviteModal}}" class="modal-mask" bindtap="onCloseInviteModal">
+  <view class="modal-content invite-modal" catchtap>
+    <view class="modal-header">
+      <text class="modal-title">员工邀请码</text>
+      <view class="modal-close" bindtap="onCloseInviteModal">×</view>
+    </view>
+    
+    <view wx:if="{{generating}}" class="modal-loading">
+      <view class="loading-spinner"></view>
+    </view>
+    
+    <view wx:else class="modal-body">
+      <!-- QR 码显示区域 -->
+      <view class="qrcode-wrapper">
+        <t-qrcode 
+          value="{{inviteCode}}" 
+          size="{{200}}"
+          color="#000000"
+          bgColor="#ffffff"
+          level="M"
+        />
+      </view>
+      
+      <!-- 邀请码文本（可选复制） -->
+      <view class="invite-code-text">
+        <text class="code-label">邀请码：</text>
+        <text class="code-value">{{inviteCode}}</text>
+      </view>
+      
+      <text class="invite-hint">员工扫描二维码或输入邀请码即可加入店铺</text>
+      <text class="invite-expires">有效期至：{{inviteExpiresAt}}</text>
+      
+      <view class="invite-actions">
+        <button class="btn-outline btn-half" bindtap="onCopyInviteCode">复制邀请码</button>
+        <button class="btn-primary btn-half" bindtap="onSaveQRCode">保存二维码</button>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- 编辑角色弹窗 -->
+<view wx:if="{{showEditModal}}" class="modal-mask" bindtap="onCloseEditModal">
+  <view class="modal-content edit-modal" catchtap>
+    <view class="modal-header">
+      <text class="modal-title">修改员工角色</text>
+      <view class="modal-close" bindtap="onCloseEditModal">×</view>
+    </view>
+    
+    <view class="modal-body">
+      <view class="editing-staff-info">
+        <image wx:if="{{editingStaff.avatar_url}}" class="edit-avatar" src="{{editingStaff.avatar_url}}" mode="aspectFill" />
+        <view wx:else class="edit-avatar-placeholder">👤</view>
+        <text class="edit-name">{{editingStaff.full_name || '未设置昵称'}}</text>
+      </view>
+      
+      <text class="form-label">选择新角色</text>
+      <view class="role-selector">
+        <view 
+          wx:for="{{roleOptions}}" 
+          wx:key="value" 
+          class="role-option {{selectedRole === item.value ? 'active' : ''}}"
+          data-role="{{item.value}}"
+          bindtap="onSelectRole"
+        >
+          <text class="option-icon">{{utils.getRoleIcon(item.value)}}</text>
+          <text>{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="modal-footer">
+      <button class="btn-cancel" bindtap="onCloseEditModal">取消</button>
+      <button class="btn-primary" disabled="{{updating}}" bindtap="onSubmitRoleChange">
+        {{updating ? '保存中...' : '确认修改'}}
+      </button>
+    </view>
+  </view>
+</view>
+
+<!-- 删除确认弹窗 -->
+<view wx:if="{{showDeleteModal}}" class="modal-mask" bindtap="onCloseDeleteModal">
+  <view class="modal-content delete-modal" catchtap>
+    <view class="modal-header">
+      <text class="modal-title">确认移除员工</text>
+      <view class="modal-close" bindtap="onCloseDeleteModal">×</view>
+    </view>
+    
+    <view class="modal-body">
+      <view class="delete-warning">
+        <text class="warning-icon">⚠️</text>
+        <text class="warning-text">
+          确定要移除员工 "{{deletingStaff.full_name || '未设置昵称'}}" 吗？
+        </text>
+        <text class="warning-hint">移除后该员工将无法访问商户管理功能</text>
+      </view>
+    </view>
+
+    <view class="modal-footer">
+      <button class="btn-cancel" bindtap="onCloseDeleteModal">取消</button>
+      <button class="btn-danger-primary" disabled="{{deleting}}" bindtap="onConfirmDelete">
+        {{deleting ? '移除中...' : '确认移除'}}
+      </button>
+    </view>
+  </view>
+</view>

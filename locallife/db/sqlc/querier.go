@@ -541,6 +541,10 @@ type Querier interface {
 	// 计算商户近N天的平均出餐时间（分钟）
 	// 通过订单支付时间到状态变为ready的时间差计算
 	GetMerchantAvgPrepareTime(ctx context.Context, arg GetMerchantAvgPrepareTimeParams) (int64, error)
+	// 通过邀请码获取商户
+	GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Text) (Merchant, error)
+	// 获取用户关联的商户（支持店主和员工）
+	// 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
 	GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Merchant, error)
 	// 商户查看索赔详情
 	GetMerchantClaimDetailForMerchant(ctx context.Context, arg GetMerchantClaimDetailForMerchantParams) (GetMerchantClaimDetailForMerchantRow, error)
@@ -1237,6 +1241,8 @@ type Querier interface {
 	// 更新门头照和环境照（jsonb数组）
 	UpdateMerchantApplicationImages(ctx context.Context, arg UpdateMerchantApplicationImagesParams) (MerchantApplication, error)
 	UpdateMerchantApplicationStatus(ctx context.Context, arg UpdateMerchantApplicationStatusParams) (MerchantApplication, error)
+	// 更新商户邀请码
+	UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchantBindCodeParams) (Merchant, error)
 	UpdateMerchantDishCategoryOrder(ctx context.Context, arg UpdateMerchantDishCategoryOrderParams) (MerchantDishCategory, error)
 	// ==================== 商户营业状态管理 ====================
 	// 更新商户营业状态（手动开店/打烊）

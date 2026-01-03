@@ -569,12 +569,52 @@ func (q *Queries) GetMerchantApplicationByLicenseNumber(ctx context.Context, bus
 	return i, err
 }
 
-const getMerchantByOwner = `-- name: GetMerchantByOwner :one
+const getMerchantByBindCode = `-- name: GetMerchantByBindCode :one
 SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at FROM merchants
-WHERE owner_user_id = $1 AND deleted_at IS NULL
+WHERE bind_code = $1 AND deleted_at IS NULL
 LIMIT 1
 `
 
+// 通过邀请码获取商户
+func (q *Queries) GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Text) (Merchant, error) {
+	row := q.db.QueryRow(ctx, getMerchantByBindCode, bindCode)
+	var i Merchant
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.Description,
+		&i.LogoUrl,
+		&i.Phone,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Status,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.RegionID,
+		&i.IsOpen,
+		&i.AutoCloseAt,
+		&i.DeletedAt,
+		&i.PendingOwnerBind,
+		&i.BindCode,
+		&i.BindCodeExpiresAt,
+	)
+	return i, err
+}
+
+const getMerchantByOwner = `-- name: GetMerchantByOwner :one
+SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at FROM merchants m
+LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active'
+WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
+ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
+LIMIT 1
+`
+
+// 获取用户关联的商户（支持店主和员工）
+// 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
 func (q *Queries) GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Merchant, error) {
 	row := q.db.QueryRow(ctx, getMerchantByOwner, ownerUserID)
 	var i Merchant
@@ -1872,6 +1912,52 @@ func (q *Queries) UpdateMerchantApplicationStatus(ctx context.Context, arg Updat
 		&i.IDCardBackOcr,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+	)
+	return i, err
+}
+
+const updateMerchantBindCode = `-- name: UpdateMerchantBindCode :one
+UPDATE merchants
+SET
+  bind_code = $2,
+  bind_code_expires_at = $3,
+  updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at
+`
+
+type UpdateMerchantBindCodeParams struct {
+	ID                int64              `json:"id"`
+	BindCode          pgtype.Text        `json:"bind_code"`
+	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
+}
+
+// 更新商户邀请码
+func (q *Queries) UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchantBindCodeParams) (Merchant, error) {
+	row := q.db.QueryRow(ctx, updateMerchantBindCode, arg.ID, arg.BindCode, arg.BindCodeExpiresAt)
+	var i Merchant
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.Description,
+		&i.LogoUrl,
+		&i.Phone,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Status,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.RegionID,
+		&i.IsOpen,
+		&i.AutoCloseAt,
+		&i.DeletedAt,
+		&i.PendingOwnerBind,
+		&i.BindCode,
+		&i.BindCodeExpiresAt,
 	)
 	return i, err
 }

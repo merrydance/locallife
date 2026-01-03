@@ -83,8 +83,12 @@ SELECT * FROM merchants
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1;
 
 -- name: GetMerchantByOwner :one
-SELECT * FROM merchants
-WHERE owner_user_id = $1 AND deleted_at IS NULL
+-- 获取用户关联的商户（支持店主和员工）
+-- 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
+SELECT m.* FROM merchants m
+LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active'
+WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
+ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
 LIMIT 1;
 
 -- name: ListMerchantsByOwner :many
@@ -92,6 +96,12 @@ LIMIT 1;
 SELECT * FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC;
+
+-- name: GetMerchantByBindCode :one
+-- 通过邀请码获取商户
+SELECT * FROM merchants
+WHERE bind_code = $1 AND deleted_at IS NULL
+LIMIT 1;
 
 -- name: ListMerchants :many
 SELECT * FROM merchants
@@ -128,6 +138,16 @@ RETURNING *;
 UPDATE merchants
 SET
   status = $2,
+  updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: UpdateMerchantBindCode :one
+-- 更新商户邀请码
+UPDATE merchants
+SET
+  bind_code = $2,
+  bind_code_expires_at = $3,
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;

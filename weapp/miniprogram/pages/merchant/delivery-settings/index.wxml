@@ -88,7 +88,7 @@
 
 <!-- 新增规则弹窗 -->
 <view wx:if="{{showModal}}" class="modal-mask" bindtap="hideModal">
-  <view class="modal-box" catchtap="">
+  <view class="modal-box" catchtap="preventClose">
     <view class="modal-header">
       <text class="modal-title">新增运费减免规则</text>
       <view class="modal-close" bindtap="hideModal">✕</view>
@@ -126,16 +126,18 @@
       
       <view class="form-group">
         <text class="form-label">开始日期</text>
-        <picker mode="date" value="{{formData.valid_from}}" bindchange="onDateChange" data-field="valid_from">
-          <view class="form-input picker">{{formData.valid_from || '选择日期'}}</view>
-        </picker>
+        <view class="form-input date-input" bindtap="onOpenCalendar" data-field="valid_from">
+          <text class="{{formData.valid_from ? '' : 'placeholder'}}">{{formData.valid_from || '请选择'}}</text>
+          <text class="date-icon">📅</text>
+        </view>
       </view>
       
       <view class="form-group">
         <text class="form-label">结束日期</text>
-        <picker mode="date" value="{{formData.valid_until}}" bindchange="onDateChange" data-field="valid_until">
-          <view class="form-input picker">{{formData.valid_until || '选择日期'}}</view>
-        </picker>
+        <view class="form-input date-input" bindtap="onOpenCalendar" data-field="valid_until">
+          <text class="{{formData.valid_until ? '' : 'placeholder'}}">{{formData.valid_until || '请选择'}}</text>
+          <text class="date-icon">📅</text>
+        </view>
       </view>
     </view>
     
@@ -144,6 +146,39 @@
       <button class="btn-confirm" bindtap="createPromotion" disabled="{{submitting}}">
         {{submitting ? '保存中...' : '确认创建'}}
       </button>
+    </view>
+  </view>
+</view>
+
+<!-- 日历选择器弹窗 -->
+<view class="calendar-overlay {{showCalendar ? 'show' : ''}}" catchtap="onCloseCalendar">
+  <view class="calendar-popup" catchtap="onCalendarContentTap">
+    <view class="calendar-header">
+      <view class="calendar-nav" bindtap="onPrevMonth">‹</view>
+      <text class="calendar-title">{{calendarYear}}年{{calendarMonth}}月</text>
+      <view class="calendar-nav" bindtap="onNextMonth">›</view>
+    </view>
+    <view class="calendar-weekdays">
+      <text class="weekday">日</text>
+      <text class="weekday">一</text>
+      <text class="weekday">二</text>
+      <text class="weekday">三</text>
+      <text class="weekday">四</text>
+      <text class="weekday">五</text>
+      <text class="weekday">六</text>
+    </view>
+    <view class="calendar-days">
+      <view 
+        wx:for="{{calendarDays}}" wx:key="index"
+        class="day-cell {{item.disabled ? 'disabled' : ''}} {{item.selected ? 'selected' : ''}} {{item.today ? 'today' : ''}} {{!item.currentMonth ? 'other-month' : ''}}"
+        bindtap="{{item.disabled ? '' : 'onSelectCalendarDay'}}"
+        data-date="{{item.date}}"
+      >
+        {{item.day}}
+      </view>
+    </view>
+    <view class="calendar-footer">
+      <view class="calendar-today-btn" bindtap="onSelectToday">今天</view>
     </view>
   </view>
 </view>

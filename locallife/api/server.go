@@ -342,6 +342,26 @@ func (server *Server) setupRouter() {
 		merchantApplymentGroup.GET("/status", server.getMerchantApplymentStatus) // 获取开户状态
 	}
 
+	// M3.3: 员工绑定商户（任意登录用户）
+	authGroup.POST("/bind-merchant", server.bindMerchant)
+
+	// M3.4: 员工管理路由（需要商户权限）
+	merchantStaffGroup := authGroup.Group("/merchant/staff")
+	merchantStaffGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
+	{
+		merchantStaffGroup.GET("", server.listMerchantStaff)
+		merchantStaffGroup.POST("/invite-code", server.generateInviteCode)
+	}
+
+	// M3.5: 仅老板可操作的员工管理
+	merchantStaffOwnerGroup := authGroup.Group("/merchant/staff")
+	merchantStaffOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
+	{
+		merchantStaffOwnerGroup.POST("", server.addMerchantStaff)
+		merchantStaffOwnerGroup.PATCH("/:id/role", server.updateMerchantStaffRole)
+		merchantStaffOwnerGroup.DELETE("/:id", server.deleteMerchantStaff)
+	}
+
 	// M3: 商户审核路由（管理员）
 	authGroup.GET("/admin/merchants/applications", server.listMerchantApplications)
 	authGroup.POST("/admin/merchants/applications/review", server.reviewMerchantApplication)
@@ -418,9 +438,9 @@ func (server *Server) setupRouter() {
 		// 配送费查询（公开访问）
 		deliveryFeeGroup.GET("/regions/:region_id/config", server.getDeliveryFeeConfig)
 
-		// 商家配送优惠（商户权限 - 验证商户身份和资源归属）
+		// 商家配送优惠（商户权限 - 使用 MerchantStaffMiddleware 支持员工角色）
 		deliveryFeeMerchantGroup := deliveryFeeGroup.Group("/merchants/:merchant_id")
-		deliveryFeeMerchantGroup.Use(server.CasbinRoleMiddleware(RoleMerchantOwner), server.LoadMerchantMiddleware())
+		deliveryFeeMerchantGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 		{
 			deliveryFeeMerchantGroup.POST("/promotions", server.createDeliveryPromotion)
 			deliveryFeeMerchantGroup.GET("/promotions", server.listDeliveryPromotions)

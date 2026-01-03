@@ -1,0 +1,6 @@
+{
+    "usingComponents": {
+        "t-qrcode": "tdesign-miniprogram/qrcode/qrcode"
+    },
+    "navigationBarTitleText": "员工管理"
+}

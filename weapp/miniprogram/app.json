@@ -66,6 +66,7 @@
         "discounts/index",
         "review/manage/index",
         "settings/index",
+        "staff/index",
         "navigation/index"
       ],
       "independent": false

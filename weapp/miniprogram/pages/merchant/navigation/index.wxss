@@ -7,8 +7,8 @@
 }
 
 .main-area {
-  flex: 1;
-  padding-top: 56px; /* Header height */
+  height: calc(100vh - 56px); /* Subtract header height */
+  margin-top: 56px; /* Push below fixed header */
 }
 
 .content-wrapper {
