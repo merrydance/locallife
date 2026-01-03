@@ -1,0 +1,56 @@
+<!-- 员工绑定商户页面 -->
+<view class="bind-container">
+  <!-- 成功状态 -->
+  <view wx:if="{{success}}" class="success-state">
+    <view class="success-icon">✅</view>
+    <text class="success-title">加入成功</text>
+    <text class="success-merchant">{{result.merchant_name}}</text>
+    <text class="success-role">您的角色：{{result.role === 'cashier' ? '收银员' : result.role}}</text>
+    
+    <view class="success-actions">
+      <button class="btn-primary" bindtap="goToMerchant">进入工作台</button>
+      <button class="btn-outline" bindtap="goHome">返回首页</button>
+    </view>
+  </view>
+
+  <!-- 输入邀请码 -->
+  <view wx:else class="input-state">
+    <view class="page-header">
+      <text class="page-icon">🏪</text>
+      <text class="page-title">加入商户</text>
+      <text class="page-desc">输入邀请码或扫描二维码加入商户团队</text>
+    </view>
+
+    <view class="input-section">
+      <text class="section-label">邀请码</text>
+      <input 
+        class="invite-input" 
+        placeholder="请输入邀请码" 
+        value="{{inviteCode}}"
+        bindinput="onInput"
+      />
+    </view>
+
+    <view class="action-section">
+      <button class="btn-primary btn-full" disabled="{{loading}}" bindtap="bindMerchant">
+        {{loading ? '加入中...' : '立即加入'}}
+      </button>
+      
+      <view class="divider">
+        <view class="divider-line"></view>
+        <text class="divider-text">或</text>
+        <view class="divider-line"></view>
+      </view>
+      
+      <button class="btn-scan" bindtap="onScan">
+        <text class="scan-icon">📷</text>
+        <text>扫描二维码</text>
+      </button>
+    </view>
+
+    <view class="tips">
+      <text class="tips-title">如何获取邀请码？</text>
+      <text class="tips-content">请联系店铺老板或店长，从员工管理页面生成邀请码二维码分享给您。</text>
+    </view>
+  </view>
+</view>

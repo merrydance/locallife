@@ -58,6 +58,21 @@ func (q *Queries) DeleteUserRole(ctx context.Context, id int64) error {
 	return err
 }
 
+const deleteUserRoleByUserAndRole = `-- name: DeleteUserRoleByUserAndRole :exec
+DELETE FROM user_roles
+WHERE user_id = $1 AND role = $2
+`
+
+type DeleteUserRoleByUserAndRoleParams struct {
+	UserID int64  `json:"user_id"`
+	Role   string `json:"role"`
+}
+
+func (q *Queries) DeleteUserRoleByUserAndRole(ctx context.Context, arg DeleteUserRoleByUserAndRoleParams) error {
+	_, err := q.db.Exec(ctx, deleteUserRoleByUserAndRole, arg.UserID, arg.Role)
+	return err
+}
+
 const getUserRole = `-- name: GetUserRole :one
 SELECT id, user_id, role, status, related_entity_id, created_at FROM user_roles
 WHERE id = $1 LIMIT 1

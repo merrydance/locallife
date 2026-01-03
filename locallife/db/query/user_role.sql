@@ -32,6 +32,10 @@ RETURNING *;
 DELETE FROM user_roles
 WHERE id = $1;
 
+-- name: DeleteUserRoleByUserAndRole :exec
+DELETE FROM user_roles
+WHERE user_id = $1 AND role = $2;
+
 -- name: HasRole :one
 SELECT EXISTS(
   SELECT 1 FROM user_roles

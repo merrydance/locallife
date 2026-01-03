@@ -295,12 +295,15 @@ func (server *Server) deleteMerchantStaff(ctx *gin.Context) {
 		return
 	}
 
-	// 删除员工记录
-	err = server.store.DeleteMerchantStaff(ctx, uriReq.ID)
+	// 软删除员工记录（设置 status='disabled'）
+	_, err = server.store.SoftDeleteMerchantStaff(ctx, uriReq.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	// 注意：不删除 user_roles 中的 merchant_staff 角色
+	// 因为用户可能还关联其他商户，或者将来可能重新入职
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "staff removed successfully"})
 }
@@ -327,6 +330,16 @@ func (server *Server) generateInviteCode(ctx *gin.Context) {
 	merchant, ok := GetMerchantFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant not found in context")))
+		return
+	}
+
+	// 检查是否有未过期的邀请码，有则复用
+	if merchant.BindCode.Valid && merchant.BindCode.String != "" &&
+		merchant.BindCodeExpiresAt.Valid && merchant.BindCodeExpiresAt.Time.After(time.Now()) {
+		ctx.JSON(http.StatusOK, generateInviteCodeResponse{
+			InviteCode: merchant.BindCode.String,
+			ExpiresAt:  merchant.BindCodeExpiresAt.Time.Format(time.RFC3339),
+		})
 		return
 	}
 
@@ -416,11 +429,12 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 		return
 	}
 
-	// 创建员工记录（默认角色为 cashier）
+	// 创建员工记录（role='pending' 表示待分配角色，status='active' 表示在职）
 	staff, err := server.store.CreateMerchantStaff(ctx, db.CreateMerchantStaffParams{
 		MerchantID: merchant.ID,
 		UserID:     authPayload.UserID,
-		Role:       "cashier",
+		Role:       "pending", // 无角色，等待老板分配
+		Status:     "active",  // 在职状态
 		InvitedBy:  pgtype.Int8{Int64: merchant.OwnerUserID, Valid: true},
 	})
 	if err != nil {

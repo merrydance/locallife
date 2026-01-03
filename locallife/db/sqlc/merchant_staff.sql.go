@@ -45,14 +45,15 @@ func (q *Queries) CountMerchantStaff(ctx context.Context, merchantID int64) (int
 
 const createMerchantStaff = `-- name: CreateMerchantStaff :one
 
-INSERT INTO merchant_staff (merchant_id, user_id, role, invited_by)
-VALUES ($1, $2, $3, $4) RETURNING id, merchant_id, user_id, role, status, invited_by, created_at, updated_at
+INSERT INTO merchant_staff (merchant_id, user_id, role, status, invited_by)
+VALUES ($1, $2, $3, $4, $5) RETURNING id, merchant_id, user_id, role, status, invited_by, created_at, updated_at
 `
 
 type CreateMerchantStaffParams struct {
 	MerchantID int64       `json:"merchant_id"`
 	UserID     int64       `json:"user_id"`
 	Role       string      `json:"role"`
+	Status     string      `json:"status"`
 	InvitedBy  pgtype.Int8 `json:"invited_by"`
 }
 
@@ -62,6 +63,7 @@ func (q *Queries) CreateMerchantStaff(ctx context.Context, arg CreateMerchantSta
 		arg.MerchantID,
 		arg.UserID,
 		arg.Role,
+		arg.Status,
 		arg.InvitedBy,
 	)
 	var i MerchantStaff
@@ -82,6 +84,7 @@ const deleteMerchantStaff = `-- name: DeleteMerchantStaff :exec
 DELETE FROM merchant_staff WHERE id = $1
 `
 
+// 硬删除（仅用于特殊情况）
 func (q *Queries) DeleteMerchantStaff(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteMerchantStaff, id)
 	return err
@@ -167,13 +170,18 @@ SELECT
     u.avatar_url
 FROM merchant_staff ms
 JOIN users u ON ms.user_id = u.id
-WHERE ms.merchant_id = $1 AND ms.status = 'active'
+WHERE ms.merchant_id = $1
 ORDER BY 
+    CASE ms.status 
+        WHEN 'active' THEN 1 
+        WHEN 'disabled' THEN 2 
+    END,
     CASE ms.role 
         WHEN 'owner' THEN 1 
         WHEN 'manager' THEN 2 
         WHEN 'chef' THEN 3 
         WHEN 'cashier' THEN 4 
+        WHEN 'pending' THEN 5
     END
 `
 
@@ -190,6 +198,7 @@ type ListMerchantStaffByMerchantRow struct {
 	AvatarUrl  pgtype.Text        `json:"avatar_url"`
 }
 
+// 显示所有员工，包括离职员工（软删除），按状态和角色排序
 func (q *Queries) ListMerchantStaffByMerchant(ctx context.Context, merchantID int64) ([]ListMerchantStaffByMerchantRow, error) {
 	rows, err := q.db.Query(ctx, listMerchantStaffByMerchant, merchantID)
 	if err != nil {
@@ -270,9 +279,33 @@ func (q *Queries) ListMerchantsByStaff(ctx context.Context, userID int64) ([]Mer
 	return items, nil
 }
 
+const softDeleteMerchantStaff = `-- name: SoftDeleteMerchantStaff :one
+UPDATE merchant_staff 
+SET status = 'disabled', updated_at = now()
+WHERE id = $1
+RETURNING id, merchant_id, user_id, role, status, invited_by, created_at, updated_at
+`
+
+// 软删除员工（设置 status='disabled'），保留历史记录
+func (q *Queries) SoftDeleteMerchantStaff(ctx context.Context, id int64) (MerchantStaff, error) {
+	row := q.db.QueryRow(ctx, softDeleteMerchantStaff, id)
+	var i MerchantStaff
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.UserID,
+		&i.Role,
+		&i.Status,
+		&i.InvitedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateMerchantStaffRole = `-- name: UpdateMerchantStaffRole :one
 UPDATE merchant_staff 
-SET role = $2, updated_at = now()
+SET role = $2, status = 'active', updated_at = now()
 WHERE id = $1
 RETURNING id, merchant_id, user_id, role, status, invited_by, created_at, updated_at
 `
@@ -282,6 +315,7 @@ type UpdateMerchantStaffRoleParams struct {
 	Role string `json:"role"`
 }
 
+// 更新角色时同时激活员工（从 pending 变为 active）
 func (q *Queries) UpdateMerchantStaffRole(ctx context.Context, arg UpdateMerchantStaffRoleParams) (MerchantStaff, error) {
 	row := q.db.QueryRow(ctx, updateMerchantStaffRole, arg.ID, arg.Role)
 	var i MerchantStaff

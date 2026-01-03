@@ -198,6 +198,11 @@ Page({
     wx.makePhoneCall({ phoneNumber: '400-800-8888' })
   },
 
+  // 扫码入职 - 跳转到员工绑定页面
+  onScanToJoin() {
+    wx.navigateTo({ url: '/pages/user/bind-merchant/index' })
+  },
+
 
 
   async onChooseAvatar(e: any) {

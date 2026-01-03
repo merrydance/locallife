@@ -366,6 +366,7 @@ type Querier interface {
 	DeleteMerchant(ctx context.Context, id int64) error
 	DeleteMerchantBusinessHours(ctx context.Context, merchantID int64) error
 	DeleteMerchantPaymentConfig(ctx context.Context, merchantID int64) error
+	// 硬删除（仅用于特殊情况）
 	DeleteMerchantStaff(ctx context.Context, id int64) error
 	DeleteMerchantStaffByMerchant(ctx context.Context, merchantID int64) error
 	DeleteNotification(ctx context.Context, arg DeleteNotificationParams) error
@@ -387,6 +388,7 @@ type Querier interface {
 	DeleteTag(ctx context.Context, id int64) error
 	DeleteUserAddress(ctx context.Context, arg DeleteUserAddressParams) error
 	DeleteUserRole(ctx context.Context, id int64) error
+	DeleteUserRoleByUserAndRole(ctx context.Context, arg DeleteUserRoleByUserAndRoleParams) error
 	// 软删除代金券模板
 	DeleteVoucher(ctx context.Context, id int64) error
 	// 探索附近包间（无需指定预订日期时段），用于本地包间浏览流
@@ -961,6 +963,7 @@ type Querier interface {
 	// 商户结算记录（带日期范围和状态筛选）
 	ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ProfitSharingOrder, error)
 	ListMerchantSpecialHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
+	// 显示所有员工，包括离职员工（软删除），按状态和角色排序
 	ListMerchantStaffByMerchant(ctx context.Context, merchantID int64) ([]ListMerchantStaffByMerchantRow, error)
 	ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag, error)
 	ListMerchantVouchers(ctx context.Context, arg ListMerchantVouchersParams) ([]Voucher, error)
@@ -1166,6 +1169,8 @@ type Querier interface {
 	SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error)
 	// 设置用户需要提交证据
 	SetUserRequiresEvidence(ctx context.Context, arg SetUserRequiresEvidenceParams) error
+	// 软删除员工（设置 status='disabled'），保留历史记录
+	SoftDeleteMerchantStaff(ctx context.Context, id int64) (MerchantStaff, error)
 	// 提交商户申请（从草稿、被拒绝或已通过状态变为已提交）
 	SubmitMerchantApplication(ctx context.Context, id int64) (MerchantApplication, error)
 	// 提交运营商申请（从草稿变为已提交待审核）
@@ -1251,6 +1256,7 @@ type Querier interface {
 	UpdateMerchantPaymentConfig(ctx context.Context, arg UpdateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	UpdateMerchantProfile(ctx context.Context, arg UpdateMerchantProfileParams) error
 	UpdateMerchantReply(ctx context.Context, arg UpdateMerchantReplyParams) (Review, error)
+	// 更新角色时同时激活员工（从 pending 变为 active）
 	UpdateMerchantStaffRole(ctx context.Context, arg UpdateMerchantStaffRoleParams) (MerchantStaff, error)
 	UpdateMerchantStaffStatus(ctx context.Context, arg UpdateMerchantStaffStatusParams) (MerchantStaff, error)
 	UpdateMerchantStatus(ctx context.Context, arg UpdateMerchantStatusParams) (Merchant, error)

@@ -3697,6 +3697,20 @@ func (mr *MockStoreMockRecorder) DeleteUserRole(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUserRole", reflect.TypeOf((*MockStore)(nil).DeleteUserRole), ctx, id)
 }
 
+// DeleteUserRoleByUserAndRole mocks base method.
+func (m *MockStore) DeleteUserRoleByUserAndRole(ctx context.Context, arg db.DeleteUserRoleByUserAndRoleParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteUserRoleByUserAndRole", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteUserRoleByUserAndRole indicates an expected call of DeleteUserRoleByUserAndRole.
+func (mr *MockStoreMockRecorder) DeleteUserRoleByUserAndRole(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUserRoleByUserAndRole", reflect.TypeOf((*MockStore)(nil).DeleteUserRoleByUserAndRole), ctx, arg)
+}
+
 // DeleteVoucher mocks base method.
 func (m *MockStore) DeleteVoucher(ctx context.Context, id int64) error {
 	m.ctrl.T.Helper()
@@ -11643,6 +11657,21 @@ func (m *MockStore) SetUserRequiresEvidence(ctx context.Context, arg db.SetUserR
 func (mr *MockStoreMockRecorder) SetUserRequiresEvidence(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUserRequiresEvidence", reflect.TypeOf((*MockStore)(nil).SetUserRequiresEvidence), ctx, arg)
+}
+
+// SoftDeleteMerchantStaff mocks base method.
+func (m *MockStore) SoftDeleteMerchantStaff(ctx context.Context, id int64) (db.MerchantStaff, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SoftDeleteMerchantStaff", ctx, id)
+	ret0, _ := ret[0].(db.MerchantStaff)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SoftDeleteMerchantStaff indicates an expected call of SoftDeleteMerchantStaff.
+func (mr *MockStoreMockRecorder) SoftDeleteMerchantStaff(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SoftDeleteMerchantStaff", reflect.TypeOf((*MockStore)(nil).SoftDeleteMerchantStaff), ctx, id)
 }
 
 // SubmitMerchantApplication mocks base method.

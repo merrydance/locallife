@@ -10,7 +10,8 @@
         'owner': '老板',
         'manager': '店长',
         'chef': '厨师长',
-        'cashier': '收银员'
+        'cashier': '收银员',
+        'pending': '待分配'
       }
       return map[role] || role
     },
@@ -19,7 +20,8 @@
         'owner': '👑',
         'manager': '👔',
         'chef': '👨‍🍳',
-        'cashier': '💰'
+        'cashier': '💰',
+        'pending': '⏳'
       }
       return map[role] || '👤'
     },
@@ -28,7 +30,8 @@
         'owner': '#722ed1',
         'manager': '#1890ff',
         'chef': '#fa8c16',
-        'cashier': '#52c41a'
+        'cashier': '#52c41a',
+        'pending': '#999'
       }
       return map[role] || '#666'
     }
@@ -60,10 +63,16 @@
             <text class="title-icon">👷</text>
             <text class="title-text">员工管理</text>
           </view>
-          <button class="btn-primary" bindtap="onGenerateInviteCode">
-            <text class="btn-icon">📨</text>
-            生成邀请码
-          </button>
+          <view class="header-actions">
+            <button class="btn-refresh" bindtap="onRefresh">
+              <text class="btn-icon">🔄</text>
+              刷新
+            </button>
+            <button class="btn-primary" bindtap="onGenerateInviteCode">
+              <text class="btn-icon">📨</text>
+              生成邀请码
+            </button>
+          </view>
         </view>
 
         <!-- 加载状态 -->
@@ -106,14 +115,21 @@
                   <text>{{utils.getRoleName(item.role)}}</text>
                 </view>
               </view>
-              <text class="col-status {{item.status === 'active' ? 'status-active' : 'status-inactive'}}">
-                {{item.status === 'active' ? '在职' : '已离职'}}
+              <text class="col-status {{item.status === 'active' ? 'status-active' : (item.status === 'pending' ? 'status-pending' : 'status-inactive')}}">
+                {{item.status === 'active' ? '在职' : (item.status === 'pending' ? '待分配' : '已离职')}}
               </text>
               <text class="col-date">{{utils.formatDate(item.created_at)}}</text>
               <view class="col-action">
                 <block wx:if="{{item.role !== 'owner'}}">
-                  <button class="btn-sm btn-edit" data-id="{{item.id}}" bindtap="onEditRole">修改角色</button>
-                  <button class="btn-sm btn-danger" data-id="{{item.id}}" bindtap="onDeleteStaff">移除</button>
+                  <!-- 在职员工：可修改角色或移除 -->
+                  <block wx:if="{{item.status === 'active'}}">
+                    <button class="btn-sm btn-edit" data-id="{{item.id}}" bindtap="onEditRole">修改角色</button>
+                    <button class="btn-sm btn-danger" data-id="{{item.id}}" bindtap="onDeleteStaff">移除</button>
+                  </block>
+                  <!-- 离职员工：可重新分配角色（恢复入职） -->
+                  <block wx:elif="{{item.status === 'disabled'}}">
+                    <button class="btn-sm btn-edit" data-id="{{item.id}}" bindtap="onEditRole">重新入职</button>
+                  </block>
                 </block>
                 <text wx:else class="owner-badge">店铺所有者</text>
               </view>
@@ -141,7 +157,7 @@
       <!-- QR 码显示区域 -->
       <view class="qrcode-wrapper">
         <t-qrcode 
-          value="{{inviteCode}}" 
+          value="{{inviteCodeUrl}}" 
           size="{{200}}"
           color="#000000"
           bgColor="#ffffff"

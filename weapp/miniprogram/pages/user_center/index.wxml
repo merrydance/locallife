@@ -73,6 +73,14 @@
             bind:click="onRegisterTap"
             data-id="{{item.id}}"
           />
+          <t-cell 
+            title="扫码入职"
+            description="扫描邀请码加入商户团队"
+            arrow
+            hover
+            leftIcon="scan"
+            bind:click="onScanToJoin"
+          />
         </t-cell-group>
       </view>
     </view>

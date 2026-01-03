@@ -655,9 +655,9 @@ type MerchantStaff struct {
 	ID         int64 `json:"id"`
 	MerchantID int64 `json:"merchant_id"`
 	UserID     int64 `json:"user_id"`
-	// 员工角色: owner=店主, manager=店长, chef=厨师长, cashier=收银员
+	// 员工角色: owner=店主, manager=店长, chef=厨师长, cashier=收银员, pending=待分配
 	Role string `json:"role"`
-	// 状态: active=启用, disabled=禁用
+	// 状态: active=启用, pending=待分配权限, disabled=禁用
 	Status string `json:"status"`
 	// 邀请人（店主ID）
 	InvitedBy pgtype.Int8        `json:"invited_by"`

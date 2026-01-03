@@ -85,6 +85,7 @@ Page({
         // 邀请码弹窗
         showInviteModal: false,
         inviteCode: '',
+        inviteCodeUrl: '', // 包含页面路径的完整URL，用于二维码
         inviteExpiresAt: '',
         generating: false,
 
@@ -132,13 +133,24 @@ Page({
         }
     },
 
+    // 刷新员工列表
+    async onRefresh() {
+        wx.showLoading({ title: '刷新中...', mask: true })
+        await this.loadStaffList()
+        wx.hideLoading()
+        wx.showToast({ title: '已刷新', icon: 'success', duration: 1000 })
+    },
+
     // 打开邀请码弹窗
     async onGenerateInviteCode() {
-        this.setData({ showInviteModal: true, generating: true, inviteCode: '' })
+        this.setData({ showInviteModal: true, generating: true, inviteCode: '', inviteCodeUrl: '' })
         try {
             const result = await StaffService.generateInviteCode()
+            // 生成包含页面路径的完整URL，扫码后直接跳转
+            const inviteCodeUrl = `/pages/user/bind-merchant/index?code=${result.invite_code}`
             this.setData({
                 inviteCode: result.invite_code,
+                inviteCodeUrl: inviteCodeUrl,
                 inviteExpiresAt: result.expires_at,
                 generating: false
             })

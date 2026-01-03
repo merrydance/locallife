@@ -32,7 +32,8 @@
     "pages/orders/tracking/index",
     "pages/support/index",
     "pages/message/center/index",
-    "pages/credit/index"
+    "pages/credit/index",
+    "pages/user/bind-merchant/index"
   ],
   "subPackages": [
     {
