@@ -467,6 +467,7 @@ type Querier interface {
 	// 批量获取套餐详情
 	GetCombosByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosByIDsRow, error)
 	// 批量获取套餐详情及商户信息（用于推荐流展示）
+	// 当套餐没有专属图片时，使用套餐内第一个菜品的图片作为展示图
 	GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosWithMerchantByIDsRow, error)
 	// 查询顾客最喜欢的菜品
 	GetCustomerFavoriteDishes(ctx context.Context, arg GetCustomerFavoriteDishesParams) ([]GetCustomerFavoriteDishesRow, error)

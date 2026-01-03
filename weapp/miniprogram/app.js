@@ -27,6 +27,9 @@ App({
         userRole: 'guest',
         userId: undefined,
         merchantId: undefined,
+        // 多店铺切换支持
+        currentMerchantId: undefined,
+        merchantInfo: undefined,
         // 设备平台信息（用于跨平台适配）
         devicePlatform: null,
         // (内部使用) 上次定位上下文

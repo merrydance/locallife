@@ -85,19 +85,34 @@
     <!-- 套餐列表 -->
     <block wx:if="{{activeTab === 'packages'}}">
       <view wx:for="{{packages}}" wx:key="id" class="package-card" bindtap="onPackageTap" data-id="{{item.id}}">
-        <t-image class="package-image" src="{{item.image_url || '/assets/placeholder_food.png'}}" mode="aspectFill" lazy />
+        <t-image class="package-image" src="{{item.imageUrl}}" mode="aspectFill" lazy />
         <view class="package-info">
-          <view class="package-header">
-            <text class="package-name">{{item.name}}</text>
-            <text class="package-price">¥{{item.priceDisplay}}</text>
+          <!-- 第1行: 店名·套餐名 -->
+          <view class="row-1">
+            <text class="shop-dish-name">{{item.merchantName}}·{{item.name}}</text>
           </view>
-          <text wx:if="{{item.original_price > item.price}}" class="package-original-price">原价¥{{item.originalPriceDisplay}}</text>
-          <text wx:if="{{item.description}}" class="package-desc">{{item.description}}</text>
-          <view class="package-footer">
-            <t-tag wx:if="{{item.is_online}}" theme="success" size="small" variant="light">在售</t-tag>
-            <t-tag wx:else theme="default" size="small" variant="light">已下架</t-tag>
+          <!-- 第2行: 价格 | 销量 -->
+          <view class="row-2">
+            <text class="price">{{item.priceDisplay}}</text>
+            <text class="separator">|</text>
+            <text class="sales">{{item.salesBadge}}</text>
+          </view>
+          <!-- 第3行: 距离 + 优惠百分比 -->
+          <view class="row-3">
+            <text class="distance">📍{{item.distance}}</text>
+            <text wx:if="{{item.savingsPercent > 0}}" class="discount">省{{item.savingsPercent}}%</text>
+          </view>
+          <!-- 第4行: 配送费 -->
+          <view wx:if="{{item.deliveryFeeDisplay}}" class="row-4">
+            <text class="delivery-fee">{{item.deliveryFeeDisplay}}</text>
+          </view>
+          <!-- 第5行: 标签 -->
+          <view wx:if="{{item.tags.length > 0}}" class="row-5">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light">{{tag}}</t-tag>
           </view>
         </view>
+        <!-- 加购按钮 -->
+        <t-button class="add-btn" theme="primary" size="small" icon="add" shape="circle" catchtap="onAddComboToCart" data-id="{{item.id}}" data-merchant-id="{{item.merchantId}}" />
       </view>
       <t-empty wx:if="{{!loading && packages.length === 0}}" description="暂无套餐" />
       <view wx:if="{{!hasMore && packages.length > 0}}" class="no-more">没有更多了</view>

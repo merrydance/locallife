@@ -32,7 +32,7 @@ Component({
         // 侧边栏宽度（用于定位）
         sidebarWidth: {
             type: Number,
-            value: 200
+            value: 0
         }
     },
     data: {
@@ -75,7 +75,6 @@ Component({
          */
         onUserMenuTap() {
             this.triggerEvent('usermenu');
-            // TODO: 显示下拉菜单（个人设置、退出登录等）
             wx.showActionSheet({
                 itemList: ['个人设置', '帮助中心', '退出登录'],
                 success: (res) => {

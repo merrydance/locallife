@@ -1092,7 +1092,7 @@ export async function getRecommendedDishes(params?: RecommendDishesParams): Prom
  * 推荐套餐响应 - 对齐后端实际返回格式
  */
 export interface RecommendedCombosResponse {
-    combos: ComboSetResponse[]
+    combos: ComboSummary[]  // 后端返回 comboSummary，包含完整信息
     algorithm: string
     expired_at: string
 }
@@ -1104,14 +1104,16 @@ export interface RecommendCombosParams {
     merchant_id?: number
     limit?: number
     page?: number
-    keyword?: string  // 搜索关键词
+    keyword?: string              // 搜索关键词
+    user_latitude?: number        // 用户纬度（用于计算距离和配送费）
+    user_longitude?: number       // 用户经度（用于计算距离和配送费）
 }
 
 /**
  * 推荐套餐结果（包含分页信息）
  */
 export interface RecommendCombosResult {
-    combos: ComboSetResponse[]
+    combos: ComboSummary[]  // 使用 ComboSummary（包含完整信息：图片、销量、距离等）
     has_more: boolean
     page: number
     total_count: number

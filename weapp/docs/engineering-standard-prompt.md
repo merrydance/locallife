@@ -34,16 +34,16 @@ We follow a **4-State** responsive model.
 ## 3. Styling & Infrastructure
 - **CSS Variables**: Always use TDesign and LocalLife global variables (e.g., `--brand-coral`, `--font-size-base`).
 - **Responsive Utilities**:
-    - [utils/responsive.ts](file:///c:/ll/miniapp/miniprogram/utils/responsive.ts): Use `responsiveBehavior` for every page.
-    - [styles/responsive.wxss](file:///c:/ll/miniapp/miniprogram/styles/responsive.wxss): Import on every page inheriting responsive classes.
+    - [utils/responsive.ts](file:///home/sam/locallife/weapp/miniprogram/utils/responsive.ts): Use `responsiveBehavior` for every page.
+    - [styles/responsive.wxss](file:///home/sam/locallife/weapp/miniprogram/styles/responsive.wxss): Import on every page inheriting responsive classes.
 - **Component Usage**: Prefer `tdesign-miniprogram` components over native ones.
 
 ---
 
 ## 4. Key Artifacts Location
-- **Report & Plan**: `C:\Users\huarun\.gemini\antigravity\brain\34973f21-5943-4528-8e7d-782cae5ddd46`
-- **Audit Report**: `audit_report.md`
-- **Responsive Standard**: `responsive_design_standard.md`
+- **Report & Plan**: `/home/sam/.gemini/antigravity/brain/5a9dc994-108c-4963-abfd-11f6963682b2`
+- **Audit Report**: `audit_report.md` (in brain folder)
+- **Responsive Standard**: `responsive-design-standard.md`
 - **Cleanup Report**: `walkthrough.md`
 
 ---

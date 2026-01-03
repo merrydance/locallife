@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -485,14 +486,45 @@ func (server *Server) recommendCombos(ctx *gin.Context) {
 			combos = make([]comboSummary, len(comboRows))
 			for i, c := range comboRows {
 				var imgURL, merchantLogo *string
-				if c.ImageUrl.Valid {
-					img := normalizeUploadURLForClient(c.ImageUrl.String)
-					imgURL = &img
+				// ImageUrl 可能是 interface{} 类型（来自 COALESCE 子查询）
+				if c.ImageUrl != nil {
+					switch v := c.ImageUrl.(type) {
+					case string:
+						if v != "" {
+							img := normalizeUploadURLForClient(v)
+							imgURL = &img
+						}
+					case *string:
+						if v != nil && *v != "" {
+							img := normalizeUploadURLForClient(*v)
+							imgURL = &img
+						}
+					case []byte:
+						if len(v) > 0 {
+							img := normalizeUploadURLForClient(string(v))
+							imgURL = &img
+						}
+					default:
+						// 可能是 pgtype.Text 或其他类型
+						log.Warn().
+							Int64("combo_id", c.ID).
+							Str("image_url_type", fmt.Sprintf("%T", c.ImageUrl)).
+							Interface("image_url_value", c.ImageUrl).
+							Msg("Unexpected image_url type in combo recommendation")
+					}
 				}
 				if c.MerchantLogo.Valid {
 					logo := normalizeUploadURLForClient(c.MerchantLogo.String)
 					merchantLogo = &logo
 				}
+
+				// Debug: log image URL processing result
+				log.Debug().
+					Int64("combo_id", c.ID).
+					Str("combo_name", c.Name).
+					Interface("raw_image_url", c.ImageUrl).
+					Bool("has_image", imgURL != nil).
+					Msg("Combo image processing")
 
 				// 计算优惠百分比
 				var savingsPercent float64

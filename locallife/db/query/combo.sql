@@ -195,12 +195,23 @@ WHERE id = ANY($1::bigint[])
 
 -- name: GetCombosWithMerchantByIDs :many
 -- 批量获取套餐详情及商户信息（用于推荐流展示）
+-- 当套餐没有专属图片时，使用套餐内第一个菜品的图片作为展示图
 SELECT 
     cs.id,
     cs.merchant_id,
     cs.name,
     cs.description,
-    cs.image_url,
+    COALESCE(
+        NULLIF(cs.image_url, ''),
+        (SELECT d.image_url 
+         FROM combo_dishes cd 
+         JOIN dishes d ON cd.dish_id = d.id 
+         WHERE cd.combo_id = cs.id 
+           AND d.image_url IS NOT NULL 
+           AND d.image_url != ''
+         ORDER BY cd.id ASC 
+         LIMIT 1)
+    ) AS image_url,
     cs.original_price,
     cs.combo_price,
     cs.is_online,

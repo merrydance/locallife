@@ -184,6 +184,14 @@ Page({
     onContact() {
         wx.makePhoneCall({ phoneNumber: '400-800-8888' });
     },
+    // 扫码入职 - 跳转到员工绑定页面
+    onScanToJoin() {
+        wx.navigateTo({ url: '/pages/user/bind-merchant/index' });
+    },
+    // 扫码认领 - 跳转到 Boss 认领页面
+    onScanToClaim() {
+        wx.navigateTo({ url: '/pages/user/claim-boss/index' });
+    },
     onChooseAvatar(e) {
         return __awaiter(this, void 0, void 0, function* () {
             const { avatarUrl } = e.detail;

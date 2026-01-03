@@ -46,6 +46,21 @@ class MerchantManagementService {
         });
     }
     /**
+     * 获取当前用户拥有的所有商户列表
+     * GET /v1/merchants/my
+     * 用于多店铺切换功能
+     */
+    static getMyMerchants() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: '/v1/merchants/my',
+                method: 'GET',
+                useCache: true,
+                cacheTTL: 5 * 60 * 1000 // 5分钟缓存
+            });
+        });
+    }
+    /**
      * 更新商户信息
      * PATCH /v1/merchants/me
      * 使用乐观锁防止并发冲突
@@ -182,25 +197,29 @@ exports.MerchantManagementService = MerchantManagementService;
  * 注意：后端要求 keyword, page_id, page_size 为必填参数
  */
 function searchMerchants(params) {
-    // 后端要求必填参数，提供默认值
-    const requestParams = {
-        keyword: params.keyword || '', // 空字符串表示搜索全部
-        page_id: params.page_id || 1,
-        page_size: params.page_size || 20
-    };
-    // 仅添加有效的经纬度
-    if (params.user_latitude !== undefined && params.user_latitude !== null) {
-        requestParams.user_latitude = params.user_latitude;
-    }
-    if (params.user_longitude !== undefined && params.user_longitude !== null) {
-        requestParams.user_longitude = params.user_longitude;
-    }
-    return (0, request_1.request)({
-        url: '/v1/search/merchants',
-        method: 'GET',
-        data: requestParams,
-        useCache: true,
-        cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+    return __awaiter(this, void 0, void 0, function* () {
+        // 后端要求必填参数，提供默认值
+        const requestParams = {
+            keyword: params.keyword || '', // 空字符串表示搜索全部
+            page_id: params.page_id || 1,
+            page_size: params.page_size || 20
+        };
+        // 仅添加有效的经纬度
+        if (params.user_latitude !== undefined && params.user_latitude !== null) {
+            requestParams.user_latitude = params.user_latitude;
+        }
+        if (params.user_longitude !== undefined && params.user_longitude !== null) {
+            requestParams.user_longitude = params.user_longitude;
+        }
+        const response = yield (0, request_1.request)({
+            url: '/v1/search/merchants',
+            method: 'GET',
+            data: requestParams,
+            useCache: true,
+            cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+        });
+        // 后端返回 { merchants: [...], total, page_id, page_size }，解包返回数组
+        return response.merchants || [];
     });
 }
 /**

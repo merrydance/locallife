@@ -316,7 +316,17 @@ SELECT
     cs.merchant_id,
     cs.name,
     cs.description,
-    cs.image_url,
+    COALESCE(
+        NULLIF(cs.image_url, ''),
+        (SELECT d.image_url 
+         FROM combo_dishes cd 
+         JOIN dishes d ON cd.dish_id = d.id 
+         WHERE cd.combo_id = cs.id 
+           AND d.image_url IS NOT NULL 
+           AND d.image_url != ''
+         ORDER BY cd.id ASC 
+         LIMIT 1)
+    ) AS image_url,
     cs.original_price,
     cs.combo_price,
     cs.is_online,
@@ -347,7 +357,7 @@ type GetCombosWithMerchantByIDsRow struct {
 	MerchantID        int64          `json:"merchant_id"`
 	Name              string         `json:"name"`
 	Description       pgtype.Text    `json:"description"`
-	ImageUrl          pgtype.Text    `json:"image_url"`
+	ImageUrl          interface{}    `json:"image_url"`
 	OriginalPrice     int64          `json:"original_price"`
 	ComboPrice        int64          `json:"combo_price"`
 	IsOnline          bool           `json:"is_online"`
@@ -360,6 +370,7 @@ type GetCombosWithMerchantByIDsRow struct {
 }
 
 // 批量获取套餐详情及商户信息（用于推荐流展示）
+// 当套餐没有专属图片时，使用套餐内第一个菜品的图片作为展示图
 func (q *Queries) GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosWithMerchantByIDsRow, error) {
 	rows, err := q.db.Query(ctx, getCombosWithMerchantByIDs, dollar_1)
 	if err != nil {

@@ -34,6 +34,18 @@ Page({
         this.setData({ isLargeScreen: (0, responsive_1.isLargeScreen)() });
         this.loadReviews(true);
     },
+    // 原生 Tab 点击
+    onTabTap(e) {
+        const value = e.currentTarget.dataset.value;
+        this.setData({
+            currentTab: value,
+            reviews: [],
+            page: 1,
+            hasMore: true
+        });
+        this.loadReviews(true);
+    },
+    // 兼容 TDesign 的 onTabChange
     onTabChange(e) {
         this.setData({
             currentTab: e.detail.value,
@@ -81,6 +93,21 @@ Page({
             selectedId: id,
             replyContent: ''
         });
+    },
+    // 原生按钮点击
+    onReplyTap(e) {
+        const id = e.currentTarget.dataset.id;
+        this.setData({
+            showReplyDialog: true,
+            selectedId: id,
+            replyContent: ''
+        });
+    },
+    // 加载更多
+    loadMore() {
+        if (!this.data.loading && this.data.hasMore) {
+            this.loadReviews(false);
+        }
     },
     closeReplyDialog() {
         this.setData({ showReplyDialog: false });

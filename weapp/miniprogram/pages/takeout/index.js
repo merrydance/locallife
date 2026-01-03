@@ -25,6 +25,7 @@ const global_store_1 = require("../../utils/global-store");
 const request_manager_1 = require("../../utils/request-manager");
 const dish_3 = require("../../api/dish");
 const responsive_1 = require("../../utils/responsive");
+const image_1 = require("../../utils/image");
 const PAGE_CONTEXT = 'takeout_index';
 const PAGE_SIZE = 10; // 每页条数，用于无限滚动分页
 Page({
@@ -516,19 +517,35 @@ Page({
                 this.setData({ page: 1, packages: [], hasMore: true });
             }
             try {
-                // 调用后端推荐套餐接口，传递当前页码
+                // 调用后端推荐套餐接口，传递当前页码和位置
+                const app = getApp();
                 const currentPage = reset ? 1 : this.data.page;
-                const result = yield (0, dish_3.getRecommendedCombos)({ limit: PAGE_SIZE, page: currentPage });
+                const result = yield (0, dish_3.getRecommendedCombos)({
+                    limit: PAGE_SIZE,
+                    page: currentPage,
+                    user_latitude: app.globalData.latitude || undefined,
+                    user_longitude: app.globalData.longitude || undefined
+                });
                 const packageViewModels = result.combos.map((combo) => ({
                     id: combo.id,
                     name: combo.name,
-                    description: combo.description || '',
+                    merchantId: combo.merchant_id,
+                    merchantName: combo.merchant_name || '',
+                    imageUrl: (0, image_1.getPublicImageUrl)(combo.image_url) || '/assets/placeholder_food.png',
                     price: combo.combo_price,
-                    priceDisplay: (combo.combo_price / 100).toFixed(2),
-                    original_price: combo.combo_price, // 后端暂无原价字段
-                    originalPriceDisplay: (combo.combo_price / 100).toFixed(2),
-                    image_url: '', // 后端暂无图片字段
-                    is_online: combo.is_online
+                    priceDisplay: `¥${(combo.combo_price / 100).toFixed(2)}`,
+                    originalPrice: combo.original_price,
+                    originalPriceDisplay: `¥${(combo.original_price / 100).toFixed(2)}`,
+                    savingsPercent: Math.round(combo.savings_percent || 0),
+                    monthlySales: combo.monthly_sales || 0,
+                    salesBadge: `月售${combo.monthly_sales || 0}`,
+                    distance: dish_1.DishAdapter.formatDistance(combo.distance),
+                    deliveryFee: combo.estimated_delivery_fee,
+                    deliveryFeeDisplay: combo.estimated_delivery_fee
+                        ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
+                        : '',
+                    tags: combo.tags || [],
+                    is_online: true // 推荐API只返回上架套餐
                 }));
                 if (reset) {
                     this.setData({
@@ -571,6 +588,26 @@ Page({
                     yield this.updateCartDisplay();
                     wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 });
                 }
+            }
+        });
+    },
+    /**
+     * 套餐加购物车
+     */
+    onAddComboToCart(e) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { id, merchantId } = e.currentTarget.dataset;
+            if (!id || !merchantId) {
+                wx.showToast({ title: '套餐信息错误', icon: 'error' });
+                return;
+            }
+            const success = yield cart_1.default.addItem({
+                merchantId: String(merchantId),
+                comboId: String(id)
+            });
+            if (success) {
+                yield this.updateCartDisplay();
+                wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 });
             }
         });
     },
