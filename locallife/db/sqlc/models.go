@@ -496,6 +496,10 @@ type Merchant struct {
 	BindCode pgtype.Text `json:"bind_code"`
 	// 绑定码过期时间
 	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
+	// Boss 认领码
+	BossBindCode pgtype.Text `json:"boss_bind_code"`
+	// Boss 认领码过期时间
+	BossBindCodeExpiresAt pgtype.Timestamptz `json:"boss_bind_code_expires_at"`
 }
 
 type MerchantApplication struct {
@@ -538,6 +542,17 @@ type MerchantApplication struct {
 	StorefrontImages []byte `json:"storefront_images"`
 	// 店内环境照片URL数组 JSON，最多5张
 	EnvironmentImages []byte `json:"environment_images"`
+}
+
+// Boss 店铺认领关系表 - Boss 可以认领多个店铺，只有分析和员工管理权限
+type MerchantBoss struct {
+	ID         int64 `json:"id"`
+	UserID     int64 `json:"user_id"`
+	MerchantID int64 `json:"merchant_id"`
+	// 状态: active=有效, disabled=已解除
+	Status    string             `json:"status"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type MerchantBusinessHour struct {

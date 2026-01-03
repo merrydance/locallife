@@ -366,6 +366,24 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/admin/merchants/applications", server.listMerchantApplications)
 	authGroup.POST("/admin/merchants/applications/review", server.reviewMerchantApplication)
 
+	// M3.6: Boss 认领店铺（任意登录用户）
+	authGroup.POST("/claim-boss", server.claimBoss)
+
+	// M3.7: Boss 店铺列表
+	bossGroup := authGroup.Group("/boss")
+	{
+		bossGroup.GET("/merchants", server.listBossMerchants)
+	}
+
+	// M3.8: Boss 管理（仅店主可操作）
+	merchantBossGroup := authGroup.Group("/merchant")
+	merchantBossGroup.Use(server.MerchantStaffMiddleware("owner"))
+	{
+		merchantBossGroup.POST("/boss-bind-code", server.generateBossBindCode)
+		merchantBossGroup.GET("/bosses", server.listMerchantBosses)
+		merchantBossGroup.DELETE("/bosses/:id", server.removeBoss)
+	}
+
 	// M4: 标签管理路由
 	tagsGroup := authGroup.Group("/tags")
 	{

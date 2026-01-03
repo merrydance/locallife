@@ -33,7 +33,8 @@
     "pages/support/index",
     "pages/message/center/index",
     "pages/credit/index",
-    "pages/user/bind-merchant/index"
+    "pages/user/bind-merchant/index",
+    "pages/user/claim-boss/index"
   ],
   "subPackages": [
     {

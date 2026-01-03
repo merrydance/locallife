@@ -203,7 +203,10 @@ Page({
     wx.navigateTo({ url: '/pages/user/bind-merchant/index' })
   },
 
-
+  // 扫码认领 - 跳转到 Boss 认领页面
+  onScanToClaim() {
+    wx.navigateTo({ url: '/pages/user/claim-boss/index' })
+  },
 
   async onChooseAvatar(e: any) {
     const { avatarUrl } = e.detail

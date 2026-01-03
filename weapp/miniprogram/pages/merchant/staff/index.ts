@@ -65,6 +65,14 @@ const StaffService = {
             url: '/v1/merchant/staff/invite-code',
             method: 'POST'
         })
+    },
+
+    // 生成 Boss 认领码
+    async generateBossBindCode(): Promise<{ bind_code: string, expires_at: string }> {
+        return request<{ bind_code: string, expires_at: string }>({
+            url: '/v1/merchant/boss-bind-code',
+            method: 'POST'
+        })
     }
 }
 
@@ -99,6 +107,13 @@ Page({
         showDeleteModal: false,
         deletingStaff: null as StaffResponse | null,
         deleting: false,
+
+        // Boss 认领码弹窗
+        showBossCodeModal: false,
+        bossBindCode: '',
+        bossCodeUrl: '',
+        bossCodeExpiresAt: '',
+        generatingBossCode: false,
 
         // 角色配置
         roleConfig: ROLE_CONFIG,
@@ -206,6 +221,47 @@ Page({
                     wx.showToast({ title: '请长按二维码保存', icon: 'none' })
                 }
             })
+    },
+
+    // ==================== Boss 认领码 ====================
+
+    // 生成 Boss 认领码
+    async onGenerateBossCode() {
+        this.setData({ showBossCodeModal: true, generatingBossCode: true })
+        try {
+            const result = await StaffService.generateBossBindCode()
+            const bossCodeUrl = `/pages/user/claim-boss/index?code=${result.bind_code}`
+            this.setData({
+                bossBindCode: result.bind_code,
+                bossCodeUrl: bossCodeUrl,
+                bossCodeExpiresAt: result.expires_at,
+                generatingBossCode: false
+            })
+        } catch (error: any) {
+            console.error('生成 Boss 认领码失败:', error)
+            wx.showToast({ title: error.message || '生成失败', icon: 'none' })
+            this.setData({ generatingBossCode: false, showBossCodeModal: false })
+        }
+    },
+
+    // 关闭 Boss 认领码弹窗
+    onCloseBossCodeModal() {
+        this.setData({ showBossCodeModal: false })
+    },
+
+    // 复制 Boss 认领码
+    onCopyBossCode() {
+        wx.setClipboardData({
+            data: this.data.bossBindCode,
+            success: () => {
+                wx.showToast({ title: '已复制', icon: 'success' })
+            }
+        })
+    },
+
+    // 保存 Boss 二维码
+    onSaveBossQRCode() {
+        wx.showToast({ title: '请长按二维码保存', icon: 'none' })
     },
 
     // 打开编辑角色弹窗

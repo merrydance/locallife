@@ -70,7 +70,11 @@
             </button>
             <button class="btn-primary" bindtap="onGenerateInviteCode">
               <text class="btn-icon">📨</text>
-              生成邀请码
+              员工邀请码
+            </button>
+            <button class="btn-primary" bindtap="onGenerateBossCode">
+              <text class="btn-icon">🏆</text>
+              Boss认领码
             </button>
           </view>
         </view>
@@ -177,6 +181,47 @@
       <view class="invite-actions">
         <button class="btn-outline btn-half" bindtap="onCopyInviteCode">复制邀请码</button>
         <button class="btn-primary btn-half" bindtap="onSaveQRCode">保存二维码</button>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Boss 认领码弹窗 -->
+<view wx:if="{{showBossCodeModal}}" class="modal-mask" bindtap="onCloseBossCodeModal">
+  <view class="modal-content invite-modal" catchtap>
+    <view class="modal-header">
+      <text class="modal-title">🏆 Boss 认领码</text>
+      <view class="modal-close" bindtap="onCloseBossCodeModal">×</view>
+    </view>
+    
+    <view wx:if="{{generatingBossCode}}" class="modal-loading">
+      <t-loading size="40px" />
+    </view>
+    
+    <view wx:else class="modal-body">
+      <!-- QR 码显示区域 -->
+      <view class="qrcode-wrapper">
+        <t-qrcode 
+          value="{{bossCodeUrl}}" 
+          size="{{200}}"
+          color="#000000"
+          bgColor="#ffffff"
+          level="M"
+        />
+      </view>
+      
+      <!-- 认领码文本（可选复制） -->
+      <view class="invite-code-text">
+        <text class="code-label">认领码：</text>
+        <text class="code-value">{{bossBindCode}}</text>
+      </view>
+      
+      <text class="invite-hint">Boss 扫描二维码或输入认领码即可获得管理权限</text>
+      <text class="invite-expires">有效期至：{{bossCodeExpiresAt}}</text>
+      
+      <view class="invite-actions">
+        <button class="btn-outline btn-half" bindtap="onCopyBossCode">复制认领码</button>
+        <button class="btn-primary btn-half" bindtap="onSaveBossQRCode">保存二维码</button>
       </view>
     </view>
   </view>

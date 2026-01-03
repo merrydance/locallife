@@ -429,3 +429,23 @@ SELECT COUNT(*) FROM merchants
 WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL;
+
+-- name: GetMerchantByBossBindCode :one
+-- 通过 Boss 认领码获取商户
+SELECT * FROM merchants
+WHERE boss_bind_code = $1 AND deleted_at IS NULL
+LIMIT 1;
+
+-- name: UpdateMerchantBossBindCode :one
+-- 更新 Boss 认领码
+UPDATE merchants
+SET boss_bind_code = $2, boss_bind_code_expires_at = $3, updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: ClearMerchantBossBindCode :exec
+-- 清除 Boss 认领码
+UPDATE merchants
+SET boss_bind_code = NULL, boss_bind_code_expires_at = NULL, updated_at = now()
+WHERE id = $1;
+

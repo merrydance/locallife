@@ -71,9 +71,13 @@ type Querier interface {
 	// Check if table has any active reservation for given date and time
 	CheckTableAvailability(ctx context.Context, arg CheckTableAvailabilityParams) (int64, error)
 	CheckUserHasMerchantAccess(ctx context.Context, arg CheckUserHasMerchantAccessParams) (bool, error)
+	// 检查用户是否是某商户的 Boss
+	CheckUserIsBoss(ctx context.Context, arg CheckUserIsBossParams) (bool, error)
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
+	// 清除 Boss 认领码
+	ClearMerchantBossBindCode(ctx context.Context, id int64) error
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error
@@ -104,6 +108,7 @@ type Querier interface {
 	CountMerchantAppealsForMerchant(ctx context.Context, appellantID int64) (int64, error)
 	// 统计各状态的申请数量
 	CountMerchantApplicationsByStatus(ctx context.Context, status string) (int64, error)
+	CountMerchantBosses(ctx context.Context, merchantID int64) (int64, error)
 	// ==========================================
 	// 商户异物索赔追踪查询
 	// ==========================================
@@ -255,6 +260,8 @@ type Querier interface {
 	// ==================== 商户入驻申请（草稿模式+自动审核） ====================
 	// 创建商户申请草稿（仅需用户ID）
 	CreateMerchantApplicationDraft(ctx context.Context, userID int64) (MerchantApplication, error)
+	// Boss 店铺认领查询
+	CreateMerchantBoss(ctx context.Context, arg CreateMerchantBossParams) (MerchantBoss, error)
 	CreateMerchantMembership(ctx context.Context, arg CreateMerchantMembershipParams) (MerchantMembership, error)
 	CreateMerchantMembershipSettings(ctx context.Context, arg CreateMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	CreateMerchantPaymentConfig(ctx context.Context, arg CreateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
@@ -364,6 +371,7 @@ type Querier interface {
 	DeleteIngredient(ctx context.Context, id int64) error
 	// 软删除商户
 	DeleteMerchant(ctx context.Context, id int64) error
+	DeleteMerchantBoss(ctx context.Context, id int64) error
 	DeleteMerchantBusinessHours(ctx context.Context, merchantID int64) error
 	DeleteMerchantPaymentConfig(ctx context.Context, merchantID int64) error
 	// 硬删除（仅用于特殊情况）
@@ -543,8 +551,11 @@ type Querier interface {
 	// 计算商户近N天的平均出餐时间（分钟）
 	// 通过订单支付时间到状态变为ready的时间差计算
 	GetMerchantAvgPrepareTime(ctx context.Context, arg GetMerchantAvgPrepareTimeParams) (int64, error)
+	GetMerchantBoss(ctx context.Context, arg GetMerchantBossParams) (MerchantBoss, error)
 	// 通过邀请码获取商户
 	GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Text) (Merchant, error)
+	// 通过 Boss 认领码获取商户
+	GetMerchantByBossBindCode(ctx context.Context, bossBindCode pgtype.Text) (Merchant, error)
 	// 获取用户关联的商户（支持店主和员工）
 	// 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
 	GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Merchant, error)
@@ -874,6 +885,8 @@ type Querier interface {
 	ListAvailableRooms(ctx context.Context, merchantID int64) ([]Table, error)
 	// 获取商户的可用包间列表（含主图）供顾客查看
 	ListAvailableRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListAvailableRoomsForCustomerRow, error)
+	// 获取店铺的所有 Boss
+	ListBossesByMerchant(ctx context.Context, merchantID int64) ([]ListBossesByMerchantRow, error)
 	ListBrowseHistory(ctx context.Context, arg ListBrowseHistoryParams) ([]BrowseHistory, error)
 	ListBrowseHistoryByType(ctx context.Context, arg ListBrowseHistoryByTypeParams) ([]BrowseHistory, error)
 	ListCartItems(ctx context.Context, cartID int64) ([]ListCartItemsRow, error)
@@ -968,6 +981,8 @@ type Querier interface {
 	ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag, error)
 	ListMerchantVouchers(ctx context.Context, arg ListMerchantVouchersParams) ([]Voucher, error)
 	ListMerchants(ctx context.Context, arg ListMerchantsParams) ([]Merchant, error)
+	// 获取 Boss 关联的所有店铺
+	ListMerchantsByBoss(ctx context.Context, userID int64) ([]Merchant, error)
 	// 获取用户拥有的所有商户（用于多店铺切换）
 	ListMerchantsByOwner(ctx context.Context, ownerUserID int64) ([]Merchant, error)
 	// ==================== 运营商管理商户 ====================
@@ -1248,6 +1263,9 @@ type Querier interface {
 	UpdateMerchantApplicationStatus(ctx context.Context, arg UpdateMerchantApplicationStatusParams) (MerchantApplication, error)
 	// 更新商户邀请码
 	UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchantBindCodeParams) (Merchant, error)
+	// 更新 Boss 认领码
+	UpdateMerchantBossBindCode(ctx context.Context, arg UpdateMerchantBossBindCodeParams) (Merchant, error)
+	UpdateMerchantBossStatus(ctx context.Context, arg UpdateMerchantBossStatusParams) (MerchantBoss, error)
 	UpdateMerchantDishCategoryOrder(ctx context.Context, arg UpdateMerchantDishCategoryOrderParams) (MerchantDishCategory, error)
 	// ==================== 商户营业状态管理 ====================
 	// 更新商户营业状态（手动开店/打烊）

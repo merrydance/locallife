@@ -81,6 +81,14 @@
             leftIcon="scan"
             bind:click="onScanToJoin"
           />
+          <t-cell 
+            title="扫码认领"
+            description="Boss扫码认领店铺管理权限"
+            arrow
+            hover
+            leftIcon="qrcode"
+            bind:click="onScanToClaim"
+          />
         </t-cell-group>
       </view>
     </view>

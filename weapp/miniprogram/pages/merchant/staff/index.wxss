@@ -360,7 +360,7 @@
 }
 
 .invite-modal {
-  width: 400px;
+  width: 480px;
 }
 
 .edit-modal {
