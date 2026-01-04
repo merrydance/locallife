@@ -1,5 +1,5 @@
-<view class="cart-bar-placeholder" wx:if="{{totalCount > 0}}"></view>
-<view class="cart-bar {{totalCount > 0 ? 'show' : ''}}">
+<view class="cart-bar-placeholder {{dockBottom ? 'dock-bottom' : ''}}" wx:if="{{alwaysShow || totalCount > 0}}"></view>
+<view class="cart-bar {{(alwaysShow || totalCount > 0) ? 'show' : ''}} {{dockBottom ? 'dock-bottom' : ''}}">
   <view class="cart-icon-wrapper" bindtap="onCartClick">
     <image class="cart-icon" src="/assets/tabbar/takeout_active.png" /> <!-- Temporary Icon -->
     <view class="badge" wx:if="{{totalCount > 0}}">{{totalCount}}</view>

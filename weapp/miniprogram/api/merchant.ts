@@ -474,6 +474,163 @@ export async function getRecommendedMerchants(params?: RecommendMerchantsParams)
   }
 }
 
+/**
+ * 消费者端商户详情响应 - 对齐 api.publicMerchantDetailResponse
+ */
+export interface PublicDiscountRule {
+  id: number
+  name: string
+  min_order_amount: number
+  discount_amount: number
+}
+
+export interface PublicVoucher {
+  id: number
+  name: string
+  amount: number
+  min_order_amount: number
+}
+
+export interface PublicDeliveryPromotion {
+  id: number
+  name: string
+  min_order_amount: number
+  discount_amount: number
+}
+
+export interface PublicMerchantDetail {
+  id: number                                   // 商户ID
+  name: string                                 // 商户名称
+  description?: string                         // 商户描述
+  logo_url?: string                            // Logo URL
+  cover_image?: string                         // 门头照/招牌图
+  phone: string                                // 商户电话
+  address: string                              // 商户地址
+  latitude: number                             // 纬度
+  longitude: number                            // 经度
+  region_id: number                            // 区域ID
+  is_open: boolean                             // 是否营业
+  tags: string[]                               // 商户标签（如：快餐、川菜）
+  monthly_sales: number                        // 近30天订单量
+  trust_score: number                          // 信誉分
+  avg_prep_minutes: number                     // 平均出餐时间（分钟）
+  business_license_image_url?: string          // 营业执照图片
+  food_permit_url?: string                     // 食品经营许可证
+  business_hours?: {                           // 营业时间
+    day_of_week: number                        // 0=周日, 1=周一, ..., 6=周六
+    open_time: string                          // HH:MM
+    close_time: string                         // HH:MM
+    is_closed: boolean                         // 是否休息
+  }[]
+  discount_rules?: PublicDiscountRule[]         // 满减规则
+  vouchers?: PublicVoucher[]                   // 代金券
+  delivery_promotions?: PublicDeliveryPromotion[] // 配送费优惠
+}
+
+
+/**
+ * 获取商户详情（消费者端）
+ * GET /v1/public/merchants/:id
+ * 返回包含标签、营业时间、证照等完整信息
+ */
+export async function getPublicMerchantDetail(merchantId: number): Promise<PublicMerchantDetail> {
+  return await request({
+    url: `/v1/public/merchants/${merchantId}`,
+    method: 'GET',
+    useCache: true,
+    cacheTTL: 5 * 60 * 1000 // 5分钟缓存
+  })
+}
+
+/**
+ * 菜品分类项
+ */
+export interface PublicDishCategory {
+  id: number
+  name: string
+  sort_order: number
+}
+
+/**
+ * 菜品项
+ */
+export interface PublicDish {
+  id: number
+  name: string
+  description?: string
+  price: number
+  member_price?: number
+  image_url?: string
+  category_id: number
+  category_name: string
+  monthly_sales: number
+  prepare_time: number
+  tags: string[]
+}
+
+/**
+ * 菜品列表响应
+ */
+export interface PublicMerchantDishesResponse {
+  categories: PublicDishCategory[]
+  dishes: PublicDish[]
+}
+
+/**
+ * 获取商户菜品列表（消费者端）
+ * GET /v1/public/merchants/:id/dishes
+ */
+export async function getPublicMerchantDishes(merchantId: number): Promise<PublicMerchantDishesResponse> {
+  return await request({
+    url: `/v1/public/merchants/${merchantId}/dishes`,
+    method: 'GET',
+    useCache: true,
+    cacheTTL: 5 * 60 * 1000
+  })
+}
+
+/**
+ * 套餐菜品项
+ */
+export interface ComboDishItem {
+  dish_id: number
+  dish_name: string
+  quantity: number
+}
+
+/**
+ * 套餐项
+ */
+export interface PublicCombo {
+  id: number
+  name: string
+  description?: string
+  image_url?: string
+  combo_price: number
+  original_price: number
+  dishes: ComboDishItem[]
+}
+
+/**
+ * 套餐列表响应
+ */
+export interface PublicMerchantCombosResponse {
+  combos: PublicCombo[]
+}
+
+/**
+ * 获取商户套餐列表（消费者端）
+ * GET /v1/public/merchants/:id/combos
+ */
+export async function getPublicMerchantCombos(merchantId: number): Promise<PublicMerchantCombosResponse> {
+  return await request({
+    url: `/v1/public/merchants/${merchantId}/combos`,
+    method: 'GET',
+    useCache: true,
+    cacheTTL: 5 * 60 * 1000
+  })
+}
+
 // ==================== 商户基础管理适配器 ====================
 
 /**

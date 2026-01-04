@@ -797,6 +797,81 @@ func (server *Server) getDish(ctx *gin.Context) {
 	})
 }
 
+// getPublicDishDetail godoc
+// @Summary 获取菜品详情（消费者端）
+// @Description 公开接口，获取菜品详细信息，无需认证
+// @Tags 公开接口
+// @Accept json
+// @Produce json
+// @Param id path int true "菜品ID"
+// @Success 200 {object} dishResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 404 {object} ErrorResponse "菜品不存在或已下架"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/dishes/{id} [get]
+func (server *Server) getPublicDishDetail(ctx *gin.Context) {
+	var req getDishRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 使用单一查询获取菜品完整信息(含食材、标签、定制选项)
+	dish, err := server.store.GetDishComplete(ctx, req.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get dish complete: %w", err)))
+		return
+	}
+
+	// 检查菜品是否上架且可用
+	if !dish.IsOnline {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish is not available")))
+		return
+	}
+
+	// 解析 JSON 字段
+	var ingredients []ingredient
+	if err := parseJSON(dish.Ingredients, &ingredients); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to parse ingredients: %w", err)))
+		return
+	}
+
+	var tags []tagInfo
+	if err := parseJSON(dish.Tags, &tags); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to parse tags: %w", err)))
+		return
+	}
+
+	var customizationGroups []customizationGroup
+	if err := parseJSON(dish.CustomizationGroups, &customizationGroups); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to parse customization_groups: %w", err)))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, dishResponse{
+		ID:                  dish.ID,
+		MerchantID:          dish.MerchantID,
+		CategoryID:          toPtrInt64(dish.CategoryID),
+		CategoryName:        toPtrString(dish.CategoryName),
+		Name:                dish.Name,
+		Description:         dish.Description.String,
+		ImageURL:            normalizeUploadURLForClient(dish.ImageUrl.String),
+		Price:               dish.Price,
+		MemberPrice:         toPtrInt64(dish.MemberPrice),
+		IsAvailable:         dish.IsAvailable,
+		IsOnline:            dish.IsOnline,
+		SortOrder:           dish.SortOrder,
+		PrepareTime:         dish.PrepareTime,
+		Ingredients:         ingredients,
+		Tags:                tags,
+		CustomizationGroups: customizationGroups,
+	})
+}
+
 type updateDishRequest struct {
 	CategoryID  *int64  `json:"category_id" binding:"omitempty,min=1"`
 	Name        string  `json:"name" binding:"omitempty,min=1,max=100"`        // 菜品名称，最大100字符

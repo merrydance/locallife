@@ -107,3 +107,16 @@
 .cart-bar-placeholder {
   height: 140rpx; /* bar height + bottom margin */
 }
+
+/* 贴底模式 - 只调整位置，保持原有视觉样式 */
+.cart-bar.dock-bottom {
+  bottom: 0;
+  left: 24rpx;
+  right: 24rpx;
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+.cart-bar-placeholder.dock-bottom {
+  height: calc(140rpx + env(safe-area-inset-bottom));
+}
+

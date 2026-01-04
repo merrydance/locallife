@@ -24,8 +24,6 @@
         <t-tag wx:for="{{dish.attributes}}" wx:key="*this" size="small">{{item}}</t-tag>
       </view>
       <view class="meta-row">
-        <text class="rating">⭐{{dish.rating}}</text>
-        <text class="dot">·</text>
         <text class="sales">月销{{dish.month_sales}}</text>
       </view>
       <view class="delivery-row">

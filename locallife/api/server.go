@@ -272,6 +272,13 @@ func (server *Server) setupRouter() {
 	authGroup.Use(authMiddleware(server.tokenMaker))
 	authGroup.POST("/uploads/sign", server.signUploadURL)
 
+	// 消费者菜品详情（需认证，但不需要商户权限）
+	authGroup.GET("/public/dishes/:id", server.getPublicDishDetail)
+	// 消费者商户详情（需认证，但不需要商户权限）
+	authGroup.GET("/public/merchants/:id", server.getPublicMerchantDetail)
+	authGroup.GET("/public/merchants/:id/dishes", server.getPublicMerchantDishes)
+	authGroup.GET("/public/merchants/:id/combos", server.getPublicMerchantCombos)
+
 	// 分享功能由小程序前端 share 属性实现，无需后端API
 
 	// M5.1: 运营商入驻申请路由（草稿模式+人工审核）

@@ -202,6 +202,29 @@ func (q *Queries) GetDishCategoryStats(ctx context.Context, arg GetDishCategoryS
 	return items, nil
 }
 
+const getMerchantAvgPrepMinutes = `-- name: GetMerchantAvgPrepMinutes :one
+SELECT COALESCE(
+  AVG(EXTRACT(EPOCH FROM (ready_log.created_at - paid_log.created_at)) / 60),
+  0
+)::INTEGER as avg_prep_minutes
+FROM orders o
+JOIN order_status_logs paid_log ON paid_log.order_id = o.id AND paid_log.to_status = 'paid'
+JOIN order_status_logs ready_log ON ready_log.order_id = o.id AND ready_log.to_status = 'ready'
+WHERE o.merchant_id = $1
+  AND o.status IN ('ready', 'delivering', 'completed')
+  AND o.created_at > NOW() - INTERVAL '30 days'
+`
+
+// 获取商户平均出餐时间（分钟）
+// 从 order_status_logs 计算 paid → ready 的时间差
+// 取最近30天完成订单的平均值
+func (q *Queries) GetMerchantAvgPrepMinutes(ctx context.Context, merchantID int64) (int32, error) {
+	row := q.db.QueryRow(ctx, getMerchantAvgPrepMinutes, merchantID)
+	var avg_prep_minutes int32
+	err := row.Scan(&avg_prep_minutes)
+	return avg_prep_minutes, err
+}
+
 const getMerchantCustomerStats = `-- name: GetMerchantCustomerStats :many
 SELECT 
     o.user_id,
@@ -348,6 +371,93 @@ func (q *Queries) GetMerchantDailyStats(ctx context.Context, arg GetMerchantDail
 	return items, nil
 }
 
+const getMerchantDishesWithCategory = `-- name: GetMerchantDishesWithCategory :many
+SELECT 
+  d.id,
+  d.name,
+  d.description,
+  d.price,
+  d.member_price,
+  d.image_url,
+  d.is_available,
+  d.sort_order,
+  d.prepare_time,
+  COALESCE(dc.id, 0) as category_id,
+  COALESCE(dc.name, '未分类') as category_name,
+  COALESCE(mdc.sort_order, 999) as category_sort_order,
+  COALESCE(
+    (SELECT json_agg(t.name) FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id),
+    '[]'::json
+  ) as tags,
+  COALESCE(
+    (SELECT SUM(oi.quantity)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id 
+     WHERE oi.dish_id = d.id AND o.status IN ('completed', 'delivered') 
+     AND o.created_at > NOW() - INTERVAL '30 days'),
+    0
+  ) as monthly_sales
+FROM dishes d
+LEFT JOIN dish_categories dc ON dc.id = d.category_id
+LEFT JOIN merchant_dish_categories mdc ON mdc.category_id = dc.id AND mdc.merchant_id = d.merchant_id
+WHERE d.merchant_id = $1
+  AND d.is_online = true
+  AND d.is_available = true
+  AND d.deleted_at IS NULL
+ORDER BY COALESCE(mdc.sort_order, 999), d.sort_order, d.id
+`
+
+type GetMerchantDishesWithCategoryRow struct {
+	ID                int64       `json:"id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	Price             int64       `json:"price"`
+	MemberPrice       pgtype.Int8 `json:"member_price"`
+	ImageUrl          pgtype.Text `json:"image_url"`
+	IsAvailable       bool        `json:"is_available"`
+	SortOrder         int16       `json:"sort_order"`
+	PrepareTime       int16       `json:"prepare_time"`
+	CategoryID        int64       `json:"category_id"`
+	CategoryName      string      `json:"category_name"`
+	CategorySortOrder int16       `json:"category_sort_order"`
+	Tags              interface{} `json:"tags"`
+	MonthlySales      interface{} `json:"monthly_sales"`
+}
+
+// 获取商户所有在线菜品（含分类信息）- 消费者端使用
+func (q *Queries) GetMerchantDishesWithCategory(ctx context.Context, merchantID int64) ([]GetMerchantDishesWithCategoryRow, error) {
+	rows, err := q.db.Query(ctx, getMerchantDishesWithCategory, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMerchantDishesWithCategoryRow{}
+	for rows.Next() {
+		var i GetMerchantDishesWithCategoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Price,
+			&i.MemberPrice,
+			&i.ImageUrl,
+			&i.IsAvailable,
+			&i.SortOrder,
+			&i.PrepareTime,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategorySortOrder,
+			&i.Tags,
+			&i.MonthlySales,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMerchantHourlyStats = `-- name: GetMerchantHourlyStats :many
 SELECT 
     EXTRACT(HOUR FROM created_at)::int AS hour,
@@ -391,6 +501,77 @@ func (q *Queries) GetMerchantHourlyStats(ctx context.Context, arg GetMerchantHou
 			&i.OrderCount,
 			&i.TotalSales,
 			&i.AvgOrderAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMerchantOnlineCombos = `-- name: GetMerchantOnlineCombos :many
+SELECT 
+  cs.id,
+  cs.name,
+  cs.description,
+  cs.image_url,
+  cs.combo_price,
+  -- 实时计算实际原价（单品价之和）
+  COALESCE(
+    (SELECT SUM(d.price * cd.quantity) FROM combo_dishes cd JOIN dishes d ON d.id = cd.dish_id WHERE cd.combo_id = cs.id),
+    cs.original_price
+  )::bigint as original_price,
+  cs.is_online,
+  (
+    SELECT json_agg(json_build_object(
+      'dish_id', cd.dish_id,
+      'dish_name', d.name,
+      'quantity', cd.quantity
+    ))
+    FROM combo_dishes cd
+    JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+  ) as dishes
+FROM combo_sets cs
+WHERE cs.merchant_id = $1
+  AND cs.is_online = true
+  AND cs.deleted_at IS NULL
+ORDER BY cs.id
+`
+
+type GetMerchantOnlineCombosRow struct {
+	ID            int64       `json:"id"`
+	Name          string      `json:"name"`
+	Description   pgtype.Text `json:"description"`
+	ImageUrl      pgtype.Text `json:"image_url"`
+	ComboPrice    int64       `json:"combo_price"`
+	OriginalPrice int64       `json:"original_price"`
+	IsOnline      bool        `json:"is_online"`
+	Dishes        []byte      `json:"dishes"`
+}
+
+// 获取商户所有在线套餐 - 消费者端使用
+func (q *Queries) GetMerchantOnlineCombos(ctx context.Context, merchantID int64) ([]GetMerchantOnlineCombosRow, error) {
+	rows, err := q.db.Query(ctx, getMerchantOnlineCombos, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMerchantOnlineCombosRow{}
+	for rows.Next() {
+		var i GetMerchantOnlineCombosRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.ImageUrl,
+			&i.ComboPrice,
+			&i.OriginalPrice,
+			&i.IsOnline,
+			&i.Dishes,
 		); err != nil {
 			return nil, err
 		}
@@ -616,6 +797,143 @@ func (q *Queries) GetTopSellingDishes(ctx context.Context, arg GetTopSellingDish
 			&i.DishPrice,
 			&i.TotalSold,
 			&i.TotalRevenue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMerchantActiveDeliveryPromotions = `-- name: ListMerchantActiveDeliveryPromotions :many
+SELECT id, merchant_id, name, min_order_amount, discount_amount, valid_from, valid_until, is_active, created_at, updated_at FROM merchant_delivery_promotions
+WHERE merchant_id = $1
+  AND is_active = true
+  AND valid_from <= NOW()
+  AND valid_until >= NOW()
+ORDER BY min_order_amount ASC
+`
+
+// 获取商户当前有效的配送费优惠
+func (q *Queries) ListMerchantActiveDeliveryPromotions(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error) {
+	rows, err := q.db.Query(ctx, listMerchantActiveDeliveryPromotions, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MerchantDeliveryPromotion{}
+	for rows.Next() {
+		var i MerchantDeliveryPromotion
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.Name,
+			&i.MinOrderAmount,
+			&i.DiscountAmount,
+			&i.ValidFrom,
+			&i.ValidUntil,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMerchantActiveDiscountRules = `-- name: ListMerchantActiveDiscountRules :many
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+WHERE merchant_id = $1
+  AND is_active = true
+  AND valid_from <= NOW()
+  AND valid_until >= NOW()
+  AND deleted_at IS NULL
+ORDER BY min_order_amount ASC
+`
+
+// 获取商户当前有效的满减规则
+func (q *Queries) ListMerchantActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error) {
+	rows, err := q.db.Query(ctx, listMerchantActiveDiscountRules, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DiscountRule{}
+	for rows.Next() {
+		var i DiscountRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.Name,
+			&i.Description,
+			&i.MinOrderAmount,
+			&i.DiscountAmount,
+			&i.CanStackWithVoucher,
+			&i.CanStackWithMembership,
+			&i.ValidFrom,
+			&i.ValidUntil,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMerchantActiveVouchers = `-- name: ListMerchantActiveVouchers :many
+SELECT id, merchant_id, code, name, description, amount, min_order_amount, total_quantity, claimed_quantity, used_quantity, valid_from, valid_until, is_active, created_at, updated_at, allowed_order_types, deleted_at FROM vouchers
+WHERE merchant_id = $1
+  AND is_active = true
+  AND valid_from <= NOW()
+  AND valid_until >= NOW()
+  AND claimed_quantity < total_quantity
+  AND deleted_at IS NULL
+ORDER BY amount DESC
+`
+
+// 获取商户当前有效的代金券
+func (q *Queries) ListMerchantActiveVouchers(ctx context.Context, merchantID int64) ([]Voucher, error) {
+	rows, err := q.db.Query(ctx, listMerchantActiveVouchers, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Voucher{}
+	for rows.Next() {
+		var i Voucher
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.Code,
+			&i.Name,
+			&i.Description,
+			&i.Amount,
+			&i.MinOrderAmount,
+			&i.TotalQuantity,
+			&i.ClaimedQuantity,
+			&i.UsedQuantity,
+			&i.ValidFrom,
+			&i.ValidUntil,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AllowedOrderTypes,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}

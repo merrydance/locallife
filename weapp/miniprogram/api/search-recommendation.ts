@@ -15,7 +15,7 @@ export interface SearchDishesParams extends Record<string, unknown> {
     min_price?: number;
     max_price?: number;
     sort_by?: 'price_asc' | 'price_desc' | 'sales_desc' | 'rating_desc';
-    page?: number;
+    page_id?: number;  // backend expects page_id
     page_size?: number;
 }
 
@@ -27,7 +27,7 @@ export interface SearchMerchantsParams extends Record<string, unknown> {
     min_rating?: number;
     delivery_fee_max?: number;
     sort_by?: 'distance' | 'rating' | 'sales' | 'delivery_fee';
-    page?: number;
+    page_id?: number;  // backend expects page_id
     page_size?: number;
 }
 
@@ -521,7 +521,7 @@ export class SearchUtils {
         const result = await searchDishes({
             keyword,
             merchant_id: merchantId,
-            page: 1,
+            page_id: 1,
             page_size: 20
         });
         return SearchAdapter.adaptDishResults(result.data);
@@ -535,7 +535,7 @@ export class SearchUtils {
             keyword,
             latitude: location?.latitude,
             longitude: location?.longitude,
-            page: 1,
+            page_id: 1,
             page_size: 20
         });
         return SearchAdapter.adaptMerchantResults(result.data);
@@ -555,7 +555,7 @@ export class SearchUtils {
             longitude,
             category,
             sort_by: 'distance',
-            page: 1,
+            page_id: 1,
             page_size: 20
         });
         return SearchAdapter.adaptMerchantResults(result.data);

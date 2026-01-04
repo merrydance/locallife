@@ -523,15 +523,34 @@ func (server *Server) reviewMerchantApplication(ctx *gin.Context) {
 
 	// 如果审核通过，创建商户记录
 	if *req.Approve {
-		// 构造application_data JSON
-		appData, err := json.Marshal(map[string]interface{}{
+		// 构造application_data JSON（包含所有证照和门店照片）
+		appDataMap := map[string]interface{}{
 			"business_license_number":    application.BusinessLicenseNumber,
 			"legal_person_name":          application.LegalPersonName,
 			"legal_person_id_number":     application.LegalPersonIDNumber,
 			"business_license_image_url": application.BusinessLicenseImageUrl,
 			"legal_person_id_front_url":  application.LegalPersonIDFrontUrl,
 			"legal_person_id_back_url":   application.LegalPersonIDBackUrl,
-		})
+		}
+		// 食品经营许可证
+		if application.FoodPermitUrl.Valid {
+			appDataMap["food_permit_url"] = application.FoodPermitUrl.String
+		}
+		// 门头照（jsonb数组）
+		if len(application.StorefrontImages) > 0 {
+			var storefrontImages []string
+			if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil {
+				appDataMap["storefront_images"] = storefrontImages
+			}
+		}
+		// 环境照（jsonb数组）
+		if len(application.EnvironmentImages) > 0 {
+			var environmentImages []string
+			if json.Unmarshal(application.EnvironmentImages, &environmentImages) == nil {
+				appDataMap["environment_images"] = environmentImages
+			}
+		}
+		appData, err := json.Marshal(appDataMap)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -1278,4 +1297,444 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, response)
+}
+
+// ==================== 消费者端商户详情 ====================
+
+// publicMerchantDetailRequest 公开商户详情请求
+type publicMerchantDetailRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// publicMerchantDetailResponse 公开商户详情响应（消费者端）
+type publicMerchantDetailResponse struct {
+	ID                      int64                     `json:"id"`
+	Name                    string                    `json:"name"`
+	Description             *string                   `json:"description,omitempty"`
+	LogoURL                 *string                   `json:"logo_url,omitempty"`
+	CoverImage              *string                   `json:"cover_image,omitempty"` // 门头照/招牌图
+	Phone                   string                    `json:"phone"`
+	Address                 string                    `json:"address"`
+	Latitude                float64                   `json:"latitude"`
+	Longitude               float64                   `json:"longitude"`
+	RegionID                int64                     `json:"region_id"`
+	IsOpen                  bool                      `json:"is_open"`
+	Tags                    []string                  `json:"tags"`                                 // 商户标签（如：快餐、川菜）
+	MonthlySales            int32                     `json:"monthly_sales"`                        // 近30天订单量
+	TrustScore              int16                     `json:"trust_score"`                          // 信誉分
+	AvgPrepMinutes          int32                     `json:"avg_prep_minutes"`                     // 平均出餐时间（分钟）
+	BusinessLicenseImageURL *string                   `json:"business_license_image_url,omitempty"` // 营业执照
+	FoodPermitURL           *string                   `json:"food_permit_url,omitempty"`            // 食品经营许可证
+	BusinessHours           []businessHourItem        `json:"business_hours,omitempty"`             // 营业时间
+	DiscountRules           []publicDiscountRule      `json:"discount_rules,omitempty"`             // 满减规则
+	Vouchers                []publicVoucher           `json:"vouchers,omitempty"`                   // 代金券
+	DeliveryPromotions      []publicDeliveryPromotion `json:"delivery_promotions,omitempty"`        // 配送费优惠
+}
+
+type publicDiscountRule struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	MinOrderAmount int64  `json:"min_order_amount"`
+	DiscountAmount int64  `json:"discount_amount"`
+}
+
+type publicVoucher struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	Amount         int64  `json:"amount"`
+	MinOrderAmount int64  `json:"min_order_amount"`
+}
+
+type publicDeliveryPromotion struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	MinOrderAmount int64  `json:"min_order_amount"`
+	DiscountAmount int64  `json:"discount_amount"`
+}
+
+// NOTE: businessHourItem is already defined at line ~961, reusing it here
+
+// getPublicMerchantDetail godoc
+// @Summary 获取商户详情（消费者端）
+// @Description 公开接口，获取商户详细信息，无需商户权限
+// @Tags 公开接口
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} publicMerchantDetailResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 404 {object} ErrorResponse "商户不存在或未上线"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/merchants/{id} [get]
+func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
+	var req publicMerchantDetailRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 获取商户基本信息
+	merchant, err := server.store.GetMerchant(ctx, req.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
+		return
+	}
+
+	// 只返回已批准的商户
+	if merchant.Status != "approved" && merchant.Status != "active" {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant is not available")))
+		return
+	}
+
+	// 构建响应
+	resp := publicMerchantDetailResponse{
+		ID:       merchant.ID,
+		Name:     merchant.Name,
+		Phone:    merchant.Phone,
+		Address:  merchant.Address,
+		RegionID: merchant.RegionID,
+		IsOpen:   merchant.IsOpen,
+		Tags:     []string{},
+	}
+
+	// 处理可空字段
+	if merchant.Description.Valid {
+		resp.Description = &merchant.Description.String
+	}
+	if merchant.LogoUrl.Valid {
+		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
+		resp.LogoURL = &logo
+	}
+	if merchant.Latitude.Valid {
+		lat, _ := parseNumericToFloat(merchant.Latitude)
+		resp.Latitude = lat
+	}
+	if merchant.Longitude.Valid {
+		lng, _ := parseNumericToFloat(merchant.Longitude)
+		resp.Longitude = lng
+	}
+
+	// 解析 application_data 获取证照信息和门头照
+	if merchant.ApplicationData != nil {
+		var appData map[string]interface{}
+		if err := json.Unmarshal(merchant.ApplicationData, &appData); err == nil {
+			if licenseURL, ok := appData["business_license_image_url"].(string); ok && licenseURL != "" {
+				normalized := normalizeUploadURLForClient(licenseURL)
+				resp.BusinessLicenseImageURL = &normalized
+			}
+			if permitURL, ok := appData["food_permit_url"].(string); ok && permitURL != "" {
+				normalized := normalizeUploadURLForClient(permitURL)
+				resp.FoodPermitURL = &normalized
+			}
+			// 门头照数组（取第一张作为封面图）
+			if storefrontImages, ok := appData["storefront_images"].([]interface{}); ok && len(storefrontImages) > 0 {
+				if firstImage, ok := storefrontImages[0].(string); ok && firstImage != "" {
+					normalized := normalizeUploadURLForClient(firstImage)
+					resp.CoverImage = &normalized
+				}
+			}
+		}
+	}
+
+	// 获取商户标签
+	tags, err := server.store.ListMerchantTags(ctx, merchant.ID)
+	if err == nil && len(tags) > 0 {
+		resp.Tags = make([]string, len(tags))
+		for i, tag := range tags {
+			resp.Tags[i] = tag.Name
+		}
+	}
+
+	// 获取商户 profile（订单量、信誉分）
+	profile, err := server.store.GetMerchantProfile(ctx, merchant.ID)
+	if err == nil {
+		resp.MonthlySales = profile.CompletedOrders // 使用已完成订单数
+		resp.TrustScore = profile.TrustScore
+	} else {
+		resp.MonthlySales = 0
+		resp.TrustScore = 850 // 默认信誉分
+	}
+
+	// 获取平均出餐时间
+	avgPrepMinutes, err := server.store.GetMerchantAvgPrepMinutes(ctx, merchant.ID)
+	if err == nil {
+		resp.AvgPrepMinutes = avgPrepMinutes
+	} else {
+		resp.AvgPrepMinutes = 15 // 默认 15 分钟
+	}
+
+	// 获取营业时间
+	hours, err := server.store.ListMerchantBusinessHours(ctx, merchant.ID)
+	if err == nil && len(hours) > 0 {
+		resp.BusinessHours = make([]businessHourItem, len(hours))
+		for i, h := range hours {
+			resp.BusinessHours[i] = businessHourItem{
+				DayOfWeek: int32(h.DayOfWeek),
+				OpenTime:  formatTimeForResponse(h.OpenTime),
+				CloseTime: formatTimeForResponse(h.CloseTime),
+				IsClosed:  h.IsClosed,
+			}
+		}
+	}
+
+	// 获取满减规则
+	discountRules, err := server.store.ListMerchantActiveDiscountRules(ctx, merchant.ID)
+	if err == nil {
+		for _, r := range discountRules {
+			resp.DiscountRules = append(resp.DiscountRules, publicDiscountRule{
+				ID:             r.ID,
+				Name:           r.Name,
+				MinOrderAmount: r.MinOrderAmount,
+				DiscountAmount: r.DiscountAmount,
+			})
+		}
+	}
+
+	// 获取代金券
+	vouchers, err := server.store.ListMerchantActiveVouchers(ctx, merchant.ID)
+	if err == nil {
+		for _, v := range vouchers {
+			resp.Vouchers = append(resp.Vouchers, publicVoucher{
+				ID:             v.ID,
+				Name:           v.Name,
+				Amount:         v.Amount,
+				MinOrderAmount: v.MinOrderAmount,
+			})
+		}
+	}
+
+	// 获取配送费优惠
+	deliveryPromotions, err := server.store.ListMerchantActiveDeliveryPromotions(ctx, merchant.ID)
+	if err == nil {
+		for _, p := range deliveryPromotions {
+			resp.DeliveryPromotions = append(resp.DeliveryPromotions, publicDeliveryPromotion{
+				ID:             p.ID,
+				Name:           p.Name,
+				MinOrderAmount: p.MinOrderAmount,
+				DiscountAmount: p.DiscountAmount,
+			})
+		}
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// formatTimeForResponse 格式化时间为 HH:MM 字符串
+func formatTimeForResponse(t pgtype.Time) string {
+	if !t.Valid {
+		return ""
+	}
+	// pgtype.Time 存储的是微秒数
+	totalSeconds := t.Microseconds / 1000000
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	return fmt.Sprintf("%02d:%02d", hours, minutes)
+}
+
+// ==================== 消费者端菜品列表 ====================
+
+type publicDishCategoryItem struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	SortOrder int16  `json:"sort_order"`
+}
+
+type publicDishItem struct {
+	ID           int64    `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description,omitempty"`
+	Price        int64    `json:"price"`
+	MemberPrice  *int64   `json:"member_price,omitempty"`
+	ImageURL     string   `json:"image_url,omitempty"`
+	CategoryID   int64    `json:"category_id"`
+	CategoryName string   `json:"category_name"`
+	MonthlySales int32    `json:"monthly_sales"`
+	PrepareTime  int16    `json:"prepare_time"`
+	Tags         []string `json:"tags"`
+}
+
+type publicMerchantDishesResponse struct {
+	Categories []publicDishCategoryItem `json:"categories"`
+	Dishes     []publicDishItem         `json:"dishes"`
+}
+
+// getPublicMerchantDishes godoc
+// @Summary 获取商户菜品列表（消费者端）
+// @Description 公开接口，获取商户所有在线菜品及分类
+// @Tags 公开接口
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} publicMerchantDishesResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/merchants/{id}/dishes [get]
+func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
+	var req publicMerchantDetailRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	dishes, err := server.store.GetMerchantDishesWithCategory(ctx, req.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 提取分类
+	categoryMap := make(map[int64]publicDishCategoryItem)
+	var dishList []publicDishItem
+
+	for _, d := range dishes {
+		// 添加分类
+		if _, exists := categoryMap[d.CategoryID]; !exists {
+			categoryMap[d.CategoryID] = publicDishCategoryItem{
+				ID:        d.CategoryID,
+				Name:      d.CategoryName,
+				SortOrder: d.CategorySortOrder,
+			}
+		}
+
+		// 解析标签
+		var tags []string
+		if d.Tags != nil {
+			if tagBytes, ok := d.Tags.([]byte); ok {
+				json.Unmarshal(tagBytes, &tags)
+			}
+		}
+		if tags == nil {
+			tags = []string{}
+		}
+
+		// 解析月销量
+		var monthlySales int32
+		if d.MonthlySales != nil {
+			switch v := d.MonthlySales.(type) {
+			case int32:
+				monthlySales = v
+			case int64:
+				monthlySales = int32(v)
+			case float64:
+				monthlySales = int32(v)
+			}
+		}
+
+		dish := publicDishItem{
+			ID:           d.ID,
+			Name:         d.Name,
+			Price:        d.Price,
+			CategoryID:   d.CategoryID,
+			CategoryName: d.CategoryName,
+			MonthlySales: monthlySales,
+			PrepareTime:  d.PrepareTime,
+			Tags:         tags,
+		}
+
+		if d.Description.Valid {
+			dish.Description = d.Description.String
+		}
+		if d.ImageUrl.Valid {
+			dish.ImageURL = normalizeUploadURLForClient(d.ImageUrl.String)
+		}
+		if d.MemberPrice.Valid {
+			dish.MemberPrice = &d.MemberPrice.Int64
+		}
+
+		dishList = append(dishList, dish)
+	}
+
+	// 构建分类列表
+	var categories []publicDishCategoryItem
+	for _, c := range categoryMap {
+		categories = append(categories, c)
+	}
+
+	ctx.JSON(http.StatusOK, publicMerchantDishesResponse{
+		Categories: categories,
+		Dishes:     dishList,
+	})
+}
+
+// ==================== 消费者端套餐列表 ====================
+
+type comboDishItem struct {
+	DishID   int64  `json:"dish_id"`
+	DishName string `json:"dish_name"`
+	Quantity int16  `json:"quantity"`
+}
+
+type publicComboItem struct {
+	ID            int64           `json:"id"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description,omitempty"`
+	ImageURL      string          `json:"image_url,omitempty"`
+	ComboPrice    int64           `json:"combo_price"`
+	OriginalPrice int64           `json:"original_price"`
+	Dishes        []comboDishItem `json:"dishes"`
+}
+
+type publicMerchantCombosResponse struct {
+	Combos []publicComboItem `json:"combos"`
+}
+
+// getPublicMerchantCombos godoc
+// @Summary 获取商户套餐列表（消费者端）
+// @Description 公开接口，获取商户所有在线套餐
+// @Tags 公开接口
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} publicMerchantCombosResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/merchants/{id}/combos [get]
+func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
+	var req publicMerchantDetailRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	combos, err := server.store.GetMerchantOnlineCombos(ctx, req.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	var comboList []publicComboItem
+	for _, c := range combos {
+		combo := publicComboItem{
+			ID:            c.ID,
+			Name:          c.Name,
+			ComboPrice:    c.ComboPrice,
+			OriginalPrice: c.OriginalPrice,
+			Dishes:        []comboDishItem{},
+		}
+
+		if c.Description.Valid {
+			combo.Description = c.Description.String
+		}
+		if c.ImageUrl.Valid {
+			combo.ImageURL = normalizeUploadURLForClient(c.ImageUrl.String)
+		}
+
+		// 解析菜品
+		if c.Dishes != nil {
+			var dishes []comboDishItem
+			if err := json.Unmarshal(c.Dishes, &dishes); err == nil {
+				combo.Dishes = dishes
+			}
+		}
+
+		comboList = append(comboList, combo)
+	}
+
+	ctx.JSON(http.StatusOK, publicMerchantCombosResponse{
+		Combos: comboList,
+	})
 }

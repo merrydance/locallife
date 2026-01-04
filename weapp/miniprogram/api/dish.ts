@@ -613,12 +613,13 @@ export class DishManagementService {
     }
 
     /**
-     * 获取菜品详情
-     * GET /v1/dishes/{id}
+     * 获取菜品详情（消费者端）
+     * GET /v1/public/dishes/{id}
+     * 注意：使用公开接口，无需商户权限
      */
     static async getDishDetail(dishId: number): Promise<DishResponse> {
         return await request({
-            url: `/v1/dishes/${dishId}`,
+            url: `/v1/public/dishes/${dishId}`,
             method: 'GET'
         })
     }

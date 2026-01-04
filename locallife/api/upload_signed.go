@@ -27,7 +27,7 @@ type signUploadURLResponse struct {
 
 // @Summary 生成上传文件的签名下载URL
 // @Description 用于访问 uploads 下的敏感图片（证照/身份证/健康证等）。
-// @Description 
+// @Description
 // @Description 说明：
 // @Description - 公共展示素材通常可直接访问 /uploads/...（无需签名）。
 // @Description - 私有/敏感图片必须先调用本接口获取短期签名URL，再使用该URL下载。
@@ -139,10 +139,13 @@ func isPubliclyAccessibleUploadPath(normalized string) bool {
 	if strings.HasPrefix(normalized, "uploads/public/") {
 		return true
 	}
-	// 商户 logo 属于对外展示素材
+	// 商户 logo/门头照/环境照 属于对外展示素材
 	parts := strings.Split(normalized, "/")
-	if len(parts) >= 5 && parts[0] == "uploads" && parts[1] == "merchants" && parts[3] == "logo" {
-		return true
+	if len(parts) >= 5 && parts[0] == "uploads" && parts[1] == "merchants" {
+		category := parts[3]
+		if category == "logo" || category == "storefront" || category == "environment" {
+			return true
+		}
 	}
 	// 评价图片一般需要对外展示
 	if strings.HasPrefix(normalized, "uploads/reviews/") {
@@ -189,6 +192,12 @@ func isUploadPathOwnedByUser(normalized string, uid int64) bool {
 	}
 	// 对外展示的公共素材：允许任意已登录用户签名访问（仍然需要短期签名）
 	if strings.HasPrefix(normalized, "uploads/public/") {
+		return true
+	}
+	// 商户证照对所有登录用户公开可见（营业执照、食品经营许可证）
+	// 路径格式: uploads/merchants/{id}/business_license/... 或 uploads/merchants/{id}/food_permit/...
+	if strings.Contains(normalized, "/merchants/") &&
+		(strings.Contains(normalized, "/business_license/") || strings.Contains(normalized, "/food_permit/")) {
 		return true
 	}
 	uidStr := fmt.Sprintf("/%d/", uid)

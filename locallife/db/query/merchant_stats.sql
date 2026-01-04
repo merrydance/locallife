@@ -210,3 +210,114 @@ LEFT JOIN orders o ON o.id = oi.order_id
 WHERE mdc.merchant_id = $1
 GROUP BY dc.id, dc.name, mdc.sort_order
 ORDER BY mdc.sort_order ASC, total_revenue DESC;
+
+-- name: GetMerchantAvgPrepMinutes :one
+-- 获取商户平均出餐时间（分钟）
+-- 从 order_status_logs 计算 paid → ready 的时间差
+-- 取最近30天完成订单的平均值
+SELECT COALESCE(
+  AVG(EXTRACT(EPOCH FROM (ready_log.created_at - paid_log.created_at)) / 60),
+  0
+)::INTEGER as avg_prep_minutes
+FROM orders o
+JOIN order_status_logs paid_log ON paid_log.order_id = o.id AND paid_log.to_status = 'paid'
+JOIN order_status_logs ready_log ON ready_log.order_id = o.id AND ready_log.to_status = 'ready'
+WHERE o.merchant_id = $1
+  AND o.status IN ('ready', 'delivering', 'completed')
+  AND o.created_at > NOW() - INTERVAL '30 days';
+
+-- name: GetMerchantDishesWithCategory :many
+-- 获取商户所有在线菜品（含分类信息）- 消费者端使用
+SELECT 
+  d.id,
+  d.name,
+  d.description,
+  d.price,
+  d.member_price,
+  d.image_url,
+  d.is_available,
+  d.sort_order,
+  d.prepare_time,
+  COALESCE(dc.id, 0) as category_id,
+  COALESCE(dc.name, '未分类') as category_name,
+  COALESCE(mdc.sort_order, 999) as category_sort_order,
+  COALESCE(
+    (SELECT json_agg(t.name) FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id),
+    '[]'::json
+  ) as tags,
+  COALESCE(
+    (SELECT SUM(oi.quantity)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id 
+     WHERE oi.dish_id = d.id AND o.status IN ('completed', 'delivered') 
+     AND o.created_at > NOW() - INTERVAL '30 days'),
+    0
+  ) as monthly_sales
+FROM dishes d
+LEFT JOIN dish_categories dc ON dc.id = d.category_id
+LEFT JOIN merchant_dish_categories mdc ON mdc.category_id = dc.id AND mdc.merchant_id = d.merchant_id
+WHERE d.merchant_id = $1
+  AND d.is_online = true
+  AND d.is_available = true
+  AND d.deleted_at IS NULL
+ORDER BY COALESCE(mdc.sort_order, 999), d.sort_order, d.id;
+
+-- name: GetMerchantOnlineCombos :many
+-- 获取商户所有在线套餐 - 消费者端使用
+SELECT 
+  cs.id,
+  cs.name,
+  cs.description,
+  cs.image_url,
+  cs.combo_price,
+  -- 实时计算实际原价（单品价之和）
+  COALESCE(
+    (SELECT SUM(d.price * cd.quantity) FROM combo_dishes cd JOIN dishes d ON d.id = cd.dish_id WHERE cd.combo_id = cs.id),
+    cs.original_price
+  )::bigint as original_price,
+  cs.is_online,
+  (
+    SELECT json_agg(json_build_object(
+      'dish_id', cd.dish_id,
+      'dish_name', d.name,
+      'quantity', cd.quantity
+    ))
+    FROM combo_dishes cd
+    JOIN dishes d ON d.id = cd.dish_id
+    WHERE cd.combo_id = cs.id
+  ) as dishes
+FROM combo_sets cs
+WHERE cs.merchant_id = $1
+  AND cs.is_online = true
+  AND cs.deleted_at IS NULL
+ORDER BY cs.id;
+
+-- name: ListMerchantActiveDiscountRules :many
+-- 获取商户当前有效的满减规则
+SELECT * FROM discount_rules
+WHERE merchant_id = $1
+  AND is_active = true
+  AND valid_from <= NOW()
+  AND valid_until >= NOW()
+  AND deleted_at IS NULL
+ORDER BY min_order_amount ASC;
+
+-- name: ListMerchantActiveVouchers :many
+-- 获取商户当前有效的代金券
+SELECT * FROM vouchers
+WHERE merchant_id = $1
+  AND is_active = true
+  AND valid_from <= NOW()
+  AND valid_until >= NOW()
+  AND claimed_quantity < total_quantity
+  AND deleted_at IS NULL
+ORDER BY amount DESC;
+
+-- name: ListMerchantActiveDeliveryPromotions :many
+-- 获取商户当前有效的配送费优惠
+SELECT * FROM merchant_delivery_promotions
+WHERE merchant_id = $1
+  AND is_active = true
+  AND valid_from <= NOW()
+  AND valid_until >= NOW()
+ORDER BY min_order_amount ASC;
+
+

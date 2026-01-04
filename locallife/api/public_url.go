@@ -35,6 +35,11 @@ func externalBaseURL(ctx *gin.Context) string {
 		}
 	}
 
+	// 生产环境强制使用 HTTPS（非 localhost）
+	if !strings.HasPrefix(host, "localhost") && !strings.HasPrefix(host, "127.0.0.1") {
+		scheme = "https"
+	}
+
 	return scheme + "://" + host
 }
 

@@ -549,6 +549,10 @@ type Querier interface {
 	GetMerchantApplicationByLicenseNumber(ctx context.Context, businessLicenseNumber string) (MerchantApplication, error)
 	// 获取用户的草稿或可编辑申请（包含所有状态，以便随时编辑）
 	GetMerchantApplicationDraft(ctx context.Context, userID int64) (MerchantApplication, error)
+	// 获取商户平均出餐时间（分钟）
+	// 从 order_status_logs 计算 paid → ready 的时间差
+	// 取最近30天完成订单的平均值
+	GetMerchantAvgPrepMinutes(ctx context.Context, merchantID int64) (int32, error)
 	// 计算商户近N天的平均出餐时间（分钟）
 	// 通过订单支付时间到状态变为ready的时间差计算
 	GetMerchantAvgPrepareTime(ctx context.Context, arg GetMerchantAvgPrepareTimeParams) (int64, error)
@@ -572,6 +576,8 @@ type Querier interface {
 	// 商户日报: 按天聚合订单数据
 	GetMerchantDailyStats(ctx context.Context, arg GetMerchantDailyStatsParams) ([]GetMerchantDailyStatsRow, error)
 	GetMerchantDishCategory(ctx context.Context, arg GetMerchantDishCategoryParams) (MerchantDishCategory, error)
+	// 获取商户所有在线菜品（含分类信息）- 消费者端使用
+	GetMerchantDishesWithCategory(ctx context.Context, merchantID int64) ([]GetMerchantDishesWithCategoryRow, error)
 	// 商户财务概览：统计收入、服务费、净收入
 	GetMerchantFinanceOverview(ctx context.Context, arg GetMerchantFinanceOverviewParams) (GetMerchantFinanceOverviewRow, error)
 	// 商户增长统计
@@ -583,6 +589,8 @@ type Querier interface {
 	GetMerchantMembership(ctx context.Context, id int64) (MerchantMembership, error)
 	// 商户会员设置查询
 	GetMerchantMembershipSettings(ctx context.Context, merchantID int64) (MerchantMembershipSetting, error)
+	// 获取商户所有在线套餐 - 消费者端使用
+	GetMerchantOnlineCombos(ctx context.Context, merchantID int64) ([]GetMerchantOnlineCombosRow, error)
 	// 订单来源分析
 	GetMerchantOrderSourceStats(ctx context.Context, arg GetMerchantOrderSourceStatsParams) ([]GetMerchantOrderSourceStatsRow, error)
 	// 商户概览: 指定日期范围的汇总统计
@@ -947,6 +955,12 @@ type Querier interface {
 	ListIngredients(ctx context.Context, arg ListIngredientsParams) ([]Ingredient, error)
 	ListMembershipTransactions(ctx context.Context, arg ListMembershipTransactionsParams) ([]MembershipTransaction, error)
 	ListMembershipTransactionsByType(ctx context.Context, arg ListMembershipTransactionsByTypeParams) ([]MembershipTransaction, error)
+	// 获取商户当前有效的配送费优惠
+	ListMerchantActiveDeliveryPromotions(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
+	// 获取商户当前有效的满减规则
+	ListMerchantActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
+	// 获取商户当前有效的代金券
+	ListMerchantActiveVouchers(ctx context.Context, merchantID int64) ([]Voucher, error)
 	// =========================== 商户视角 ===========================
 	// 商户查询自己的申诉列表
 	ListMerchantAppealsForMerchant(ctx context.Context, arg ListMerchantAppealsForMerchantParams) ([]ListMerchantAppealsForMerchantRow, error)
