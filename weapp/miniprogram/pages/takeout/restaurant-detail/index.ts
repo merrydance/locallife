@@ -4,6 +4,7 @@
  */
 
 import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantCombos, PublicMerchantDetail, PublicDishCategory } from '../../../api/merchant'
+import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
 import { getPublicImageUrl } from '../../../utils/image'
 import { resolveImageURL } from '../../../utils/image-security'
 
@@ -11,12 +12,13 @@ Page({
   data: {
     restaurantId: '',
     restaurant: null as any,
-    activeTab: 'dishes' as 'dishes' | 'combos' | 'info',
+    activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms' | 'info',
     activeCategoryId: '' as string | number,
     categories: [] as PublicDishCategory[],
     dishes: [] as any[],
     filteredDishes: [] as any[],
     combos: [] as any[],
+    rooms: [] as PublicRoom[],
     cartCount: 0,
     cartPrice: 0,
     navBarHeight: 88,
@@ -48,11 +50,12 @@ Page({
     try {
       const merchantId = parseInt(this.data.restaurantId)
 
-      // 并行加载商户信息、菜品和套餐
-      const [merchantResult, dishesResult, combosResult] = await Promise.all([
+      // 并行加载商户信息、菜品、套餐和包间
+      const [merchantResult, dishesResult, combosResult, roomsResult] = await Promise.all([
         this.loadMerchantInfo(merchantId),
         this.loadDishes(merchantId),
-        this.loadCombos(merchantId)
+        this.loadCombos(merchantId),
+        this.loadRooms(merchantId)
       ])
 
       if (!merchantResult) {
@@ -70,6 +73,7 @@ Page({
         categories,
         dishes: dishesResult.dishes,
         combos: combosResult,
+        rooms: roomsResult,
         activeCategoryId: firstCategoryId,
         loading: false
       })
@@ -181,6 +185,20 @@ Page({
       }))
     } catch (error) {
       console.error('加载套餐失败:', error)
+      return []
+    }
+  },
+
+  async loadRooms(merchantId: number): Promise<PublicRoom[]> {
+    try {
+      const result = await getPublicMerchantRooms(merchantId)
+      // 包间图片是公共图片，使用getPublicImageUrl处理
+      return (result.rooms || []).map((room: PublicRoom) => ({
+        ...room,
+        image_url: room.image_url ? getPublicImageUrl(room.image_url) : ''
+      }))
+    } catch (error) {
+      console.error('加载包间失败:', error)
       return []
     }
   },
@@ -338,6 +356,15 @@ Page({
       wx.previewImage({
         current: src,
         urls: [src]
+      })
+    }
+  },
+
+  onRoomTap(e: WechatMiniprogram.CustomEvent) {
+    const roomId = e.currentTarget.dataset.id
+    if (roomId) {
+      wx.navigateTo({
+        url: `/pages/takeout/room-detail/index?id=${roomId}`
       })
     }
   }

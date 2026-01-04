@@ -22,6 +22,7 @@
   <t-tabs value="{{activeTab}}" bind:change="onTabChange">
     <t-tab-panel label="菜品" value="dishes" />
     <t-tab-panel label="套餐({{combos.length}})" value="combos" />
+    <t-tab-panel label="包间({{rooms.length}})" value="rooms" />
     <t-tab-panel label="商家" value="info" />
   </t-tabs>
 </view>
@@ -112,6 +113,31 @@
       </view>
     </block>
     <t-empty wx:else description="暂无套餐" />
+  </scroll-view>
+
+  <!-- 包间Tab -->
+  <scroll-view wx:if="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y>
+    <block wx:if="{{rooms.length > 0}}">
+      <view wx:for="{{rooms}}" wx:key="id" class="room-item" data-id="{{item.id}}" bindtap="onRoomTap">
+        <t-image wx:if="{{item.image_url}}" class="room-image" src="{{item.image_url}}" mode="aspectFill" />
+        <view wx:else class="room-image-placeholder">暂无图片</view>
+        <view class="room-info">
+          <text class="room-name">{{item.name}}</text>
+          <view class="room-tags" wx:if="{{item.tags.length > 0}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light">{{tag}}</t-tag>
+          </view>
+          <view class="room-meta">
+            <text class="room-capacity">可容纳 {{item.capacity}} 人</text>
+            <text class="room-sales">月销 {{item.monthly_sales || 0}}</text>
+          </view>
+          <view class="room-price-row" wx:if="{{item.minimum_spend}}">
+            <text class="room-price-label">最低消费</text>
+            <text class="room-price">¥{{item.minimum_spend / 100}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+    <t-empty wx:else description="暂无包间" />
   </scroll-view>
 
   <!-- 商家Tab -->

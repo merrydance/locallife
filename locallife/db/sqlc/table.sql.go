@@ -662,7 +662,11 @@ SELECT
     t.minimum_spend,
     t.status,
     t.created_at,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image,
+    COALESCE(
+        (SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
+        (SELECT image_url FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
+        ''
+    )::TEXT as primary_image,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')

@@ -138,6 +138,37 @@ export interface TableTagInfo {
     type: string                                 // 标签类型
 }
 
+/** 公开包间信息（消费侧） */
+export interface PublicRoom {
+    id: number                                   // 包间ID
+    name: string                                 // 包间名称
+    capacity: number                             // 容纳人数
+    minimum_spend?: number                       // 最低消费（分）
+    description?: string                         // 描述
+    image_url?: string                           // 主图URL
+    monthly_sales: number                        // 月销量（预订数）
+    status: string                               // 状态
+    tags: string[]                               // 标签列表
+}
+
+/** 公开包间列表响应 */
+export interface PublicMerchantRoomsResponse {
+    rooms: PublicRoom[]
+}
+
+// ==================== 消费侧API接口函数 ====================
+
+/**
+ * 获取商户包间列表（消费者端）
+ * @param merchantId 商户ID
+ */
+export async function getPublicMerchantRooms(merchantId: number): Promise<PublicMerchantRoomsResponse> {
+    return request({
+        url: `/v1/public/merchants/${merchantId}/rooms`,
+        method: 'GET'
+    })
+}
+
 // ==================== API接口函数 ====================
 
 /**
@@ -163,10 +194,10 @@ export async function getMerchantAllRooms(merchantId: number): Promise<ListRooms
 }
 
 /**
- * 获取包间详情
+ * 获取包间详情（消费者端）
  * @param roomId 包间ID
  */
-export async function getRoomDetail(roomId: number): Promise<RoomResponse> {
+export async function getRoomDetail(roomId: number): Promise<RoomDetailResponse> {
     return request({
         url: `/v1/rooms/${roomId}`,
         method: 'GET'

@@ -1738,3 +1738,82 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 		Combos: comboList,
 	})
 }
+
+// ==================== 消费者端包间列表 ====================
+
+type publicRoomItem struct {
+	ID           int64    `json:"id"`
+	Name         string   `json:"name"`
+	Capacity     int16    `json:"capacity"`
+	MinimumSpend *int64   `json:"minimum_spend,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	ImageURL     string   `json:"image_url,omitempty"`
+	MonthlySales int64    `json:"monthly_sales"`
+	Status       string   `json:"status"`
+	Tags         []string `json:"tags"`
+}
+
+type publicMerchantRoomsResponse struct {
+	Rooms []publicRoomItem `json:"rooms"`
+}
+
+// getPublicMerchantRooms godoc
+// @Summary 获取商户包间列表（消费者端）
+// @Description 公开接口，获取商户所有包间信息，帮助消费者决策
+// @Tags 公开接口
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} publicMerchantRoomsResponse
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/merchants/{id}/rooms [get]
+func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
+	var req publicMerchantDetailRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	rooms, err := server.store.ListMerchantRoomsForCustomer(ctx, req.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	var roomList []publicRoomItem
+	for _, r := range rooms {
+		room := publicRoomItem{
+			ID:           r.ID,
+			Name:         r.TableNo,
+			Capacity:     r.Capacity,
+			MonthlySales: r.MonthlyReservations,
+			Status:       r.Status,
+			Tags:         []string{},
+		}
+
+		if r.Description.Valid {
+			room.Description = r.Description.String
+		}
+		if r.MinimumSpend.Valid {
+			room.MinimumSpend = &r.MinimumSpend.Int64
+		}
+		if r.PrimaryImage != "" {
+			room.ImageURL = normalizeUploadURLForClient(r.PrimaryImage)
+		}
+
+		// 获取包间标签
+		tags, err := server.store.ListTableTags(ctx, r.ID)
+		if err == nil {
+			for _, t := range tags {
+				room.Tags = append(room.Tags, t.TagName)
+			}
+		}
+
+		roomList = append(roomList, room)
+	}
+
+	ctx.JSON(http.StatusOK, publicMerchantRoomsResponse{
+		Rooms: roomList,
+	})
+}

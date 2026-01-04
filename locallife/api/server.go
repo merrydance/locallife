@@ -278,6 +278,7 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/public/merchants/:id", server.getPublicMerchantDetail)
 	authGroup.GET("/public/merchants/:id/dishes", server.getPublicMerchantDishes)
 	authGroup.GET("/public/merchants/:id/combos", server.getPublicMerchantCombos)
+	authGroup.GET("/public/merchants/:id/rooms", server.getPublicMerchantRooms)
 
 	// 分享功能由小程序前端 share 属性实现，无需后端API
 
