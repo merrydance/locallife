@@ -175,7 +175,6 @@
               mode="aspectFit"
             />
             <text class="license-name">营业执照</text>
-            <text class="license-debug">{{restaurant.business_license_image_url}}</text>
           </view>
           <view class="license-item" wx:if="{{restaurant.food_permit_url}}" bindtap="onPreviewLicense" data-src="{{restaurant.food_permit_url}}">
             <t-image 

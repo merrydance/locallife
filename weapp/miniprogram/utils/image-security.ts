@@ -67,12 +67,13 @@ export async function resolveImageURL(urlOrPath: string): Promise<string> {
     const storedPath = toStoredPath(urlOrPath)
     if (!storedPath) return urlOrPath // Should verify logic here, but if not stored path and not external, what is it? Return as is.
 
-    // 调试：临时禁用缓存
-    // const now = Math.floor(Date.now() / 1000)
-    // const cached = signedUrlCache.get(storedPath)
-    // if (cached && cached.expires > now + 60) {
-    //     return cached.url
-    // }
+    // Check cache
+    const now = Math.floor(Date.now() / 1000)
+    const cached = signedUrlCache.get(storedPath)
+    // Refresh if expiring in less than 60s
+    if (cached && cached.expires > now + 60) {
+        return cached.url
+    }
 
     try {
         const res = await request<SignedUrlResponse>({
@@ -86,17 +87,6 @@ export async function resolveImageURL(urlOrPath: string): Promise<string> {
         return res.url
 
     } catch (e: any) {
-        // 调试：显示签名错误（包含状态码）
-        const errorInfo = e?.statusCode
-            ? `${e.statusCode}: ${e?.error?.error || e?.message || ''}`
-            : (e?.message || e?.errMsg || JSON.stringify(e)?.slice(0, 30))
-        wx.showToast({
-            title: `签名失败: ${errorInfo?.slice(0, 30)}`,
-            icon: 'none',
-            duration: 5000
-        })
-
-
         // 如果是abort错误，等待短暂时间后检查缓存（另一个并发请求可能成功了）
         if (e?.errMsg?.includes('abort')) {
             await new Promise(resolve => setTimeout(resolve, 100))
@@ -106,7 +96,7 @@ export async function resolveImageURL(urlOrPath: string): Promise<string> {
             }
         }
 
-        // 静默处理签名失败，返回备用路径（不打印错误到控制台）
+        // 静默处理签名失败，返回备用路径
         const baseUrl = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE
         const path = urlOrPath.startsWith('/') ? urlOrPath : `/${urlOrPath}`
         return `${baseUrl}${path}`

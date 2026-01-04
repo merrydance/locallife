@@ -518,13 +518,6 @@
   color: #666;
 }
 
-.license-debug {
-  font-size: 18rpx;
-  color: #999;
-  word-break: break-all;
-  max-width: 280rpx;
-}
-
 .info-value.license {
   font-size: 24rpx;
   color: #999;

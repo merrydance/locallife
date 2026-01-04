@@ -340,22 +340,5 @@ Page({
         urls: [src]
       })
     }
-  },
-
-  onImageError(e: WechatMiniprogram.CustomEvent) {
-    const src = (e.detail?.src || e.target?.dataset?.src || '').slice(0, 60)
-    wx.showModal({
-      title: '图片加载失败',
-      content: `错误: ${e.detail?.errMsg || '未知'}\nSRC: ${src}...`,
-      showCancel: false
-    })
-  },
-
-  onImageLoad(e: WechatMiniprogram.CustomEvent) {
-    wx.showToast({
-      title: '图片加载成功',
-      icon: 'success',
-      duration: 1000
-    })
   }
 })
