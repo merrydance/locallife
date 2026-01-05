@@ -5,6 +5,7 @@
 
 import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantCombos, PublicMerchantDetail, PublicDishCategory } from '../../../api/merchant'
 import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
+import { getUserCarts } from '../../../api/cart'
 import { getPublicImageUrl } from '../../../utils/image'
 import { resolveImageURL } from '../../../utils/image-security'
 
@@ -309,13 +310,24 @@ Page({
     }
   },
 
-  updateCartDisplay() {
-    const CartService = require('../../../services/cart').default
-    const cart = CartService.getCart()
-    this.setData({
-      cartCount: cart?.total_count || 0,
-      cartPrice: cart?.subtotal || 0
-    })
+  async updateCartDisplay() {
+    try {
+      // 使用与外卖首页相同的方式获取购物车状态
+      const userCarts = await getUserCarts()
+      const totalCount = userCarts.summary?.total_items || 0
+      const totalPrice = userCarts.summary?.total_amount || 0
+
+      this.setData({
+        cartCount: totalCount,
+        cartPrice: totalPrice
+      })
+    } catch (error) {
+      // 获取失败时重置为0
+      this.setData({
+        cartCount: 0,
+        cartPrice: 0
+      })
+    }
   },
 
   onCheckout() {
@@ -364,7 +376,7 @@ Page({
     const roomId = e.currentTarget.dataset.id
     if (roomId) {
       wx.navigateTo({
-        url: `/pages/takeout/room-detail/index?id=${roomId}`
+        url: `/pages/reservation/room-detail/index?id=${roomId}`
       })
     }
   }

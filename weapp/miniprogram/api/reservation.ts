@@ -4,7 +4,7 @@
  * 对应后端 /v1/reservations 路由组
  */
 
-import { request } from '../utils/request'
+import { request, API_BASE } from '../utils/request'
 
 // ==================== 数据类型定义 ====================
 
@@ -344,5 +344,55 @@ export const updateReservation = ReservationService.updateReservation
 export const confirmReservationByMerchant = ReservationService.confirmReservation
 export const completeReservationByMerchant = ReservationService.completeReservation
 export const markReservationNoShow = ReservationService.markNoShow
+
+// ==================== 包间相关接口 ====================
+
+/**
+ * 包间信息（用于预订详情页）
+ */
+export interface Room {
+  id: number
+  merchant_id: number       // 商户ID（全款模式需要）
+  name: string
+  capacity: number
+  min_spend: number         // 最低消费（分）
+  deposit: number           // 预定定金（分）
+  images: string[]          // 图片列表
+  facilities: string[]      // 设施服务
+  description: string
+}
+
+/**
+ * 获取包间详情（用于预订详情页）
+ * 从后端 /v1/rooms/:id 获取数据并映射字段
+ */
+export async function getRoomDetail(id: string): Promise<Room> {
+  const response = await request({
+    url: `/v1/rooms/${id}`,
+    method: 'GET'
+  }) as any
+
+  // 映射后端 RoomDetailResponse 到页面 Room 格式
+  // 图片URL已经是完整路径或以/开头，直接使用
+  const processImageUrl = (url: string) => {
+    if (!url) return ''
+    if (url.startsWith('http')) return url
+    if (url.startsWith('/')) return `${API_BASE}${url}`
+    return url
+  }
+
+  return {
+    id: response.id,
+    merchant_id: response.merchant_id || 0,
+    name: response.room_no || '包间',
+    capacity: response.capacity || 0,
+    min_spend: response.minimum_spend || 0,
+    // 定金逻辑与后端一致：有最低消费则定金=最低消费，否则默认100元
+    deposit: response.minimum_spend > 0 ? response.minimum_spend : 10000,
+    images: (response.images || []).map((url: string) => processImageUrl(url)),
+    facilities: (response.tags || []).map((t: any) => t.name || t), // 标签作为设施
+    description: response.description || ''
+  }
+}
 
 export default ReservationService

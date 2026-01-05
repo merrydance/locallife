@@ -53,8 +53,6 @@ export interface RoomImage {
 /** 包间可用性检查参数 */
 export interface CheckRoomAvailabilityParams extends Record<string, unknown> {
     date: string // YYYY-MM-DD
-    start_time: string // HH:MM
-    end_time: string // HH:MM
 }
 
 /** 包间可用性响应 */

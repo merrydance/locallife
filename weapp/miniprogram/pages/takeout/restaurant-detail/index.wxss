@@ -3,7 +3,7 @@
   background: #F6F6F6;
 }
 
-.loading {
+.loading-wrapper {
   display: flex;
   justify-content: center;
   padding: 200rpx 0;

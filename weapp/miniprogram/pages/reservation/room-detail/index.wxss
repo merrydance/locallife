@@ -3,7 +3,7 @@
   background: #F6F6F6;
 }
 
-.loading {
+.loading-wrapper {
   display: flex;
   justify-content: center;
   padding: 100rpx 0;
@@ -12,6 +12,11 @@
 .swiper {
   width: 100%;
   height: 400rpx;
+}
+
+.swiper-image {
+  width: 100%;
+  height: 100%;
 }
 
 .info-section,
@@ -81,6 +86,94 @@
   font-size: 28rpx;
   color: #666;
   line-height: 1.6;
+}
+
+/* 日历区块 */
+.calendar-section {
+  background: #fff;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.month-label {
+  font-size: 24rpx;
+  font-weight: normal;
+  color: #666;
+  margin-left: 12rpx;
+}
+
+.calendar-grid {
+  margin-top: 24rpx;
+}
+
+.calendar-header {
+  display: flex;
+  border-bottom: 1rpx solid #eee;
+  padding-bottom: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.header-cell {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header-cell.empty {
+  width: 80rpx;
+  flex: none;
+}
+
+.day-label {
+  font-size: 22rpx;
+  color: #999;
+}
+
+.date-num {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  margin-top: 4rpx;
+}
+
+.calendar-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.row-label {
+  width: 80rpx;
+  font-size: 24rpx;
+  color: #666;
+  text-align: center;
+}
+
+.calendar-cell {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 12rpx 0;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 48rpx;
+  margin-top: 24rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #eee;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 24rpx;
+  color: #666;
 }
 
 .bottom-bar {

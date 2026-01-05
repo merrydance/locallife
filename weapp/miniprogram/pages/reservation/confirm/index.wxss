@@ -7,19 +7,20 @@
   background: #fff;
   padding: 32rpx 24rpx;
   margin-bottom: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .room-name {
   font-size: 36rpx;
   font-weight: bold;
   color: #333;
-  display: block;
-  margin-bottom: 8rpx;
 }
 
-.deposit-tip {
+.room-capacity {
   font-size: 28rpx;
-  color: #E34D59;
+  color: #666;
 }
 
 .form-section {
@@ -44,18 +45,14 @@
   background: #fff;
   box-shadow: 0 -4rpx 12rpx rgba(0,0,0,0.08);
   padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+}
+
+.mode-selector {
+  padding: 24rpx;
+}
+
+.mode-selector .t-radio-group {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.price-info {
-  font-size: 28rpx;
-  color: #333;
-}
-
-.price {
-  font-size: 40rpx;
-  font-weight: bold;
-  color: #E34D59;
+  flex-direction: column;
+  gap: 24rpx;
 }

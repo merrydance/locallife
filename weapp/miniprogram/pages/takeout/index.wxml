@@ -124,13 +124,13 @@
     </view>
   </view>
   
-  <!-- 底部安全区占位 (仅购物车显示时) -->
-  <view wx:if="{{activeTab === 'dishes' && cartTotalCount > 0}}" style="height: 120rpx;"></view>
+  <!-- 底部安全区占位 (菜品和套餐Tab显示购物车时) -->
+  <view wx:if="{{(activeTab === 'dishes' || activeTab === 'packages') && cartTotalCount > 0}}" style="height: 120rpx;"></view>
 </scroll-view>
 
-<!-- 购物车栏 -->
+<!-- 购物车栏 (菜品和套餐Tab) -->
 <cart-bar 
-  wx:if="{{activeTab === 'dishes' && cartTotalCount > 0}}"
+  wx:if="{{(activeTab === 'dishes' || activeTab === 'packages') && cartTotalCount > 0}}"
   totalCount="{{cartTotalCount}}"
   totalPrice="{{cartTotalPrice}}"
   bind:checkout="onCheckout"
