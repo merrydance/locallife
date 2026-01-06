@@ -2,6 +2,8 @@ import { logger } from '../../utils/logger'
 import { searchRooms, getRecommendedRooms, getRecommendedMerchants, RoomSearchResult } from '../../api/search'
 import { MerchantSummary } from '../../api/merchant'
 import { globalStore } from '../../utils/global-store'
+import { getPublicImageUrl } from '../../utils/image'
+import { DishAdapter } from '../../adapters/dish'
 
 const app = getApp<IAppOption>()
 
@@ -35,7 +37,7 @@ Page({
     filterVisible: false,
     uiSelectedDate: '',
     uiSelectedTimeSlot: '',
-    uiGuestCount: 2,
+    uiGuestCount: 2,  // 默认2人
     uiPriceRange: '',
 
     // Helpers
@@ -107,67 +109,91 @@ Page({
 
       let newList: any[] = []
 
-      // Parse price range from APPLIED filters
-      let min_price, max_price
-      if (appliedFilters.priceRange) {
-        const parts = appliedFilters.priceRange.split('-')
-        min_price = Number(parts[0])
-        max_price = Number(parts[1])
-      }
-
       if (activeTab === 'room') {
         const hasTimeFilter = appliedFilters.date && appliedFilters.startTime
 
-        if (keyword || hasTimeFilter) {
-          // Search Mode
+        // 将 priceRange 转换为 max_minimum_spend（分）
+        let max_minimum_spend: number | undefined
+        if (appliedFilters.priceRange) {
+          const parts = appliedFilters.priceRange.split('-')
+          // 使用上限作为 max_minimum_spend，后端期望分值
+          if (parts[1]) {
+            max_minimum_spend = Number(parts[1]) * 100
+          }
+        }
+
+        if (hasTimeFilter) {
+          // Search Mode - 需要日期时间过滤
           const results = await searchRooms({
-            page_id: page,
-            page_size: pageSize,
-            keyword,
+            reservation_date: appliedFilters.date || new Date().toISOString().split('T')[0],
+            reservation_time: appliedFilters.startTime || '18:00',
+            min_capacity: appliedFilters.guestCount,
+            max_minimum_spend,
             user_latitude: latitude,
             user_longitude: longitude,
-            date: appliedFilters.date || new Date().toISOString().split('T')[0],
-            start_time: appliedFilters.startTime || '18:00',
-            end_time: appliedFilters.endTime || '20:00',
-            guest_count: appliedFilters.guestCount || 2,
-            min_price,
-            max_price
+            page_id: page,
+            page_size: pageSize
           })
-          newList = results.map((r: RoomSearchResult) => ({ ...r, type: 'room' }))
+          // 在 TypeScript 中预处理距离和图片
+          newList = results.map((r: RoomSearchResult) => ({
+            ...r,
+            type: 'room',
+            primary_image: getPublicImageUrl(r.primary_image) || '',
+            distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
+          }))
         } else {
-          // Feed Mode
+          // Feed Mode - 使用推荐接口（支持人数和低消过滤）
           const results = await getRecommendedRooms({
             page_id: page,
-            limit: pageSize,
+            page_size: pageSize,
             user_latitude: latitude,
             user_longitude: longitude,
-            guest_count: appliedFilters.guestCount,
-            min_price,
-            max_price
+            min_capacity: appliedFilters.guestCount,
+            max_minimum_spend
           })
-          newList = results.map((r: RoomSearchResult) => ({ ...r, type: 'room' }))
+
+          newList = results.map((r: RoomSearchResult) => ({
+            ...r,
+            type: 'room',
+            primary_image: getPublicImageUrl(r.primary_image) || '',
+            distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
+          }))
         }
 
       } else {
-        // Restaurant Stream
+        // Restaurant Stream - 与外卖页 loadRestaurants 保持一致的数据格式
+        let merchantResults: MerchantSummary[] = []
+
         if (keyword) {
           const { searchMerchants } = require('../../api/search')
-          const results = await searchMerchants({
+          merchantResults = await searchMerchants({
             keyword,
             page_id: page,
             page_size: pageSize,
             user_latitude: latitude,
             user_longitude: longitude
           })
-          newList = results.map((m: MerchantSummary) => ({ ...m, type: 'restaurant' }))
         } else {
-          const results = await getRecommendedMerchants({
+          const result = await getRecommendedMerchants({
             user_latitude: latitude,
             user_longitude: longitude,
             limit: pageSize
           })
-          newList = results.map((m: MerchantSummary) => ({ ...m, type: 'restaurant' }))
+          // API 返回 { merchants: [...] } 或直接返回数组
+          merchantResults = (result as any).merchants || result as MerchantSummary[]
         }
+
+        // 转换为与外卖页一致的 ViewModel 格式
+        newList = merchantResults.map((m: MerchantSummary) => ({
+          id: m.id,
+          name: m.name,
+          imageUrl: getPublicImageUrl(m.logo_url) || '',
+          cuisineType: m.tags ? m.tags.slice(0, 2) : [],
+          distance: m.distance !== undefined ? DishAdapter.formatDistance(m.distance) : '',
+          address: m.address,
+          tags: m.tags ? m.tags.slice(0, 3) : [],
+          type: 'restaurant'
+        }))
       }
 
       this.setData({
@@ -201,7 +227,19 @@ Page({
   },
 
   onSearch(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ keyword: e.detail.value })
+    const keyword = e.detail.value?.trim() || ''
+
+    // 如果有搜索词且在包间 tab，切换到餐厅 tab 搜索
+    // 因为后端 searchRooms API 不支持关键词搜索
+    if (keyword && this.data.activeTab === 'room') {
+      this.setData({
+        keyword,
+        activeTab: 'restaurant'
+      })
+    } else {
+      this.setData({ keyword })
+    }
+
     this.loadItems(true)
   },
 
@@ -255,10 +293,11 @@ Page({
   },
 
   resetFilter() {
+    // 重置为默认值
     this.setData({
       uiGuestCount: 2,
       uiPriceRange: '',
-      uiSelectedDate: this.data.dateOptions[0].value,
+      uiSelectedDate: this.data.dateOptions[0]?.value || '',
       uiSelectedTimeSlot: ''
     })
   },

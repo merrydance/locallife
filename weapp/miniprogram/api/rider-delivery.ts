@@ -477,13 +477,13 @@ export class DeliveryAdapter {
     }
 
     /**
-     * 格式化距离显示
+     * 格式化距离显示（统一中文格式：米/公里）
      */
     static formatDistance(distanceInMeters: number): string {
         if (distanceInMeters < 1000) {
-            return `${distanceInMeters}m`
+            return `${Math.round(distanceInMeters)}米`
         } else {
-            return `${(distanceInMeters / 1000).toFixed(1)}km`
+            return `${(distanceInMeters / 1000).toFixed(1)}公里`
         }
     }
 

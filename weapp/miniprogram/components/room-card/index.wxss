@@ -22,6 +22,7 @@
   height: 180rpx;
   border-radius: 12rpx;
   flex-shrink: 0;
+  background: #f5f5f5;
 }
 
 .room-info {
@@ -39,7 +40,7 @@
   gap: 16rpx;
 }
 
-.row-2, .row-3, .row-4, .row-5, .row-6 {
+.row-2, .row-3, .row-4, .row-5 {
   display: flex;
   align-items: center;
   gap: 8rpx;
@@ -59,33 +60,40 @@
 
 /* 价格 */
 .price {
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: bold;
   color: #FF6B58;
-  flex-shrink: 0;
 }
 
-.row-2 {
+.no-minimum {
+  font-size: 24rpx;
+  color: #00A870;
+}
+
+.separator {
+  color: #ddd;
+  font-size: 22rpx;
+}
+
+.capacity {
   font-size: 24rpx;
   color: #666;
 }
 
-.row-3, .row-4, .row-5, .row-6 {
+.booking, .distance {
   font-size: 22rpx;
   color: #999;
 }
 
-.dot {
-  color: #ddd;
-}
-
-.rating {
-  color: #FFC107;
-  font-weight: 500;
+.distance {
+  margin-left: 16rpx;
 }
 
 .address {
+  font-size: 22rpx;
+  color: #999;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+

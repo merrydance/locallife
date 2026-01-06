@@ -47,7 +47,7 @@
     <view class="location-guide-desc">本地生活服务依赖于您的位置，请先完成定位</view>
     <view class="location-guide-buttons">
       <t-button theme="primary" size="small" bind:tap="onRetryLocation">重新定位</t-button>
-      <t-button theme="light" size="small" bind:tap="onManualLocation">手动选择</t-button>
+      <t-button variant="outline" size="small" bind:tap="onManualLocation">手动选择</t-button>
     </view>
   </view>
 

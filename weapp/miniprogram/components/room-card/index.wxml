@@ -1,40 +1,40 @@
 <view class="room-card" bindtap="onTap">
-  <t-image class="room-image" src="{{room.imageUrl}}" mode="aspectFill" lazy />
+  <!-- 图片：已在 TypeScript 中预处理 fallback -->
+  <t-image 
+    class="room-image" 
+    src="{{room.primary_image || '/assets/placeholder.png'}}" 
+    mode="aspectFill" 
+    lazy 
+  />
   
   <view class="room-info">
-    <!-- 第1行: 餐厅名·包间名 + 价格 -->
+    <!-- 第1行: 餐厅名·包间名 -->
     <view class="row-1">
-      <text class="restaurant-room-name">{{room.restaurantName}}·{{room.name}}</text>
-      <text class="price">{{room.priceDisplay}}起</text>
+      <text class="restaurant-room-name">{{room.merchant_name}}·{{room.table_no}}</text>
     </view>
     
-    <!-- 第2行: 容纳人数 -->
+    <!-- 第2行: 容纳人数 + 低消 -->
     <view class="row-2">
-      <text class="capacity">{{room.capacity.min}}-{{room.capacity.max}}人</text>
+      <text class="capacity">容纳 {{room.capacity}} 人</text>
+      <text class="separator">|</text>
+      <text class="price" wx:if="{{room.minimum_spend}}">¥{{room.minimum_spend / 100}}起</text>
+      <text class="no-minimum" wx:else>无低消</text>
     </view>
     
-    <!-- 第3行: 设施标签 -->
-    <view class="row-3">
-      <t-tag wx:for="{{room.facilities}}" wx:key="*this" size="small">{{item}}</t-tag>
+    <!-- 第3行: 标签 -->
+    <view class="row-3" wx:if="{{room.tags && room.tags.length > 0}}">
+      <t-tag wx:for="{{room.tags}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
     </view>
     
-    <!-- 第4行: 评分·预订次数 -->
+    <!-- 第4行: 月预订量 + 距离（已在TS中格式化为distance_display） -->
     <view class="row-4">
-      <text class="rating">⭐{{room.ratingDisplay}}</text>
-      <text class="dot">·</text>
-      <text class="booking">{{room.bookingBadge}}</text>
+      <text class="booking">月订 {{room.monthly_reservations || 0}}</text>
+      <text wx:if="{{room.distance_display}}" class="distance">{{room.distance_display}}</text>
     </view>
     
     <!-- 第5行: 地址 -->
-    <view class="row-5">
-      <text class="address">{{room.address}}</text>
-    </view>
-    
-    <!-- 第6行: 距离·营业时间 -->
-    <view class="row-6">
-      <text class="distance">📍{{room.distance}}</text>
-      <text class="dot">·</text>
-      <text class="hours">🕐营业中</text>
+    <view class="row-5" wx:if="{{room.merchant_address}}">
+      <text class="address">{{room.merchant_address}}</text>
     </view>
   </view>
 </view>

@@ -352,7 +352,11 @@ SELECT
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
-    COALESCE((SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), '')::TEXT as primary_image,
+    COALESCE(
+        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
+        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        ''
+    )::TEXT as primary_image,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.reservation_date >= CURRENT_DATE - INTERVAL '30 days'

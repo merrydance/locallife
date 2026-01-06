@@ -14,7 +14,7 @@
   </t-cell-group>
 
   <view class="actions">
-    <t-button block theme="light" icon="call" bind:tap="onCallMerchant">联系商户</t-button>
+    <t-button block variant="outline" icon="call" bind:tap="onCallMerchant">联系商户</t-button>
     
     <t-button 
       wx:if="{{reservation.status === 'pending' || reservation.status === 'confirmed'}}" 

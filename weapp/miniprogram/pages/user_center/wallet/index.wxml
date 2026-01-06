@@ -9,7 +9,7 @@
     </view>
     <view class="actions">
       <t-button theme="primary" size="small" bindtap="onTopUp">充值</t-button>
-      <t-button theme="light" size="small" bindtap="onWithdraw">提现</t-button>
+      <t-button variant="outline" size="small" bindtap="onWithdraw">提现</t-button>
     </view>
   </view>
 

@@ -26,33 +26,31 @@ export interface RecommendMerchantsParams extends Record<string, unknown> {
     limit?: number
 }
 
-/** 搜索包间参数 */
+/** 搜索包间参数 - 对齐后端 searchRoomsRequest */
 export interface SearchRoomsParams extends Record<string, unknown> {
-    keyword?: string
-    date: string
-    start_time: string
-    end_time: string
-    guest_count: number
-    cuisine_type?: string
-    min_price?: number
-    max_price?: number
-    user_latitude?: number
-    user_longitude?: number
-    page_id: number
-    page_size: number
+    reservation_date: string           // 必填：预订日期 YYYY-MM-DD
+    reservation_time: string           // 必填：预订时段 HH:MM
+    min_capacity?: number              // 可选：最小容纳人数
+    max_capacity?: number              // 可选：最大容纳人数
+    max_minimum_spend?: number         // 可选：最大低消（分）
+    tag_id?: number                    // 可选：菜系/标签ID
+    region_id?: number                 // 可选：区域ID
+    user_latitude?: number             // 可选：用户纬度
+    user_longitude?: number            // 可选：用户经度
+    page_id: number                    // 必填：页码
+    page_size: number                  // 必填：每页数量
 }
 
-/** 推荐包间参数 */
+/** 推荐包间参数 - 对齐后端 exploreRoomsRequest */
 export interface RecommendRoomsParams extends Record<string, unknown> {
-    region_id?: number
-    user_latitude?: number
-    user_longitude?: number
-    guest_count?: number
-    min_price?: number
-    max_price?: number
-    amenities?: string
-    page_id?: number
-    limit?: number
+    region_id?: number                 // 区域ID
+    min_capacity?: number              // 最小容纳人数
+    max_capacity?: number              // 最大容纳人数
+    max_minimum_spend?: number         // 最大低消（分）
+    user_latitude?: number             // 用户纬度
+    user_longitude?: number            // 用户经度
+    page_id: number                    // 页码
+    page_size: number                  // 每页数量
 }
 
 /** 包间搜索结果 */
@@ -61,7 +59,9 @@ export interface RoomSearchResult {
     merchant_id: number
     merchant_name: string
     merchant_logo: string
+    merchant_address?: string
     name: string
+    table_no?: string
     capacity: number
     hourly_rate: number
     minimum_spend: number
@@ -70,6 +70,9 @@ export interface RoomSearchResult {
     is_available: boolean
     distance?: number
     estimated_delivery_fee?: number
+    primary_image?: string
+    monthly_reservations?: number
+    tags?: string[]
 }
 
 /** 搜索历史记录 */
@@ -154,39 +157,15 @@ export async function getRecommendedMerchants(params: RecommendMerchantsParams =
 
 /**
  * 获取推荐包间
- * @param params 推荐参数
+ * @param params 推荐参数（已对齐后端 exploreRoomsRequest）
  */
-export async function getRecommendedRooms(params: RecommendRoomsParams = {}): Promise<RoomSearchResult[]> {
-    const {
-        limit = 10,
-        page_id = 1,
-        guest_count,
-        max_price,
-        // min_price is not supported by recommend API currently based on swagger
-        ...rest
-    } = cleanParams(params)
-
-    const queryParams: any = {
-        page_id,
-        page_size: limit,
-        ...rest
-    }
-
-    if (guest_count) {
-        queryParams.min_capacity = guest_count
-    }
-
-    // Interpret max_price as max_minimum_spend if provided
-    if (max_price) {
-        queryParams.max_minimum_spend = max_price // sending raw value for now to match status quo, unless I verify currency.
-    }
-
-    logger.debug('Fetching Recommended Rooms', queryParams, 'API')
+export async function getRecommendedRooms(params: RecommendRoomsParams): Promise<RoomSearchResult[]> {
+    logger.debug('Fetching Recommended Rooms', params, 'API')
 
     const res = await request<any>({
         url: '/v1/recommendations/rooms',
         method: 'GET',
-        data: queryParams
+        data: cleanParams(params)
     })
     return res.rooms || res
 }

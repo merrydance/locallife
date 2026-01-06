@@ -894,23 +894,24 @@ type exploreRoomsRequest struct {
 }
 
 type exploreRoomItem struct {
-	ID                   int64   `json:"id"`
-	MerchantID           int64   `json:"merchant_id"`
-	TableNo              string  `json:"table_no"`
-	Capacity             int16   `json:"capacity"`
-	Description          *string `json:"description,omitempty"`
-	MinimumSpend         *int64  `json:"minimum_spend,omitempty"` // 分
-	Status               string  `json:"status"`
-	MerchantName         string  `json:"merchant_name"`
-	MerchantLogo         *string `json:"merchant_logo,omitempty"`
-	MerchantAddress      string  `json:"merchant_address"`
-	MerchantPhone        *string `json:"merchant_phone,omitempty"`
-	MerchantLatitude     float64 `json:"merchant_latitude"`
-	MerchantLongitude    float64 `json:"merchant_longitude"`
-	PrimaryImage         *string `json:"primary_image,omitempty"`
-	MonthlyReservations  int     `json:"monthly_reservations"`             // 近30天预订量
-	Distance             *int    `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
-	EstimatedDeliveryFee *int64  `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
+	ID                   int64    `json:"id"`
+	MerchantID           int64    `json:"merchant_id"`
+	TableNo              string   `json:"table_no"`
+	Capacity             int16    `json:"capacity"`
+	Description          *string  `json:"description,omitempty"`
+	MinimumSpend         *int64   `json:"minimum_spend,omitempty"` // 分
+	Status               string   `json:"status"`
+	MerchantName         string   `json:"merchant_name"`
+	MerchantLogo         *string  `json:"merchant_logo,omitempty"`
+	MerchantAddress      string   `json:"merchant_address"`
+	MerchantPhone        *string  `json:"merchant_phone,omitempty"`
+	MerchantLatitude     float64  `json:"merchant_latitude"`
+	MerchantLongitude    float64  `json:"merchant_longitude"`
+	PrimaryImage         *string  `json:"primary_image,omitempty"`
+	MonthlyReservations  int      `json:"monthly_reservations"`             // 近30天预订量
+	Distance             *int     `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
+	EstimatedDeliveryFee *int64   `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
+	Tags                 []string `json:"tags"`                             // 包间标签
 }
 
 type exploreRoomsResponse struct {
@@ -1032,6 +1033,15 @@ func (server *Server) exploreRooms(ctx *gin.Context) {
 		if r.MerchantLongitude.Valid {
 			lng, _ := r.MerchantLongitude.Float64Value()
 			rooms[i].MerchantLongitude = lng.Float64
+		}
+
+		// 获取包间标签
+		rooms[i].Tags = []string{}
+		tags, err := server.store.ListTableTags(ctx, r.ID)
+		if err == nil {
+			for _, t := range tags {
+				rooms[i].Tags = append(rooms[i].Tags, t.TagName)
+			}
 		}
 	}
 

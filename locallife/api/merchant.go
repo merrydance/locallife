@@ -1747,7 +1747,7 @@ type publicRoomItem struct {
 	Capacity     int16    `json:"capacity"`
 	MinimumSpend *int64   `json:"minimum_spend,omitempty"`
 	Description  string   `json:"description,omitempty"`
-	ImageURL     string   `json:"image_url,omitempty"`
+	PrimaryImage string   `json:"primary_image,omitempty"` // 统一字段名：包间主图
 	MonthlySales int64    `json:"monthly_sales"`
 	Status       string   `json:"status"`
 	Tags         []string `json:"tags"`
@@ -1799,7 +1799,7 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 			room.MinimumSpend = &r.MinimumSpend.Int64
 		}
 		if r.PrimaryImage != "" {
-			room.ImageURL = normalizeUploadURLForClient(r.PrimaryImage)
+			room.PrimaryImage = normalizeUploadURLForClient(r.PrimaryImage)
 		}
 
 		// 获取包间标签

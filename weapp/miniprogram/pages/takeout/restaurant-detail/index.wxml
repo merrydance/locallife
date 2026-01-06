@@ -121,7 +121,7 @@
   <scroll-view wx:if="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y>
     <block wx:if="{{rooms.length > 0}}">
       <view wx:for="{{rooms}}" wx:key="id" class="room-item" data-id="{{item.id}}" bindtap="onRoomTap">
-        <t-image wx:if="{{item.image_url}}" class="room-image" src="{{item.image_url}}" mode="aspectFill" />
+        <t-image wx:if="{{item.primary_image}}" class="room-image" src="{{item.primary_image}}" mode="aspectFill" />
         <view wx:else class="room-image-placeholder">暂无图片</view>
         <view class="room-info">
           <text class="room-name">{{item.name}}</text>

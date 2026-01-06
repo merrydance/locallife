@@ -85,8 +85,8 @@
 
 <!-- Filter Popup -->
 <t-popup visible="{{filterVisible}}" placement="left" bind:visible-change="onFilterPopupChange">
-  <view class="filter-drawer" style="padding-top: {{navBarHeight}}px;">
-    <view class="drawer-header">
+  <view class="filter-drawer">
+    <view class="drawer-header" style="padding-top: {{navBarHeight}}px;">
       <text class="drawer-title">筛选条件</text>
       <t-icon name="close" size="40rpx" bind:tap="hideFilterPopup" />
     </view>
@@ -147,7 +147,7 @@
            <t-check-tag 
             wx:for="{{priceOptions}}" 
             wx:key="value"
-            checked="{{uiPriceRange === item.value}}"
+            checked="{{uiPriceRange && uiPriceRange === item.value}}"
             content="{{item.label}}"
             bind:change="onPriceTagChange"
             data-value="{{item.value}}"
@@ -158,7 +158,7 @@
     </scroll-view>
 
     <view class="drawer-footer">
-      <t-button theme="light" block bind:tap="resetFilter">重置</t-button>
+      <t-button variant="outline" block bind:tap="resetFilter">重置</t-button>
       <t-button theme="primary" block bind:tap="applyFilter">查看结果</t-button>
     </view>
   </view>

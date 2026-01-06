@@ -196,7 +196,7 @@ Page({
       // 包间图片是公共图片，使用getPublicImageUrl处理
       return (result.rooms || []).map((room: PublicRoom) => ({
         ...room,
-        image_url: room.image_url ? getPublicImageUrl(room.image_url) : ''
+        primary_image: room.primary_image ? getPublicImageUrl(room.primary_image) : ''
       }))
     } catch (error) {
       console.error('加载包间失败:', error)

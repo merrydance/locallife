@@ -143,7 +143,7 @@ export interface PublicRoom {
     capacity: number                             // 容纳人数
     minimum_spend?: number                       // 最低消费（分）
     description?: string                         // 描述
-    image_url?: string                           // 主图URL
+    primary_image?: string                       // 主图URL（统一字段名）
     monthly_sales: number                        // 月销量（预订数）
     status: string                               // 状态
     tags: string[]                               // 标签列表
