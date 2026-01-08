@@ -1,7 +1,7 @@
 -- name: CreateCart :one
-INSERT INTO carts (user_id, merchant_id)
-VALUES ($1, $2)
-ON CONFLICT (user_id, merchant_id) DO UPDATE SET updated_at = now()
+INSERT INTO carts (user_id, merchant_id, order_type, table_id, reservation_id)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, merchant_id, order_type, table_id, reservation_id) DO UPDATE SET updated_at = now()
 RETURNING *;
 
 -- name: GetCart :one
@@ -10,7 +10,7 @@ WHERE id = $1;
 
 -- name: GetCartByUserAndMerchant :one
 SELECT * FROM carts
-WHERE user_id = $1 AND merchant_id = $2;
+WHERE user_id = $1 AND merchant_id = $2 AND order_type = $3 AND table_id IS NOT DISTINCT FROM $4 AND reservation_id IS NOT DISTINCT FROM $5;
 
 -- name: GetCartWithItems :one
 SELECT 
@@ -40,7 +40,7 @@ FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
 LEFT JOIN dishes d ON d.id = ci.dish_id
 LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
-WHERE c.user_id = $1 AND c.merchant_id = $2
+WHERE c.user_id = $1 AND c.merchant_id = $2 AND c.order_type = $3 AND c.table_id IS NOT DISTINCT FROM $4 AND c.reservation_id IS NOT DISTINCT FROM $5
 GROUP BY c.id;
 
 -- name: AddCartItem :one
@@ -143,13 +143,16 @@ FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
 LEFT JOIN dishes d ON d.id = ci.dish_id
 LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
-WHERE c.user_id = $1;
+WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL);
 
 -- name: GetUserCartsWithDetails :many
 -- 获取用户所有购物车及其商品详情（用于合单结算）
 SELECT 
     c.id AS cart_id,
     c.merchant_id,
+    c.order_type,
+    c.table_id,
+    c.reservation_id,
     m.name AS merchant_name,
     m.logo_url AS merchant_logo,
     mpc.sub_mch_id AS sub_mchid,
@@ -176,8 +179,8 @@ LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
 LEFT JOIN dishes d ON d.id = ci.dish_id
 LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
-WHERE c.user_id = $1
-GROUP BY c.id, c.merchant_id, m.id, mpc.sub_mch_id
+WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL)
+GROUP BY c.id, c.merchant_id, c.order_type, c.table_id, c.reservation_id, m.id, mpc.sub_mch_id
 HAVING COUNT(ci.id) > 0  -- 只返回有商品的购物车
 ORDER BY c.updated_at DESC;
 

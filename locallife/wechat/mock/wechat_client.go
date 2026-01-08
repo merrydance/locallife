@@ -57,6 +57,21 @@ func (mr *MockWechatClientMockRecorder) Code2Session(ctx, code any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Code2Session", reflect.TypeOf((*MockWechatClient)(nil).Code2Session), ctx, code)
 }
 
+// GetWXACodeUnlimited mocks base method.
+func (m *MockWechatClient) GetWXACodeUnlimited(ctx context.Context, req *wechat.WXACodeRequest) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWXACodeUnlimited", ctx, req)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWXACodeUnlimited indicates an expected call of GetWXACodeUnlimited.
+func (mr *MockWechatClientMockRecorder) GetWXACodeUnlimited(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWXACodeUnlimited", reflect.TypeOf((*MockWechatClient)(nil).GetWXACodeUnlimited), ctx, req)
+}
+
 // ImgSecCheck mocks base method.
 func (m *MockWechatClient) ImgSecCheck(ctx context.Context, imgFile multipart.File) error {
 	m.ctrl.T.Helper()

@@ -17,6 +17,15 @@
     <t-button block variant="outline" icon="call" bind:tap="onCallMerchant">联系商户</t-button>
     
     <t-button 
+      wx:if="{{reservation.status === 'confirmed' || reservation.status === 'checked_in'}}" 
+      block 
+      theme="primary" 
+      bind:tap="onGoToOrder"
+    >
+      点菜
+    </t-button>
+    
+    <t-button 
       wx:if="{{reservation.status === 'pending' || reservation.status === 'confirmed'}}" 
       block 
       theme="danger" 

@@ -41,7 +41,7 @@
             <text class="dish-desc">{{item.description}}</text>
             <view class="dish-meta">
               <text class="rating">⭐{{item.rating}}</text>
-              <text class="price">¥{{item.price / 100}}</text>
+              <text class="price">¥{{item.priceDisplay}}</text>
             </view>
           </view>
           <t-button 
@@ -63,7 +63,7 @@
 <view wx:if="{{!loading && session && cartCount > 0}}" class="cart-bar">
   <view class="cart-info">
     <text class="cart-count">🛒 {{cartCount}}件</text>
-    <text class="cart-price">¥{{cartPrice / 100}}</text>
+    <text class="cart-price">¥{{cartPriceDisplay}}</text>
   </view>
   <t-button class="submit-btn" theme="primary" bindtap="onSubmitOrder">下单</t-button>
 </view>

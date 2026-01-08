@@ -40,9 +40,10 @@ const (
 
 // 超时和退款配置
 const (
-	PaymentTimeoutMinutes = 30    // 支付超时时间：30分钟
-	RefundDeadlineHours   = 2     // 退款截止：预定时间前2小时
-	DefaultDepositAmount  = 10000 // 默认定金：100元（分）
+	PaymentTimeoutMinutes    = 30    // 支付超时时间：30分钟
+	RefundDeadlineHours      = 2     // 退款截止：预定时间前2小时
+	DefaultDepositAmount     = 10000 // 默认定金：100元（分）
+	ReservationDurationHours = 4     // 用餐时段时长：4小时（用于时间段冲突检测）
 )
 
 type createReservationRequest struct {
@@ -240,7 +241,7 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		reservationTime.Hour(), reservationTime.Minute(), 0, 0, time.Local,
 	)
 	if reservationDateTime.Before(now) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation time must be in the future")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("所选时段已过，请选择其他时间")))
 		return
 	}
 
@@ -279,18 +280,24 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
 		Valid:        true,
 	}
+	// 用餐时段时长，用于检测时间段冲突
+	pgDuration := pgtype.Interval{
+		Microseconds: ReservationDurationHours * 60 * 60 * 1000000,
+		Valid:        true,
+	}
 
 	count, err := server.store.CheckTableAvailability(ctx, db.CheckTableAvailabilityParams{
 		TableID:         req.TableID,
 		ReservationDate: pgDate,
-		ReservationTime: pgTime,
+		Column3:         pgTime,
+		Column4:         pgDuration,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if count > 0 {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("time slot already reserved")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
 		return
 	}
 
@@ -306,24 +313,22 @@ func (server *Server) createReservation(ctx *gin.Context) {
 			depositAmount = DefaultDepositAmount
 		}
 	} else {
-		// 全款模式：必须预点菜品
-		if len(req.Items) == 0 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("全款模式需要预点菜品")))
-			return
-		}
+		// 全款模式：如果预点了菜品，则验证菜品和金额
+		if len(req.Items) > 0 {
+			// 验证并计算菜品金额（同时获取菜品单价）
+			validatedItems, prepaidAmount, err = server.validateReservationItems(ctx, table.MerchantID, req.Items)
+			if err != nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
 
-		// 验证并计算菜品金额（同时获取菜品单价）
-		validatedItems, prepaidAmount, err = server.validateReservationItems(ctx, table.MerchantID, req.Items)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
-			return
+			// 全款模式如果预点了菜品，至少要达到包间最低消费
+			if table.MinimumSpend.Valid && prepaidAmount < table.MinimumSpend.Int64 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("预点菜品金额 %d 分未达到包间最低消费 %d 分", prepaidAmount, table.MinimumSpend.Int64)))
+				return
+			}
 		}
-
-		// 全款模式至少要达到包间最低消费
-		if table.MinimumSpend.Valid && prepaidAmount < table.MinimumSpend.Int64 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("预点菜品金额 %d 分未达到包间最低消费 %d 分", prepaidAmount, table.MinimumSpend.Int64)))
-			return
-		}
+		// 如果没有预点菜品，允许创建预订（prepaidAmount 为 0），用户将在 30 分钟内去点菜支付
 	}
 
 	// 计算支付截止时间和退款截止时间
@@ -1452,18 +1457,24 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
 		Valid:        true,
 	}
+	// 用餐时段时长，用于检测时间段冲突
+	pgDuration := pgtype.Interval{
+		Microseconds: ReservationDurationHours * 60 * 60 * 1000000,
+		Valid:        true,
+	}
 
 	count, err := server.store.CheckTableAvailability(ctx, db.CheckTableAvailabilityParams{
 		TableID:         req.TableID,
 		ReservationDate: pgDate,
-		ReservationTime: pgTime,
+		Column3:         pgTime,
+		Column4:         pgDuration,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if count > 0 {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("time slot already reserved")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
 		return
 	}
 
@@ -1794,10 +1805,17 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 			}
 		}
 
+		// 用餐时段时长，用于检测时间段冲突
+		checkDuration := pgtype.Interval{
+			Microseconds: ReservationDurationHours * 60 * 60 * 1000000,
+			Valid:        true,
+		}
+
 		count, err := server.store.CheckTableAvailability(ctx, db.CheckTableAvailabilityParams{
 			TableID:         checkTableID,
 			ReservationDate: checkDate,
-			ReservationTime: checkTime,
+			Column3:         checkTime,
+			Column4:         checkDuration,
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1807,7 +1825,7 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 		if count > 0 && (checkTableID != reservation.TableID ||
 			checkDate.Time != reservation.ReservationDate.Time ||
 			checkTime.Microseconds != reservation.ReservationTime.Microseconds) {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("time slot already reserved")))
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
 			return
 		}
 	}

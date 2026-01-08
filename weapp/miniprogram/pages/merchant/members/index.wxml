@@ -1,25 +1,5 @@
 <!-- 会员管理页面 - PC-SaaS 布局 -->
-<wxs module="utils">
-  module.exports = {
-    formatAmount: function(fen) {
-      return (fen / 100).toFixed(2)
-    },
-    formatDate: function(dateStr) {
-      if (!dateStr) return '-'
-      return dateStr.slice(0, 10)
-    },
-    formatTxType: function(type) {
-      var map = {
-        'recharge': '充值',
-        'consume': '消费',
-        'refund': '退款',
-        'adjustment_credit': '余额增加',
-        'adjustment_debit': '余额扣减'
-      }
-      return map[type] || type
-    }
-  }
-</wxs>
+<!-- 价格已在 TS 中预处理 -->
 
 <!-- 小屏提示 -->
 <match-media max-width="1599">
@@ -89,10 +69,10 @@
                 <text class="member-name">{{item.full_name || '匿名用户'}}</text>
               </view>
               <text class="col-phone">{{item.phone || '-'}}</text>
-              <text class="col-balance balance-value">¥{{utils.formatAmount(item.balance)}}</text>
-              <text class="col-recharged">¥{{utils.formatAmount(item.total_recharged)}}</text>
-              <text class="col-consumed">¥{{utils.formatAmount(item.total_consumed)}}</text>
-              <text class="col-date">{{utils.formatDate(item.created_at)}}</text>
+              <text class="col-balance balance-value">¥{{item.balance_display}}</text>
+              <text class="col-recharged">¥{{item.total_recharged_display}}</text>
+              <text class="col-consumed">¥{{item.total_consumed_display}}</text>
+              <text class="col-date">{{item.created_date}}</text>
               <view class="col-action">
                 <button class="btn-sm btn-primary" data-user-id="{{item.user_id}}" bindtap="onViewMember">详情</button>
               </view>
@@ -139,16 +119,16 @@
       <view class="detail-section balance-section">
         <view class="balance-card">
           <text class="balance-label">当前余额</text>
-          <text class="balance-amount">¥{{utils.formatAmount(selectedMember.balance)}}</text>
+          <text class="balance-amount">¥{{selectedMember.balance_display}}</text>
         </view>
         <view class="balance-stats">
           <view class="stat-item">
             <text class="stat-label">累计充值</text>
-            <text class="stat-value">¥{{utils.formatAmount(selectedMember.total_recharged)}}</text>
+            <text class="stat-value">¥{{selectedMember.total_recharged_display}}</text>
           </view>
           <view class="stat-item">
             <text class="stat-label">累计消费</text>
-            <text class="stat-value">¥{{utils.formatAmount(selectedMember.total_consumed)}}</text>
+            <text class="stat-value">¥{{selectedMember.total_consumed_display}}</text>
           </view>
         </view>
         <button class="btn-primary btn-adjust" data-user-id="{{selectedMember.user_id}}" bindtap="onOpenAdjust">调整余额</button>
@@ -163,14 +143,14 @@
         <view wx:else class="transaction-list">
           <view wx:for="{{selectedMember.transactions}}" wx:key="id" class="transaction-item">
             <view class="tx-left">
-              <text class="tx-type">{{utils.formatTxType(item.type)}}</text>
+              <text class="tx-type">{{item.type_display}}</text>
               <text class="tx-notes">{{item.notes || '-'}}</text>
             </view>
             <view class="tx-right">
               <text class="tx-amount {{item.amount >= 0 ? 'positive' : 'negative'}}">
-                {{item.amount >= 0 ? '+' : ''}}¥{{utils.formatAmount(item.amount)}}
+                {{item.amount_sign}}¥{{item.amount_display}}
               </text>
-              <text class="tx-date">{{utils.formatDate(item.created_at)}}</text>
+              <text class="tx-date">{{item.created_date}}</text>
             </view>
           </view>
         </view>

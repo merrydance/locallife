@@ -9,6 +9,7 @@
 
 import { ComboManagementService, ComboSetResponse, ComboSetWithDetailsResponse, DishManagementService, DishResponse, TagService, TagInfo } from '../../../api/dish'
 import { logger } from '../../../utils/logger'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 const app = getApp<IAppOption>()
 
@@ -109,6 +110,7 @@ Page({
             // 后端返回的是 combo_sets 字段
             const combos = (response.combo_sets || []).map(combo => ({
                 ...combo,
+                comboPriceDisplay: formatPriceNoSymbol(combo.combo_price || 0),
                 dishes: [],
                 dish_count: 0
             }))
@@ -134,9 +136,14 @@ Page({
                 page_size: 50
             })
             console.log('[Combos] 加载菜品成功，数量:', response.dishes?.length || 0)
+            // 预处理价格
+            const dishesWithPrice = (response.dishes || []).map(d => ({
+                ...d,
+                priceDisplay: formatPriceNoSymbol(d.price || 0)
+            }))
             this.setData({
-                allDishes: response.dishes || [],
-                filteredDishes: response.dishes || []
+                allDishes: dishesWithPrice,
+                filteredDishes: dishesWithPrice
             })
         } catch (error) {
             console.error('[Combos] 加载菜品失败:', error)
@@ -477,6 +484,7 @@ Page({
                 dish_id: d.id,
                 dish_name: d.name,
                 dish_price: d.price,
+                dishPriceDisplay: formatPriceNoSymbol(d.price || 0),
                 dish_image_url: d.image_url,
                 quantity: qtyMap.get(d.id) || 0
             }))

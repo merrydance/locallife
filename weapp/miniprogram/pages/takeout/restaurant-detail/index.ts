@@ -8,6 +8,7 @@ import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
 import { getUserCarts } from '../../../api/cart'
 import { getPublicImageUrl } from '../../../utils/image'
 import { resolveImageURL } from '../../../utils/image-security'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 Page({
   data: {
@@ -22,6 +23,7 @@ Page({
     rooms: [] as PublicRoom[],
     cartCount: 0,
     cartPrice: 0,
+    cartPriceDisplay: '0.00',
     navBarHeight: 88,
     loading: true
   },
@@ -157,7 +159,11 @@ Page({
         name: dish.name,
         image_url: getPublicImageUrl(dish.image_url || ''),
         price: dish.price,
+        priceDisplay: formatPriceNoSymbol(dish.price || 0),
         member_price: dish.member_price,
+        memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
+        original_price: dish.original_price,
+        originalPriceDisplay: dish.original_price ? formatPriceNoSymbol(dish.original_price) : null,
         category_id: dish.category_id || 0,
         category_name: dish.category_name || '未分类',
         monthly_sales: dish.monthly_sales || 0,
@@ -181,7 +187,10 @@ Page({
         description: combo.description || '',
         image_url: getPublicImageUrl(combo.image_url || ''),
         combo_price: combo.combo_price,
+        comboPriceDisplay: formatPriceNoSymbol(combo.combo_price || 0),
         original_price: combo.original_price,
+        originalPriceDisplay: formatPriceNoSymbol(combo.original_price || 0),
+        savingsDisplay: formatPriceNoSymbol((combo.original_price || 0) - (combo.combo_price || 0)),
         dishes: combo.dishes || []
       }))
     } catch (error) {
@@ -313,19 +322,21 @@ Page({
   async updateCartDisplay() {
     try {
       // 使用与外卖首页相同的方式获取购物车状态
-      const userCarts = await getUserCarts()
+      const userCarts = await getUserCarts('takeout')
       const totalCount = userCarts.summary?.total_items || 0
       const totalPrice = userCarts.summary?.total_amount || 0
 
       this.setData({
         cartCount: totalCount,
-        cartPrice: totalPrice
+        cartPrice: totalPrice,
+        cartPriceDisplay: formatPriceNoSymbol(totalPrice)
       })
     } catch (error) {
       // 获取失败时重置为0
       this.setData({
         cartCount: 0,
-        cartPrice: 0
+        cartPrice: 0,
+        cartPriceDisplay: '0.00'
       })
     }
   },

@@ -53,6 +53,12 @@ type Cart struct {
 	MerchantID int64     `json:"merchant_id"`
 	UpdatedAt  time.Time `json:"updated_at"`
 	CreatedAt  time.Time `json:"created_at"`
+	// 订单类型：takeout=外卖, dine_in=堂食, reservation=预订
+	OrderType string `json:"order_type"`
+	// 桌台ID（仅堂食有效）
+	TableID pgtype.Int8 `json:"table_id"`
+	// 预订ID（仅预订有效）
+	ReservationID pgtype.Int8 `json:"reservation_id"`
 }
 
 // 购物车商品表

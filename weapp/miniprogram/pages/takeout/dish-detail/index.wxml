@@ -16,8 +16,8 @@
     <view class="info-section">
       <view class="shop-dish-name">{{dish.shop_name}}·{{dish.name}}</view>
       <view class="price-row">
-        <text class="price">¥{{dish.price / 100}}</text>
-        <text wx:if="{{dish.original_price > dish.price}}" class="original-price">¥{{dish.original_price / 100}}</text>
+        <text class="price">¥{{dish.priceDisplay}}</text>
+        <text wx:if="{{dish.originalPriceDisplay}}" class="original-price">¥{{dish.originalPriceDisplay}}</text>
       </view>
       <view class="tags-row">
         <t-tag wx:if="{{dish.is_premade}}" theme="warning" size="small">预制菜</t-tag>
@@ -48,7 +48,7 @@
             data-spec-id="{{spec.id}}"
             bind:tap="onSpecTap"
           >
-            {{spec.name}} <text wx:if="{{spec.price_diff > 0}}">+¥{{spec.price_diff / 100}}</text>
+            {{spec.name}} <text wx:if="{{spec.priceDiffDisplay}}">+¥{{spec.priceDiffDisplay}}</text>
           </t-tag>
         </view>
       </view>

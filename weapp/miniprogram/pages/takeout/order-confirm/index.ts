@@ -4,12 +4,13 @@ import { ErrorHandler } from '../../../utils/error-handler'
 import { getAddressList, AddressDTO } from '../../../api/address'
 import { createOrder, previewOrder, CreateOrderRequest } from '../../../api/order'
 import { Cart } from '../../../models/cart'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 interface PreviewData {
-    subtotal: number
-    deliveryFee: number
-    discount: number
-    total: number
+  subtotal: number
+  deliveryFee: number
+  discount: number
+  total: number
 }
 
 Page({
@@ -20,7 +21,9 @@ Page({
     deliveryTime: 'ASAP',
     navBarHeight: 88,
     loading: false,
-    previewData: null as PreviewData | null
+    previewData: null as PreviewData | null,
+    orderTotalDisplay: '0.00',
+    deliveryFeeDisplay: '5.00'
   },
 
   onLoad() {
@@ -45,7 +48,12 @@ Page({
 
   loadCart() {
     const cart = CartService.getCart()
-    this.setData({ cart })
+    // 计算订单总价（商品金额 + 配送费 500分）
+    const orderTotal = (cart?.totalPrice || 0) + 500
+    this.setData({
+      cart,
+      orderTotalDisplay: formatPriceNoSymbol(orderTotal)
+    })
     this.updateOrderPreview()
   },
 

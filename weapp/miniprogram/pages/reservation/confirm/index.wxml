@@ -51,7 +51,7 @@
 <!-- 底部提交栏 -->
 <view class="bottom-bar">
   <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit">
-    {{paymentMode === 'deposit' ? '支付定金 ¥' + deposit / 100 : '选择菜品'}}
+    {{paymentMode === 'deposit' ? '支付定金 ¥' + depositDisplay : '选择菜品'}}
   </t-button>
 </view>
 

@@ -100,8 +100,8 @@ ORDER BY reservation_time;
 SELECT COUNT(*) FROM table_reservations
 WHERE table_id = $1 
   AND reservation_date = $2
-  AND reservation_time = $3
-  AND status IN ('pending', 'paid', 'confirmed');
+  AND status IN ('pending', 'paid', 'confirmed')
+  AND ($3::time, $4::interval) OVERLAPS (reservation_time, $4::interval);
 
 -- name: UpdateReservationStatus :one
 UPDATE table_reservations

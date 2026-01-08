@@ -1,4 +1,5 @@
 import { CouponService, UserCoupon, CouponStatus } from '../../../api/coupon';
+import { formatPriceNoSymbol } from '../../../utils/util';
 
 Page({
     data: {
@@ -59,8 +60,9 @@ Page({
 
             const newCoupons = res.coupons.map(c => ({
                 ...c,
-                _formatValue: c.type === 'discount' ? `${c.value / 10}折` : `¥${c.value / 100}`,
-                _formatMinSpend: c.min_spend > 0 ? `满${c.min_spend / 100}可用` : '无门槛',
+                valueDisplay: c.type === 'discount' ? String(c.value / 10) : formatPriceNoSymbol(c.value || 0),
+                _formatValue: c.type === 'discount' ? `${c.value / 10}折` : `¥${formatPriceNoSymbol(c.value || 0)}`,
+                _formatMinSpend: c.min_spend > 0 ? `满${formatPriceNoSymbol(c.min_spend)}可用` : '无门槛',
                 _formatTime: c.end_time.split(' ')[0]
             }));
 

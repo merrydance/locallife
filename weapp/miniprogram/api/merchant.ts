@@ -793,11 +793,23 @@ export function getMerchantOrders(merchantId: string, status?: string): Promise<
 }
 
 /**
+ * 获取商户菜品列表响应类型
+ */
+export interface MerchantDishesResponse {
+  categories: Array<{
+    id: number
+    name: string
+    sort_order: number
+  }>
+  dishes: DishDTO[]
+}
+
+/**
  * 获取商户菜品列表
  */
-export function getMerchantDishes(merchantId: string): Promise<DishDTO[]> {
+export function getMerchantDishes(merchantId: string): Promise<MerchantDishesResponse> {
   return request({
-    url: `/customers/merchants/${merchantId}/dishes`,
+    url: `/v1/public/merchants/${merchantId}/dishes`,
     method: 'GET'
   })
 }

@@ -7714,33 +7714,33 @@ func (mr *MockStoreMockRecorder) GetUserCartsByMerchantIDs(ctx, arg any) *gomock
 }
 
 // GetUserCartsSummary mocks base method.
-func (m *MockStore) GetUserCartsSummary(ctx context.Context, userID int64) (db.GetUserCartsSummaryRow, error) {
+func (m *MockStore) GetUserCartsSummary(ctx context.Context, arg db.GetUserCartsSummaryParams) (db.GetUserCartsSummaryRow, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUserCartsSummary", ctx, userID)
+	ret := m.ctrl.Call(m, "GetUserCartsSummary", ctx, arg)
 	ret0, _ := ret[0].(db.GetUserCartsSummaryRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetUserCartsSummary indicates an expected call of GetUserCartsSummary.
-func (mr *MockStoreMockRecorder) GetUserCartsSummary(ctx, userID any) *gomock.Call {
+func (mr *MockStoreMockRecorder) GetUserCartsSummary(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserCartsSummary", reflect.TypeOf((*MockStore)(nil).GetUserCartsSummary), ctx, userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserCartsSummary", reflect.TypeOf((*MockStore)(nil).GetUserCartsSummary), ctx, arg)
 }
 
 // GetUserCartsWithDetails mocks base method.
-func (m *MockStore) GetUserCartsWithDetails(ctx context.Context, userID int64) ([]db.GetUserCartsWithDetailsRow, error) {
+func (m *MockStore) GetUserCartsWithDetails(ctx context.Context, arg db.GetUserCartsWithDetailsParams) ([]db.GetUserCartsWithDetailsRow, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUserCartsWithDetails", ctx, userID)
+	ret := m.ctrl.Call(m, "GetUserCartsWithDetails", ctx, arg)
 	ret0, _ := ret[0].([]db.GetUserCartsWithDetailsRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetUserCartsWithDetails indicates an expected call of GetUserCartsWithDetails.
-func (mr *MockStoreMockRecorder) GetUserCartsWithDetails(ctx, userID any) *gomock.Call {
+func (mr *MockStoreMockRecorder) GetUserCartsWithDetails(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserCartsWithDetails", reflect.TypeOf((*MockStore)(nil).GetUserCartsWithDetails), ctx, userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserCartsWithDetails", reflect.TypeOf((*MockStore)(nil).GetUserCartsWithDetails), ctx, arg)
 }
 
 // GetUserClaimWarningStatus mocks base method.

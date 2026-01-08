@@ -306,7 +306,7 @@
               <text class="item-customs" wx:if="{{item.customizations}}">{{item.customizations}}</text>
             </view>
             <text class="item-qty">x{{item.quantity}}</text>
-            <text class="item-price">¥{{item.subtotal / 100}}</text>
+            <text class="item-price">¥{{item.subtotal_display}}</text>
           </view>
         </view>
       </view>
@@ -317,19 +317,19 @@
         <view class="amount-rows">
           <view class="amount-row">
             <text>商品小计</text>
-            <text>¥{{detailOrder.subtotal / 100}}</text>
+            <text>¥{{detailOrder.subtotal_display}}</text>
           </view>
           <view class="amount-row" wx:if="{{detailOrder.delivery_fee > 0}}">
             <text>配送费</text>
-            <text>¥{{detailOrder.delivery_fee / 100}}</text>
+            <text>¥{{detailOrder.delivery_fee_display}}</text>
           </view>
           <view class="amount-row discount" wx:if="{{detailOrder.discount_amount > 0}}">
             <text>优惠</text>
-            <text>-¥{{detailOrder.discount_amount / 100}}</text>
+            <text>-¥{{detailOrder.discount_display}}</text>
           </view>
           <view class="amount-row total">
             <text>实付金额</text>
-            <text class="total-value">¥{{detailOrder.total_amount / 100}}</text>
+            <text class="total-value">¥{{detailOrder.total_display}}</text>
           </view>
         </view>
       </view>

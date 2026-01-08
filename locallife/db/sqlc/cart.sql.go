@@ -70,19 +70,28 @@ func (q *Queries) ClearMultipleCarts(ctx context.Context, dollar_1 []int64) erro
 }
 
 const createCart = `-- name: CreateCart :one
-INSERT INTO carts (user_id, merchant_id)
-VALUES ($1, $2)
-ON CONFLICT (user_id, merchant_id) DO UPDATE SET updated_at = now()
-RETURNING id, user_id, merchant_id, updated_at, created_at
+INSERT INTO carts (user_id, merchant_id, order_type, table_id, reservation_id)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, merchant_id, order_type, table_id, reservation_id) DO UPDATE SET updated_at = now()
+RETURNING id, user_id, merchant_id, updated_at, created_at, order_type, table_id, reservation_id
 `
 
 type CreateCartParams struct {
-	UserID     int64 `json:"user_id"`
-	MerchantID int64 `json:"merchant_id"`
+	UserID        int64       `json:"user_id"`
+	MerchantID    int64       `json:"merchant_id"`
+	OrderType     string      `json:"order_type"`
+	TableID       pgtype.Int8 `json:"table_id"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
 }
 
 func (q *Queries) CreateCart(ctx context.Context, arg CreateCartParams) (Cart, error) {
-	row := q.db.QueryRow(ctx, createCart, arg.UserID, arg.MerchantID)
+	row := q.db.QueryRow(ctx, createCart,
+		arg.UserID,
+		arg.MerchantID,
+		arg.OrderType,
+		arg.TableID,
+		arg.ReservationID,
+	)
 	var i Cart
 	err := row.Scan(
 		&i.ID,
@@ -90,6 +99,9 @@ func (q *Queries) CreateCart(ctx context.Context, arg CreateCartParams) (Cart, e
 		&i.MerchantID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.OrderType,
+		&i.TableID,
+		&i.ReservationID,
 	)
 	return i, err
 }
@@ -115,7 +127,7 @@ func (q *Queries) DeleteCartItem(ctx context.Context, id int64) error {
 }
 
 const getCart = `-- name: GetCart :one
-SELECT id, user_id, merchant_id, updated_at, created_at FROM carts
+SELECT id, user_id, merchant_id, updated_at, created_at, order_type, table_id, reservation_id FROM carts
 WHERE id = $1
 `
 
@@ -128,22 +140,34 @@ func (q *Queries) GetCart(ctx context.Context, id int64) (Cart, error) {
 		&i.MerchantID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.OrderType,
+		&i.TableID,
+		&i.ReservationID,
 	)
 	return i, err
 }
 
 const getCartByUserAndMerchant = `-- name: GetCartByUserAndMerchant :one
-SELECT id, user_id, merchant_id, updated_at, created_at FROM carts
-WHERE user_id = $1 AND merchant_id = $2
+SELECT id, user_id, merchant_id, updated_at, created_at, order_type, table_id, reservation_id FROM carts
+WHERE user_id = $1 AND merchant_id = $2 AND order_type = $3 AND table_id IS NOT DISTINCT FROM $4 AND reservation_id IS NOT DISTINCT FROM $5
 `
 
 type GetCartByUserAndMerchantParams struct {
-	UserID     int64 `json:"user_id"`
-	MerchantID int64 `json:"merchant_id"`
+	UserID        int64       `json:"user_id"`
+	MerchantID    int64       `json:"merchant_id"`
+	OrderType     string      `json:"order_type"`
+	TableID       pgtype.Int8 `json:"table_id"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
 }
 
 func (q *Queries) GetCartByUserAndMerchant(ctx context.Context, arg GetCartByUserAndMerchantParams) (Cart, error) {
-	row := q.db.QueryRow(ctx, getCartByUserAndMerchant, arg.UserID, arg.MerchantID)
+	row := q.db.QueryRow(ctx, getCartByUserAndMerchant,
+		arg.UserID,
+		arg.MerchantID,
+		arg.OrderType,
+		arg.TableID,
+		arg.ReservationID,
+	)
 	var i Cart
 	err := row.Scan(
 		&i.ID,
@@ -151,6 +175,9 @@ func (q *Queries) GetCartByUserAndMerchant(ctx context.Context, arg GetCartByUse
 		&i.MerchantID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.OrderType,
+		&i.TableID,
+		&i.ReservationID,
 	)
 	return i, err
 }
@@ -267,7 +294,7 @@ func (q *Queries) GetCartItemByDishAndCustomizations(ctx context.Context, arg Ge
 
 const getCartWithItems = `-- name: GetCartWithItems :one
 SELECT 
-    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at,
+    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at, c.order_type, c.table_id, c.reservation_id,
     COALESCE(
         json_agg(
             json_build_object(
@@ -293,26 +320,38 @@ FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
 LEFT JOIN dishes d ON d.id = ci.dish_id
 LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
-WHERE c.user_id = $1 AND c.merchant_id = $2
+WHERE c.user_id = $1 AND c.merchant_id = $2 AND c.order_type = $3 AND c.table_id IS NOT DISTINCT FROM $4 AND c.reservation_id IS NOT DISTINCT FROM $5
 GROUP BY c.id
 `
 
 type GetCartWithItemsParams struct {
-	UserID     int64 `json:"user_id"`
-	MerchantID int64 `json:"merchant_id"`
+	UserID        int64       `json:"user_id"`
+	MerchantID    int64       `json:"merchant_id"`
+	OrderType     string      `json:"order_type"`
+	TableID       pgtype.Int8 `json:"table_id"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
 }
 
 type GetCartWithItemsRow struct {
-	ID         int64     `json:"id"`
-	UserID     int64     `json:"user_id"`
-	MerchantID int64     `json:"merchant_id"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	CreatedAt  time.Time `json:"created_at"`
-	Items      []byte    `json:"items"`
+	ID            int64       `json:"id"`
+	UserID        int64       `json:"user_id"`
+	MerchantID    int64       `json:"merchant_id"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+	CreatedAt     time.Time   `json:"created_at"`
+	OrderType     string      `json:"order_type"`
+	TableID       pgtype.Int8 `json:"table_id"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+	Items         []byte      `json:"items"`
 }
 
 func (q *Queries) GetCartWithItems(ctx context.Context, arg GetCartWithItemsParams) (GetCartWithItemsRow, error) {
-	row := q.db.QueryRow(ctx, getCartWithItems, arg.UserID, arg.MerchantID)
+	row := q.db.QueryRow(ctx, getCartWithItems,
+		arg.UserID,
+		arg.MerchantID,
+		arg.OrderType,
+		arg.TableID,
+		arg.ReservationID,
+	)
 	var i GetCartWithItemsRow
 	err := row.Scan(
 		&i.ID,
@@ -320,6 +359,9 @@ func (q *Queries) GetCartWithItems(ctx context.Context, arg GetCartWithItemsPara
 		&i.MerchantID,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.OrderType,
+		&i.TableID,
+		&i.ReservationID,
 		&i.Items,
 	)
 	return i, err
@@ -327,7 +369,7 @@ func (q *Queries) GetCartWithItems(ctx context.Context, arg GetCartWithItemsPara
 
 const getUserCarts = `-- name: GetUserCarts :many
 SELECT 
-    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at,
+    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at, c.order_type, c.table_id, c.reservation_id,
     m.name AS merchant_name,
     m.logo_url AS merchant_logo,
     COUNT(ci.id) AS item_count
@@ -340,14 +382,17 @@ ORDER BY c.updated_at DESC
 `
 
 type GetUserCartsRow struct {
-	ID           int64       `json:"id"`
-	UserID       int64       `json:"user_id"`
-	MerchantID   int64       `json:"merchant_id"`
-	UpdatedAt    time.Time   `json:"updated_at"`
-	CreatedAt    time.Time   `json:"created_at"`
-	MerchantName string      `json:"merchant_name"`
-	MerchantLogo pgtype.Text `json:"merchant_logo"`
-	ItemCount    int64       `json:"item_count"`
+	ID            int64       `json:"id"`
+	UserID        int64       `json:"user_id"`
+	MerchantID    int64       `json:"merchant_id"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+	CreatedAt     time.Time   `json:"created_at"`
+	OrderType     string      `json:"order_type"`
+	TableID       pgtype.Int8 `json:"table_id"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+	MerchantName  string      `json:"merchant_name"`
+	MerchantLogo  pgtype.Text `json:"merchant_logo"`
+	ItemCount     int64       `json:"item_count"`
 }
 
 func (q *Queries) GetUserCarts(ctx context.Context, userID int64) ([]GetUserCartsRow, error) {
@@ -365,6 +410,9 @@ func (q *Queries) GetUserCarts(ctx context.Context, userID int64) ([]GetUserCart
 			&i.MerchantID,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.OrderType,
+			&i.TableID,
+			&i.ReservationID,
 			&i.MerchantName,
 			&i.MerchantLogo,
 			&i.ItemCount,
@@ -456,7 +504,7 @@ func (q *Queries) GetUserCartsByCartIDs(ctx context.Context, arg GetUserCartsByC
 
 const getUserCartsByMerchantIDs = `-- name: GetUserCartsByMerchantIDs :many
 SELECT 
-    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at,
+    c.id, c.user_id, c.merchant_id, c.updated_at, c.created_at, c.order_type, c.table_id, c.reservation_id,
     m.name AS merchant_name,
     mpc.sub_mch_id AS sub_mchid,
     m.status AS merchant_status
@@ -478,6 +526,9 @@ type GetUserCartsByMerchantIDsRow struct {
 	MerchantID     int64       `json:"merchant_id"`
 	UpdatedAt      time.Time   `json:"updated_at"`
 	CreatedAt      time.Time   `json:"created_at"`
+	OrderType      string      `json:"order_type"`
+	TableID        pgtype.Int8 `json:"table_id"`
+	ReservationID  pgtype.Int8 `json:"reservation_id"`
 	MerchantName   string      `json:"merchant_name"`
 	SubMchid       pgtype.Text `json:"sub_mchid"`
 	MerchantStatus string      `json:"merchant_status"`
@@ -499,6 +550,9 @@ func (q *Queries) GetUserCartsByMerchantIDs(ctx context.Context, arg GetUserCart
 			&i.MerchantID,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.OrderType,
+			&i.TableID,
+			&i.ReservationID,
 			&i.MerchantName,
 			&i.SubMchid,
 			&i.MerchantStatus,
@@ -529,8 +583,13 @@ FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
 LEFT JOIN dishes d ON d.id = ci.dish_id
 LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
-WHERE c.user_id = $1
+WHERE c.user_id = $1 AND (c.order_type = $2 OR $2 IS NULL)
 `
+
+type GetUserCartsSummaryParams struct {
+	UserID    int64       `json:"user_id"`
+	OrderType pgtype.Text `json:"order_type"`
+}
 
 type GetUserCartsSummaryRow struct {
 	CartCount   int32 `json:"cart_count"`
@@ -540,8 +599,8 @@ type GetUserCartsSummaryRow struct {
 
 // ==================== 多商户购物车汇总查询 ====================
 // 获取用户所有购物车的汇总统计
-func (q *Queries) GetUserCartsSummary(ctx context.Context, userID int64) (GetUserCartsSummaryRow, error) {
-	row := q.db.QueryRow(ctx, getUserCartsSummary, userID)
+func (q *Queries) GetUserCartsSummary(ctx context.Context, arg GetUserCartsSummaryParams) (GetUserCartsSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getUserCartsSummary, arg.UserID, arg.OrderType)
 	var i GetUserCartsSummaryRow
 	err := row.Scan(&i.CartCount, &i.TotalItems, &i.TotalAmount)
 	return i, err
@@ -551,6 +610,9 @@ const getUserCartsWithDetails = `-- name: GetUserCartsWithDetails :many
 SELECT 
     c.id AS cart_id,
     c.merchant_id,
+    c.order_type,
+    c.table_id,
+    c.reservation_id,
     m.name AS merchant_name,
     m.logo_url AS merchant_logo,
     mpc.sub_mch_id AS sub_mchid,
@@ -577,27 +639,35 @@ LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
 LEFT JOIN dishes d ON d.id = ci.dish_id
 LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
-WHERE c.user_id = $1
-GROUP BY c.id, c.merchant_id, m.id, mpc.sub_mch_id
+WHERE c.user_id = $1 AND (c.order_type = $2 OR $2 IS NULL)
+GROUP BY c.id, c.merchant_id, c.order_type, c.table_id, c.reservation_id, m.id, mpc.sub_mch_id
 HAVING COUNT(ci.id) > 0  -- 只返回有商品的购物车
 ORDER BY c.updated_at DESC
 `
 
+type GetUserCartsWithDetailsParams struct {
+	UserID    int64       `json:"user_id"`
+	OrderType pgtype.Text `json:"order_type"`
+}
+
 type GetUserCartsWithDetailsRow struct {
-	CartID       int64       `json:"cart_id"`
-	MerchantID   int64       `json:"merchant_id"`
-	MerchantName string      `json:"merchant_name"`
-	MerchantLogo pgtype.Text `json:"merchant_logo"`
-	SubMchid     pgtype.Text `json:"sub_mchid"`
-	ItemCount    int32       `json:"item_count"`
-	Subtotal     int64       `json:"subtotal"`
-	AllAvailable bool        `json:"all_available"`
-	UpdatedAt    time.Time   `json:"updated_at"`
+	CartID        int64       `json:"cart_id"`
+	MerchantID    int64       `json:"merchant_id"`
+	OrderType     string      `json:"order_type"`
+	TableID       pgtype.Int8 `json:"table_id"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+	MerchantName  string      `json:"merchant_name"`
+	MerchantLogo  pgtype.Text `json:"merchant_logo"`
+	SubMchid      pgtype.Text `json:"sub_mchid"`
+	ItemCount     int32       `json:"item_count"`
+	Subtotal      int64       `json:"subtotal"`
+	AllAvailable  bool        `json:"all_available"`
+	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
 // 获取用户所有购物车及其商品详情（用于合单结算）
-func (q *Queries) GetUserCartsWithDetails(ctx context.Context, userID int64) ([]GetUserCartsWithDetailsRow, error) {
-	rows, err := q.db.Query(ctx, getUserCartsWithDetails, userID)
+func (q *Queries) GetUserCartsWithDetails(ctx context.Context, arg GetUserCartsWithDetailsParams) ([]GetUserCartsWithDetailsRow, error) {
+	rows, err := q.db.Query(ctx, getUserCartsWithDetails, arg.UserID, arg.OrderType)
 	if err != nil {
 		return nil, err
 	}
@@ -608,6 +678,9 @@ func (q *Queries) GetUserCartsWithDetails(ctx context.Context, userID int64) ([]
 		if err := rows.Scan(
 			&i.CartID,
 			&i.MerchantID,
+			&i.OrderType,
+			&i.TableID,
+			&i.ReservationID,
 			&i.MerchantName,
 			&i.MerchantLogo,
 			&i.SubMchid,

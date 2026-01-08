@@ -82,7 +82,7 @@
                     </view>
                   </view>
                   <view class="combo-meta">
-                    <text class="combo-price">¥{{item.combo_price / 100}}</text>
+                    <text class="combo-price">¥{{item.comboPriceDisplay}}</text>
                   </view>
                 </view>
               </view>
@@ -220,7 +220,7 @@
                     <view class="combo-dish-info">
                       <text class="combo-dish-name">{{item.dish_name}}</text>
                       <text class="combo-dish-qty">x{{item.quantity || 1}}</text>
-                      <text class="combo-dish-price">¥{{item.dish_price / 100}}</text>
+                      <text class="combo-dish-price">¥{{item.dishPriceDisplay}}</text>
                     </view>
                     <view class="combo-dish-remove" bindtap="onRemoveDish" data-id="{{item.dish_id}}">✕</view>
                   </view>
@@ -266,7 +266,7 @@
       >
         <view class="picker-dish-info" bindtap="onToggleDish" data-item="{{item}}">
           <text class="picker-dish-name">{{item.name}}</text>
-          <text class="picker-dish-price">¥{{item.price / 100}}</text>
+          <text class="picker-dish-price">¥{{item.priceDisplay}}</text>
         </view>
         <!-- 数量选择器 -->
         <view class="quantity-control">

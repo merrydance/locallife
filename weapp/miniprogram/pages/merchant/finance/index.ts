@@ -4,6 +4,7 @@
  */
 
 import { request } from '@/utils/request'
+import { formatPriceNoSymbol } from '@/utils/util'
 
 // 类型定义
 interface FinanceOverviewResponse {
@@ -180,27 +181,71 @@ Page({
             switch (tab) {
                 case 'overview':
                     const overview = await FinanceService.getOverview(startDate, endDate)
-                    this.setData({ overview, loading: false })
+                    // 预处理 overview 价格
+                    const overviewDisplay = overview ? {
+                        ...overview,
+                        total_gmv_display: formatPriceNoSymbol(overview.total_gmv || 0),
+                        total_income_display: formatPriceNoSymbol(overview.total_income || 0),
+                        net_income_display: formatPriceNoSymbol(overview.net_income || 0),
+                        pending_income_display: formatPriceNoSymbol(overview.pending_income || 0),
+                        total_platform_fee_display: formatPriceNoSymbol(overview.total_platform_fee || 0),
+                        total_operator_fee_display: formatPriceNoSymbol(overview.total_operator_fee || 0),
+                        total_promotion_exp_display: formatPriceNoSymbol(overview.total_promotion_exp || 0)
+                    } : null
+                    this.setData({ overview: overviewDisplay, loading: false })
                     break
                 case 'daily':
                     const dailyFinance = await FinanceService.getDailyFinance(startDate, endDate)
-                    this.setData({ dailyFinance: dailyFinance || [], loading: false })
+                    const dailyDisplay = (dailyFinance || []).map((item: DailyFinanceItem) => ({
+                        ...item,
+                        total_gmv_display: formatPriceNoSymbol(item.total_gmv || 0),
+                        merchant_income_display: formatPriceNoSymbol(item.merchant_income || 0),
+                        total_fee_display: formatPriceNoSymbol(item.total_fee || 0)
+                    }))
+                    this.setData({ dailyFinance: dailyDisplay, loading: false })
                     break
                 case 'orders':
                     const orders = await FinanceService.getOrders(startDate, endDate)
-                    this.setData({ orders: orders || [], loading: false })
+                    const ordersDisplay = (orders || []).map((item: FinanceOrderItem) => ({
+                        ...item,
+                        total_amount_display: formatPriceNoSymbol(item.total_amount || 0),
+                        total_fee_display: formatPriceNoSymbol((item.platform_fee || 0) + (item.operator_fee || 0)),
+                        merchant_amount_display: formatPriceNoSymbol(item.merchant_amount || 0),
+                        created_date: item.created_at ? item.created_at.slice(0, 10) : '-'
+                    }))
+                    this.setData({ orders: ordersDisplay, loading: false })
                     break
                 case 'fees':
                     const serviceFees = await FinanceService.getServiceFees(startDate, endDate)
-                    this.setData({ serviceFees: serviceFees || [], loading: false })
+                    const feesDisplay = (serviceFees || []).map((item: ServiceFeeItem) => ({
+                        ...item,
+                        total_amount_display: formatPriceNoSymbol(item.total_amount || 0),
+                        platform_fee_display: formatPriceNoSymbol(item.platform_fee || 0),
+                        operator_fee_display: formatPriceNoSymbol(item.operator_fee || 0),
+                        total_fee_display: formatPriceNoSymbol(item.total_fee || 0)
+                    }))
+                    this.setData({ serviceFees: feesDisplay, loading: false })
                     break
                 case 'promotions':
                     const promotions = await FinanceService.getPromotions(startDate, endDate)
-                    this.setData({ promotions: promotions || [], loading: false })
+                    const promotionsDisplay = (promotions || []).map((item: PromotionExpenseItem) => ({
+                        ...item,
+                        subtotal_display: formatPriceNoSymbol(item.subtotal || 0),
+                        delivery_fee_display: formatPriceNoSymbol(item.delivery_fee || 0),
+                        delivery_fee_discount_display: formatPriceNoSymbol(item.delivery_fee_discount || 0),
+                        created_date: item.created_at ? item.created_at.slice(0, 10) : '-'
+                    }))
+                    this.setData({ promotions: promotionsDisplay, loading: false })
                     break
                 case 'settlements':
                     const settlements = await FinanceService.getSettlements(startDate, endDate)
-                    this.setData({ settlements: settlements || [], loading: false })
+                    const settlementsDisplay = (settlements || []).map((item: SettlementItem) => ({
+                        ...item,
+                        total_amount_display: formatPriceNoSymbol(item.total_amount || 0),
+                        merchant_amount_display: formatPriceNoSymbol(item.merchant_amount || 0),
+                        created_date: item.created_at ? item.created_at.slice(0, 10) : '-'
+                    }))
+                    this.setData({ settlements: settlementsDisplay, loading: false })
                     break
             }
         } catch (error: any) {

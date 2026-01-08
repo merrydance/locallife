@@ -15,6 +15,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.markReservationNoShow = exports.completeReservationByMerchant = exports.confirmReservationByMerchant = exports.updateReservation = exports.merchantCreateReservation = exports.getReservationStats = exports.getTodayReservations = exports.getMerchantReservations = exports.startCookingReservation = exports.checkInReservation = exports.addDishesToReservation = exports.cancelReservation = exports.getReservationDetail = exports.getUserReservations = exports.createReservation = exports.ReservationService = void 0;
+exports.getRoomDetail = getRoomDetail;
 const request_1 = require("../utils/request");
 // ==================== 预订服务 ====================
 class ReservationService {
@@ -227,4 +228,39 @@ exports.updateReservation = ReservationService.updateReservation;
 exports.confirmReservationByMerchant = ReservationService.confirmReservation;
 exports.completeReservationByMerchant = ReservationService.completeReservation;
 exports.markReservationNoShow = ReservationService.markNoShow;
+/**
+ * 获取包间详情（用于预订详情页）
+ * 从后端 /v1/rooms/:id 获取数据并映射字段
+ */
+function getRoomDetail(id) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const response = yield (0, request_1.request)({
+            url: `/v1/rooms/${id}`,
+            method: 'GET'
+        });
+        // 映射后端 RoomDetailResponse 到页面 Room 格式
+        // 图片URL已经是完整路径或以/开头，直接使用
+        const processImageUrl = (url) => {
+            if (!url)
+                return '';
+            if (url.startsWith('http'))
+                return url;
+            if (url.startsWith('/'))
+                return `${request_1.API_BASE}${url}`;
+            return url;
+        };
+        return {
+            id: response.id,
+            merchant_id: response.merchant_id || 0,
+            name: response.room_no || '包间',
+            capacity: response.capacity || 0,
+            min_spend: response.minimum_spend || 0,
+            // 定金逻辑与后端一致：有最低消费则定金=最低消费，否则默认100元
+            deposit: response.minimum_spend > 0 ? response.minimum_spend : 10000,
+            images: (response.images || []).map((url) => processImageUrl(url)),
+            facilities: (response.tags || []).map((t) => t.name || t), // 标签作为设施
+            description: response.description || ''
+        };
+    });
+}
 exports.default = ReservationService;

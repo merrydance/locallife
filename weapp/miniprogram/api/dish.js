@@ -119,13 +119,14 @@ class DishManagementService {
         });
     }
     /**
-     * 获取菜品详情
-     * GET /v1/dishes/{id}
+     * 获取菜品详情（消费者端）
+     * GET /v1/public/dishes/{id}
+     * 注意：使用公开接口，无需商户权限
      */
     static getDishDetail(dishId) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield (0, request_1.request)({
-                url: `/v1/dishes/${dishId}`,
+                url: `/v1/public/dishes/${dishId}`,
                 method: 'GET'
             });
         });

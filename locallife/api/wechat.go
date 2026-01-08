@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -65,7 +64,7 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 	user, err := server.store.GetUserByWechatOpenID(ctx, wechatResp.OpenID)
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			// 用户不存在,创建新用户(使用事务确保原子性)
 			txResult, err := server.store.CreateUserTx(ctx, db.CreateUserTxParams{
 				WechatOpenid: wechatResp.OpenID,
@@ -173,7 +172,7 @@ func (server *Server) bindPhone(ctx *gin.Context) {
 		String: req.Phone,
 		Valid:  true,
 	})
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to check phone availability: %w", err)))
 		return
 	}

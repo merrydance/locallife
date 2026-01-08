@@ -71,9 +71,9 @@ class DishAdapter {
             return '距离未知';
         }
         if (meters < 1000) {
-            return `${meters}m`;
+            return `${Math.round(meters)}米`;
         }
-        return `${(meters / 1000).toFixed(1)}km`;
+        return `${(meters / 1000).toFixed(1)}公里`;
     }
     static formatDeliveryTime(minutes) {
         if (!minutes || minutes === 0) {

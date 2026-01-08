@@ -71,11 +71,11 @@ Page({
                 params.status = currentStatus
             }
 
-            const response = await ReservationService.getReservations(params)
+            const response = await ReservationService.getUserReservations(params)
             const result = response.reservations
 
             // 处理显示字段
-            const processedReservations = result.map(r => this.processReservation(r))
+            const processedReservations = result.map((r: ReservationResponse) => this.processReservation(r))
             const reservations = reset ? processedReservations : [...this.data.reservations, ...processedReservations]
 
             this.setData({
@@ -90,12 +90,13 @@ Page({
         }
     },
 
-    processReservation(r: ReservationResponse): ReservationResponse & { _statusText: string; _statusClass: string; _canCancel: boolean; _dateTimeDisplay: string; _depositDisplay: string } {
+    processReservation(r: ReservationResponse): ReservationResponse & { _statusText: string; _statusClass: string; _canCancel: boolean; _canOrder: boolean; _dateTimeDisplay: string; _depositDisplay: string } {
         return {
             ...r,
             _statusText: this.getStatusText(r.status || ''),
             _statusClass: r.status || '',
             _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''),
+            _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''),  // 已确认或已签到可点菜
             _dateTimeDisplay: r.reservation_time, // Interface uses reservation_time for full datetime
             _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : ''
         }
@@ -152,5 +153,18 @@ Page({
             logger.error('取消预订失败', error, 'reservations.doCancelReservation')
             wx.showToast({ title: '取消失败', icon: 'error' })
         }
+    },
+
+    /**
+     * 跳转到点菜页面
+     */
+    onGoToOrder(e: WechatMiniprogram.BaseEvent) {
+        const item = e.currentTarget.dataset.item as ReservationResponse
+        if (!item) return
+
+        // 跳转到堂食点餐页面，传递预订ID和商户ID
+        wx.navigateTo({
+            url: `/pages/dine-in/menu/menu?reservation_id=${item.id}&merchant_id=${item.merchant_id}`
+        })
     }
 })

@@ -1,6 +1,7 @@
 import { pickupOrder, deliverOrder, getRiderDashboard, RiderOrderDTO } from '../../../api/rider'
 import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 Page({
   data: {
@@ -51,6 +52,7 @@ Page({
       order_no: dto.id.slice(-8).toUpperCase(),
       status: dto.status,
       income: dto.fee, // Cents
+      incomeDisplay: formatPriceNoSymbol(dto.fee || 0),
       time_limit: dto.expect_deliver_time ? dto.expect_deliver_time.slice(11, 16) : '',
       merchant: {
         name: dto.merchant_name,

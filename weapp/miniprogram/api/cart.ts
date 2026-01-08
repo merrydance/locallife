@@ -11,6 +11,9 @@ import { request } from '../utils/request'
 export interface CartResponse {
     id: number
     merchant_id: number
+    order_type: string
+    table_id?: number
+    reservation_id?: number
     items: CartItemResponse[]
     subtotal: number
     total_count: number
@@ -41,6 +44,9 @@ export interface CartSummaryResponse {
 /** 添加商品到购物车请求 - 对齐 api.addCartItemRequest */
 export interface AddCartItemRequest extends Record<string, unknown> {
     merchant_id: number
+    order_type?: string       // 订单类型：takeout, dine_in, reservation
+    table_id?: number
+    reservation_id?: number
     dish_id?: number          // dish_id和combo_id二选一
     combo_id?: number         // dish_id和combo_id二选一
     quantity: number          // 数量，范围：1-99
@@ -56,6 +62,9 @@ export interface UpdateCartItemRequest extends Record<string, unknown> {
 /** 计算购物车请求 - 对齐 api.calculateCartRequest */
 export interface CalculateCartRequest extends Record<string, unknown> {
     merchant_id: number
+    order_type?: string
+    table_id?: number
+    reservation_id?: number
     address_id?: number       // 配送地址ID，用于计算配送费
     latitude?: number         // 用户当前位置纬度（address_id的fallback）
     longitude?: number        // 用户当前位置经度（address_id的fallback）
@@ -65,6 +74,9 @@ export interface CalculateCartRequest extends Record<string, unknown> {
 /** 清空购物车请求 - 对齐 api.clearCartRequest */
 export interface ClearCartRequest extends Record<string, unknown> {
     merchant_id: number       // 商户ID (必填)
+    order_type?: string
+    table_id?: number
+    reservation_id?: number
 }
 
 /** 商户购物车响应 - 对齐 api.merchantCartResponse */
@@ -76,6 +88,9 @@ export interface MerchantCartResponse {
     merchant_logo?: string    // 商户Logo URL
     merchant_name?: string    // 商户名称
     subtotal?: number         // 商品小计（分）
+    order_type?: string       // 订单类型
+    table_id?: number         // 桌台ID
+    reservation_id?: number   // 预约ID
 }
 
 /** 用户所有购物车响应 - 对齐 api.userCartsResponse */
@@ -138,34 +153,42 @@ export interface CalculateCartResponse {
 
 /**
  * 获取指定商户的购物车
- * @param merchantId 商户ID
+ * @param params 获取参数
  */
-export async function getCart(merchantId: number): Promise<CartResponse> {
+export async function getCart(params: {
+    merchant_id: number,
+    order_type?: string,
+    table_id?: number,
+    reservation_id?: number
+}): Promise<CartResponse> {
     return request({
         url: '/v1/cart',
         method: 'GET',
-        data: { merchant_id: merchantId }
+        data: params
     })
 }
 
 /**
  * 获取购物车摘要（所有商户）
+ * @param orderType 订单类型过滤
  */
-export async function getCartSummary(): Promise<CartSummaryResponse> {
+export async function getCartSummary(orderType?: string): Promise<CartSummaryResponse> {
     return request({
         url: '/v1/cart/summary',
-        method: 'GET'
+        method: 'GET',
+        data: orderType ? { order_type: orderType } : undefined
     })
 }
 
 /**
  * 获取用户所有商户的购物车（完整信息）
- * 返回包含 carts 数组和 summary 的完整响应
+ * @param orderType 订单类型过滤
  */
-export async function getUserCarts(): Promise<UserCartsResponse> {
+export async function getUserCarts(orderType?: string): Promise<UserCartsResponse> {
     return request({
         url: '/v1/cart/summary',
-        method: 'GET'
+        method: 'GET',
+        data: orderType ? { order_type: orderType } : undefined
     })
 }
 
@@ -250,7 +273,7 @@ export async function previewCombinedCheckout(params: CombinedCheckoutRequest): 
  */
 export async function getCartItemCount(merchantId?: number): Promise<number> {
     if (merchantId) {
-        const cart = await getCart(merchantId)
+        const cart = await getCart({ merchant_id: merchantId })
         return cart.total_count
     } else {
         const summary = await getCartSummary()

@@ -29,11 +29,11 @@
       </view>
       <view class="detail-row">
         <text class="label">最低消费</text>
-        <text class="value price">¥{{room.min_spend / 100}}</text>
+        <text class="value price">¥{{room.minSpendDisplay}}</text>
       </view>
       <view class="detail-row">
         <text class="label">预定定金</text>
-        <text class="value price">¥{{room.deposit / 100}}</text>
+        <text class="value price">¥{{room.depositDisplay}}</text>
       </view>
     </view>
 
@@ -70,6 +70,10 @@
             class="calendar-cell {{item.lunchAvailable ? 'available' : 'unavailable'}}" 
             wx:for="{{calendarDays}}" 
             wx:key="date"
+            bindtap="onCellTap"
+            data-date="{{item.date}}"
+            data-type="lunch"
+            data-available="{{item.lunchAvailable}}"
           >
             <t-icon 
               name="{{item.lunchAvailable ? 'check-circle-filled' : 'close-circle-filled'}}" 
@@ -86,6 +90,10 @@
             class="calendar-cell {{item.dinnerAvailable ? 'available' : 'unavailable'}}" 
             wx:for="{{calendarDays}}" 
             wx:key="date"
+            bindtap="onCellTap"
+            data-date="{{item.date}}"
+            data-type="dinner"
+            data-available="{{item.dinnerAvailable}}"
           >
             <t-icon 
               name="{{item.dinnerAvailable ? 'check-circle-filled' : 'close-circle-filled'}}" 

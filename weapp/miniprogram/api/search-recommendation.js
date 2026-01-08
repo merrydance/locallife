@@ -268,7 +268,7 @@ class SearchUtils {
             const result = yield (0, exports.searchDishes)({
                 keyword,
                 merchant_id: merchantId,
-                page: 1,
+                page_id: 1,
                 page_size: 20
             });
             return SearchAdapter.adaptDishResults(result.data);
@@ -283,7 +283,7 @@ class SearchUtils {
                 keyword,
                 latitude: location === null || location === void 0 ? void 0 : location.latitude,
                 longitude: location === null || location === void 0 ? void 0 : location.longitude,
-                page: 1,
+                page_id: 1,
                 page_size: 20
             });
             return SearchAdapter.adaptMerchantResults(result.data);
@@ -300,7 +300,7 @@ class SearchUtils {
                 longitude,
                 category,
                 sort_by: 'distance',
-                page: 1,
+                page_id: 1,
                 page_size: 20
             });
             return SearchAdapter.adaptMerchantResults(result.data);

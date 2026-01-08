@@ -1,11 +1,14 @@
 import { getMyVouchers, getMyAvailableVouchers, claimVoucher, UserVoucherResponse } from '../../../api/personal'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 interface CouponDisplay {
   id: number
   merchant_name: string
   name: string
   threshold: number
+  thresholdDisplay: string
   discount: number
+  discountDisplay: string
   end_date: string
   can_claim?: boolean
   status?: string
@@ -42,7 +45,9 @@ Page({
           merchant_name: v.merchant_name || '平台通用',
           name: v.name,
           threshold: v.min_order_amount,
+          thresholdDisplay: formatPriceNoSymbol(v.min_order_amount || 0),
           discount: v.discount_amount,
+          discountDisplay: formatPriceNoSymbol(v.discount_amount || 0),
           end_date: v.end_time?.split('T')[0] || '',
           can_claim: true
         }))
@@ -54,7 +59,9 @@ Page({
           merchant_name: v.merchant_name || '平台通用',
           name: v.voucher_name,
           threshold: v.min_order_amount,
+          thresholdDisplay: formatPriceNoSymbol(v.min_order_amount || 0),
           discount: v.discount_amount,
+          discountDisplay: formatPriceNoSymbol(v.discount_amount || 0),
           end_date: v.end_time?.split('T')[0] || '',
           status: v.status
         }))

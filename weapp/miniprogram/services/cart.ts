@@ -55,7 +55,7 @@ class CartService {
 
     try {
       logger.debug('Refreshing cart from backend', { merchantId: this.currentMerchantId }, 'CartService.refreshCart')
-      const cart = await CartAPI.getCart(this.currentMerchantId)
+      const cart = await CartAPI.getCart({ merchant_id: this.currentMerchantId })
       this.currentCart = cart
 
       this.notifyListeners()

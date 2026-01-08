@@ -72,5 +72,17 @@ Page({
     onCallMerchant() {
         // Placeholder for calling merchant
         wx.makePhoneCall({ phoneNumber: '13800000000' });
+    },
+
+    /**
+     * 跳转到点菜页面（定金模式顾客到店后点菜）
+     */
+    onGoToOrder() {
+        const { reservation } = this.data;
+        if (!reservation) return;
+
+        wx.navigateTo({
+            url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${reservation.merchant_id}`
+        });
     }
 });

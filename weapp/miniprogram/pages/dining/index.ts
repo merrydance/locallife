@@ -4,6 +4,7 @@ import CartService from '../../services/cart'
 import { logger } from '../../utils/logger'
 import { ErrorHandler } from '../../utils/error-handler'
 import { BehaviorTracker, EventType } from '../../utils/tracker'
+import { formatPriceNoSymbol } from '../../utils/util'
 
 Page({
     data: {
@@ -15,6 +16,7 @@ Page({
         activeCategoryId: 'all',
         cartCount: 0,
         cartPrice: 0,
+        cartPriceDisplay: '0.00',
         navBarHeight: 88,
         loading: true
     },
@@ -90,16 +92,22 @@ Page({
 
     async loadMenu() {
         try {
-            const dishes = await getMerchantDishes(this.data.merchantId)
+            const response = await getMerchantDishes(this.data.merchantId)
+            // 预处理菜品价格
+            const dishes = (response.dishes || []).map((dish: any) => ({
+                ...dish,
+                priceDisplay: formatPriceNoSymbol(dish.price || 0),
+                memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null
+            }))
 
             const categories = [{ id: 'all', name: '全部' }]
             const categoryMap = new Map()
 
-            dishes.forEach((dish: DishDTO) => {
+            dishes.forEach((dish: any) => {
                 if (dish.category_id && !categoryMap.has(dish.category_id)) {
                     categoryMap.set(dish.category_id, {
                         id: dish.category_id,
-                        name: dish.category_id // 注意：这里使用 category_id 作为 name，可能需要后端返回 category_name
+                        name: dish.category_name || String(dish.category_id)
                     })
                 }
             })
@@ -147,7 +155,8 @@ Page({
         const cart = CartService.getCart()
         this.setData({
             cartCount: cart.totalCount,
-            cartPrice: cart.totalPrice
+            cartPrice: cart.totalPrice,
+            cartPriceDisplay: formatPriceNoSymbol(cart.totalPrice || 0)
         })
     },
 

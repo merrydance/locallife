@@ -1,9 +1,10 @@
 "use strict";
 /**
- * 堂食点餐菜单页面
- * 支持两种入口：
+ * 堂食点餐/预订点菜菜单页面
+ * 支持三种入口：
  * 1. 页面跳转：直接传 table_id 和 merchant_id
  * 2. 扫描小程序码：scene 参数格式 m=商户ID&t=桌号
+ * 3. 预订点菜：直接传 reservation_id 和 merchant_id
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -17,11 +18,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const table_1 = require("../../../api/table");
 const cart_1 = require("../../../api/cart");
+const reservation_1 = require("../../../api/reservation");
+const merchant_1 = require("../../../api/merchant");
 Page({
     data: {
         tableId: 0,
         merchantId: 0,
         tableNo: '',
+        // 预订点菜场景
+        reservationId: 0,
+        orderType: 'dine_in',
         // 商户和桌台信息
         merchantInfo: null,
         tableInfo: null,
@@ -47,11 +53,23 @@ Page({
         let tableId = null;
         let merchantId = null;
         let tableNo = null;
+        // 方式0: 预订点菜入口 (从预订详情页跳转)
+        if (options.reservation_id && options.merchant_id) {
+            const reservationId = parseInt(options.reservation_id);
+            merchantId = parseInt(options.merchant_id);
+            this.setData({
+                reservationId,
+                merchantId,
+                orderType: 'reservation'
+            });
+            this.initPageForReservation(reservationId, merchantId);
+            return;
+        }
         // 方式1: 直接参数 (从页面跳转)
         if (options.table_id && options.merchant_id) {
             tableId = parseInt(options.table_id);
             merchantId = parseInt(options.merchant_id);
-            this.setData({ tableId, merchantId });
+            this.setData({ tableId, merchantId, orderType: 'dine_in' });
             this.initPageById(tableId, merchantId);
             return;
         }
@@ -66,13 +84,13 @@ Page({
             if (mMatch && tMatch) {
                 merchantId = parseInt(mMatch[1]);
                 tableNo = tMatch[1];
-                this.setData({ merchantId, tableNo });
+                this.setData({ merchantId, tableNo, orderType: 'dine_in' });
                 this.initPageByTableNo(merchantId, tableNo);
                 return;
             }
             else if (tidMatch) {
                 tableId = parseInt(tidMatch[1]);
-                this.setData({ tableId });
+                this.setData({ tableId, orderType: 'dine_in' });
                 this.showError('暂不支持此扫码格式');
                 return;
             }
@@ -128,6 +146,63 @@ Page({
             catch (error) {
                 console.error('初始化失败:', error);
                 wx.showToast({ title: '加载失败', icon: 'error' });
+                this.setData({ loading: false });
+            }
+        });
+    },
+    /**
+     * 预订点菜初始化（从预订详情页跳转）
+     */
+    initPageForReservation(reservationId, merchantId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            try {
+                this.setData({ loading: true });
+                wx.showLoading({ title: '加载菜单...' });
+                // 获取预订详情和商户菜品
+                const [reservation, dishes] = yield Promise.all([
+                    (0, reservation_1.getReservationDetail)(reservationId),
+                    (0, merchant_1.getMerchantDishes)(String(merchantId))
+                ]);
+                // 按分类整理菜品
+                const categoryMap = new Map();
+                dishes.forEach((dish) => {
+                    const catId = dish.category_id || 0;
+                    const catName = dish.category_name || '其他';
+                    if (!categoryMap.has(catId)) {
+                        categoryMap.set(catId, { id: catId, name: catName, dishes: [] });
+                    }
+                    categoryMap.get(catId).dishes.push(dish);
+                });
+                const categories = Array.from(categoryMap.values());
+                // 获取商户名（从菜品或使用默认值）
+                const merchantName = ((_a = dishes[0]) === null || _a === void 0 ? void 0 : _a.merchant_name) || '商户';
+                this.setData({
+                    reservationId,
+                    merchantId,
+                    merchantInfo: {
+                        id: merchantId,
+                        name: merchantName
+                    },
+                    categories: categories,
+                    currentCategoryId: ((_b = categories[0]) === null || _b === void 0 ? void 0 : _b.id) || 0,
+                    currentDishes: ((_c = categories[0]) === null || _c === void 0 ? void 0 : _c.dishes) || []
+                });
+                // 设置页面标题
+                wx.setNavigationBarTitle({ title: merchantName });
+                // 加载购物车
+                yield this.loadCart();
+                wx.hideLoading();
+            }
+            catch (error) {
+                wx.hideLoading();
+                console.error('预订初始化失败:', error);
+                wx.showToast({
+                    title: error.userMessage || '加载失败',
+                    icon: 'error'
+                });
+            }
+            finally {
                 this.setData({ loading: false });
             }
         });
@@ -311,7 +386,7 @@ Page({
      */
     goToCheckout() {
         return __awaiter(this, void 0, void 0, function* () {
-            const { cart, tableId, merchantId } = this.data;
+            const { cart, tableId, merchantId, orderType, reservationId } = this.data;
             if (!cart || cart.items.length === 0) {
                 wx.showToast({ title: '购物车为空', icon: 'none' });
                 return;
@@ -319,10 +394,16 @@ Page({
             try {
                 // 计算订单金额
                 yield (0, cart_1.calculateCart)({ merchant_id: merchantId });
+                // 根据订单类型拼接参数
+                let url = `/pages/dine-in/checkout/checkout?merchant_id=${merchantId}&order_type=${orderType}`;
+                if (orderType === 'dine_in') {
+                    url += `&table_id=${tableId}`;
+                }
+                else if (orderType === 'reservation') {
+                    url += `&reservation_id=${reservationId}`;
+                }
                 // 跳转到结算页面
-                wx.navigateTo({
-                    url: `/pages/dine-in/checkout/checkout?table_id=${tableId}&merchant_id=${merchantId}&order_type=dine_in`
-                });
+                wx.navigateTo({ url });
             }
             catch (error) {
                 console.error('结算失败:', error);

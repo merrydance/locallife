@@ -97,26 +97,15 @@ function getRecommendedMerchants() {
 }
 /**
  * 获取推荐包间
- * @param params 推荐参数
+ * @param params 推荐参数（已对齐后端 exploreRoomsRequest）
  */
-function getRecommendedRooms() {
-    return __awaiter(this, arguments, void 0, function* (params = {}) {
-        const _a = cleanParams(params), { limit = 10, page_id = 1, guest_count, max_price } = _a, 
-        // min_price is not supported by recommend API currently based on swagger
-        rest = __rest(_a, ["limit", "page_id", "guest_count", "max_price"]);
-        const queryParams = Object.assign({ page_id, page_size: limit }, rest);
-        if (guest_count) {
-            queryParams.min_capacity = guest_count;
-        }
-        // Interpret max_price as max_minimum_spend if provided
-        if (max_price) {
-            queryParams.max_minimum_spend = max_price; // sending raw value for now to match status quo, unless I verify currency.
-        }
-        logger_1.logger.debug('Fetching Recommended Rooms', queryParams, 'API');
+function getRecommendedRooms(params) {
+    return __awaiter(this, void 0, void 0, function* () {
+        logger_1.logger.debug('Fetching Recommended Rooms', params, 'API');
         const res = yield (0, request_1.request)({
             url: '/v1/recommendations/rooms',
             method: 'GET',
-            data: queryParams
+            data: cleanParams(params)
         });
         return res.rooms || res;
     });

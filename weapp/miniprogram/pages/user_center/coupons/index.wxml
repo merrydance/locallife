@@ -23,8 +23,8 @@
     <view class="coupons-list">
       <view wx:for="{{coupons}}" wx:key="id" class="coupon-card">
         <view class="coupon-left">
-          <text class="discount-amount">¥{{item.discount / 100}}</text>
-          <text class="threshold">满{{item.threshold / 100}}可用</text>
+          <text class="discount-amount">¥{{item.discountDisplay}}</text>
+          <text class="threshold">满{{item.thresholdDisplay}}可用</text>
         </view>
         <view class="coupon-right">
           <text class="merchant-name">{{item.merchant_name}}</text>

@@ -72,10 +72,10 @@ Page({
                 if (currentStatus) {
                     params.status = currentStatus;
                 }
-                const response = yield reservation_1.ReservationService.getReservations(params);
+                const response = yield reservation_1.ReservationService.getUserReservations(params);
                 const result = response.reservations;
                 // 处理显示字段
-                const processedReservations = result.map(r => this.processReservation(r));
+                const processedReservations = result.map((r) => this.processReservation(r));
                 const reservations = reset ? processedReservations : [...this.data.reservations, ...processedReservations];
                 this.setData({
                     reservations,
@@ -91,7 +91,7 @@ Page({
         });
     },
     processReservation(r) {
-        return Object.assign(Object.assign({}, r), { _statusText: this.getStatusText(r.status || ''), _statusClass: r.status || '', _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''), _dateTimeDisplay: r.reservation_time, _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '' });
+        return Object.assign(Object.assign({}, r), { _statusText: this.getStatusText(r.status || ''), _statusClass: r.status || '', _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''), _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''), _dateTimeDisplay: r.reservation_time, _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '' });
     },
     getStatusText(status) {
         const statusMap = {
@@ -143,6 +143,18 @@ Page({
                 logger_1.logger.error('取消预订失败', error, 'reservations.doCancelReservation');
                 wx.showToast({ title: '取消失败', icon: 'error' });
             }
+        });
+    },
+    /**
+     * 跳转到点菜页面
+     */
+    onGoToOrder(e) {
+        const item = e.currentTarget.dataset.item;
+        if (!item)
+            return;
+        // 跳转到堂食点餐页面，传递预订ID和商户ID
+        wx.navigateTo({
+            url: `/pages/dine-in/menu/menu?reservation_id=${item.id}&merchant_id=${item.merchant_id}`
         });
     }
 });

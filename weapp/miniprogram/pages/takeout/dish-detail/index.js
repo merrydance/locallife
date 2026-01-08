@@ -16,6 +16,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const tracker_1 = require("../../../utils/tracker");
 const dish_1 = require("../../../api/dish");
 const personal_1 = require("../../../api/personal");
+const image_1 = require("../../../utils/image");
 Page({
     data: {
         dishId: '',
@@ -31,12 +32,21 @@ Page({
     onLoad(options) {
         const dishId = options.id;
         const merchantId = options.merchant_id || '';
+        // 从列表页传递过来的额外信息
+        const shopName = decodeURIComponent(options.shop_name || '');
+        const monthSales = parseInt(options.month_sales || '0');
+        const distanceMeters = parseInt(options.distance || '0');
+        const deliveryTimeMinutes = parseInt(options.delivery_time || '0');
         if (!dishId) {
             wx.showToast({ title: '菜品ID缺失', icon: 'error' });
             setTimeout(() => wx.navigateBack(), 1500);
             return;
         }
-        this.setData({ dishId, merchantId });
+        this.setData({
+            dishId,
+            merchantId,
+            extraInfo: { shopName, monthSales, distanceMeters, deliveryTimeMinutes }
+        });
         this.loadDishDetail();
     },
     onNavHeight(e) {
@@ -74,15 +84,18 @@ Page({
                         console.warn('加载评价失败:', e);
                     }
                 }
+                // 从 URL 参数获取额外信息
+                const extraInfo = this.data.extraInfo || {};
+                const imageUrl = (0, image_1.getPublicImageUrl)(dishData.image_url);
                 // 构建菜品视图模型
                 const dish = {
                     id: dishData.id,
                     name: dishData.name,
-                    shop_name: dishData.category_name || '商家',
+                    shop_name: extraInfo.shopName || '商家',
                     shop_id: dishData.merchant_id,
                     merchant_id: dishData.merchant_id,
-                    images: dishData.image_url ? [dishData.image_url] : [],
-                    image_url: dishData.image_url,
+                    images: imageUrl ? [imageUrl] : [],
+                    image_url: imageUrl,
                     price: dishData.price,
                     original_price: dishData.price,
                     member_price: dishData.member_price,
@@ -93,7 +106,11 @@ Page({
                     spec_groups: this.convertCustomizationGroups(dishData.customization_groups),
                     reviews,
                     tags: ((_a = dishData.tags) === null || _a === void 0 ? void 0 : _a.map(t => t.name)) || [],
-                    ingredients: dishData.ingredients || []
+                    ingredients: dishData.ingredients || [],
+                    // 额外展示字段（从列表页传递）
+                    month_sales: extraInfo.monthSales || 0,
+                    distance_meters: extraInfo.distanceMeters || 0,
+                    delivery_time_minutes: extraInfo.deliveryTimeMinutes || Math.round((dishData.prepare_time || 10) + 15) // 制作时间+配送时间
                 };
                 // 初始化规格选择
                 const selectedSpecs = {};

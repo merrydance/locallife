@@ -1,22 +1,5 @@
 <!-- 储值管理页面 - 桌面级 SaaS 界面 -->
-<wxs module="utils">
-  module.exports = {
-    formatAmount: function(amount) {
-      return (amount / 100).toFixed(2)
-    },
-    formatDate: function(dateStr) {
-      if (!dateStr) return '-'
-      return dateStr.slice(0, 10)
-    },
-    hasScene: function(scenes, scene) {
-      if (!scenes) return false
-      for (var i = 0; i < scenes.length; i++) {
-        if (scenes[i] === scene) return true
-      }
-      return false
-    }
-  }
-</wxs>
+<!-- 价格已在 TS 中预处理 -->
 
 <!-- 小屏提示 -->
 <match-media max-width="1599">
@@ -101,11 +84,11 @@
                 >
                   <view class="rule-main">
                     <view class="rule-amounts">
-                      <text class="recharge-amount">充 ¥{{utils.formatAmount(item.recharge_amount)}}</text>
-                      <text class="bonus-amount">送 ¥{{utils.formatAmount(item.bonus_amount)}}</text>
+                      <text class="recharge-amount">充 ¥{{item.recharge_amount_display}}</text>
+                      <text class="bonus-amount">送 ¥{{item.bonus_amount_display}}</text>
                     </view>
                     <view class="rule-meta">
-                      <text class="rule-date">{{utils.formatDate(item.valid_from)}} ~ {{utils.formatDate(item.valid_until)}}</text>
+                      <text class="rule-date">{{item.valid_from_display}} ~ {{item.valid_until_display}}</text>
                       <text class="rule-status {{item.is_active ? 'active' : 'inactive'}}">{{item.is_active ? '生效中' : '已停用'}}</text>
                     </view>
                   </view>

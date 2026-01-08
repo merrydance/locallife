@@ -82,7 +82,7 @@
                 />
                 <view class="card-info">
                   <text class="card-name">{{item.name}}</text>
-                  <text class="card-price">¥{{item.price / 100}}</text>
+                  <text class="card-price">¥{{item.priceDisplay}}</text>
                 </view>
                 <view class="card-inventory">
                   <text class="inventory-label">库存</text>

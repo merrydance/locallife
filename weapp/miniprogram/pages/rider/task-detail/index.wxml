@@ -12,7 +12,7 @@
       </view>
       <view class="income-row">
         <text>预计收入</text>
-        <text class="income">¥{{task.income / 100}}</text>
+        <text class="income">¥{{task.incomeDisplay}}</text>
       </view>
     </view>
 

@@ -8,9 +8,9 @@
   <view class="cart-info" bindtap="onCartClick">
     <view class="price-info">
       <text class="currency">¥</text>
-      <text class="total-price">{{totalPrice / 100}}</text>
+      <text class="total-price">{{computedPriceDisplay}}</text>
     </view>
-    <view class="delivery-tip">{{deliveryFee > 0 ? '预估配送费 ¥' + deliveryFee / 100 : '结算时计算配送费'}}</view>
+    <view class="delivery-tip">{{computedDeliveryDisplay ? '预估配送费 ¥' + computedDeliveryDisplay : '结算时计算配送费'}}</view>
   </view>
   
   <view class="checkout-btn {{totalCount > 0 ? 'active' : ''}}" bindtap="onCheckout">

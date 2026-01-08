@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -34,11 +34,14 @@ type cartItemResponse struct {
 }
 
 type cartResponse struct {
-	ID         int64              `json:"id"`
-	MerchantID int64              `json:"merchant_id"`
-	Items      []cartItemResponse `json:"items"`
-	TotalCount int                `json:"total_count"`
-	Subtotal   int64              `json:"subtotal"`
+	ID            int64              `json:"id"`
+	MerchantID    int64              `json:"merchant_id"`
+	OrderType     string             `json:"order_type"`
+	TableID       *int64             `json:"table_id,omitempty"`
+	ReservationID *int64             `json:"reservation_id,omitempty"`
+	Items         []cartItemResponse `json:"items"`
+	TotalCount    int                `json:"total_count"`
+	Subtotal      int64              `json:"subtotal"`
 }
 
 // getCart godoc
@@ -69,15 +72,33 @@ func (server *Server) getCart(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
+	orderType := ctx.DefaultQuery("order_type", "takeout")
+	var tableID, reservationID pgtype.Int8
+
+	if tidStr := ctx.Query("table_id"); tidStr != "" {
+		if tid, err := strconv.ParseInt(tidStr, 10, 64); err == nil {
+			tableID = pgtype.Int8{Int64: tid, Valid: true}
+		}
+	}
+	if ridStr := ctx.Query("reservation_id"); ridStr != "" {
+		if rid, err := strconv.ParseInt(ridStr, 10, 64); err == nil {
+			reservationID = pgtype.Int8{Int64: rid, Valid: true}
+		}
+	}
+
 	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
-		UserID:     authPayload.UserID,
-		MerchantID: merchantID,
+		UserID:        authPayload.UserID,
+		MerchantID:    merchantID,
+		OrderType:     orderType,
+		TableID:       tableID,
+		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			// 购物车不存在，返回空购物车
 			ctx.JSON(http.StatusOK, cartResponse{
 				MerchantID: merchantID,
+				OrderType:  orderType,
 				Items:      []cartItemResponse{},
 				TotalCount: 0,
 				Subtotal:   0,
@@ -162,17 +183,33 @@ func buildCartResponse(cart db.Cart, items []db.ListCartItemsRow) cartResponse {
 	}
 
 	return cartResponse{
-		ID:         cart.ID,
-		MerchantID: cart.MerchantID,
-		Items:      cartItems,
-		TotalCount: totalCount,
-		Subtotal:   subtotal,
+		ID:            cart.ID,
+		MerchantID:    cart.MerchantID,
+		OrderType:     cart.OrderType,
+		TableID:       nullableInt64(cart.TableID),
+		ReservationID: nullableInt64(cart.ReservationID),
+		Items:         cartItems,
+		TotalCount:    totalCount,
+		Subtotal:      subtotal,
 	}
+}
+
+func nullableInt64(v pgtype.Int8) *int64 {
+	if v.Valid {
+		return &v.Int64
+	}
+	return nil
 }
 
 type addCartItemRequest struct {
 	// 商户ID (必填)
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
+	// 订单类型 (选填，默认为 takeout)
+	OrderType string `json:"order_type"`
+	// 桌台ID (堂食时必填)
+	TableID *int64 `json:"table_id"`
+	// 预约ID (预约时必填)
+	ReservationID *int64 `json:"reservation_id"`
 	// 菜品ID (dish_id和combo_id二选一)
 	DishID *int64 `json:"dish_id" binding:"omitempty,min=1"`
 	// 套餐ID (dish_id和combo_id二选一)
@@ -219,7 +256,7 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	// 验证商户存在
 	_, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -231,7 +268,7 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	if req.DishID != nil {
 		dish, err := server.store.GetDish(ctx, *req.DishID)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 				return
 			}
@@ -251,7 +288,7 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	if req.ComboID != nil {
 		combo, err := server.store.GetComboSet(ctx, *req.ComboID)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo not found")))
 				return
 			}
@@ -269,13 +306,45 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	}
 
 	// 获取或创建购物车
-	cart, err := server.store.CreateCart(ctx, db.CreateCartParams{
-		UserID:     authPayload.UserID,
-		MerchantID: req.MerchantID,
+	if req.OrderType == "" {
+		req.OrderType = "takeout"
+	}
+
+	var tableID, reservationID pgtype.Int8
+	if req.TableID != nil {
+		tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
+	}
+	if req.ReservationID != nil {
+		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+	}
+
+	// 先尝试获取现有购物车
+	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
+		UserID:        authPayload.UserID,
+		MerchantID:    req.MerchantID,
+		OrderType:     req.OrderType,
+		TableID:       tableID,
+		ReservationID: reservationID,
 	})
+
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create cart: %w", err)))
-		return
+		if errors.Is(err, pgx.ErrNoRows) {
+			// 不存在，则创建新购物车
+			cart, err = server.store.CreateCart(ctx, db.CreateCartParams{
+				UserID:        authPayload.UserID,
+				MerchantID:    req.MerchantID,
+				OrderType:     req.OrderType,
+				TableID:       tableID,
+				ReservationID: reservationID,
+			})
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create cart: %w", err)))
+				return
+			}
+		} else {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get existing cart: %w", err)))
+			return
+		}
 	}
 
 	// 处理定制选项
@@ -404,7 +473,7 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 	// 获取购物车商品信息
 	cartItem, err := server.store.GetCartItem(ctx, itemID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart item not found")))
 			return
 		}
@@ -415,7 +484,7 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 	// P0安全：通过cart_id获取购物车，验证所有权
 	cart, err := server.store.GetCart(ctx, cartItem.CartID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart not found")))
 			return
 		}
@@ -480,7 +549,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	// 获取购物车商品
 	cartItem, err := server.store.GetCartItem(ctx, itemID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart item not found")))
 			return
 		}
@@ -491,7 +560,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	// P0安全：通过cart_id获取购物车，验证所有权
 	cart, err := server.store.GetCart(ctx, cartItem.CartID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart not found")))
 			return
 		}
@@ -518,6 +587,12 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 type clearCartRequest struct {
 	// 商户ID (必填)
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
+	// 订单类型
+	OrderType string `json:"order_type"`
+	// 桌台ID
+	TableID *int64 `json:"table_id"`
+	// 预约ID
+	ReservationID *int64 `json:"reservation_id"`
 }
 
 // clearCart godoc
@@ -542,15 +617,31 @@ func (server *Server) clearCart(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
+	if req.OrderType == "" {
+		req.OrderType = "takeout"
+	}
+
+	var tableID, reservationID pgtype.Int8
+	if req.TableID != nil {
+		tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
+	}
+	if req.ReservationID != nil {
+		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+	}
+
 	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
-		UserID:     authPayload.UserID,
-		MerchantID: req.MerchantID,
+		UserID:        authPayload.UserID,
+		MerchantID:    req.MerchantID,
+		OrderType:     req.OrderType,
+		TableID:       tableID,
+		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			// 购物车不存在，返回空购物车
 			ctx.JSON(http.StatusOK, cartResponse{
 				MerchantID: req.MerchantID,
+				OrderType:  req.OrderType,
 				Items:      []cartItemResponse{},
 				TotalCount: 0,
 				Subtotal:   0,
@@ -568,17 +659,26 @@ func (server *Server) clearCart(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, cartResponse{
-		ID:         cart.ID,
-		MerchantID: req.MerchantID,
-		Items:      []cartItemResponse{},
-		TotalCount: 0,
-		Subtotal:   0,
+		ID:            cart.ID,
+		MerchantID:    req.MerchantID,
+		OrderType:     req.OrderType,
+		TableID:       req.TableID,
+		ReservationID: req.ReservationID,
+		Items:         []cartItemResponse{},
+		TotalCount:    0,
+		Subtotal:      0,
 	})
 }
 
 type calculateCartRequest struct {
 	// 商户ID (必填)
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
+	// 订单类型
+	OrderType string `json:"order_type"`
+	// 桌台ID
+	TableID *int64 `json:"table_id"`
+	// 预约ID
+	ReservationID *int64 `json:"reservation_id"`
 	// 配送地址ID (选填，用于计算配送费)
 	AddressID *int64 `json:"address_id" binding:"omitempty,min=1"`
 	// 用户当前位置纬度 (选填，当无地址时作为fallback)
@@ -634,7 +734,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	// 获取商户信息（用于获取region_id和min_order_amount）
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
 			return
 		}
@@ -642,12 +742,27 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		return
 	}
 
+	if req.OrderType == "" {
+		req.OrderType = "takeout"
+	}
+
+	var tableID, reservationID pgtype.Int8
+	if req.TableID != nil {
+		tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
+	}
+	if req.ReservationID != nil {
+		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+	}
+
 	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
-		UserID:     authPayload.UserID,
-		MerchantID: req.MerchantID,
+		UserID:        authPayload.UserID,
+		MerchantID:    req.MerchantID,
+		OrderType:     req.OrderType,
+		TableID:       tableID,
+		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("购物车为空")))
 			return
 		}
@@ -943,6 +1058,12 @@ type merchantCartResponse struct {
 	CartID int64 `json:"cart_id"`
 	// 商户ID
 	MerchantID int64 `json:"merchant_id"`
+	// 订单类型
+	OrderType string `json:"order_type"`
+	// 桌台ID
+	TableID int64 `json:"table_id,omitempty"`
+	// 预约ID
+	ReservationID int64 `json:"reservation_id,omitempty"`
 	// 商户名称
 	MerchantName string `json:"merchant_name"`
 	// 商户Logo URL
@@ -975,16 +1096,34 @@ type userCartsResponse struct {
 // @Security BearerAuth
 func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	orderType := ctx.Query("order_type")
+	fmt.Printf("[DEBUG] getUserCartsSummary: user_id=%d, order_type=%s\n", authPayload.UserID, orderType)
+
+	argSummary := db.GetUserCartsSummaryParams{
+		UserID: authPayload.UserID,
+		OrderType: pgtype.Text{
+			String: orderType,
+			Valid:  orderType != "",
+		},
+	}
 
 	// 获取汇总统计
-	summary, err := server.store.GetUserCartsSummary(ctx, authPayload.UserID)
+	summary, err := server.store.GetUserCartsSummary(ctx, argSummary)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user carts summary: %w", err)))
 		return
 	}
 
+	argDetails := db.GetUserCartsWithDetailsParams{
+		UserID: authPayload.UserID,
+		OrderType: pgtype.Text{
+			String: orderType,
+			Valid:  orderType != "",
+		},
+	}
+
 	// 获取各商户购物车详情
-	carts, err := server.store.GetUserCartsWithDetails(ctx, authPayload.UserID)
+	carts, err := server.store.GetUserCartsWithDetails(ctx, argDetails)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user carts with details: %w", err)))
 		return
@@ -994,13 +1133,16 @@ func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 	cartList := make([]merchantCartResponse, len(carts))
 	for i, cart := range carts {
 		cartList[i] = merchantCartResponse{
-			CartID:       cart.CartID,
-			MerchantID:   cart.MerchantID,
-			MerchantName: cart.MerchantName,
-			MerchantLogo: normalizeUploadURLForClient(cart.MerchantLogo.String),
-			ItemCount:    int(cart.ItemCount),
-			Subtotal:     cart.Subtotal,
-			AllAvailable: cart.AllAvailable,
+			CartID:        cart.CartID,
+			MerchantID:    cart.MerchantID,
+			OrderType:     cart.OrderType,
+			TableID:       cart.TableID.Int64,
+			ReservationID: cart.ReservationID.Int64,
+			MerchantName:  cart.MerchantName,
+			MerchantLogo:  normalizeUploadURLForClient(cart.MerchantLogo.String),
+			ItemCount:     int(cart.ItemCount),
+			Subtotal:      cart.Subtotal,
+			AllAvailable:  cart.AllAvailable,
 		}
 	}
 

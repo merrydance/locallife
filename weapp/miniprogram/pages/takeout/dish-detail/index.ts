@@ -7,6 +7,7 @@ import { tracker, EventType } from '../../../utils/tracker'
 import { DishManagementService, DishResponse } from '../../../api/dish'
 import { getMerchantReviews } from '../../../api/personal'
 import { getPublicImageUrl } from '../../../utils/image'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 Page({
   data: {
@@ -18,7 +19,8 @@ Page({
     navBarHeight: 88,
     currentImageIndex: 0,
     loading: true,
-    totalPrice: 0
+    totalPrice: 0,
+    totalPriceDisplay: '0.00'
   },
 
   onLoad(options: any) {
@@ -96,8 +98,11 @@ Page({
         images: imageUrl ? [imageUrl] : [],
         image_url: imageUrl,
         price: dishData.price,
+        priceDisplay: formatPriceNoSymbol(dishData.price || 0),
         original_price: dishData.price,
+        originalPriceDisplay: formatPriceNoSymbol(dishData.price || 0),
         member_price: dishData.member_price,
+        memberPriceDisplay: dishData.member_price ? formatPriceNoSymbol(dishData.member_price) : null,
         description: dishData.description || '',
         is_available: dishData.is_available,
         is_online: dishData.is_online,
@@ -155,7 +160,8 @@ Page({
       specs: (group.options || []).map((opt: any) => ({
         id: opt.id.toString(),
         name: opt.tag_name,
-        price_diff: opt.extra_price || 0
+        price_diff: opt.extra_price || 0,
+        priceDiffDisplay: opt.extra_price ? formatPriceNoSymbol(opt.extra_price) : null
       }))
     }))
   },
@@ -192,7 +198,10 @@ Page({
       })
     }
 
-    this.setData({ totalPrice })
+    this.setData({
+      totalPrice,
+      totalPriceDisplay: formatPriceNoSymbol(totalPrice)
+    })
   },
 
   onQuantityChange(e: WechatMiniprogram.CustomEvent) {

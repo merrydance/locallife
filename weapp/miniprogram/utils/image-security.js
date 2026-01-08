@@ -18,6 +18,8 @@ const request_1 = require("./request");
  * - /uploads/public/...
  * - /uploads/reviews/...
  * - /uploads/merchants/{id}/logo/...
+ * - /uploads/merchants/{id}/storefront/...
+ * - /uploads/merchants/{id}/environment/...
  */
 function isPublicUploads(urlOrPath) {
     if (!urlOrPath)
@@ -26,8 +28,8 @@ function isPublicUploads(urlOrPath) {
     const path = urlOrPath.startsWith('/') ? urlOrPath.slice(1) : urlOrPath;
     return (path.startsWith('uploads/public/') ||
         path.startsWith('uploads/reviews/') ||
-        // regex for uploads/merchants/{id}/logo/
-        /^uploads\/merchants\/\d+\/logo\//.test(path));
+        // regex for uploads/merchants/{id}/logo|storefront|environment/
+        /^uploads\/merchants\/\d+\/(logo|storefront|environment)\//.test(path));
 }
 /**
  * Normalizes a path to the stored relative path format (e.g., uploads/...)
@@ -94,7 +96,7 @@ function resolveImageURL(urlOrPath) {
                     return cached.url;
                 }
             }
-            // 静默处理签名失败，返回备用路径（不打印错误到控制台）
+            // 静默处理签名失败，返回备用路径
             const baseUrl = request_1.API_BASE.endsWith('/') ? request_1.API_BASE.slice(0, -1) : request_1.API_BASE;
             const path = urlOrPath.startsWith('/') ? urlOrPath : `/${urlOrPath}`;
             return `${baseUrl}${path}`;

@@ -62,8 +62,8 @@
               <text class="sales">月销 {{item.monthly_sales || 0}}</text>
             </view>
             <view class="dish-price-row">
-              <text class="dish-price">¥{{item.price / 100}}</text>
-              <text wx:if="{{item.original_price > item.price}}" class="dish-original-price">¥{{item.original_price / 100}}</text>
+              <text class="dish-price">¥{{item.priceDisplay}}</text>
+              <text wx:if="{{item.originalPriceDisplay}}" class="dish-original-price">¥{{item.originalPriceDisplay}}</text>
             </view>
           </view>
           <t-button 
@@ -98,9 +98,9 @@
             </view>
           </view>
           <view class="combo-price-row">
-            <text class="combo-price">¥{{item.combo_price / 100}}</text>
-            <text class="combo-original-price">¥{{item.original_price / 100}}</text>
-            <text class="combo-discount">省¥{{(item.original_price - item.combo_price) / 100}}</text>
+            <text class="combo-price">¥{{item.comboPriceDisplay}}</text>
+            <text class="combo-original-price">¥{{item.originalPriceDisplay}}</text>
+            <text class="combo-discount">省¥{{item.savingsDisplay}}</text>
           </view>
         </view>
         <t-button 

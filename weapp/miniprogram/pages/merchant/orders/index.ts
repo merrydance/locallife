@@ -5,6 +5,7 @@
 
 import { MerchantOrderManagementService, OrderResponse } from '../../../api/order-management'
 import { logger } from '../../../utils/logger'
+import { formatPriceNoSymbol } from '../../../utils/util'
 import dayjs from 'dayjs'
 
 const app = getApp<IAppOption>()
@@ -128,7 +129,7 @@ Page({
           ready: readyRes.length,
           completed: completedRes.length
         },
-        todayRevenue: (revenue / 100).toFixed(2)
+        todayRevenue: formatPriceNoSymbol(revenue)
       })
     } catch (error) {
       logger.error('加载订单统计失败', error, 'Orders')
@@ -194,8 +195,14 @@ Page({
       selected: false,
       status_label: STATUS_LABELS[order.status] || order.status,
       order_type_label: TYPE_LABELS[order.order_type] || order.order_type,
-      total_display: (order.total_amount / 100).toFixed(2),
-      discount_display: (order.discount_amount / 100).toFixed(2),
+      total_display: formatPriceNoSymbol(order.total_amount || 0),
+      discount_display: formatPriceNoSymbol(order.discount_amount || 0),
+      subtotal_display: formatPriceNoSymbol(order.subtotal || 0),
+      delivery_fee_display: formatPriceNoSymbol(order.delivery_fee || 0),
+      items: (order.items || []).map(item => ({
+        ...item,
+        subtotal_display: formatPriceNoSymbol(item.subtotal || 0)
+      })),
       items_summary: itemsSummary || '无商品信息',
       items_count: itemsCount,
       created_date: createdAt.format('MM-DD'),

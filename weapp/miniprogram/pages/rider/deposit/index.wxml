@@ -14,7 +14,7 @@
       </view>
       <view class="amount-row">
         <text class="currency">¥</text>
-        <text class="amount">{{deposit / 100}}</text>
+        <text class="amount">{{depositDisplay}}</text>
       </view>
       <view class="action-row">
         <t-button 
@@ -43,7 +43,7 @@
       <view class="section-title">押金说明</view>
       <view class="info-item">
         <t-icon name="info-circle" size="32rpx" color="#666" />
-        <text>接单前需缴纳押金 ¥{{minDeposit / 100}}</text>
+        <text>接单前需缴纳押金 ¥{{minDepositDisplay}}</text>
       </view>
       <view class="info-item">
         <t-icon name="check-circle" size="32rpx" color="#666" />
@@ -61,7 +61,7 @@
             <text class="item-time">{{item.created_at}}</text>
           </view>
           <text class="item-amount {{item.type === 'PAYMENT' ? 'negative' : 'positive'}}">
-            {{item.type === 'PAYMENT' ? '-' : '+'}}{{item.amount / 100}}
+            {{item.amountDisplay}}
           </text>
         </view>
       </view>

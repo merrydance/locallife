@@ -5,7 +5,7 @@
   <view class="balance-card">
     <view class="balance-info">
       <text class="label">账户余额(元)</text>
-      <text class="amount">{{balance / 100}}</text>
+      <text class="amount">{{balanceDisplay}}</text>
     </view>
     <view class="actions">
       <t-button theme="primary" size="small" bindtap="onTopUp">充值</t-button>
@@ -30,7 +30,7 @@
             <text class="item-time">{{item.time}}</text>
           </view>
           <text class="item-amount {{item.amount > 0 ? 'positive' : 'negative'}}">
-            {{item.amount > 0 ? '+' : ''}}{{item.amount / 100}}
+            {{item.amountDisplay}}
           </text>
         </view>
       </view>

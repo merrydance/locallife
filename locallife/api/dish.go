@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +16,7 @@ import (
 )
 
 func isNoRows(err error) bool {
-	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows)
+	return errors.Is(err, pgx.ErrNoRows)
 }
 
 // ==================== 菜品分类 ====================
@@ -734,7 +733,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -745,7 +744,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 	// 使用单一查询获取菜品完整信息(含食材、标签、定制选项)
 	dish, err := server.store.GetDishComplete(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -819,7 +818,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 	// 使用单一查询获取菜品完整信息(含食材、标签、定制选项)
 	dish, err := server.store.GetDishComplete(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -921,7 +920,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -932,7 +931,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	// 验证菜品所有权
 	dish, err := server.store.GetDish(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1088,7 +1087,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1099,7 +1098,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	// 验证菜品所有权
 	dish, err := server.store.GetDish(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1218,7 +1217,7 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1229,7 +1228,7 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 	// 获取菜品
 	dish, err := server.store.GetDish(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1294,7 +1293,7 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1444,7 +1443,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1455,7 +1454,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 	// 获取菜品
 	dish, err := server.store.GetDish(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1476,7 +1475,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 			if _, exists := tagNameMap[o.TagID]; !exists {
 				tag, err := server.store.GetTag(ctx, o.TagID)
 				if err != nil {
-					if errors.Is(err, sql.ErrNoRows) {
+					if errors.Is(err, pgx.ErrNoRows) {
 						ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("tag %d not found", o.TagID)))
 						return
 					}
@@ -1566,7 +1565,7 @@ func (server *Server) getDishCustomizations(ctx *gin.Context) {
 	// 使用单次查询获取菜品和所有定制信息（消除 N+1 查询）
 	dish, err := server.store.GetDishWithCustomizations(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}

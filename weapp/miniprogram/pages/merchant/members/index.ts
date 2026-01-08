@@ -4,6 +4,7 @@
  */
 
 import { request } from '@/utils/request'
+import { formatPriceNoSymbol } from '@/utils/util'
 
 // 会员响应类型
 interface MemberResponse {
@@ -126,8 +127,16 @@ Page({
 
         try {
             const result = await MemberService.listMembers(merchantId, loadMore ? pageId : 1, pageSize)
+            // 预处理价格
+            const processedMembers = result.map(m => ({
+                ...m,
+                balance_display: formatPriceNoSymbol(m.balance || 0),
+                total_recharged_display: formatPriceNoSymbol(m.total_recharged || 0),
+                total_consumed_display: formatPriceNoSymbol(m.total_consumed || 0),
+                created_date: m.created_at ? m.created_at.slice(0, 10) : '-'
+            }))
             this.setData({
-                members: loadMore ? [...members, ...result] : result,
+                members: loadMore ? [...members, ...processedMembers] : processedMembers,
                 hasMore: result.length === pageSize,
                 pageId: loadMore ? pageId + 1 : 2,
                 loading: false
@@ -155,7 +164,21 @@ Page({
 
         try {
             const detail = await MemberService.getMemberDetail(merchantId, userId)
-            this.setData({ selectedMember: detail, detailLoading: false })
+            // 预处理详情价格
+            const processedDetail = {
+                ...detail,
+                balance_display: formatPriceNoSymbol(detail.balance || 0),
+                total_recharged_display: formatPriceNoSymbol(detail.total_recharged || 0),
+                total_consumed_display: formatPriceNoSymbol(detail.total_consumed || 0),
+                transactions: (detail.transactions || []).map(tx => ({
+                    ...tx,
+                    amount_display: formatPriceNoSymbol(Math.abs(tx.amount || 0)),
+                    amount_sign: tx.amount >= 0 ? '+' : '-',
+                    created_date: tx.created_at ? tx.created_at.slice(0, 10) : '-',
+                    type_display: this.formatTxType(tx.type)
+                }))
+            }
+            this.setData({ selectedMember: processedDetail, detailLoading: false })
         } catch (error: any) {
             console.error('加载会员详情失败:', error)
             wx.showToast({ title: error.message || '加载失败', icon: 'none' })
@@ -234,9 +257,9 @@ Page({
         }
     },
 
-    // 格式化金额
+    // 格式化金额 - 使用统一的 formatPriceNoSymbol
     formatAmount(fen: number): string {
-        return (fen / 100).toFixed(2)
+        return formatPriceNoSymbol(fen)
     },
 
     // 格式化日期

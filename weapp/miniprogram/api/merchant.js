@@ -16,6 +16,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getMerchants = exports.MerchantManagementAdapter = exports.MerchantManagementService = void 0;
 exports.searchMerchants = searchMerchants;
 exports.getRecommendedMerchants = getRecommendedMerchants;
+exports.getPublicMerchantDetail = getPublicMerchantDetail;
+exports.getPublicMerchantDishes = getPublicMerchantDishes;
+exports.getPublicMerchantCombos = getPublicMerchantCombos;
 exports.getMerchantOrders = getMerchantOrders;
 exports.getMerchantDishes = getMerchantDishes;
 exports.acceptOrder = acceptOrder;
@@ -242,6 +245,49 @@ function getRecommendedMerchants(params) {
             page: (_b = response.page) !== null && _b !== void 0 ? _b : 1,
             total_count: (_c = response.total_count) !== null && _c !== void 0 ? _c : 0
         };
+    });
+}
+/**
+ * 获取商户详情（消费者端）
+ * GET /v1/public/merchants/:id
+ * 返回包含标签、营业时间、证照等完整信息
+ */
+function getPublicMerchantDetail(merchantId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield (0, request_1.request)({
+            url: `/v1/public/merchants/${merchantId}`,
+            method: 'GET',
+            useCache: true,
+            cacheTTL: 5 * 60 * 1000 // 5分钟缓存
+        });
+    });
+}
+/**
+ * 获取商户菜品列表（消费者端）
+ * GET /v1/public/merchants/:id/dishes
+ */
+function getPublicMerchantDishes(merchantId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield (0, request_1.request)({
+            url: `/v1/public/merchants/${merchantId}/dishes`,
+            method: 'GET',
+            useCache: true,
+            cacheTTL: 5 * 60 * 1000
+        });
+    });
+}
+/**
+ * 获取商户套餐列表（消费者端）
+ * GET /v1/public/merchants/:id/combos
+ */
+function getPublicMerchantCombos(merchantId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield (0, request_1.request)({
+            url: `/v1/public/merchants/${merchantId}/combos`,
+            method: 'GET',
+            useCache: true,
+            cacheTTL: 5 * 60 * 1000
+        });
     });
 }
 // ==================== 商户基础管理适配器 ====================

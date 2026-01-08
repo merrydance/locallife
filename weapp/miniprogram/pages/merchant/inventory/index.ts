@@ -8,6 +8,7 @@ import { InventoryService } from '../../../api/inventory'
 import { DishManagementService, DishCategory } from '../../../api/dish'
 import { resolveImageURL } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 const app = getApp<IAppOption>()
 
@@ -120,6 +121,7 @@ Page({
                         id: d.id,
                         name: d.name,
                         price: d.price,
+                        priceDisplay: formatPriceNoSymbol(d.price || 0),
                         image_url: imageUrl,
                         category_id: d.category_id,
                         category_name: d.category_name || '',

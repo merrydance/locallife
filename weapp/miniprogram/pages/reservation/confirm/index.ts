@@ -3,7 +3,7 @@
  * 支持定金模式和全款模式
  */
 
-import { formatTime } from '@/utils/util'
+import { formatTime, formatPriceNoSymbol } from '@/utils/util'
 import { createReservation, CreateReservationRequest } from '../../../api/reservation'
 import { checkRoomAvailability } from '../../../api/room'
 
@@ -20,6 +20,7 @@ Page({
     roomName: '',
     capacity: 10,
     deposit: 0,
+    depositDisplay: '0.00',
     paymentMode: 'deposit' as 'deposit' | 'full',
     form: {
       date: '',
@@ -48,21 +49,28 @@ Page({
         merchantId: parseInt(options.merchantId) || 0,
         roomName: decodeURIComponent(options.roomName || ''),
         capacity: parseInt(options.capacity) || 10,
-        deposit: Number(options.deposit) || 10000
+        deposit: Number(options.deposit) || 10000,
+        depositDisplay: formatPriceNoSymbol(Number(options.deposit) || 10000)
       })
     }
 
-    // 默认日期为明天
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    // 格式化日期为 YYYY-MM-DD（后端需要）
-    const pad = (n: number) => n < 10 ? '0' + n : String(n)
-    const dateStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
-    this.setData({ 'form.date': dateStr })
-
-    // 加载明天的可用时段
-    if (options.roomId) {
-      this.loadAvailability(dateStr)
+    // 处理传入的日期和时间
+    if (options.date) {
+      this.setData({ 'form.date': options.date })
+      if (options.time) {
+        this.setData({ 'form.time': options.time })
+      }
+      this.loadAvailability(options.date, parseInt(options.roomId))
+    } else {
+      // 默认日期为明天
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const pad = (n: number) => n < 10 ? '0' + n : String(n)
+      const dateStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
+      this.setData({ 'form.date': dateStr })
+      if (options.roomId) {
+        this.loadAvailability(dateStr, parseInt(options.roomId))
+      }
     }
   },
 
@@ -101,8 +109,8 @@ Page({
   },
 
   // 加载可用时段
-  async loadAvailability(date: string) {
-    const { tableId } = this.data
+  async loadAvailability(date: string, tableIdOverride?: number) {
+    const tableId = tableIdOverride || this.data.tableId
     if (!tableId) return
 
     this.setData({ loadingSlots: true })
@@ -161,8 +169,9 @@ Page({
   },
 
   async onSubmit() {
-    const { form, tableId, paymentMode, merchantId, roomId, roomName, deposit } = this.data
+    const { form, tableId, paymentMode, merchantId } = this.data
 
+    // 表单验证
     if (!form.date || !form.time || !form.name || !form.phone) {
       wx.showToast({ title: '请填写完整信息', icon: 'none' })
       return
@@ -178,17 +187,10 @@ Page({
       return
     }
 
-    // 全款模式：跳转到菜品选择页面
-    if (paymentMode === 'full') {
-      const url = `/pages/reservation/select-dishes/index?tableId=${tableId}&merchantId=${merchantId}&roomName=${encodeURIComponent(roomName)}&date=${form.date}&time=${form.time}&guestCount=${form.guestCount}&contactName=${encodeURIComponent(form.name)}&contactPhone=${form.phone}&notes=${encodeURIComponent(form.remark || '')}`
-      wx.navigateTo({ url })
-      return
-    }
-
-    // 定金模式：直接创建预订
     this.setData({ submitting: true })
 
     try {
+      // 无论哪种模式，都先创建预订（锁定房间）
       const reservationData: CreateReservationRequest = {
         table_id: tableId,
         date: form.date,
@@ -196,21 +198,34 @@ Page({
         guest_count: form.guestCount,
         contact_name: form.name,
         contact_phone: form.phone,
-        payment_mode: 'deposit',
+        payment_mode: paymentMode,
         notes: form.remark || undefined
       }
 
+      console.log('[预订] 发送数据:', JSON.stringify(reservationData))
+
       const reservation = await createReservation(reservationData)
 
-      wx.showToast({ title: '预定提交成功', icon: 'success' })
-
-      // TODO: 跳转到支付页面
-      setTimeout(() => {
-        wx.redirectTo({ url: `/pages/reservation/list/index` })
-      }, 1500)
+      if (paymentMode === 'full') {
+        // 全款模式：跳转到点菜页面（传入 reservation_id）
+        wx.redirectTo({
+          url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${merchantId}`
+        })
+      } else {
+        // 定金模式：跳转到支付页面
+        wx.showModal({
+          title: '预定创建成功',
+          content: '支付页面正在开发中，请稍后在预订列表中完成支付',
+          showCancel: false,
+          success: () => {
+            wx.navigateBack()
+          }
+        })
+      }
     } catch (error: any) {
       console.error('预定提交失败:', error)
       wx.showToast({ title: error?.message || '提交失败', icon: 'none' })
+    } finally {
       this.setData({ submitting: false })
     }
   }

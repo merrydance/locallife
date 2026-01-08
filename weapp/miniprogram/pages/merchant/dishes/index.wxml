@@ -120,7 +120,7 @@
                       </view>
                     </view>
                     <view class="dish-meta">
-                      <text class="dish-price">¥{{item.price / 100}}</text>
+                      <text class="dish-price">¥{{item.priceDisplay}}</text>
                       <text class="dish-category" wx:if="{{item.category_name}}">{{item.category_name}}</text>
                     </view>
                   </view>

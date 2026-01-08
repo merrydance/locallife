@@ -1,13 +1,17 @@
+import { formatPriceNoSymbol } from '../../../utils/util'
+
 Page({
   data: {
     balance: 0,
+    balanceDisplay: '0.00',
     transactions: [] as Array<{
-            id: string
-            type: 'PAYMENT' | 'REFUND' | 'TOPUP'
-            amount: number
-            title: string
-            time: string
-        }>,
+      id: string
+      type: 'PAYMENT' | 'REFUND' | 'TOPUP'
+      amount: number
+      amountDisplay: string
+      title: string
+      time: string
+    }>,
     loading: false,
     navBarHeight: 88
   },
@@ -50,9 +54,15 @@ Page({
           }
         ]
       }
+      // 预处理价格
+      const processedTransactions = mockWallet.transactions.map(t => ({
+        ...t,
+        amountDisplay: (t.amount > 0 ? '+' : '') + formatPriceNoSymbol(Math.abs(t.amount))
+      }))
       this.setData({
         balance: mockWallet.balance,
-        transactions: mockWallet.transactions,
+        balanceDisplay: formatPriceNoSymbol(mockWallet.balance),
+        transactions: processedTransactions,
         loading: false
       })
     } catch (error) {

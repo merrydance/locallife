@@ -1,32 +1,5 @@
 <!-- 财务管理页面 - PC-SaaS 布局 -->
-<wxs module="utils">
-  module.exports = {
-    formatAmount: function(fen) {
-      return (fen / 100).toFixed(2)
-    },
-    formatStatus: function(status) {
-      var map = {
-        'pending': '待处理',
-        'processing': '处理中',
-        'finished': '已完成',
-        'failed': '失败'
-      }
-      return map[status] || status
-    },
-    formatSource: function(source) {
-      var map = {
-        'takeout': '外卖',
-        'dine_in': '堂食',
-        'pickup': '自取'
-      }
-      return map[source] || source
-    },
-    formatDate: function(dateStr) {
-      if (!dateStr) return '-'
-      return dateStr.slice(0, 10)
-    }
-  }
-</wxs>
+<!-- 价格已在 TS 中预处理 -->
 
 <!-- 小屏提示 -->
 <match-media max-width="1599">
@@ -85,31 +58,31 @@
           <view class="overview-grid">
             <view class="overview-card large">
               <text class="card-label">总 GMV</text>
-              <text class="card-value primary">¥{{utils.formatAmount(overview.total_gmv)}}</text>
+              <text class="card-value primary">¥{{overview.total_gmv_display}}</text>
             </view>
             <view class="overview-card">
               <text class="card-label">实收收入</text>
-              <text class="card-value success">¥{{utils.formatAmount(overview.total_income)}}</text>
+              <text class="card-value success">¥{{overview.total_income_display}}</text>
             </view>
             <view class="overview-card">
               <text class="card-label">净收入</text>
-              <text class="card-value">¥{{utils.formatAmount(overview.net_income)}}</text>
+              <text class="card-value">¥{{overview.net_income_display}}</text>
             </view>
             <view class="overview-card">
               <text class="card-label">待结算</text>
-              <text class="card-value warning">¥{{utils.formatAmount(overview.pending_income)}}</text>
+              <text class="card-value warning">¥{{overview.pending_income_display}}</text>
             </view>
             <view class="overview-card">
               <text class="card-label">平台服务费</text>
-              <text class="card-value danger">¥{{utils.formatAmount(overview.total_platform_fee)}}</text>
+              <text class="card-value danger">¥{{overview.total_platform_fee_display}}</text>
             </view>
             <view class="overview-card">
               <text class="card-label">运营商服务费</text>
-              <text class="card-value danger">¥{{utils.formatAmount(overview.total_operator_fee)}}</text>
+              <text class="card-value danger">¥{{overview.total_operator_fee_display}}</text>
             </view>
             <view class="overview-card">
               <text class="card-label">满返支出</text>
-              <text class="card-value danger">¥{{utils.formatAmount(overview.total_promotion_exp)}}</text>
+              <text class="card-value danger">¥{{overview.total_promotion_exp_display}}</text>
             </view>
             <view class="overview-card">
               <text class="card-label">已完成订单</text>
@@ -132,9 +105,9 @@
             <view wx:for="{{dailyFinance}}" wx:key="date" class="table-row">
               <text class="col-date">{{item.date}}</text>
               <text class="col-count">{{item.order_count}}</text>
-              <text class="col-gmv">¥{{utils.formatAmount(item.total_gmv)}}</text>
-              <text class="col-income success">¥{{utils.formatAmount(item.merchant_income)}}</text>
-              <text class="col-fee danger">¥{{utils.formatAmount(item.total_fee)}}</text>
+              <text class="col-gmv">¥{{item.total_gmv_display}}</text>
+              <text class="col-income success">¥{{item.merchant_income_display}}</text>
+              <text class="col-fee danger">¥{{item.total_fee_display}}</text>
             </view>
           </view>
         </view>
@@ -154,12 +127,12 @@
             <view wx:if="{{orders.length === 0}}" class="empty-hint">暂无数据</view>
             <view wx:for="{{orders}}" wx:key="id" class="table-row">
               <text class="col-id">{{item.id}}</text>
-              <text class="col-source">{{utils.formatSource(item.order_source)}}</text>
-              <text class="col-amount">¥{{utils.formatAmount(item.total_amount)}}</text>
-              <text class="col-fee danger">¥{{utils.formatAmount(item.platform_fee + item.operator_fee)}}</text>
-              <text class="col-income success">¥{{utils.formatAmount(item.merchant_amount)}}</text>
-              <text class="col-status status-{{item.status}}">{{utils.formatStatus(item.status)}}</text>
-              <text class="col-time">{{utils.formatDate(item.created_at)}}</text>
+              <text class="col-source">{{item.order_source}}</text>
+              <text class="col-amount">¥{{item.total_amount_display}}</text>
+              <text class="col-fee danger">¥{{item.total_fee_display}}</text>
+              <text class="col-income success">¥{{item.merchant_amount_display}}</text>
+              <text class="col-status status-{{item.status}}">{{item.status}}</text>
+              <text class="col-time">{{item.created_date}}</text>
             </view>
           </view>
         </view>
@@ -179,12 +152,12 @@
             <view wx:if="{{serviceFees.length === 0}}" class="empty-hint">暂无数据</view>
             <view wx:for="{{serviceFees}}" wx:key="index" class="table-row">
               <text class="col-date">{{item.date}}</text>
-              <text class="col-source">{{utils.formatSource(item.order_source)}}</text>
+              <text class="col-source">{{item.order_source}}</text>
               <text class="col-count">{{item.order_count}}</text>
-              <text class="col-amount">¥{{utils.formatAmount(item.total_amount)}}</text>
-              <text class="col-platform danger">¥{{utils.formatAmount(item.platform_fee)}}</text>
-              <text class="col-operator danger">¥{{utils.formatAmount(item.operator_fee)}}</text>
-              <text class="col-total danger">¥{{utils.formatAmount(item.total_fee)}}</text>
+              <text class="col-amount">¥{{item.total_amount_display}}</text>
+              <text class="col-platform danger">¥{{item.platform_fee_display}}</text>
+              <text class="col-operator danger">¥{{item.operator_fee_display}}</text>
+              <text class="col-total danger">¥{{item.total_fee_display}}</text>
             </view>
           </view>
         </view>
@@ -203,11 +176,11 @@
             <view wx:if="{{promotions.length === 0}}" class="empty-hint">暂无数据</view>
             <view wx:for="{{promotions}}" wx:key="id" class="table-row">
               <text class="col-id">{{item.order_no}}</text>
-              <text class="col-type">{{utils.formatSource(item.order_type)}}</text>
-              <text class="col-subtotal">¥{{utils.formatAmount(item.subtotal)}}</text>
-              <text class="col-delivery">¥{{utils.formatAmount(item.delivery_fee)}}</text>
-              <text class="col-discount danger">¥{{utils.formatAmount(item.delivery_fee_discount)}}</text>
-              <text class="col-time">{{utils.formatDate(item.created_at)}}</text>
+              <text class="col-type">{{item.order_type}}</text>
+              <text class="col-subtotal">¥{{item.subtotal_display}}</text>
+              <text class="col-delivery">¥{{item.delivery_fee_display}}</text>
+              <text class="col-discount danger">¥{{item.delivery_fee_discount_display}}</text>
+              <text class="col-time">{{item.created_date}}</text>
             </view>
           </view>
         </view>
@@ -226,11 +199,11 @@
             <view wx:if="{{settlements.length === 0}}" class="empty-hint">暂无数据</view>
             <view wx:for="{{settlements}}" wx:key="id" class="table-row">
               <text class="col-id">{{item.id}}</text>
-              <text class="col-source">{{utils.formatSource(item.order_source)}}</text>
-              <text class="col-amount">¥{{utils.formatAmount(item.total_amount)}}</text>
-              <text class="col-income success">¥{{utils.formatAmount(item.merchant_amount)}}</text>
-              <text class="col-status status-{{item.status}}">{{utils.formatStatus(item.status)}}</text>
-              <text class="col-time">{{utils.formatDate(item.created_at)}}</text>
+              <text class="col-source">{{item.order_source}}</text>
+              <text class="col-amount">¥{{item.total_amount_display}}</text>
+              <text class="col-income success">¥{{item.merchant_amount_display}}</text>
+              <text class="col-status status-{{item.status}}">{{item.status}}</text>
+              <text class="col-time">{{item.created_date}}</text>
             </view>
           </view>
         </view>

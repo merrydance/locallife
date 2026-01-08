@@ -5,6 +5,7 @@
  */
 
 import { logger } from '@/utils/logger'
+import { formatPriceNoSymbol } from '@/utils/util'
 import {
     membershipSettingsService,
     rechargeRuleManagementService,
@@ -129,7 +130,15 @@ Page({
 
         try {
             const rules = await rechargeRuleManagementService.listRechargeRules(merchantId)
-            this.setData({ rechargeRules: rules })
+            // 预处理价格
+            const processedRules = rules.map(rule => ({
+                ...rule,
+                recharge_amount_display: formatPriceNoSymbol(rule.recharge_amount || 0),
+                bonus_amount_display: formatPriceNoSymbol(rule.bonus_amount || 0),
+                valid_from_display: rule.valid_from ? rule.valid_from.slice(0, 10) : '-',
+                valid_until_display: rule.valid_until ? rule.valid_until.slice(0, 10) : '-'
+            }))
+            this.setData({ rechargeRules: processedRules })
         } catch (error) {
             logger.error('加载充值规则失败', error, 'membership-settings')
         }
@@ -196,8 +205,8 @@ Page({
             showRuleModal: true,
             editingRule: rule,
             ruleForm: {
-                recharge_amount: String(rule.recharge_amount / 100),
-                bonus_amount: String(rule.bonus_amount / 100),
+                recharge_amount: formatPriceNoSymbol(rule.recharge_amount || 0),
+                bonus_amount: formatPriceNoSymbol(rule.bonus_amount || 0),
                 valid_from: rule.valid_from.slice(0, 10),
                 valid_until: rule.valid_until.slice(0, 10)
             }
@@ -397,9 +406,11 @@ Page({
     async onDeleteRule(e: WechatMiniprogram.TouchEvent) {
         const rule = e.currentTarget.dataset.rule as RechargeRuleResponse
 
+        const rechargeDisplay = formatPriceNoSymbol(rule.recharge_amount || 0)
+        const bonusDisplay = formatPriceNoSymbol(rule.bonus_amount || 0)
         wx.showModal({
             title: '确认删除',
-            content: `确定删除"充${rule.recharge_amount / 100}元送${rule.bonus_amount / 100}元"规则？`,
+            content: `确定删除"充${rechargeDisplay}元送${bonusDisplay}元"规则？`,
             success: async (res) => {
                 if (res.confirm) {
                     wx.showLoading({ title: '删除中...' })

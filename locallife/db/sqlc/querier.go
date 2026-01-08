@@ -817,9 +817,9 @@ type Querier interface {
 	GetUserCartsByMerchantIDs(ctx context.Context, arg GetUserCartsByMerchantIDsParams) ([]GetUserCartsByMerchantIDsRow, error)
 	// ==================== 多商户购物车汇总查询 ====================
 	// 获取用户所有购物车的汇总统计
-	GetUserCartsSummary(ctx context.Context, userID int64) (GetUserCartsSummaryRow, error)
+	GetUserCartsSummary(ctx context.Context, arg GetUserCartsSummaryParams) (GetUserCartsSummaryRow, error)
 	// 获取用户所有购物车及其商品详情（用于合单结算）
-	GetUserCartsWithDetails(ctx context.Context, userID int64) ([]GetUserCartsWithDetailsRow, error)
+	GetUserCartsWithDetails(ctx context.Context, arg GetUserCartsWithDetailsParams) ([]GetUserCartsWithDetailsRow, error)
 	// 获取用户索赔警告状态
 	GetUserClaimWarningStatus(ctx context.Context, userID int64) (UserClaimWarning, error)
 	GetUserDefaultAddress(ctx context.Context, userID int64) (UserAddress, error)

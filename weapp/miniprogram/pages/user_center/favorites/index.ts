@@ -12,6 +12,7 @@ import {
   FavoriteMerchantResponse
 } from '../../../api/personal'
 import { logger } from '../../../utils/logger'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 Page({
   data: {
@@ -69,6 +70,7 @@ Page({
       name: item.dish_name,
       image: item.dish_image_url || '/assets/default-dish.png',
       price: item.price,
+      priceDisplay: formatPriceNoSymbol(item.price || 0),
       merchantId: item.merchant_id,
       merchantName: item.merchant_name,
       desc: item.merchant_name

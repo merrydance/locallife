@@ -21,9 +21,19 @@ Component({
     },
     methods: {
         onTap() {
-            if (this.data.dish) {
+            const dish = this.data.dish;
+            if (dish) {
+                // 传递额外信息到详情页（小程序不支持 URLSearchParams）
+                const params = [
+                    `id=${dish.id}`,
+                    `merchant_id=${dish.merchantId || ''}`,
+                    `shop_name=${encodeURIComponent(dish.shopName || '')}`,
+                    `month_sales=${dish.monthlySales || 0}`,
+                    `distance=${dish.distance_meters || 0}`,
+                    `delivery_time=${Math.round((dish.deliveryTimeSeconds || 0) / 60) || 0}`
+                ].join('&');
                 wx.navigateTo({
-                    url: `/pages/takeout/dish-detail/index?id=${this.data.dish.id}`
+                    url: `/pages/takeout/dish-detail/index?${params}`
                 });
             }
         },

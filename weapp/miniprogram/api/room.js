@@ -14,6 +14,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRoom = exports.getRooms = void 0;
+exports.getPublicMerchantRooms = getPublicMerchantRooms;
 exports.getMerchantAvailableRooms = getMerchantAvailableRooms;
 exports.getMerchantAllRooms = getMerchantAllRooms;
 exports.getRoomDetail = getRoomDetail;
@@ -27,6 +28,19 @@ exports.checkMultipleRoomsAvailability = checkMultipleRoomsAvailability;
 exports.getAvailableRoomsForTimeSlot = getAvailableRoomsForTimeSlot;
 exports.calculateRoomCost = calculateRoomCost;
 const request_1 = require("../utils/request");
+// ==================== 消费侧API接口函数 ====================
+/**
+ * 获取商户包间列表（消费者端）
+ * @param merchantId 商户ID
+ */
+function getPublicMerchantRooms(merchantId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return (0, request_1.request)({
+            url: `/v1/public/merchants/${merchantId}/rooms`,
+            method: 'GET'
+        });
+    });
+}
 // ==================== API接口函数 ====================
 /**
  * 获取商户可用包间列表
@@ -53,7 +67,7 @@ function getMerchantAllRooms(merchantId) {
     });
 }
 /**
- * 获取包间详情
+ * 获取包间详情（消费者端）
  * @param roomId 包间ID
  */
 function getRoomDetail(roomId) {

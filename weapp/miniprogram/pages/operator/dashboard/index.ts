@@ -4,6 +4,7 @@
  */
 
 import { responsiveBehavior } from '@/utils/responsive'
+import { formatPriceNoSymbol } from '@/utils/util'
 import { platformDashboardService, RealtimeDashboardData } from '../../../api/platform-dashboard'
 import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
 
@@ -12,6 +13,7 @@ Page({
   data: {
     stats: {
       total_gmv: 0,
+      total_gmv_display: '0.00',
       total_orders: 0,
       active_merchants: 0,
       active_riders: 0
@@ -43,6 +45,7 @@ Page({
       this.setData({
         stats: {
           total_gmv: realtimeData.gmv_24h || 0,
+          total_gmv_display: formatPriceNoSymbol(realtimeData.gmv_24h || 0),
           total_orders: realtimeData.orders_24h || 0,
           active_merchants: realtimeData.active_merchants_24h || 0,
           active_riders: 0 // 后端暂无骑手数据

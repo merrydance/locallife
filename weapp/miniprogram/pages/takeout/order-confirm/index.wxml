@@ -68,7 +68,7 @@
     </view>
     <view class="cost-row total">
       <text class="cost-label">实付金额</text>
-      <text class="cost-value">¥{{(cart.totalPrice + 500) / 100}}</text>
+      <text class="cost-value">¥{{orderTotalDisplay}}</text>
     </view>
   </view>
 </view>
@@ -77,7 +77,7 @@
 <view class="submit-bar">
   <view class="submit-info">
     <text class="submit-label">实付:</text>
-    <text class="submit-price">¥{{(cart.totalPrice + 500) / 100}}</text>
+    <text class="submit-price">¥{{orderTotalDisplay}}</text>
   </view>
   <t-button 
     class="submit-btn" 

@@ -14,7 +14,7 @@
           <view class="coupon-left">
             <view class="value-box">
               <text class="symbol" wx:if="{{item.type === 'amount'}}">¥</text>
-              <text class="value">{{item.type === 'amount' ? item.value / 100 : item.value / 10}}</text>
+              <text class="value">{{item.valueDisplay}}</text>
               <text class="unit" wx:if="{{item.type === 'discount'}}">折</text>
             </view>
             <text class="condition">{{item._formatMinSpend}}</text>

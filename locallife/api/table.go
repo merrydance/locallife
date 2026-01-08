@@ -1482,29 +1482,50 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 		return
 	}
 
-	// 构建已预约时间集合 (用分钟表示)
-	reservedTimes := make(map[string]bool)
+	// 收集该日期的所有有效预约起始时间
+	var reservedStartMinutes []int
 	for _, r := range reservations {
-		// 只考虑有效状态的预约
-		if r.Status == "pending" || r.Status == "paid" || r.Status == "confirmed" {
+		// 考虑所有占用桌台的状态
+		if r.Status == ReservationStatusPending ||
+			r.Status == ReservationStatusPaid ||
+			r.Status == ReservationStatusConfirmed ||
+			r.Status == ReservationStatusCheckedIn {
 			if r.ReservationTime.Valid {
-				timeStr := fmt.Sprintf("%02d:%02d", r.ReservationTime.Microseconds/3600000000, (r.ReservationTime.Microseconds%3600000000)/60000000)
-				reservedTimes[timeStr] = true
+				startMin := int(r.ReservationTime.Microseconds / 1000000 / 60)
+				reservedStartMinutes = append(reservedStartMinutes, startMin)
 			}
 		}
 	}
 
 	// 生成时间段列表（11:00-21:00，每30分钟一个时段）
 	slots := []timeSlot{}
+	durationMin := ReservationDurationHours * 60
 	for hour := 11; hour <= 21; hour++ {
 		for _, minute := range []int{0, 30} {
 			if hour == 21 && minute == 30 {
 				continue // 21:30 不提供预约
 			}
+			currentMin := hour*60 + minute
 			timeStr := fmt.Sprintf("%02d:%02d", hour, minute)
+
+			// 检查当前时段起始的 4 小时内是否与已有预约冲突
+			available := true
+			for _, startMin := range reservedStartMinutes {
+				// 冲突条件：两个 4 小时时段有重叠
+				// 即：|currentMin - startMin| < durationMin
+				diff := currentMin - startMin
+				if diff < 0 {
+					diff = -diff
+				}
+				if diff < durationMin {
+					available = false
+					break
+				}
+			}
+
 			slots = append(slots, timeSlot{
 				Time:      timeStr,
-				Available: !reservedTimes[timeStr],
+				Available: available,
 			})
 		}
 	}

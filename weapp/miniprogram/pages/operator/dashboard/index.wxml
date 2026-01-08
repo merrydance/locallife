@@ -8,7 +8,7 @@
     <view class="stats-grid responsive-grid-4">
       <view class="stat-card">
         <text class="label">总GMV</text>
-        <text class="value">¥{{stats.total_gmv / 100}}</text>
+        <text class="value">¥{{stats.total_gmv_display}}</text>
       </view>
       <view class="stat-card">
         <text class="label">总订单</text>

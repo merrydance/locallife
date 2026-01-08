@@ -72,7 +72,7 @@ Page({
       this.setData({ loading: true })
 
       // 获取用户所有购物车汇总
-      const userCarts = await CartAPI.getUserCarts()
+      const userCarts = await CartAPI.getUserCarts('takeout')
 
       if (!userCarts.carts || userCarts.carts.length === 0) {
         this.setData({
@@ -97,7 +97,12 @@ Page({
         if (!merchantCart.merchant_id) continue
 
         try {
-          const cartDetail = await CartAPI.getCart(merchantCart.merchant_id)
+          const cartDetail = await CartAPI.getCart({
+            merchant_id: merchantCart.merchant_id,
+            order_type: merchantCart.order_type,
+            table_id: merchantCart.table_id || 0,
+            reservation_id: merchantCart.reservation_id || 0
+          })
           const group = this.buildMerchantGroup(merchantCart, cartDetail)
           merchantGroups.push(group)
         } catch (error) {

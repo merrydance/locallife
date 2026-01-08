@@ -1,389 +1,380 @@
-/* 堂食结算页面样式 */
-.checkout-container {
-  height: 100vh;
+/* 堂食/预订结算页样式 */
+
+/* 页面根节点 - 防止横向滚动 */
+page {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.page-container {
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: var(--td-bg-color-page, #f5f5f5);
   display: flex;
   flex-direction: column;
-  background: #f5f5f5;
+  box-sizing: border-box;
 }
 
 /* 加载状态 */
-.loading-container {
+.loading-wrapper {
+  flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 60vh;
+  padding-top: 200rpx;
 }
 
-.loading-spinner {
-  width: 60rpx;
-  height: 60rpx;
-  border: 4rpx solid #f3f3f3;
-  border-top: 4rpx solid #ff6b35;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  color: #666;
-  font-size: 28rpx;
-  margin-top: 20rpx;
-}
-
-/* 主要内容 */
-.checkout-content {
+/* 主滚动区 */
+.main-scroll {
   flex: 1;
-  padding-bottom: 140rpx;
+  width: 100%;
+  max-width: 100vw;
+  padding: var(--customer-page-padding, 20rpx);
+  padding-bottom: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
-/* 通用区块样式 */
-.section {
-  margin-bottom: 20rpx;
+.section-card {
+  background: var(--td-bg-color-container, #fff);
+  border-radius: var(--customer-card-radius, 16rpx);
+  padding: var(--customer-card-padding, 20rpx);
+  margin-bottom: var(--customer-card-margin, 12rpx);
+  box-shadow: var(--customer-card-shadow, 0 2rpx 8rpx rgba(0,0,0,0.04));
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+  margin-bottom: 16rpx;
 }
 
 .section-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  padding: 30rpx;
-  background: #fff;
-  border-bottom: 1rpx solid #f0f0f0;
+  margin-bottom: 16rpx;
 }
 
-.section-title {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.items-count {
+.item-count {
   font-size: 24rpx;
-  color: #999;
-  margin-left: 10rpx;
+  color: var(--td-text-color-secondary, #666);
 }
 
-/* 桌台信息区块 */
-.table-info-card {
-  background: #fff;
-  padding: 30rpx;
+/* 商户信息 */
+.merchant-section {
+  background: linear-gradient(135deg, #fff 0%, #f8fbff 100%);
 }
 
-.table-basic-info {
+.merchant-row {
   display: flex;
   align-items: center;
-  margin-bottom: 30rpx;
-  padding-bottom: 20rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-}
-
-.table-number {
-  font-size: 36rpx;
-  font-weight: 600;
-  color: #ff6b35;
-  margin-right: 20rpx;
-}
-
-.merchant-name {
-  font-size: 28rpx;
-  color: #666;
-}
-
-.dining-settings {
-  display: flex;
-  flex-direction: column;
   gap: 20rpx;
 }
 
-.setting-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.merchant-logo {
+  flex-shrink: 0;
 }
 
-.setting-label {
-  font-size: 28rpx;
-  color: #333;
-  width: 160rpx;
-}
-
-.setting-input {
+.merchant-info {
   flex: 1;
-  height: 60rpx;
-  background: #f5f5f5;
-  border-radius: 8rpx;
-  padding: 0 20rpx;
-  font-size: 28rpx;
-  color: #333;
+  min-width: 0;
 }
 
-/* 订单商品区块 */
+.merchant-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merchant-address {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary, #999);
+  margin-top: 4rpx;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 菜品列表 */
 .items-list {
-  background: #fff;
+  margin-top: 8rpx;
 }
 
 .order-item {
   display: flex;
-  align-items: center;
-  padding: 30rpx;
-  border-bottom: 1rpx solid #f0f0f0;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer, #f0f0f0);
 }
 
 .order-item:last-child {
   border-bottom: none;
 }
 
-.item-image {
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: 8rpx;
-  margin-right: 20rpx;
-  flex-shrink: 0;
-}
-
-.item-info {
+.item-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+}
+
+.item-top-row,
+.item-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .item-name {
   font-size: 28rpx;
-  color: #333;
-  margin-bottom: 8rpx;
+  font-weight: 500;
+  color: var(--td-text-color-primary, #333);
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.item-spec {
-  font-size: 24rpx;
-  color: #999;
-  margin-bottom: 12rpx;
-}
-
-.item-price-row {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-}
-
 .item-price {
   font-size: 28rpx;
-  color: #ff6b35;
   font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+  margin-left: 16rpx;
 }
 
-.item-quantity {
+.item-spec {
   font-size: 24rpx;
-  color: #999;
+  color: var(--td-text-color-placeholder, #999);
 }
 
-.item-subtotal {
-  text-align: right;
+.item-qty {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary, #666);
 }
 
-.subtotal-amount {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
+/* 优惠券样式 */
+.voucher-selected {
+  color: var(--td-brand-color, #0052d9) !important;
+  font-weight: 500;
 }
 
-/* 费用明细区块 */
-.price-details {
-  background: #fff;
-  padding: 30rpx;
+.voucher-placeholder {
+  color: var(--td-text-color-placeholder, #999) !important;
 }
 
-.price-item {
+/* 价格明细 */
+.price-section {
+  padding-top: 24rpx;
+}
+
+.price-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16rpx 0;
-}
-
-.price-item.discount .price-value {
-  color: #52c41a;
-}
-
-.price-item.total {
-  border-top: 1rpx solid #f0f0f0;
-  margin-top: 16rpx;
-  padding-top: 20rpx;
-}
-
-.price-item.total .price-label,
-.price-item.total .price-value {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
+  padding: 12rpx 0;
 }
 
 .price-label {
   font-size: 28rpx;
-  color: #666;
+  color: var(--td-text-color-secondary, #666);
+}
+
+.price-label.bold {
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
 }
 
 .price-value {
   font-size: 28rpx;
-  color: #333;
+  color: var(--td-text-color-primary, #333);
 }
 
-/* 备注区块 */
-.remark-input-wrapper {
-  background: #fff;
-  padding: 30rpx;
-  position: relative;
+.price-value.discount {
+  color: var(--td-error-color, #e34d59);
 }
 
-.remark-input {
-  width: 100%;
+.price-value.total {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: var(--td-error-color, #e34d59);
+}
+
+.total-row {
+  border-top: 1rpx solid var(--td-bg-color-secondarycontainer, #f0f0f0);
+  margin-top: 12rpx;
+  padding-top: 20rpx;
+}
+
+/* 备注 */
+.remark-textarea {
+  background: var(--td-bg-color-secondarycontainer, #f5f5f5) !important;
+  border-radius: 12rpx !important;
   min-height: 120rpx;
-  background: #f5f5f5;
-  border-radius: 8rpx;
-  padding: 20rpx;
-  font-size: 28rpx;
-  color: #333;
-  line-height: 1.5;
-}
-
-.remark-count {
-  position: absolute;
-  bottom: 40rpx;
-  right: 40rpx;
-  font-size: 24rpx;
-  color: #999;
-}
-
-/* 支付方式区块 */
-.payment-methods {
-  background: #fff;
-}
-
-.payment-method {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 30rpx;
-  border-bottom: 1rpx solid #f0f0f0;
-  transition: background-color 0.3s;
-}
-
-.payment-method:last-child {
-  border-bottom: none;
-}
-
-.payment-method.selected {
-  background: #fff7f0;
-}
-
-.payment-method.disabled {
-  opacity: 0.5;
-}
-
-.method-info {
-  display: flex;
-  align-items: center;
-}
-
-.method-icon {
-  font-size: 40rpx;
-  margin-right: 20rpx;
-}
-
-.method-name {
-  font-size: 28rpx;
-  color: #333;
-}
-
-.method-radio {
-  width: 40rpx;
-  height: 40rpx;
-  border: 2rpx solid #ddd;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.payment-method.selected .method-radio {
-  border-color: #ff6b35;
-}
-
-.radio-dot {
-  width: 20rpx;
-  height: 20rpx;
-  border-radius: 50%;
-  background: transparent;
-}
-
-.radio-dot.checked {
-  background: #ff6b35;
 }
 
 /* 底部占位 */
 .bottom-placeholder {
-  height: 140rpx;
+  height: 180rpx;
 }
 
-/* 底部操作栏 */
-.bottom-bar {
+/* 提交栏 */
+.submit-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
-  border-top: 1rpx solid #eee;
-  padding: 20rpx 30rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.1);
+  padding: 20rpx 24rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  background: var(--td-bg-color-container, #fff);
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  z-index: 100;
 }
 
-.total-info {
+.submit-left {
   display: flex;
   align-items: baseline;
 }
 
-.total-label {
+.submit-label {
   font-size: 28rpx;
-  color: #666;
+  color: var(--td-text-color-secondary, #666);
 }
 
-.total-amount {
-  font-size: 36rpx;
-  font-weight: 600;
-  color: #ff6b35;
-  margin-left: 8rpx;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 20rpx;
-}
-
-.back-btn {
-  padding: 16rpx 32rpx;
-  background: #f5f5f5;
-  color: #666;
-  border-radius: 25rpx;
-  font-size: 28rpx;
+.submit-price {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: var(--td-error-color, #e34d59);
+  margin-left: 4rpx;
 }
 
 .submit-btn {
-  padding: 16rpx 40rpx;
-  background: #ff6b35;
-  color: #fff;
-  border-radius: 25rpx;
-  font-size: 28rpx;
+  width: 280rpx;
+}
+
+/* 优惠券弹窗 */
+.voucher-popup {
+  background: var(--td-bg-color-container, #fff);
+  border-radius: 24rpx 24rpx 0 0;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 32rpx;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer, #f0f0f0);
+}
+
+.popup-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+}
+
+.voucher-scroll {
+  flex: 1;
+  padding: 20rpx;
+  max-height: 50vh;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.voucher-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  background: var(--td-bg-color-container, #fff);
+  border: 2rpx solid var(--td-bg-color-secondarycontainer, #f0f0f0);
+  border-radius: 16rpx;
+  margin-bottom: 16rpx;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.voucher-item:active {
+  opacity: 0.8;
+}
+
+.voucher-item.selected {
+  border-color: var(--td-brand-color, #0052d9);
+  background: rgba(0, 82, 217, 0.04);
+}
+
+.voucher-amount {
+  width: 120rpx;
+  min-width: 120rpx;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--td-error-color, #e34d59);
+}
+
+.voucher-amount .currency {
+  font-size: 24rpx;
   font-weight: 600;
 }
 
-.submit-btn.loading {
-  background: #ccc;
-  color: #999;
+.voucher-amount .amount {
+  font-size: 40rpx;
+  font-weight: 700;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.voucher-content {
+  flex: 1;
+  margin-left: 16rpx;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.voucher-title {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--td-text-color-primary, #333);
+  display: block;
+}
+
+.voucher-condition {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder, #999);
+  margin-top: 8rpx;
+  display: block;
+}
+
+/* 优惠券加载状态 */
+.voucher-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 80rpx 0;
+}
+
+/* t-cell 标签样式：浅灰色 */
+.cell-label {
+  color: var(--td-text-color-secondary, #666) !important;
+  font-weight: 400 !important;
+}
+
+/* t-cell 值样式：深色突出 */
+.cell-value {
+  color: var(--td-text-color-primary, #333) !important;
+  font-weight: 500 !important;
 }

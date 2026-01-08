@@ -5,6 +5,7 @@
  */
 
 import { logger } from '@/utils/logger'
+import { formatPriceNoSymbol } from '@/utils/util'
 import {
     VoucherManagementService,
     MarketingAdapter,
@@ -107,11 +108,15 @@ Page({
                 page_size: 50
             })
 
-            // 添加状态信息
+            // 添加状态信息和价格预处理
             const vouchersWithStatus: VoucherWithStatus[] = vouchers.map(v => ({
                 ...v,
                 statusText: MarketingAdapter.getVoucherStatusText(v),
-                statusClass: this.getStatusClass(v)
+                statusClass: this.getStatusClass(v),
+                amount_display: formatPriceNoSymbol(v.amount || 0),
+                min_order_amount_display: formatPriceNoSymbol(v.min_order_amount || 0),
+                valid_from_display: v.valid_from ? v.valid_from.slice(0, 10) : '-',
+                valid_until_display: v.valid_until ? v.valid_until.slice(0, 10) : '-'
             }))
 
             this.setData({ vouchers: vouchersWithStatus })
@@ -162,8 +167,8 @@ Page({
             form: {
                 name: voucher.name,
                 code: voucher.code,
-                amount: String(voucher.amount / 100),
-                min_order_amount: String(voucher.min_order_amount / 100),
+                amount: formatPriceNoSymbol(voucher.amount || 0),
+                min_order_amount: formatPriceNoSymbol(voucher.min_order_amount || 0),
                 total_quantity: String(voucher.total_quantity),
                 valid_from: voucher.valid_from.slice(0, 10),
                 valid_until: voucher.valid_until.slice(0, 10),

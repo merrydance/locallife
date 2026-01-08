@@ -51,8 +51,9 @@
       </view>
 
       <view class="card-footer">
-        <t-button size="small" variant="outline" data-id="{{item.id}}" bindtap="onViewDetail">查看详情</t-button>
-        <t-button wx:if="{{item._canCancel}}" size="small" theme="danger" variant="text" data-id="{{item.id}}" bindtap="onCancelReservation">取消预订</t-button>
+        <t-button size="small" variant="outline" data-id="{{item.id}}" bind:tap="onViewDetail">查看详情</t-button>
+        <t-button wx:if="{{item._canOrder}}" size="small" theme="primary" data-item="{{item}}" bind:tap="onGoToOrder">点菜</t-button>
+        <t-button wx:if="{{item._canCancel}}" size="small" theme="danger" variant="text" data-id="{{item.id}}" bind:tap="onCancelReservation">取消预订</t-button>
       </view>
     </view>
 

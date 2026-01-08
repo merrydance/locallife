@@ -1,22 +1,5 @@
 <!-- 代金券管理页面 - 桌面级 SaaS 界面 -->
-<wxs module="utils">
-  module.exports = {
-    formatAmount: function(amount) {
-      return (amount / 100).toFixed(2)
-    },
-    formatDate: function(dateStr) {
-      if (!dateStr) return '-'
-      return dateStr.slice(0, 10)
-    },
-    hasOrderType: function(types, type) {
-      if (!types) return false
-      for (var i = 0; i < types.length; i++) {
-        if (types[i] === type) return true
-      }
-      return false
-    }
-  }
-</wxs>
+<!-- 价格已在 TS 中预处理 -->
 
 <!-- 小屏提示 -->
 <match-media max-width="1599">
@@ -76,7 +59,7 @@
             <view class="voucher-header">
               <view class="voucher-amount">
                 <text class="amount-prefix">¥</text>
-                <text class="amount-value">{{utils.formatAmount(item.amount)}}</text>
+                <text class="amount-value">{{item.amount_display}}</text>
               </view>
               <view class="voucher-status {{item.statusClass}}">{{item.statusText}}</view>
             </view>
@@ -85,7 +68,7 @@
             <view class="voucher-body">
               <text class="voucher-name">{{item.name}}</text>
               <text class="voucher-code">券码: {{item.code}}</text>
-              <text class="voucher-condition">满 ¥{{utils.formatAmount(item.min_order_amount)}} 可用</text>
+              <text class="voucher-condition">满 ¥{{item.min_order_amount_display}} 可用</text>
               <view class="voucher-scenes">
                 <text class="scene-tag" wx:if="{{utils.hasOrderType(item.allowed_order_types, 'dine_in')}}">堂食</text>
                 <text class="scene-tag" wx:if="{{utils.hasOrderType(item.allowed_order_types, 'takeout')}}">外卖</text>
@@ -107,7 +90,7 @@
 
             <!-- 有效期 -->
             <view class="voucher-validity">
-              {{utils.formatDate(item.valid_from)}} ~ {{utils.formatDate(item.valid_until)}}
+              {{item.valid_from_display}} ~ {{item.valid_until_display}}
             </view>
 
             <!-- 操作按钮 -->

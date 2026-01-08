@@ -1,7 +1,7 @@
 "use strict";
 /**
- * 堂食结算页面
- * 处理堂食订单的结算和支付流程
+ * 堂食/预订结算页面
+ * 处理堂食和预订订单的结算和支付流程
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -13,13 +13,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const customer_cart_order_1 = require("../../../api/customer-cart-order");
-const payment_refund_1 = require("../../../api/payment-refund");
-const customer_reservation_1 = require("../../../api/customer-reservation");
+const cart_1 = require("../../../api/cart");
+const order_1 = require("../../../api/order");
+const payment_1 = require("../../../api/payment");
 Page({
     data: {
         tableId: 0,
         merchantId: 0,
+        reservationId: 0, // 预订点菜场景
         orderType: 'dine_in',
         // 订单数据
         cart: null,
@@ -44,8 +45,8 @@ Page({
         }
     },
     onLoad(options) {
-        const { table_id, merchant_id, order_type = 'dine_in' } = options;
-        if (!table_id || !merchant_id) {
+        const { table_id, merchant_id, order_type = 'dine_in', reservation_id } = options;
+        if (!merchant_id) {
             wx.showToast({
                 title: '参数错误',
                 icon: 'error'
@@ -53,9 +54,21 @@ Page({
             wx.navigateBack();
             return;
         }
+        // 预订场景需要 reservation_id，堂食场景需要 table_id
+        if (order_type === 'reservation' && !reservation_id) {
+            wx.showToast({ title: '缺少预订ID', icon: 'error' });
+            wx.navigateBack();
+            return;
+        }
+        if (order_type === 'dine_in' && !table_id) {
+            wx.showToast({ title: '缺少桌台ID', icon: 'error' });
+            wx.navigateBack();
+            return;
+        }
         this.setData({
-            tableId: parseInt(table_id),
+            tableId: table_id ? parseInt(table_id) : 0,
             merchantId: parseInt(merchant_id),
+            reservationId: reservation_id ? parseInt(reservation_id) : 0,
             orderType: order_type
         });
         this.initPage();
@@ -65,14 +78,12 @@ Page({
      */
     initPage() {
         return __awaiter(this, void 0, void 0, function* () {
+            const { merchantId } = this.data;
             try {
                 this.setData({ loading: true });
-                // 并行加载数据
-                const [cart, calculation, tableInfo] = yield Promise.all([
-                    (0, customer_cart_order_1.getCart)(),
-                    (0, customer_cart_order_1.calculateCart)(),
-                    (0, customer_reservation_1.getTableInfo)(this.data.tableId)
-                ]);
+                // 加载购物车和计算结果
+                const cart = yield (0, cart_1.getCart)(merchantId);
+                const calculation = yield (0, cart_1.calculateCart)({ merchant_id: merchantId });
                 if (!cart.items || cart.items.length === 0) {
                     wx.showModal({
                         title: '提示',
@@ -85,8 +96,7 @@ Page({
                 }
                 this.setData({
                     cart,
-                    calculation,
-                    tableInfo
+                    calculation
                 });
             }
             catch (error) {
@@ -152,19 +162,25 @@ Page({
             }
             try {
                 this.setData({ submitting: true });
-                // 创建订单
+                // 创建订单 - 根据订单类型传递不同字段
                 const orderData = {
                     merchant_id: merchantId,
                     order_type: orderType,
-                    table_id: tableId,
                     items: cart.items,
                     remark,
                     guest_count: diningInfo.guest_count,
                     special_requests: diningInfo.special_requests
                 };
-                const order = yield (0, customer_cart_order_1.createOrder)(orderData);
+                // 堂食场景传 table_id，预订场景传 reservation_id
+                if (orderType === 'dine_in') {
+                    orderData.table_id = tableId;
+                }
+                else if (orderType === 'reservation') {
+                    orderData.reservation_id = this.data.reservationId;
+                }
+                const order = yield (0, order_1.createOrder)(orderData);
                 // 创建支付
-                yield this.createPayment(order.id, calculation.total_amount, selectedPaymentMethod);
+                yield this.doCreatePayment(order.id, calculation.total_amount, selectedPaymentMethod);
             }
             catch (error) {
                 console.error('提交订单失败:', error);
@@ -181,26 +197,31 @@ Page({
     /**
      * 创建支付
      */
-    createPayment(orderId, amount, paymentMethod) {
+    doCreatePayment(orderId, _amount, paymentMethod) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                let paymentResult;
-                const description = `堂食订单 ${orderId}`;
-                switch (paymentMethod) {
-                    case 'wechat_pay':
-                        paymentResult = yield (0, payment_refund_1.createWechatPayment)(orderId, amount, description);
-                        yield this.handleWechatPay(paymentResult);
-                        break;
-                    case 'alipay':
-                        paymentResult = yield (0, payment_refund_1.createAlipayPayment)(orderId, amount, description);
-                        yield this.handleAlipay(paymentResult);
-                        break;
-                    case 'balance':
-                        paymentResult = yield (0, payment_refund_1.createBalancePayment)(orderId, amount, description);
-                        yield this.handleBalancePay(paymentResult);
-                        break;
-                    default:
-                        throw new Error('不支持的支付方式');
+                if (paymentMethod === 'wechat_pay') {
+                    // 创建支付订单
+                    const paymentResult = yield (0, payment_1.createPayment)({
+                        order_id: orderId,
+                        payment_type: 'miniprogram',
+                        business_type: 'order'
+                    });
+                    // 调起微信支付
+                    if (paymentResult.pay_params) {
+                        yield (0, payment_1.invokeWechatPay)(paymentResult.pay_params);
+                        this.handlePaymentSuccess();
+                    }
+                    else {
+                        throw new Error('支付参数缺失');
+                    }
+                }
+                else if (paymentMethod === 'balance') {
+                    // 余额支付通过创建订单时的 use_balance 参数处理
+                    this.handlePaymentSuccess();
+                }
+                else {
+                    throw new Error('不支持的支付方式');
                 }
             }
             catch (error) {
@@ -208,6 +229,17 @@ Page({
                 throw error;
             }
         });
+    },
+    /**
+     * 支付成功处理
+     */
+    handlePaymentSuccess() {
+        wx.showToast({ title: '支付成功', icon: 'success' });
+        setTimeout(() => {
+            wx.redirectTo({
+                url: '/pages/orders/list/index?tab=dine_in'
+            });
+        }, 1500);
     },
     /**
      * 处理微信支付

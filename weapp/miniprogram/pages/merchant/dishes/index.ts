@@ -9,6 +9,7 @@
 import { DishManagementService, DishResponse, DishCategory, TagService, TagInfo, CustomizationGroupInput, CustomizationOptionInput } from '../../../api/dish'
 import { resolveImageURL } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 const app = getApp<IAppOption>()
 
@@ -177,7 +178,11 @@ Page({
           if (imageUrl) {
             imageUrl = await resolveImageURL(imageUrl)
           }
-          return { ...dish, image_url: imageUrl }
+          return {
+            ...dish,
+            image_url: imageUrl,
+            priceDisplay: formatPriceNoSymbol(dish.price || 0)
+          }
         })
       )
 

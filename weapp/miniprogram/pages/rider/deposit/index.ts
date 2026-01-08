@@ -1,11 +1,14 @@
 import { getRiderDashboard } from '../../../api/rider'
 import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 Page({
   data: {
     deposit: 0,
+    depositDisplay: '0.00',
     minDeposit: 50000, // 500元
+    minDepositDisplay: '500.00',
     status: 'UNPAID', // UNPAID, PAID, REFUNDING
     transactions: [] as any[],
     loading: false,
@@ -25,9 +28,10 @@ Page({
     try {
       const dashboard = await getRiderDashboard()
       const deposit = dashboard.deposit || { amount: 0, status: 'UNPAID' }
-            
+
       this.setData({
         deposit: deposit.amount,
+        depositDisplay: formatPriceNoSymbol(deposit.amount || 0),
         status: deposit.status,
         transactions: [], // Transaction history API missing
         loading: false
