@@ -13,6 +13,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const util_1 = require("@/utils/util");
 const reservation_1 = require("../../../api/reservation");
 const room_1 = require("../../../api/room");
 Page({
@@ -23,6 +24,7 @@ Page({
         roomName: '',
         capacity: 10,
         deposit: 0,
+        depositDisplay: '0.00',
         paymentMode: 'deposit',
         form: {
             date: '',
@@ -50,19 +52,28 @@ Page({
                 merchantId: parseInt(options.merchantId) || 0,
                 roomName: decodeURIComponent(options.roomName || ''),
                 capacity: parseInt(options.capacity) || 10,
-                deposit: Number(options.deposit) || 10000
+                deposit: Number(options.deposit) || 10000,
+                depositDisplay: (0, util_1.formatPriceNoSymbol)(Number(options.deposit) || 10000)
             });
         }
-        // 默认日期为明天
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        // 格式化日期为 YYYY-MM-DD（后端需要）
-        const pad = (n) => n < 10 ? '0' + n : String(n);
-        const dateStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
-        this.setData({ 'form.date': dateStr });
-        // 加载明天的可用时段
-        if (options.roomId) {
-            this.loadAvailability(dateStr);
+        // 处理传入的日期和时间
+        if (options.date) {
+            this.setData({ 'form.date': options.date });
+            if (options.time) {
+                this.setData({ 'form.time': options.time });
+            }
+            this.loadAvailability(options.date, parseInt(options.roomId));
+        }
+        else {
+            // 默认日期为明天
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const pad = (n) => n < 10 ? '0' + n : String(n);
+            const dateStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+            this.setData({ 'form.date': dateStr });
+            if (options.roomId) {
+                this.loadAvailability(dateStr, parseInt(options.roomId));
+            }
         }
     },
     onNavHeight(e) {
@@ -94,9 +105,9 @@ Page({
         this.loadAvailability(date);
     },
     // 加载可用时段
-    loadAvailability(date) {
+    loadAvailability(date, tableIdOverride) {
         return __awaiter(this, void 0, void 0, function* () {
-            const { tableId } = this.data;
+            const tableId = tableIdOverride || this.data.tableId;
             if (!tableId)
                 return;
             this.setData({ loadingSlots: true });
@@ -176,6 +187,7 @@ Page({
                     payment_mode: paymentMode,
                     notes: form.remark || undefined
                 };
+                console.log('[预订] 发送数据:', JSON.stringify(reservationData));
                 const reservation = yield (0, reservation_1.createReservation)(reservationData);
                 if (paymentMode === 'full') {
                     // 全款模式：跳转到点菜页面（传入 reservation_id）
@@ -185,13 +197,14 @@ Page({
                 }
                 else {
                     // 定金模式：跳转到支付页面
-                    wx.showToast({ title: '预定创建成功', icon: 'success' });
-                    setTimeout(() => {
-                        // 跳转到预订列表页（用户可在列表中找到待支付预订并支付）
-                        wx.redirectTo({
-                            url: `/pages/user_center/reservations/index`
-                        });
-                    }, 1000);
+                    wx.showModal({
+                        title: '预定创建成功',
+                        content: '支付页面正在开发中，请稍后在预订列表中完成支付',
+                        showCancel: false,
+                        success: () => {
+                            wx.navigateBack();
+                        }
+                    });
                 }
             }
             catch (error) {

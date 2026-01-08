@@ -8,9 +8,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+Object.defineProperty(exports, "__esModule", { value: true });
+const util_1 = require("../../../utils/util");
 Page({
     data: {
         balance: 0,
+        balanceDisplay: '0.00',
         transactions: [],
         loading: false,
         navBarHeight: 88
@@ -52,9 +55,12 @@ Page({
                         }
                     ]
                 };
+                // 预处理价格
+                const processedTransactions = mockWallet.transactions.map(t => (Object.assign(Object.assign({}, t), { amountDisplay: (t.amount > 0 ? '+' : '') + (0, util_1.formatPriceNoSymbol)(Math.abs(t.amount)) })));
                 this.setData({
                     balance: mockWallet.balance,
-                    transactions: mockWallet.transactions,
+                    balanceDisplay: (0, util_1.formatPriceNoSymbol)(mockWallet.balance),
+                    transactions: processedTransactions,
                     loading: false
                 });
             }

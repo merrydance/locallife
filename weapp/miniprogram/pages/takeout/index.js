@@ -617,7 +617,7 @@ Page({
             try {
                 console.log('[updateCartDisplay] 开始调用API');
                 // 直接从后端获取最新购物车汇总，确保数据准确
-                const userCarts = yield (0, cart_2.getUserCarts)();
+                const userCarts = yield (0, cart_2.getUserCarts)('takeout');
                 console.log('[updateCartDisplay] API返回:', JSON.stringify(userCarts));
                 const totalCount = ((_a = userCarts.summary) === null || _a === void 0 ? void 0 : _a.total_items) || 0;
                 const totalPrice = ((_b = userCarts.summary) === null || _b === void 0 ? void 0 : _b.total_amount) || 0;

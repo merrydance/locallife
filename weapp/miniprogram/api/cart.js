@@ -30,37 +30,40 @@ const request_1 = require("../utils/request");
 // ==================== API接口函数 ====================
 /**
  * 获取指定商户的购物车
- * @param merchantId 商户ID
+ * @param params 获取参数
  */
-function getCart(merchantId) {
+function getCart(params) {
     return __awaiter(this, void 0, void 0, function* () {
         return (0, request_1.request)({
             url: '/v1/cart',
             method: 'GET',
-            data: { merchant_id: merchantId }
+            data: params
         });
     });
 }
 /**
  * 获取购物车摘要（所有商户）
+ * @param orderType 订单类型过滤
  */
-function getCartSummary() {
+function getCartSummary(orderType) {
     return __awaiter(this, void 0, void 0, function* () {
         return (0, request_1.request)({
             url: '/v1/cart/summary',
-            method: 'GET'
+            method: 'GET',
+            data: orderType ? { order_type: orderType } : undefined
         });
     });
 }
 /**
  * 获取用户所有商户的购物车（完整信息）
- * 返回包含 carts 数组和 summary 的完整响应
+ * @param orderType 订单类型过滤
  */
-function getUserCarts() {
+function getUserCarts(orderType) {
     return __awaiter(this, void 0, void 0, function* () {
         return (0, request_1.request)({
             url: '/v1/cart/summary',
-            method: 'GET'
+            method: 'GET',
+            data: orderType ? { order_type: orderType } : undefined
         });
     });
 }
@@ -151,7 +154,7 @@ function previewCombinedCheckout(params) {
 function getCartItemCount(merchantId) {
     return __awaiter(this, void 0, void 0, function* () {
         if (merchantId) {
-            const cart = yield getCart(merchantId);
+            const cart = yield getCart({ merchant_id: merchantId });
             return cart.total_count;
         }
         else {

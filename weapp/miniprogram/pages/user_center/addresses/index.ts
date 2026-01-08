@@ -1,10 +1,10 @@
-import { getAddressList, deleteAddress, updateAddress, AddressDTO } from '../../../api/address'
+import AddressService, { Address } from '../../../api/address'
 import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
 
 Page({
   data: {
-    addresses: [] as AddressDTO[],
+    addresses: [] as Address[],
     navBarHeight: 88,
     loading: false,
     isSelectMode: false
@@ -28,7 +28,7 @@ Page({
     this.setData({ loading: true })
 
     try {
-      const addresses = await getAddressList()
+      const addresses = await AddressService.getAddresses()
       this.setData({
         addresses,
         loading: false
@@ -40,10 +40,31 @@ Page({
   },
 
   onAddAddress() {
-    // Ensure edit page exists or create one. For now just a toast if not exist
     wx.navigateTo({
-      url: '/pages/user_center/addresses/edit/index', fail: () => {
-        wx.showToast({ title: '编辑页开发中', icon: 'none' })
+      url: '/pages/user_center/addresses/edit/index'
+    })
+  },
+
+  /**
+   * 从微信导入地址
+   */
+  onImportWechatAddress() {
+    wx.chooseAddress({
+      success: (res) => {
+        // 跳转到编辑页，预填微信地址数据
+        const params = encodeURIComponent(JSON.stringify({
+          contact_name: res.userName,
+          contact_phone: res.telNumber,
+          detail_address: `${res.provinceName}${res.cityName}${res.countyName}${res.detailInfo}`
+        }))
+        wx.navigateTo({
+          url: `/pages/user_center/addresses/edit/index?wechat_data=${params}`
+        })
+      },
+      fail: (err) => {
+        if (err.errMsg.includes('cancel')) return
+        logger.error('Choose address failed:', err, 'Addresses')
+        wx.showToast({ title: '获取微信地址失败', icon: 'none' })
       }
     })
   },
@@ -51,10 +72,7 @@ Page({
   onEditAddress(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset
     wx.navigateTo({
-      url: `/pages/user_center/addresses/edit/index?id=${id}`,
-      fail: () => {
-        wx.showToast({ title: '编辑页开发中', icon: 'none' })
-      }
+      url: `/pages/user_center/addresses/edit/index?id=${id}`
     })
   },
 
@@ -66,7 +84,7 @@ Page({
       success: async (res) => {
         if (res.confirm) {
           try {
-            await deleteAddress(id)
+            await AddressService.deleteAddress(id)
             wx.showToast({ title: '已删除', icon: 'success' })
             this.loadAddresses()
           } catch (error) {
@@ -83,7 +101,7 @@ Page({
       const pages = getCurrentPages()
       const prevPage = pages[pages.length - 2]
       if (prevPage) {
-        prevPage.setData({ selectedAddressId: id })
+        (prevPage as any).setData({ selectedAddressId: id })
       }
       wx.navigateBack()
     }
@@ -91,17 +109,9 @@ Page({
 
   async onSetDefault(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset
-    const address = this.data.addresses.find((a) => a.id === id)
-    if (!address) return
 
     try {
-      // Convert AddressDTO back to CreateAddressRequest-like object for update
-      // Note: In a real app, maybe a specific set_default endpoint exists or we just update is_default
-      await updateAddress(id, {
-        ...address,
-        is_default: true
-      })
-
+      await AddressService.setDefaultAddress(id)
       wx.showToast({ title: '已设为默认', icon: 'success' })
       this.loadAddresses()
     } catch (error) {

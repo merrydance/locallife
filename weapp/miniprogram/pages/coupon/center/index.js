@@ -10,6 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const coupon_1 = require("../../../api/coupon");
+const util_1 = require("../../../utils/util");
 Page({
     data: {
         coupons: [],
@@ -45,7 +46,7 @@ Page({
                     page_id: page,
                     page_size: this.data.pageSize
                 });
-                const newCoupons = res.coupons.map(c => (Object.assign(Object.assign({}, c), { _formatValue: c.type === 'discount' ? `${c.value / 10}折` : `¥${c.value / 100}`, _formatMinSpend: c.min_spend > 0 ? `满${c.min_spend / 100}可用` : '无门槛', _percent: Math.round((c.claimed_count / c.total_count) * 100) })));
+                const newCoupons = res.coupons.map(c => (Object.assign(Object.assign({}, c), { valueDisplay: c.type === 'discount' ? String(c.value / 10) : (0, util_1.formatPriceNoSymbol)(c.value || 0), _formatValue: c.type === 'discount' ? `${c.value / 10}折` : `¥${(0, util_1.formatPriceNoSymbol)(c.value || 0)}`, _formatMinSpend: c.min_spend > 0 ? `满${(0, util_1.formatPriceNoSymbol)(c.min_spend)}可用` : '无门槛', _percent: Math.round((c.claimed_count / c.total_count) * 100) })));
                 this.setData({
                     coupons: reset ? newCoupons : [...this.data.coupons, ...newCoupons],
                     page: page + 1,

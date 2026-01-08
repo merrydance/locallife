@@ -386,7 +386,7 @@ Page({
     /**
      * 提交订单
      */
-    async submitOrder() {
+    async onSubmitOrder() {
         const {
             cart,
             calculation,

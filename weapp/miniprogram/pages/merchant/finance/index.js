@@ -14,6 +14,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const request_1 = require("@/utils/request");
+const util_1 = require("@/utils/util");
 // 财务服务
 const FinanceService = {
     getOverview(startDate, endDate) {
@@ -117,27 +118,34 @@ Page({
                 switch (tab) {
                     case 'overview':
                         const overview = yield FinanceService.getOverview(startDate, endDate);
-                        this.setData({ overview, loading: false });
+                        // 预处理 overview 价格
+                        const overviewDisplay = overview ? Object.assign(Object.assign({}, overview), { total_gmv_display: (0, util_1.formatPriceNoSymbol)(overview.total_gmv || 0), total_income_display: (0, util_1.formatPriceNoSymbol)(overview.total_income || 0), net_income_display: (0, util_1.formatPriceNoSymbol)(overview.net_income || 0), pending_income_display: (0, util_1.formatPriceNoSymbol)(overview.pending_income || 0), total_platform_fee_display: (0, util_1.formatPriceNoSymbol)(overview.total_platform_fee || 0), total_operator_fee_display: (0, util_1.formatPriceNoSymbol)(overview.total_operator_fee || 0), total_promotion_exp_display: (0, util_1.formatPriceNoSymbol)(overview.total_promotion_exp || 0) }) : null;
+                        this.setData({ overview: overviewDisplay, loading: false });
                         break;
                     case 'daily':
                         const dailyFinance = yield FinanceService.getDailyFinance(startDate, endDate);
-                        this.setData({ dailyFinance: dailyFinance || [], loading: false });
+                        const dailyDisplay = (dailyFinance || []).map((item) => (Object.assign(Object.assign({}, item), { total_gmv_display: (0, util_1.formatPriceNoSymbol)(item.total_gmv || 0), merchant_income_display: (0, util_1.formatPriceNoSymbol)(item.merchant_income || 0), total_fee_display: (0, util_1.formatPriceNoSymbol)(item.total_fee || 0) })));
+                        this.setData({ dailyFinance: dailyDisplay, loading: false });
                         break;
                     case 'orders':
                         const orders = yield FinanceService.getOrders(startDate, endDate);
-                        this.setData({ orders: orders || [], loading: false });
+                        const ordersDisplay = (orders || []).map((item) => (Object.assign(Object.assign({}, item), { total_amount_display: (0, util_1.formatPriceNoSymbol)(item.total_amount || 0), total_fee_display: (0, util_1.formatPriceNoSymbol)((item.platform_fee || 0) + (item.operator_fee || 0)), merchant_amount_display: (0, util_1.formatPriceNoSymbol)(item.merchant_amount || 0), created_date: item.created_at ? item.created_at.slice(0, 10) : '-' })));
+                        this.setData({ orders: ordersDisplay, loading: false });
                         break;
                     case 'fees':
                         const serviceFees = yield FinanceService.getServiceFees(startDate, endDate);
-                        this.setData({ serviceFees: serviceFees || [], loading: false });
+                        const feesDisplay = (serviceFees || []).map((item) => (Object.assign(Object.assign({}, item), { total_amount_display: (0, util_1.formatPriceNoSymbol)(item.total_amount || 0), platform_fee_display: (0, util_1.formatPriceNoSymbol)(item.platform_fee || 0), operator_fee_display: (0, util_1.formatPriceNoSymbol)(item.operator_fee || 0), total_fee_display: (0, util_1.formatPriceNoSymbol)(item.total_fee || 0) })));
+                        this.setData({ serviceFees: feesDisplay, loading: false });
                         break;
                     case 'promotions':
                         const promotions = yield FinanceService.getPromotions(startDate, endDate);
-                        this.setData({ promotions: promotions || [], loading: false });
+                        const promotionsDisplay = (promotions || []).map((item) => (Object.assign(Object.assign({}, item), { subtotal_display: (0, util_1.formatPriceNoSymbol)(item.subtotal || 0), delivery_fee_display: (0, util_1.formatPriceNoSymbol)(item.delivery_fee || 0), delivery_fee_discount_display: (0, util_1.formatPriceNoSymbol)(item.delivery_fee_discount || 0), created_date: item.created_at ? item.created_at.slice(0, 10) : '-' })));
+                        this.setData({ promotions: promotionsDisplay, loading: false });
                         break;
                     case 'settlements':
                         const settlements = yield FinanceService.getSettlements(startDate, endDate);
-                        this.setData({ settlements: settlements || [], loading: false });
+                        const settlementsDisplay = (settlements || []).map((item) => (Object.assign(Object.assign({}, item), { total_amount_display: (0, util_1.formatPriceNoSymbol)(item.total_amount || 0), merchant_amount_display: (0, util_1.formatPriceNoSymbol)(item.merchant_amount || 0), created_date: item.created_at ? item.created_at.slice(0, 10) : '-' })));
+                        this.setData({ settlements: settlementsDisplay, loading: false });
                         break;
                 }
             }

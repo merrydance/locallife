@@ -429,14 +429,23 @@ func generateOrderNo() string {
 func (server *Server) createOrder(ctx *gin.Context) {
 	var req createOrderRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		log.Warn().Err(err).Msg("[DEBUG] createOrder: binding failed")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	log.Info().
+		Int64("merchant_id", req.MerchantID).
+		Str("order_type", req.OrderType).
+		Int("items_count", len(req.Items)).
+		Interface("address_id", req.AddressID).
+		Msg("[DEBUG] createOrder: request parsed")
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 验证订单类型与关联字段
 	if err := validateOrderTypeFields(req); err != nil {
+		log.Warn().Err(err).Msg("[DEBUG] createOrder: validateOrderTypeFields failed")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -445,6 +454,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			log.Warn().Msg("[DEBUG] createOrder: merchant not found")
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -452,9 +462,12 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		return
 	}
 	if merchant.Status != "active" {
+		log.Warn().Str("status", merchant.Status).Msg("[DEBUG] createOrder: merchant not active")
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant is not active")))
 		return
 	}
+
+	log.Info().Msg("[DEBUG] createOrder: merchant validated")
 
 	// P0安全: 堂食订单验证桌台归属商户
 	if req.OrderType == OrderTypeDineIn && req.TableID != nil {
@@ -476,9 +489,12 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	// 计算订单金额
 	subtotal, items, err := server.calculateOrderItems(ctx, req.MerchantID, req.Items)
 	if err != nil {
+		log.Warn().Err(err).Msg("[DEBUG] createOrder: calculateOrderItems failed")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	log.Info().Int64("subtotal", subtotal).Int("items_count", len(items)).Msg("[DEBUG] createOrder: items calculated")
 
 	// 计算配送费（仅外卖订单）
 	var deliveryFee int64 = 0

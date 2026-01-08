@@ -19,6 +19,7 @@ const inventory_1 = require("../../../api/inventory");
 const dish_1 = require("../../../api/dish");
 const image_security_1 = require("../../../utils/image-security");
 const logger_1 = require("../../../utils/logger");
+const util_1 = require("../../../utils/util");
 const app = getApp();
 // 格式化数字为两位
 function pad(n) {
@@ -110,6 +111,7 @@ Page({
                         id: d.id,
                         name: d.name,
                         price: d.price,
+                        priceDisplay: (0, util_1.formatPriceNoSymbol)(d.price || 0),
                         image_url: imageUrl,
                         category_id: d.category_id,
                         category_name: d.category_name || '',

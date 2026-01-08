@@ -19,6 +19,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dish_1 = require("../../../api/dish");
 const image_security_1 = require("../../../utils/image-security");
 const logger_1 = require("../../../utils/logger");
+const util_1 = require("../../../utils/util");
 const app = getApp();
 Page({
     data: {
@@ -167,7 +168,7 @@ Page({
                     if (imageUrl) {
                         imageUrl = yield (0, image_security_1.resolveImageURL)(imageUrl);
                     }
-                    return Object.assign(Object.assign({}, dish), { image_url: imageUrl });
+                    return Object.assign(Object.assign({}, dish), { image_url: imageUrl, priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0) });
                 })));
                 this.setData({
                     allDishes: processedDishes,

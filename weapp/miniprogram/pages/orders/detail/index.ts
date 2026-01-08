@@ -3,6 +3,7 @@ import CartService from '../../../services/cart'
 import { getOrderDetail, confirmOrder, cancelOrder, urgeOrder, OrderResponse } from '../../../api/order'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
+import { generateOrderTimeline } from '../../../utils/timeline'
 
 // 取消原因选项
 const CANCEL_REASONS = [
@@ -61,7 +62,6 @@ Page({
       const showUrgeButton = ['paid', 'preparing', 'delivering'].includes(orderDTO.status)
 
       // 生成订单时间线
-      const { generateOrderTimeline } = await import('../../../utils/timeline')
       const timeline = generateOrderTimeline(orderDTO)
 
       this.setData({

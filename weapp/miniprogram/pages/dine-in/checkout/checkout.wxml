@@ -173,7 +173,7 @@
       bind:tap="onSubmitOrder"
       class="submit-btn"
     >
-      提交订单
+      ¥{{calculation.totalDisplay || '0.00'}} 去支付
     </t-button>
   </view>
 </view>

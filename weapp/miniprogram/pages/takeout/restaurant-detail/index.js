@@ -18,6 +18,7 @@ const room_1 = require("../../../api/room");
 const cart_1 = require("../../../api/cart");
 const image_1 = require("../../../utils/image");
 const image_security_1 = require("../../../utils/image-security");
+const util_1 = require("../../../utils/util");
 Page({
     data: {
         restaurantId: '',
@@ -31,6 +32,7 @@ Page({
         rooms: [],
         cartCount: 0,
         cartPrice: 0,
+        cartPriceDisplay: '0.00',
         navBarHeight: 88,
         loading: true
     },
@@ -156,7 +158,11 @@ Page({
                     name: dish.name,
                     image_url: (0, image_1.getPublicImageUrl)(dish.image_url || ''),
                     price: dish.price,
+                    priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0),
                     member_price: dish.member_price,
+                    memberPriceDisplay: dish.member_price ? (0, util_1.formatPriceNoSymbol)(dish.member_price) : null,
+                    original_price: dish.original_price,
+                    originalPriceDisplay: dish.original_price ? (0, util_1.formatPriceNoSymbol)(dish.original_price) : null,
                     category_id: dish.category_id || 0,
                     category_name: dish.category_name || '未分类',
                     monthly_sales: dish.monthly_sales || 0,
@@ -182,7 +188,10 @@ Page({
                     description: combo.description || '',
                     image_url: (0, image_1.getPublicImageUrl)(combo.image_url || ''),
                     combo_price: combo.combo_price,
+                    comboPriceDisplay: (0, util_1.formatPriceNoSymbol)(combo.combo_price || 0),
                     original_price: combo.original_price,
+                    originalPriceDisplay: (0, util_1.formatPriceNoSymbol)(combo.original_price || 0),
+                    savingsDisplay: (0, util_1.formatPriceNoSymbol)((combo.original_price || 0) - (combo.combo_price || 0)),
                     dishes: combo.dishes || []
                 }));
             }
@@ -308,19 +317,21 @@ Page({
             var _a, _b;
             try {
                 // 使用与外卖首页相同的方式获取购物车状态
-                const userCarts = yield (0, cart_1.getUserCarts)();
+                const userCarts = yield (0, cart_1.getUserCarts)('takeout');
                 const totalCount = ((_a = userCarts.summary) === null || _a === void 0 ? void 0 : _a.total_items) || 0;
                 const totalPrice = ((_b = userCarts.summary) === null || _b === void 0 ? void 0 : _b.total_amount) || 0;
                 this.setData({
                     cartCount: totalCount,
-                    cartPrice: totalPrice
+                    cartPrice: totalPrice,
+                    cartPriceDisplay: (0, util_1.formatPriceNoSymbol)(totalPrice)
                 });
             }
             catch (error) {
                 // 获取失败时重置为0
                 this.setData({
                     cartCount: 0,
-                    cartPrice: 0
+                    cartPrice: 0,
+                    cartPriceDisplay: '0.00'
                 });
             }
         });

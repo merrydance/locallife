@@ -1,88 +1,107 @@
-import { createAddress, updateAddress, getAddressDetail, deleteAddress } from '../../../../api/address'
+import AddressService, { Address, CreateAddressRequest, UpdateAddressRequest } from '../../../../api/address'
 import { logger } from '../../../../utils/logger'
 import { ErrorHandler } from '../../../../utils/error-handler'
 
+interface WechatAddressData {
+  contact_name: string
+  contact_phone: string
+  detail_address: string
+}
+
 Page({
   data: {
-    addressId: '',
-    name: '',
-    gender: 1, // 1: Male, 0: Female
-    mobile: '',
-    address: '', // Location name
-    complete_address: '', // Detailed part (building/room)
-    latitude: 0,
-    longitude: 0,
-    tag: 'home',
-    is_default: false,
-    saving: false
+    addressId: 0,
+    contactName: '',
+    contactPhone: '',
+    detailAddress: '',
+    latitude: '',
+    longitude: '',
+    isDefault: false,
+    saving: false,
+    navBarHeight: 88
   },
 
   onLoad(options: any) {
     if (options.id) {
-      this.setData({ addressId: options.id })
-      this.loadAddress(options.id)
+      this.setData({ addressId: Number(options.id) })
+      this.loadAddress(Number(options.id))
       wx.setNavigationBarTitle({ title: '编辑地址' })
+    } else if (options.wechat_data) {
+      // 从微信导入的数据
+      try {
+        const data: WechatAddressData = JSON.parse(decodeURIComponent(options.wechat_data))
+        this.setData({
+          contactName: data.contact_name,
+          contactPhone: data.contact_phone,
+          detailAddress: data.detail_address
+        })
+        wx.setNavigationBarTitle({ title: '完善地址' })
+        // 微信地址没有经纬度，需要用户选择位置
+        wx.showToast({ title: '请选择地图位置', icon: 'none', duration: 2000 })
+      } catch (e) {
+        logger.error('Parse wechat data failed', e, 'AddressEdit')
+      }
     } else {
       wx.setNavigationBarTitle({ title: '新增地址' })
     }
   },
 
-  async loadAddress(id: string) {
+  onNavHeight(e: WechatMiniprogram.CustomEvent) {
+    this.setData({ navBarHeight: e.detail.navBarHeight })
+  },
+
+  async loadAddress(id: number) {
     try {
-      const detail = await getAddressDetail(id)
+      const detail = await AddressService.getAddressDetail(id)
       this.setData({
-        name: detail.name,
-        gender: detail.gender,
-        mobile: detail.mobile,
-        address: detail.address,
-        complete_address: detail.complete_address,
+        contactName: detail.contact_name,
+        contactPhone: detail.contact_phone,
+        detailAddress: detail.detail_address,
         latitude: detail.latitude,
         longitude: detail.longitude,
-        tag: detail.tag,
-        is_default: detail.is_default
+        isDefault: detail.is_default
       })
     } catch (error) {
-      logger.error('Load address failed:', error, 'Edit')
+      logger.error('Load address failed:', error, 'AddressEdit')
       wx.showToast({ title: '加载失败', icon: 'error' })
     }
   },
 
   onNameChange(e: any) {
-    this.setData({ name: e.detail.value })
+    this.setData({ contactName: e.detail.value })
   },
 
-  onGenderChange(e: any) {
-    this.setData({ gender: Number(e.detail.value) })
-  },
-
-  onMobileChange(e: any) {
-    this.setData({ mobile: e.detail.value })
+  onPhoneChange(e: any) {
+    this.setData({ contactPhone: e.detail.value })
   },
 
   onDetailChange(e: any) {
-    this.setData({ complete_address: e.detail.value })
-  },
-
-  onTagChange(e: any) {
-    this.setData({ tag: e.detail.value })
+    this.setData({ detailAddress: e.detail.value })
   },
 
   onDefaultChange(e: any) {
-    this.setData({ is_default: e.detail.value })
+    this.setData({ isDefault: e.detail.value })
   },
 
   onChooseLocation() {
     wx.chooseLocation({
       success: (res) => {
+        // 使用选择的位置更新地址和经纬度
+        const newAddress = res.name || res.address
+        const currentDetail = this.data.detailAddress
+
+        // 如果当前地址为空或是微信导入的，使用新地址
+        // 如果用户已有详细地址，保留
         this.setData({
-          address: res.name || res.address,
-          latitude: res.latitude,
-          longitude: res.longitude
+          detailAddress: currentDetail || newAddress,
+          latitude: String(res.latitude),
+          longitude: String(res.longitude)
         })
       },
       fail: (err) => {
-        logger.error('Choose location failed:', err, 'Edit')
-        // Maybe show setting modal if auth denied
+        if (err.errMsg.includes('cancel')) return
+        logger.error('Choose location failed:', err, 'AddressEdit')
+        wx.showToast({ title: '请在设置中开启位置权限', icon: 'none' })
       }
     })
   },
@@ -92,30 +111,40 @@ Page({
 
     this.setData({ saving: true })
 
-    const data = {
-      name: this.data.name,
-      gender: this.data.gender,
-      mobile: this.data.mobile,
-      address: this.data.address,
-      complete_address: this.data.complete_address,
-      latitude: this.data.latitude,
-      longitude: this.data.longitude,
-      tag: this.data.tag,
-      is_default: this.data.is_default
-    }
-
     try {
       if (this.data.addressId) {
-        await updateAddress(this.data.addressId, data)
+        // 更新地址
+        const updateData: UpdateAddressRequest = {
+          contact_name: this.data.contactName,
+          contact_phone: this.data.contactPhone,
+          detail_address: this.data.detailAddress,
+          latitude: this.data.latitude,
+          longitude: this.data.longitude
+        }
+        await AddressService.updateAddress(this.data.addressId, updateData)
+
+        // 如果需要设为默认
+        if (this.data.isDefault) {
+          await AddressService.setDefaultAddress(this.data.addressId)
+        }
       } else {
-        await createAddress(data)
+        // 创建地址
+        const createData: CreateAddressRequest = {
+          contact_name: this.data.contactName,
+          contact_phone: this.data.contactPhone,
+          detail_address: this.data.detailAddress,
+          latitude: this.data.latitude,
+          longitude: this.data.longitude,
+          is_default: this.data.isDefault
+        }
+        await AddressService.createAddress(createData)
       }
 
       wx.showToast({ title: '保存成功', icon: 'success' })
       setTimeout(() => wx.navigateBack(), 1500)
     } catch (error) {
-      logger.error('Save address failed:', error, 'Edit')
-      wx.showToast({ title: '保存失败', icon: 'error' })
+      logger.error('Save address failed:', error, 'AddressEdit')
+      ErrorHandler.handle(error, 'AddressEdit.save')
     } finally {
       this.setData({ saving: false })
     }
@@ -130,34 +159,35 @@ Page({
       success: async (res) => {
         if (res.confirm) {
           try {
-            await deleteAddress(this.data.addressId)
+            await AddressService.deleteAddress(this.data.addressId)
             wx.showToast({ title: '已删除', icon: 'success' })
             setTimeout(() => wx.navigateBack(), 1500)
           } catch (error) {
-            logger.error('Delete address failed:', error, 'Edit')
-            wx.showToast({ title: '删除失败', icon: 'error' })
+            logger.error('Delete address failed:', error, 'AddressEdit')
+            ErrorHandler.handle(error, 'AddressEdit.delete')
           }
         }
       }
     })
   },
 
-  validate() {
-    const { name, mobile, address, complete_address } = this.data
-    if (!name.trim()) {
+  validate(): boolean {
+    const { contactName, contactPhone, detailAddress, latitude, longitude } = this.data
+
+    if (!contactName.trim()) {
       wx.showToast({ title: '请填写联系人', icon: 'none' })
       return false
     }
-    if (!mobile.trim() || mobile.length < 11) {
+    if (!contactPhone.trim() || contactPhone.length !== 11) {
       wx.showToast({ title: '请填写正确手机号', icon: 'none' })
       return false
     }
-    if (!address) {
-      wx.showToast({ title: '请选择收货地址', icon: 'none' })
+    if (!detailAddress.trim()) {
+      wx.showToast({ title: '请填写详细地址', icon: 'none' })
       return false
     }
-    if (!complete_address.trim()) {
-      wx.showToast({ title: '请填写门牌号', icon: 'none' })
+    if (!latitude || !longitude) {
+      wx.showToast({ title: '请选择地图位置', icon: 'none' })
       return false
     }
     return true

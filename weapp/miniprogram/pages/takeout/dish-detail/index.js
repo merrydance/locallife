@@ -17,6 +17,7 @@ const tracker_1 = require("../../../utils/tracker");
 const dish_1 = require("../../../api/dish");
 const personal_1 = require("../../../api/personal");
 const image_1 = require("../../../utils/image");
+const util_1 = require("../../../utils/util");
 Page({
     data: {
         dishId: '',
@@ -27,7 +28,8 @@ Page({
         navBarHeight: 88,
         currentImageIndex: 0,
         loading: true,
-        totalPrice: 0
+        totalPrice: 0,
+        totalPriceDisplay: '0.00'
     },
     onLoad(options) {
         const dishId = options.id;
@@ -97,8 +99,11 @@ Page({
                     images: imageUrl ? [imageUrl] : [],
                     image_url: imageUrl,
                     price: dishData.price,
+                    priceDisplay: (0, util_1.formatPriceNoSymbol)(dishData.price || 0),
                     original_price: dishData.price,
+                    originalPriceDisplay: (0, util_1.formatPriceNoSymbol)(dishData.price || 0),
                     member_price: dishData.member_price,
+                    memberPriceDisplay: dishData.member_price ? (0, util_1.formatPriceNoSymbol)(dishData.member_price) : null,
                     description: dishData.description || '',
                     is_available: dishData.is_available,
                     is_online: dishData.is_online,
@@ -152,7 +157,8 @@ Page({
             specs: (group.options || []).map((opt) => ({
                 id: opt.id.toString(),
                 name: opt.tag_name,
-                price_diff: opt.extra_price || 0
+                price_diff: opt.extra_price || 0,
+                priceDiffDisplay: opt.extra_price ? (0, util_1.formatPriceNoSymbol)(opt.extra_price) : null
             }))
         }));
     },
@@ -184,7 +190,10 @@ Page({
                 }
             });
         }
-        this.setData({ totalPrice });
+        this.setData({
+            totalPrice,
+            totalPriceDisplay: (0, util_1.formatPriceNoSymbol)(totalPrice)
+        });
     },
     onQuantityChange(e) {
         const { type } = e.currentTarget.dataset;

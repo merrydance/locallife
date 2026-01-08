@@ -94,7 +94,7 @@ class CartService {
             }
             try {
                 logger_1.logger.debug('Refreshing cart from backend', { merchantId: this.currentMerchantId }, 'CartService.refreshCart');
-                const cart = yield CartAPI.getCart(this.currentMerchantId);
+                const cart = yield CartAPI.getCart({ merchant_id: this.currentMerchantId });
                 this.currentCart = cart;
                 this.notifyListeners();
                 return cart;

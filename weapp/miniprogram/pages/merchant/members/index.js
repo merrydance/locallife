@@ -14,6 +14,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const request_1 = require("@/utils/request");
+const util_1 = require("@/utils/util");
 // 会员管理服务
 const MemberService = {
     // 获取会员列表
@@ -102,8 +103,10 @@ Page({
             }
             try {
                 const result = yield MemberService.listMembers(merchantId, loadMore ? pageId : 1, pageSize);
+                // 预处理价格
+                const processedMembers = result.map(m => (Object.assign(Object.assign({}, m), { balance_display: (0, util_1.formatPriceNoSymbol)(m.balance || 0), total_recharged_display: (0, util_1.formatPriceNoSymbol)(m.total_recharged || 0), total_consumed_display: (0, util_1.formatPriceNoSymbol)(m.total_consumed || 0), created_date: m.created_at ? m.created_at.slice(0, 10) : '-' })));
                 this.setData({
-                    members: loadMore ? [...members, ...result] : result,
+                    members: loadMore ? [...members, ...processedMembers] : processedMembers,
                     hasMore: result.length === pageSize,
                     pageId: loadMore ? pageId + 1 : 2,
                     loading: false
@@ -130,7 +133,9 @@ Page({
             this.setData({ showDetailModal: true, detailLoading: true, selectedMember: null });
             try {
                 const detail = yield MemberService.getMemberDetail(merchantId, userId);
-                this.setData({ selectedMember: detail, detailLoading: false });
+                // 预处理详情价格
+                const processedDetail = Object.assign(Object.assign({}, detail), { balance_display: (0, util_1.formatPriceNoSymbol)(detail.balance || 0), total_recharged_display: (0, util_1.formatPriceNoSymbol)(detail.total_recharged || 0), total_consumed_display: (0, util_1.formatPriceNoSymbol)(detail.total_consumed || 0), transactions: (detail.transactions || []).map(tx => (Object.assign(Object.assign({}, tx), { amount_display: (0, util_1.formatPriceNoSymbol)(Math.abs(tx.amount || 0)), amount_sign: tx.amount >= 0 ? '+' : '-', created_date: tx.created_at ? tx.created_at.slice(0, 10) : '-', type_display: this.formatTxType(tx.type) }))) });
+                this.setData({ selectedMember: processedDetail, detailLoading: false });
             }
             catch (error) {
                 console.error('加载会员详情失败:', error);
@@ -203,9 +208,9 @@ Page({
             }
         });
     },
-    // 格式化金额
+    // 格式化金额 - 使用统一的 formatPriceNoSymbol
     formatAmount(fen) {
-        return (fen / 100).toFixed(2);
+        return (0, util_1.formatPriceNoSymbol)(fen);
     },
     // 格式化日期
     formatDate(dateStr) {

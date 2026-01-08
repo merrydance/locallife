@@ -17,6 +17,7 @@ const merchant_1 = require("../../api/merchant");
 const cart_1 = __importDefault(require("../../services/cart"));
 const logger_1 = require("../../utils/logger");
 const error_handler_1 = require("../../utils/error-handler");
+const util_1 = require("../../utils/util");
 Page({
     data: {
         tableId: '',
@@ -27,6 +28,7 @@ Page({
         activeCategoryId: 'all',
         cartCount: 0,
         cartPrice: 0,
+        cartPriceDisplay: '0.00',
         navBarHeight: 88,
         loading: true
     },
@@ -108,14 +110,16 @@ Page({
     loadMenu() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const dishes = yield (0, merchant_1.getMerchantDishes)(this.data.merchantId);
+                const response = yield (0, merchant_1.getMerchantDishes)(this.data.merchantId);
+                // 预处理菜品价格
+                const dishes = (response.dishes || []).map((dish) => (Object.assign(Object.assign({}, dish), { priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0), memberPriceDisplay: dish.member_price ? (0, util_1.formatPriceNoSymbol)(dish.member_price) : null })));
                 const categories = [{ id: 'all', name: '全部' }];
                 const categoryMap = new Map();
                 dishes.forEach((dish) => {
                     if (dish.category_id && !categoryMap.has(dish.category_id)) {
                         categoryMap.set(dish.category_id, {
                             id: dish.category_id,
-                            name: dish.category_id // 注意：这里使用 category_id 作为 name，可能需要后端返回 category_name
+                            name: dish.category_name || String(dish.category_id)
                         });
                     }
                 });
@@ -159,7 +163,8 @@ Page({
         const cart = cart_1.default.getCart();
         this.setData({
             cartCount: cart.totalCount,
-            cartPrice: cart.totalPrice
+            cartPrice: cart.totalPrice,
+            cartPriceDisplay: (0, util_1.formatPriceNoSymbol)(cart.totalPrice || 0)
         });
     },
     onSubmitOrder() {

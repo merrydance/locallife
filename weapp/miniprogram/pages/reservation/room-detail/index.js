@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const reservation_1 = require("../../../api/reservation");
 const room_1 = require("../../../api/room");
+const util_1 = require("@/utils/util");
 Page({
     data: {
         roomId: '',
@@ -20,7 +21,9 @@ Page({
         // 可用日期列表（未来7天）
         calendarDays: [],
         currentMonth: '',
-        loadingDates: false
+        loadingDates: false,
+        selectedDate: '',
+        selectedType: ''
     },
     onLoad(options) {
         if (options.id) {
@@ -36,8 +39,10 @@ Page({
             this.setData({ loading: true });
             try {
                 const room = yield (0, reservation_1.getRoomDetail)(id);
+                // 预处理价格
+                const processedRoom = Object.assign(Object.assign({}, room), { minSpendDisplay: (0, util_1.formatPriceNoSymbol)(room.min_spend || 0), depositDisplay: (0, util_1.formatPriceNoSymbol)(room.deposit || 0) });
                 this.setData({
-                    room,
+                    room: processedRoom,
                     loading: false
                 });
                 // 加载可用日期
@@ -106,10 +111,29 @@ Page({
             }
         });
     },
+    onCellTap(e) {
+        const { date, type, available } = e.currentTarget.dataset;
+        if (!available) {
+            wx.showToast({ title: '时段已满', icon: 'none' });
+            return;
+        }
+        this.setData({
+            selectedDate: date,
+            selectedType: type
+        });
+        // 直接跳转
+        this.onBook();
+    },
     onBook() {
-        const { room } = this.data;
+        const { room, selectedDate, selectedType } = this.data;
         if (room) {
-            const url = `/pages/reservation/confirm/index?roomId=${room.id}&merchantId=${room.merchant_id}&roomName=${encodeURIComponent(room.name)}&capacity=${room.capacity}&deposit=${room.deposit}`;
+            // 默认时间
+            let time = '';
+            if (selectedType === 'lunch')
+                time = '12:00';
+            if (selectedType === 'dinner')
+                time = '18:00';
+            const url = `/pages/reservation/confirm/index?roomId=${room.id}&merchantId=${room.merchant_id}&roomName=${encodeURIComponent(room.name)}&capacity=${room.capacity}&deposit=${room.deposit}&date=${selectedDate}&time=${time}`;
             wx.navigateTo({ url });
         }
     }

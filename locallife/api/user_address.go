@@ -29,6 +29,10 @@ type userAddressResponse struct {
 }
 
 func newUserAddressResponse(address db.UserAddress) userAddressResponse {
+	// 正确格式化经纬度为小数字符串
+	lon, _ := parseNumericToFloat(address.Longitude)
+	lat, _ := parseNumericToFloat(address.Latitude)
+
 	return userAddressResponse{
 		ID:            address.ID,
 		UserID:        address.UserID,
@@ -36,8 +40,8 @@ func newUserAddressResponse(address db.UserAddress) userAddressResponse {
 		DetailAddress: address.DetailAddress,
 		ContactName:   address.ContactName,
 		ContactPhone:  address.ContactPhone,
-		Longitude:     fmt.Sprintf("%v", address.Longitude),
-		Latitude:      fmt.Sprintf("%v", address.Latitude),
+		Longitude:     strconv.FormatFloat(lon, 'f', -1, 64),
+		Latitude:      strconv.FormatFloat(lat, 'f', -1, 64),
 		IsDefault:     address.IsDefault,
 		CreatedAt:     address.CreatedAt.Format("2006-01-02 15:04:05"),
 	}

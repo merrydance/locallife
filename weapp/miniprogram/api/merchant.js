@@ -424,7 +424,7 @@ function getMerchantOrders(merchantId, status) {
  */
 function getMerchantDishes(merchantId) {
     return (0, request_1.request)({
-        url: `/customers/merchants/${merchantId}/dishes`,
+        url: `/v1/public/merchants/${merchantId}/dishes`,
         method: 'GET'
     });
 }

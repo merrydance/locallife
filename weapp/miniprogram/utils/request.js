@@ -220,10 +220,26 @@ function request(options) {
                     statusCode: result.statusCode,
                     data: result.data
                 }, 'request');
+                // 尝试从后端响应中提取错误信息
+                const responseData = result.data;
+                const backendMessage = (responseData === null || responseData === void 0 ? void 0 : responseData.message) || (responseData === null || responseData === void 0 ? void 0 : responseData.error) || '';
                 // 常见HTTP错误处理
-                let userMessage = '服务器响应异常,请稍后重试';
+                let userMessage = backendMessage || '服务器响应异常,请稍后重试';
                 let errorDetail = `HTTP ${result.statusCode}`;
-                if (result.statusCode === 404) {
+                let errorType = error_handler_1.ErrorType.NETWORK;
+                if (result.statusCode === 400) {
+                    // 400 Bad Request - 请求参数错误，显示后端返回的具体错误信息
+                    userMessage = backendMessage || '请求参数错误';
+                    errorDetail = `参数错误(400): ${backendMessage}`;
+                    errorType = error_handler_1.ErrorType.BUSINESS;
+                }
+                else if (result.statusCode === 409) {
+                    // 409 Conflict - 冲突错误（如时间段已被预订），显示后端返回的具体错误信息
+                    userMessage = backendMessage || '操作冲突，请稍后重试';
+                    errorDetail = `冲突(409): ${backendMessage}`;
+                    errorType = error_handler_1.ErrorType.BUSINESS;
+                }
+                else if (result.statusCode === 404) {
                     userMessage = '服务暂时不可用,请稍后重试';
                     errorDetail = '服务未找到(404) - 可能是后端服务未启动';
                 }
@@ -235,8 +251,14 @@ function request(options) {
                     userMessage = '服务器内部错误,请稍后重试';
                     errorDetail = `服务器错误(${result.statusCode})`;
                 }
+                else if (result.statusCode >= 400) {
+                    // 其他 4xx 客户端错误，优先使用后端返回的消息
+                    userMessage = backendMessage || '请求失败，请稍后重试';
+                    errorDetail = `客户端错误(${result.statusCode}): ${backendMessage}`;
+                    errorType = error_handler_1.ErrorType.BUSINESS;
+                }
                 throw new error_handler_1.AppError({
-                    type: error_handler_1.ErrorType.NETWORK,
+                    type: errorType,
                     message: errorDetail,
                     userMessage
                 });

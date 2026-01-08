@@ -1,37 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -49,6 +16,7 @@ const logger_1 = require("../../../utils/logger");
 const cart_1 = __importDefault(require("../../../services/cart"));
 const order_1 = require("../../../api/order");
 const order_2 = require("../../../adapters/order");
+const timeline_1 = require("../../../utils/timeline");
 // 取消原因选项
 const CANCEL_REASONS = [
     '不想要了',
@@ -97,8 +65,7 @@ Page({
                 // 判断是否显示催单按钮（已支付、制作中、配送中可催单）
                 const showUrgeButton = ['paid', 'preparing', 'delivering'].includes(orderDTO.status);
                 // 生成订单时间线
-                const { generateOrderTimeline } = yield Promise.resolve().then(() => __importStar(require('../../../utils/timeline')));
-                const timeline = generateOrderTimeline(orderDTO);
+                const timeline = (0, timeline_1.generateOrderTimeline)(orderDTO);
                 this.setData({
                     order: Object.assign(Object.assign({}, order), { timeline }),
                     orderDTO,

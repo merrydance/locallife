@@ -19,6 +19,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const dish_1 = require("../../../api/dish");
 const logger_1 = require("../../../utils/logger");
+const util_1 = require("../../../utils/util");
 const app = getApp();
 Page({
     data: {
@@ -98,7 +99,7 @@ Page({
                 });
                 console.log('[Combos] API 响应:', JSON.stringify(response));
                 // 后端返回的是 combo_sets 字段
-                const combos = (response.combo_sets || []).map(combo => (Object.assign(Object.assign({}, combo), { dishes: [], dish_count: 0 })));
+                const combos = (response.combo_sets || []).map(combo => (Object.assign(Object.assign({}, combo), { comboPriceDisplay: (0, util_1.formatPriceNoSymbol)(combo.combo_price || 0), dishes: [], dish_count: 0 })));
                 console.log('[Combos] 加载套餐成功，数量:', combos.length);
                 this.setData({
                     combos,
@@ -122,9 +123,11 @@ Page({
                     page_size: 50
                 });
                 console.log('[Combos] 加载菜品成功，数量:', ((_a = response.dishes) === null || _a === void 0 ? void 0 : _a.length) || 0);
+                // 预处理价格
+                const dishesWithPrice = (response.dishes || []).map(d => (Object.assign(Object.assign({}, d), { priceDisplay: (0, util_1.formatPriceNoSymbol)(d.price || 0) })));
                 this.setData({
-                    allDishes: response.dishes || [],
-                    filteredDishes: response.dishes || []
+                    allDishes: dishesWithPrice,
+                    filteredDishes: dishesWithPrice
                 });
             }
             catch (error) {
@@ -418,6 +421,7 @@ Page({
             dish_id: d.id,
             dish_name: d.name,
             dish_price: d.price,
+            dishPriceDisplay: (0, util_1.formatPriceNoSymbol)(d.price || 0),
             dish_image_url: d.image_url,
             quantity: qtyMap.get(d.id) || 0
         }))

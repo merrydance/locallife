@@ -8,8 +8,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const address_1 = require("../../../api/address");
+const address_1 = __importDefault(require("../../../api/address"));
+const logger_1 = require("../../../utils/logger");
 const error_handler_1 = require("../../../utils/error-handler");
 Page({
     data: {
@@ -33,7 +37,7 @@ Page({
         return __awaiter(this, void 0, void 0, function* () {
             this.setData({ loading: true });
             try {
-                const addresses = yield (0, address_1.getAddressList)();
+                const addresses = yield address_1.default.getAddresses();
                 this.setData({
                     addresses,
                     loading: false
@@ -46,20 +50,38 @@ Page({
         });
     },
     onAddAddress() {
-        // Ensure edit page exists or create one. For now just a toast if not exist
         wx.navigateTo({
-            url: '/pages/user_center/addresses/edit/index', fail: () => {
-                wx.showToast({ title: '编辑页开发中', icon: 'none' });
+            url: '/pages/user_center/addresses/edit/index'
+        });
+    },
+    /**
+     * 从微信导入地址
+     */
+    onImportWechatAddress() {
+        wx.chooseAddress({
+            success: (res) => {
+                // 跳转到编辑页，预填微信地址数据
+                const params = encodeURIComponent(JSON.stringify({
+                    contact_name: res.userName,
+                    contact_phone: res.telNumber,
+                    detail_address: `${res.provinceName}${res.cityName}${res.countyName}${res.detailInfo}`
+                }));
+                wx.navigateTo({
+                    url: `/pages/user_center/addresses/edit/index?wechat_data=${params}`
+                });
+            },
+            fail: (err) => {
+                if (err.errMsg.includes('cancel'))
+                    return;
+                logger_1.logger.error('Choose address failed:', err, 'Addresses');
+                wx.showToast({ title: '获取微信地址失败', icon: 'none' });
             }
         });
     },
     onEditAddress(e) {
         const { id } = e.currentTarget.dataset;
         wx.navigateTo({
-            url: `/pages/user_center/addresses/edit/index?id=${id}`,
-            fail: () => {
-                wx.showToast({ title: '编辑页开发中', icon: 'none' });
-            }
+            url: `/pages/user_center/addresses/edit/index?id=${id}`
         });
     },
     onDeleteAddress(e) {
@@ -70,7 +92,7 @@ Page({
             success: (res) => __awaiter(this, void 0, void 0, function* () {
                 if (res.confirm) {
                     try {
-                        yield (0, address_1.deleteAddress)(id);
+                        yield address_1.default.deleteAddress(id);
                         wx.showToast({ title: '已删除', icon: 'success' });
                         this.loadAddresses();
                     }
@@ -95,13 +117,8 @@ Page({
     onSetDefault(e) {
         return __awaiter(this, void 0, void 0, function* () {
             const { id } = e.currentTarget.dataset;
-            const address = this.data.addresses.find((a) => a.id === id);
-            if (!address)
-                return;
             try {
-                // Convert AddressDTO back to CreateAddressRequest-like object for update
-                // Note: In a real app, maybe a specific set_default endpoint exists or we just update is_default
-                yield (0, address_1.updateAddress)(id, Object.assign(Object.assign({}, address), { is_default: true }));
+                yield address_1.default.setDefaultAddress(id);
                 wx.showToast({ title: '已设为默认', icon: 'success' });
                 this.loadAddresses();
             }

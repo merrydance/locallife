@@ -15,6 +15,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const logger_1 = require("@/utils/logger");
+const util_1 = require("@/utils/util");
 const marketing_management_1 = require("@/api/marketing-management");
 Page({
     data: {
@@ -90,8 +91,8 @@ Page({
                     page_id: 1,
                     page_size: 50
                 });
-                // 添加状态信息
-                const vouchersWithStatus = vouchers.map(v => (Object.assign(Object.assign({}, v), { statusText: marketing_management_1.MarketingAdapter.getVoucherStatusText(v), statusClass: this.getStatusClass(v) })));
+                // 添加状态信息和价格预处理
+                const vouchersWithStatus = vouchers.map(v => (Object.assign(Object.assign({}, v), { statusText: marketing_management_1.MarketingAdapter.getVoucherStatusText(v), statusClass: this.getStatusClass(v), amount_display: (0, util_1.formatPriceNoSymbol)(v.amount || 0), min_order_amount_display: (0, util_1.formatPriceNoSymbol)(v.min_order_amount || 0), valid_from_display: v.valid_from ? v.valid_from.slice(0, 10) : '-', valid_until_display: v.valid_until ? v.valid_until.slice(0, 10) : '-' })));
                 this.setData({ vouchers: vouchersWithStatus });
             }
             catch (error) {
@@ -141,8 +142,8 @@ Page({
             form: {
                 name: voucher.name,
                 code: voucher.code,
-                amount: String(voucher.amount / 100),
-                min_order_amount: String(voucher.min_order_amount / 100),
+                amount: (0, util_1.formatPriceNoSymbol)(voucher.amount || 0),
+                min_order_amount: (0, util_1.formatPriceNoSymbol)(voucher.min_order_amount || 0),
                 total_quantity: String(voucher.total_quantity),
                 valid_from: voucher.valid_from.slice(0, 10),
                 valid_until: voucher.valid_until.slice(0, 10),

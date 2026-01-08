@@ -79,7 +79,7 @@ Page({
             try {
                 this.setData({ loading: true });
                 // 获取用户所有购物车汇总
-                const userCarts = yield CartAPI.getUserCarts();
+                const userCarts = yield CartAPI.getUserCarts('takeout');
                 if (!userCarts.carts || userCarts.carts.length === 0) {
                     this.setData({
                         loading: false,
@@ -101,7 +101,12 @@ Page({
                     if (!merchantCart.merchant_id)
                         continue;
                     try {
-                        const cartDetail = yield CartAPI.getCart(merchantCart.merchant_id);
+                        const cartDetail = yield CartAPI.getCart({
+                            merchant_id: merchantCart.merchant_id,
+                            order_type: merchantCart.order_type,
+                            table_id: merchantCart.table_id || 0,
+                            reservation_id: merchantCart.reservation_id || 0
+                        });
                         const group = this.buildMerchantGroup(merchantCart, cartDetail);
                         merchantGroups.push(group);
                     }

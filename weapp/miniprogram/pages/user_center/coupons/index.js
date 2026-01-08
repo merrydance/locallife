@@ -10,6 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const personal_1 = require("../../../api/personal");
+const util_1 = require("../../../utils/util");
 Page({
     data: {
         activeTab: 'AVAILABLE',
@@ -39,7 +40,9 @@ Page({
                             merchant_name: v.merchant_name || '平台通用',
                             name: v.name,
                             threshold: v.min_order_amount,
+                            thresholdDisplay: (0, util_1.formatPriceNoSymbol)(v.min_order_amount || 0),
                             discount: v.discount_amount,
+                            discountDisplay: (0, util_1.formatPriceNoSymbol)(v.discount_amount || 0),
                             end_date: ((_a = v.end_time) === null || _a === void 0 ? void 0 : _a.split('T')[0]) || '',
                             can_claim: true
                         });
@@ -55,7 +58,9 @@ Page({
                             merchant_name: v.merchant_name || '平台通用',
                             name: v.voucher_name,
                             threshold: v.min_order_amount,
+                            thresholdDisplay: (0, util_1.formatPriceNoSymbol)(v.min_order_amount || 0),
                             discount: v.discount_amount,
+                            discountDisplay: (0, util_1.formatPriceNoSymbol)(v.discount_amount || 0),
                             end_date: ((_a = v.end_time) === null || _a === void 0 ? void 0 : _a.split('T')[0]) || '',
                             status: v.status
                         });

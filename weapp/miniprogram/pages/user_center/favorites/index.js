@@ -15,6 +15,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const personal_1 = require("../../../api/personal");
 const logger_1 = require("../../../utils/logger");
+const util_1 = require("../../../utils/util");
 Page({
     data: {
         favorites: [],
@@ -68,6 +69,7 @@ Page({
                 name: item.dish_name,
                 image: item.dish_image_url || '/assets/default-dish.png',
                 price: item.price,
+                priceDisplay: (0, util_1.formatPriceNoSymbol)(item.price || 0),
                 merchantId: item.merchant_id,
                 merchantName: item.merchant_name,
                 desc: item.merchant_name

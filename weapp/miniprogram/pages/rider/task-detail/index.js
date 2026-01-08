@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const rider_1 = require("../../../api/rider");
 const logger_1 = require("../../../utils/logger");
+const util_1 = require("../../../utils/util");
 Page({
     data: {
         taskId: '',
@@ -59,6 +60,7 @@ Page({
             order_no: dto.id.slice(-8).toUpperCase(),
             status: dto.status,
             income: dto.fee, // Cents
+            incomeDisplay: (0, util_1.formatPriceNoSymbol)(dto.fee || 0),
             time_limit: dto.expect_deliver_time ? dto.expect_deliver_time.slice(11, 16) : '',
             merchant: {
                 name: dto.merchant_name,

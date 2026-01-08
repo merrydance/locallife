@@ -18,6 +18,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const order_management_1 = require("../../../api/order-management");
 const logger_1 = require("../../../utils/logger");
+const util_1 = require("../../../utils/util");
 const dayjs_1 = __importDefault(require("dayjs"));
 const app = getApp();
 // 订单状态映射
@@ -128,7 +129,7 @@ Page({
                         ready: readyRes.length,
                         completed: completedRes.length
                     },
-                    todayRevenue: (revenue / 100).toFixed(2)
+                    todayRevenue: (0, util_1.formatPriceNoSymbol)(revenue)
                 });
             }
             catch (error) {
@@ -184,7 +185,7 @@ Page({
             }
             itemsCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
         }
-        return Object.assign(Object.assign({}, order), { selected: false, status_label: STATUS_LABELS[order.status] || order.status, order_type_label: TYPE_LABELS[order.order_type] || order.order_type, total_display: (order.total_amount / 100).toFixed(2), discount_display: (order.discount_amount / 100).toFixed(2), items_summary: itemsSummary || '无商品信息', items_count: itemsCount, created_date: createdAt.format('MM-DD'), created_time: createdAt.format('HH:mm:ss') });
+        return Object.assign(Object.assign({}, order), { selected: false, status_label: STATUS_LABELS[order.status] || order.status, order_type_label: TYPE_LABELS[order.order_type] || order.order_type, total_display: (0, util_1.formatPriceNoSymbol)(order.total_amount || 0), discount_display: (0, util_1.formatPriceNoSymbol)(order.discount_amount || 0), subtotal_display: (0, util_1.formatPriceNoSymbol)(order.subtotal || 0), delivery_fee_display: (0, util_1.formatPriceNoSymbol)(order.delivery_fee || 0), items: (order.items || []).map(item => (Object.assign(Object.assign({}, item), { subtotal_display: (0, util_1.formatPriceNoSymbol)(item.subtotal || 0) }))), items_summary: itemsSummary || '无商品信息', items_count: itemsCount, created_date: createdAt.format('MM-DD'), created_time: createdAt.format('HH:mm:ss') });
     },
     // 生成页码数组
     generatePageNumbers(current, total) {

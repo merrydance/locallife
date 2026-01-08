@@ -14,6 +14,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const responsive_1 = require("@/utils/responsive");
+const util_1 = require("@/utils/util");
 const platform_dashboard_1 = require("../../../api/platform-dashboard");
 const operator_merchant_management_1 = require("../../../api/operator-merchant-management");
 Page({
@@ -21,6 +22,7 @@ Page({
     data: {
         stats: {
             total_gmv: 0,
+            total_gmv_display: '0.00',
             total_orders: 0,
             active_merchants: 0,
             active_riders: 0
@@ -48,6 +50,7 @@ Page({
                 this.setData({
                     stats: {
                         total_gmv: realtimeData.gmv_24h || 0,
+                        total_gmv_display: (0, util_1.formatPriceNoSymbol)(realtimeData.gmv_24h || 0),
                         total_orders: realtimeData.orders_24h || 0,
                         active_merchants: realtimeData.active_merchants_24h || 0,
                         active_riders: 0 // 后端暂无骑手数据

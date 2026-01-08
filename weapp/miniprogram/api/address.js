@@ -1,7 +1,7 @@
 "use strict";
 /**
  * 地址管理接口
- * 包含地址增删改查及设置默认地址
+ * 对齐后端 user_address.go
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -56,13 +56,13 @@ class AddressService {
     }
     /**
      * 更新地址
-     * PUT /v1/addresses/:id
+     * PATCH /v1/addresses/:id (注意：后端用 PATCH 不是 PUT)
      */
     static updateAddress(id, data) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield (0, request_1.request)({
                 url: `/v1/addresses/${id}`,
-                method: 'PUT',
+                method: 'PATCH', // 后端期望 PATCH
                 data: data
             });
         });
@@ -81,14 +81,24 @@ class AddressService {
     }
     /**
      * 设置默认地址
-     * POST /v1/addresses/:id/default
+     * PATCH /v1/addresses/:id/default (注意：后端用 PATCH 不是 POST)
      */
     static setDefaultAddress(id) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield (0, request_1.request)({
                 url: `/v1/addresses/${id}/default`,
-                method: 'POST'
+                method: 'PATCH' // 后端期望 PATCH
             });
+        });
+    }
+    /**
+     * 获取默认地址
+     * 从地址列表中找到 is_default=true 的地址
+     */
+    static getDefaultAddress() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const addresses = yield this.getAddresses();
+            return addresses.find(a => a.is_default) || addresses[0] || null;
         });
     }
 }
