@@ -766,7 +766,9 @@ func TestCountSearchDishesGlobal(t *testing.T) {
 	}
 
 	// 计数
-	count, err := testStore.CountSearchDishesGlobal(context.Background(), pgtype.Text{String: prefix, Valid: true})
+	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
+		Column1: pgtype.Text{String: prefix, Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)
 }

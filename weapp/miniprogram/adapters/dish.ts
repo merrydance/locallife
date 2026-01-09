@@ -62,7 +62,8 @@ export class DishAdapter {
       member_price: dto.member_price,
       is_available: dto.is_available,
       repurchaseRate: dto.repurchase_rate,
-      repurchaseRateDisplay: DishAdapter.formatRepurchaseRate(dto.repurchase_rate)
+      repurchaseRateDisplay: DishAdapter.formatRepurchaseRate(dto.repurchase_rate),
+      estimated_delivery_time: dto.estimated_delivery_time
     }
   }
 

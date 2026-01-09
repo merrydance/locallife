@@ -28,7 +28,7 @@
       </view>
       <view class="delivery-row">
         <text class="distance">📍{{dish.distance_meters}}m</text>
-        <text class="delivery-time">🕐预计{{dish.delivery_time_minutes}}分钟送达</text>
+        <text class="delivery-time">🕐预计{{dish.estimated_delivery_time}}分钟送达</text>
       </view>
     </view>
 

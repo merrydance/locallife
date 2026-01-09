@@ -146,12 +146,21 @@ WHERE
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
+  AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
+  AND ($2::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $2
+  ))
 `
 
+type CountSearchDishesGlobalParams struct {
+	Column1 pgtype.Text `json:"column_1"`
+	TagID   pgtype.Int8 `json:"tag_id"`
+}
+
 // 统计全局菜品搜索结果总数
-func (q *Queries) CountSearchDishesGlobal(ctx context.Context, dollar_1 pgtype.Text) (int64, error) {
-	row := q.db.QueryRow(ctx, countSearchDishesGlobal, dollar_1)
+func (q *Queries) CountSearchDishesGlobal(ctx context.Context, arg CountSearchDishesGlobalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchDishesGlobal, arg.Column1, arg.TagID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1746,7 +1755,11 @@ WHERE
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
+  AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
+  AND ($6::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $6
+  ))
 ORDER BY 
     m.is_open DESC,
     (d.monthly_sales * (1 + d.repurchase_rate)) DESC,
@@ -1762,6 +1775,7 @@ type SearchDishesGlobalParams struct {
 	Offset  int32       `json:"offset"`
 	Column4 float64     `json:"column_4"`
 	Column5 float64     `json:"column_5"`
+	TagID   pgtype.Int8 `json:"tag_id"`
 }
 
 type SearchDishesGlobalRow struct {
@@ -1797,6 +1811,7 @@ func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobal
 		arg.Offset,
 		arg.Column4,
 		arg.Column5,
+		arg.TagID,
 	)
 	if err != nil {
 		return nil, err

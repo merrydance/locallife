@@ -159,7 +159,11 @@ WHERE
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
+  AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
+  AND (sqlc.narg('tag_id')::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = sqlc.narg('tag_id')
+  ))
 ORDER BY 
     m.is_open DESC,
     (d.monthly_sales * (1 + d.repurchase_rate)) DESC,
@@ -188,7 +192,11 @@ WHERE
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
-  AND d.name ILIKE '%' || $1 || '%';
+  AND d.is_online = true
+  AND d.name ILIKE '%' || $1 || '%'
+  AND (sqlc.narg('tag_id')::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = sqlc.narg('tag_id')
+  ));
 
 -- name: SearchDishIDsGlobal :many
 -- 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）

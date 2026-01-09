@@ -29,6 +29,7 @@ export interface Dish {
     prepare_time?: number  // 制作时间
     repurchaseRate?: number // 复购率
     repurchaseRateDisplay?: string // 复购率展示
+    estimated_delivery_time?: number // 预估配送时间（秒）
 }
 
 /**

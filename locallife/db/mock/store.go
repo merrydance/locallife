@@ -1701,18 +1701,18 @@ func (mr *MockStoreMockRecorder) CountSearchDishesByName(ctx, arg any) *gomock.C
 }
 
 // CountSearchDishesGlobal mocks base method.
-func (m *MockStore) CountSearchDishesGlobal(ctx context.Context, dollar_1 pgtype.Text) (int64, error) {
+func (m *MockStore) CountSearchDishesGlobal(ctx context.Context, arg db.CountSearchDishesGlobalParams) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CountSearchDishesGlobal", ctx, dollar_1)
+	ret := m.ctrl.Call(m, "CountSearchDishesGlobal", ctx, arg)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CountSearchDishesGlobal indicates an expected call of CountSearchDishesGlobal.
-func (mr *MockStoreMockRecorder) CountSearchDishesGlobal(ctx, dollar_1 any) *gomock.Call {
+func (mr *MockStoreMockRecorder) CountSearchDishesGlobal(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountSearchDishesGlobal", reflect.TypeOf((*MockStore)(nil).CountSearchDishesGlobal), ctx, dollar_1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountSearchDishesGlobal", reflect.TypeOf((*MockStore)(nil).CountSearchDishesGlobal), ctx, arg)
 }
 
 // CountSearchMerchants mocks base method.

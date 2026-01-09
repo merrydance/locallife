@@ -1012,6 +1012,7 @@ export interface SearchDishItem {
     merchant_is_open?: boolean
     distance?: number
     estimated_delivery_fee?: number // Added field
+    estimated_delivery_time?: number // Added field (seconds)
 }
 
 /**
@@ -1074,6 +1075,7 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
 
     // 仅当参数存在时才添加，避免传递 undefined 导致后端验证失败
     if (params?.merchant_id) searchParams.merchant_id = params.merchant_id
+    if (params?.tag_id) searchParams.tag_id = params.tag_id // Added
     if (params?.user_latitude) searchParams.user_latitude = params.user_latitude
     if (params?.user_longitude) searchParams.user_longitude = params.user_longitude
 
@@ -1098,6 +1100,7 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
             merchant_is_open: item.merchant_is_open ?? true,
             distance: item.distance || 0,
             estimated_delivery_fee: item.estimated_delivery_fee || 0,
+            estimated_delivery_time: item.estimated_delivery_time || 0,
             tags: []
         } as unknown as DishSummary)),
 

@@ -179,7 +179,7 @@ type Querier interface {
 	// 统计商户内菜品搜索结果总数
 	CountSearchDishesByName(ctx context.Context, arg CountSearchDishesByNameParams) (int64, error)
 	// 统计全局菜品搜索结果总数
-	CountSearchDishesGlobal(ctx context.Context, dollar_1 pgtype.Text) (int64, error)
+	CountSearchDishesGlobal(ctx context.Context, arg CountSearchDishesGlobalParams) (int64, error)
 	CountSearchMerchants(ctx context.Context, dollar_1 pgtype.Text) (int64, error)
 	// 统计搜索包间结果数量
 	CountSearchRooms(ctx context.Context, arg CountSearchRoomsParams) (int64, error)

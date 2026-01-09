@@ -9,10 +9,20 @@ export class Navigation {
   /**
      * 跳转到菜品详情页
      */
-  static toDishDetail(dishId: string) {
-    wx.navigateTo({
-      url: `/pages/takeout/dish-detail/index?id=${dishId}`
-    })
+  static toDishDetail(dishId: string, extraInfo?: {
+    shopName?: string
+    monthSales?: number
+    distance?: number
+    estimatedDeliveryTime?: number
+  }) {
+    let url = `/pages/takeout/dish-detail/index?id=${dishId}`
+    if (extraInfo) {
+      if (extraInfo.shopName) url += `&shop_name=${encodeURIComponent(extraInfo.shopName)}`
+      if (extraInfo.monthSales) url += `&month_sales=${extraInfo.monthSales}`
+      if (extraInfo.distance) url += `&distance=${extraInfo.distance}`
+      if (extraInfo.estimatedDeliveryTime) url += `&estimated_delivery_time=${extraInfo.estimatedDeliveryTime}`
+    }
+    wx.navigateTo({ url })
   }
 
   /**

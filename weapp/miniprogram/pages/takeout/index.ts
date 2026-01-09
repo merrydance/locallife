@@ -714,7 +714,19 @@ Page({
      */
   onDishClick(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.detail
-    Navigation.toDishDetail(id)
+    // 查找对应菜品
+    const dish = this.data.dishes.find((d: any) => d.id == id) as any
+
+    if (dish) {
+      Navigation.toDishDetail(id, {
+        shopName: dish.shop_name || dish.merchant_name,
+        monthSales: dish.month_sales,
+        distance: dish.distance,
+        estimatedDeliveryTime: Math.ceil((dish.estimated_delivery_time || 0) / 60) // 转换为分钟传递
+      })
+    } else {
+      Navigation.toDishDetail(id)
+    }
   },
 
   /**
