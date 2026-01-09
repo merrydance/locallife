@@ -270,3 +270,79 @@ WHERE
   AND cs.is_online = true
   AND cs.name ILIKE '%' || $1 || '%'
 ORDER BY cs.created_at DESC;
+
+-- name: SearchCombosGlobal :many
+-- Consumer-Facing Global Combo Search
+-- Returns enriched data for the home feed or search page.
+-- Strict filters: Online combos only, Active merchants only.
+-- Sorting: Open Merchants First > Sales (Weighted) > Distance.
+SELECT 
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    COALESCE(
+        NULLIF(cs.image_url, ''),
+        (SELECT d.image_url 
+         FROM combo_dishes cd 
+         JOIN dishes d ON cd.dish_id = d.id 
+         WHERE cd.combo_id = cs.id 
+           AND d.image_url IS NOT NULL 
+           AND d.image_url != ''
+         ORDER BY cd.id ASC 
+         LIMIT 1)
+    )::text AS image_url,
+    cs.original_price,
+    cs.combo_price,
+    cs.is_online,
+    m.name AS merchant_name,
+    m.logo_url AS merchant_logo,
+    m.latitude AS merchant_latitude,
+    m.longitude AS merchant_longitude,
+    m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
+    -- Calculate Sales using Order Items (Last 30 days) for Relevance
+    COALESCE(
+        (SELECT SUM(oi.quantity)
+         FROM order_items oi 
+         JOIN orders o ON o.id = oi.order_id 
+         WHERE oi.combo_id = cs.id 
+           AND o.status IN ('delivered', 'completed')
+           AND o.created_at >= NOW() - INTERVAL '30 days'
+        ), 0
+    )::int AS monthly_sales,
+    -- Distance Calculation
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    )
+ORDER BY 
+    m.is_open DESC, 
+    monthly_sales DESC,
+    distance ASC
+LIMIT $2 OFFSET $3;
+
+-- name: CountSearchCombosGlobal :one
+-- Count for pagination
+SELECT COUNT(*)
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    );

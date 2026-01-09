@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
 
 // =============================================================================
@@ -42,8 +43,8 @@ type searchDishResponse struct {
 	Name           string  `json:"name"`
 	Description    string  `json:"description"`
 	ImageURL       string  `json:"image_url"`
-	Price          float64 `json:"price"`
-	MemberPrice    float64 `json:"member_price,omitempty"`
+	Price          int64   `json:"price"`                  // Cents
+	MemberPrice    int64   `json:"member_price,omitempty"` // Cents
 	IsAvailable    bool    `json:"is_available"`
 	IsOnline       bool    `json:"is_online"`
 	SortOrder      int16   `json:"sort_order"`
@@ -55,6 +56,7 @@ type searchDishResponse struct {
 	MerchantIsOpen        *bool  `json:"merchant_is_open,omitempty"`
 	Distance              int    `json:"distance"`                // Meters
 	EstimatedDeliveryTime int    `json:"estimated_delivery_time"` // Seconds
+	EstimatedDeliveryFee  int    `json:"estimated_delivery_fee"`  // Cents
 }
 
 type searchMerchantResponse struct {
@@ -71,6 +73,24 @@ type searchMerchantResponse struct {
 	TotalOrders          int32   `json:"total_orders,omitempty"`           // 总销量
 	Distance             *int    `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
 	EstimatedDeliveryFee *int64  `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
+}
+
+type searchComboResponse struct {
+	ID                    int64  `json:"id"`
+	MerchantID            int64  `json:"merchant_id"`
+	Name                  string `json:"name"`
+	Description           string `json:"description"`
+	ImageURL              string `json:"image_url"`
+	OriginalPrice         int64  `json:"original_price"`  // Cents
+	ComboPrice            int64  `json:"combo_price"`     // Cents
+	SavingsPercent        int    `json:"savings_percent"` // 节省百分比
+	MonthlySales          int32  `json:"monthly_sales"`
+	MerchantName          string `json:"merchant_name"`
+	MerchantLogo          string `json:"merchant_logo"`
+	MerchantIsOpen        bool   `json:"merchant_is_open"`
+	Distance              int    `json:"distance"`
+	EstimatedDeliveryFee  *int64 `json:"estimated_delivery_fee,omitempty"`
+	EstimatedDeliveryTime int    `json:"estimated_delivery_time"`
 }
 
 // searchDishes godoc
@@ -151,6 +171,26 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	response := make([]searchDishResponse, len(dishes))
 	for i, dish := range dishes {
 		response[i] = newSearchDishResponseFromGlobalRow(dish)
+
+		// Refatored Delivery Fee: Use robust internal calculator
+		// dish.MerchantRegionID is now available from SearchDishesGlobal
+		feeResult, err := server.calculateDeliveryFeeInternal(ctx, dish.MerchantRegionID, dish.MerchantID, int32(dish.Distance), 0)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("region_id", dish.MerchantRegionID).
+				Int64("merchant_id", dish.MerchantID).
+				Msg("calculateDeliveryFeeInternal failed in searchDishes")
+		} else if feeResult != nil && !feeResult.DeliverySuspended {
+			response[i].EstimatedDeliveryFee = int(feeResult.FinalFee)
+
+			// DEBUG LOG (Updated)
+			log.Info().
+				Int64("dish_id", dish.ID).
+				Int64("region_id", dish.MerchantRegionID).
+				Float64("distance", dish.Distance).
+				Int64("final_fee", feeResult.FinalFee).
+				Msg("searchDishes fee calculation details")
+		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -228,6 +268,126 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	})
 }
 
+// searchCombos godoc
+// @Summary 搜索套餐
+// @Description 搜索套餐，消费者端使用，只返回上架且商户状态正常的套餐
+// @Tags Search
+// @Accept json
+// @Produce json
+// @Param keyword query string false "搜索关键词"
+// @Param page_id query int true "页码" minimum(1)
+// @Param page_size query int true "每页数量" minimum(1) maximum(50)
+// @Param user_latitude query number false "用户当前纬度"
+// @Param user_longitude query number false "用户当前经度"
+// @Success 200 {object} map[string]interface{} "搜索结果"
+// @Failure 400 {object} map[string]string "请求参数错误"
+// @Failure 500 {object} map[string]string "服务器内部错误"
+// @Router /v1/search/combos [get]
+func (server *Server) searchCombos(ctx *gin.Context) {
+	var req searchDishesRequest // Reuse same request struct as params are identical
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	offset := (req.PageID - 1) * req.PageSize
+
+	// 准备位置参数
+	var userLat, userLng float64
+	if req.UserLatitude != nil && req.UserLongitude != nil {
+		userLat = *req.UserLatitude
+		userLng = *req.UserLongitude
+	}
+
+	// 执行搜索
+	combos, err := server.store.SearchCombosGlobal(ctx, db.SearchCombosGlobalParams{
+		Column1: req.Keyword,
+		Limit:   req.PageSize,
+		Offset:  offset,
+		Column4: userLat,
+		Column5: userLng,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 获取总数
+	total, err := server.store.CountSearchCombosGlobal(ctx, req.Keyword)
+	if err != nil {
+		total = int64(len(combos))
+	}
+
+	response := make([]searchComboResponse, len(combos))
+	for i, row := range combos {
+		// Calculate Savings (using int64 cents)
+		originalPrice := int64(row.OriginalPrice)
+		comboPrice := int64(row.ComboPrice)
+		savings := 0
+		if originalPrice > comboPrice {
+			savings = int((float64(originalPrice) - float64(comboPrice)) / float64(originalPrice) * 100)
+		}
+
+		// Delivery Fee & Time Calculation
+		var estimatedFee *int64
+		deliveryTime := 1800 // Default 30 mins
+		if row.Distance > 0 {
+			// Time: 15 mins prep + travel (12km/h)
+			travelTime := int(row.Distance / 3.33)
+			deliveryTime = 900 + travelTime
+
+			// Fee: Use standard internal calculator logic from recommendation.go
+			feeResult, err := server.calculateDeliveryFeeInternal(ctx, row.MerchantRegionID, row.MerchantID, int32(row.Distance), 0)
+			if err != nil {
+				// Log error but don't fail the request. Return nil fee.
+				log.Error().Err(err).
+					Int64("region_id", row.MerchantRegionID).
+					Int64("merchant_id", row.MerchantID).
+					Float64("distance", row.Distance).
+					Msg("calculateDeliveryFeeInternal failed in searchCombos")
+			} else if feeResult != nil && !feeResult.DeliverySuspended {
+				log.Info().
+					Int64("merchant_id", row.MerchantID).
+					Int64("region_id", row.MerchantRegionID).
+					Int64("final_fee", feeResult.FinalFee).
+					Msg("Delivery fee calculated successfully") // DEBUG LOG
+				estimatedFee = &feeResult.FinalFee
+			} else {
+				log.Warn().
+					Int64("merchant_id", row.MerchantID).
+					Bool("fee_result_nil", feeResult == nil).
+					Interface("fee_result", feeResult).
+					Msg("Delivery fee calculation returned no valid fee")
+			}
+		}
+
+		response[i] = searchComboResponse{
+			ID:                    row.ID,
+			MerchantID:            row.MerchantID,
+			Name:                  row.Name,
+			Description:           row.Description.String,
+			ImageURL:              normalizeUploadURLForClient(row.ImageUrl),
+			OriginalPrice:         originalPrice,
+			ComboPrice:            comboPrice,
+			SavingsPercent:        savings,
+			MonthlySales:          row.MonthlySales,
+			MerchantName:          row.MerchantName,
+			MerchantLogo:          normalizeUploadURLForClient(row.MerchantLogo.String),
+			MerchantIsOpen:        row.MerchantIsOpen,
+			Distance:              int(row.Distance),
+			EstimatedDeliveryFee:  estimatedFee,
+			EstimatedDeliveryTime: deliveryTime,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"combos":    response,
+		"total":     total,
+		"page_id":   req.PageID,
+		"page_size": req.PageSize,
+	})
+}
+
 // Helper for simple Dish (Merchant Search)
 func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 	resp := searchDishResponse{
@@ -236,7 +396,7 @@ func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 		Name:         dish.Name,
 		Description:  dish.Description.String,
 		ImageURL:     normalizeUploadURLForClient(dish.ImageUrl.String),
-		Price:        float64(dish.Price) / 100,
+		Price:        int64(dish.Price),
 		IsAvailable:  dish.IsAvailable,
 		IsOnline:     dish.IsOnline,
 		SortOrder:    dish.SortOrder,
@@ -250,7 +410,7 @@ func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 		resp.CategoryID = &dish.CategoryID.Int64
 	}
 	if dish.MemberPrice.Valid {
-		resp.MemberPrice = float64(dish.MemberPrice.Int64) / 100
+		resp.MemberPrice = int64(dish.MemberPrice.Int64)
 	}
 	// Merchant info is empty for merchant-specific search
 	return resp
@@ -272,18 +432,27 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow) searchDish
 		Name:         row.Name,
 		Description:  row.Description.String,
 		ImageURL:     normalizeUploadURLForClient(row.ImageUrl.String),
-		Price:        float64(row.Price) / 100,
+		Price:        int64(row.Price),
 		IsAvailable:  row.IsAvailable,
 		IsOnline:     row.IsOnline,
 		SortOrder:    row.SortOrder,
 		MonthlySales: row.MonthlySales,
 		// Enriched Fields
-		MerchantName:          row.MerchantName,
-		MerchantLogo:          normalizeUploadURLForClient(row.MerchantLogo.String),
-		MerchantIsOpen:        &row.MerchantIsOpen,
-		Distance:              int(row.Distance),
+		MerchantName:   row.MerchantName,
+		MerchantLogo:   normalizeUploadURLForClient(row.MerchantLogo.String),
+		MerchantIsOpen: &row.MerchantIsOpen,
+		Distance:       int(row.Distance),
+
 		EstimatedDeliveryTime: deliveryTimeSeconds,
+		EstimatedDeliveryFee:  int(300 + (row.Distance / 1000 * 100)), // Simple fee: 3 RMB base + 1 RMB/km
 	}
+
+	// DEBUG LOG for searchDishes to trace fee issues
+	log.Info().
+		Int64("dish_id", row.ID).
+		Float64("distance", row.Distance).
+		Int("calculated_fee", resp.EstimatedDeliveryFee).
+		Msg("searchDishes fee calculation details")
 
 	if row.RepurchaseRate.Valid {
 		val, _ := row.RepurchaseRate.Float64Value()
@@ -293,30 +462,7 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow) searchDish
 		resp.CategoryID = &row.CategoryID.Int64
 	}
 	if row.MemberPrice.Valid {
-		resp.MemberPrice = float64(row.MemberPrice.Int64) / 100
-	}
-	return resp
-}
-
-func newSearchMerchantResponse(merchant db.Merchant) searchMerchantResponse {
-	resp := searchMerchantResponse{
-		ID:          merchant.ID,
-		Name:        merchant.Name,
-		Description: merchant.Description.String,
-		Address:     merchant.Address,
-		Phone:       merchant.Phone,
-		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
-		Status:      merchant.Status,
-		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
-	}
-	// 转换 pgtype.Numeric 到 float64
-	if merchant.Latitude.Valid {
-		lat, _ := merchant.Latitude.Float64Value()
-		resp.Latitude = lat.Float64
-	}
-	if merchant.Longitude.Valid {
-		lng, _ := merchant.Longitude.Float64Value()
-		resp.Longitude = lng.Float64
+		resp.MemberPrice = int64(row.MemberPrice.Int64)
 	}
 	return resp
 }

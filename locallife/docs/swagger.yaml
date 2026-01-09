@@ -597,10 +597,19 @@ definitions:
         description: 商户ID (必填)
         minimum: 1
         type: integer
+      order_type:
+        description: 订单类型 (选填，默认为 takeout)
+        type: string
       quantity:
         description: 数量 (必填，范围：1-99)
         maximum: 99
         minimum: 1
+        type: integer
+      reservation_id:
+        description: 预约ID (预约时必填)
+        type: integer
+      table_id:
+        description: 桌台ID (堂食时必填)
         type: integer
     required:
     - merchant_id
@@ -656,6 +665,21 @@ definitions:
     required:
     - merchant_id
     type: object
+  api.addStaffRequest:
+    properties:
+      role:
+        enum:
+        - manager
+        - chef
+        - cashier
+        type: string
+      user_id:
+        minimum: 1
+        type: integer
+    required:
+    - role
+    - user_id
+    type: object
   api.addTableImageRequest:
     properties:
       image_url:
@@ -678,6 +702,19 @@ definitions:
         type: integer
     required:
     - tag_id
+    type: object
+  api.adjustMemberBalanceBody:
+    properties:
+      amount:
+        description: 正数增加，负数扣减
+        type: integer
+      notes:
+        maxLength: 200
+        minLength: 1
+        type: string
+    required:
+    - amount
+    - notes
     type: object
   api.appealResponse:
     properties:
@@ -758,6 +795,28 @@ definitions:
     - dish_ids
     - is_online
     type: object
+  api.bindMerchantRequest:
+    properties:
+      invite_code:
+        type: string
+    required:
+    - invite_code
+    type: object
+  api.bossMerchantResponse:
+    properties:
+      address:
+        type: string
+      id:
+        type: integer
+      logo_url:
+        type: string
+      name:
+        type: string
+      phone:
+        type: string
+      status:
+        type: string
+    type: object
   api.browseHistoryItem:
     properties:
       id:
@@ -830,9 +889,24 @@ definitions:
         description: 配送地址ID (选填，用于计算配送费)
         minimum: 1
         type: integer
+      latitude:
+        description: 用户当前位置纬度 (选填，当无地址时作为fallback)
+        type: number
+      longitude:
+        description: 用户当前位置经度 (选填，当无地址时作为fallback)
+        type: number
       merchant_id:
         description: 商户ID (必填)
         minimum: 1
+        type: integer
+      order_type:
+        description: 订单类型
+        type: string
+      reservation_id:
+        description: 预约ID
+        type: integer
+      table_id:
+        description: 桌台ID
         type: integer
       voucher_id:
         description: 优惠券ID (选填，用于计算优惠)
@@ -933,7 +1007,13 @@ definitions:
         type: array
       merchant_id:
         type: integer
+      order_type:
+        type: string
+      reservation_id:
+        type: integer
       subtotal:
+        type: integer
+      table_id:
         type: integer
       total_count:
         type: integer
@@ -988,6 +1068,22 @@ definitions:
       message:
         type: string
     type: object
+  api.claimBossRequest:
+    properties:
+      bind_code:
+        type: string
+    required:
+    - bind_code
+    type: object
+  api.claimBossResponse:
+    properties:
+      merchant_id:
+        type: integer
+      merchant_name:
+        type: string
+      message:
+        type: string
+    type: object
   api.claimResponse:
     properties:
       approval_type:
@@ -1028,6 +1124,15 @@ definitions:
       merchant_id:
         description: 商户ID (必填)
         minimum: 1
+        type: integer
+      order_type:
+        description: 订单类型
+        type: string
+      reservation_id:
+        description: 预约ID
+        type: integer
+      table_id:
+        description: 桌台ID
         type: integer
     required:
     - merchant_id
@@ -1092,6 +1197,29 @@ definitions:
         description: 商品合计（分）
         type: integer
     type: object
+  api.comboDishInput:
+    properties:
+      dish_id:
+        description: 菜品ID
+        minimum: 1
+        type: integer
+      quantity:
+        description: 数量，1-99
+        maximum: 99
+        minimum: 1
+        type: integer
+    required:
+    - dish_id
+    type: object
+  api.comboDishItem:
+    properties:
+      dish_id:
+        type: integer
+      dish_name:
+        type: string
+      quantity:
+        type: integer
+    type: object
   api.comboSetResponse:
     properties:
       combo_price:
@@ -1143,6 +1271,9 @@ definitions:
         type: string
       merchant_id:
         type: integer
+      merchant_is_open:
+        description: 商户是否营业
+        type: boolean
       merchant_latitude:
         type: number
       merchant_logo:
@@ -1182,9 +1313,15 @@ definitions:
         maxLength: 500
         type: string
       dish_ids:
-        description: 可选：创建时关联菜品，最多50个
+        description: 向后兼容：只传菜品ID（数量默认为1）
         items:
           type: integer
+        maxItems: 50
+        type: array
+      dishes:
+        description: 推荐：传菜品ID和数量
+        items:
+          $ref: '#/definitions/api.comboDishInput'
         maxItems: 50
         type: array
       is_online:
@@ -1199,6 +1336,12 @@ definitions:
         description: 原价（分），可选
         minimum: 0
         type: integer
+      tag_ids:
+        description: 属性标签ID列表（最多10个）
+        items:
+          type: integer
+        maxItems: 10
+        type: array
     required:
     - combo_price
     - name
@@ -1289,6 +1432,12 @@ definitions:
       category_id:
         minimum: 1
         type: integer
+      customization_groups:
+        description: 定制选项分组
+        items:
+          $ref: '#/definitions/api.customizationGroupInput'
+        maxItems: 20
+        type: array
       description:
         maxLength: 500
         type: string
@@ -1702,6 +1851,11 @@ definitions:
         - table
         - room
         type: string
+      tag_ids:
+        description: 标签ID列表
+        items:
+          type: integer
+        type: array
     required:
     - capacity
     - table_no
@@ -1757,8 +1911,8 @@ definitions:
         minimum: 1
         type: integer
       code:
+        description: 可选，若未提供则自动生成
         maxLength: 50
-        minLength: 1
         type: string
       description:
         maxLength: 500
@@ -1783,7 +1937,6 @@ definitions:
         type: string
     required:
     - amount
-    - code
     - name
     - total_quantity
     - valid_from
@@ -2166,10 +2319,16 @@ definitions:
     type: object
   api.dishInComboResponse:
     properties:
-      id:
+      dish_id:
         type: integer
-      name:
+      dish_image_url:
         type: string
+      dish_name:
+        type: string
+      dish_price:
+        type: integer
+      quantity:
+        type: integer
     type: object
   api.dishResponse:
     properties:
@@ -2232,6 +2391,9 @@ definitions:
       estimated_delivery_fee:
         description: 预估配送费（分）
         type: integer
+      estimated_delivery_time:
+        description: 预估配送时间（秒）
+        type: integer
       id:
         type: integer
       image_url:
@@ -2243,6 +2405,9 @@ definitions:
         type: integer
       merchant_id:
         type: integer
+      merchant_is_open:
+        description: 商户是否营业
+        type: boolean
       merchant_latitude:
         type: number
       merchant_logo:
@@ -2366,6 +2531,11 @@ definitions:
         type: string
       table_no:
         type: string
+      tags:
+        description: 包间标签
+        items:
+          type: string
+        type: array
     type: object
   api.exploreRoomsResponse:
     properties:
@@ -2426,13 +2596,27 @@ definitions:
         description: 总服务费（平台+运营商）
         type: integer
     type: object
+  api.generateBossBindCodeResponse:
+    properties:
+      bind_code:
+        type: string
+      expires_at:
+        type: string
+    type: object
+  api.generateInviteCodeResponse:
+    properties:
+      expires_at:
+        type: string
+      invite_code:
+        type: string
+    type: object
   api.generateTableQRCodeResponse:
     properties:
       merchant_id:
         example: 1
         type: integer
       qr_code_url:
-        example: https://api.example.com/v1/scan/table?merchant_id=1&table_no=T01
+        example: https://api.example.com/uploads/qrcodes/m1_t123.png
         type: string
       table_no:
         example: T01
@@ -2747,6 +2931,13 @@ definitions:
           $ref: '#/definitions/api.tableResponse'
         type: array
     type: object
+  api.listTagsResponse:
+    properties:
+      tags:
+        items:
+          $ref: '#/definitions/api.tagDetailResponse'
+        type: array
+    type: object
   api.locationPoint:
     properties:
       accuracy:
@@ -3004,6 +3195,23 @@ definitions:
         description: 状态
         type: string
     type: object
+  api.merchantBossResponse:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: integer
+      phone:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: integer
+    type: object
   api.merchantCartResponse:
     properties:
       all_available:
@@ -3024,9 +3232,57 @@ definitions:
       merchant_name:
         description: 商户名称
         type: string
+      order_type:
+        description: 订单类型
+        type: string
+      reservation_id:
+        description: 预约ID
+        type: integer
       subtotal:
         description: 商品小计（分）
         type: integer
+      table_id:
+        description: 桌台ID
+        type: integer
+    type: object
+  api.merchantCreateReservationRequest:
+    properties:
+      contact_name:
+        maxLength: 50
+        type: string
+      contact_phone:
+        maxLength: 20
+        type: string
+      date:
+        description: YYYY-MM-DD
+        type: string
+      guest_count:
+        maximum: 50
+        minimum: 1
+        type: integer
+      notes:
+        maxLength: 500
+        type: string
+      source:
+        description: 默认 merchant
+        enum:
+        - phone
+        - walkin
+        - merchant
+        type: string
+      table_id:
+        minimum: 1
+        type: integer
+      time:
+        description: HH:MM
+        type: string
+    required:
+    - contact_name
+    - contact_phone
+    - date
+    - guest_count
+    - table_id
+    - time
     type: object
   api.merchantDetailResponse:
     properties:
@@ -3094,6 +3350,52 @@ definitions:
         type: integer
       status:
         type: string
+    type: object
+  api.merchantMemberDetailResponse:
+    properties:
+      avatar_url:
+        type: string
+      balance:
+        type: integer
+      created_at:
+        type: string
+      full_name:
+        type: string
+      membership_id:
+        type: integer
+      phone:
+        type: string
+      total_consumed:
+        type: integer
+      total_recharged:
+        type: integer
+      transactions:
+        items:
+          $ref: '#/definitions/api.transactionResponse'
+        type: array
+      user_id:
+        type: integer
+    type: object
+  api.merchantMemberResponse:
+    properties:
+      avatar_url:
+        type: string
+      balance:
+        type: integer
+      created_at:
+        type: string
+      full_name:
+        type: string
+      membership_id:
+        type: integer
+      phone:
+        type: string
+      total_consumed:
+        type: integer
+      total_recharged:
+        type: integer
+      user_id:
+        type: integer
     type: object
   api.merchantOrderSourceStatsRow:
     properties:
@@ -3206,6 +3508,8 @@ definitions:
         type: string
       updated_at:
         type: string
+      version:
+        type: integer
     type: object
   api.merchantStatusResponse:
     properties:
@@ -3230,6 +3534,9 @@ definitions:
         type: integer
       id:
         type: integer
+      is_open:
+        description: 是否营业
+        type: boolean
       latitude:
         type: number
       logo_url:
@@ -3730,6 +4037,18 @@ definitions:
         description: 创建时间
         example: "2025-12-01T12:20:00Z"
         type: string
+      delivery_address:
+        description: 配送地址
+        example: 北京市朝阳区某小区1号楼
+        type: string
+      delivery_contact_name:
+        description: 配送联系人
+        example: 张三
+        type: string
+      delivery_contact_phone:
+        description: 配送联系电话
+        example: "13800138000"
+        type: string
       delivery_distance:
         description: 配送距离 (单位：米)
         example: 2500
@@ -3762,6 +4081,10 @@ definitions:
       merchant_name:
         description: 商户名称
         example: 张三餐厅
+        type: string
+      merchant_phone:
+        description: 商户电话
+        example: "13800138000"
         type: string
       notes:
         description: 订单备注
@@ -4004,6 +4327,209 @@ definitions:
         description: 优惠金额或比例
         type: integer
     type: object
+  api.publicComboItem:
+    properties:
+      combo_price:
+        type: integer
+      description:
+        type: string
+      dishes:
+        items:
+          $ref: '#/definitions/api.comboDishItem'
+        type: array
+      id:
+        type: integer
+      image_url:
+        type: string
+      name:
+        type: string
+      original_price:
+        type: integer
+    type: object
+  api.publicDeliveryPromotion:
+    properties:
+      discount_amount:
+        type: integer
+      id:
+        type: integer
+      min_order_amount:
+        type: integer
+      name:
+        type: string
+    type: object
+  api.publicDiscountRule:
+    properties:
+      discount_amount:
+        type: integer
+      id:
+        type: integer
+      min_order_amount:
+        type: integer
+      name:
+        type: string
+    type: object
+  api.publicDishCategoryItem:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      sort_order:
+        type: integer
+    type: object
+  api.publicDishItem:
+    properties:
+      category_id:
+        type: integer
+      category_name:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      image_url:
+        type: string
+      member_price:
+        type: integer
+      monthly_sales:
+        type: integer
+      name:
+        type: string
+      prepare_time:
+        type: integer
+      price:
+        type: integer
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  api.publicMerchantCombosResponse:
+    properties:
+      combos:
+        items:
+          $ref: '#/definitions/api.publicComboItem'
+        type: array
+    type: object
+  api.publicMerchantDetailResponse:
+    properties:
+      address:
+        type: string
+      avg_prep_minutes:
+        description: 平均出餐时间（分钟）
+        type: integer
+      business_hours:
+        description: 营业时间
+        items:
+          $ref: '#/definitions/api.businessHourItem'
+        type: array
+      business_license_image_url:
+        description: 营业执照
+        type: string
+      cover_image:
+        description: 门头照/招牌图
+        type: string
+      delivery_promotions:
+        description: 配送费优惠
+        items:
+          $ref: '#/definitions/api.publicDeliveryPromotion'
+        type: array
+      description:
+        type: string
+      discount_rules:
+        description: 满减规则
+        items:
+          $ref: '#/definitions/api.publicDiscountRule'
+        type: array
+      food_permit_url:
+        description: 食品经营许可证
+        type: string
+      id:
+        type: integer
+      is_open:
+        type: boolean
+      latitude:
+        type: number
+      logo_url:
+        type: string
+      longitude:
+        type: number
+      monthly_sales:
+        description: 近30天订单量
+        type: integer
+      name:
+        type: string
+      phone:
+        type: string
+      region_id:
+        type: integer
+      tags:
+        description: 商户标签（如：快餐、川菜）
+        items:
+          type: string
+        type: array
+      trust_score:
+        description: 信誉分
+        type: integer
+      vouchers:
+        description: 代金券
+        items:
+          $ref: '#/definitions/api.publicVoucher'
+        type: array
+    type: object
+  api.publicMerchantDishesResponse:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/api.publicDishCategoryItem'
+        type: array
+      dishes:
+        items:
+          $ref: '#/definitions/api.publicDishItem'
+        type: array
+    type: object
+  api.publicMerchantRoomsResponse:
+    properties:
+      rooms:
+        items:
+          $ref: '#/definitions/api.publicRoomItem'
+        type: array
+    type: object
+  api.publicRoomItem:
+    properties:
+      capacity:
+        type: integer
+      description:
+        type: string
+      id:
+        type: integer
+      minimum_spend:
+        type: integer
+      monthly_sales:
+        type: integer
+      name:
+        type: string
+      primary_image:
+        description: 统一字段名：包间主图
+        type: string
+      status:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  api.publicVoucher:
+    properties:
+      amount:
+        type: integer
+      id:
+        type: integer
+      min_order_amount:
+        type: integer
+      name:
+        type: string
+    type: object
   api.realtimeDashboardResponse:
     properties:
       active_merchants_24h:
@@ -4080,6 +4606,12 @@ definitions:
         type: array
       expired_at:
         type: string
+      has_more:
+        type: boolean
+      page:
+        type: integer
+      total_count:
+        type: integer
     type: object
   api.recommendDishesAPIResponse:
     properties:
@@ -4102,6 +4634,15 @@ definitions:
         type: array
       expired_at:
         type: string
+      has_more:
+        description: 是否有更多数据
+        type: boolean
+      page:
+        description: 当前页码
+        type: integer
+      total_count:
+        description: 本次返回的数量
+        type: integer
     type: object
   api.recommendMerchantsResponse:
     properties:
@@ -4109,10 +4650,16 @@ definitions:
         type: string
       expired_at:
         type: string
+      has_more:
+        type: boolean
       merchants:
         items:
           $ref: '#/definitions/api.merchantSummary'
         type: array
+      page:
+        type: integer
+      total_count:
+        type: integer
     type: object
   api.recommendedOrderResponse:
     properties:
@@ -4302,6 +4849,21 @@ definitions:
         type: string
     required:
     - reply
+    type: object
+  api.reservationBrief:
+    properties:
+      contact_name:
+        type: string
+      contact_phone:
+        type: string
+      guest_count:
+        type: integer
+      id:
+        type: integer
+      notes:
+        type: string
+      reservation_time:
+        type: string
     type: object
   api.reservationItem:
     properties:
@@ -4970,6 +5532,25 @@ definitions:
       url:
         type: string
     type: object
+  api.staffResponse:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: integer
+      merchant_id:
+        type: integer
+      role:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: integer
+    type: object
   api.suspendOperatorMerchantRequest:
     properties:
       duration_hours:
@@ -5017,6 +5598,10 @@ definitions:
         type: integer
       created_at:
         type: string
+      current_reservation:
+        allOf:
+        - $ref: '#/definitions/api.reservationBrief'
+        description: 当前预订信息
       current_reservation_id:
         type: integer
       description:
@@ -5048,6 +5633,17 @@ definitions:
         type: integer
       name:
         type: string
+      type:
+        type: string
+    type: object
+  api.tagDetailResponse:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      sort_order:
+        type: integer
       type:
         type: string
     type: object
@@ -5177,6 +5773,12 @@ definitions:
         description: 描述，最大500字符
         maxLength: 500
         type: string
+      dishes:
+        description: 可选：更新套餐菜品列表
+        items:
+          $ref: '#/definitions/api.comboDishInput'
+        maxItems: 50
+        type: array
       is_online:
         description: 是否上架
         type: boolean
@@ -5185,6 +5787,12 @@ definitions:
         maxLength: 100
         minLength: 1
         type: string
+      tag_ids:
+        description: 可选：更新属性标签列表
+        items:
+          type: integer
+        maxItems: 10
+        type: array
     type: object
   api.updateDailyInventoryRequest:
     properties:
@@ -5270,6 +5878,12 @@ definitions:
       sort_order:
         minimum: 0
         type: integer
+      tag_ids:
+        description: 标签ID列表（最多10个）
+        items:
+          type: integer
+        maxItems: 10
+        type: array
     type: object
   api.updateDishStatusRequest:
     properties:
@@ -5348,7 +5962,6 @@ definitions:
         minLength: 2
         type: string
       region_id:
-        minimum: 1
         type: integer
     type: object
   api.updateMerchantImagesRequest:
@@ -5498,6 +6111,31 @@ definitions:
         minimum: 0
         type: number
     type: object
+  api.updateReservationRequest:
+    properties:
+      contact_name:
+        maxLength: 50
+        type: string
+      contact_phone:
+        maxLength: 20
+        type: string
+      date:
+        description: YYYY-MM-DD
+        type: string
+      guest_count:
+        maximum: 50
+        minimum: 1
+        type: integer
+      notes:
+        maxLength: 500
+        type: string
+      table_id:
+        minimum: 1
+        type: integer
+      time:
+        description: HH:MM
+        type: string
+    type: object
   api.updateRiderApplicationBasicRequest:
     properties:
       phone:
@@ -5519,6 +6157,17 @@ definitions:
         type: integer
     required:
     - date
+    type: object
+  api.updateStaffRoleRequest:
+    properties:
+      role:
+        enum:
+        - manager
+        - chef
+        - cashier
+        type: string
+    required:
+    - role
     type: object
   api.updateTableRequest:
     properties:
@@ -5545,6 +6194,11 @@ definitions:
       table_no:
         maxLength: 50
         type: string
+      tag_ids:
+        description: 标签ID列表
+        items:
+          type: integer
+        type: array
     type: object
   api.updateTableStatusRequest:
     properties:
@@ -7446,6 +8100,62 @@ paths:
       summary: 上报用户行为埋点
       tags:
       - 推荐引擎
+  /v1/bind-merchant:
+    post:
+      consumes:
+      - application/json
+      description: 员工通过邀请码绑定到商户
+      parameters:
+      - description: 邀请码
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.bindMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 绑定成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误或邀请码无效
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 已绑定
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 员工绑定商户
+      tags:
+      - 员工管理
+  /v1/boss/merchants:
+    get:
+      description: 获取当前 Boss 认领的所有店铺
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.bossMerchantResponse'
+            type: array
+      summary: Boss 获取关联店铺
+      tags:
+      - Boss管理
   /v1/cart:
     get:
       consumes:
@@ -7752,6 +8462,28 @@ paths:
       summary: 获取用户所有购物车汇总
       tags:
       - 购物车
+  /v1/claim-boss:
+    post:
+      consumes:
+      - application/json
+      description: Boss 扫码或输入认领码认领店铺
+      parameters:
+      - description: 认领请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.claimBossRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.claimBossResponse'
+      summary: Boss 认领店铺
+      tags:
+      - Boss管理
   /v1/claims:
     get:
       consumes:
@@ -10805,6 +11537,54 @@ paths:
       summary: 商户绑定银行卡并提交微信开户
       tags:
       - 商户
+  /v1/merchant/boss-bind-code:
+    post:
+      description: 商户老板生成认领码，让 Boss 扫码认领店铺
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.generateBossBindCodeResponse'
+      summary: 生成 Boss 认领码
+      tags:
+      - Boss管理
+  /v1/merchant/bosses:
+    get:
+      description: 商户老板查看认领该店铺的所有 Boss
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.merchantBossResponse'
+            type: array
+      summary: 获取店铺的 Boss 列表
+      tags:
+      - Boss管理
+  /v1/merchant/bosses/{id}:
+    delete:
+      description: 商户老板移除已认领的 Boss
+      parameters:
+      - description: Boss ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 移除 Boss
+      tags:
+      - Boss管理
   /v1/merchant/claims:
     get:
       consumes:
@@ -11628,6 +12408,33 @@ paths:
       summary: 获取结算记录
       tags:
       - 商户财务管理
+  /v1/merchant/invite-code:
+    post:
+      description: 商户老板或店长生成员工邀请码
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 邀请码
+          schema:
+            $ref: '#/definitions/api.generateInviteCodeResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 生成邀请码
+      tags:
+      - 员工管理
   /v1/merchant/orders:
     get:
       consumes:
@@ -11969,6 +12776,170 @@ paths:
       summary: 获取订单统计
       tags:
       - 商户订单管理
+  /v1/merchant/staff:
+    get:
+      description: 商户老板或店长列出所有员工
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 员工列表
+          schema:
+            items:
+              $ref: '#/definitions/api.staffResponse'
+            type: array
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 列出商户员工
+      tags:
+      - 员工管理
+    post:
+      consumes:
+      - application/json
+      description: 商户老板添加员工（需要用户ID）
+      parameters:
+      - description: 员工信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.addStaffRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 添加成功
+          schema:
+            $ref: '#/definitions/api.staffResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 员工已存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 添加员工
+      tags:
+      - 员工管理
+  /v1/merchant/staff/{id}:
+    delete:
+      description: 商户老板移除员工
+      parameters:
+      - description: 员工ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 员工不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 移除员工
+      tags:
+      - 员工管理
+  /v1/merchant/staff/{id}/role:
+    patch:
+      consumes:
+      - application/json
+      description: 商户老板更新员工角色
+      parameters:
+      - description: 员工ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 新角色
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateStaffRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.staffResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 员工不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新员工角色
+      tags:
+      - 员工管理
   /v1/merchant/stats/categories:
     get:
       consumes:
@@ -12377,6 +13348,158 @@ paths:
       summary: 获取订单来源分析
       tags:
       - 商户统计
+  /v1/merchants/{id}/members:
+    get:
+      description: 商户获取本店所有会员的列表（含余额、消费统计）
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 页码
+        in: query
+        minimum: 1
+        name: page_id
+        required: true
+        type: integer
+      - description: 每页数量
+        in: query
+        maximum: 50
+        minimum: 5
+        name: page_size
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 会员列表
+          schema:
+            items:
+              $ref: '#/definitions/api.merchantMemberResponse'
+            type: array
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户会员列表
+      tags:
+      - 会员管理-商户
+  /v1/merchants/{id}/members/{user_id}:
+    get:
+      description: 商户获取指定会员的详细信息和交易记录
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 用户ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 会员详情
+          schema:
+            $ref: '#/definitions/api.merchantMemberDetailResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 会员不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户会员详情
+      tags:
+      - 会员管理-商户
+  /v1/merchants/{id}/members/{user_id}/balance:
+    post:
+      consumes:
+      - application/json
+      description: 商户调整会员余额（正数为增加/退款，负数为扣减）
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 用户ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: 调整信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.adjustMemberBalanceBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新后的会员信息
+          schema:
+            $ref: '#/definitions/api.merchantMemberResponse'
+        "400":
+          description: 参数错误或余额不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 会员不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 调整会员余额
+      tags:
+      - 会员管理-商户
   /v1/merchants/{id}/promotions:
     get:
       consumes:
@@ -13306,6 +14429,33 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新商户营业状态
+      tags:
+      - 商户
+  /v1/merchants/my:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户拥有的所有商户列表（用于多店铺切换）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 商户列表
+          schema:
+            items:
+              $ref: '#/definitions/api.merchantResponse'
+            type: array
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户的所有商户
       tags:
       - 商户
   /v1/notifications:
@@ -15121,20 +16271,22 @@ paths:
     get:
       consumes:
       - application/json
-      description: 分页获取当前用户的支付订单列表
+      description: 分页获取当前用户的支付订单列表，或按订单ID查询
       parameters:
       - description: 页码
         in: query
         minimum: 1
         name: page_id
-        required: true
         type: integer
       - description: 每页条数
         in: query
         maximum: 20
-        minimum: 5
+        minimum: 1
         name: page_size
-        required: true
+        type: integer
+      - description: 订单ID（按订单查询时使用）
+        in: query
+        name: order_id
         type: integer
       produces:
       - application/json
@@ -15383,6 +16535,159 @@ paths:
       summary: 平台运营WebSocket连接端点
       tags:
       - 通知管理
+  /v1/public/dishes/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 公开接口，获取菜品详细信息，无需认证
+      parameters:
+      - description: 菜品ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.dishResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 菜品不存在或已下架
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 获取菜品详情（消费者端）
+      tags:
+      - 公开接口
+  /v1/public/merchants/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 公开接口，获取商户详细信息，无需商户权限
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.publicMerchantDetailResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 商户不存在或未上线
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 获取商户详情（消费者端）
+      tags:
+      - 公开接口
+  /v1/public/merchants/{id}/combos:
+    get:
+      consumes:
+      - application/json
+      description: 公开接口，获取商户所有在线套餐
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.publicMerchantCombosResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 获取商户套餐列表（消费者端）
+      tags:
+      - 公开接口
+  /v1/public/merchants/{id}/dishes:
+    get:
+      consumes:
+      - application/json
+      description: 公开接口，获取商户所有在线菜品及分类
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.publicMerchantDishesResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 获取商户菜品列表（消费者端）
+      tags:
+      - 公开接口
+  /v1/public/merchants/{id}/rooms:
+    get:
+      consumes:
+      - application/json
+      description: 公开接口，获取商户所有包间信息，帮助消费者决策
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.publicMerchantRoomsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 获取商户包间列表（消费者端）
+      tags:
+      - 公开接口
   /v1/recommendations/combos:
     get:
       consumes:
@@ -16178,6 +17483,54 @@ paths:
       summary: 取消预定
       tags:
       - 预定管理
+  /v1/reservations/{id}/checkin:
+    post:
+      consumes:
+      - application/json
+      description: 顾客到店后自助签到，通知商户顾客已到
+      parameters:
+      - description: 预定ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.reservationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权操作该预定
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 预定不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 预定状态不允许签到
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 顾客到店签到
+      tags:
+      - 预定管理
   /v1/reservations/{id}/complete:
     post:
       consumes:
@@ -16322,6 +17675,108 @@ paths:
       summary: 标记未到店
       tags:
       - 预定管理-商户
+  /v1/reservations/{id}/start-cooking:
+    post:
+      consumes:
+      - application/json
+      description: 顾客或商户通知厨房开始制作预点菜品
+      parameters:
+      - description: 预定ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.reservationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权操作该预定
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 预定不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 预定状态不允许起菜
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 通知厨房起菜
+      tags:
+      - 预定管理
+  /v1/reservations/{id}/update:
+    put:
+      consumes:
+      - application/json
+      description: 商户修改预订信息（桌台、时间、人数、联系方式等）
+      parameters:
+      - description: 预定ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 修改请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateReservationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.reservationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户或预定不属于该商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 预定不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 时间段已被预定
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 商户修改预订
+      tags:
+      - 预定管理-商户
   /v1/reservations/me:
     get:
       consumes:
@@ -16438,6 +17893,54 @@ paths:
       summary: 获取商户预定列表
       tags:
       - 预定管理-商户
+  /v1/reservations/merchant/create:
+    post:
+      consumes:
+      - application/json
+      description: 商户为顾客创建预订（电话预订、现场预订等），无需支付，直接进入已确认状态
+      parameters:
+      - description: 预订请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.merchantCreateReservationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.reservationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 桌台不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 时间段已被预定
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 商户代客创建预订
+      tags:
+      - 预定管理-商户
   /v1/reservations/merchant/stats:
     get:
       consumes:
@@ -16487,6 +17990,40 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取预定统计
+      tags:
+      - 预定管理-商户
+  /v1/reservations/merchant/today:
+    get:
+      consumes:
+      - application/json
+      description: 商户获取今日有效预订列表（已支付/已确认/已签到）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              reservations:
+                items:
+                  $ref: '#/definitions/api.reservationResponse'
+                type: array
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取今日预订列表
       tags:
       - 预定管理-商户
   /v1/reviews:
@@ -17958,21 +19495,16 @@ paths:
       summary: 扫码点餐
       tags:
       - 扫码点餐
-  /v1/search/dishes:
+  /v1/search/combos:
     get:
       consumes:
       - application/json
-      description: 根据关键词搜索菜品，可选在特定商户内搜索
+      description: 搜索套餐，消费者端使用，只返回上架且商户状态正常的套餐
       parameters:
       - description: 搜索关键词
         in: query
         name: keyword
-        required: true
         type: string
-      - description: 商户ID（可选，在特定商户内搜索）
-        in: query
-        name: merchant_id
-        type: integer
       - description: 页码
         in: query
         minimum: 1
@@ -17986,6 +19518,14 @@ paths:
         name: page_size
         required: true
         type: integer
+      - description: 用户当前纬度
+        in: query
+        name: user_latitude
+        type: number
+      - description: 用户当前经度
+        in: query
+        name: user_longitude
+        type: number
       produces:
       - application/json
       responses:
@@ -18006,7 +19546,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: 搜索菜品
+      summary: 搜索套餐
       tags:
       - Search
   /v1/search/merchants:
@@ -18532,7 +20072,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 为指定桌台生成扫码点餐二维码URL。仅桌台所属商户可调用。
+      description: 为指定桌台生成微信小程序码。扫码后跳转到堂食菜单页面。仅桌台所属商户可调用。
       parameters:
       - description: 桌台ID
         in: path
@@ -18795,6 +20335,47 @@ paths:
       summary: 上传桌台/包间图片
       tags:
       - 桌台管理
+  /v1/tags:
+    get:
+      consumes:
+      - application/json
+      description: 根据类型获取所有激活状态的标签
+      parameters:
+      - description: 标签类型
+        enum:
+        - dish
+        - merchant
+        - combo
+        - table
+        - customization
+        in: query
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 标签列表
+          schema:
+            $ref: '#/definitions/api.listTagsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取标签列表
+      tags:
+      - 标签管理
   /v1/trust-score/appeals:
     post:
       consumes:

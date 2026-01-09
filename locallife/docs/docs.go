@@ -2479,6 +2479,93 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/bind-merchant": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "员工通过邀请码绑定到商户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "员工管理"
+                ],
+                "summary": "员工绑定商户",
+                "parameters": [
+                    {
+                        "description": "邀请码",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.bindMerchantRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "绑定成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或邀请码无效",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "已绑定",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/boss/merchants": {
+            "get": {
+                "description": "获取当前 Boss 认领的所有店铺",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Boss管理"
+                ],
+                "summary": "Boss 获取关联店铺",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.bossMerchantResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/cart": {
             "get": {
                 "security": [
@@ -2953,6 +3040,40 @@ const docTemplate = `{
                         "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/claim-boss": {
+            "post": {
+                "description": "Boss 扫码或输入认领码认领店铺",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Boss管理"
+                ],
+                "summary": "Boss 认领店铺",
+                "parameters": [
+                    {
+                        "description": "认领请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.claimBossRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimBossResponse"
                         }
                     }
                 }
@@ -7661,6 +7782,79 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/boss-bind-code": {
+            "post": {
+                "description": "商户老板生成认领码，让 Boss 扫码认领店铺",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Boss管理"
+                ],
+                "summary": "生成 Boss 认领码",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.generateBossBindCodeResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/bosses": {
+            "get": {
+                "description": "商户老板查看认领该店铺的所有 Boss",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Boss管理"
+                ],
+                "summary": "获取店铺的 Boss 列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.merchantBossResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/bosses/{id}": {
+            "delete": {
+                "description": "商户老板移除已认领的 Boss",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Boss管理"
+                ],
+                "summary": "移除 Boss",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Boss ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/claims": {
             "get": {
                 "security": [
@@ -8875,6 +9069,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/invite-code": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户老板或店长生成员工邀请码",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "员工管理"
+                ],
+                "summary": "生成邀请码",
+                "responses": {
+                    "200": {
+                        "description": "邀请码",
+                        "schema": {
+                            "$ref": "#/definitions/api.generateInviteCodeResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/orders": {
             "get": {
                 "security": [
@@ -9374,6 +9611,262 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/staff": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户老板或店长列出所有员工",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "员工管理"
+                ],
+                "summary": "列出商户员工",
+                "responses": {
+                    "200": {
+                        "description": "员工列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.staffResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户老板添加员工（需要用户ID）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "员工管理"
+                ],
+                "summary": "添加员工",
+                "parameters": [
+                    {
+                        "description": "员工信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.addStaffRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "添加成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.staffResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "员工已存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/staff/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户老板移除员工",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "员工管理"
+                ],
+                "summary": "移除员工",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "员工ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "员工不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/staff/{id}/role": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户老板更新员工角色",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "员工管理"
+                ],
+                "summary": "更新员工角色",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "员工ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新角色",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateStaffRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.staffResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "员工不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -10609,6 +11102,281 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchants/my": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前用户拥有的所有商户列表（用于多店铺切换）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "获取当前用户的所有商户",
+                "responses": {
+                    "200": {
+                        "description": "商户列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.merchantResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchants/{id}/members": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户获取本店所有会员的列表（含余额、消费统计）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "会员管理-商户"
+                ],
+                "summary": "获取商户会员列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 5,
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "会员列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.merchantMemberResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchants/{id}/members/{user_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户获取指定会员的详细信息和交易记录",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "会员管理-商户"
+                ],
+                "summary": "获取商户会员详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "会员详情",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantMemberDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "会员不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchants/{id}/members/{user_id}/balance": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户调整会员余额（正数为增加/退款，负数为扣减）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "会员管理-商户"
+                ],
+                "summary": "调整会员余额",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "调整信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.adjustMemberBalanceBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的会员信息",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantMemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或余额不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "会员不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -14185,7 +14953,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页获取当前用户的支付订单列表",
+                "description": "分页获取当前用户的支付订单列表，或按订单ID查询",
                 "consumes": [
                     "application/json"
                 ],
@@ -14202,17 +14970,21 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "页码",
                         "name": "page_id",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
                     },
                     {
                         "maximum": 20,
-                        "minimum": 5,
+                        "minimum": 1,
                         "type": "integer",
                         "description": "每页条数",
                         "name": "page_size",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "订单ID（按订单查询时使用）",
+                        "name": "order_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -14561,6 +15333,238 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/public/dishes/{id}": {
+            "get": {
+                "description": "公开接口，获取菜品详细信息，无需认证",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "公开接口"
+                ],
+                "summary": "获取菜品详情（消费者端）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "菜品ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.dishResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "菜品不存在或已下架",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/public/merchants/{id}": {
+            "get": {
+                "description": "公开接口，获取商户详细信息，无需商户权限",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "公开接口"
+                ],
+                "summary": "获取商户详情（消费者端）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.publicMerchantDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在或未上线",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/public/merchants/{id}/combos": {
+            "get": {
+                "description": "公开接口，获取商户所有在线套餐",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "公开接口"
+                ],
+                "summary": "获取商户套餐列表（消费者端）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.publicMerchantCombosResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/public/merchants/{id}/dishes": {
+            "get": {
+                "description": "公开接口，获取商户所有在线菜品及分类",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "公开接口"
+                ],
+                "summary": "获取商户菜品列表（消费者端）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.publicMerchantDishesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/public/merchants/{id}/rooms": {
+            "get": {
+                "description": "公开接口，获取商户所有包间信息，帮助消费者决策",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "公开接口"
+                ],
+                "summary": "获取商户包间列表（消费者端）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.publicMerchantRoomsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -15731,6 +16735,81 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/reservations/merchant/create": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户为顾客创建预订（电话预订、现场预订等），无需支付，直接进入已确认状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "预定管理-商户"
+                ],
+                "summary": "商户代客创建预订",
+                "parameters": [
+                    {
+                        "description": "预订请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCreateReservationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.reservationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "桌台不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "时间段已被预定",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/reservations/merchant/stats": {
             "get": {
                 "security": [
@@ -15782,6 +16861,60 @@ const docTemplate = `{
                                 "pending_count": {
                                     "type": "integer",
                                     "format": "int64"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/reservations/merchant/today": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户获取今日有效预订列表（已支付/已确认/已签到）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "预定管理-商户"
+                ],
+                "summary": "获取今日预订列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "reservations": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/definitions/api.reservationResponse"
+                                    }
                                 }
                             }
                         }
@@ -16030,6 +17163,80 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/reservations/{id}/checkin": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "顾客到店后自助签到，通知商户顾客已到",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "预定管理"
+                ],
+                "summary": "顾客到店签到",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "预定ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.reservationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权操作该预定",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "预定不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "预定状态不允许签到",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/reservations/{id}/complete": {
             "post": {
                 "security": [
@@ -16239,6 +17446,163 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "预定状态不允许标记为未到店",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/reservations/{id}/start-cooking": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "顾客或商户通知厨房开始制作预点菜品",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "预定管理"
+                ],
+                "summary": "通知厨房起菜",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "预定ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.reservationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权操作该预定",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "预定不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "预定状态不允许起菜",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/reservations/{id}/update": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户修改预订信息（桌台、时间、人数、联系方式等）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "预定管理-商户"
+                ],
+                "summary": "商户修改预订",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "预定ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "修改请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateReservationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.reservationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户或预定不属于该商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "预定不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "时间段已被预定",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -18509,9 +19873,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/search/dishes": {
+        "/v1/search/combos": {
             "get": {
-                "description": "根据关键词搜索菜品，可选在特定商户内搜索",
+                "description": "搜索套餐，消费者端使用，只返回上架且商户状态正常的套餐",
                 "consumes": [
                     "application/json"
                 ],
@@ -18521,19 +19885,12 @@ const docTemplate = `{
                 "tags": [
                     "Search"
                 ],
-                "summary": "搜索菜品",
+                "summary": "搜索套餐",
                 "parameters": [
                     {
                         "type": "string",
                         "description": "搜索关键词",
                         "name": "keyword",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "商户ID（可选，在特定商户内搜索）",
-                        "name": "merchant_id",
                         "in": "query"
                     },
                     {
@@ -18552,6 +19909,18 @@ const docTemplate = `{
                         "name": "page_size",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "number",
+                        "description": "用户当前纬度",
+                        "name": "user_latitude",
+                        "in": "query"
+                    },
+                    {
+                        "type": "number",
+                        "description": "用户当前经度",
+                        "name": "user_longitude",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -19450,7 +20819,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "为指定桌台生成扫码点餐二维码URL。仅桌台所属商户可调用。",
+                "description": "为指定桌台生成微信小程序码。扫码后跳转到堂食菜单页面。仅桌台所属商户可调用。",
                 "consumes": [
                     "application/json"
                 ],
@@ -19777,6 +21146,68 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "桌台不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/tags": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据类型获取所有激活状态的标签",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "标签管理"
+                ],
+                "summary": "获取标签列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "dish",
+                            "merchant",
+                            "combo",
+                            "table",
+                            "customization"
+                        ],
+                        "type": "string",
+                        "description": "标签类型",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "标签列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listTagsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -21596,11 +23027,23 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1
                 },
+                "order_type": {
+                    "description": "订单类型 (选填，默认为 takeout)",
+                    "type": "string"
+                },
                 "quantity": {
                     "description": "数量 (必填，范围：1-99)",
                     "type": "integer",
                     "maximum": 99,
                     "minimum": 1
+                },
+                "reservation_id": {
+                    "description": "预约ID (预约时必填)",
+                    "type": "integer"
+                },
+                "table_id": {
+                    "description": "桌台ID (堂食时必填)",
+                    "type": "integer"
                 }
             }
         },
@@ -21677,6 +23120,27 @@ const docTemplate = `{
                 }
             }
         },
+        "api.addStaffRequest": {
+            "type": "object",
+            "required": [
+                "role",
+                "user_id"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "manager",
+                        "chef",
+                        "cashier"
+                    ]
+                },
+                "user_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
         "api.addTableImageRequest": {
             "type": "object",
             "required": [
@@ -21707,6 +23171,24 @@ const docTemplate = `{
                 "tag_id": {
                     "type": "integer",
                     "minimum": 1
+                }
+            }
+        },
+        "api.adjustMemberBalanceBody": {
+            "type": "object",
+            "required": [
+                "amount",
+                "notes"
+            ],
+            "properties": {
+                "amount": {
+                    "description": "正数增加，负数扣减",
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
                 }
             }
         },
@@ -21825,6 +23307,40 @@ const docTemplate = `{
                 }
             }
         },
+        "api.bindMerchantRequest": {
+            "type": "object",
+            "required": [
+                "invite_code"
+            ],
+            "properties": {
+                "invite_code": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.bossMerchantResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "api.browseHistoryItem": {
             "type": "object",
             "properties": {
@@ -21930,10 +23446,30 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1
                 },
+                "latitude": {
+                    "description": "用户当前位置纬度 (选填，当无地址时作为fallback)",
+                    "type": "number"
+                },
+                "longitude": {
+                    "description": "用户当前位置经度 (选填，当无地址时作为fallback)",
+                    "type": "number"
+                },
                 "merchant_id": {
                     "description": "商户ID (必填)",
                     "type": "integer",
                     "minimum": 1
+                },
+                "order_type": {
+                    "description": "订单类型",
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "description": "预约ID",
+                    "type": "integer"
+                },
+                "table_id": {
+                    "description": "桌台ID",
+                    "type": "integer"
                 },
                 "voucher_id": {
                     "description": "优惠券ID (选填，用于计算优惠)",
@@ -22074,7 +23610,16 @@ const docTemplate = `{
                 "merchant_id": {
                     "type": "integer"
                 },
+                "order_type": {
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "type": "integer"
+                },
                 "subtotal": {
+                    "type": "integer"
+                },
+                "table_id": {
                     "type": "integer"
                 },
                 "total_count": {
@@ -22154,6 +23699,31 @@ const docTemplate = `{
                 }
             }
         },
+        "api.claimBossRequest": {
+            "type": "object",
+            "required": [
+                "bind_code"
+            ],
+            "properties": {
+                "bind_code": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.claimBossResponse": {
+            "type": "object",
+            "properties": {
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "api.claimResponse": {
             "type": "object",
             "properties": {
@@ -22217,6 +23787,18 @@ const docTemplate = `{
                     "description": "商户ID (必填)",
                     "type": "integer",
                     "minimum": 1
+                },
+                "order_type": {
+                    "description": "订单类型",
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "description": "预约ID",
+                    "type": "integer"
+                },
+                "table_id": {
+                    "description": "桌台ID",
+                    "type": "integer"
                 }
             }
         },
@@ -22303,6 +23885,39 @@ const docTemplate = `{
                 }
             }
         },
+        "api.comboDishInput": {
+            "type": "object",
+            "required": [
+                "dish_id"
+            ],
+            "properties": {
+                "dish_id": {
+                    "description": "菜品ID",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "quantity": {
+                    "description": "数量，1-99",
+                    "type": "integer",
+                    "maximum": 99,
+                    "minimum": 1
+                }
+            }
+        },
+        "api.comboDishItem": {
+            "type": "object",
+            "properties": {
+                "dish_id": {
+                    "type": "integer"
+                },
+                "dish_name": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.comboSetResponse": {
             "type": "object",
             "properties": {
@@ -22379,6 +23994,10 @@ const docTemplate = `{
                 "merchant_id": {
                     "type": "integer"
                 },
+                "merchant_is_open": {
+                    "description": "商户是否营业",
+                    "type": "boolean"
+                },
                 "merchant_latitude": {
                     "type": "number"
                 },
@@ -22437,11 +24056,19 @@ const docTemplate = `{
                     "maxLength": 500
                 },
                 "dish_ids": {
-                    "description": "可选：创建时关联菜品，最多50个",
+                    "description": "向后兼容：只传菜品ID（数量默认为1）",
                     "type": "array",
                     "maxItems": 50,
                     "items": {
                         "type": "integer"
+                    }
+                },
+                "dishes": {
+                    "description": "推荐：传菜品ID和数量",
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/api.comboDishInput"
                     }
                 },
                 "is_online": {
@@ -22458,6 +24085,14 @@ const docTemplate = `{
                     "description": "原价（分），可选",
                     "type": "integer",
                     "minimum": 0
+                },
+                "tag_ids": {
+                    "description": "属性标签ID列表（最多10个）",
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -22581,6 +24216,14 @@ const docTemplate = `{
                 "category_id": {
                     "type": "integer",
                     "minimum": 1
+                },
+                "customization_groups": {
+                    "description": "定制选项分组",
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                        "$ref": "#/definitions/api.customizationGroupInput"
+                    }
                 },
                 "description": {
                     "type": "string",
@@ -23130,6 +24773,13 @@ const docTemplate = `{
                         "table",
                         "room"
                     ]
+                },
+                "tag_ids": {
+                    "description": "标签ID列表",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -23184,7 +24834,6 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "amount",
-                "code",
                 "name",
                 "total_quantity",
                 "valid_from",
@@ -23205,9 +24854,9 @@ const docTemplate = `{
                     "minimum": 1
                 },
                 "code": {
+                    "description": "可选，若未提供则自动生成",
                     "type": "string",
-                    "maxLength": 50,
-                    "minLength": 1
+                    "maxLength": 50
                 },
                 "description": {
                     "type": "string",
@@ -23799,11 +25448,20 @@ const docTemplate = `{
         "api.dishInComboResponse": {
             "type": "object",
             "properties": {
-                "id": {
+                "dish_id": {
                     "type": "integer"
                 },
-                "name": {
+                "dish_image_url": {
                     "type": "string"
+                },
+                "dish_name": {
+                    "type": "string"
+                },
+                "dish_price": {
+                    "type": "integer"
+                },
+                "quantity": {
+                    "type": "integer"
                 }
             }
         },
@@ -23898,6 +25556,10 @@ const docTemplate = `{
                     "description": "预估配送费（分）",
                     "type": "integer"
                 },
+                "estimated_delivery_time": {
+                    "description": "预估配送时间（秒）",
+                    "type": "integer"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -23913,6 +25575,10 @@ const docTemplate = `{
                 },
                 "merchant_id": {
                     "type": "integer"
+                },
+                "merchant_is_open": {
+                    "description": "商户是否营业",
+                    "type": "boolean"
                 },
                 "merchant_latitude": {
                     "type": "number"
@@ -24089,6 +25755,13 @@ const docTemplate = `{
                 },
                 "table_no": {
                     "type": "string"
+                },
+                "tags": {
+                    "description": "包间标签",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -24177,6 +25850,28 @@ const docTemplate = `{
                 }
             }
         },
+        "api.generateBossBindCodeResponse": {
+            "type": "object",
+            "properties": {
+                "bind_code": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.generateInviteCodeResponse": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "invite_code": {
+                    "type": "string"
+                }
+            }
+        },
         "api.generateTableQRCodeResponse": {
             "type": "object",
             "properties": {
@@ -24186,7 +25881,7 @@ const docTemplate = `{
                 },
                 "qr_code_url": {
                     "type": "string",
-                    "example": "https://api.example.com/v1/scan/table?merchant_id=1\u0026table_no=T01"
+                    "example": "https://api.example.com/uploads/qrcodes/m1_t123.png"
                 },
                 "table_no": {
                     "type": "string",
@@ -24652,6 +26347,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listTagsResponse": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.tagDetailResponse"
+                    }
+                }
+            }
+        },
         "api.locationPoint": {
             "type": "object",
             "required": [
@@ -25023,6 +26729,32 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantBossResponse": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.merchantCartResponse": {
             "type": "object",
             "properties": {
@@ -25050,9 +26782,72 @@ const docTemplate = `{
                     "description": "商户名称",
                     "type": "string"
                 },
+                "order_type": {
+                    "description": "订单类型",
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "description": "预约ID",
+                    "type": "integer"
+                },
                 "subtotal": {
                     "description": "商品小计（分）",
                     "type": "integer"
+                },
+                "table_id": {
+                    "description": "桌台ID",
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantCreateReservationRequest": {
+            "type": "object",
+            "required": [
+                "contact_name",
+                "contact_phone",
+                "date",
+                "guest_count",
+                "table_id",
+                "time"
+            ],
+            "properties": {
+                "contact_name": {
+                    "type": "string",
+                    "maxLength": 50
+                },
+                "contact_phone": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                },
+                "guest_count": {
+                    "type": "integer",
+                    "maximum": 50,
+                    "minimum": 1
+                },
+                "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "source": {
+                    "description": "默认 merchant",
+                    "type": "string",
+                    "enum": [
+                        "phone",
+                        "walkin",
+                        "merchant"
+                    ]
+                },
+                "table_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "time": {
+                    "description": "HH:MM",
+                    "type": "string"
                 }
             }
         },
@@ -25155,6 +26950,76 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "api.merchantMemberDetailResponse": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "balance": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "membership_id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "total_consumed": {
+                    "type": "integer"
+                },
+                "total_recharged": {
+                    "type": "integer"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.transactionResponse"
+                    }
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantMemberResponse": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "balance": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "membership_id": {
+                    "type": "integer"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "total_consumed": {
+                    "type": "integer"
+                },
+                "total_recharged": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -25320,6 +27185,9 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -25356,6 +27224,10 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "is_open": {
+                    "description": "是否营业",
+                    "type": "boolean"
                 },
                 "latitude": {
                     "type": "number"
@@ -26060,6 +27932,21 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-12-01T12:20:00Z"
                 },
+                "delivery_address": {
+                    "description": "配送地址",
+                    "type": "string",
+                    "example": "北京市朝阳区某小区1号楼"
+                },
+                "delivery_contact_name": {
+                    "description": "配送联系人",
+                    "type": "string",
+                    "example": "张三"
+                },
+                "delivery_contact_phone": {
+                    "description": "配送联系电话",
+                    "type": "string",
+                    "example": "13800138000"
+                },
                 "delivery_distance": {
                     "description": "配送距离 (单位：米)",
                     "type": "integer",
@@ -26101,6 +27988,11 @@ const docTemplate = `{
                     "description": "商户名称",
                     "type": "string",
                     "example": "张三餐厅"
+                },
+                "merchant_phone": {
+                    "description": "商户电话",
+                    "type": "string",
+                    "example": "13800138000"
                 },
                 "notes": {
                     "description": "订单备注",
@@ -26437,6 +28329,310 @@ const docTemplate = `{
                 }
             }
         },
+        "api.publicComboItem": {
+            "type": "object",
+            "properties": {
+                "combo_price": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "dishes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.comboDishItem"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "image_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "original_price": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.publicDeliveryPromotion": {
+            "type": "object",
+            "properties": {
+                "discount_amount": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "min_order_amount": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.publicDiscountRule": {
+            "type": "object",
+            "properties": {
+                "discount_amount": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "min_order_amount": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.publicDishCategoryItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.publicDishItem": {
+            "type": "object",
+            "properties": {
+                "category_id": {
+                    "type": "integer"
+                },
+                "category_name": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "image_url": {
+                    "type": "string"
+                },
+                "member_price": {
+                    "type": "integer"
+                },
+                "monthly_sales": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "prepare_time": {
+                    "type": "integer"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.publicMerchantCombosResponse": {
+            "type": "object",
+            "properties": {
+                "combos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.publicComboItem"
+                    }
+                }
+            }
+        },
+        "api.publicMerchantDetailResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "avg_prep_minutes": {
+                    "description": "平均出餐时间（分钟）",
+                    "type": "integer"
+                },
+                "business_hours": {
+                    "description": "营业时间",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.businessHourItem"
+                    }
+                },
+                "business_license_image_url": {
+                    "description": "营业执照",
+                    "type": "string"
+                },
+                "cover_image": {
+                    "description": "门头照/招牌图",
+                    "type": "string"
+                },
+                "delivery_promotions": {
+                    "description": "配送费优惠",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.publicDeliveryPromotion"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "discount_rules": {
+                    "description": "满减规则",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.publicDiscountRule"
+                    }
+                },
+                "food_permit_url": {
+                    "description": "食品经营许可证",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_open": {
+                    "type": "boolean"
+                },
+                "latitude": {
+                    "type": "number"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "longitude": {
+                    "type": "number"
+                },
+                "monthly_sales": {
+                    "description": "近30天订单量",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "description": "商户标签（如：快餐、川菜）",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "trust_score": {
+                    "description": "信誉分",
+                    "type": "integer"
+                },
+                "vouchers": {
+                    "description": "代金券",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.publicVoucher"
+                    }
+                }
+            }
+        },
+        "api.publicMerchantDishesResponse": {
+            "type": "object",
+            "properties": {
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.publicDishCategoryItem"
+                    }
+                },
+                "dishes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.publicDishItem"
+                    }
+                }
+            }
+        },
+        "api.publicMerchantRoomsResponse": {
+            "type": "object",
+            "properties": {
+                "rooms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.publicRoomItem"
+                    }
+                }
+            }
+        },
+        "api.publicRoomItem": {
+            "type": "object",
+            "properties": {
+                "capacity": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "minimum_spend": {
+                    "type": "integer"
+                },
+                "monthly_sales": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "primary_image": {
+                    "description": "统一字段名：包间主图",
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.publicVoucher": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "min_order_amount": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "api.realtimeDashboardResponse": {
             "type": "object",
             "properties": {
@@ -26544,6 +28740,15 @@ const docTemplate = `{
                 },
                 "expired_at": {
                     "type": "string"
+                },
+                "has_more": {
+                    "type": "boolean"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -26577,6 +28782,18 @@ const docTemplate = `{
                 },
                 "expired_at": {
                     "type": "string"
+                },
+                "has_more": {
+                    "description": "是否有更多数据",
+                    "type": "boolean"
+                },
+                "page": {
+                    "description": "当前页码",
+                    "type": "integer"
+                },
+                "total_count": {
+                    "description": "本次返回的数量",
+                    "type": "integer"
                 }
             }
         },
@@ -26589,11 +28806,20 @@ const docTemplate = `{
                 "expired_at": {
                     "type": "string"
                 },
+                "has_more": {
+                    "type": "boolean"
+                },
                 "merchants": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.merchantSummary"
                     }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -26872,6 +29098,29 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 500,
                     "minLength": 1
+                }
+            }
+        },
+        "api.reservationBrief": {
+            "type": "object",
+            "properties": {
+                "contact_name": {
+                    "type": "string"
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "guest_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "reservation_time": {
+                    "type": "string"
                 }
             }
         },
@@ -27860,6 +30109,35 @@ const docTemplate = `{
                 }
             }
         },
+        "api.staffResponse": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.suspendOperatorMerchantRequest": {
             "type": "object",
             "required": [
@@ -27927,6 +30205,14 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "current_reservation": {
+                    "description": "当前预订信息",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.reservationBrief"
+                        }
+                    ]
+                },
                 "current_reservation_id": {
                     "type": "integer"
                 },
@@ -27973,6 +30259,23 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.tagDetailResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
                 },
                 "type": {
                     "type": "string"
@@ -28161,6 +30464,14 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 500
                 },
+                "dishes": {
+                    "description": "可选：更新套餐菜品列表",
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "$ref": "#/definitions/api.comboDishInput"
+                    }
+                },
                 "is_online": {
                     "description": "是否上架",
                     "type": "boolean"
@@ -28170,6 +30481,14 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 100,
                     "minLength": 1
+                },
+                "tag_ids": {
+                    "description": "可选：更新属性标签列表",
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -28287,6 +30606,14 @@ const docTemplate = `{
                 "sort_order": {
                     "type": "integer",
                     "minimum": 0
+                },
+                "tag_ids": {
+                    "description": "标签ID列表（最多10个）",
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -28402,8 +30729,7 @@ const docTemplate = `{
                     "minLength": 2
                 },
                 "region_id": {
-                    "type": "integer",
-                    "minimum": 1
+                    "type": "integer"
                 }
             }
         },
@@ -28615,6 +30941,40 @@ const docTemplate = `{
                 }
             }
         },
+        "api.updateReservationRequest": {
+            "type": "object",
+            "properties": {
+                "contact_name": {
+                    "type": "string",
+                    "maxLength": 50
+                },
+                "contact_phone": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                },
+                "guest_count": {
+                    "type": "integer",
+                    "maximum": 50,
+                    "minimum": 1
+                },
+                "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "table_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "time": {
+                    "description": "HH:MM",
+                    "type": "string"
+                }
+            }
+        },
         "api.updateRiderApplicationBasicRequest": {
             "type": "object",
             "properties": {
@@ -28644,6 +31004,22 @@ const docTemplate = `{
                 "total_quantity": {
                     "type": "integer",
                     "minimum": -1
+                }
+            }
+        },
+        "api.updateStaffRoleRequest": {
+            "type": "object",
+            "required": [
+                "role"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "manager",
+                        "chef",
+                        "cashier"
+                    ]
                 }
             }
         },
@@ -28679,6 +31055,13 @@ const docTemplate = `{
                 "table_no": {
                     "type": "string",
                     "maxLength": 50
+                },
+                "tag_ids": {
+                    "description": "标签ID列表",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },

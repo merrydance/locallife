@@ -1670,6 +1670,21 @@ func (mr *MockStoreMockRecorder) CountRidersByStatus(ctx, status any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRidersByStatus", reflect.TypeOf((*MockStore)(nil).CountRidersByStatus), ctx, status)
 }
 
+// CountSearchCombosGlobal mocks base method.
+func (m *MockStore) CountSearchCombosGlobal(ctx context.Context, dollar_1 string) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountSearchCombosGlobal", ctx, dollar_1)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountSearchCombosGlobal indicates an expected call of CountSearchCombosGlobal.
+func (mr *MockStoreMockRecorder) CountSearchCombosGlobal(ctx, dollar_1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountSearchCombosGlobal", reflect.TypeOf((*MockStore)(nil).CountSearchCombosGlobal), ctx, dollar_1)
+}
+
 // CountSearchDishesByName mocks base method.
 func (m *MockStore) CountSearchDishesByName(ctx context.Context, arg db.CountSearchDishesByNameParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -11658,6 +11673,21 @@ func (m *MockStore) SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Te
 func (mr *MockStoreMockRecorder) SearchComboIDsGlobal(ctx, dollar_1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchComboIDsGlobal", reflect.TypeOf((*MockStore)(nil).SearchComboIDsGlobal), ctx, dollar_1)
+}
+
+// SearchCombosGlobal mocks base method.
+func (m *MockStore) SearchCombosGlobal(ctx context.Context, arg db.SearchCombosGlobalParams) ([]db.SearchCombosGlobalRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchCombosGlobal", ctx, arg)
+	ret0, _ := ret[0].([]db.SearchCombosGlobalRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchCombosGlobal indicates an expected call of SearchCombosGlobal.
+func (mr *MockStoreMockRecorder) SearchCombosGlobal(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchCombosGlobal", reflect.TypeOf((*MockStore)(nil).SearchCombosGlobal), ctx, arg)
 }
 
 // SearchDishIDsGlobal mocks base method.

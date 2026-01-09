@@ -1737,6 +1737,7 @@ SELECT
   m.name AS merchant_name,
   m.logo_url AS merchant_logo,
   m.is_open AS merchant_is_open,
+  m.region_id AS merchant_region_id,
   earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
 FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
@@ -1764,27 +1765,28 @@ type SearchDishesGlobalParams struct {
 }
 
 type SearchDishesGlobalRow struct {
-	ID             int64              `json:"id"`
-	MerchantID     int64              `json:"merchant_id"`
-	CategoryID     pgtype.Int8        `json:"category_id"`
-	Name           string             `json:"name"`
-	Description    pgtype.Text        `json:"description"`
-	ImageUrl       pgtype.Text        `json:"image_url"`
-	Price          int64              `json:"price"`
-	MemberPrice    pgtype.Int8        `json:"member_price"`
-	IsAvailable    bool               `json:"is_available"`
-	IsOnline       bool               `json:"is_online"`
-	SortOrder      int16              `json:"sort_order"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	PrepareTime    int16              `json:"prepare_time"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
-	MonthlySales   int32              `json:"monthly_sales"`
-	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
-	MerchantName   string             `json:"merchant_name"`
-	MerchantLogo   pgtype.Text        `json:"merchant_logo"`
-	MerchantIsOpen bool               `json:"merchant_is_open"`
-	Distance       float64            `json:"distance"`
+	ID               int64              `json:"id"`
+	MerchantID       int64              `json:"merchant_id"`
+	CategoryID       pgtype.Int8        `json:"category_id"`
+	Name             string             `json:"name"`
+	Description      pgtype.Text        `json:"description"`
+	ImageUrl         pgtype.Text        `json:"image_url"`
+	Price            int64              `json:"price"`
+	MemberPrice      pgtype.Int8        `json:"member_price"`
+	IsAvailable      bool               `json:"is_available"`
+	IsOnline         bool               `json:"is_online"`
+	SortOrder        int16              `json:"sort_order"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	PrepareTime      int16              `json:"prepare_time"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales     int32              `json:"monthly_sales"`
+	RepurchaseRate   pgtype.Numeric     `json:"repurchase_rate"`
+	MerchantName     string             `json:"merchant_name"`
+	MerchantLogo     pgtype.Text        `json:"merchant_logo"`
+	MerchantIsOpen   bool               `json:"merchant_is_open"`
+	MerchantRegionID int64              `json:"merchant_region_id"`
+	Distance         float64            `json:"distance"`
 }
 
 // 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
@@ -1824,6 +1826,7 @@ func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobal
 			&i.MerchantName,
 			&i.MerchantLogo,
 			&i.MerchantIsOpen,
+			&i.MerchantRegionID,
 			&i.Distance,
 		); err != nil {
 			return nil, err

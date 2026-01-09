@@ -279,7 +279,7 @@ type removeBossRequest struct {
 // @Tags Boss管理
 // @Produce json
 // @Param id path int true "Boss ID"
-// @Success 200 {object} gin.H
+// @Success 200 {object} map[string]interface{}
 // @Router /v1/merchant/bosses/{id} [delete]
 func (server *Server) removeBoss(ctx *gin.Context) {
 	var req removeBossRequest

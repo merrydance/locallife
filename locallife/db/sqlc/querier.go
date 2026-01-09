@@ -174,6 +174,8 @@ type Querier interface {
 	// 按区域和状态统计骑手数量
 	CountRidersByRegionWithStatus(ctx context.Context, arg CountRidersByRegionWithStatusParams) (int64, error)
 	CountRidersByStatus(ctx context.Context, status string) (int64, error)
+	// Count for pagination
+	CountSearchCombosGlobal(ctx context.Context, dollar_1 string) (int64, error)
 	// 统计商户内菜品搜索结果总数
 	CountSearchDishesByName(ctx context.Context, arg CountSearchDishesByNameParams) (int64, error)
 	// 统计全局菜品搜索结果总数
@@ -1176,6 +1178,11 @@ type Querier interface {
 	SaveRecommendations(ctx context.Context, arg SaveRecommendationsParams) (Recommendation, error)
 	// 全局套餐搜索，只返回套餐ID（用于推荐接口的关键词过滤）
 	SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
+	// Consumer-Facing Global Combo Search
+	// Returns enriched data for the home feed or search page.
+	// Strict filters: Online combos only, Active merchants only.
+	// Sorting: Open Merchants First > Sales (Weighted) > Distance.
+	SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobalParams) ([]SearchCombosGlobalRow, error)
 	// 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
 	SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
 	SearchDishesByName(ctx context.Context, arg SearchDishesByNameParams) ([]Dish, error)

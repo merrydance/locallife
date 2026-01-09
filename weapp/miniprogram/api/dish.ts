@@ -1011,6 +1011,7 @@ export interface SearchDishItem {
     merchant_logo?: string
     merchant_is_open?: boolean
     distance?: number
+    estimated_delivery_fee?: number // Added field
 }
 
 /**
@@ -1096,7 +1097,7 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
             merchant_region_id: 0,
             merchant_is_open: item.merchant_is_open ?? true,
             distance: item.distance || 0,
-            estimated_delivery_fee: 0,
+            estimated_delivery_fee: item.estimated_delivery_fee || 0,
             tags: []
         } as unknown as DishSummary)),
 
@@ -1186,6 +1187,66 @@ export async function getTags(type: string): Promise<Tag[]> {
         cacheTTL: 10 * 60 * 1000 // 10分钟缓存
     })
     return response.tags || []
+}
+
+// ==================== 套餐搜索 API ====================
+
+export interface SearchComboItem {
+    id: number
+    merchant_id: number
+    name: string
+    description: string
+    image_url: string
+    original_price: number      // 元
+    combo_price: number         // 元
+    savings_percent: number     // %
+    monthly_sales: number
+    merchant_name: string
+    merchant_logo: string
+    merchant_is_open: boolean
+    distance: number            // 米
+    estimated_delivery_fee?: number // 分
+    estimated_delivery_time?: number // 秒
+}
+
+export interface ComboSearchParams {
+    keyword?: string
+    page_id?: number
+    page_size?: number
+    user_latitude?: number
+    user_longitude?: number
+}
+
+export interface ComboSearchResult {
+    combos: SearchComboItem[]
+    total: number
+    page_id: number
+    page_size: number
+}
+
+/**
+ * 搜索套餐 - 基于 /v1/search/combos
+ */
+export async function searchCombos(params: ComboSearchParams): Promise<ComboSearchResult> {
+    // 过滤掉 undefined 的参数
+    const searchParams: any = {
+        page_id: params.page_id || 1,
+        page_size: params.page_size || 20
+    }
+
+    if (params.keyword) searchParams.keyword = params.keyword
+    if (params.user_latitude !== undefined) searchParams.user_latitude = params.user_latitude
+    if (params.user_longitude !== undefined) searchParams.user_longitude = params.user_longitude
+
+    const response = await request<ComboSearchResult>({
+        url: '/v1/search/combos',
+        method: 'GET',
+        data: searchParams,
+        useCache: true,
+        cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+    })
+
+    return response
 }
 
 // ==================== 导出默认服务 ====================

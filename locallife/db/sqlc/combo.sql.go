@@ -94,6 +94,30 @@ func (q *Queries) CountComboSetsByMerchant(ctx context.Context, arg CountComboSe
 	return count, err
 }
 
+const countSearchCombosGlobal = `-- name: CountSearchCombosGlobal :one
+SELECT COUNT(*)
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    )
+`
+
+// Count for pagination
+func (q *Queries) CountSearchCombosGlobal(ctx context.Context, dollar_1 string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchCombosGlobal, dollar_1)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createComboSet = `-- name: CreateComboSet :one
 
 INSERT INTO combo_sets (
@@ -783,6 +807,137 @@ func (q *Queries) SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Text
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchCombosGlobal = `-- name: SearchCombosGlobal :many
+SELECT 
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    COALESCE(
+        NULLIF(cs.image_url, ''),
+        (SELECT d.image_url 
+         FROM combo_dishes cd 
+         JOIN dishes d ON cd.dish_id = d.id 
+         WHERE cd.combo_id = cs.id 
+           AND d.image_url IS NOT NULL 
+           AND d.image_url != ''
+         ORDER BY cd.id ASC 
+         LIMIT 1)
+    )::text AS image_url,
+    cs.original_price,
+    cs.combo_price,
+    cs.is_online,
+    m.name AS merchant_name,
+    m.logo_url AS merchant_logo,
+    m.latitude AS merchant_latitude,
+    m.longitude AS merchant_longitude,
+    m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
+    -- Calculate Sales using Order Items (Last 30 days) for Relevance
+    COALESCE(
+        (SELECT SUM(oi.quantity)
+         FROM order_items oi 
+         JOIN orders o ON o.id = oi.order_id 
+         WHERE oi.combo_id = cs.id 
+           AND o.status IN ('delivered', 'completed')
+           AND o.created_at >= NOW() - INTERVAL '30 days'
+        ), 0
+    )::int AS monthly_sales,
+    -- Distance Calculation
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+FROM combo_sets cs
+JOIN merchants m ON cs.merchant_id = m.id
+WHERE 
+    m.status = 'active'
+    AND m.deleted_at IS NULL
+    AND cs.deleted_at IS NULL
+    AND cs.is_online = true
+    AND (
+        $1::text = '' OR 
+        cs.name ILIKE '%' || $1 || '%' OR 
+        m.name ILIKE '%' || $1 || '%'
+    )
+ORDER BY 
+    m.is_open DESC, 
+    monthly_sales DESC,
+    distance ASC
+LIMIT $2 OFFSET $3
+`
+
+type SearchCombosGlobalParams struct {
+	Column1 string  `json:"column_1"`
+	Limit   int32   `json:"limit"`
+	Offset  int32   `json:"offset"`
+	Column4 float64 `json:"column_4"`
+	Column5 float64 `json:"column_5"`
+}
+
+type SearchCombosGlobalRow struct {
+	ID                int64          `json:"id"`
+	MerchantID        int64          `json:"merchant_id"`
+	Name              string         `json:"name"`
+	Description       pgtype.Text    `json:"description"`
+	ImageUrl          string         `json:"image_url"`
+	OriginalPrice     int64          `json:"original_price"`
+	ComboPrice        int64          `json:"combo_price"`
+	IsOnline          bool           `json:"is_online"`
+	MerchantName      string         `json:"merchant_name"`
+	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
+	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
+	MerchantRegionID  int64          `json:"merchant_region_id"`
+	MerchantIsOpen    bool           `json:"merchant_is_open"`
+	MonthlySales      int32          `json:"monthly_sales"`
+	Distance          float64        `json:"distance"`
+}
+
+// Consumer-Facing Global Combo Search
+// Returns enriched data for the home feed or search page.
+// Strict filters: Online combos only, Active merchants only.
+// Sorting: Open Merchants First > Sales (Weighted) > Distance.
+func (q *Queries) SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobalParams) ([]SearchCombosGlobalRow, error) {
+	rows, err := q.db.Query(ctx, searchCombosGlobal,
+		arg.Column1,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+		arg.Column5,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchCombosGlobalRow{}
+	for rows.Next() {
+		var i SearchCombosGlobalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.Name,
+			&i.Description,
+			&i.ImageUrl,
+			&i.OriginalPrice,
+			&i.ComboPrice,
+			&i.IsOnline,
+			&i.MerchantName,
+			&i.MerchantLogo,
+			&i.MerchantLatitude,
+			&i.MerchantLongitude,
+			&i.MerchantRegionID,
+			&i.MerchantIsOpen,
+			&i.MonthlySales,
+			&i.Distance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

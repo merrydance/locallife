@@ -2,6 +2,8 @@ import { Dish, DishResponse } from '../models/dish'
 import { DishSummary as ApiDishSummary } from '../api/dish'
 
 import { getPublicImageUrl } from '../utils/image'
+import { formatPrice } from '../utils/util'
+
 
 export class DishAdapter {
   /**
@@ -13,7 +15,7 @@ export class DishAdapter {
       name: dto.name,
       imageUrl: getPublicImageUrl(dto.image_url),
       price: dto.price,
-      priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+      priceDisplay: formatPrice(dto.price),
       shopName: '商户名称', // 需要从商户信息获取
       merchantId: dto.merchant_id,
       attributes: dto.ingredients?.map(ing => ing.name) || [],
@@ -42,7 +44,7 @@ export class DishAdapter {
       name: dto.name,
       imageUrl: getPublicImageUrl(dto.image_url),
       price: dto.price,
-      priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+      priceDisplay: formatPrice(dto.price),
       shopName: dto.merchant_name || '未知商家',
       merchantId: dto.merchant_id,
       attributes: [], // 摘要数据中没有配料信息

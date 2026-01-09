@@ -181,6 +181,9 @@ func (server *Server) setupRouter() {
 	// 📝 注册自定义验证器
 	registerCustomValidators()
 
+	// 🌐 跨域资源共享中间件
+	router.Use(CORSMiddleware(server.config.AllowedOrigins))
+
 	// 🔒 安全响应头中间件（防止 XSS、点击劫持等）
 	router.Use(SecurityHeadersMiddleware())
 
@@ -258,7 +261,8 @@ func (server *Server) setupRouter() {
 	{
 		searchGroup.GET("/dishes", server.searchDishes)
 		searchGroup.GET("/merchants", server.searchMerchants)
-		searchGroup.GET("/rooms", server.searchRooms) // 包间搜索：按日期、时段、人数、菜系等条件
+		searchGroup.GET("/combos", server.searchCombos) // 套餐搜索
+		searchGroup.GET("/rooms", server.searchRooms)   // 包间搜索：按日期、时段、人数、菜系等条件
 	}
 
 	// 餐厅优惠活动（无需认证）

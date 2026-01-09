@@ -9,7 +9,10 @@ export {
     ComboSetWithDetailsResponse,
     UpdateComboSetRequest,
     ComboManagementService,
-    getRecommendedCombos
+    getRecommendedCombos,
+    searchCombos,
+    SearchComboItem,
+    ComboSearchResult
 } from './dish'
 
 // 兼容性别名

@@ -150,6 +150,7 @@ SELECT
   m.name AS merchant_name,
   m.logo_url AS merchant_logo,
   m.is_open AS merchant_is_open,
+  m.region_id AS merchant_region_id,
   earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
 FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
