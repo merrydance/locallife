@@ -1,5 +1,6 @@
 import { Order, OrderDetail, OrderItem } from '../models/order'
 import { OrderResponse, getPayableAmount } from '../api/order'
+import { getPublicImageUrl } from '../utils/image'
 import dayjs from 'dayjs'
 
 /**
@@ -61,13 +62,13 @@ export class OrderAdapter {
       dishId: item.dish_id,
       comboId: item.combo_id,
       name: item.name,
-      imageUrl: item.image_url || '',
+      imageUrl: item.image_url ? getPublicImageUrl(item.image_url) : '',
       quantity: item.quantity,
       unitPrice: item.unit_price,
       subtotal: item.subtotal,
       unitPriceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
       subtotalDisplay: `¥${(item.subtotal / 100).toFixed(2)}`,
-      customizations: item.customizations?.map(c => `${c.group_name}: ${c.option_name}`) || []
+      customizations: item.customizations?.map(c => `${c.name}: ${c.value}`) || []
     }))
 
     return {
@@ -83,7 +84,13 @@ export class OrderAdapter {
       discountAmountDisplay: dto.discount_amount > 0 ? `-¥${(dto.discount_amount / 100).toFixed(2)}` : '',
       payableAmount,
       payableAmountDisplay: `¥${(payableAmount / 100).toFixed(2)}`,
-      notes: dto.notes
+      notes: dto.notes,
+      // 配送地址信息
+      address: dto.delivery_address,
+      contactName: dto.delivery_contact_name,
+      contactPhone: dto.delivery_contact_phone,
+      // 商户电话
+      merchantPhone: dto.merchant_phone
     }
   }
 }

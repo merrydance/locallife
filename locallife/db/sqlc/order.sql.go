@@ -485,45 +485,52 @@ SELECT
     o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id,
     m.name as merchant_name,
     m.phone as merchant_phone,
-    m.address as merchant_address
+    m.address as merchant_address,
+    ua.contact_name as delivery_contact_name,
+    ua.contact_phone as delivery_contact_phone,
+    ua.detail_address as delivery_address
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
+LEFT JOIN user_addresses ua ON o.address_id = ua.id
 WHERE o.id = $1
 `
 
 type GetOrderWithDetailsRow struct {
-	ID                  int64              `json:"id"`
-	OrderNo             string             `json:"order_no"`
-	UserID              int64              `json:"user_id"`
-	MerchantID          int64              `json:"merchant_id"`
-	OrderType           string             `json:"order_type"`
-	AddressID           pgtype.Int8        `json:"address_id"`
-	DeliveryFee         int64              `json:"delivery_fee"`
-	DeliveryDistance    pgtype.Int4        `json:"delivery_distance"`
-	TableID             pgtype.Int8        `json:"table_id"`
-	ReservationID       pgtype.Int8        `json:"reservation_id"`
-	Subtotal            int64              `json:"subtotal"`
-	DiscountAmount      int64              `json:"discount_amount"`
-	DeliveryFeeDiscount int64              `json:"delivery_fee_discount"`
-	TotalAmount         int64              `json:"total_amount"`
-	Status              string             `json:"status"`
-	PaymentMethod       pgtype.Text        `json:"payment_method"`
-	PaidAt              pgtype.Timestamptz `json:"paid_at"`
-	Notes               pgtype.Text        `json:"notes"`
-	CreatedAt           time.Time          `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason        pgtype.Text        `json:"cancel_reason"`
-	FinalAmount         pgtype.Int8        `json:"final_amount"`
-	PlatformCommission  pgtype.Int8        `json:"platform_commission"`
-	UserVoucherID       pgtype.Int8        `json:"user_voucher_id"`
-	VoucherAmount       int64              `json:"voucher_amount"`
-	BalancePaid         int64              `json:"balance_paid"`
-	MembershipID        pgtype.Int8        `json:"membership_id"`
-	MerchantName        string             `json:"merchant_name"`
-	MerchantPhone       string             `json:"merchant_phone"`
-	MerchantAddress     string             `json:"merchant_address"`
+	ID                   int64              `json:"id"`
+	OrderNo              string             `json:"order_no"`
+	UserID               int64              `json:"user_id"`
+	MerchantID           int64              `json:"merchant_id"`
+	OrderType            string             `json:"order_type"`
+	AddressID            pgtype.Int8        `json:"address_id"`
+	DeliveryFee          int64              `json:"delivery_fee"`
+	DeliveryDistance     pgtype.Int4        `json:"delivery_distance"`
+	TableID              pgtype.Int8        `json:"table_id"`
+	ReservationID        pgtype.Int8        `json:"reservation_id"`
+	Subtotal             int64              `json:"subtotal"`
+	DiscountAmount       int64              `json:"discount_amount"`
+	DeliveryFeeDiscount  int64              `json:"delivery_fee_discount"`
+	TotalAmount          int64              `json:"total_amount"`
+	Status               string             `json:"status"`
+	PaymentMethod        pgtype.Text        `json:"payment_method"`
+	PaidAt               pgtype.Timestamptz `json:"paid_at"`
+	Notes                pgtype.Text        `json:"notes"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt          pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason         pgtype.Text        `json:"cancel_reason"`
+	FinalAmount          pgtype.Int8        `json:"final_amount"`
+	PlatformCommission   pgtype.Int8        `json:"platform_commission"`
+	UserVoucherID        pgtype.Int8        `json:"user_voucher_id"`
+	VoucherAmount        int64              `json:"voucher_amount"`
+	BalancePaid          int64              `json:"balance_paid"`
+	MembershipID         pgtype.Int8        `json:"membership_id"`
+	MerchantName         string             `json:"merchant_name"`
+	MerchantPhone        string             `json:"merchant_phone"`
+	MerchantAddress      string             `json:"merchant_address"`
+	DeliveryContactName  pgtype.Text        `json:"delivery_contact_name"`
+	DeliveryContactPhone pgtype.Text        `json:"delivery_contact_phone"`
+	DeliveryAddress      pgtype.Text        `json:"delivery_address"`
 }
 
 func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWithDetailsRow, error) {
@@ -562,6 +569,9 @@ func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWi
 		&i.MerchantName,
 		&i.MerchantPhone,
 		&i.MerchantAddress,
+		&i.DeliveryContactName,
+		&i.DeliveryContactPhone,
+		&i.DeliveryAddress,
 	)
 	return i, err
 }

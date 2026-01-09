@@ -221,6 +221,18 @@ type orderResponse struct {
 
 	// 更新时间
 	UpdatedAt *time.Time `json:"updated_at,omitempty" example:"2025-12-01T12:30:00Z"`
+
+	// 商户电话
+	MerchantPhone *string `json:"merchant_phone,omitempty" example:"13800138000"`
+
+	// 配送联系人
+	DeliveryContactName *string `json:"delivery_contact_name,omitempty" example:"张三"`
+
+	// 配送联系电话
+	DeliveryContactPhone *string `json:"delivery_contact_phone,omitempty" example:"13800138000"`
+
+	// 配送地址
+	DeliveryAddress *string `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
 }
 
 func newOrderResponse(o db.Order) orderResponse {
@@ -291,6 +303,77 @@ func newOrderWithMerchantResponse(o db.ListOrdersByUserRow) orderResponse {
 		TotalAmount:         o.TotalAmount,
 		Status:              o.Status,
 		CreatedAt:           o.CreatedAt,
+	}
+
+	if o.AddressID.Valid {
+		resp.AddressID = &o.AddressID.Int64
+	}
+	if o.DeliveryDistance.Valid {
+		resp.DeliveryDistance = &o.DeliveryDistance.Int32
+	}
+	if o.TableID.Valid {
+		resp.TableID = &o.TableID.Int64
+	}
+	if o.ReservationID.Valid {
+		resp.ReservationID = &o.ReservationID.Int64
+	}
+	if o.PaymentMethod.Valid {
+		resp.PaymentMethod = &o.PaymentMethod.String
+	}
+	if o.Notes.Valid {
+		resp.Notes = &o.Notes.String
+	}
+	if o.PaidAt.Valid {
+		resp.PaidAt = &o.PaidAt.Time
+	}
+	if o.CompletedAt.Valid {
+		resp.CompletedAt = &o.CompletedAt.Time
+	}
+	if o.CancelledAt.Valid {
+		resp.CancelledAt = &o.CancelledAt.Time
+	}
+	if o.CancelReason.Valid {
+		resp.CancelReason = &o.CancelReason.String
+	}
+	if o.UpdatedAt.Valid {
+		resp.UpdatedAt = &o.UpdatedAt.Time
+	}
+
+	return resp
+}
+
+// newOrderWithDetailsResponse 用于订单详情，包含商户信息和配送地址
+func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
+	resp := orderResponse{
+		ID:                  o.ID,
+		OrderNo:             o.OrderNo,
+		UserID:              o.UserID,
+		MerchantID:          o.MerchantID,
+		MerchantName:        o.MerchantName,
+		OrderType:           o.OrderType,
+		DeliveryFee:         o.DeliveryFee,
+		Subtotal:            o.Subtotal,
+		DiscountAmount:      o.DiscountAmount,
+		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
+		TotalAmount:         o.TotalAmount,
+		Status:              o.Status,
+		CreatedAt:           o.CreatedAt,
+	}
+
+	// 商户电话
+	if o.MerchantPhone != "" {
+		resp.MerchantPhone = &o.MerchantPhone
+	}
+
+	// 配送地址信息
+	if o.DeliveryContactName.Valid {
+		resp.DeliveryContactName = &o.DeliveryContactName.String
+	}
+	if o.DeliveryContactPhone.Valid {
+		resp.DeliveryContactPhone = &o.DeliveryContactPhone.String
+	}
+	if o.DeliveryAddress.Valid {
+		resp.DeliveryAddress = &o.DeliveryAddress.String
 	}
 
 	if o.AddressID.Valid {
@@ -930,7 +1013,8 @@ func (server *Server) getOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	order, err := server.store.GetOrder(ctx, req.ID)
+	// 使用 JOIN 查询，一次获取订单 + 商户信息 + 配送地址
+	order, err := server.store.GetOrderWithDetails(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
@@ -953,7 +1037,7 @@ func (server *Server) getOrder(ctx *gin.Context) {
 		return
 	}
 
-	resp := newOrderResponse(order)
+	resp := newOrderWithDetailsResponse(order)
 	resp.Items = make([]orderItemResponse, len(items))
 	for i, item := range items {
 		resp.Items[i] = orderItemResponse{

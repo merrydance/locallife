@@ -53,9 +53,10 @@ export interface OrderDetail extends Order {
     payableAmount: number         // 计算值: totalAmount - discountAmount
     payableAmountDisplay: string
     notes?: string
-    address?: string
-    contactName?: string
-    contactPhone?: string
+    address?: string              // 配送地址
+    contactName?: string          // 配送联系人
+    contactPhone?: string         // 配送联系电话
+    merchantPhone?: string        // 商户电话
     timeline?: OrderTimelineItem[]
 }
 

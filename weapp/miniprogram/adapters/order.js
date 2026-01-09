@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrderAdapter = void 0;
 const order_1 = require("../api/order");
+const image_1 = require("../utils/image");
 const dayjs_1 = __importDefault(require("dayjs"));
 /**
  * 订单类型映射 - 对齐swagger枚举值
@@ -62,16 +63,20 @@ class OrderAdapter {
                 dishId: item.dish_id,
                 comboId: item.combo_id,
                 name: item.name,
-                imageUrl: item.image_url || '',
+                imageUrl: item.image_url ? (0, image_1.getPublicImageUrl)(item.image_url) : '',
                 quantity: item.quantity,
                 unitPrice: item.unit_price,
                 subtotal: item.subtotal,
                 unitPriceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
                 subtotalDisplay: `¥${(item.subtotal / 100).toFixed(2)}`,
-                customizations: ((_a = item.customizations) === null || _a === void 0 ? void 0 : _a.map(c => `${c.group_name}: ${c.option_name}`)) || []
+                customizations: ((_a = item.customizations) === null || _a === void 0 ? void 0 : _a.map(c => `${c.name}: ${c.value}`)) || []
             });
         });
-        return Object.assign(Object.assign({}, base), { items, subtotal: dto.subtotal, subtotalDisplay: `¥${(dto.subtotal / 100).toFixed(2)}`, deliveryFee: dto.delivery_fee, deliveryFeeDisplay: dto.delivery_fee > 0 ? `¥${(dto.delivery_fee / 100).toFixed(2)}` : '免配送费', deliveryFeeDiscount: dto.delivery_fee_discount, deliveryFeeDiscountDisplay: dto.delivery_fee_discount > 0 ? `-¥${(dto.delivery_fee_discount / 100).toFixed(2)}` : '', discountAmount: dto.discount_amount, discountAmountDisplay: dto.discount_amount > 0 ? `-¥${(dto.discount_amount / 100).toFixed(2)}` : '', payableAmount, payableAmountDisplay: `¥${(payableAmount / 100).toFixed(2)}`, notes: dto.notes });
+        return Object.assign(Object.assign({}, base), { items, subtotal: dto.subtotal, subtotalDisplay: `¥${(dto.subtotal / 100).toFixed(2)}`, deliveryFee: dto.delivery_fee, deliveryFeeDisplay: dto.delivery_fee > 0 ? `¥${(dto.delivery_fee / 100).toFixed(2)}` : '免配送费', deliveryFeeDiscount: dto.delivery_fee_discount, deliveryFeeDiscountDisplay: dto.delivery_fee_discount > 0 ? `-¥${(dto.delivery_fee_discount / 100).toFixed(2)}` : '', discountAmount: dto.discount_amount, discountAmountDisplay: dto.discount_amount > 0 ? `-¥${(dto.discount_amount / 100).toFixed(2)}` : '', payableAmount, payableAmountDisplay: `¥${(payableAmount / 100).toFixed(2)}`, notes: dto.notes, 
+            // 配送地址信息
+            address: dto.delivery_address, contactName: dto.delivery_contact_name, contactPhone: dto.delivery_contact_phone, 
+            // 商户电话
+            merchantPhone: dto.merchant_phone });
     }
 }
 exports.OrderAdapter = OrderAdapter;

@@ -1,4 +1,4 @@
-import { getPaymentById, closePayment, getPaymentRefunds, Payment, Refund } from '../../../api/payment-refund'
+import { getPaymentById, closePayment, getPaymentRefunds, getPayments, Payment, Refund } from '../../../api/payment-refund'
 import { logger } from '../../../utils/logger'
 
 Page({
@@ -49,7 +49,6 @@ Page({
         this.setData({ loading: true })
         try {
             // 通过订单ID获取支付列表，取第一条
-            const { getPayments } = await import('../../../api/payment-refund')
             const result = await getPayments({ order_id: orderId, page: 1, page_size: 1 })
             if (result.data && result.data.length > 0) {
                 const payment = result.data[0]

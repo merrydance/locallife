@@ -327,18 +327,20 @@ func (server *Server) getPaymentOrder(ctx *gin.Context) {
 
 // listPaymentOrders 获取用户支付订单列表
 type listPaymentOrdersRequest struct {
-	PageID   int32 `form:"page_id" binding:"required,min=1"`
-	PageSize int32 `form:"page_size" binding:"required,min=5,max=20"`
+	PageID   int32  `form:"page_id" binding:"omitempty,min=1"`
+	PageSize int32  `form:"page_size" binding:"omitempty,min=1,max=20"`
+	OrderID  *int64 `form:"order_id" binding:"omitempty,min=1"` // 可选：按订单ID筛选
 }
 
 // listPaymentOrders godoc
 // @Summary 获取支付订单列表
-// @Description 分页获取当前用户的支付订单列表
+// @Description 分页获取当前用户的支付订单列表，或按订单ID查询
 // @Tags 支付管理
 // @Accept json
 // @Produce json
-// @Param page_id query int true "页码" minimum(1)
-// @Param page_size query int true "每页条数" minimum(5) maximum(20)
+// @Param page_id query int false "页码" minimum(1)
+// @Param page_size query int false "每页条数" minimum(1) maximum(20)
+// @Param order_id query int false "订单ID（按订单查询时使用）"
 // @Success 200 {array} paymentOrderResponse "支付订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
@@ -354,11 +356,40 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	offset := (req.PageID - 1) * req.PageSize
+	// 如果指定了 order_id，直接查询该订单的支付记录
+	if req.OrderID != nil {
+		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, pgtype.Int8{Int64: *req.OrderID, Valid: true})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusOK, []paymentOrderResponse{})
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		// 验证支付订单属于当前用户
+		if payment.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusOK, []paymentOrderResponse{})
+			return
+		}
+		ctx.JSON(http.StatusOK, []paymentOrderResponse{newPaymentOrderResponse(payment)})
+		return
+	}
+
+	// 默认分页查询
+	pageID := req.PageID
+	pageSize := req.PageSize
+	if pageID == 0 {
+		pageID = 1
+	}
+	if pageSize == 0 {
+		pageSize = 10
+	}
+	offset := (pageID - 1) * pageSize
 
 	paymentOrders, err := server.store.ListPaymentOrdersByUser(ctx, db.ListPaymentOrdersByUserParams{
 		UserID: authPayload.UserID,
-		Limit:  req.PageSize,
+		Limit:  pageSize,
 		Offset: offset,
 	})
 	if err != nil {

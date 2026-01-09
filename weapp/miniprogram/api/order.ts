@@ -51,6 +51,7 @@ export interface OrderResponse {
   user_id: number
   merchant_id: number
   merchant_name: string
+  merchant_phone?: string          // 商户电话
   status: OrderStatus
   order_type: OrderType
   payment_method?: 'wechat' | 'balance'
@@ -70,6 +71,9 @@ export interface OrderResponse {
   // 配送相关
   address_id?: number
   delivery_distance?: number
+  delivery_contact_name?: string   // 配送联系人
+  delivery_contact_phone?: string  // 配送联系电话
+  delivery_address?: string        // 配送地址
   // 堂食相关
   table_id?: number
   // 预定相关

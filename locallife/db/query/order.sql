@@ -41,9 +41,13 @@ SELECT
     o.*,
     m.name as merchant_name,
     m.phone as merchant_phone,
-    m.address as merchant_address
+    m.address as merchant_address,
+    ua.contact_name as delivery_contact_name,
+    ua.contact_phone as delivery_contact_phone,
+    ua.detail_address as delivery_address
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
+LEFT JOIN user_addresses ua ON o.address_id = ua.id
 WHERE o.id = $1;
 
 -- name: ListOrdersByUser :many
