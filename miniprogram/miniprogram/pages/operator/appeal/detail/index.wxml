@@ -1,0 +1,39 @@
+<view class="container" wx:if="{{appeal}}">
+  <view class="card">
+    <view class="row">
+        <text class="label">申诉类型</text>
+        <text class="value">{{appeal.appeal_type}}</text>
+    </view>
+    <view class="row">
+        <text class="label">关联订单</text>
+        <text class="value">{{appeal.related_order_id || '无'}}</text>
+    </view>
+    <view class="row">
+        <text class="label">申诉内容</text>
+        <text class="value content">{{appeal.content}}</text>
+    </view>
+    <view class="images" wx:if="{{appeal.images && appeal.images.length > 0}}">
+        <image wx:for="{{appeal.images}}" wx:key="*this" src="{{item}}" mode="aspectFill" class="img" />
+    </view>
+  </view>
+
+  <view class="card input-card" wx:if="{{appeal.status === 'pending'}}">
+    <t-textarea label="处理意见" placeholder="请输入处理说明" value="{{replyContent}}" bind:change="onInput" />
+  </view>
+  
+  <view class="footer-actions" wx:if="{{appeal.status === 'pending'}}">
+    <t-button theme="danger" variant="outline" block bind:tap="onReject">驳回</t-button>
+    <t-button theme="primary" block bind:tap="onApprove">同意/解决</t-button>
+  </view>
+
+    <t-dialog
+    visible="{{showRejectDialog}}"
+    title="驳回申诉"
+    confirm-btn="确认驳回"
+    cancel-btn="取消"
+    bind:confirm="onRejectConfirm"
+    bind:cancel="onRejectCancel"
+  >
+    <view slot="content">确认要驳回此申诉吗？请确保已填写处理意见。</view>
+  </t-dialog>
+</view>

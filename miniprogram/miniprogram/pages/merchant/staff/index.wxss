@@ -1,0 +1,577 @@
+/* 员工管理页面样式 - PC-SaaS 风格 */
+
+/* 小屏提示 */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.notice-box {
+  background: white;
+  padding: 48px 64px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.notice-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.notice-title {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 8px;
+}
+
+.notice-desc {
+  display: block;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.btn-back {
+  display: inline-block;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+/* 大屏布局 */
+.saas-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease;
+}
+
+.page-container {
+  flex: 1;
+  padding: 24px 32px;
+  margin-top: 60px;
+  overflow-y: auto;
+}
+
+/* 页面标题 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-icon {
+  font-size: 28px;
+}
+
+.title-text {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+/* 按钮 */
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn-refresh {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f5f5f5;
+  color: #666;
+  border: 1px solid #e0e0e0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-refresh:hover {
+  background: #eee;
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+}
+
+.btn-icon {
+  font-size: 16px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.btn-edit {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.btn-danger {
+  background: #fff1f0;
+  color: #ff4d4f;
+}
+
+.btn-cancel {
+  background: #f5f5f5;
+  color: #666;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.btn-danger-primary {
+  background: linear-gradient(135deg, #ff4d4f 0%, #cf1322 100%);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  background: white;
+  border-radius: 12px;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  font-size: 14px;
+  color: #999;
+}
+
+/* 员工表格 */
+.staff-table {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  background: #f8f9fc;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+}
+
+.table-row {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.table-row:hover {
+  background: #fafbfc;
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.col-name {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.col-role { flex: 1.5; }
+.col-status { flex: 1; }
+.col-date { flex: 1; color: #999; font-size: 13px; }
+.col-action { flex: 1.5; display: flex; align-items: center; }
+
+.staff-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.staff-avatar-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.staff-name {
+  font-weight: 500;
+  color: #333;
+}
+
+/* 角色标签 */
+.role-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.role-icon {
+  font-size: 14px;
+}
+
+/* 状态 */
+.status-active {
+  color: #52c41a;
+}
+
+.status-pending {
+  color: #fa8c16;
+  font-weight: 500;
+}
+
+.status-inactive {
+  color: #999;
+}
+
+.owner-badge {
+  color: #722ed1;
+  font-size: 12px;
+  padding: 4px 12px;
+  background: #f9f0ff;
+  border-radius: 4px;
+}
+
+/* 弹窗 */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.invite-modal {
+  width: 480px;
+}
+
+.edit-modal {
+  width: 420px;
+}
+
+.delete-modal {
+  width: 400px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.modal-close {
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #eee;
+}
+
+.modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+}
+
+/* 邀请码弹窗 */
+.qrcode-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.invite-code-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f8f9fc;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.code-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.code-value {
+  font-size: 13px;
+  font-family: monospace;
+  color: #333;
+  letter-spacing: 0.5px;
+}
+
+.invite-hint {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.invite-expires {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.invite-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-half {
+  flex: 1;
+}
+
+.btn-outline {
+  background: #fff;
+  color: #667eea;
+  border: 1px solid #667eea;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* 编辑角色弹窗 */
+.editing-staff-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.edit-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.edit-avatar-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.edit-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.role-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.role-option.active {
+  border-color: #667eea;
+  background: #667eea08;
+}
+
+.option-icon {
+  font-size: 20px;
+}
+
+/* 删除确认弹窗 */
+.delete-warning {
+  text-align: center;
+}
+
+.warning-icon {
+  display: block;
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.warning-text {
+  display: block;
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.warning-hint {
+  display: block;
+  font-size: 13px;
+  color: #999;
+}

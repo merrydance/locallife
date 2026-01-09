@@ -1,0 +1,517 @@
+/**
+ * 商户 PC-SaaS 统一样式
+ * 所有商户端桌面页面共享的变量和组件样式
+ * 使用方式：在页面 WXSS 中 @import '../../../styles/merchant-saas.wxss';
+ */
+
+/* ==================== SaaS 主题变量 ==================== */
+/* 注意：这些变量基于 TDesign 变量，做了 SaaS 风格映射 */
+page {
+  /* 主色调（蓝色系 - 专业商务感） */
+  --saas-primary: var(--td-brand-color, #1890ff);
+  --saas-primary-light: #40a9ff;
+  --saas-primary-bg: rgba(24, 144, 255, 0.1);
+  
+  /* 功能色 */
+  --saas-success: var(--td-success-color, #52c41a);
+  --saas-success-bg: #f6ffed;
+  --saas-warning: var(--td-warning-color, #faad14);
+  --saas-danger: var(--td-error-color, #ff4d4f);
+  
+  /* 文字色 */
+  --saas-text-primary: #262626;
+  --saas-text-secondary: #595959;
+  --saas-text-muted: #8c8c8c;
+  
+  /* 背景色 */
+  --saas-bg-base: #f5f5f5;
+  --saas-bg-component: #ffffff;
+  --saas-border: #e8e8e8;
+  
+  /* 侧边栏 */
+  --saas-sidebar-bg: #001529;
+  --saas-sidebar-collapsed-width: 64px;
+  --saas-sidebar-expanded-width: 200px;
+  
+  /* 头部 */
+  --saas-header-height: 56px;
+  
+  /* 间距 */
+  --saas-gap-sm: 8px;
+  --saas-gap-md: 16px;
+  --saas-gap-lg: 24px;
+  
+  /* 圆角 */
+  --saas-radius-sm: 4px;
+  --saas-radius-md: 6px;
+  --saas-radius-lg: 8px;
+  --saas-radius-xl: 12px;
+  
+  /* 阴影 */
+  --saas-shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --saas-shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  
+  /* 字体 */
+  --saas-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* ==================== 桌面端提示（通用） ==================== */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--saas-bg-base);
+  padding: 20px;
+}
+
+.notice-box {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: var(--saas-radius-xl);
+  box-shadow: var(--saas-shadow-md);
+}
+
+.notice-icon { font-size: 64px; margin-bottom: 16px; }
+.notice-title { display: block; font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.notice-desc { display: block; color: var(--saas-text-muted); margin-bottom: 24px; }
+
+/* ==================== SaaS 布局容器 ==================== */
+.saas-layout {
+  min-height: 100vh;
+  background: var(--saas-bg-base);
+  font-family: var(--saas-font-family);
+}
+
+.main-area {
+  transition: margin-left 0.2s;
+  min-height: 100vh;
+}
+
+/* ==================== 编辑面板（通用） ==================== */
+.editor-panel {
+  flex: 1;
+  min-width: 0;
+  background: var(--saas-bg-component);
+  border-radius: var(--saas-radius-lg);
+  box-shadow: var(--saas-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--saas-text-muted);
+}
+
+.placeholder-icon { font-size: 48px; margin-bottom: 12px; }
+.placeholder-text { font-size: 14px; }
+
+.editor-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--saas-border);
+}
+
+.editor-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--saas-text-primary);
+}
+
+.editor-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.editor-form {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* ==================== 按钮样式 ==================== */
+.btn-primary {
+  height: 40px;
+  padding: 0 20px;
+  line-height: 40px;
+  background: var(--saas-primary);
+  color: white;
+  border: none;
+  border-radius: var(--saas-radius-md);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+.btn-primary:hover {
+  background: var(--saas-primary-light);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  height: 40px;
+  padding: 0 16px;
+  line-height: 38px;
+  background: var(--saas-bg-component);
+  color: var(--saas-text-secondary);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius-md);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+}
+
+.btn-secondary:hover {
+  border-color: var(--saas-primary);
+  color: var(--saas-primary);
+}
+
+.btn-cancel {
+  height: 40px;
+  padding: 0 24px;
+  font-size: 14px;
+  line-height: 38px;
+  border: 1px solid var(--saas-border);
+  background: var(--saas-bg-component);
+  color: var(--saas-text-secondary);
+  border-radius: var(--saas-radius-md);
+  cursor: pointer;
+}
+
+.btn-save {
+  height: 40px;
+  padding: 0 24px;
+  font-size: 14px;
+  line-height: 40px;
+  background: var(--saas-primary);
+  color: white;
+  border: none;
+  border-radius: var(--saas-radius-md);
+  cursor: pointer;
+}
+
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  width: 100%;
+  background: transparent;
+  color: var(--saas-danger);
+  border: 1px solid var(--saas-danger);
+  padding: 10px;
+  border-radius: var(--saas-radius-md);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background: var(--saas-danger);
+  color: white;
+}
+
+/* ==================== 表单样式 ==================== */
+.form-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--saas-text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--saas-border);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-action {
+  font-size: 13px;
+  color: var(--saas-primary);
+  cursor: pointer;
+}
+
+.section-action:hover {
+  text-decoration: underline;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group.horizontal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: var(--saas-text-secondary);
+  margin-bottom: 8px;
+}
+
+.required {
+  color: var(--saas-danger);
+}
+
+.form-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 15px;
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius-lg);
+  font-size: 14px;
+  background: #fafafa;
+  box-sizing: border-box;
+}
+
+.form-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px 15px;
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius-lg);
+  font-size: 14px;
+  background: #fafafa;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+/* ==================== 开关样式 ==================== */
+.toggle {
+  width: 44px;
+  height: 24px;
+  background: #e8e8e8;
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle.on {
+  background: var(--saas-primary);
+}
+
+.toggle-handle {
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.toggle.on .toggle-handle {
+  left: 22px;
+}
+
+/* ==================== 标签选择器 ==================== */
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #f5f5f5;
+  border: 1px solid var(--saas-border);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+  user-select: none;
+}
+
+.tag-item:hover {
+  border-color: var(--saas-primary);
+  background: #f0f5ff;
+}
+
+.tag-item.selected {
+  background: var(--saas-primary-bg);
+  border-color: var(--saas-primary);
+  color: var(--saas-primary);
+}
+
+.tag-name {
+  font-size: 13px;
+}
+
+.tag-check {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--saas-primary);
+}
+
+.tags-empty {
+  color: var(--saas-text-muted);
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+/* ==================== 弹窗样式 ==================== */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s;
+  z-index: 1000;
+}
+
+.modal-mask.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  width: 500px;
+  max-height: 80vh;
+  background: white;
+  border-radius: var(--saas-radius-xl);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-panel.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.modal-panel.small {
+  width: 320px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--saas-border);
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--saas-text-primary);
+}
+
+.modal-close {
+  font-size: 18px;
+  color: var(--saas-text-muted);
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--saas-border);
+}
+
+/* ==================== 加载/空状态 ==================== */
+.loading-state, .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--saas-text-muted);
+}
+
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-text { font-size: 14px; }
+.empty-hint { font-size: 12px; color: var(--saas-text-muted); margin-top: 8px; }
+
+/* ==================== 搜索框 ==================== */
+.search-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius-md);
+  font-size: 14px;
+  background: var(--saas-bg-component);
+}
+
+/* ==================== 滚动条美化 ==================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}

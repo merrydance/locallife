@@ -1,0 +1,135 @@
+<wxs module="utils">
+var formatAmount = function(amount) {
+  return (amount / 100).toFixed(2);
+}
+var formatDistance = function(distance) {
+  if (distance < 1000) {
+    return distance + 'm';
+  }
+  return (distance / 1000).toFixed(1) + 'km';
+}
+var formatStatus = function(status) {
+    var map = {
+        'pending': '待接单',
+        'accepted': '已接单',
+        'picking_up': '取餐中',
+        'picked_up': '已取餐',
+        'delivering': '配送中',
+        'delivered': '已送达',
+        'cancelled': '已取消'
+    };
+    return map[status] || status;
+}
+module.exports = {
+  formatAmount: formatAmount,
+  formatDistance: formatDistance,
+  formatStatus: formatStatus
+}
+</wxs>
+
+<view class="task-card {{type}}">
+  <view class="card-header">
+    <text class="order-no">订单号: {{task.order_no}}</text>
+    <view class="header-right">
+        <t-tag wx:if="{{type === 'active'}}" theme="primary" size="small">{{utils.formatStatus(task.status)}}</t-tag>
+        <text class="delivery-fee" wx:if="{{type !== 'history'}}">¥{{utils.formatAmount(task.delivery_fee)}}</text>
+    </view>
+  </view>
+
+  <view class="card-body">
+    <view class="address-section">
+      <view class="address-item">
+        <t-icon name="shop" size="32rpx" color="#1890ff" />
+        <view class="address-info">
+          <view class="address-row">
+            <text class="label">取餐</text>
+            <text class="address">{{task.merchant_name}}</text>
+            <t-icon name="location-1" size="32rpx" bind:tap="onNavigate" data-type="merchant" />
+          </view>
+          <text class="detail">{{task.merchant_address}}</text>
+        </view>
+      </view>
+
+      <view class="address-item">
+        <t-icon name="location" size="32rpx" color="#52c41a" />
+        <view class="address-info">
+           <view class="address-row">
+            <text class="label">送餐</text>
+            <text class="address">{{task.customer_name}}</text>
+            <t-icon name="call" size="32rpx" bind:tap="onCall" data-phone="{{task.customer_phone}}" />
+            <t-icon name="location-1" size="32rpx" bind:tap="onNavigate" data-type="customer" />
+          </view>
+          <text class="detail">{{task.customer_address}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="task-meta">
+      <text class="meta-item">距离: {{utils.formatDistance(task.distance)}}</text>
+      <text class="meta-item" wx:if="{{type === 'available'}}">预计: {{task.estimated_time}}分钟</text>
+      <text class="meta-item" wx:if="{{type === 'active'}}">预计送达: {{task.delivery_time || '计算中...'}}</text>
+      <text class="meta-item" wx:if="{{type === 'history'}}">送达时间: {{task.delivery_time}}</text>
+    </view>
+  </view>
+
+  <view class="card-footer" wx:if="{{type !== 'history'}}">
+    <!-- Available Actions -->
+    <t-button 
+      wx:if="{{type === 'available'}}"
+      theme="primary" 
+      size="medium" 
+      block
+      bind:tap="onGrab"
+    >
+      立即抢单
+    </t-button>
+
+    <!-- Active Actions -->
+    <block wx:if="{{type === 'active'}}">
+        <t-button 
+            wx:if="{{task.status === 'accepted'}}"
+            theme="primary" 
+            size="small" 
+            bind:tap="onPickup"
+        >
+            开始取餐
+        </t-button>
+
+        <t-button 
+            wx:if="{{task.status === 'picking_up'}}"
+            theme="success" 
+            size="small" 
+            bind:tap="onConfirmPickup"
+        >
+            确认取餐
+        </t-button>
+
+        <t-button 
+            wx:if="{{task.status === 'picked_up'}}"
+            theme="primary" 
+            size="small" 
+            bind:tap="onDeliver"
+        >
+            开始配送
+        </t-button>
+
+        <t-button 
+            wx:if="{{task.status === 'delivering'}}"
+            theme="success" 
+            size="small" 
+            bind:tap="onConfirmDeliver"
+        >
+            确认送达
+        </t-button>
+
+        <t-button 
+            theme="default" 
+            size="small" 
+            variant="outline"
+            bind:tap="onException"
+        >
+            上报异常
+        </t-button>
+    </block>
+  </view>
+</view>

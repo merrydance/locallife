@@ -1,0 +1,114 @@
+.container {
+    min-height: 100vh;
+    background: #f5f5f5;
+    padding: 24rpx;
+}
+
+.score-card {
+    background: #fff;
+    border-radius: 12rpx;
+    padding: 48rpx;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 24rpx;
+}
+
+.chart-box {
+    position: relative;
+    width: 240rpx;
+    height: 240rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 24rpx;
+}
+
+/* Override t-progress size if needed via class, but component props are limited. 
+   Assuming default size fits or controlled by container. 
+   Actually t-progress circle size defaults to fit. */
+
+.score-text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.num {
+    font-size: 56rpx;
+    font-weight: bold;
+    color: #333;
+}
+
+.label {
+    font-size: 24rpx;
+    color: #999;
+}
+
+.level {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: #333;
+}
+
+.title {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 24rpx;
+    padding-left: 12rpx;
+    border-left: 8rpx solid #E34D59;
+}
+
+.list {
+    background: #fff;
+    border-radius: 12rpx;
+    padding: 0 24rpx;
+}
+
+.item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24rpx 0;
+    border-bottom: 1rpx solid #f5f5f5;
+}
+
+.item:last-child {
+    border-bottom: none;
+}
+
+.left {
+    display: flex;
+    flex-direction: column;
+}
+
+.action {
+    font-size: 28rpx;
+    color: #333;
+    margin-bottom: 8rpx;
+}
+
+.time {
+    font-size: 24rpx;
+    color: #999;
+}
+
+.right {
+    font-size: 32rpx;
+    font-weight: bold;
+}
+
+.plus {
+    color: #00A870;
+}
+
+.minus {
+    color: #E34D59;
+}

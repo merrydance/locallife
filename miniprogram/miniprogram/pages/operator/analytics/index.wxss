@@ -1,0 +1,131 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.content {
+  padding: 24rpx;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.large-screen .metrics-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.metric-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.metric-label {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.metric-value {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.metric-trend {
+  display: flex;
+  align-items: center;
+  font-size: 24rpx;
+  gap: 4rpx;
+}
+
+.metric-trend.up { color: #00A870; }
+.metric-trend.down { color: #E34D59; }
+
+.chart-card, .table-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.card-header {
+  margin-bottom: 24rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.chart-container {
+  width: 100%;
+  height: 500rpx;
+}
+
+ec-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.ranking-item:last-child {
+  border-bottom: none;
+}
+
+.rank-num {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  font-weight: bold;
+  font-size: 28rpx;
+  margin-right: 24rpx;
+  border-radius: 8rpx;
+  background: #F0F0F0;
+  color: #666;
+}
+
+.rank-1 { background: #FFD700; color: #fff; }
+.rank-2 { background: #C0C0C0; color: #fff; }
+.rank-3 { background: #CD7F32; color: #fff; }
+
+.merchant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.merchant-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.merchant-orders {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.merchant-gmv {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}

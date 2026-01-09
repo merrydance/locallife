@@ -1,0 +1,12 @@
+{
+    "navigationBarTitleText": "领券中心",
+    "navigationBarBackgroundColor": "#e34d59",
+    "navigationBarTextStyle": "white",
+    "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-progress": "tdesign-miniprogram/progress/progress",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-pull-down-refresh": "tdesign-miniprogram/pull-down-refresh/pull-down-refresh",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

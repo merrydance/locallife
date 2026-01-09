@@ -1,0 +1,112 @@
+.page {
+  min-height: 100vh;
+  padding: 24rpx 32rpx 80rpx;
+  background: #f4f5fb;
+}
+
+.credit-hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 28rpx;
+  padding: 40rpx;
+  margin-top: 16rpx;
+  margin-bottom: 28rpx;
+  color: #fff;
+}
+
+.credit-title {
+  font-size: 36rpx;
+  font-weight: 600;
+}
+
+.credit-subtitle {
+  font-size: 28rpx;
+  margin-top: 8rpx;
+  opacity: 0.9;
+}
+
+.credit-desc {
+  font-size: 24rpx;
+  margin-top: 16rpx;
+  opacity: 0.75;
+  line-height: 1.5;
+}
+
+.card,
+.faq-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  box-shadow: 0 12rpx 24rpx rgba(27, 31, 65, 0.08);
+  margin-bottom: 24rpx;
+}
+
+.card-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24rpx;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1e1f3b;
+}
+
+.card-sub {
+  font-size: 24rpx;
+  color: #7a819f;
+  margin-top: 8rpx;
+  line-height: 1.5;
+}
+
+.card-action {
+  align-self: flex-start;
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  border: 1px solid #dedff5;
+  font-size: 24rpx;
+  color: #5a37ff;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.card:active {
+  transform: scale(0.99);
+}
+
+.faq-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+  color: #1e1f3b;
+}
+
+.faq-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f1f2fb;
+}
+
+.faq-item:last-child {
+  border-bottom: none;
+}
+
+.faq-question {
+  font-size: 28rpx;
+  color: #1e1f3b;
+  font-weight: 600;
+}
+
+.faq-answer {
+  font-size: 24rpx;
+  color: #7a819f;
+  margin-top: 6rpx;
+}
+
+.arrow {
+  font-size: 40rpx;
+  color: #b0b4d0;
+}

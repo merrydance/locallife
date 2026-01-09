@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "物流信息",
+  "navigationBarBackgroundColor": "#ffffff",
+  "navigationBarTextStyle": "black",
+  "backgroundColor": "#f2f5fc",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index"
+  }
+}

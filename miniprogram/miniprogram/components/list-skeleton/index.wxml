@@ -1,0 +1,14 @@
+<!-- 通用列表项骨架屏组件 -->
+<view class="list-skeleton">
+  <view class="skeleton-left">
+    <view class="skeleton-avatar" wx:if="{{showAvatar}}"></view>
+  </view>
+  <view class="skeleton-content">
+    <view class="skeleton-line skeleton-title"></view>
+    <view class="skeleton-line skeleton-subtitle"></view>
+    <view class="skeleton-line skeleton-desc"></view>
+  </view>
+  <view class="skeleton-right" wx:if="{{showArrow}}">
+    <view class="skeleton-arrow"></view>
+  </view>
+</view>

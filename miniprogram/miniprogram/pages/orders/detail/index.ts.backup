@@ -1,0 +1,99 @@
+import Navigation from '../../../utils/navigation'
+import CartService from '../../../services/cart'
+import { getOrderDetail } from '../../../api/order'
+import { OrderAdapter } from '../../../adapters/order'
+import { OrderDetail } from '../../../models/order'
+
+Page({
+    data: {
+        orderId: '',
+        order: null as OrderDetail | null,
+        navBarHeight: 88,
+        loading: false
+    },
+
+    onLoad(options: any) {
+        if (options.id) {
+            this.setData({ orderId: options.id })
+            this.loadOrderDetail()
+        }
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    async loadOrderDetail() {
+        this.setData({ loading: true })
+
+        try {
+            const orderDTO = await getOrderDetail(this.data.orderId)
+            const order = OrderAdapter.toDetailViewModel(orderDTO)
+
+            this.setData({
+                order,
+                loading: false
+            })
+        } catch (error) {
+            console.error('Load order detail failed:', error)
+            wx.showToast({ title: '加载失败', icon: 'error' })
+            this.setData({ loading: false })
+        }
+    },
+
+    onCallMerchant() {
+        const { order } = this.data
+        if (order) {
+            // TODO: Merchant phone is not in OrderDTO yet, might need to fetch merchant detail
+            // For now, we can try to find it or use a placeholder if not available
+             wx.showToast({ title: '暂无商家电话', icon: 'none' })
+        }
+    },
+
+    onCancelOrder() {
+        wx.showModal({
+            title: '取消订单',
+            content: '确认取消此订单?',
+            success: async (res) => {
+                if (res.confirm) {
+                    // TODO: Implement cancel API
+                    // await cancelOrder(this.data.orderId)
+                    wx.showToast({ title: '已取消', icon: 'success' })
+                    setTimeout(() => wx.navigateBack(), 1500)
+                }
+            }
+        })
+    },
+
+    // 评价订单
+    onReview() {
+        wx.showToast({ title: '评价功能开发中', icon: 'none' })
+        // Navigation.toReview(this.data.orderId)
+    },
+
+    // 再来一单
+    onReorder() {
+        const { order } = this.data
+        if (!order) return
+
+        // 将订单菜品加入购物车
+        CartService.clear()
+        order.items.forEach((item) => {
+            CartService.addItem({
+                merchantId: order.merchantId,
+                dishId: item.dishId,
+                dishName: item.dishName,
+                shopName: order.merchantName,
+                imageUrl: '', // Image URL is not in OrderItemDTO currently
+                price: item.price,
+                priceDisplay: item.priceDisplay,
+                quantity: item.quantity
+            })
+        })
+
+        wx.showToast({ title: '已加入购物车', icon: 'success' })
+        setTimeout(() => {
+            wx.navigateTo({ url: '/pages/takeout/order-confirm/index' })
+        }, 500)
+    }
+})

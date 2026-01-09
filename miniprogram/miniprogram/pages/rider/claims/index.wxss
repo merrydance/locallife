@@ -1,0 +1,90 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+  padding: 24rpx;
+}
+
+.form-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 24rpx;
+}
+
+.image-uploader {
+  display: flex;
+  gap: 16rpx;
+  margin: 24rpx 0;
+  flex-wrap: wrap;
+}
+
+.upload-btn {
+  width: 160rpx;
+  height: 160rpx;
+  background: #F9F9F9;
+  border-radius: 8rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.image-preview {
+  border-radius: 8rpx;
+  overflow: hidden;
+}
+
+.history-section {
+  margin-top: 32rpx;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 40rpx 0;
+}
+
+.empty {
+  padding: 60rpx 0;
+}
+
+.claim-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.claim-type {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.claim-desc {
+  font-size: 26rpx;
+  color: #666;
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.claim-time {
+  font-size: 24rpx;
+  color: #999;
+}

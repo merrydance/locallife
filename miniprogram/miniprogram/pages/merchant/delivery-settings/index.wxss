@@ -1,0 +1,471 @@
+/* 运费减免设置 - 桌面级 SaaS 样式 */
+
+/* 小屏提示 */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.notice-box {
+  background: #fff;
+  padding: 48px 64px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+
+.notice-icon { font-size: 64px; display: block; margin-bottom: 16px; }
+.notice-title { display: block; font-size: 20px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
+.notice-desc { display: block; font-size: 14px; color: #666; margin-bottom: 24px; }
+.btn-back {
+  display: inline-block;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* SaaS 布局 */
+.saas-layout {
+  min-height: 100vh;
+  background: #f0f2f5;
+}
+
+.page-container {
+  padding: 24px 32px;
+  margin-top: 56px;
+}
+
+/* 页面头部 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.page-title-section { display: flex; flex-direction: column; gap: 4px; }
+.page-title { font-size: 24px; font-weight: 700; color: #1a1a2e; }
+.page-subtitle { font-size: 14px; color: #8c8c8c; }
+
+.page-actions { display: flex; gap: 12px; }
+.btn-add {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  border: none;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  color: #888;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px;
+  color: #8c8c8c;
+}
+
+.empty-icon { font-size: 64px; margin-bottom: 16px; }
+.empty-text { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+.empty-hint { font-size: 14px; }
+
+/* 规则列表 */
+.promotions-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.promotion-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-left: 4px solid #52c41a;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.promotion-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+.promotion-card.inactive {
+  border-left-color: #d9d9d9;
+  opacity: 0.7;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.promo-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #f5f5f5;
+  color: #999;
+}
+
+.status-badge.active {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.card-body {
+  margin-bottom: 16px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #8c8c8c;
+}
+
+.info-value {
+  font-size: 13px;
+  color: #333;
+}
+
+.info-value.highlight {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-delete {
+  padding: 6px 16px;
+  background: #fff;
+  border: 1px solid #ff4d4f;
+  color: #ff4d4f;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+/* 弹窗 */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-box {
+  background: #fff;
+  border-radius: 12px;
+  width: 480px;
+  max-width: 90%;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #999;
+}
+
+.modal-close:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 44px;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.form-input.picker {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  color: #333;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.btn-cancel, .btn-confirm {
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  color: #666;
+}
+
+.btn-confirm {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+}
+
+.btn-confirm[disabled] {
+  opacity: 0.6;
+}
+
+/* 日期输入样式 */
+.date-input {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.date-input .placeholder {
+  color: #999;
+}
+
+.date-icon {
+  font-size: 16px;
+}
+
+/* 日历弹窗 */
+.calendar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s;
+}
+
+.calendar-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.calendar-popup {
+  background: #fff;
+  border-radius: 12px;
+  width: 320px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  transform: scale(0.95);
+  transition: transform 0.2s;
+}
+
+.calendar-overlay.show .calendar-popup {
+  transform: scale(1);
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.calendar-nav {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.calendar-nav:hover {
+  background: #f3f4f6;
+  color: #667eea;
+}
+
+.calendar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 12px 16px 8px;
+  background: #fafafa;
+}
+
+.weekday {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  font-weight: 500;
+}
+
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 8px 16px 16px;
+  gap: 4px;
+}
+
+.day-cell {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #333;
+}
+
+.day-cell:hover:not(.disabled):not(.selected) {
+  background: #f3f4f6;
+}
+
+.day-cell.other-month {
+  color: #ccc;
+}
+
+.day-cell.today {
+  border: 1px solid #667eea;
+}
+
+.day-cell.selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.day-cell.disabled {
+  color: #d1d5db;
+  cursor: not-allowed;
+}
+
+.calendar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  justify-content: center;
+}
+
+.calendar-today-btn {
+  font-size: 13px;
+  color: #667eea;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.calendar-today-btn:hover {
+  background: #f5f3ff;
+}

@@ -1,0 +1,24 @@
+
+<view class="auth-image {{className}}" style="{{customStyle}}">
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-state">
+    <t-loading theme="circular" size="40rpx" inherit-color />
+  </view>
+
+  <!-- 加载失败 -->
+  <view wx:elif="{{error}}" class="error-state" bindtap="retry">
+    <t-icon name="image-error" size="48rpx" color="#ccc" />
+  </view>
+
+  <!-- 图片显示 -->
+  <image 
+    wx:else 
+    src="{{localPath}}" 
+    mode="{{mode}}" 
+    class="image-element" 
+    lazy-load="{{lazyLoad}}" 
+    show-menu-by-longpress="{{showMenuByLongpress}}"
+    binderror="onError" 
+    bindload="onLoad"
+  />
+</view>

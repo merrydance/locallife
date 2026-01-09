@@ -1,0 +1,188 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.swiper {
+  width: 100%;
+  height: 400rpx;
+}
+
+.swiper-image {
+  width: 100%;
+  height: 100%;
+}
+
+.info-section,
+.facilities-section,
+.desc-section {
+  background: #fff;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.room-name {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  font-size: 28rpx;
+}
+
+.label {
+  color: #666;
+}
+
+.value {
+  color: #333;
+  font-weight: 500;
+}
+
+.value.price {
+  color: #E34D59;
+  font-weight: bold;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 24rpx;
+}
+
+.facilities-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16rpx;
+}
+
+.facility-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.desc-text {
+  font-size: 28rpx;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* 日历区块 */
+.calendar-section {
+  background: #fff;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.month-label {
+  font-size: 24rpx;
+  font-weight: normal;
+  color: #666;
+  margin-left: 12rpx;
+}
+
+.calendar-grid {
+  margin-top: 24rpx;
+}
+
+.calendar-header {
+  display: flex;
+  border-bottom: 1rpx solid #eee;
+  padding-bottom: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.header-cell {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header-cell.empty {
+  width: 80rpx;
+  flex: none;
+}
+
+.day-label {
+  font-size: 22rpx;
+  color: #999;
+}
+
+.date-num {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  margin-top: 4rpx;
+}
+
+.calendar-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.row-label {
+  width: 80rpx;
+  font-size: 24rpx;
+  color: #666;
+  text-align: center;
+}
+
+.calendar-cell {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 12rpx 0;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 48rpx;
+  margin-top: 24rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #eee;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16rpx 24rpx;
+  background: #fff;
+  box-shadow: 0 -4rpx 12rpx rgba(0,0,0,0.08);
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+}

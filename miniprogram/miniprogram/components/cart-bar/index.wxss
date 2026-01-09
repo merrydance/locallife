@@ -1,0 +1,122 @@
+.cart-bar {
+  position: fixed;
+  bottom: 40rpx;
+  left: 24rpx;
+  right: 24rpx;
+  height: 100rpx;
+  background: linear-gradient(135deg, var(--brand-coral) 0%, var(--td-brand-color-9) 100%);
+  border-radius: 50rpx;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  z-index: 999;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(150%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cart-bar.show {
+  transform: translateY(0);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(150%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.cart-icon-wrapper {
+  position: relative;
+  width: 100rpx;
+  height: 100rpx;
+  margin-top: -30rpx;
+  margin-left: 20rpx;
+}
+
+.cart-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--td-bg-color-container);
+  padding: 20rpx;
+  box-sizing: border-box;
+  box-shadow: var(--shadow-md);
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--td-error-color);
+  color: var(--td-text-color-anti);
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  border: 2rpx solid var(--td-bg-color-container);
+}
+
+.cart-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-left: 20rpx;
+}
+
+.price-info {
+  color: var(--td-text-color-anti);
+  font-size: 36rpx;
+  font-weight: bold;
+}
+
+.currency {
+  font-size: 24rpx;
+  margin-right: 4rpx;
+}
+
+.delivery-tip {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 20rpx;
+}
+
+.checkout-btn {
+  width: 200rpx;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 600;
+  border-top-right-radius: 50rpx;
+  border-bottom-right-radius: 50rpx;
+  transition: all 0.3s;
+}
+
+.checkout-btn.active {
+  background: rgba(255, 255, 255, 0.25);
+  color: var(--td-text-color-anti);
+  backdrop-filter: blur(10rpx);
+}
+
+.cart-bar-placeholder {
+  height: 140rpx; /* bar height + bottom margin */
+}
+
+/* 贴底模式 - 只调整位置，保持原有视觉样式 */
+.cart-bar.dock-bottom {
+  bottom: 0;
+  left: 24rpx;
+  right: 24rpx;
+  margin-bottom: env(safe-area-inset-bottom);
+}
+
+.cart-bar-placeholder.dock-bottom {
+  height: calc(140rpx + env(safe-area-inset-bottom));
+}
+

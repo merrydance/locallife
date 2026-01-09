@@ -1,0 +1,100 @@
+<!-- 经营健康分 - 桌面级 SaaS 界面 -->
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- PC 全屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <merchant-header 
+      merchant-name="{{merchantName}}"
+      is-open="{{true}}"
+    />
+
+    <view class="page-container">
+      <!-- 页面头部 -->
+      <view class="page-header">
+        <view class="page-title-section">
+          <text class="page-title">经营健康分</text>
+          <text class="page-subtitle">监控店铺经营状况和信任评分</text>
+        </view>
+        <view class="page-actions">
+          <button class="btn-refresh" bindtap="loadHealthInfo">
+            <text>🔄 刷新</text>
+          </button>
+        </view>
+      </view>
+
+      <!-- Loading -->
+      <view wx:if="{{loading}}" class="loading-container">
+        <view class="loading-spinner"></view>
+        <text>加载中...</text>
+      </view>
+
+      <view wx:else class="content-area">
+        <!-- 健康分大卡片 -->
+        <view class="health-card-large">
+          <view class="score-section">
+            <view class="score-ring {{score >= 90 ? 'excellent' : (score >= 80 ? 'good' : (score >= 60 ? 'warning' : 'danger'))}}">
+              <text class="score-value">{{score}}</text>
+            </view>
+            <view class="score-info">
+              <text class="level-text">{{level}}</text>
+              <text class="level-desc">{{levelDesc}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 核心指标网格 -->
+        <view class="section">
+          <view class="section-header">
+            <text class="section-title">📊 核心指标</text>
+          </view>
+          <view class="metrics-grid">
+            <view wx:for="{{metrics}}" wx:key="label" class="metric-card {{item.status === 'GOOD' ? 'good' : (item.status === 'WARNING' ? 'warning' : 'danger')}}">
+              <text class="metric-value">{{item.value}}</text>
+              <text class="metric-label">{{item.label}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 违规/预警记录 -->
+        <view class="section">
+          <view class="section-header">
+            <text class="section-title">⚠️ 违规/预警记录</text>
+          </view>
+          
+          <view wx:if="{{violations.length === 0}}" class="empty-state">
+            <text class="empty-icon">✅</text>
+            <text class="empty-text">暂无违规记录，继续保持</text>
+          </view>
+
+          <view wx:else class="violations-list">
+            <view wx:for="{{violations}}" wx:key="id" class="violation-card">
+              <view class="card-header">
+                <view class="type-tag {{item.type === 'WARNING' ? 'warning' : 'danger'}}">
+                  {{item.type === 'WARNING' ? '预警' : '违规'}}
+                </view>
+                <text class="time">{{item.created_at}}</text>
+              </view>
+              <text class="violation-title">{{item.title}}</text>
+              <text class="violation-desc">{{item.desc}}</text>
+              <view class="card-actions">
+                <button class="btn-appeal" data-id="{{item.id}}" bindtap="onAppeal">申诉</button>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>

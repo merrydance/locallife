@@ -1,0 +1,31 @@
+<view class="container">
+  <view class="rating-section">
+    <text class="label">评分</text>
+    <t-rate value="{{rating}}" size="24" bind:change="onRateChange" />
+  </view>
+
+  <view class="content-section">
+    <t-textarea 
+        placeholder="口味如何，环境怎么样，服务周到吗？" 
+        value="{{content}}" 
+        bind:change="onContentInput" 
+        maxlength="200" 
+        indicator
+        style="height: 300rpx"
+    />
+  </view>
+
+  <view class="upload-section">
+    <t-upload
+        mediaType="{{['image']}}"
+        max="{{3}}"
+        files="{{fileList}}"
+        bind:add="onAddFile"
+        bind:remove="onRemoveFile"
+    />
+  </view>
+
+  <view class="footer">
+    <t-button theme="primary" block size="large" loading="{{submitting}}" bind:tap="onSubmit">提交评价</t-button>
+  </view>
+</view>

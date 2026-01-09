@@ -1,0 +1,52 @@
+<view class="uploader-container {{disabled ? 'disabled' : ''}}" bind:tap="onUpload">
+  <!-- Corner Markers (Decoration) -->
+  <view class="corner corner-tl"></view>
+  <view class="corner corner-tr"></view>
+  <view class="corner corner-bl"></view>
+  <view class="corner corner-br"></view>
+
+  <!-- Content -->
+  <view class="content">
+    <!-- 1. Has Image -->
+    <block wx:if="{{value}}">
+      <image class="preview-image" src="{{value}}" mode="aspectFill" catch:tap="onPreview" binderror="onImageError" />
+      <view class="remove-btn" catch:tap="onRemove" wx:if="{{!disabled}}">
+        <t-icon name="close" size="32rpx" color="#fff" />
+      </view>
+    </block>
+    
+    <!-- 2. Loading -->
+    <view class="loading-state" wx:elif="{{uploading}}">
+      <t-loading theme="circular" size="48rpx" text="上传中..." />
+    </view>
+
+    <!-- 3. Placeholder (Empty) -->
+    <view class="placeholder-state" wx:else>
+      <!-- ID Front -->
+      <view class="icon-wrapper" wx:if="{{type === 'id-front'}}">
+        <t-icon name="user" size="80rpx" color="#B5C4D8" />
+        <div class="icon-deco-lines"></div>
+      </view>
+
+      <!-- ID Back -->
+      <view class="icon-wrapper" wx:elif="{{type === 'id-back'}}">
+         <t-icon name="certificate" size="80rpx" color="#B5C4D8" />
+      </view>
+
+       <!-- License / Permit -->
+      <view class="icon-wrapper" wx:elif="{{type === 'license' || type === 'permit'}}">
+         <t-icon name="file-certificate" size="80rpx" color="#B5C4D8" />
+      </view>
+
+      <!-- Shop -->
+      <view class="icon-wrapper" wx:elif="{{type === 'shop'}}">
+         <t-icon name="shop" size="80rpx" color="#B5C4D8" />
+      </view>
+
+      <!-- Default -->
+      <t-icon wx:else name="add" size="64rpx" color="#B5C4D8" />
+
+      <text class="placeholder-text">{{title || '点击上传'}}</text>
+    </view>
+  </view>
+</view>

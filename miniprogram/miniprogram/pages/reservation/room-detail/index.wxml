@@ -1,0 +1,131 @@
+<custom-navbar title="包间详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <view wx:if="{{loading}}" class="loading-wrapper">
+    <t-loading theme="circular" size="40rpx" />
+  </view>
+
+  <view wx:if="{{!loading && room}}" class="content">
+    <!-- 轮播图 -->
+    <t-swiper 
+      wx:if="{{room.images.length > 0}}"
+      list="{{room.images}}"
+      autoplay="{{true}}"
+      duration="{{300}}"
+      interval="{{3000}}"
+      navigation="{{ { type: 'dots' } }}"
+      height="{{400}}"
+    />
+
+    <!-- 基本信息 -->
+    <view class="info-section">
+      <view class="header-row">
+        <text class="room-name">{{room.name}}</text>
+        <t-tag theme="success" variant="light">可预订</t-tag>
+      </view>
+      <view class="detail-row">
+        <text class="label">容纳人数</text>
+        <text class="value">{{room.capacity}}人</text>
+      </view>
+      <view class="detail-row">
+        <text class="label">最低消费</text>
+        <text class="value price">¥{{room.minSpendDisplay}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="label">预定定金</text>
+        <text class="value price">¥{{room.depositDisplay}}</text>
+      </view>
+    </view>
+
+    <!-- 设施服务 -->
+    <view class="facilities-section" wx:if="{{room.facilities.length > 0}}">
+      <view class="section-title">设施服务</view>
+      <view class="facilities-grid">
+        <view wx:for="{{room.facilities}}" wx:key="*this" class="facility-item">
+          <t-icon name="check-circle" size="32rpx" color="#00A870" />
+          <text>{{item}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 可用日期日历 -->
+    <view class="calendar-section">
+      <view class="section-title">可预约日期 <text class="month-label">{{currentMonth}}</text></view>
+      <t-loading wx:if="{{loadingDates}}" theme="circular" size="32rpx" />
+      
+      <view class="calendar-grid" wx:if="{{!loadingDates && calendarDays.length > 0}}">
+        <!-- 表头 -->
+        <view class="calendar-header">
+          <view class="header-cell empty"></view>
+          <view class="header-cell" wx:for="{{calendarDays}}" wx:key="date">
+            <text class="day-label">{{item.dayLabel}}</text>
+            <text class="date-num">{{item.dateNum}}</text>
+          </view>
+        </view>
+        
+        <!-- 午餐行 -->
+        <view class="calendar-row">
+          <view class="row-label">午餐</view>
+          <view 
+            class="calendar-cell {{item.lunchAvailable ? 'available' : 'unavailable'}}" 
+            wx:for="{{calendarDays}}" 
+            wx:key="date"
+            bindtap="onCellTap"
+            data-date="{{item.date}}"
+            data-type="lunch"
+            data-available="{{item.lunchAvailable}}"
+          >
+            <t-icon 
+              name="{{item.lunchAvailable ? 'check-circle-filled' : 'close-circle-filled'}}" 
+              size="36rpx" 
+              color="{{item.lunchAvailable ? '#00A870' : '#E34D59'}}" 
+            />
+          </view>
+        </view>
+        
+        <!-- 晚餐行 -->
+        <view class="calendar-row">
+          <view class="row-label">晚餐</view>
+          <view 
+            class="calendar-cell {{item.dinnerAvailable ? 'available' : 'unavailable'}}" 
+            wx:for="{{calendarDays}}" 
+            wx:key="date"
+            bindtap="onCellTap"
+            data-date="{{item.date}}"
+            data-type="dinner"
+            data-available="{{item.dinnerAvailable}}"
+          >
+            <t-icon 
+              name="{{item.dinnerAvailable ? 'check-circle-filled' : 'close-circle-filled'}}" 
+              size="36rpx" 
+              color="{{item.dinnerAvailable ? '#00A870' : '#E34D59'}}" 
+            />
+          </view>
+        </view>
+      </view>
+      
+      <!-- 图例 -->
+      <view class="legend">
+        <view class="legend-item">
+          <t-icon name="check-circle-filled" size="28rpx" color="#00A870" />
+          <text>可预订</text>
+        </view>
+        <view class="legend-item">
+          <t-icon name="close-circle-filled" size="28rpx" color="#E34D59" />
+          <text>已约满</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 包间介绍 -->
+    <view class="desc-section" wx:if="{{room.description}}">
+      <view class="section-title">包间介绍</view>
+      <text class="desc-text">{{room.description}}</text>
+    </view>
+  </view>
+</view>
+
+<!-- 底部按钮 -->
+<view wx:if="{{!loading && room}}" class="bottom-bar">
+  <t-button block theme="primary" size="large" bindtap="onBook">立即预定</t-button>
+</view>

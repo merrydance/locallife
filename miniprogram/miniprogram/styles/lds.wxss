@@ -1,0 +1,157 @@
+/**
+ * LocalLife Desktop System (LDS) Utility Core
+ * Specialized for high-density merchant workstations.
+ */
+
+/* LDS Variables */
+.lds-root {
+  --lds-font-xs: 11px;
+  --lds-font-sm: 13px;
+  --lds-font-base: 14px;
+  --lds-font-md: 16px;
+  --lds-font-lg: 20px;
+  
+  --lds-primary: #0052d9;
+  --lds-bg-page: #f1f5f9;
+  --lds-bg-container: #ffffff;
+  --lds-bg-hover: #f8fafc;
+  --lds-border: #e2e8f0;
+  
+  --lds-text-primary: #0f172a;
+  --lds-text-secondary: #64748b;
+  --lds-text-muted: #94a3b8;
+  
+  --lds-radius-sm: 4px;
+  --lds-radius-md: 8px;
+  --lds-radius-lg: 12px;
+  
+  --lds-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--lds-text-primary);
+  background: var(--lds-bg-page);
+
+  /* TDesign Variable Overrides for Professional High Density */
+  --td-font-size-m: 14px !important;
+  --td-cell-min-height: 40px !important;
+  --td-cell-vertical-padding: 8px !important;
+  --td-cell-horizontal-padding: 16px !important;
+  --td-cell-title-font-size: 14px !important;
+  
+  --td-input-vertical-padding: 6px !important;
+  --td-input-placeholder-font-size: 13px !important;
+  --td-input-height: 32px !important;
+
+  --td-switch-height: 20px !important;
+  --td-switch-width: 40px !important;
+
+  --td-spacer-4: 12px !important; /* Tighten generic gaps */
+}
+
+/* Typography Resets - Targetted instead of blanket tags */
+.lds-root text, .lds-root .t-input__control, .lds-root .t-button__text {
+  font-size: var(--lds-font-base) !important;
+}
+
+.lds-text-xs { font-size: var(--lds-font-xs) !important; }
+.lds-text-sm { font-size: var(--lds-font-sm) !important; }
+.lds-text-md { font-size: var(--lds-font-md) !important; font-weight: 600; }
+.lds-text-lg { font-size: var(--lds-font-lg) !important; font-weight: 800; }
+
+.lds-text-secondary { color: var(--lds-text-secondary) !important; }
+.lds-text-muted { color: var(--lds-text-muted) !important; }
+.lds-text-primary-color { color: var(--lds-primary) !important; }
+
+/* Spacing Utilities */
+.lds-p-2 { padding: 8px !important; }
+.lds-p-4 { padding: 16px !important; }
+.lds-p-6 { padding: 24px !important; }
+.lds-m-b-2 { margin-bottom: 8px !important; }
+.lds-m-b-4 { margin-bottom: 16px !important; }
+
+/* Layout Components */
+.lds-pane-container {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.lds-pane {
+  background: var(--lds-bg-container);
+  border-right: 1px solid var(--lds-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lds-pane-header {
+  height: 56px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--lds-border);
+  flex-shrink: 0;
+}
+
+.lds-pane-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Interactive States */
+.lds-hoverable { transition: all 0.2s; cursor: pointer; }
+.lds-hoverable:hover { background: var(--lds-bg-hover); }
+
+.lds-active {
+  background: #eff6ff !important;
+  color: var(--lds-primary) !important;
+  border-right: 2px solid var(--lds-primary);
+}
+
+/* Component Depth Fixes - Forcing density against app.wxss important bleed */
+.lds-root .t-cell {
+  min-height: 32px !important;
+  padding: 4px 16px !important;
+}
+
+.lds-root .t-input {
+  padding: 4px 1px !important;
+  height: auto !important;
+  min-height: 32px !important;
+}
+
+.lds-root .t-input__label {
+  font-size: 13px !important;
+  color: var(--lds-text-secondary) !important;
+  min-height: auto !important;
+  margin-bottom: 2px !important;
+}
+
+.lds-root .t-input__wrap {
+  padding: 0 !important;
+}
+
+.lds-root .t-switch {
+  transform: scale(0.9);
+  transform-origin: right center;
+}
+
+.lds-root .t-switch__body {
+  height: 20px !important;
+  min-width: 40px !important;
+}
+
+.lds-root .t-switch__dot {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Card Style */
+.lds-card {
+  background: var(--lds-bg-container);
+  border: 1px solid var(--lds-border);
+  border-radius: var(--lds-radius-md);
+  box-shadow: var(--lds-shadow);
+  overflow: hidden;
+}

@@ -1,0 +1,23 @@
+{
+    "navigationBarTitleText": "配送管理",
+    "navigationBarBackgroundColor": "#667eea",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f5f5f5",
+    "enablePullDownRefresh": false,
+    "disableScroll": true,
+    "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-textarea": "tdesign-miniprogram/textarea/textarea",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-popup": "tdesign-miniprogram/popup/popup",
+        "delivery-task-card": "/components/delivery-task-card/index"
+    }
+}

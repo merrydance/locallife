@@ -1,0 +1,23 @@
+<view class="virtual-list-container">
+  <scroll-view 
+    class="virtual-scroll-view"
+    scroll-y
+    enhanced
+    enable-passive
+    scroll-with-animation="{{false}}"
+    bindscroll="onScroll"
+    bindscrolltolower="onScrollToLower"
+    lower-threshold="100"
+  >
+    <!-- 上方填充 -->
+    <view class="virtual-placeholder-top" style="height: {{offsetTop}}px;"></view>
+
+    <!-- 可见区域渲染 (由父组件通过slot提供渲染逻辑) -->
+    <view class="virtual-items-wrapper">
+      <slot wx:for="{{visibleItems}}" wx:key="{{uniqueKey}}" wx:for-item="item" wx:for-index="virtualIndex"></slot>
+    </view>
+
+    <!-- 下方填充 -->
+    <view class="virtual-placeholder-bottom" style="height: {{offsetBottom}}px;"></view>
+  </scroll-view>
+</view>

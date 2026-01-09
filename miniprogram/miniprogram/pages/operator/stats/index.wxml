@@ -1,0 +1,26 @@
+<view class="container">
+  <view class="header">平台数据看板</view>
+  
+  <view class="card-grid">
+    <view class="card">
+        <text class="label">今日GMV</text>
+        <text class="value">¥{{stats.gmv}}</text>
+    </view>
+    <view class="card">
+        <text class="label">总订单数</text>
+        <text class="value">{{stats.total_orders}}</text>
+    </view>
+    <view class="card">
+        <text class="label">活跃商户</text>
+        <text class="value">{{stats.active_merchants}}</text>
+    </view>
+    <view class="card">
+        <text class="label">活跃用户</text>
+        <text class="value">{{stats.active_users}}</text>
+    </view>
+  </view>
+  
+  <view class="chart-box">
+     <t-empty icon="chart-bar" description="趋势图表待集成" />
+  </view>
+</view>

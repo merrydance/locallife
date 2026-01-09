@@ -1,0 +1,145 @@
+import { OrderAdapter } from '../../../adapters/order'
+import { Order } from '../../../models/order'
+import { getMerchantMetrics, getMerchantOrders, getMerchantAdminDetail, setMerchantOnline, setMerchantOffline, acceptOrder, readyOrder } from '../../../api/merchant'
+
+const app = getApp<IAppOption>()
+
+Page({
+    data: {
+        isTablet: false,
+        onlineStatus: false,
+        merchantId: '',
+        stats: {
+            gmv: 0,
+            orderCount: 0
+        },
+        orders: [] as Order[]
+    },
+
+    onLoad() {
+        this.checkDevice()
+        
+        // Retrieve merchantId from globalData
+        if (app.globalData.merchantId) {
+            this.init(app.globalData.merchantId)
+        } else if (app.globalData.userInfo) {
+             // User info loaded but no merchantId? Maybe not a merchant or data missing.
+             this.handleNoMerchantId()
+        } else {
+            // Wait for login
+            app.userInfoReadyCallback = (userInfo) => {
+                if (app.globalData.merchantId) {
+                    this.init(app.globalData.merchantId)
+                } else {
+                    this.handleNoMerchantId()
+                }
+            }
+        }
+    },
+
+    init(merchantId: string) {
+        this.setData({ merchantId })
+        this.loadMerchantStatus()
+        this.loadStats()
+        this.loadOrders()
+    },
+
+    handleNoMerchantId() {
+        // If logged in but no merchantId, check role or redirect to onboarding
+        const role = app.globalData.userRole
+        if (role === 'merchant' && !app.globalData.merchantId) {
+             wx.showToast({ title: '获取商户信息失败', icon: 'none' })
+        } else if (role !== 'merchant') {
+             // Redirect to role selection or onboarding
+             // For now, just show toast. In real app, redirect.
+             // wx.redirectTo({ url: '/pages/onboarding/index' })
+             console.warn('User is not a merchant')
+        }
+    },
+
+    checkDevice() {
+        const sys = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync()
+        // Simple heuristic: width > 600px is tablet/desktop
+        this.setData({ isTablet: sys.windowWidth > 600 })
+    },
+
+    async loadMerchantStatus() {
+        if (!this.data.merchantId) return
+        try {
+            const detail = await getMerchantAdminDetail(this.data.merchantId)
+            this.setData({ onlineStatus: detail.biz_status === 'OPEN' })
+        } catch (error) {
+            console.error('Load merchant status failed', error)
+        }
+    },
+
+    async loadStats() {
+        if (!this.data.merchantId) return
+        try {
+            const metrics = await getMerchantMetrics(this.data.merchantId)
+            this.setData({
+                stats: {
+                    gmv: metrics.total_sales,
+                    orderCount: metrics.total_orders
+                }
+            })
+        } catch (error) {
+            console.error('Load metrics failed', error)
+        }
+    },
+
+    async loadOrders() {
+        if (!this.data.merchantId) return
+        try {
+            // Fetch pending/processing orders
+            const orderDTOs = await getMerchantOrders(this.data.merchantId, 'PROCESSING') 
+            // Adjust status filter as needed. Maybe 'CREATED,PAID,CONFIRMED'
+            
+            const orders = orderDTOs.map(dto => OrderAdapter.toViewModel(dto as any))
+            this.setData({ orders })
+        } catch (error) {
+            console.error('Load orders failed', error)
+        }
+    },
+
+    async onOrderAction(e: WechatMiniprogram.CustomEvent) {
+        const { id, action } = e.detail
+        if (!this.data.merchantId) return
+        
+        wx.showLoading({ title: '处理中' })
+        
+        try {
+            if (action === 'accept') {
+                await acceptOrder(this.data.merchantId, id)
+            } else if (action === 'ready') {
+                await readyOrder(id)
+            }
+            
+            wx.showToast({ title: '操作成功', icon: 'success' })
+            this.loadOrders() // Reload list
+        } catch (error) {
+            console.error('Action failed', error)
+            wx.showToast({ title: '操作失败', icon: 'none' })
+        } finally {
+            wx.hideLoading()
+        }
+    },
+
+    async onToggleStatus() {
+        if (!this.data.merchantId) return
+        
+        const newStatus = !this.data.onlineStatus
+        try {
+            if (newStatus) {
+                await setMerchantOnline(this.data.merchantId)
+            } else {
+                await setMerchantOffline(this.data.merchantId)
+            }
+            this.setData({ onlineStatus: newStatus })
+            wx.showToast({ title: newStatus ? '已营业' : '已休息', icon: 'none' })
+        } catch (error) {
+            console.error('Toggle status failed', error)
+            wx.showToast({ title: '操作失败', icon: 'none' })
+        }
+    }
+})

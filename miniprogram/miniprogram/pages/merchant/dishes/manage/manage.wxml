@@ -1,0 +1,298 @@
+<!--商户菜品管理页面-->
+<view class="dish-manage-container">
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="loading-container">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">正在加载菜品...</text>
+  </view>
+
+  <!-- 主要内容 -->
+  <view wx:else class="main-content">
+    <!-- 搜索和筛选栏 -->
+    <view class="search-filter-bar">
+      <view class="search-box">
+        <input 
+          class="search-input" 
+          placeholder="搜索菜品名称..." 
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+        />
+        <text class="search-icon">🔍</text>
+      </view>
+      
+      <picker class="filter-picker" bindchange="onFilterChange" value="{{filterStatus}}" range-key="label" range="{{[{value:'all',label:'全部'},{value:'available',label:'已上架'},{value:'unavailable',label:'已下架'}]}}">
+        <view class="filter-btn">
+          <text class="filter-text">筛选</text>
+          <text class="filter-arrow">▼</text>
+        </view>
+      </picker>
+    </view>
+
+    <!-- 分类导航 -->
+    <scroll-view class="category-nav" scroll-x="true">
+      <view class="category-list">
+        <view 
+          wx:for="{{categories}}" 
+          wx:key="id"
+          class="category-item {{currentCategoryId === item.id ? 'active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="switchCategory"
+        >
+          <text class="category-name">{{item.name}}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 操作栏 -->
+    <view class="action-bar">
+      <view class="left-actions">
+        <button class="action-btn primary" bindtap="addDish">
+          <text class="btn-icon">+</text>
+          <text class="btn-text">添加菜品</text>
+        </button>
+        
+        <button class="action-btn {{selectionMode ? 'active' : ''}}" bindtap="toggleSelectionMode">
+          <text class="btn-icon">☑</text>
+          <text class="btn-text">{{selectionMode ? '取消选择' : '批量操作'}}</text>
+        </button>
+      </view>
+      
+      <view wx:if="{{selectionMode}}" class="batch-actions">
+        <button class="batch-btn" data-operation="enable" bindtap="batchOperation">上架</button>
+        <button class="batch-btn" data-operation="disable" bindtap="batchOperation">下架</button>
+        <button class="batch-btn danger" data-operation="delete" bindtap="batchOperation">删除</button>
+      </view>
+    </view>
+
+    <!-- 全选栏 -->
+    <view wx:if="{{selectionMode}}" class="select-all-bar">
+      <view class="select-all-checkbox" bindtap="toggleSelectAll">
+        <text class="checkbox {{selectedDishes.length === dishes.length && dishes.length > 0 ? 'checked' : ''}}">{{selectedDishes.length === dishes.length && dishes.length > 0 ? '☑' : '☐'}}</text>
+        <text class="select-text">全选 ({{selectedDishes.length}}/{{dishes.length}})</text>
+      </view>
+    </view>
+
+    <!-- 菜品列表 -->
+    <scroll-view class="dish-list" scroll-y="true" refresher-enabled="{{true}}" refresher-triggered="{{refreshing}}" bindrefresherrefresh="refreshData">
+      <view wx:if="{{dishes.length === 0}}" class="empty-state">
+        <image class="empty-icon" src="/assets/icons/empty-dish.png" mode="aspectFit"></image>
+        <text class="empty-text">暂无菜品</text>
+        <button class="empty-action" bindtap="addDish">添加第一个菜品</button>
+      </view>
+      
+      <view wx:else class="dish-items">
+        <view 
+          wx:for="{{dishes}}" 
+          wx:key="id"
+          class="dish-item {{selectionMode ? 'selection-mode' : ''}}"
+        >
+          <!-- 选择框 -->
+          <view wx:if="{{selectionMode}}" class="selection-checkbox" data-id="{{item.id}}" bindtap="toggleDishSelection">
+            <text class="checkbox {{selectedDishes.indexOf(item.id) > -1 ? 'checked' : ''}}">{{selectedDishes.indexOf(item.id) > -1 ? '☑' : '☐'}}</text>
+          </view>
+          
+          <!-- 菜品信息 -->
+          <view class="dish-content">
+            <image class="dish-image" src="{{item.image_url}}" mode="aspectFill"></image>
+            
+            <view class="dish-info">
+              <view class="dish-header">
+                <text class="dish-name">{{item.name}}</text>
+                <view class="dish-status">
+                  <text class="status-badge {{item.is_available ? 'available' : 'unavailable'}}">
+                    {{item.is_available ? '已上架' : '已下架'}}
+                  </text>
+                </view>
+              </view>
+              
+              <text class="dish-description">{{item.description}}</text>
+              
+              <view class="dish-stats">
+                <text class="dish-category">{{item.category_name}}</text>
+                <text class="dish-sales">月售{{item.sales_count}}</text>
+                <text class="dish-rating">⭐{{item.rating}}</text>
+              </view>
+              
+              <view class="dish-price-row">
+                <view class="price-info">
+                  <text class="current-price">¥{{item.price}}</text>
+                  <text wx:if="{{item.original_price && item.original_price > item.price}}" class="original-price">¥{{item.original_price}}</text>
+                </view>
+                
+                <view wx:if="{{item.inventory_count !== undefined}}" class="inventory-info">
+                  <text class="inventory-label">库存:</text>
+                  <text class="inventory-count">{{item.inventory_count}}</text>
+                </view>
+              </view>
+            </view>
+            
+            <!-- 操作按钮 -->
+            <view wx:if="{{!selectionMode}}" class="dish-actions">
+              <button class="action-icon-btn" data-id="{{item.id}}" bindtap="editDish">
+                <text class="action-icon">✏️</text>
+              </button>
+              
+              <button class="action-icon-btn" data-id="{{item.id}}" bindtap="manageInventory">
+                <text class="action-icon">📦</text>
+              </button>
+              
+              <button 
+                class="action-icon-btn" 
+                data-id="{{item.id}}" 
+                data-available="{{item.is_available}}"
+                bindtap="toggleDishStatus"
+              >
+                <text class="action-icon">{{item.is_available ? '⬇️' : '⬆️'}}</text>
+              </button>
+              
+              <button class="action-icon-btn danger" data-id="{{item.id}}" bindtap="deleteDish">
+                <text class="action-icon">🗑️</text>
+              </button>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 编辑菜品弹窗 -->
+  <view wx:if="{{showEditModal}}" class="modal-overlay">
+    <view class="modal-content edit-modal">
+      <view class="modal-header">
+        <text class="modal-title">{{editingDish ? '编辑菜品' : '添加菜品'}}</text>
+        <button class="modal-close" bindtap="closeEditModal">×</button>
+      </view>
+      
+      <scroll-view class="modal-body" scroll-y="true">
+        <!-- 菜品图片 -->
+        <view class="form-group">
+          <text class="form-label">菜品图片 *</text>
+          <view class="image-upload" bindtap="chooseImage">
+            <image wx:if="{{editForm.image_url}}" class="upload-preview" src="{{editForm.image_url}}" mode="aspectFill"></image>
+            <view wx:else class="upload-placeholder">
+              <text class="upload-icon">📷</text>
+              <text class="upload-text">点击上传图片</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 菜品名称 -->
+        <view class="form-group">
+          <text class="form-label">菜品名称 *</text>
+          <input 
+            class="form-input" 
+            placeholder="请输入菜品名称"
+            value="{{editForm.name}}"
+            data-field="name"
+            bindinput="onFormInput"
+          />
+        </view>
+        
+        <!-- 菜品描述 -->
+        <view class="form-group">
+          <text class="form-label">菜品描述</text>
+          <textarea 
+            class="form-textarea" 
+            placeholder="请输入菜品描述"
+            value="{{editForm.description}}"
+            data-field="description"
+            bindinput="onFormInput"
+          ></textarea>
+        </view>
+        
+        <!-- 分类选择 -->
+        <view class="form-group">
+          <text class="form-label">菜品分类 *</text>
+          <picker class="form-picker" bindchange="onCategoryChange" value="{{editForm.category_id}}" range="{{categories.slice(1)}}" range-key="name" range-value="id">
+            <view class="picker-display">
+              <text class="picker-text">{{editForm.category_name || '请选择分类'}}</text>
+              <text class="picker-arrow">▼</text>
+            </view>
+          </picker>
+        </view>
+        
+        <!-- 价格设置 -->
+        <view class="form-row">
+          <view class="form-group half">
+            <text class="form-label">现价 *</text>
+            <input 
+              class="form-input" 
+              type="digit"
+              placeholder="0.00"
+              value="{{editForm.price}}"
+              data-field="price"
+              bindinput="onFormInput"
+            />
+          </view>
+          
+          <view class="form-group half">
+            <text class="form-label">原价</text>
+            <input 
+              class="form-input" 
+              type="digit"
+              placeholder="0.00"
+              value="{{editForm.original_price}}"
+              data-field="original_price"
+              bindinput="onFormInput"
+            />
+          </view>
+        </view>
+      </scroll-view>
+      
+      <view class="modal-footer">
+        <button class="modal-btn cancel" bindtap="closeEditModal">取消</button>
+        <button class="modal-btn confirm" bindtap="saveDish">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 库存管理弹窗 -->
+  <view wx:if="{{showInventoryModal}}" class="modal-overlay">
+    <view class="modal-content inventory-modal">
+      <view class="modal-header">
+        <text class="modal-title">库存管理</text>
+        <button class="modal-close" bindtap="closeInventoryModal">×</button>
+      </view>
+      
+      <view class="modal-body">
+        <view class="inventory-info">
+          <text class="dish-name">{{inventoryForm.dish_name}}</text>
+          <text class="current-inventory">当前库存: {{inventoryForm.current_count}}</text>
+        </view>
+        
+        <view class="form-group">
+          <text class="form-label">调整数量 *</text>
+          <input 
+            class="form-input" 
+            type="number"
+            placeholder="正数为增加，负数为减少"
+            value="{{inventoryForm.adjustment}}"
+            data-field="adjustment"
+            bindinput="onInventoryInput"
+          />
+        </view>
+        
+        <view class="form-group">
+          <text class="form-label">调整原因 *</text>
+          <textarea 
+            class="form-textarea" 
+            placeholder="请输入调整原因"
+            value="{{inventoryForm.reason}}"
+            data-field="reason"
+            bindinput="onInventoryInput"
+          ></textarea>
+        </view>
+        
+        <view class="inventory-preview">
+          <text class="preview-label">调整后库存:</text>
+          <text class="preview-value">{{inventoryForm.current_count + inventoryForm.adjustment}}</text>
+        </view>
+      </view>
+      
+      <view class="modal-footer">
+        <button class="modal-btn cancel" bindtap="closeInventoryModal">取消</button>
+        <button class="modal-btn confirm" bindtap="saveInventoryAdjustment">确认调整</button>
+      </view>
+    </view>
+  </view>
+</view>

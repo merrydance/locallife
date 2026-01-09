@@ -1,0 +1,78 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.rules-list {
+  padding: 24rpx;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24rpx;
+}
+
+@media (min-width: 1024rpx) {
+  .rules-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1440rpx) {
+  .rules-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.rule-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.rule-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-bottom: 12rpx;
+}
+
+.value {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #0052D9;
+}
+
+.unit {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.desc {
+  font-size: 26rpx;
+  color: #999;
+  line-height: 1.4;
+}

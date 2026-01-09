@@ -1,0 +1,119 @@
+<custom-navbar title="骑手入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container has-fixed-bottom" style="padding-top: {{navBarHeight}}px;">
+  <view class="form-container">
+    <!-- 1. 证照上传 (置顶) -->
+    <view class="section-header">证照上传 (自动识别)</view>
+    
+    <view class="upload-group">
+      <view class="upload-item">
+        <view class="upload-label required">身份证正面</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{idCardFrontImages}}" 
+          max="1" 
+          bind:success="onIdCardFrontUpload" 
+          bind:remove="onIdCardFrontRemove" 
+        />
+      </view>
+      
+      <view class="upload-item">
+        <view class="upload-label required">身份证反面</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{idCardBackImages}}" 
+          max="1" 
+          bind:success="onIdCardBackUpload" 
+          bind:remove="onIdCardBackRemove" 
+        />
+      </view>
+    </view>
+
+    <view class="upload-group">
+      <view class="upload-item">
+        <view class="upload-label required">健康证</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{healthCertImages}}" 
+          max="1" 
+          bind:success="onHealthCertUpload" 
+          bind:remove="onHealthCertRemove" 
+        />
+      </view>
+    </view>
+
+    <!-- 2. 基本信息 -->
+    <view class="section-header">基本信息</view>
+    <t-cell-group theme="card">
+      <t-cell title="真实姓名" required>
+        <input class="input" placeholder="识别回填" value="{{formData.name}}" bindinput="onNameInput" />
+      </t-cell>
+      <t-cell title="联系电话" required>
+        <input class="input" type="number" placeholder="请输入联系电话" value="{{formData.phone}}" bindinput="onPhoneInput" />
+      </t-cell>
+      <t-cell title="身份证号" required>
+        <input class="input" placeholder="识别回填" value="{{formData.idCard}}" bindinput="onIdCardInput" />
+      </t-cell>
+      <t-cell title="常驻地址" required arrow bind:click="onChooseAddress">
+        <view class="picker-text {{formData.address ? '' : 'placeholder'}}">
+          {{formData.address || '请选择常驻地址'}}
+        </view>
+      </t-cell>
+      <t-cell title="详细地址" required>
+        <input class="input" placeholder="门牌号、楼层等" value="{{formData.addressDetail}}" bindinput="onAddressDetailInput" />
+      </t-cell>
+      <t-cell title="配送工具" arrow bind:click="onChooseVehicle">
+        <view class="picker-text {{formData.vehicle ? '' : 'placeholder'}}">
+          {{formData.vehicle || '请选择配送工具'}}
+        </view>
+      </t-cell>
+      <t-cell title="可接单时段" arrow bind:click="onChooseTime">
+        <view class="picker-text {{formData.availableTime ? '' : 'placeholder'}}">
+          {{formData.availableTime || '请选择可接单时段'}}
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <!-- 3. 身份信息 (自动回填) -->
+    <view class="section-header">身份信息</view>
+    <t-cell-group theme="card">
+      <t-cell title="性别" required>
+        <input class="input" placeholder="识别回填" value="{{formData.gender}}" bindinput="onGenderInput" />
+      </t-cell>
+      <t-cell title="籍贯地址" required>
+        <input class="input" placeholder="识别回填" value="{{formData.hometown}}" bindinput="onHometownInput" />
+      </t-cell>
+      <t-cell title="当前住址">
+        <input class="input" placeholder="选填" value="{{formData.currentAddress}}" bindinput="onCurrentAddressInput" />
+      </t-cell>
+      <t-cell title="身份证有效期" required>
+        <input class="input" placeholder="识别回填" value="{{formData.idCardValidity}}" bindinput="onIdCardValidityInput" />
+      </t-cell>
+    </t-cell-group>
+  </view>
+</view>
+
+<!-- 底部提交按钮 -->
+<view class="fixed-bottom-bar">
+  <t-button class="w-full" theme="primary" size="large" bindtap="onSubmit">
+    提交申请
+  </t-button>
+</view>
+
+<!-- 配送工具选择器 -->
+<t-picker
+  visible="{{vehiclePickerVisible}}"
+  value="{{vehiclePickerValue}}"
+  data-source="{{vehicleOptions}}"
+  bind:confirm="onVehicleConfirm"
+  bind:cancel="onVehicleCancel"
+/>
+
+<!-- 时段选择器 -->
+<t-picker
+  visible="{{timePickerVisible}}"
+  value="{{timePickerValue}}"
+  data-source="{{timeOptions}}"
+  bind:confirm="onTimeConfirm"
+  bind:cancel="onTimeCancel"
+/>

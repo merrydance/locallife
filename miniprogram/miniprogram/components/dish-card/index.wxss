@@ -1,0 +1,102 @@
+/* 菜品卡片 - 使用消费侧统一设计 Token */
+
+.dish-card {
+  display: flex;
+  gap: var(--customer-card-gap);
+  padding: var(--customer-card-padding);
+  background: #fff;
+  border-radius: var(--customer-card-radius);
+  margin-bottom: var(--customer-card-margin);
+  box-shadow: var(--customer-card-shadow);
+  transition: all 0.2s ease;
+}
+
+.dish-card:active {
+  transform: scale(0.98);
+  box-shadow: var(--customer-card-shadow-active);
+}
+
+.dish-image {
+  width: var(--customer-image-size);
+  height: var(--customer-image-size);
+  border-radius: var(--customer-image-radius);
+  flex-shrink: 0;
+}
+
+.dish-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.row-2, .row-3, .row-4, .row-5 {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.shop-dish-name {
+  flex: 1;
+  font-size: var(--customer-title-size);
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price {
+  font-size: var(--customer-title-size);
+  font-weight: bold;
+  color: var(--brand-coral);
+}
+
+.separator {
+  color: #ddd;
+  margin: 0 4rpx;
+}
+
+.sales {
+  color: #666;
+  font-size: var(--customer-subtitle-size);
+}
+
+.distance, .delivery-time {
+  color: #999;
+  font-size: var(--customer-caption-size);
+}
+
+.delivery-fee {
+  font-size: 20rpx;
+  color: #666;
+  padding: 4rpx 12rpx;
+  background: #f5f5f5;
+  border-radius: 6rpx;
+}
+
+.discount {
+  font-size: 20rpx;
+  color: var(--brand-coral);
+  padding: 4rpx 12rpx;
+  background: #FFF5F3;
+  border-radius: 6rpx;
+}
+
+.add-btn {
+  align-self: flex-end;
+  transition: transform 0.2s ease;
+}
+
+.add-btn:active {
+  transform: scale(0.9);
+}

@@ -1,0 +1,28 @@
+<view class="page">
+  <view class="header">
+    <view class="title">区域管理</view>
+    <view class="subtitle">管理负责区域及其配送规则</view>
+  </view>
+
+  <view class="region-list">
+    <t-cell-group theme="card">
+      <t-cell
+        wx:for="{{regions}}"
+        wx:key="id"
+        title="{{item.name}}"
+        note="{{item.status === 'active' ? '运营中' : '已停用'}}"
+        description="{{item.level}}级区域 | 代码: {{item.code}}"
+        hover
+        arrow
+        bind:click="onRegionClick"
+        data-id="{{item.id}}"
+      >
+        <view slot="note" class="status-tag {{item.status}}">
+            <t-tag variant="light" theme="{{item.status === 'active' ? 'primary' : 'default'}}">{{item.status === 'active' ? '运营中' : '已停用'}}</t-tag>
+        </view>
+      </t-cell>
+    </t-cell-group>
+  </view>
+
+  <t-fab icon="add" bind:click="onAddRegion" aria-label="添加区域"></t-fab>
+</view>

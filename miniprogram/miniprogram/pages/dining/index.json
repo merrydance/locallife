@@ -1,0 +1,9 @@
+{
+    "navigationBarTitleText": "堂食点餐",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

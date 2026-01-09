@@ -1,0 +1,27 @@
+<view class="restaurant-card" bindtap="onTap">
+  <t-image class="restaurant-image" src="{{restaurant.imageUrl}}" mode="aspectFill" lazy />
+  
+  <view class="restaurant-info">
+    <!-- 第1行: 餐厅名 + 休息中标签 -->
+    <view class="row-1">
+      <text class="restaurant-name">{{restaurant.name}}</text>
+      <t-tag wx:if="{{restaurant.isOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
+    </view>
+
+    
+    <!-- 第2行: 菜系 | 人均 | 距离 -->
+    <view class="row-2">
+      <text class="cuisine">{{restaurant.cuisineType[0] || '美食'}}</text>
+      <text class="separator">|</text>
+      <text class="avg-price">{{restaurant.avgPriceDisplay || '人均未知'}}</text>
+      <text class="separator">|</text>
+      <text class="distance">{{restaurant.distance}}</text>
+    </view>
+    
+    <!-- 第3行: 标签 + 包间信息（条件显示） -->
+    <view class="row-3">
+      <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
+      <text wx:if="{{restaurant.availableRoomsBadge}}" class="rooms">🚪 {{restaurant.availableRoomsBadge}}</text>
+    </view>
+  </view>
+</view>

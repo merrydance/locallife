@@ -1,0 +1,149 @@
+.page {
+  min-height: 100vh;
+  padding: 0 32rpx 120rpx;
+  background: #f5f6fb;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding-top: 200rpx;
+}
+
+/* 状态卡片 */
+.status-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 48rpx 32rpx;
+  margin-top: 24rpx;
+  text-align: center;
+  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+}
+
+.status-icon {
+  margin-bottom: 16rpx;
+}
+
+.status-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1d2750;
+  margin-bottom: 12rpx;
+}
+
+.amount {
+  font-size: 56rpx;
+  font-weight: 700;
+  color: #1d2750;
+}
+
+/* 信息卡片 */
+.info-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  margin-top: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1d2750;
+  margin-bottom: 24rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #edf0fb;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+}
+
+.label {
+  font-size: 28rpx;
+  color: #9aa4c2;
+}
+
+.value {
+  font-size: 28rpx;
+  color: #1d2750;
+  text-align: right;
+  max-width: 60%;
+  word-break: break-all;
+}
+
+/* 退款项 */
+.refund-item {
+  padding: 20rpx 0;
+  border-bottom: 1rpx dashed #edf0fb;
+}
+
+.refund-item:last-child {
+  border-bottom: none;
+}
+
+.refund-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.refund-amount {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1d2750;
+}
+
+.refund-status {
+  font-size: 24rpx;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+}
+
+.refund-status.pending,
+.refund-status.processing {
+  background: #fff6d9;
+  color: #865900;
+}
+
+.refund-status.success {
+  background: #dff7e6;
+  color: #1d7a32;
+}
+
+.refund-status.failed {
+  background: #ffe8e8;
+  color: #e34d59;
+}
+
+.refund-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #9aa4c2;
+}
+
+.refund-reason {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 操作栏 */
+.action-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24rpx 32rpx;
+  background: #fff;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.05);
+}
+
+.empty {
+  padding-top: 200rpx;
+}

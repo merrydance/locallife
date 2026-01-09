@@ -1,0 +1,213 @@
+<!-- 财务管理页面 - PC-SaaS 布局 -->
+<!-- 价格已在 TS 中预处理 -->
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">💰</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问财务管理</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: 0;">
+      <!-- 顶部栏 -->
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 标题栏 -->
+        <view class="page-header">
+          <view class="page-title">
+            <text class="title-icon">💰</text>
+            <text class="title-text">财务管理</text>
+          </view>
+          <!-- 日期范围 -->
+          <view class="date-range-picker">
+            <view class="range-option {{dateRange === 'week' ? 'active' : ''}}" data-range="week" bindtap="onDateRangeChange">近7天</view>
+            <view class="range-option {{dateRange === 'month' ? 'active' : ''}}" data-range="month" bindtap="onDateRangeChange">近30天</view>
+          </view>
+        </view>
+
+        <!-- Tab 导航 -->
+        <view class="tab-nav">
+          <view class="tab-item {{activeTab === 'overview' ? 'active' : ''}}" data-tab="overview" bindtap="onTabChange">概览</view>
+          <view class="tab-item {{activeTab === 'daily' ? 'active' : ''}}" data-tab="daily" bindtap="onTabChange">每日汇总</view>
+          <view class="tab-item {{activeTab === 'orders' ? 'active' : ''}}" data-tab="orders" bindtap="onTabChange">订单明细</view>
+          <view class="tab-item {{activeTab === 'fees' ? 'active' : ''}}" data-tab="fees" bindtap="onTabChange">服务费</view>
+          <view class="tab-item {{activeTab === 'promotions' ? 'active' : ''}}" data-tab="promotions" bindtap="onTabChange">满返支出</view>
+          <view class="tab-item {{activeTab === 'settlements' ? 'active' : ''}}" data-tab="settlements" bindtap="onTabChange">结算记录</view>
+        </view>
+
+        <!-- 加载状态 -->
+        <view wx:if="{{loading}}" class="loading-state">
+          <view class="loading-spinner"></view>
+          <text>加载中...</text>
+        </view>
+
+        <!-- 概览 Tab -->
+        <view wx:elif="{{activeTab === 'overview' && overview}}" class="tab-content">
+          <view class="overview-grid">
+            <view class="overview-card large">
+              <text class="card-label">总 GMV</text>
+              <text class="card-value primary">¥{{overview.total_gmv_display}}</text>
+            </view>
+            <view class="overview-card">
+              <text class="card-label">实收收入</text>
+              <text class="card-value success">¥{{overview.total_income_display}}</text>
+            </view>
+            <view class="overview-card">
+              <text class="card-label">净收入</text>
+              <text class="card-value">¥{{overview.net_income_display}}</text>
+            </view>
+            <view class="overview-card">
+              <text class="card-label">待结算</text>
+              <text class="card-value warning">¥{{overview.pending_income_display}}</text>
+            </view>
+            <view class="overview-card">
+              <text class="card-label">平台服务费</text>
+              <text class="card-value danger">¥{{overview.total_platform_fee_display}}</text>
+            </view>
+            <view class="overview-card">
+              <text class="card-label">运营商服务费</text>
+              <text class="card-value danger">¥{{overview.total_operator_fee_display}}</text>
+            </view>
+            <view class="overview-card">
+              <text class="card-label">满返支出</text>
+              <text class="card-value danger">¥{{overview.total_promotion_exp_display}}</text>
+            </view>
+            <view class="overview-card">
+              <text class="card-label">已完成订单</text>
+              <text class="card-value">{{overview.completed_orders}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 每日汇总 Tab -->
+        <view wx:elif="{{activeTab === 'daily'}}" class="tab-content">
+          <view class="data-table">
+            <view class="table-header">
+              <text class="col-date">日期</text>
+              <text class="col-count">订单数</text>
+              <text class="col-gmv">GMV</text>
+              <text class="col-income">商户收入</text>
+              <text class="col-fee">服务费</text>
+            </view>
+            <view wx:if="{{dailyFinance.length === 0}}" class="empty-hint">暂无数据</view>
+            <view wx:for="{{dailyFinance}}" wx:key="date" class="table-row">
+              <text class="col-date">{{item.date}}</text>
+              <text class="col-count">{{item.order_count}}</text>
+              <text class="col-gmv">¥{{item.total_gmv_display}}</text>
+              <text class="col-income success">¥{{item.merchant_income_display}}</text>
+              <text class="col-fee danger">¥{{item.total_fee_display}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 订单明细 Tab -->
+        <view wx:elif="{{activeTab === 'orders'}}" class="tab-content">
+          <view class="data-table">
+            <view class="table-header">
+              <text class="col-id">ID</text>
+              <text class="col-source">来源</text>
+              <text class="col-amount">订单金额</text>
+              <text class="col-fee">服务费</text>
+              <text class="col-income">商户收入</text>
+              <text class="col-status">状态</text>
+              <text class="col-time">时间</text>
+            </view>
+            <view wx:if="{{orders.length === 0}}" class="empty-hint">暂无数据</view>
+            <view wx:for="{{orders}}" wx:key="id" class="table-row">
+              <text class="col-id">{{item.id}}</text>
+              <text class="col-source">{{item.order_source}}</text>
+              <text class="col-amount">¥{{item.total_amount_display}}</text>
+              <text class="col-fee danger">¥{{item.total_fee_display}}</text>
+              <text class="col-income success">¥{{item.merchant_amount_display}}</text>
+              <text class="col-status status-{{item.status}}">{{item.status}}</text>
+              <text class="col-time">{{item.created_date}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 服务费 Tab -->
+        <view wx:elif="{{activeTab === 'fees'}}" class="tab-content">
+          <view class="data-table">
+            <view class="table-header">
+              <text class="col-date">日期</text>
+              <text class="col-source">来源</text>
+              <text class="col-count">订单数</text>
+              <text class="col-amount">订单金额</text>
+              <text class="col-platform">平台费</text>
+              <text class="col-operator">运营商费</text>
+              <text class="col-total">总服务费</text>
+            </view>
+            <view wx:if="{{serviceFees.length === 0}}" class="empty-hint">暂无数据</view>
+            <view wx:for="{{serviceFees}}" wx:key="index" class="table-row">
+              <text class="col-date">{{item.date}}</text>
+              <text class="col-source">{{item.order_source}}</text>
+              <text class="col-count">{{item.order_count}}</text>
+              <text class="col-amount">¥{{item.total_amount_display}}</text>
+              <text class="col-platform danger">¥{{item.platform_fee_display}}</text>
+              <text class="col-operator danger">¥{{item.operator_fee_display}}</text>
+              <text class="col-total danger">¥{{item.total_fee_display}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 满返支出 Tab -->
+        <view wx:elif="{{activeTab === 'promotions'}}" class="tab-content">
+          <view class="data-table">
+            <view class="table-header">
+              <text class="col-id">订单号</text>
+              <text class="col-type">类型</text>
+              <text class="col-subtotal">商品金额</text>
+              <text class="col-delivery">配送费</text>
+              <text class="col-discount">优惠金额</text>
+              <text class="col-time">时间</text>
+            </view>
+            <view wx:if="{{promotions.length === 0}}" class="empty-hint">暂无数据</view>
+            <view wx:for="{{promotions}}" wx:key="id" class="table-row">
+              <text class="col-id">{{item.order_no}}</text>
+              <text class="col-type">{{item.order_type}}</text>
+              <text class="col-subtotal">¥{{item.subtotal_display}}</text>
+              <text class="col-delivery">¥{{item.delivery_fee_display}}</text>
+              <text class="col-discount danger">¥{{item.delivery_fee_discount_display}}</text>
+              <text class="col-time">{{item.created_date}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 结算记录 Tab -->
+        <view wx:elif="{{activeTab === 'settlements'}}" class="tab-content">
+          <view class="data-table">
+            <view class="table-header">
+              <text class="col-id">ID</text>
+              <text class="col-source">来源</text>
+              <text class="col-amount">订单金额</text>
+              <text class="col-income">结算金额</text>
+              <text class="col-status">状态</text>
+              <text class="col-time">时间</text>
+            </view>
+            <view wx:if="{{settlements.length === 0}}" class="empty-hint">暂无数据</view>
+            <view wx:for="{{settlements}}" wx:key="id" class="table-row">
+              <text class="col-id">{{item.id}}</text>
+              <text class="col-source">{{item.order_source}}</text>
+              <text class="col-amount">¥{{item.total_amount_display}}</text>
+              <text class="col-income success">¥{{item.merchant_amount_display}}</text>
+              <text class="col-status status-{{item.status}}">{{item.status}}</text>
+              <text class="col-time">{{item.created_date}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>

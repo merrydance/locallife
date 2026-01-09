@@ -1,0 +1,38 @@
+<!-- 标签选择器组件 -->
+<wxs module="utils">
+  module.exports = {
+    contains: function(arr, id) {
+      if (!arr || !arr.length) return false;
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i] === id) return true;
+      }
+      return false;
+    }
+  }
+</wxs>
+
+<view class="tag-selector">
+  <!-- 标题栏（可选） -->
+  <view class="selector-header" wx:if="{{showManage}}">
+    <text class="selector-action" bindtap="onOpenManage">管理标签</text>
+  </view>
+
+  <!-- 标签列表 -->
+  <view class="tags-container">
+    <view 
+      wx:for="{{tags}}" 
+      wx:key="id" 
+      class="tag-item {{utils.contains(selectedIds, item.id) ? 'selected' : ''}}"
+      bindtap="onTagToggle"
+      data-id="{{item.id}}"
+    >
+      <text class="tag-name">{{item.name}}</text>
+      <text class="tag-check" wx:if="{{utils.contains(selectedIds, item.id)}}">✓</text>
+    </view>
+    
+    <!-- 空状态 -->
+    <view wx:if="{{tags.length === 0}}" class="tags-empty">
+      <text>{{emptyText}}</text>
+    </view>
+  </view>
+</view>

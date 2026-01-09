@@ -1,0 +1,7 @@
+{
+    "navigationBarTitleText": "骑手端",
+    "usingComponents": {
+        "delivery-card": "../../../components/delivery-card/index",
+        "map-view": "../../../components/map-view/index"
+    }
+}

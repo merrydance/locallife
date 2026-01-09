@@ -1,0 +1,205 @@
+<!-- 储值管理页面 - 桌面级 SaaS 界面 -->
+<!-- 价格已在 TS 中预处理 -->
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">�</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问储值管理</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: 0;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+      />
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 加载状态 -->
+        <view wx:if="{{loading}}" class="loading-state">
+          <view class="loading-spinner"></view>
+          <text>加载中...</text>
+        </view>
+
+        <view wx:else class="content-grid">
+          <!-- 左侧：会员设置 -->
+          <view class="settings-panel">
+            <view class="panel-header">
+              <text class="panel-title">💳 储值使用设置</text>
+              <button class="btn-primary btn-sm" bindtap="onSaveSettings" disabled="{{saving}}">
+                {{saving ? '保存中...' : '保存设置'}}
+              </button>
+            </view>
+            
+            <view class="panel-body">
+              <!-- 储值可用场景 -->
+              <view class="form-section">
+                <text class="section-title">储值可用场景</text>
+                <text class="section-desc">选择会员储值余额可以使用的消费场景</text>
+                <view class="scene-selector">
+                  <view 
+                    wx:for="{{sceneOptions}}" wx:key="value"
+                    class="scene-chip {{utils.hasScene(settings.balance_usable_scenes, item.value) ? 'active' : ''}}"
+                    bindtap="onSceneToggle"
+                    data-type="balance"
+                    data-scene="{{item.value}}"
+                  >
+                    {{item.label}}
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <!-- 右侧：充值规则 -->
+          <view class="rules-panel">
+            <view class="panel-header">
+              <text class="panel-title">🎁 充值规则管理</text>
+              <button class="btn-primary btn-sm" bindtap="onAddRule">+ 新增规则</button>
+            </view>
+            
+            <view class="panel-body">
+              <!-- 规则列表 -->
+              <view wx:if="{{rechargeRules.length === 0}}" class="empty-state">
+                <text class="empty-icon">📦</text>
+                <text class="empty-text">暂无充值规则</text>
+                <text class="empty-hint">点击"新增规则"创建充值送赠金活动</text>
+              </view>
+
+              <view wx:else class="rules-list">
+                <view 
+                  wx:for="{{rechargeRules}}" wx:key="id" 
+                  class="rule-card {{item.is_active ? '' : 'inactive'}}"
+                >
+                  <view class="rule-main">
+                    <view class="rule-amounts">
+                      <text class="recharge-amount">充 ¥{{item.recharge_amount_display}}</text>
+                      <text class="bonus-amount">送 ¥{{item.bonus_amount_display}}</text>
+                    </view>
+                    <view class="rule-meta">
+                      <text class="rule-date">{{item.valid_from_display}} ~ {{item.valid_until_display}}</text>
+                      <text class="rule-status {{item.is_active ? 'active' : 'inactive'}}">{{item.is_active ? '生效中' : '已停用'}}</text>
+                    </view>
+                  </view>
+                  <view class="rule-actions">
+                    <view class="action-btn" bindtap="onToggleRuleStatus" data-rule="{{item}}">
+                      {{item.is_active ? '停用' : '启用'}}
+                    </view>
+                    <view class="action-btn" bindtap="onEditRule" data-rule="{{item}}">编辑</view>
+                    <view class="action-btn danger" catchtap="onDeleteRule" data-rule="{{item}}">删除</view>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 规则编辑弹窗 -->
+<view class="modal-overlay {{showRuleModal ? 'show' : ''}}" catchtap="onCloseRuleModal">
+  <view class="modal-content" catchtap="onModalContentTap">
+    <view class="modal-header">
+      <text class="modal-title">{{editingRule ? '编辑规则' : '新增充值规则'}}</text>
+      <text class="modal-close" bindtap="onCloseRuleModal">×</text>
+    </view>
+    <view class="modal-body">
+      <view class="form-group">
+        <text class="form-label">充值金额 (元)</text>
+        <input 
+          class="form-input" 
+          type="digit" 
+          placeholder="例如: 100" 
+          value="{{ruleForm.recharge_amount}}"
+          data-field="recharge_amount"
+          bindinput="onRuleFormInput"
+        />
+      </view>
+      <view class="form-group">
+        <text class="form-label">赠送金额 (元)</text>
+        <input 
+          class="form-input" 
+          type="digit" 
+          placeholder="例如: 20" 
+          value="{{ruleForm.bonus_amount}}"
+          data-field="bonus_amount"
+          bindinput="onRuleFormInput"
+        />
+      </view>
+      <view class="form-row">
+        <view class="form-group half">
+          <text class="form-label">开始日期</text>
+          <view 
+            class="form-input date-input" 
+            bindtap="onOpenCalendar"
+            data-field="valid_from"
+          >
+            <text class="{{ruleForm.valid_from ? '' : 'placeholder'}}">{{ruleForm.valid_from || '请选择'}}</text>
+            <text class="date-icon">📅</text>
+          </view>
+        </view>
+        <view class="form-group half">
+          <text class="form-label">结束日期</text>
+          <view 
+            class="form-input date-input" 
+            bindtap="onOpenCalendar"
+            data-field="valid_until"
+          >
+            <text class="{{ruleForm.valid_until ? '' : 'placeholder'}}">{{ruleForm.valid_until || '请选择'}}</text>
+            <text class="date-icon">📅</text>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-outline" bindtap="onCloseRuleModal">取消</button>
+      <button class="btn-primary" bindtap="onSaveRule">保存</button>
+    </view>
+  </view>
+</view>
+
+<!-- 日历选择器弹窗 -->
+<view class="calendar-overlay {{showCalendar ? 'show' : ''}}" catchtap="onCloseCalendar">
+  <view class="calendar-popup" catchtap="onCalendarContentTap">
+    <view class="calendar-header">
+      <view class="calendar-nav" bindtap="onPrevMonth">‹</view>
+      <text class="calendar-title">{{calendarYear}}年{{calendarMonth}}月</text>
+      <view class="calendar-nav" bindtap="onNextMonth">›</view>
+    </view>
+    <view class="calendar-weekdays">
+      <text class="weekday">日</text>
+      <text class="weekday">一</text>
+      <text class="weekday">二</text>
+      <text class="weekday">三</text>
+      <text class="weekday">四</text>
+      <text class="weekday">五</text>
+      <text class="weekday">六</text>
+    </view>
+    <view class="calendar-days">
+      <view 
+        wx:for="{{calendarDays}}" wx:key="index"
+        class="day-cell {{item.disabled ? 'disabled' : ''}} {{item.selected ? 'selected' : ''}} {{item.today ? 'today' : ''}} {{!item.currentMonth ? 'other-month' : ''}}"
+        bindtap="{{item.disabled ? '' : 'onSelectCalendarDay'}}"
+        data-date="{{item.date}}"
+      >
+        {{item.day}}
+      </view>
+    </view>
+    <view class="calendar-footer">
+      <view class="calendar-today-btn" bindtap="onSelectToday">今天</view>
+    </view>
+  </view>
+</view>

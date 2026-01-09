@@ -1,0 +1,116 @@
+<!--商户管理中心 - 功能入口汇总页-->
+<view class="admin-container">
+  <custom-navbar title="管理中心" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+  <view class="main-content" style="padding-top: {{navBarHeight}}px;">
+    <!-- 日常运营 -->
+    <view class="section">
+      <view class="section-title">日常运营</view>
+      <view class="menu-grid">
+        <view class="menu-item" bindtap="goToOrders">
+          <view class="menu-icon orders">
+            <t-icon name="view-list" size="48rpx" />
+          </view>
+          <text class="menu-text">订单管理</text>
+        </view>
+        <view class="menu-item" bindtap="goToDishes">
+          <view class="menu-icon dishes">
+            <t-icon name="gift" size="48rpx" />
+          </view>
+          <text class="menu-text">菜品管理</text>
+        </view>
+        <view class="menu-item" bindtap="goToTables">
+          <view class="menu-icon tables">
+            <t-icon name="table" size="48rpx" />
+          </view>
+          <text class="menu-text">桌台管理</text>
+        </view>
+        <view class="menu-item" bindtap="goToDinein">
+          <view class="menu-icon dinein">
+            <t-icon name="shop" size="48rpx" />
+          </view>
+          <text class="menu-text">堂食管理</text>
+        </view>
+        <view class="menu-item" bindtap="goToInventory">
+          <view class="menu-icon inventory">
+            <t-icon name="view-grid" size="48rpx" />
+          </view>
+          <text class="menu-text">库存管理</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 后厨与设备 -->
+    <view class="section">
+      <view class="section-title">后厨与设备</view>
+      <view class="menu-grid">
+        <view class="menu-item" bindtap="goToKitchen">
+          <view class="menu-icon kitchen">
+            <t-icon name="desktop" size="48rpx" />
+          </view>
+          <text class="menu-text">后厨显示</text>
+        </view>
+        <view class="menu-item" bindtap="goToPrinters">
+          <view class="menu-icon printers">
+            <t-icon name="print" size="48rpx" />
+          </view>
+          <text class="menu-text">打印设置</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 数据分析 -->
+    <view class="section">
+      <view class="section-title">数据分析</view>
+      <view class="menu-grid">
+        <view class="menu-item" bindtap="goToFinance">
+          <view class="menu-icon finance">
+            <t-icon name="money" size="48rpx" />
+          </view>
+          <text class="menu-text">财务对账</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 营销推广 -->
+    <view class="section">
+      <view class="section-title">营销推广</view>
+      <view class="menu-grid">
+        <view class="menu-item" bindtap="goToMarketing">
+          <view class="menu-icon marketing">
+            <t-icon name="discount" size="48rpx" />
+          </view>
+          <text class="menu-text">优惠活动</text>
+        </view>
+        <view class="menu-item" bindtap="goToReview">
+          <view class="menu-icon review">
+            <t-icon name="star" size="48rpx" />
+          </view>
+          <text class="menu-text">评价管理</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 预约管理 -->
+    <view class="section">
+      <view class="section-title">预约管理</view>
+      <view class="menu-grid">
+        <view class="menu-item" bindtap="goToReservations">
+          <view class="menu-icon reservations">
+            <t-icon name="calendar" size="48rpx" />
+          </view>
+          <text class="menu-text">预约列表</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 店铺设置 -->
+    <view class="section">
+      <view class="section-title">店铺设置</view>
+      <t-cell-group>
+        <t-cell title="店铺信息" arrow hover leftIcon="shop" bindtap="goToProfile" />
+        <t-cell title="健康证管理" arrow hover leftIcon="user-safety" bindtap="goToHealth" />
+      </t-cell-group>
+    </view>
+  </view>
+</view>

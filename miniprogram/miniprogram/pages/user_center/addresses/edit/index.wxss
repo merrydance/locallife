@@ -1,0 +1,31 @@
+.page-container {
+  padding: 24rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.form-group {
+  background: #fff;
+  border-radius: 12rpx;
+  overflow: hidden;
+  margin-bottom: 24rpx;
+}
+
+.gender-group {
+  padding: 0 32rpx;
+  background: #fff;
+}
+
+.button-group {
+  margin-top: 48rpx;
+}
+
+.delete-btn {
+  margin-top: 24rpx;
+}
+
+/* TDesign Override */
+.t-radio-group {
+  display: flex;
+  gap: 32rpx;
+}
+

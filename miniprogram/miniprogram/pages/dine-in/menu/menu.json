@@ -1,0 +1,19 @@
+{
+    "navigationBarTitleText": "点餐",
+    "navigationBarBackgroundColor": "#ff6b35",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f5f5f5",
+    "enablePullDownRefresh": true,
+    "disableScroll": false,
+    "usingComponents": {
+        "t-image": "tdesign-miniprogram/image/image",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-popup": "tdesign-miniprogram/popup/popup",
+        "custom-navbar": "/components/custom-navbar/index",
+        "cart-bar": "/components/cart-bar/index"
+    }
+}

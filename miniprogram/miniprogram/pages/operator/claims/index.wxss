@@ -1,0 +1,106 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.claims-list {
+  padding: 24rpx;
+}
+
+.claims-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24rpx;
+}
+
+@media (min-width: 1024rpx) {
+  .claims-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1440rpx) {
+  .claims-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.claim-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.card-body {
+  margin-bottom: 16rpx;
+}
+
+.info-row {
+  display: flex;
+  margin-bottom: 8rpx;
+  font-size: 26rpx;
+}
+
+.label {
+  color: #666;
+  width: 140rpx;
+}
+
+.value {
+  color: #333;
+  flex: 1;
+}
+
+.desc-box {
+  background: #F9F9F9;
+  padding: 16rpx;
+  border-radius: 8rpx;
+  margin: 16rpx 0;
+  font-size: 26rpx;
+  color: #333;
+}
+
+.result-box {
+  background: #E8F8F2;
+  padding: 16rpx;
+  border-radius: 8rpx;
+  font-size: 26rpx;
+  color: #00A870;
+  display: flex;
+}
+
+.result-box .label {
+  color: #00A870;
+}
+
+.result-box .value {
+  color: #00A870;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F0F0F0;
+}

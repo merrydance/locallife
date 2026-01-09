@@ -1,0 +1,43 @@
+<view class="pc-full-layout" style="padding: 40px; background: #fff; border-radius: 32rpx; min-height: 80vh;">
+  <view style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 40px;">
+    <view>
+      <view class="responsive-title" style="font-size: 48rpx;">平台业务实时监控大屏 (全屏模式)</view>
+      <view class="responsive-body" style="color: #999;">最后更新: {{realtimeData.timestamp}}</view>
+    </view>
+    <t-tag variant="dark" theme="primary">数据自动刷新中</t-tag>
+  </view>
+
+  <view style="display: grid; grid-template-columns: 2fr 1fr; gap: 40px;">
+    <!-- 主看板 -->
+    <view>
+       <t-grid border="{{false}}" class="responsive-grid-4">
+         <t-grid-item text="活跃商户" description="{{realtimeData.realtime_stats.active_merchants}}" icon="shop" />
+         <t-grid-item text="在线骑手" description="{{realtimeData.realtime_stats.online_riders}}" icon="user" />
+         <t-grid-item text="今日订单" description="{{realtimeData.realtime_stats.pending_orders}}" icon="order" />
+         <t-grid-item text="今日GMV" description="¥{{realtimeData.today_stats.today_gmv / 100}}" icon="money-circle" />
+       </t-grid>
+
+       <view style="margin-top: 60px;">
+         <view class="responsive-subtitle">历史累积概览</view>
+         <include src="./stats-grid.wxml" />
+       </view>
+    </view>
+
+    <!-- 右侧排行榜与审核 -->
+    <view style="background: #fcfcfc; padding: 32px; border-radius: 24rpx; border: 1rpx solid #eee;">
+       <view class="responsive-subtitle" style="margin-bottom: 24px;">极速管理入口</view>
+       <t-grid border="{{false}}" column="{{2}}">
+         <t-grid-item text="商户申请" badge-props="{{ { count: pendingMerchants } }}" bind:click="onActionTap" />
+         <t-grid-item text="骑手申请" badge-props="{{ { count: pendingRiders } }}" bind:click="onActionTap" />
+       </t-grid>
+       
+       <view style="margin-top: 40px;">
+         <view class="responsive-subtitle">实时商户排行</view>
+         <view wx:for="{{merchantRanking}}" wx:key="merchant_id" class="ranking-row" style="padding: 12px 0;">
+            <text>{{index+1}}. {{item.merchant_name}}</text>
+            <text style="float: right; color: #0052d9;">¥{{item.total_gmv / 100}}</text>
+         </view>
+       </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,7 @@
+{
+    "navigationBarTitleText": "堂食管理",
+    "navigationStyle": "custom",
+    "usingComponents": {
+        "merchant-header": "/components/merchant-header/index"
+    }
+}

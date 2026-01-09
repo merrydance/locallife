@@ -1,0 +1,63 @@
+<custom-navbar title="异常上报" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 上报表单 -->
+  <view class="form-card">
+    <view class="section-title">上报新问题</view>
+    <t-cell title="异常类型" arrow hover note="{{form.typeLabel || '请选择'}}" bindtap="onTypeClick" />
+    <t-textarea 
+      placeholder="请详细描述遇到的问题..." 
+      value="{{form.description}}" 
+      bindchange="onDescChange"
+      maxlength="200"
+      indicator
+    />
+    <view class="image-uploader">
+      <view class="upload-btn" bindtap="onAddImage">
+        <t-icon name="add" size="48rpx" color="#999" />
+        <text>上传凭证</text>
+      </view>
+      <view wx:for="{{form.images}}" wx:key="*this" class="image-preview">
+        <t-image src="{{item}}" mode="aspectFill" width="160rpx" height="160rpx" />
+      </view>
+    </view>
+    <t-button theme="primary" block loading="{{submitting}}" bindtap="onSubmit">提交上报</t-button>
+  </view>
+
+  <!-- 历史记录 -->
+  <view class="history-section">
+    <view class="section-title">上报记录</view>
+    <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+    <view wx:if="{{!loading}}" class="claims-list">
+      <view wx:if="{{claims.length === 0}}" class="empty">
+        <t-empty description="暂无上报记录" />
+      </view>
+
+      <view wx:else>
+        <view wx:for="{{claims}}" wx:key="id" class="claim-card">
+          <view class="card-header">
+            <text class="claim-type">{{item.type === 'MERCHANT_DELAY' ? '商家出餐慢' : '其他'}}</text>
+            <t-tag theme="{{item.status === 'PENDING' ? 'warning' : 'success'}}" size="small">
+              {{item.status === 'PENDING' ? '处理中' : '已处理'}}
+            </t-tag>
+          </view>
+          <text class="claim-desc">{{item.description}}</text>
+          <text class="claim-time">{{item.created_at}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<t-picker
+  visible="{{showTypePicker}}"
+  value="{{[form.type]}}"
+  title="选择异常类型"
+  cancelBtn="取消"
+  confirmBtn="确认"
+  bindchange="onTypeChange"
+  bindcancel="onTypeCancel"
+>
+  <t-picker-item options="{{types}}" />
+</t-picker>

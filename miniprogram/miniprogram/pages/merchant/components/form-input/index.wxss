@@ -1,0 +1,14 @@
+/* 表单输入组件样式 */
+@import '../../styles/merchant-saas.wxss';
+
+.form-input-wrapper {
+  margin-bottom: 20px;
+}
+
+/* .form-label, .required, .form-input, .form-textarea 样式继承自 merchant-saas.wxss */
+
+.form-input.disabled,
+.form-textarea.disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+}

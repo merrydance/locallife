@@ -1,0 +1,297 @@
+<!-- 套餐管理 - 桌面级 SaaS 界面（两栏布局） -->
+
+<!-- WXS 模块 - 处理数组操作 -->
+<wxs module="utils">
+  module.exports = {
+    contains: function(arr, id) {
+      if (!arr || !arr.length) return false;
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i] === id) return true;
+      }
+      return false;
+    }
+  }
+</wxs>
+
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问套餐管理</text>
+      <button class="btn-back" bindtap="goBack">返回工作台</button>
+    </view>
+  </view>
+</match-media>
+
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: 0;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        merchant-name="{{merchantName}}"
+        is-open="{{isOpen}}"
+      />
+
+      <!-- 页面内容 - 两栏布局 -->
+      <view class="page-container combo-page">
+        <!-- 左侧套餐列表区 -->
+        <view class="combo-list-panel">
+          <!-- 工具栏 -->
+          <view class="panel-header">
+            <text class="panel-title">套餐列表 ({{combos.length}})</text>
+            <button class="btn-add" bindtap="onAddCombo">+ 添加套餐</button>
+          </view>
+
+          <!-- 搜索框 -->
+          <view class="search-bar">
+            <input 
+              class="search-input" 
+              placeholder="搜索套餐名称..." 
+              value="{{searchKeyword}}"
+              bindinput="onSearch"
+            />
+          </view>
+
+          <!-- 列表 -->
+          <view class="combo-list-scroll">
+            <view wx:if="{{loading}}" class="loading-state">
+              <text>加载中...</text>
+            </view>
+            <view wx:elif="{{filteredCombos.length === 0}}" class="empty-state">
+              <text class="empty-icon">📦</text>
+              <text class="empty-text">暂无套餐</text>
+              <text class="empty-hint">点击上方按钮添加第一个套餐</text>
+            </view>
+            <view wx:else class="combo-cards">
+              <view 
+                wx:for="{{filteredCombos}}" 
+                wx:key="id" 
+                class="combo-card {{selectedCombo.id === item.id ? 'selected' : ''}}"
+                bindtap="onSelectCombo"
+                data-item="{{item}}"
+              >
+                <view class="combo-card-main">
+                  <view class="combo-name-row">
+                    <text class="combo-name">{{item.name}}</text>
+                    <view class="combo-status {{item.is_online ? 'online' : 'offline'}}">
+                      {{item.is_online ? '在售' : '下架'}}
+                    </view>
+                  </view>
+                  <view class="combo-meta">
+                    <text class="combo-price">¥{{item.comboPriceDisplay}}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 右侧编辑面板 -->
+        <view class="editor-panel">
+          <view wx:if="{{!selectedCombo && !isAdding}}" class="editor-placeholder">
+            <text class="placeholder-icon">👆</text>
+            <text class="placeholder-text">选择套餐进行编辑</text>
+          </view>
+
+          <view wx:else class="editor-content">
+            <view class="editor-header">
+              <text class="editor-title">{{isAdding ? '添加套餐' : '编辑套餐'}}</text>
+              <view class="editor-actions">
+                <button class="btn-cancel" bindtap="onCancelEdit">取消</button>
+                <button class="btn-save" bindtap="onSaveCombo" disabled="{{saving}}">
+                  {{saving ? '保存中...' : '保存'}}
+                </button>
+              </view>
+            </view>
+
+            <view class="editor-form">
+              <!-- 基本信息 -->
+              <view class="form-section">
+                <view class="section-title">基本信息</view>
+                
+                <view class="form-group">
+                  <label class="form-label">套餐名称 <text class="required">*</text></label>
+                  <input 
+                    class="form-input" 
+                    placeholder="请输入套餐名称" 
+                    value="{{selectedCombo.name}}"
+                    data-field="name"
+                    bindinput="onFieldChange"
+                  />
+                </view>
+
+                <view class="form-group">
+                  <label class="form-label">套餐描述</label>
+                  <textarea 
+                    class="form-textarea" 
+                    placeholder="请输入套餐描述（选填）" 
+                    value="{{selectedCombo.description}}"
+                    data-field="description"
+                    bindinput="onFieldChange"
+                    maxlength="500"
+                  />
+                </view>
+              </view>
+
+              <!-- 价格设置 -->
+              <view class="form-section">
+                <view class="section-title">价格设置</view>
+                
+                <view class="form-row">
+                  <view class="form-group flex-1">
+                    <label class="form-label">套餐价格 (元) <text class="required">*</text></label>
+                    <input 
+                      class="form-input" 
+                      type="digit" 
+                      placeholder="0.00" 
+                      value="{{selectedCombo.combo_price ? selectedCombo.combo_price / 100 : ''}}"
+                      data-field="combo_price"
+                      bindinput="onPriceFieldChange"
+                    />
+                  </view>
+                  <view class="form-group flex-1">
+                    <label class="form-label">原价参考 (元)</label>
+                    <input 
+                      class="form-input" 
+                      type="digit" 
+                      placeholder="自动计算"
+                      value="{{originalPrice}}"
+                      disabled
+                    />
+                  </view>
+                </view>
+              </view>
+
+              <!-- 状态设置 -->
+              <view class="form-section">
+                <view class="section-title">状态设置</view>
+                
+                <view class="form-group horizontal">
+                  <label class="form-label">上架销售</label>
+                  <view 
+                    class="toggle {{selectedCombo.is_online ? 'on' : ''}}" 
+                    bindtap="onToggleOnline"
+                  >
+                    <view class="toggle-handle"></view>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 属性标签 -->
+              <view class="form-section">
+                <view class="section-title">属性标签</view>
+                <view class="tags-container">
+                  <view 
+                    wx:for="{{availableTags}}" 
+                    wx:key="id" 
+                    class="tag-item {{utils.contains(selectedTagIds, item.id) ? 'selected' : ''}}"
+                    bindtap="onTagToggle"
+                    data-id="{{item.id}}"
+                  >
+                    <text class="tag-name">{{item.name}}</text>
+                    <text class="tag-check" wx:if="{{utils.contains(selectedTagIds, item.id)}}">✓</text>
+                  </view>
+                  <view wx:if="{{availableTags.length === 0}}" class="tags-empty">
+                    <text>暂无可用标签</text>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 套餐内菜品 -->
+              <view class="form-section">
+                <view class="section-title-row">
+                  <view class="section-title" style="margin-bottom: 0;">套餐内菜品</view>
+                  <button class="btn-add-dish" bindtap="onOpenDishPicker">+ 添加菜品</button>
+                </view>
+                
+                <view class="combo-dishes-list">
+                  <view wx:if="{{!selectedCombo.dishes || selectedCombo.dishes.length === 0}}" class="empty-dishes">
+                    <text class="empty-dishes-text">暂未添加菜品，点击上方按钮添加</text>
+                  </view>
+                  <view 
+                    wx:for="{{selectedCombo.dishes}}" 
+                    wx:key="dish_id" 
+                    class="combo-dish-item"
+                  >
+                    <view class="combo-dish-info">
+                      <text class="combo-dish-name">{{item.dish_name}}</text>
+                      <text class="combo-dish-qty">x{{item.quantity || 1}}</text>
+                      <text class="combo-dish-price">¥{{item.dishPriceDisplay}}</text>
+                    </view>
+                    <view class="combo-dish-remove" bindtap="onRemoveDish" data-id="{{item.dish_id}}">✕</view>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 删除按钮 -->
+              <view wx:if="{{!isAdding && selectedCombo.id}}" class="form-section">
+                <button class="btn-danger" bindtap="onDeleteCombo">删除此套餐</button>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 菜品选择弹窗 -->
+<view class="modal-mask {{showDishPicker ? 'visible' : ''}}" bindtap="onCloseDishPicker"></view>
+<view class="modal-panel dish-picker-panel {{showDishPicker ? 'visible' : ''}}" catchtap="">
+  <view class="modal-header">
+    <text class="modal-title">选择菜品 <text wx:if="{{pickerDishCount > 0}}" class="selected-count">(已选 {{pickerDishCount}} 个)</text></text>
+    <view class="modal-close" bindtap="onCloseDishPicker">✕</view>
+  </view>
+  <view class="modal-body">
+    <!-- 搜索框 -->
+    <view class="picker-search">
+      <input 
+        class="form-input" 
+        placeholder="搜索菜品名称..." 
+        value="{{dishSearchKeyword}}"
+        bindinput="onDishSearch"
+      />
+    </view>
+    
+    <!-- 菜品列表 -->
+    <view class="picker-dish-list">
+      <view 
+        wx:for="{{filteredDishes}}" 
+        wx:key="id" 
+        class="picker-dish-item {{item.quantity > 0 ? 'selected' : ''}}"
+      >
+        <view class="picker-dish-info" bindtap="onToggleDish" data-item="{{item}}">
+          <text class="picker-dish-name">{{item.name}}</text>
+          <text class="picker-dish-price">¥{{item.priceDisplay}}</text>
+        </view>
+        <!-- 数量选择器 -->
+        <view class="quantity-control">
+          <view 
+            class="qty-btn {{item.quantity > 0 ? '' : 'disabled'}}" 
+            catchtap="onDecreaseDishQty" 
+            data-id="{{item.id}}"
+          >−</view>
+          <text class="qty-value">{{item.quantity || 0}}</text>
+          <view 
+            class="qty-btn" 
+            catchtap="onIncreaseDishQty" 
+            data-id="{{item.id}}"
+          >+</view>
+        </view>
+      </view>
+      <view wx:if="{{filteredDishes.length === 0}}" class="picker-empty">
+        <text>暂无可选菜品</text>
+      </view>
+    </view>
+  </view>
+  <view class="modal-footer">
+    <button class="btn-cancel" bindtap="onCloseDishPicker">取消</button>
+    <button class="btn-primary" bindtap="onConfirmDishSelection" disabled="{{pickerDishCount === 0}}">
+      确认添加 ({{pickerDishCount}})
+    </button>
+  </view>
+</view>

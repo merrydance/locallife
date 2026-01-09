@@ -1,0 +1,7 @@
+{
+    "navigationBarTitleText": "经营健康分",
+    "navigationStyle": "custom",
+    "usingComponents": {
+        "merchant-header": "/components/merchant-header/index"
+    }
+}

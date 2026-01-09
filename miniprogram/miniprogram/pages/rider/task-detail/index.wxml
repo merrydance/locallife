@@ -1,0 +1,71 @@
+<custom-navbar title="任务详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading && task}}" class="content">
+    <!-- 状态卡片 -->
+    <view class="status-card">
+      <view class="status-header">
+        <text class="status-text">{{task.status === 'ACCEPTED' ? '待取货' : (task.status === 'DELIVERING' ? '配送中' : '已完成')}}</text>
+        <text class="time-limit">剩余时间: {{task.time_limit}}</text>
+      </view>
+      <view class="income-row">
+        <text>预计收入</text>
+        <text class="income">¥{{task.incomeDisplay}}</text>
+      </view>
+    </view>
+
+    <!-- 路线信息 -->
+    <view class="section">
+      <view class="location-item">
+        <view class="dot pickup"></view>
+        <view class="info">
+          <text class="label">取货点</text>
+          <text class="name">{{task.merchant.name}}</text>
+          <text class="address">{{task.merchant.address}}</text>
+        </view>
+        <t-button size="small" shape="circle" icon="call" data-phone="{{task.merchant.phone}}" bindtap="onCall" />
+      </view>
+      
+      <view class="divider"></view>
+
+      <view class="location-item">
+        <view class="dot deliver"></view>
+        <view class="info">
+          <text class="label">送货点</text>
+          <text class="name">{{task.customer.name}}</text>
+          <text class="address">{{task.customer.address}}</text>
+        </view>
+        <t-button size="small" shape="circle" icon="call" data-phone="{{task.customer.phone}}" bindtap="onCall" />
+      </view>
+    </view>
+
+    <!-- 订单明细 -->
+    <view class="section">
+      <view class="section-title">订单内容</view>
+      <view class="order-items">
+        <view wx:for="{{task.items}}" wx:key="name" class="item-row">
+          <text class="item-name">{{item.name}}</text>
+          <text class="item-count">x{{item.count}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 订单信息 -->
+    <view class="section">
+      <view class="info-row">
+        <text class="label">订单编号</text>
+        <text class="value">{{task.order_no}}</text>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- 底部操作栏 -->
+<view wx:if="{{!loading && task}}" class="bottom-bar">
+  <t-button theme="light" bindtap="onReportIssue">上报异常</t-button>
+  <t-button theme="primary" bindtap="onUpdateStatus">
+    {{task.status === 'ACCEPTED' ? '确认取货' : '确认送达'}}
+  </t-button>
+</view>

@@ -1,0 +1,6 @@
+<t-grid border="{{false}}" class="responsive-grid-4" style="padding: 24rpx;">
+  <t-grid-item text="总订单" description="{{overviewData.summary.total_orders || 0}}" />
+  <t-grid-item text="总GMV" description="¥{{overviewData.summary.total_gmv / 100}}" />
+  <t-grid-item text="活跃商户" description="{{overviewData.summary.active_merchants || 0}}" />
+  <t-grid-item text="活跃用户" description="{{overviewData.summary.active_users || 0}}" />
+</t-grid>

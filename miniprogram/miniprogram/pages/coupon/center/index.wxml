@@ -1,0 +1,54 @@
+<view class="container">
+  <view class="header">
+    <text class="title">领券中心</text>
+    <text class="subtitle">先领券，再下单</text>
+  </view>
+
+  <t-pull-down-refresh
+    value="{{refreshing}}"
+    bind:refresh="onPullDownRefresh"
+  >
+    <view class="content">
+      <block wx:if="{{coupons.length > 0}}">
+        <view class="coupon-item" wx:for="{{coupons}}" wx:key="id">
+          <view class="coupon-left">
+            <view class="value-box">
+              <text class="symbol" wx:if="{{item.type === 'amount'}}">¥</text>
+              <text class="value">{{item.valueDisplay}}</text>
+              <text class="unit" wx:if="{{item.type === 'discount'}}">折</text>
+            </view>
+            <text class="condition">{{item._formatMinSpend}}</text>
+          </view>
+          
+          <view class="coupon-right">
+            <view class="info">
+              <text class="coupon-title">{{item.title}}</text>
+              <text class="shop-name">{{item.merchant_name}}</text>
+              <view class="progress-box">
+                <t-progress theme="plump" percentage="{{item._percent}}" />
+                <text class="sold-text">已抢{{item._percent}}%</text>
+              </view>
+            </view>
+            
+            <t-button 
+                size="small" 
+                theme="{{item.is_claimed ? 'light' : 'primary'}}" 
+                disabled="{{item.is_claimed}}"
+                data-id="{{item.id}}"
+                data-index="{{index}}"
+                bind:tap="onClaim"
+            >
+                {{item.is_claimed ? '已领取' : '立即领取'}}
+            </t-button>
+          </view>
+        </view>
+        <view class="load-more">
+            <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="加载中..." />
+            <view wx:if="{{!loading && !hasMore}}" class="no-more">没有更多了</view>
+        </view>
+      </block>
+      
+      <t-empty wx:else icon="info-circle-filled" description="暂无优惠券" />
+    </view>
+  </t-pull-down-refresh>
+</view>

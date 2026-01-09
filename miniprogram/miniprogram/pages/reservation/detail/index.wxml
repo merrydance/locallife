@@ -1,0 +1,53 @@
+<view class="container" wx:if="{{reservation}}">
+  <view class="status-card">
+    <t-icon name="check-circle-filled" size="64rpx" color="{{reservation.status === 'confirmed' ? '#00a870' : '#ed7b2f'}}" />
+    <text class="status-text">{{reservation._statusText}}</text>
+    <text class="status-desc" wx:if="{{reservation.status === 'pending'}}">请等待商户确认</text>
+  </view>
+
+  <t-cell-group theme="card">
+    <t-cell title="商户" note="{{reservation.merchant_name}}" arrow />
+    <t-cell title="时间" note="{{reservation._timeText}}" />
+    <t-cell title="人数" note="{{reservation.party_size}}人" />
+    <t-cell title="联系人" note="{{reservation.contact_name}} {{reservation.contact_phone}}" />
+    <t-cell title="备注" note="{{reservation.notes || '无'}}" />
+  </t-cell-group>
+
+  <view class="actions">
+    <t-button block variant="outline" icon="call" bind:tap="onCallMerchant">联系商户</t-button>
+    
+    <t-button 
+      wx:if="{{reservation.status === 'confirmed' || reservation.status === 'checked_in'}}" 
+      block 
+      theme="primary" 
+      bind:tap="onGoToOrder"
+    >
+      点菜
+    </t-button>
+    
+    <t-button 
+      wx:if="{{reservation.status === 'pending' || reservation.status === 'confirmed'}}" 
+      block 
+      theme="danger" 
+      variant="outline" 
+      bind:tap="onCancel"
+    >
+      取消预订
+    </t-button>
+  </view>
+
+  <t-dialog
+    visible="{{showCancelDialog}}"
+    title="取消预订"
+    confirm-btn="确认取消"
+    cancel-btn="暂不取消"
+    bind:confirm="confirmCancel"
+    bind:cancel="closeCancelDialog"
+  >
+    <view slot="content">
+      <t-radio-group value="{{cancelReason}}" bind:change="onReasonChange">
+        <t-radio wx:for="{{cancelReasons}}" wx:key="*this" value="{{item}}" label="{{item}}" />
+      </t-radio-group>
+    </view>
+  </t-dialog>
+</view>

@@ -1,0 +1,198 @@
+/* 员工绑定商户页面样式 */
+
+.bind-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px 24px;
+  box-sizing: border-box;
+}
+
+/* 成功状态 */
+.success-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 80px;
+}
+
+.success-icon {
+  font-size: 72px;
+  margin-bottom: 24px;
+}
+
+.success-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+.success-merchant {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 8px;
+}
+
+.success-role {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 40px;
+}
+
+.success-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 输入状态 */
+.input-state {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.page-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.page-icon {
+  display: block;
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  display: block;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 8px;
+}
+
+.page-desc {
+  display: block;
+  font-size: 14px;
+  color: #666;
+}
+
+/* 输入区域 */
+.input-section {
+  margin-bottom: 24px;
+}
+
+.section-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.invite-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 16px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.invite-input:focus {
+  border-color: #667eea;
+}
+
+/* 操作区域 */
+.action-section {
+  margin-bottom: 32px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: #e0e0e0;
+}
+
+.divider-text {
+  padding: 0 16px;
+  font-size: 13px;
+  color: #999;
+}
+
+.btn-scan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  background: #f8f9fc;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #333;
+}
+
+.scan-icon {
+  font-size: 20px;
+}
+
+/* 提示 */
+.tips {
+  background: #f8f9fc;
+  padding: 16px;
+  border-radius: 10px;
+}
+
+.tips-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.tips-content {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+}

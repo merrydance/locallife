@@ -1,0 +1,8 @@
+{
+    "navigationBarTitleText": "自动化配置",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-switch": "tdesign-miniprogram/switch/switch",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

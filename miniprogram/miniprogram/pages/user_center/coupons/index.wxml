@@ -1,0 +1,54 @@
+<custom-navbar title="优惠券" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view class="tabs-section">
+    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
+      <t-tab-panel label="可领取" value="AVAILABLE" />
+      <t-tab-panel label="我的" value="MY" />
+    </t-tabs>
+  </view>
+
+  <!-- 骨架屏 -->
+  <view wx:if="{{loading && coupons.length === 0}}" class="skeleton-container">
+    <list-skeleton wx:for="{{[1,2,3,4]}}" wx:key="*this" show-avatar="{{false}}" show-arrow="{{false}}" />
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:elif="{{coupons.length === 0}}" class="empty">
+    <t-empty description="暂无优惠券" />
+  </view>
+
+  <!-- 优惠券列表 -->
+  <view wx:else class="coupons-container">
+    <view class="coupons-list">
+      <view wx:for="{{coupons}}" wx:key="id" class="coupon-card">
+        <view class="coupon-left">
+          <text class="discount-amount">¥{{item.discountDisplay}}</text>
+          <text class="threshold">满{{item.thresholdDisplay}}可用</text>
+        </view>
+        <view class="coupon-right">
+          <text class="merchant-name">{{item.merchant_name}}</text>
+          <text class="coupon-name">{{item.name}}</text>
+          <text class="expire-date">有效期至 {{item.end_date}}</text>
+          <t-button 
+            wx:if="{{activeTab === 'AVAILABLE' && item.can_claim}}"
+            class="claim-btn"
+            size="small" 
+            theme="primary"
+            data-id="{{item.id}}"
+            bindtap="onClaimCoupon"
+          >
+            立即领取
+          </t-button>
+          <t-tag 
+            wx:if="{{activeTab === 'MY'}}"
+            size="small" 
+            theme="{{item.status === 'UNUSED' ? 'success' : 'default'}}"
+          >
+            {{item.status === 'UNUSED' ? '未使用' : '已使用'}}
+          </t-tag>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

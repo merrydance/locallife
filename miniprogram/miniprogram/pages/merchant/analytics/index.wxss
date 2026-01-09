@@ -1,0 +1,326 @@
+/* 经营统计页面样式 - PC-SaaS 风格 */
+
+/* 小屏提示 */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.notice-box {
+  background: white;
+  padding: 48px 64px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.notice-icon { font-size: 64px; margin-bottom: 16px; }
+.notice-title { display: block; font-size: 20px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
+.notice-desc { display: block; font-size: 14px; color: #666; margin-bottom: 24px; }
+.btn-back {
+  display: inline-block;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* 大屏布局 */
+.saas-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease;
+}
+
+.page-container {
+  flex: 1;
+  padding: 24px 32px;
+  margin-top: 60px;
+  overflow-y: auto;
+}
+
+/* 页面标题 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-icon { font-size: 28px; }
+.title-text { font-size: 24px; font-weight: 600; color: #1a1a2e; }
+
+/* 日期范围选择 */
+.date-range-picker {
+  display: flex;
+  gap: 8px;
+  background: white;
+  padding: 4px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.range-option {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.range-option.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 概览卡片 */
+.overview-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.card-label {
+  display: block;
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.card-value {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+}
+
+.card-value.primary { color: #667eea; }
+.card-value.warning { color: #ff6b6b; }
+
+/* 两列布局 */
+.two-column-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.left-column, .right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 区块卡片 */
+.section-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.section-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16px;
+}
+
+.empty-hint {
+  text-align: center;
+  padding: 24px;
+  color: #999;
+  font-size: 14px;
+}
+
+/* 日报列表 */
+.daily-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.daily-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+}
+
+.daily-row:last-child { border-bottom: none; }
+.daily-date { color: #666; flex: 1; }
+.daily-orders { color: #999; width: 60px; text-align: center; }
+.daily-sales { color: #667eea; font-weight: 500; width: 100px; text-align: right; }
+
+/* 时段分析 */
+.hourly-chart {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.hourly-bar-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.hourly-label {
+  width: 50px;
+  font-size: 12px;
+  color: #666;
+}
+
+.hourly-bar-wrap {
+  flex: 1;
+  height: 16px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.hourly-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 4px;
+  min-width: 4px;
+}
+
+.hourly-count {
+  width: 50px;
+  text-align: right;
+  font-size: 12px;
+  color: #999;
+}
+
+/* 订单来源 */
+.source-list, .category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.source-row, .category-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f8f9fc;
+  border-radius: 8px;
+}
+
+.source-type, .cat-name { font-weight: 500; color: #333; flex: 1; }
+.source-count, .cat-qty { color: #999; width: 60px; text-align: center; }
+.source-sales, .cat-sales { color: #667eea; font-weight: 500; width: 100px; text-align: right; }
+
+/* 复购分析 */
+.repurchase-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.repurchase-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  background: #f8f9fc;
+  border-radius: 8px;
+}
+
+.rep-label { color: #666; }
+.rep-value { font-weight: 600; color: #333; }
+.rep-value.highlight { color: #667eea; font-size: 18px; }
+
+/* 排行榜区域 */
+.rankings-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.ranking-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.ranking-table {
+  margin-top: 12px;
+}
+
+.ranking-header, .ranking-row {
+  display: flex;
+  padding: 12px 0;
+  font-size: 14px;
+}
+
+.ranking-header {
+  border-bottom: 2px solid #eee;
+  font-weight: 600;
+  color: #666;
+}
+
+.ranking-row {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ranking-row:last-child { border-bottom: none; }
+
+.rank-col { width: 50px; text-align: center; }
+.name-col { flex: 1; }
+.qty-col { width: 80px; text-align: center; }
+.amount-col { width: 100px; text-align: right; color: #667eea; }
+
+.rank-1 { color: #ff6b6b; font-weight: 700; }
+.rank-2 { color: #ffa94d; font-weight: 600; }
+.rank-3 { color: #4ecdc4; font-weight: 600; }

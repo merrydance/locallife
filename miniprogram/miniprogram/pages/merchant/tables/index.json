@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "merchant-header": "/components/merchant-header/index"
+  },
+  "navigationBarTitleText": "桌台管理"
+}

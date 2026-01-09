@@ -1,0 +1,225 @@
+<!--堂食点餐/预订点菜页面-->
+<custom-navbar title="{{merchantInfo.name || '点餐'}}" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="loading-container">
+    <t-loading theme="circular" size="64rpx" text="加载菜单..." layout="vertical" />
+  </view>
+
+  <!-- 错误状态 -->
+  <view wx:elif="{{hasError}}" class="error-container">
+    <t-icon name="error-circle" size="120rpx" color="#E34D59" />
+    <text class="error-title">加载失败</text>
+    <text class="error-message">{{errorMessage || '由于网络原因，菜单加载失败'}}</text>
+    <t-button theme="primary" shape="round" bindtap="onRetry">重试</t-button>
+  </view>
+
+  <!-- 主要内容 -->
+  <view wx:else class="content-wrapper">
+    <!-- 桌台信息 -->
+    <view class="table-info" wx:if="{{tableNo}}">
+      <view class="info-row">
+        <text class="label">桌号：</text>
+        <text class="value">{{tableNo}}</text>
+      </view>
+      <t-button class="call-btn" size="extra-small" theme="primary" variant="outline" bindtap="callService">呼叫服务</t-button>
+    </view>
+
+    <!-- 菜品列表 -->
+    <view class="dishes-container">
+      <!-- 左侧分类 -->
+      <scroll-view class="category-sidebar" scroll-y>
+        <view 
+          wx:for="{{categories}}" 
+          wx:key="id"
+          class="category-item {{currentCategoryId === item.id ? 'active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="switchCategory"
+        >
+          {{item.name}}
+        </view>
+      </scroll-view>
+
+      <!-- 右侧菜品 -->
+      <scroll-view class="dishes-list" scroll-y>
+        <block wx:if="{{currentDishes.length > 0}}">
+          <view wx:for="{{currentDishes}}" wx:key="id" class="dish-item">
+            <t-image class="dish-image" src="{{item.image_url}}" mode="aspectFill" data-id="{{item.id}}" bindtap="viewDishDetail" />
+            <view class="dish-info" data-id="{{item.id}}" bindtap="viewDishDetail">
+              <text class="dish-name">{{item.name}}</text>
+              <text wx:if="{{item.description}}" class="dish-desc">{{item.description}}</text>
+              <view class="dish-tags" wx:if="{{item.tags && item.tags.length > 0}}">
+                <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light">{{tag}}</t-tag>
+              </view>
+              <view class="dish-price-row">
+                <text class="dish-price">¥{{item.priceDisplay}}</text>
+                <text wx:if="{{item.memberPriceDisplay}}" class="dish-member-price">会员价 ¥{{item.memberPriceDisplay}}</text>
+              </view>
+            </view>
+            <!-- 菜品控制区 -->
+            <view class="dish-card-controls">
+              <!-- 有定制选项：仅显示"选规格"按钮 -->
+              <block wx:if="{{item.hasCustomizations}}">
+                <view class="customize-btn-wrapper">
+                  <t-button size="extra-small" theme="primary" variant="outline" shape="round" data-id="{{item.id}}" catchtap="openCustomDrawer">选规格</t-button>
+                  <text wx:if="{{item.cartQty > 0}}" class="cart-badge">{{item.cartQty}}</text>
+                </view>
+              </block>
+              <!-- 无定制选项：显示加减步进器 -->
+              <block wx:else>
+                <view class="stepper-control">
+                  <view wx:if="{{item.cartQty > 0}}" class="stepper-item">
+                    <t-button size="extra-small" icon="remove" shape="circle" theme="default" data-id="{{item.id}}" catchtap="onDecrease" />
+                    <text class="qty-text">{{item.cartQty}}</text>
+                  </view>
+                  <t-button size="extra-small" icon="add" shape="circle" theme="primary" data-id="{{item.id}}" catchtap="onIncrease" />
+                </view>
+              </block>
+            </view>
+          </view>
+        </block>
+        <t-empty wx:else description="该分类暂无菜品" />
+      </scroll-view>
+    </view>
+  </view>
+</view>
+
+  <!-- 共享购物车栏组件 -->
+  <cart-bar 
+    totalPrice="{{totalPrice}}" 
+    totalCount="{{totalCount}}" 
+    dockBottom="{{true}}"
+    bind:toggle="toggleCartVisible"
+    bind:checkout="goToCheckout"
+  />
+
+<!-- 购物车弹窗 -->
+<view wx:if="{{cartVisible}}" class="cart-modal">
+  <view class="cart-mask" bindtap="hideCart"></view>
+  <view class="cart-modal-content">
+    <view class="cart-header">
+      <text class="cart-title">购物车 ({{cart.total_quantity}})</text>
+      <t-button class="cart-close" size="small" theme="default" variant="text" icon="close" bindtap="hideCart" />
+    </view>
+    
+    <scroll-view class="cart-items-scroll" scroll-y>
+      <view wx:for="{{cart.items}}" wx:key="dish_id" class="cart-item">
+        <view class="item-info">
+          <text class="item-name">{{item.dish_name}}</text>
+          <text class="item-price">¥{{item.priceDisplay}}</text>
+        </view>
+        <view class="item-stepper">
+          <t-button 
+            size="small" 
+            icon="remove" 
+            shape="circle" 
+            theme="default"
+            data-item-id="{{item.id}}" 
+            data-quantity="{{item.quantity - 1}}"
+            bindtap="updateItemQuantity"
+          />
+          <text class="qty">{{item.quantity}}</text>
+          <t-button 
+            size="small" 
+            icon="add" 
+            shape="circle" 
+            theme="primary"
+            data-item-id="{{item.id}}" 
+            data-quantity="{{item.quantity + 1}}"
+            bindtap="updateItemQuantity"
+          />
+        </view>
+      </view>
+    </scroll-view>
+    
+    <view class="cart-footer">
+      <view class="cart-total-info">
+        <text class="total-label">合计：</text>
+        <text class="total-amount">¥{{cart.subtotalDisplay}}</text>
+      </view>
+      <t-button class="checkout-btn" theme="primary" bindtap="goToCheckout">
+        去结算 ({{cart.total_quantity}})
+      </t-button>
+    </view>
+  </view>
+</view>
+
+<!-- 定制选择 Drawer -->
+<t-popup visible="{{drawerVisible}}" placement="bottom" bind:visible-change="closeCustomDrawer">
+  <view class="custom-drawer">
+    <view class="drawer-header">
+      <text class="drawer-title">{{drawerDish.name}}</text>
+      <t-icon name="close" size="48rpx" bind:tap="closeCustomDrawer" />
+    </view>
+    
+    <scroll-view scroll-y class="drawer-content">
+      <view class="spec-group" wx:for="{{drawerDish.spec_groups}}" wx:key="id" wx:for-item="group">
+        <view class="group-title">{{group.name}}</view>
+        <view class="spec-list">
+          <t-tag 
+            wx:for="{{group.specs}}" 
+            wx:key="id" 
+            wx:for-item="spec"
+            class="spec-item {{drawerSpecs[group.id] === spec.id ? 'active' : ''}}"
+            variant="{{drawerSpecs[group.id] === spec.id ? 'light' : 'outline'}}"
+            theme="{{drawerSpecs[group.id] === spec.id ? 'primary' : 'default'}}"
+            data-group-id="{{group.id}}"
+            data-spec-id="{{spec.id}}"
+            bindtap="onDrawerSpecTap"
+          >
+            {{spec.name}} <text wx:if="{{spec.price_diff > 0}}">+¥{{spec.priceDiffDisplay}}</text>
+          </t-tag>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="drawer-footer">
+      <view class="footer-left">
+        <view class="stepper-control big">
+          <t-button size="small" icon="remove" shape="circle" theme="default" bindtap="onDrawerDecrease" />
+          <text class="qty-text">{{drawerQty}}</text>
+          <t-button size="small" icon="add" shape="circle" theme="primary" bindtap="onDrawerIncrease" />
+        </view>
+      </view>
+      <t-button theme="primary" size="large" block bindtap="onConfirmCustom">加入购物车</t-button>
+    </view>
+  </view>
+</t-popup>
+
+<!-- 菜品详情弹窗 -->
+<t-popup visible="{{selectedDish !== null}}" placement="center" bind:visible-change="closeDishDetail">
+  <view class="dish-detail-popup" wx:if="{{selectedDish}}">
+    <image class="detail-image" src="{{selectedDish.image_url}}" mode="aspectFill" />
+    <view class="detail-info">
+      <view class="detail-header">
+        <text class="detail-name">{{selectedDish.name}}</text>
+        <t-icon name="close" size="40rpx" bindtap="closeDishDetail" />
+      </view>
+      <text class="detail-desc">{{selectedDish.description || '暂无描述'}}</text>
+      
+      <view class="detail-price-row">
+        <view class="price-box">
+          <text class="symbol">¥</text>
+          <text class="price">{{selectedDish.priceDisplay}}</text>
+        </view>
+        <t-button 
+          wx:if="{{!selectedDish.hasCustomizations}}"
+          theme="primary" 
+          size="small" 
+          shape="round" 
+          data-id="{{selectedDish.id}}" 
+          bindtap="onIncrease"
+        >加入购物车</t-button>
+        <t-button 
+          wx:else
+          theme="primary" 
+          size="small" 
+          shape="round" 
+          data-id="{{selectedDish.id}}" 
+          bindtap="openCustomDrawer"
+        >选规格</t-button>
+      </view>
+    </view>
+  </view>
+</t-popup>

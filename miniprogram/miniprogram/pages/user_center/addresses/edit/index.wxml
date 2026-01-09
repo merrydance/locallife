@@ -1,0 +1,68 @@
+<custom-navbar title="编辑地址" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view class="form-group">
+    <t-input
+      label="联系人"
+      placeholder="请填写收货人姓名"
+      value="{{contactName}}"
+      bind:change="onNameChange"
+    />
+
+    <t-input
+      label="手机号"
+      placeholder="请填写11位手机号"
+      type="number"
+      maxlength="11"
+      value="{{contactPhone}}"
+      bind:change="onPhoneChange"
+    />
+
+    <t-cell
+      title="地图定位"
+      note="{{latitude ? '已选择' : '点击选择'}}"
+      arrow
+      hover
+      bind:click="onChooseLocation"
+    />
+
+    <t-textarea
+      label="详细地址"
+      placeholder="省市区+街道+门牌号"
+      value="{{detailAddress}}"
+      bind:change="onDetailChange"
+      maxlength="200"
+      autosize
+    />
+  </view>
+
+  <view class="form-group">
+    <t-cell title="设为默认地址">
+      <t-switch value="{{isDefault}}" bind:change="onDefaultChange" slot="note" />
+    </t-cell>
+  </view>
+
+  <view class="button-group">
+    <t-button 
+      theme="primary" 
+      size="large" 
+      block 
+      bind:tap="onSave" 
+      loading="{{saving}}"
+      disabled="{{saving}}"
+    >
+      保存地址
+    </t-button>
+    <t-button 
+      wx:if="{{addressId}}" 
+      theme="danger" 
+      variant="text" 
+      size="large" 
+      block 
+      bind:tap="onDelete"
+      class="delete-btn"
+    >
+      删除地址
+    </t-button>
+  </view>
+</view>

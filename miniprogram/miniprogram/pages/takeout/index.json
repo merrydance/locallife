@@ -1,0 +1,22 @@
+{
+    "navigationBarTitleText": "外卖",
+    "enablePullDownRefresh": true,
+    "renderer": "skyline",
+    "componentFramework": "glass-easel",
+    "usingComponents": {
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "custom-navbar": "/components/custom-navbar/index",
+        "category-tabs": "../../components/category-tabs/index",
+        "dish-card": "../../components/dish-card/index",
+        "dish-skeleton": "../../components/dish-skeleton/index",
+        "restaurant-card": "../../components/restaurant-card/index",
+        "cart-bar": "../../components/cart-bar/index",
+        "t-search": "tdesign-miniprogram/search/search",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-image": "tdesign-miniprogram/image/image"
+    }
+}

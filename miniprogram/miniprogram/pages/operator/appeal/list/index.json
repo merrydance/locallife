@@ -1,0 +1,9 @@
+{
+    "navigationBarTitleText": "申诉处理",
+    "usingComponents": {
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-empty": "tdesign-miniprogram/empty/empty"
+    }
+}

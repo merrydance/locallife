@@ -1,0 +1,120 @@
+<!-- 评价管理 - 桌面级 SaaS 界面 -->
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- PC 全屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <merchant-header 
+      merchant-name="{{merchantName}}"
+      is-open="{{true}}"
+    />
+
+    <view class="page-container">
+      <!-- 页面头部 -->
+      <view class="page-header">
+        <view class="page-title-section">
+          <text class="page-title">评价管理</text>
+          <text class="page-subtitle">查看和回复顾客评价</text>
+        </view>
+        <view class="page-actions">
+          <button class="btn-refresh" bindtap="loadReviews" data-reset="{{true}}">
+            <text>🔄 刷新</text>
+          </button>
+        </view>
+      </view>
+
+      <!-- Tab 筛选 -->
+      <view class="tabs-bar">
+        <view wx:for="{{tabs}}" wx:key="value" 
+              class="tab-item {{currentTab === item.value ? 'active' : ''}}"
+              data-value="{{item.value}}"
+              bindtap="onTabTap">
+          {{item.label}}
+        </view>
+      </view>
+
+      <!-- Loading -->
+      <view wx:if="{{loading && reviews.length === 0}}" class="loading-container">
+        <view class="loading-spinner"></view>
+        <text>加载中...</text>
+      </view>
+
+      <!-- 评价列表 -->
+      <view wx:else class="content-area">
+        <view wx:if="{{reviews.length === 0}}" class="empty-state">
+          <text class="empty-icon">💬</text>
+          <text class="empty-text">暂无评价</text>
+        </view>
+
+        <view wx:else class="reviews-list">
+          <view wx:for="{{reviews}}" wx:key="id" class="review-card">
+            <view class="review-header">
+              <view class="user-info">
+                <image class="user-avatar" src="{{item.user_avatar || '/assets/icons/default-avatar.png'}}" mode="aspectFill" />
+                <text class="user-name">{{item.user_name || '用户'}}</text>
+              </view>
+              <view class="rating">
+                <text wx:for="{{5}}" wx:key="*this" wx:for-item="star" class="star {{star < item.rating ? 'filled' : ''}}">★</text>
+              </view>
+            </view>
+            
+            <text class="review-content">{{item.content}}</text>
+            <text class="review-time">{{item.created_at}}</text>
+            
+            <!-- 已有回复 -->
+            <view wx:if="{{item.reply}}" class="reply-section">
+              <view class="reply-label">商家回复</view>
+              <text class="reply-content">{{item.reply}}</text>
+            </view>
+
+            <!-- 未回复时显示回复按钮 -->
+            <view wx:if="{{!item.reply}}" class="review-actions">
+              <button class="btn-reply" data-id="{{item.id}}" bindtap="onReplyTap">回复</button>
+            </view>
+          </view>
+        </view>
+
+        <!-- 加载更多 -->
+        <view wx:if="{{hasMore && reviews.length > 0}}" class="load-more" bindtap="loadMore">
+          <text wx:if="{{loading}}">加载中...</text>
+          <text wx:else>加载更多</text>
+        </view>
+        <view wx:if="{{!hasMore && reviews.length > 0}}" class="no-more">
+          <text>已加载全部</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 回复弹窗 -->
+<view wx:if="{{showReplyDialog}}" class="dialog-mask" bindtap="closeReplyDialog">
+  <view class="dialog-box" catchtap="">
+    <view class="dialog-header">
+      <text class="dialog-title">回复评价</text>
+      <view class="dialog-close" bindtap="closeReplyDialog">✕</view>
+    </view>
+    <view class="dialog-body">
+      <textarea class="reply-textarea" 
+                placeholder="请输入回复内容" 
+                value="{{replyContent}}" 
+                bindinput="onReplyInput"
+                maxlength="500" />
+    </view>
+    <view class="dialog-footer">
+      <button class="btn-cancel" bindtap="closeReplyDialog">取消</button>
+      <button class="btn-confirm" bindtap="confirmReply">确认回复</button>
+    </view>
+  </view>
+</view>

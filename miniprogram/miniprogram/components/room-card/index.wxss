@@ -1,0 +1,99 @@
+/* 包间卡片 - 统一设计规范 */
+
+.room-card {
+  display: flex;
+  gap: 20rpx;
+  padding: 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 12rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+}
+
+.room-card:active {
+  transform: scale(0.98);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+/* 图片 - 与其他卡片统一 180x180 */
+.room-image {
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+  background: #f5f5f5;
+}
+
+.room-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.row-2, .row-3, .row-4, .row-5 {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: wrap;
+}
+
+/* 标题 */
+.restaurant-room-name {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 价格 */
+.price {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #FF6B58;
+}
+
+.no-minimum {
+  font-size: 24rpx;
+  color: #00A870;
+}
+
+.separator {
+  color: #ddd;
+  font-size: 22rpx;
+}
+
+.capacity {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.booking, .distance {
+  font-size: 22rpx;
+  color: #999;
+}
+
+.distance {
+  margin-left: 16rpx;
+}
+
+.address {
+  font-size: 22rpx;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

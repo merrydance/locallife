@@ -1,0 +1,184 @@
+<!-- 运费减免设置 - 桌面级 SaaS 界面 -->
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- PC 全屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <merchant-header 
+      merchant-name="{{merchantName}}"
+      is-open="{{true}}"
+    />
+
+    <view class="page-container">
+      <!-- 页面头部 -->
+      <view class="page-header">
+        <view class="page-title-section">
+          <text class="page-title">运费减免设置</text>
+          <text class="page-subtitle">设置满额免运费或运费优惠规则</text>
+        </view>
+        <view class="page-actions">
+          <button class="btn-add" bindtap="showAddModal">
+            <text>➕ 新增规则</text>
+          </button>
+        </view>
+      </view>
+
+      <!-- Loading -->
+      <view wx:if="{{loading}}" class="loading-container">
+        <view class="loading-spinner"></view>
+        <text>加载中...</text>
+      </view>
+
+      <!-- 规则列表 -->
+      <view wx:else class="content-area">
+        <view wx:if="{{promotions.length === 0}}" class="empty-state">
+          <text class="empty-icon">🚚</text>
+          <text class="empty-text">暂无运费减免规则</text>
+          <text class="empty-hint">添加规则后，满足条件的订单可享受运费优惠</text>
+        </view>
+
+        <view wx:else class="promotions-list">
+          <view wx:for="{{promotions}}" wx:key="id" class="promotion-card {{item.is_active ? 'active' : 'inactive'}}">
+            <view class="card-header">
+              <text class="promo-name">{{item.name}}</text>
+              <view class="status-badge {{item.is_active ? 'active' : ''}}">
+                {{item.is_active ? '启用中' : '已停用'}}
+              </view>
+            </view>
+            
+            <view class="card-body">
+              <view class="info-row">
+                <text class="info-label">优惠类型</text>
+                <text class="info-value">{{item.typeText}}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">起订金额</text>
+                <text class="info-value">¥{{item.min_order_amount_display}}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">减免金额</text>
+                <text class="info-value highlight">¥{{item.discount_display}}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">有效期</text>
+                <text class="info-value">{{item.valid_period}}</text>
+              </view>
+            </view>
+            
+            <view class="card-actions">
+              <button class="btn-delete" data-id="{{item.id}}" bindtap="deletePromotion">删除</button>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>
+
+<!-- 新增规则弹窗 -->
+<view wx:if="{{showModal}}" class="modal-mask" bindtap="hideModal">
+  <view class="modal-box" catchtap="preventClose">
+    <view class="modal-header">
+      <text class="modal-title">新增运费减免规则</text>
+      <view class="modal-close" bindtap="hideModal">✕</view>
+    </view>
+    
+    <view class="modal-body">
+      <view class="form-group">
+        <text class="form-label">规则名称</text>
+        <input class="form-input" 
+               placeholder="如：满30元免运费" 
+               value="{{formData.name}}" 
+               bindinput="onInputChange" 
+               data-field="name" />
+      </view>
+      
+      <view class="form-group">
+        <text class="form-label">起订金额 (元)</text>
+        <input class="form-input" 
+               type="digit" 
+               placeholder="满多少元可享受优惠" 
+               value="{{formData.min_order_amount}}" 
+               bindinput="onInputChange" 
+               data-field="min_order_amount" />
+      </view>
+      
+      <view class="form-group">
+        <text class="form-label">减免金额 (元)</text>
+        <input class="form-input" 
+               type="digit" 
+               placeholder="减免运费金额，填0表示免运费" 
+               value="{{formData.discount_amount}}" 
+               bindinput="onInputChange" 
+               data-field="discount_amount" />
+      </view>
+      
+      <view class="form-group">
+        <text class="form-label">开始日期</text>
+        <view class="form-input date-input" bindtap="onOpenCalendar" data-field="valid_from">
+          <text class="{{formData.valid_from ? '' : 'placeholder'}}">{{formData.valid_from || '请选择'}}</text>
+          <text class="date-icon">📅</text>
+        </view>
+      </view>
+      
+      <view class="form-group">
+        <text class="form-label">结束日期</text>
+        <view class="form-input date-input" bindtap="onOpenCalendar" data-field="valid_until">
+          <text class="{{formData.valid_until ? '' : 'placeholder'}}">{{formData.valid_until || '请选择'}}</text>
+          <text class="date-icon">📅</text>
+        </view>
+      </view>
+    </view>
+    
+    <view class="modal-footer">
+      <button class="btn-cancel" bindtap="hideModal">取消</button>
+      <button class="btn-confirm" bindtap="createPromotion" disabled="{{submitting}}">
+        {{submitting ? '保存中...' : '确认创建'}}
+      </button>
+    </view>
+  </view>
+</view>
+
+<!-- 日历选择器弹窗 -->
+<view class="calendar-overlay {{showCalendar ? 'show' : ''}}" catchtap="onCloseCalendar">
+  <view class="calendar-popup" catchtap="onCalendarContentTap">
+    <view class="calendar-header">
+      <view class="calendar-nav" bindtap="onPrevMonth">‹</view>
+      <text class="calendar-title">{{calendarYear}}年{{calendarMonth}}月</text>
+      <view class="calendar-nav" bindtap="onNextMonth">›</view>
+    </view>
+    <view class="calendar-weekdays">
+      <text class="weekday">日</text>
+      <text class="weekday">一</text>
+      <text class="weekday">二</text>
+      <text class="weekday">三</text>
+      <text class="weekday">四</text>
+      <text class="weekday">五</text>
+      <text class="weekday">六</text>
+    </view>
+    <view class="calendar-days">
+      <view 
+        wx:for="{{calendarDays}}" wx:key="index"
+        class="day-cell {{item.disabled ? 'disabled' : ''}} {{item.selected ? 'selected' : ''}} {{item.today ? 'today' : ''}} {{!item.currentMonth ? 'other-month' : ''}}"
+        bindtap="{{item.disabled ? '' : 'onSelectCalendarDay'}}"
+        data-date="{{item.date}}"
+      >
+        {{item.day}}
+      </view>
+    </view>
+    <view class="calendar-footer">
+      <view class="calendar-today-btn" bindtap="onSelectToday">今天</view>
+    </view>
+  </view>
+</view>

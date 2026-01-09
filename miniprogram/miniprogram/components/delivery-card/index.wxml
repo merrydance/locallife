@@ -1,0 +1,94 @@
+<wxs module="utils">
+  var getStatusClass = function(status) {
+    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return 'orange';
+    if (status == 'ACCEPTED' || status === 1) return 'blue';
+    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return 'green';
+    return 'gray';
+  }
+  
+  var getStatusText = function(status) {
+    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return '新任务';
+    if (status == 'ACCEPTED' || status === 1) return '待取货';
+    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return '配送中';
+    return '已完成';
+  }
+
+  var getBtnClass = function(status) {
+    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return 'btn-orange';
+    if (status == 'ACCEPTED' || status === 1) return 'btn-blue';
+    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return 'btn-green';
+    return 'btn-gray';
+  }
+
+  var getBtnText = function(status) {
+    if (status == 'PENDING' || status == 'CONFIRMED' || status == 'CREATED' || status === 0) return '抢单';
+    if (status == 'ACCEPTED' || status === 1) return '确认取货';
+    if (status == 'PICKED_UP' || status == 'DELIVERING' || status === 2) return '确认送达';
+    return '查看详情';
+  }
+
+  var formatMoney = function(cents) {
+    return (cents / 100).toFixed(2);
+  }
+
+  module.exports = {
+    getStatusClass: getStatusClass,
+    getStatusText: getStatusText,
+    getBtnClass: getBtnClass,
+    getBtnText: getBtnText,
+    formatMoney: formatMoney
+  }
+</wxs>
+
+<view class="delivery-card" wx:if="{{task}}">
+  <!-- Header -->
+  <view class="card-header">
+    <view class="header-left">
+      <text class="task-id">#{{task.id}}</text>
+      <view class="tag {{utils.getStatusClass(task.status)}}">
+        {{utils.getStatusText(task.status)}}
+      </view>
+    </view>
+    <text class="income">¥{{utils.formatMoney(task.fee)}}</text>
+  </view>
+
+  <!-- Route Info -->
+  <view class="route-info">
+    <!-- Shop -->
+    <view class="route-node">
+      <view class="node-icon start">取</view>
+      <view class="node-content">
+        <text class="address">{{task.merchant_name}}</text>
+        <text class="sub-address">{{task.merchant_address}}</text>
+      </view>
+      <view class="node-action" catchtap="onCall" data-type="shop">
+        <t-icon name="call" size="40rpx" color="#0052d9" />
+      </view>
+    </view>
+
+    <view class="route-line"></view>
+
+    <!-- Customer -->
+    <view class="route-node">
+      <view class="node-icon end">送</view>
+      <view class="node-content">
+        <text class="address">{{task.customer_address}}</text>
+        <text class="sub-address">距离 {{task.distance_to_deliver}}m</text>
+      </view>
+      <view class="node-action" catchtap="onCall" data-type="customer">
+        <t-icon name="call" size="40rpx" color="#0052d9" />
+      </view>
+    </view>
+  </view>
+
+  <!-- Big Action Button -->
+  <view class="action-area">
+    <button 
+      class="big-btn {{utils.getBtnClass(task.status)}}" 
+      bindtap="onAction"
+      hover-class="btn-hover"
+    >
+      {{utils.getBtnText(task.status)}}
+    </button>
+  </view>
+</view>

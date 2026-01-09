@@ -1,0 +1,355 @@
+<!-- 订单管理 - 桌面级 SaaS 界面 -->
+<!-- 仅 PC-Full (>=1600px) 支持 -->
+
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">🖥️</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问订单管理系统</text>
+      <button class="btn-back" bindtap="goBack">返回工作台</button>
+    </view>
+  </view>
+</match-media>
+
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 主区域 (全宽) -->
+    <view class="main-area" style="margin-left: 0;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        merchant-name="{{merchantName}}"
+        is-open="{{isOpen}}"
+      />
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 页面头部 -->
+        <view class="page-header">
+          <view class="page-title-section">
+            <text class="page-title">订单管理</text>
+            <text class="page-subtitle">管理所有订单的接单、制作和完成流程</text>
+          </view>
+          <view class="page-actions">
+            <button class="btn-refresh" bindtap="refreshOrders">
+              <text class="btn-icon">🔄</text>
+              <text>刷新</text>
+            </button>
+            <button class="btn-export" bindtap="exportOrders">
+              <text class="btn-icon">📊</text>
+              <text>导出</text>
+            </button>
+          </view>
+        </view>
+
+        <!-- 统计卡片 -->
+        <view class="stats-cards">
+          <view class="stat-card warning" bindtap="filterByStatus" data-status="paid">
+            <view class="stat-value">{{statusCounts.paid}}</view>
+            <view class="stat-label">待接单</view>
+            <view class="stat-trend" wx:if="{{statusCounts.paid > 0}}">需立即处理</view>
+          </view>
+          <view class="stat-card info" bindtap="filterByStatus" data-status="preparing">
+            <view class="stat-value">{{statusCounts.preparing}}</view>
+            <view class="stat-label">制作中</view>
+          </view>
+          <view class="stat-card success" bindtap="filterByStatus" data-status="ready">
+            <view class="stat-value">{{statusCounts.ready}}</view>
+            <view class="stat-label">待出餐</view>
+          </view>
+          <view class="stat-card" bindtap="filterByStatus" data-status="completed">
+            <view class="stat-value">{{statusCounts.completed}}</view>
+            <view class="stat-label">今日完成</view>
+          </view>
+          <view class="stat-card primary">
+            <view class="stat-value">¥{{todayRevenue}}</view>
+            <view class="stat-label">今日营业额</view>
+          </view>
+        </view>
+
+        <!-- 筛选工具栏 -->
+        <view class="filter-toolbar">
+          <view class="filter-left">
+            <!-- 状态筛选 -->
+            <view class="filter-group">
+              <view 
+                class="filter-tab {{currentStatus === '' ? 'active' : ''}}" 
+                bindtap="filterByStatus" 
+                data-status=""
+              >全部</view>
+              <view 
+                class="filter-tab {{currentStatus === 'paid' ? 'active' : ''}}" 
+                bindtap="filterByStatus" 
+                data-status="paid"
+              >待接单 <text class="badge" wx:if="{{statusCounts.paid}}">{{statusCounts.paid}}</text></view>
+              <view 
+                class="filter-tab {{currentStatus === 'preparing' ? 'active' : ''}}" 
+                bindtap="filterByStatus" 
+                data-status="preparing"
+              >制作中</view>
+              <view 
+                class="filter-tab {{currentStatus === 'ready' ? 'active' : ''}}" 
+                bindtap="filterByStatus" 
+                data-status="ready"
+              >待出餐</view>
+              <view 
+                class="filter-tab {{currentStatus === 'completed' ? 'active' : ''}}" 
+                bindtap="filterByStatus" 
+                data-status="completed"
+              >已完成</view>
+              <view 
+                class="filter-tab {{currentStatus === 'cancelled' ? 'active' : ''}}" 
+                bindtap="filterByStatus" 
+                data-status="cancelled"
+              >已取消</view>
+            </view>
+          </view>
+          <view class="filter-right">
+            <!-- 类型筛选 -->
+            <view class="select-box" bindtap="showTypeFilter">
+              <text>{{orderTypeLabel}}</text>
+              <text class="arrow">▼</text>
+            </view>
+            <!-- 搜索 -->
+            <view class="search-box">
+              <text class="search-icon">🔍</text>
+              <input 
+                class="search-input" 
+                placeholder="搜索订单号/备注" 
+                value="{{searchKeyword}}"
+                bindinput="onSearchInput"
+                bindconfirm="doSearch"
+              />
+            </view>
+          </view>
+        </view>
+
+        <!-- 订单表格 -->
+        <view class="table-container">
+          <view class="table-wrapper">
+            <!-- 表头 -->
+            <view class="table-header">
+              <view class="th th-checkbox">
+                <view class="checkbox {{allSelected ? 'checked' : ''}}" bindtap="toggleSelectAll"></view>
+              </view>
+              <view class="th th-order-no">订单号</view>
+              <view class="th th-type">类型</view>
+              <view class="th th-items">商品</view>
+              <view class="th th-amount">金额</view>
+              <view class="th th-status">状态</view>
+              <view class="th th-time">下单时间</view>
+              <view class="th th-actions">操作</view>
+            </view>
+
+            <!-- 加载中 -->
+            <view wx:if="{{loading}}" class="table-loading">
+              <view class="loading-spinner"></view>
+              <text>加载中...</text>
+            </view>
+
+            <!-- 空状态 -->
+            <view wx:elif="{{orders.length === 0}}" class="table-empty">
+              <text class="empty-icon">📋</text>
+              <text class="empty-text">暂无订单数据</text>
+            </view>
+
+            <!-- 表格内容 -->
+            <scroll-view wx:else scroll-y class="table-body">
+              <view 
+                wx:for="{{orders}}" 
+                wx:key="id" 
+                class="table-row {{item.selected ? 'selected' : ''}} status-{{item.status}}"
+              >
+                <view class="td td-checkbox">
+                  <view 
+                    class="checkbox {{item.selected ? 'checked' : ''}}" 
+                    catchtap="toggleSelect" 
+                    data-id="{{item.id}}"
+                  ></view>
+                </view>
+                <view class="td td-order-no">
+                  <text class="order-no">#{{item.order_no}}</text>
+                  <text class="order-note" wx:if="{{item.notes}}">{{item.notes}}</text>
+                </view>
+                <view class="td td-type">
+                  <view class="type-tag {{item.order_type}}">{{item.order_type_label}}</view>
+                </view>
+                <view class="td td-items">
+                  <text class="items-summary">{{item.items_summary}}</text>
+                  <text class="items-count">共{{item.items_count}}件</text>
+                </view>
+                <view class="td td-amount">
+                  <text class="amount">¥{{item.total_display}}</text>
+                  <text class="discount" wx:if="{{item.discount_amount > 0}}">-¥{{item.discount_display}}</text>
+                </view>
+                <view class="td td-status">
+                  <view class="status-badge status-{{item.status}}">{{item.status_label}}</view>
+                </view>
+                <view class="td td-time">
+                  <text class="time-date">{{item.created_date}}</text>
+                  <text class="time-clock">{{item.created_time}}</text>
+                </view>
+                <view class="td td-actions">
+                  <!-- 待接单 -->
+                  <block wx:if="{{item.status === 'paid'}}">
+                    <button class="btn-action accept" catchtap="acceptOrder" data-id="{{item.id}}">接单</button>
+                    <button class="btn-action reject" catchtap="rejectOrder" data-id="{{item.id}}">拒单</button>
+                  </block>
+                  <!-- 制作中 -->
+                  <block wx:elif="{{item.status === 'preparing'}}">
+                    <button class="btn-action ready" catchtap="markReady" data-id="{{item.id}}">出餐</button>
+                  </block>
+                  <!-- 待出餐/配送中 -->
+                  <block wx:elif="{{item.status === 'ready' || item.status === 'delivering'}}">
+                    <button class="btn-action complete" catchtap="completeOrder" data-id="{{item.id}}">完成</button>
+                  </block>
+                  <!-- 通用 -->
+                  <button class="btn-action detail" catchtap="viewDetail" data-id="{{item.id}}">详情</button>
+                  <button class="btn-action print" catchtap="printOrder" data-id="{{item.id}}">打印</button>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <!-- 分页 -->
+          <view class="pagination" wx:if="{{totalPages > 1}}">
+            <view class="page-info">共 {{totalCount}} 条记录</view>
+            <view class="page-controls">
+              <button 
+                class="page-btn {{currentPage <= 1 ? 'disabled' : ''}}" 
+                bindtap="prevPage"
+                disabled="{{currentPage <= 1}}"
+              >上一页</button>
+              <view class="page-numbers">
+                <view 
+                  wx:for="{{pageNumbers}}" 
+                  wx:key="*this"
+                  class="page-num {{currentPage === item ? 'active' : ''}}"
+                  bindtap="goToPage"
+                  data-page="{{item}}"
+                >{{item}}</view>
+              </view>
+              <button 
+                class="page-btn {{currentPage >= totalPages ? 'disabled' : ''}}" 
+                bindtap="nextPage"
+                disabled="{{currentPage >= totalPages}}"
+              >下一页</button>
+            </view>
+            <view class="page-size">
+              <text>每页</text>
+              <picker mode="selector" range="{{pageSizeOptions}}" value="{{pageSizeIndex}}" bindchange="changePageSize">
+                <view class="picker-value">{{pageSize}}</view>
+              </picker>
+              <text>条</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 批量操作栏 -->
+        <view class="batch-actions" wx:if="{{selectedCount > 0}}">
+          <text class="selected-info">已选择 {{selectedCount}} 项</text>
+          <button class="batch-btn accept" bindtap="batchAccept" wx:if="{{canBatchAccept}}">批量接单</button>
+          <button class="batch-btn print" bindtap="batchPrint">批量打印</button>
+          <button class="batch-btn cancel" bindtap="clearSelection">取消选择</button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 订单详情抽屉 -->
+  <view class="drawer-mask {{showDetail ? 'visible' : ''}}" bindtap="closeDetail"></view>
+  <view class="drawer {{showDetail ? 'visible' : ''}}">
+    <view class="drawer-header">
+      <text class="drawer-title">订单详情</text>
+      <view class="drawer-close" bindtap="closeDetail">✕</view>
+    </view>
+    <scroll-view scroll-y class="drawer-body" wx:if="{{detailOrder}}">
+      <!-- 订单基本信息 -->
+      <view class="detail-section">
+        <view class="section-title">订单信息</view>
+        <view class="info-grid">
+          <view class="info-item">
+            <text class="info-label">订单号</text>
+            <text class="info-value">#{{detailOrder.order_no}}</text>
+          </view>
+          <view class="info-item">
+            <text class="info-label">订单类型</text>
+            <text class="info-value">{{detailOrder.order_type_label}}</text>
+          </view>
+          <view class="info-item">
+            <text class="info-label">订单状态</text>
+            <view class="status-badge status-{{detailOrder.status}}">{{detailOrder.status_label}}</view>
+          </view>
+          <view class="info-item">
+            <text class="info-label">下单时间</text>
+            <text class="info-value">{{detailOrder.created_at}}</text>
+          </view>
+          <view class="info-item" wx:if="{{detailOrder.paid_at}}">
+            <text class="info-label">支付时间</text>
+            <text class="info-value">{{detailOrder.paid_at}}</text>
+          </view>
+          <view class="info-item" wx:if="{{detailOrder.table_id}}">
+            <text class="info-label">桌台</text>
+            <text class="info-value">{{detailOrder.table_no}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 商品明细 -->
+      <view class="detail-section">
+        <view class="section-title">商品明细</view>
+        <view class="items-list">
+          <view class="item-row" wx:for="{{detailOrder.items}}" wx:key="id">
+            <image class="item-image" src="{{item.image_url || '/assets/placeholder.png'}}" mode="aspectFill" />
+            <view class="item-info">
+              <text class="item-name">{{item.name}}</text>
+              <text class="item-customs" wx:if="{{item.customizations}}">{{item.customizations}}</text>
+            </view>
+            <text class="item-qty">x{{item.quantity}}</text>
+            <text class="item-price">¥{{item.subtotal_display}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 金额明细 -->
+      <view class="detail-section">
+        <view class="section-title">金额明细</view>
+        <view class="amount-rows">
+          <view class="amount-row">
+            <text>商品小计</text>
+            <text>¥{{detailOrder.subtotal_display}}</text>
+          </view>
+          <view class="amount-row" wx:if="{{detailOrder.delivery_fee > 0}}">
+            <text>配送费</text>
+            <text>¥{{detailOrder.delivery_fee_display}}</text>
+          </view>
+          <view class="amount-row discount" wx:if="{{detailOrder.discount_amount > 0}}">
+            <text>优惠</text>
+            <text>-¥{{detailOrder.discount_display}}</text>
+          </view>
+          <view class="amount-row total">
+            <text>实付金额</text>
+            <text class="total-value">¥{{detailOrder.total_display}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 备注 -->
+      <view class="detail-section" wx:if="{{detailOrder.notes}}">
+        <view class="section-title">订单备注</view>
+        <view class="notes-box">{{detailOrder.notes}}</view>
+      </view>
+    </scroll-view>
+
+    <view class="drawer-footer" wx:if="{{detailOrder}}">
+      <button class="btn-print-lg" bindtap="printCurrentOrder">打印小票</button>
+      <block wx:if="{{detailOrder.status === 'paid'}}">
+        <button class="btn-reject-lg" bindtap="rejectCurrentOrder">拒单</button>
+        <button class="btn-accept-lg" bindtap="acceptCurrentOrder">接单</button>
+      </block>
+      <block wx:elif="{{detailOrder.status === 'preparing'}}">
+        <button class="btn-ready-lg" bindtap="markCurrentReady">出餐完成</button>
+      </block>
+    </view>
+  </view>
+</match-media>

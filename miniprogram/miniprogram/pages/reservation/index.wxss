@@ -1,0 +1,111 @@
+/* 预订页面 - 使用统一设计 Token */
+
+/* Skyline 滚动容器 */
+.page-scroll {
+  background-color: #FAFAFA;
+  box-sizing: border-box;
+}
+
+/* Top Bar */
+.top-bar {
+  display: flex;
+  align-items: center;
+  padding: var(--customer-card-margin) var(--customer-page-padding);
+  background: #fff;
+  gap: var(--customer-card-margin);
+}
+
+.filter-btn-new {
+  flex-shrink: 0;
+}
+
+.search-box {
+  flex: 1;
+}
+
+/* Tabs Section */
+.tabs-section {
+  background: #fff;
+  margin-bottom: 12rpx;
+}
+
+/* 内容区域 - 与 takeout 完全一致 */
+.content-section {
+  display: flex;
+  flex-direction: column;
+  padding: 12rpx 20rpx 24rpx;
+}
+
+.loading-more {
+  display: flex;
+  justify-content: center;
+  padding: 32rpx 0;
+}
+
+.no-more {
+  text-align: center;
+  padding: 32rpx 0;
+  color: #999;
+  font-size: var(--customer-subtitle-size);
+}
+
+/* Filter Drawer */
+.filter-drawer {
+  width: 600rpx;
+  height: 100vh;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 32rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.drawer-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.drawer-content {
+  flex: 1;
+  padding: var(--customer-page-padding);
+  overflow-y: auto;
+}
+
+.filter-group {
+  margin-bottom: 32rpx;
+}
+
+.group-title {
+  font-size: var(--customer-title-size);
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 16rpx;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.drawer-footer {
+  display: flex;
+  gap: var(--customer-page-padding);
+  padding: var(--customer-page-padding);
+  border-top: 1rpx solid #f0f0f0;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.drawer-footer .t-button {
+  flex: 1;
+}

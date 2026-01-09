@@ -1,0 +1,71 @@
+<view class="search-filter">
+  <!-- Search Bar -->
+  <view class="search-bar">
+    <view class="search-input-wrapper">
+      <icon type="search" size="16" color="#999" />
+      <input 
+        class="search-input" 
+        placeholder="搜索菜品、餐厅名称" 
+        value="{{keyword}}"
+        bindinput="onSearchInput"
+      />
+    </view>
+    <view class="filter-btn" bindtap="toggleFilter">
+      <text>筛选</text>
+    </view>
+  </view>
+
+  <!-- Filter Panel -->
+  <view class="filter-panel" wx:if="{{showFilter}}">
+    <!-- Date Picker -->
+    <view class="filter-item">
+      <text class="filter-label">日期</text>
+      <picker mode="date" value="{{filters.date}}" bindchange="onDateChange">
+        <view class="picker-value">
+          {{filters.date || '选择日期'}}
+        </view>
+      </picker>
+    </view>
+
+    <!-- Meal Period -->
+    <view class="filter-item">
+      <text class="filter-label">就餐时段</text>
+      <view class="meal-period-options">
+        <view 
+          class="period-option {{filters.mealPeriod === 'all' ? 'active' : ''}}"
+          data-value="all"
+          bindtap="onMealPeriodChange"
+        >全天</view>
+        <view 
+          class="period-option {{filters.mealPeriod === 'lunch' ? 'active' : ''}}"
+          data-value="lunch"
+          bindtap="onMealPeriodChange"
+        >午餐</view>
+        <view 
+          class="period-option {{filters.mealPeriod === 'dinner' ? 'active' : ''}}"
+          data-value="dinner"
+          bindtap="onMealPeriodChange"
+        >晚餐</view>
+      </view>
+    </view>
+
+    <!-- Guest Count -->
+    <view class="filter-item">
+      <text class="filter-label">就餐人数: {{filters.guestCount}}人</text>
+      <slider 
+        min="1" 
+        max="20" 
+        value="{{filters.guestCount}}" 
+        bindchange="onGuestCountChange"
+        bindchanging="onGuestCountChange"
+        activeColor="#0052D9"
+      />
+    </view>
+
+    <!-- Action Buttons -->
+    <view class="filter-actions">
+      <view class="reset-btn" bindtap="resetFilters">重置</view>
+      <view class="apply-btn" bindtap="toggleFilter">确定</view>
+    </view>
+  </view>
+</view>

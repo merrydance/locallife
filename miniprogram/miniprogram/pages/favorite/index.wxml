@@ -1,0 +1,44 @@
+<view class="container">
+  <t-tabs value="{{currentTab}}" bind:change="onTabChange" sticky>
+    <t-tab-panel wx:for="{{tabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+  </t-tabs>
+
+  <t-pull-down-refresh
+    value="{{refreshing}}"
+    bind:refresh="onPullDownRefresh"
+  >
+    <view class="content">
+      <block wx:if="{{favorites.length > 0}}">
+        <t-swipe-cell 
+            wx:for="{{favorites}}" 
+            wx:key="id" 
+            right="{{[{ text: '取消收藏', className: 'btn-delete' }]}}"
+            bind:click="onRemove"
+            data-id="{{item.target_id}}"
+            data-index="{{index}}"
+        >
+          <view class="favorite-item" bind:tap="onItemClick" data-id="{{item.target_id}}">
+            <image class="image" src="{{item.image}}" mode="aspectFill" />
+            <view class="info">
+              <text class="title">{{item.title}}</text>
+              <view class="sub-info">
+                 <t-rate wx:if="{{currentTab === 'merchant'}}" value="{{item.rating}}" size="12" disabled />
+                 <text class="sub-text">{{item.sub_title}}</text>
+              </view>
+              <view class="tags" wx:if="{{item.tags && item.tags.length > 0}}">
+                <t-tag wx:for="{{item.tags}}" wx:key="*this" wx:for-item="tag" size="small" variant="light">{{tag}}</t-tag>
+              </view>
+            </view>
+          </view>
+        </t-swipe-cell>
+        
+        <view class="load-more">
+            <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="加载中..." />
+            <view wx:if="{{!loading && !hasMore}}" class="no-more">没有更多了</view>
+        </view>
+      </block>
+      
+      <t-empty wx:else icon="star" description="暂无收藏" />
+    </view>
+  </t-pull-down-refresh>
+</view>

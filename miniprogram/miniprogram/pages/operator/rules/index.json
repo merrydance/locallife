@@ -1,0 +1,8 @@
+{
+    "navigationBarTitleText": "规则配置",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

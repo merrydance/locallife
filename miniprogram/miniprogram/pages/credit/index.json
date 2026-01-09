@@ -1,0 +1,7 @@
+{
+    "navigationBarTitleText": "信用分",
+    "usingComponents": {
+        "t-progress": "tdesign-miniprogram/progress/progress",
+        "t-empty": "tdesign-miniprogram/empty/empty"
+    }
+}

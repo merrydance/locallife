@@ -1,0 +1,11 @@
+{
+    "navigationBarTitleText": "运营中心",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

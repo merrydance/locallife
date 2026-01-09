@@ -1,0 +1,19 @@
+<view class="cart-bar-placeholder {{dockBottom ? 'dock-bottom' : ''}}" wx:if="{{alwaysShow || totalCount > 0}}"></view>
+<view class="cart-bar {{(alwaysShow || totalCount > 0) ? 'show' : ''}} {{dockBottom ? 'dock-bottom' : ''}}">
+  <view class="cart-icon-wrapper" bindtap="onCartClick">
+    <image class="cart-icon" src="/assets/tabbar/takeout_active.png" /> <!-- Temporary Icon -->
+    <view class="badge" wx:if="{{totalCount > 0}}">{{totalCount}}</view>
+  </view>
+  
+  <view class="cart-info" bindtap="onCartClick">
+    <view class="price-info">
+      <text class="currency">¥</text>
+      <text class="total-price">{{computedPriceDisplay}}</text>
+    </view>
+    <view class="delivery-tip">{{computedDeliveryDisplay ? '预估配送费 ¥' + computedDeliveryDisplay : '结算时计算配送费'}}</view>
+  </view>
+  
+  <view class="checkout-btn {{totalCount > 0 ? 'active' : ''}}" bindtap="onCheckout">
+    去结算
+  </view>
+</view>

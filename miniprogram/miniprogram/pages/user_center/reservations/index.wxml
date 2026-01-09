@@ -1,0 +1,66 @@
+<custom-navbar title="我的预订" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page" style="padding-top: {{navBarHeight}}px;">
+  <!-- 状态筛选Tab -->
+  <t-tabs value="{{currentStatus}}" bind:change="onStatusChange">
+    <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+  </t-tabs>
+
+  <!-- 骨架屏 -->
+  <view wx:if="{{loading && reservations.length === 0}}" class="skeleton-container">
+    <view class="card skeleton" wx:for="{{[1,2,3]}}" wx:key="*this">
+      <view class="skeleton-line" style="width: 60%; height: 32rpx; margin-bottom: 12rpx;"></view>
+      <view class="skeleton-line" style="width: 40%; height: 24rpx; margin-bottom: 20rpx;"></view>
+      <view class="skeleton-line" style="width: 100%; height: 80rpx;"></view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:elif="{{reservations.length === 0}}" class="empty">
+    <t-empty description="暂无预订记录" />
+  </view>
+
+  <!-- 预订列表 -->
+  <view wx:else class="reservation-list">
+    <view class="card" wx:for="{{reservations}}" wx:key="id">
+      <view class="card-header">
+        <view class="table-info">
+          <view class="table-name">{{item.table_type || '包间'}} · {{item.table_no || ''}}</view>
+          <view class="datetime">{{item._dateTimeDisplay}}</view>
+        </view>
+        <t-tag variant="light" theme="{{item._statusClass === 'completed' ? 'success' : (item._statusClass === 'cancelled' ? 'default' : 'primary')}}">{{item._statusText}}</t-tag>
+      </view>
+
+      <view class="card-body">
+        <view class="info-row">
+          <text class="label">就餐人数</text>
+          <text class="value">{{item.guest_count}}人</text>
+        </view>
+        <view class="info-row">
+          <text class="label">联系人</text>
+          <text class="value">{{item.contact_name}} {{item.contact_phone}}</text>
+        </view>
+        <view class="info-row" wx:if="{{item._depositDisplay}}">
+          <text class="label">定金</text>
+          <text class="value">{{item._depositDisplay}}</text>
+        </view>
+        <view class="info-row" wx:if="{{item.notes}}">
+          <text class="label">备注</text>
+          <text class="value">{{item.notes}}</text>
+        </view>
+      </view>
+
+      <view class="card-footer">
+        <t-button size="small" variant="outline" data-id="{{item.id}}" bind:tap="onViewDetail">查看详情</t-button>
+        <t-button wx:if="{{item._canOrder}}" size="small" theme="primary" data-item="{{item}}" bind:tap="onGoToOrder">点菜</t-button>
+        <t-button wx:if="{{item._canCancel}}" size="small" theme="danger" variant="text" data-id="{{item.id}}" bind:tap="onCancelReservation">取消预订</t-button>
+      </view>
+    </view>
+
+    <!-- 加载状态 -->
+    <view class="loading-footer">
+      <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="加载中..." />
+      <view wx:elif="{{!hasMore && reservations.length > 0}}" class="no-more">没有更多了</view>
+    </view>
+  </view>
+</view>

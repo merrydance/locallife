@@ -1,0 +1,179 @@
+<custom-navbar title="运营商入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
+  <view class="form-container">
+    <!-- 1. 证照上传 (置顶) -->
+    <view class="section-header">证照上传 (自动识别)</view>
+    
+    <view class="upload-group">
+      <view class="upload-item">
+        <view class="upload-label">营业执照 (必传)</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{licenseImages}}" 
+          max="1" 
+          bind:success="onLicenseUpload" 
+          bind:remove="onLicenseRemove" 
+        />
+      </view>
+      <view class="upload-item">
+        <view class="upload-label">开户许可证 (必传)</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{accountPermitImages}}" 
+          max="1" 
+          bind:success="onAccountPermitUpload" 
+          bind:remove="onAccountPermitRemove" 
+        />
+      </view>
+    </view>
+
+    <view class="upload-group">
+      <view class="upload-item">
+        <view class="upload-label">法人身份证正面 (必传)</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{idCardFrontImages}}" 
+          max="1" 
+          bind:success="onIdCardFrontUpload" 
+          bind:remove="onIdCardFrontRemove" 
+        />
+      </view>
+      
+      <view class="upload-item">
+        <view class="upload-label">法人身份证反面 (必传)</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{idCardBackImages}}" 
+          max="1" 
+          bind:success="onIdCardBackUpload" 
+          bind:remove="onIdCardBackRemove" 
+        />
+      </view>
+    </view>
+
+    <view class="upload-group">
+      <view class="upload-item">
+        <view class="upload-label">合作计划书 (选填)</view>
+        <t-upload 
+          mediaType="{{['image']}}" 
+          files="{{planImages}}" 
+          max="5" 
+          bind:success="onPlanUpload" 
+          bind:remove="onPlanRemove" 
+        />
+      </view>
+    </view>
+
+    <!-- 2. 基本信息 -->
+    <view class="section-header">基本信息</view>
+    <t-cell-group theme="card">
+      <t-cell title="公司名称" required>
+        <input class="input" placeholder="请输入公司名称" value="{{formData.companyName}}" bindinput="onCompanyNameInput" />
+      </t-cell>
+      <t-cell title="联系人" required>
+        <input class="input" placeholder="请输入联系人姓名" value="{{formData.contactName}}" bindinput="onContactNameInput" />
+      </t-cell>
+      <t-cell title="联系电话" required>
+        <input class="input" type="number" placeholder="请输入联系电话" value="{{formData.phone}}" bindinput="onPhoneInput" />
+      </t-cell>
+      <t-cell title="公司地址" required arrow bind:click="onChooseAddress">
+        <view class="picker-text {{formData.address ? '' : 'placeholder'}}">
+          {{formData.address || '请选择公司地址'}}
+        </view>
+      </t-cell>
+      <t-cell title="详细地址" required>
+        <input class="input" placeholder="门牌号、楼层等" value="{{formData.addressDetail}}" bindinput="onAddressDetailInput" />
+      </t-cell>
+      <t-cell title="运营区域" arrow bind:click="onChooseRegion">
+        <view class="picker-text {{formData.operationRegion ? '' : 'placeholder'}}">
+          {{formData.operationRegion || '请选择运营区域'}}
+        </view>
+      </t-cell>
+      <t-cell title="预计投入" arrow bind:click="onChooseInvestment">
+        <view class="picker-text {{formData.investment ? '' : 'placeholder'}}">
+          {{formData.investment || '请选择预计投入'}}
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <!-- 3. 证照信息 (自动回填) -->
+    <view class="section-header">证照信息</view>
+    <t-cell-group theme="card">
+      <t-cell title="统一信用代码" required>
+        <input class="input" placeholder="识别回填" value="{{formData.creditCode}}" bindinput="onCreditCodeInput" />
+      </t-cell>
+      <t-cell title="注册地址" required>
+        <input class="input" placeholder="识别回填" value="{{formData.registerAddress}}" bindinput="onRegisterAddressInput" />
+      </t-cell>
+      <t-cell title="营业期限" required>
+        <input class="input" placeholder="例如: 2099-12-31 或 长期" value="{{formData.licenseValidity}}" bindinput="onLicenseValidityInput" />
+      </t-cell>
+      <t-cell title="经营范围" required>
+        <input class="input" placeholder="识别回填" value="{{formData.businessScope}}" bindinput="onBusinessScopeInput" />
+      </t-cell>
+    </t-cell-group>
+
+    <!-- 4. 法人信息 (自动回填) -->
+    <view class="section-header">法人信息</view>
+    <t-cell-group theme="card">
+      <t-cell title="法人姓名" required>
+        <input class="input" placeholder="识别回填" value="{{formData.legalPerson}}" bindinput="onLegalPersonInput" />
+      </t-cell>
+      <t-cell title="身份证号" required>
+        <input class="input" placeholder="识别回填" value="{{formData.idCard}}" bindinput="onIdCardInput" />
+      </t-cell>
+      <t-cell title="性别" required>
+        <input class="input" placeholder="识别回填" value="{{formData.gender}}" bindinput="onGenderInput" />
+      </t-cell>
+      <t-cell title="籍贯地址" required>
+        <input class="input" placeholder="识别回填" value="{{formData.hometown}}" bindinput="onHometownInput" />
+      </t-cell>
+      <t-cell title="当前住址">
+        <input class="input" placeholder="选填" value="{{formData.currentAddress}}" bindinput="onCurrentAddressInput" />
+      </t-cell>
+      <t-cell title="身份证有效期" required>
+        <input class="input" placeholder="识别回填" value="{{formData.idCardValidity}}" bindinput="onIdCardValidityInput" />
+      </t-cell>
+    </t-cell-group>
+
+    <!-- 5. 结算信息 -->
+    <view class="section-header">结算信息</view>
+    <t-cell-group theme="card">
+      <t-cell title="开户行">
+        <input class="input" placeholder="请输入开户行" value="{{formData.bankName}}" bindinput="onBankNameInput" />
+      </t-cell>
+      <t-cell title="银行账号">
+        <input class="input" type="number" placeholder="请输入银行账号" value="{{formData.bankAccount}}" bindinput="onBankAccountInput" />
+      </t-cell>
+      <t-cell title="开户名">
+        <input class="input" placeholder="请输入开户名" value="{{formData.accountName}}" bindinput="onAccountNameInput" />
+      </t-cell>
+    </t-cell-group>
+  </view>
+</view>
+
+<!-- 底部提交按钮 -->
+<view class="submit-bar">
+  <t-button class="submit-btn" theme="primary" size="large" bindtap="onSubmit">
+    提交申请
+  </t-button>
+</view>
+
+<!-- 运营区域选择器 -->
+<t-picker
+  visible="{{regionPickerVisible}}"
+  value="{{regionPickerValue}}"
+  data-source="{{regionOptions}}"
+  bind:confirm="onRegionConfirm"
+  bind:cancel="onRegionCancel"
+/>
+
+<!-- 投入选择器 -->
+<t-picker
+  visible="{{investmentPickerVisible}}"
+  value="{{investmentPickerValue}}"
+  data-source="{{investmentOptions}}"
+  bind:confirm="onInvestmentConfirm"
+  bind:cancel="onInvestmentCancel"
+/>

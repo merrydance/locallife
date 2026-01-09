@@ -1,0 +1,92 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.content {
+  padding: 24rpx;
+}
+
+.chart-card, .table-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.card-header {
+  margin-bottom: 24rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.chart-container {
+  width: 100%;
+  height: 500rpx;
+}
+
+ec-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.table-container {
+  width: 100%;
+}
+
+.table-header {
+  display: flex;
+  background: #F9F9F9;
+  padding: 16rpx 0;
+  border-radius: 8rpx;
+}
+
+.th {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  color: #666;
+  font-weight: bold;
+}
+
+.tr {
+  display: flex;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.tr:last-child {
+  border-bottom: none;
+}
+
+.td {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  color: #333;
+}
+@media (min-width: 750px) {
+  .content {
+    padding: 16px !important;
+  }
+  .chart-card, .table-card {
+    padding: 16px !important;
+    border-radius: 8px !important;
+  }
+  .card-title {
+    font-size: 16px !important;
+  }
+  .chart-container {
+    height: 400px !important;
+  }
+  .th, .td {
+    font-size: 14px !important;
+  }
+}

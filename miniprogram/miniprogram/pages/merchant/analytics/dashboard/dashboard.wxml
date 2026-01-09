@@ -1,0 +1,202 @@
+<!--商户BI分析仪表盘页面-->
+<!-- 手机端引导 -->
+<match-media max-width="749">
+  <view class="lds-mobile-guidance lds-root">
+    <view class="guidance-box">
+      <t-icon name="chart-bar" size="100px" color="var(--lds-primary)" />
+      <view class="lds-text-lg lds-m-b-2">数据分析中心</view>
+      <view class="lds-text-secondary lds-m-b-4">完整的数据分析报表建议在平板或电脑端查看，以获得更好的可视化效果。</view>
+      <t-button block theme="primary" variant="outline" shape="round" bindtap="onBack">返回工作台</t-button>
+    </view>
+  </view>
+</match-media>
+
+<!-- 平板及桌面端：完整分析仪表盘 -->
+<match-media min-width="750">
+<view class="analytics-container">
+
+  <!-- 加载状态 -->
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="正在加载..." class="loading-container" />
+
+  <!-- 主要内容 -->
+  <view wx:else class="main-content">
+    <!-- 日期选择栏 -->
+    <view class="date-selector">
+      <view class="date-range">
+        <t-button size="small" variant="outline" data-mode="start" bind:tap="showDatePickerModal">
+          {{dateRange.start_date}}
+        </t-button>
+        <text class="separator">至</text>
+        <t-button size="small" variant="outline" data-mode="end" bind:tap="showDatePickerModal">
+          {{dateRange.end_date}}
+        </t-button>
+      </view>
+      
+      <view class="quick-select">
+        <t-button size="small" variant="text" data-days="7" bind:tap="quickSelectDate">近7天</t-button>
+        <t-button size="small" variant="text" data-days="30" bind:tap="quickSelectDate">近30天</t-button>
+        <t-button size="small" variant="text" data-days="90" bind:tap="quickSelectDate">近90天</t-button>
+      </view>
+    </view>
+
+    <!-- Tab导航 -->
+    <t-tabs value="{{currentTab}}" bind:change="onTabChange" class="analytics-tabs">
+      <t-tab-panel label="概览" value="overview" />
+      <t-tab-panel label="销售分析" value="sales" />
+      <t-tab-panel label="财务分析" value="finance" />
+      <t-tab-panel label="客户分析" value="customer" />
+    </t-tabs>
+
+    <!-- 概览Tab -->
+    <scroll-view wx:if="{{currentTab === 'overview'}}" class="tab-content" scroll-y="true">
+      <!-- 核心指标卡片 -->
+      <view wx:if="{{statsOverview}}" class="metrics-grid">
+        <view class="metric-card">
+          <text class="metric-label">总订单数</text>
+          <text class="metric-value">{{statsOverview.total_orders}}</text>
+          <view class="metric-growth" style="color: {{getGrowthColor(statsOverview.growth_rate)}}">
+            <t-icon name="arrow-up" size="24rpx" wx:if="{{statsOverview.growth_rate > 0}}" />
+            <t-icon name="arrow-down" size="24rpx" wx:if="{{statsOverview.growth_rate < 0}}" />
+            <text>{{formatGrowthRate(statsOverview.growth_rate)}}</text>
+          </view>
+        </view>
+
+        <view class="metric-card">
+          <text class="metric-label">总营收</text>
+          <text class="metric-value">¥{{formatAmount(statsOverview.total_revenue)}}</text>
+          <view class="metric-growth" style="color: {{getGrowthColor(statsOverview.growth_rate)}}">
+            <t-icon name="arrow-up" size="24rpx" wx:if="{{statsOverview.growth_rate > 0}}" />
+            <t-icon name="arrow-down" size="24rpx" wx:if="{{statsOverview.growth_rate < 0}}" />
+            <text>{{formatGrowthRate(statsOverview.growth_rate)}}</text>
+          </view>
+        </view>
+
+        <view class="metric-card">
+          <text class="metric-label">客单价</text>
+          <text class="metric-value">¥{{formatAmount(statsOverview.avg_order_value)}}</text>
+        </view>
+
+        <view class="metric-card">
+          <text class="metric-label">完成率</text>
+          <text class="metric-value">{{formatPercentage(statsOverview.completion_rate)}}</text>
+        </view>
+      </view>
+
+      <!-- 趋势图表 -->
+      <view class="chart-section">
+        <view class="section-title">销售趋势</view>
+        <view class="chart-placeholder">
+          <text class="placeholder-text">图表区域（需集成图表库）</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 销售分析Tab -->
+    <scroll-view wx:if="{{currentTab === 'sales'}}" class="tab-content" scroll-y="true">
+      <!-- 热门菜品 -->
+      <view class="section">
+        <view class="section-title">热门菜品 TOP10</view>
+        <view class="top-dishes-list">
+          <view wx:for="{{topDishes}}" wx:key="dish_id" class="dish-item">
+            <view class="dish-rank">{{item.rank}}</view>
+            <view class="dish-info">
+              <text class="dish-name">{{item.dish_name}}</text>
+              <text class="dish-sales">销量: {{item.sales_count}}</text>
+            </view>
+            <text class="dish-revenue">¥{{formatAmount(item.revenue)}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 分类统计 -->
+      <view class="section">
+        <view class="section-title">分类销售占比</view>
+        <view class="category-list">
+          <view wx:for="{{categoryStats}}" wx:key="category_id" class="category-item">
+            <view class="category-info">
+              <text class="category-name">{{item.category_name}}</text>
+              <text class="category-sales">销量: {{item.sales_count}}</text>
+            </view>
+            <view class="category-stats">
+              <text class="category-revenue">¥{{formatAmount(item.revenue)}}</text>
+              <text class="category-percentage">{{formatPercentage(item.percentage)}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 财务分析Tab -->
+    <scroll-view wx:if="{{currentTab === 'finance'}}" class="tab-content" scroll-y="true">
+      <view wx:if="{{financeOverview}}" class="finance-overview">
+        <t-cell-group title="财务概览">
+          <t-cell title="总营收" note="¥{{formatAmount(financeOverview.total_revenue)}}" />
+          <t-cell title="总退款" note="¥{{formatAmount(financeOverview.total_refunds)}}" />
+          <t-cell title="服务费" note="¥{{formatAmount(financeOverview.total_service_fees)}}" />
+          <t-cell title="净营收" note="¥{{formatAmount(financeOverview.net_revenue)}}" />
+          <t-cell title="待结算" note="¥{{formatAmount(financeOverview.pending_settlement)}}" />
+        </t-cell-group>
+      </view>
+    </scroll-view>
+
+    <!-- 客户分析Tab -->
+    <scroll-view wx:if="{{currentTab === 'customer'}}" class="tab-content" scroll-y="true">
+      <!-- 复购率 -->
+      <view wx:if="{{repurchaseStats}}" class="repurchase-section">
+        <view class="section-title">复购分析</view>
+        <view class="repurchase-metrics">
+          <view class="repurchase-card">
+            <text class="label">总客户数</text>
+            <text class="value">{{repurchaseStats.total_customers}}</text>
+          </view>
+          <view class="repurchase-card">
+            <text class="label">复购客户</text>
+            <text class="value">{{repurchaseStats.repurchase_customers}}</text>
+          </view>
+          <view class="repurchase-card">
+            <text class="label">复购率</text>
+            <text class="value">{{formatPercentage(repurchaseStats.repurchase_rate)}}</text>
+          </view>
+          <view class="repurchase-card">
+            <text class="label">平均复购间隔</text>
+            <text class="value">{{repurchaseStats.avg_repurchase_interval}}天</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 客户列表 -->
+      <view class="section">
+        <view class="section-title">客户消费排行</view>
+        <view class="customer-list">
+          <view wx:for="{{customerStats}}" wx:key="user_id" class="customer-item">
+            <view class="customer-info">
+              <text class="customer-name">{{item.username}}</text>
+              <text class="customer-orders">订单数: {{item.total_orders}}</text>
+            </view>
+            <view class="customer-stats">
+              <text class="customer-spent">¥{{formatAmount(item.total_spent)}}</text>
+              <text class="customer-avg">均¥{{formatAmount(item.avg_order_value)}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 日期选择器弹窗 -->
+  <t-popup 
+    visible="{{showDatePicker}}" 
+    placement="bottom" 
+    bind:visible-change="closeDatePicker"
+  >
+    <t-date-time-picker 
+      title="选择日期"
+      mode="date"
+      value="{{datePickerMode === 'start' ? dateRange.start_date : dateRange.end_date}}"
+      bind:confirm="onDateConfirm"
+      bind:cancel="closeDatePicker"
+    />
+  </t-popup>
+</view>
+</match-media>
+

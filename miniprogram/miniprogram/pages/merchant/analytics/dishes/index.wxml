@@ -1,0 +1,35 @@
+<custom-navbar title="菜品分析" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+  <view class="content">
+    <!-- 分类占比图 -->
+    <view class="chart-card">
+      <view class="card-header">
+        <text class="card-title">销量分类占比</text>
+      </view>
+      <view class="chart-container">
+        <ec-canvas id="mychart-dom-pie" canvas-id="mychart-pie" ec="{{ ec }}"></ec-canvas>
+      </view>
+    </view>
+
+    <!-- 销量排行榜 -->
+    <view class="table-card">
+      <view class="card-header">
+        <text class="card-title">菜品销量 TOP 5</text>
+      </view>
+      <view class="ranking-list">
+        <view wx:for="{{topDishes}}" wx:key="rank" class="ranking-item">
+          <view class="rank-num rank-{{item.rank}}">{{item.rank}}</view>
+          <view class="dish-info">
+            <text class="dish-name">{{item.name}}</text>
+            <text class="dish-sales">销量 {{item.sales}}</text>
+          </view>
+          <view class="dish-revenue">
+            <text class="revenue-val">¥{{item.revenue}}</text>
+            <t-icon wx:if="{{item.trend !== 'flat'}}" name="{{item.trend === 'up' ? 'arrow-up' : 'arrow-down'}}" size="24rpx" color="{{item.trend === 'up' ? '#00A870' : '#E34D59'}}" />
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

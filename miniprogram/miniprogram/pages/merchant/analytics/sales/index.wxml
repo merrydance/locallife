@@ -1,0 +1,38 @@
+<custom-navbar title="销售报表" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+  <view class="content">
+    <!-- 趋势图 -->
+    <view class="chart-card">
+      <view class="card-header">
+        <text class="card-title">近7天销售趋势</text>
+      </view>
+      <view class="chart-container">
+        <ec-canvas id="mychart-dom-line" canvas-id="mychart-line" ec="{{ ec }}"></ec-canvas>
+      </view>
+    </view>
+
+    <!-- 销售明细表 -->
+    <view class="table-card">
+      <view class="card-header">
+        <text class="card-title">销售明细</text>
+      </view>
+      <view class="table-container">
+        <view class="table-header">
+          <text class="th">日期</text>
+          <text class="th">销售额</text>
+          <text class="th">订单量</text>
+          <text class="th">客单价</text>
+        </view>
+        <view class="table-body">
+          <view wx:for="{{salesData}}" wx:key="date" class="tr">
+            <text class="td">{{item.date}}</text>
+            <text class="td">¥{{item.gmv}}</text>
+            <text class="td">{{item.orders}}</text>
+            <text class="td">¥{{item.avg}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,7 @@
+{
+    "usingComponents": {
+        "merchant-header": "/components/merchant-header/index"
+    },
+    "navigationStyle": "custom",
+    "enablePullDownRefresh": false
+}

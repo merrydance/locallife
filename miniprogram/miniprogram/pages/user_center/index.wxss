@@ -1,0 +1,90 @@
+/* 用户中心 - 统一设计规范 */
+
+/* Skyline 滚动容器 */
+.page-scroll {
+  background: #FAFAFA;
+  box-sizing: border-box;
+}
+
+/* 内容区域 - 与 takeout/reservation 一致 */
+.content-section {
+  display: flex;
+  flex-direction: column;
+  padding: 12rpx 20rpx 24rpx;
+}
+
+/* User Profile Card - 与其他卡片统一 */
+.user-card {
+  background: #fff;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  margin-bottom: 12rpx;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+}
+
+.avatar-wrapper {
+  padding: 0;
+  width: 96rpx !important;
+  height: 96rpx !important;
+  border-radius: 50%;
+  margin: 0 20rpx 0 0 !important;
+  background-color: #f3f3f3;
+  position: relative;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-wrapper::after {
+  border: none;
+}
+
+.avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  display: block;
+}
+
+.info-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+}
+
+.nickname-input {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  text-align: left;
+  height: 48rpx;
+  min-height: 48rpx;
+  width: 100%;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* 卡片区块 - 统一样式 */
+.card-section {
+  margin-bottom: 12rpx;
+}
+
+.card-title {
+  padding: 16rpx 0 12rpx;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.card-body {
+  background: #fff;
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+}

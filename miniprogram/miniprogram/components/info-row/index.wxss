@@ -1,0 +1,40 @@
+/* 信息行组件样式 */
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: wrap;
+  font-size: 24rpx;
+}
+
+.info-item {
+  color: var(--td-text-color-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.info-icon {
+  font-size: 22rpx;
+}
+
+/* 主题色 */
+.info-item.primary {
+  color: var(--brand-coral);
+  font-weight: 500;
+}
+
+.info-item.warning {
+  color: var(--brand-mustard);
+  font-weight: 500;
+}
+
+.info-item.success {
+  color: var(--brand-teal);
+  font-weight: 500;
+}
+
+.separator {
+  color: var(--td-text-color-placeholder);
+  margin: 0 4rpx;
+}

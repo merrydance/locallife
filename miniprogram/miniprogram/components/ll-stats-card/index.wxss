@@ -1,0 +1,149 @@
+/* Mobile specific (RPX Gated) */
+@media (max-width: 749px) {
+  .ll-stats-card {
+    position: relative;
+    padding: 32rpx;
+    background: #ffffff;
+    border-radius: 24rpx;
+    box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 160rpx;
+  }
+
+  .label {
+    font-size: 26rpx;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .trend-group {
+    font-size: 22rpx;
+    padding: 4rpx 12rpx;
+  }
+
+  .value {
+    font-size: 48rpx;
+    font-weight: 800;
+  }
+
+  .unit {
+    font-size: 24rpx;
+    margin-left: 8rpx;
+  }
+}
+
+/* Base properties (Unit-independent) */
+.ll-stats-card {
+  position: relative;
+  background: #ffffff;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.ll-stats-card.primary {
+  border-left: 4px solid #0052D9;
+}
+
+.ll-stats-card.secondary {
+  border-left: 4px solid #00A870;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.label-group {
+  display: flex;
+  align-items: center;
+}
+
+.prefix-icon {
+  margin-right: 6px;
+  color: #666;
+}
+
+.trend-group {
+  display: flex;
+  align-items: center;
+  border-radius: 100px;
+  font-weight: 600;
+}
+
+.trend-group.up {
+  color: #d54941;
+  background: rgba(213, 73, 65, 0.1);
+}
+
+.trend-group.down {
+  color: #2ba471;
+  background: rgba(43, 164, 113, 0.1);
+}
+
+.value-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.value {
+  color: #1a1a1a;
+  font-family: 'TDesign', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Large screen specific (Fixed PX for consistent density) */
+.ll-stats-card.large {
+  padding: 24px;
+  min-height: 120px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.ll-stats-card.large .label {
+  font-size: 14px;
+}
+
+.ll-stats-card.large .value {
+  font-size: 32px;
+  margin-top: 8px;
+}
+
+.ll-stats-card.large .unit {
+  font-size: 13px;
+}
+
+.ll-stats-card.large .trend-group {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.ll-stats-card.large .prefix-icon {
+  font-size: 18px !important;
+}
+
+.extra-info {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #888;
+}
+
+/* Decoration */
+.decoration-circle {
+  position: absolute;
+  right: -20px;
+  top: -20px;
+  width: 60px;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.01);
+  border-radius: 50%;
+  pointer-events: none;
+}

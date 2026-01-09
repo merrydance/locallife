@@ -1,0 +1,7 @@
+{
+    "navigationBarTitleText": "设置中心",
+    "navigationStyle": "custom",
+    "usingComponents": {
+        "merchant-header": "/components/merchant-header/index"
+    }
+}

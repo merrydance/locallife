@@ -1,0 +1,99 @@
+<custom-navbar title="购物车" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 140rpx;">
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-container">
+    <t-loading theme="circular" size="48rpx" />
+  </view>
+
+  <!-- 购物车列表（按商户分组） -->
+  <view wx:elif="{{merchantGroups.length > 0}}" class="cart-groups">
+    <view wx:for="{{merchantGroups}}" wx:key="cartId" class="merchant-group">
+      <!-- 商户头部 -->
+      <view class="merchant-header">
+        <view class="merchant-info" bindtap="onToggleMerchant" data-cart-id="{{item.cartId}}">
+          <t-checkbox 
+            value="{{item.cartId}}" 
+            checked="{{item.selected}}"
+            borderless
+            t-class="custom-checkbox"
+            t-class-icon="custom-checkbox-icon"
+          />
+          <image wx:if="{{item.merchantLogo}}" class="merchant-logo" src="{{item.merchantLogo}}" mode="aspectFill" />
+          <text class="merchant-name">{{item.merchantName}}</text>
+        </view>
+        <text class="clear-btn" bindtap="onClearMerchant" data-merchant-id="{{item.merchantId}}">清空本店</text>
+      </view>
+
+      <!-- 商品列表 -->
+      <view class="cart-items">
+        <view wx:for="{{item.items}}" wx:for-item="cartItem" wx:key="id" class="cart-item {{!cartItem.isAvailable ? 'unavailable' : ''}}">
+          <image class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" />
+          
+          <view class="item-info">
+            <text class="item-name">{{cartItem.name}}</text>
+            <view class="item-price-row">
+              <text class="item-price">{{cartItem.priceDisplay}}</text>
+              <text wx:if="{{!cartItem.isAvailable}}" class="item-status">已下架</text>
+            </view>
+          </view>
+
+          <view class="item-actions">
+            <view class="quantity-btn decrease" bindtap="onDecrease" data-item-id="{{cartItem.id}}">
+              <t-icon name="remove" size="32rpx" />
+            </view>
+            <text class="quantity">{{cartItem.quantity}}</text>
+            <view class="quantity-btn increase" bindtap="onIncrease" data-item-id="{{cartItem.id}}">
+              <t-icon name="add" size="32rpx" />
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 商户小计 -->
+      <view class="merchant-footer">
+        <view class="fee-row">
+          <text class="fee-label">商品小计</text>
+          <text class="fee-value">{{item.subtotalDisplay}}</text>
+        </view>
+        <view class="fee-row">
+          <text class="fee-label">代取费</text>
+          <text class="fee-value">{{item.deliveryFeeDisplay}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:else class="empty-container">
+    <t-empty 
+      icon="cart"
+      description="购物车是空的"
+    >
+      <t-button theme="primary" size="large" bindtap="onBackToTakeout">去逛逛</t-button>
+    </t-empty>
+  </view>
+</view>
+
+<!-- 底部结算栏 -->
+<view wx:if="{{merchantGroups.length > 0}}" class="checkout-bar">
+  <view class="total-info">
+    <view class="total-row">
+      <text class="total-label">已选 {{selectedCartIds.length}} 家商户</text>
+    </view>
+    <view class="total-row">
+      <text class="total-label">合计:</text>
+      <text class="total-price">{{checkoutTotalDisplay}}</text>
+    </view>
+  </view>
+  <t-button 
+    class="checkout-btn" 
+    theme="primary" 
+    size="large" 
+    disabled="{{selectedCartIds.length === 0}}"
+    bindtap="onCheckout"
+    t-class="checkout-btn-inner"
+  >
+    去结算
+  </t-button>
+</view>

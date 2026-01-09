@@ -1,0 +1,92 @@
+<custom-navbar title="确认订单" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 160rpx;">
+  <!-- 收货地址 -->
+  <view class="address-section" bindtap="onSelectAddress">
+    <view wx:if="{{address && address.id}}" class="address-content">
+      <view class="address-header">
+        <text class="address-name">{{address.contact_name}}</text>
+        <text class="address-phone">{{address.contact_phone}}</text>
+        <t-tag wx:if="{{address.is_default}}" size="small" theme="primary">默认</t-tag>
+      </view>
+      <text class="address-detail">{{address.detail_address}}</text>
+      <text class="address-arrow">›</text>
+    </view>
+    <view wx:else class="address-empty">
+      <t-icon name="location" size="48rpx" />
+      <text class="empty-text">请选择收货地址</text>
+      <text class="address-arrow">›</text>
+    </view>
+  </view>
+
+  <!-- 配送时间 -->
+  <view class="delivery-section">
+    <view class="section-title">配送时间</view>
+    <radio-group bindchange="onDeliveryTimeChange">
+      <label class="delivery-item">
+        <radio value="ASAP" checked="{{deliveryTime === 'ASAP'}}" />
+        <text class="delivery-text">尽快送达</text>
+      </label>
+      <label class="delivery-item">
+        <radio value="SCHEDULED" checked="{{deliveryTime === 'SCHEDULED'}}" />
+        <text class="delivery-text">预约送达</text>
+      </label>
+    </radio-group>
+  </view>
+
+  <!-- 商品列表 -->
+  <view class="items-section">
+    <view class="section-title">商品清单</view>
+    <view wx:for="{{cart.items}}" wx:key="id" class="item-row">
+      <t-image class="item-image" src="{{item.imageUrl}}" mode="aspectFill" />
+      <view class="item-info">
+        <text class="item-name">{{item.name}}</text>
+      </view>
+      <text class="item-quantity">×{{item.quantity}}</text>
+      <text class="item-price">¥{{item.priceDisplay}}</text>
+    </view>
+  </view>
+
+  <!-- 备注 -->
+  <view class="remark-section">
+    <view class="section-title">订单备注</view>
+    <textarea 
+      class="remark-input" 
+      placeholder="如：请提前电话联系、放门口等" 
+      maxlength="100"
+      bindinput="onRemarkInput"
+    />
+  </view>
+
+  <!-- 费用明细 -->
+  <view class="cost-section">
+    <view class="cost-row">
+      <text class="cost-label">商品金额</text>
+      <text class="cost-value">{{cart.totalPriceDisplay}}</text>
+    </view>
+    <view class="cost-row">
+      <text class="cost-label">配送费</text>
+      <text class="cost-value">¥5.00</text>
+    </view>
+    <view class="cost-row total">
+      <text class="cost-label">实付金额</text>
+      <text class="cost-value">¥{{orderTotalDisplay}}</text>
+    </view>
+  </view>
+</view>
+
+<!-- 底部提交栏 -->
+<view class="submit-bar">
+  <view class="submit-info">
+    <text class="submit-label">实付:</text>
+    <text class="submit-price">¥{{orderTotalDisplay}}</text>
+  </view>
+  <t-button 
+    class="submit-btn" 
+    theme="primary" 
+    loading="{{loading}}"
+    bindtap="onSubmitOrder"
+  >
+    ¥{{orderTotalDisplay}} 去支付
+  </t-button>
+</view>

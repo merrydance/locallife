@@ -1,0 +1,133 @@
+.uploader-container {
+  position: relative;
+  width: 100%;
+  height: 440rpx; /* Taller aspect ratio as requested */
+  background-color: #F8F9FB;
+  border-radius: 12rpx;
+  overflow: hidden;
+  box-sizing: border-box;
+  margin-bottom: 24rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2rpx dashed #DCDCDC; /* Default dashed border */
+}
+
+/* Has value - solid border? or no border? */
+.uploader-container.has-value {
+  border-style: solid;
+}
+
+/* Corner Markers */
+.corner {
+  position: absolute;
+  width: 32rpx;
+  height: 32rpx;
+  border-color: #4080FF; /* Blue accent */
+  border-style: solid;
+  border-width: 0;
+  pointer-events: none; /* Don't block clicks */
+}
+
+.corner-tl {
+  top: 24rpx; left: 24rpx;
+  border-top-width: 4rpx;
+  border-left-width: 4rpx;
+  border-top-left-radius: 4rpx;
+}
+.corner-tr {
+  top: 24rpx; right: 24rpx;
+  border-top-width: 4rpx;
+  border-right-width: 4rpx;
+  border-top-right-radius: 4rpx;
+}
+.corner-bl {
+  bottom: 24rpx; left: 24rpx;
+  border-bottom-width: 4rpx;
+  border-left-width: 4rpx;
+  border-bottom-left-radius: 4rpx;
+}
+.corner-br {
+  bottom: 24rpx; right: 24rpx;
+  border-bottom-width: 4rpx;
+  border-right-width: 4rpx;
+  border-bottom-right-radius: 4rpx;
+}
+
+/* Content */
+.content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 12rpx;
+}
+
+.remove-btn {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  background: rgba(0,0,0,0.5);
+  border-radius: 50%;
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.placeholder-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #999;
+}
+
+.icon-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+/* Deco Lines to mimic ID card text */
+.icon-deco-lines {
+  margin-top: 12rpx;
+  width: 60rpx;
+  height: 6rpx;
+  background: #E0E6F0;
+  border-radius: 4rpx;
+  position: relative;
+}
+.icon-deco-lines::after {
+  content: '';
+  position: absolute;
+  top: 10rpx;
+  left: 0;
+  width: 40rpx;
+  height: 6rpx;
+  background: #E0E6F0;
+  border-radius: 4rpx;
+}
+
+.placeholder-text {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #666;
+  font-size: 24rpx;
+}

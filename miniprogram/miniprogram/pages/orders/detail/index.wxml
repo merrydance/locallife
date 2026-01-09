@@ -1,0 +1,124 @@
+<custom-navbar title="订单详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading && order}}" class="detail-content">
+    <!-- 状态 -->
+    <view class="status-section">
+      <t-icon name="check-circle" size="80rpx" color="{{order.statusColor}}" />
+      <text class="status-text">{{order.statusText}}</text>
+      <text class="status-time">{{order.expectDeliverTime ? '预计 ' + order.expectDeliverTime + ' 送达' : order.createTime}}</text>
+    </view>
+
+    <!-- 商家信息 -->
+    <view class="merchant-section">
+      <view class="merchant-info">
+        <text class="merchant-name">{{order.merchantName}}</text>
+        <t-button size="small" icon="call" bindtap="onCallMerchant">联系商家</t-button>
+      </view>
+    </view>
+
+    <!-- 配送地址 -->
+    <view wx:if="{{order.type === 'takeout'}}" class="address-section">
+      <view class="section-title">配送地址</view>
+      <text class="address-text">{{order.address}}</text>
+      <view class="contact-info">
+        <text>{{order.contactName}}</text>
+        <text>{{order.contactPhone}}</text>
+      </view>
+    </view>
+
+    <!-- 商品列表 -->
+    <view class="items-section">
+      <view class="section-title">商品清单</view>
+      <view wx:for="{{order.items}}" wx:key="id" class="item-row">
+        <t-image class="item-image" src="{{item.imageUrl || 'https://tdesign.gtimg.com/mobile/demos/example1.png'}}" mode="aspectFill" />
+        <view class="item-info">
+          <text class="item-name">{{item.name}}</text>
+          <text class="item-price">{{item.unitPriceDisplay}}</text>
+        </view>
+        <text class="item-quantity">x{{item.quantity}}</text>
+      </view>
+    </view>
+
+    <!-- 费用明细 -->
+    <view class="cost-section">
+      <view class="cost-row">
+        <text class="label">商品总额</text>
+        <text class="value">{{order.subtotalDisplay}}</text>
+      </view>
+      <view class="cost-row">
+        <text class="label">配送费</text>
+        <text class="value">{{order.deliveryFeeDisplay}}</text>
+      </view>
+      <view wx:if="{{order.discountAmount > 0}}" class="cost-row">
+        <text class="label">优惠</text>
+        <text class="value discount">{{order.discountAmountDisplay}}</text>
+      </view>
+      <view class="cost-row total">
+        <text class="label">实付金额</text>
+        <text class="value">{{order.payableAmountDisplay}}</text>
+      </view>
+    </view>
+
+    <!-- 订单信息 -->
+    <view class="info-section">
+      <view class="info-row">
+        <text class="label">订单号</text>
+        <text class="value">{{order.orderNo}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">下单时间</text>
+        <text class="value">{{order.createTime}}</text>
+      </view>
+      <view class="info-row link-row" bindtap="onViewPayment">
+        <text class="label">支付详情</text>
+        <view class="value-link">
+          <text>查看</text>
+          <t-icon name="chevron-right" size="32rpx" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 订单时间线 (仅配送中或已完成订单显示) -->
+    <view wx:if="{{order.timeline && order.timeline.length > 0}}" class="timeline-section">
+      <view class="section-title">订单进度</view>
+      <view class="timeline">
+        <view class="timeline-row" wx:for="{{order.timeline}}" wx:key="title">
+          <view class="timeline-dot {{item.done ? 'done' : ''}}" />
+          <view class="timeline-body">
+            <view class="timeline-head">
+              <view class="timeline-title">{{item.title}}</view>
+              <view class="timeline-time">{{item.time}}</view>
+            </view>
+            <view class="timeline-desc">{{item.desc}}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- 底部操作 -->
+<view wx:if="{{!loading && order}}" class="bottom-bar">
+  <!-- 取消订单按钮 -->
+  <t-button wx:if="{{showCancelButton}}" class="cancel-btn" bindtap="onCancelOrder">取消订单</t-button>
+  
+  <!-- 催单按钮 -->
+  <t-button wx:if="{{showUrgeButton}}" class="secondary-btn" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">
+    {{urgeCountdown > 0 ? urgeCountdown + 's后可催单' : '催单'}}
+  </t-button>
+  
+  <!-- 查看物流 -->
+  <t-button wx:if="{{showTrackingButton}}" class="secondary-btn" bindtap="onViewTracking">查看物流</t-button>
+  
+  <!-- 确认收货 -->
+  <t-button wx:if="{{showConfirmButton}}" class="primary-btn" bindtap="onConfirmReceipt">确认收货</t-button>
+  
+  <!-- 已完成订单操作 -->
+  <block wx:if="{{order.status === 'completed'}}">
+    <t-button class="secondary-btn" bindtap="onReview">评价订单</t-button>
+    <t-button class="primary-btn" bindtap="onReorder">再来一单</t-button>
+  </block>
+</view>

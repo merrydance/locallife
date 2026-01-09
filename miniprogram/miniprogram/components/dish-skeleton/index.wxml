@@ -1,0 +1,10 @@
+<!-- 菜品卡片骨架屏组件 -->
+<view class="dish-skeleton">
+  <view class="skeleton-image"></view>
+  <view class="skeleton-info">
+    <view class="skeleton-line skeleton-title"></view>
+    <view class="skeleton-line skeleton-price"></view>
+    <view class="skeleton-line skeleton-tags"></view>
+  </view>
+  <view class="skeleton-button"></view>
+</view>

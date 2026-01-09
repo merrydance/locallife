@@ -1,0 +1,93 @@
+/* 自定义导航栏 */
+.custom-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: linear-gradient(135deg, #FF8A75 0%, #FF6B58 100%);
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.1);
+}
+
+.status-bar {
+  width: 100%;
+}
+
+.nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24rpx;
+}
+
+.nav-left {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+/* 返回按钮 - 使用 flexbox 完美居中 */
+.back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background-color 0.3s;
+}
+
+.back-button:active {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 返回图标 - 使用图片确保完美居中 */
+.back-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.location-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  max-width: 200rpx;
+  overflow: hidden;
+}
+
+.location-icon {
+  display: none;
+}
+
+.location-text {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.87);
+  white-space: nowrap;
+}
+
+.location-text.scroll {
+  animation: scroll-text 8s linear infinite;
+}
+
+@keyframes scroll-text {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+.nav-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.nav-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.nav-right {
+  flex-shrink: 0;
+}

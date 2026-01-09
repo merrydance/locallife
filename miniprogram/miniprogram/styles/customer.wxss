@@ -1,0 +1,253 @@
+/**
+ * 消费侧统一样式规范
+ * 适用于所有顾客端页面（外卖、预订、用户中心及其子页面）
+ * 
+ * 设计原则：
+ * 1. 移动优先 - 使用 rpx 单位适配不同手机屏幕
+ * 2. TDesign 规范 - 遵循 8px 间距系统
+ * 3. 统一视觉 - 一致的间距、字体、圆角、阴影
+ */
+
+/* ==================== 设计 Token ==================== */
+
+/* 间距系统 (基于 8rpx = 4px) */
+/* spacing-xs: 8rpx (4px)   - 紧凑间距 */
+/* spacing-sm: 12rpx (6px)  - 小间距 */
+/* spacing-md: 16rpx (8px)  - 中等间距 */
+/* spacing-lg: 20rpx (10px) - 大间距 */
+/* spacing-xl: 24rpx (12px) - 特大间距 */
+
+/* ==================== 页面滚动容器 ==================== */
+
+.customer-scroll {
+  background: #FAFAFA;
+  box-sizing: border-box;
+}
+
+/* ==================== 内容区域 ==================== */
+
+/* 标准内容区 - 用于列表页 */
+.customer-content {
+  display: flex;
+  flex-direction: column;
+  padding: 12rpx 20rpx 24rpx;
+}
+
+/* 紧凑内容区 - 用于详情页 */
+.customer-content-compact {
+  display: flex;
+  flex-direction: column;
+  padding: 0 20rpx;
+}
+
+/* ==================== 区块样式 ==================== */
+
+/* 白色区块 - 搜索/tabs 等 */
+.customer-section {
+  background: #fff;
+  margin-bottom: 12rpx;
+}
+
+/* 带内边距的区块 */
+.customer-section-padded {
+  background: #fff;
+  padding: 20rpx;
+  margin-bottom: 12rpx;
+}
+
+/* ==================== 卡片样式 ==================== */
+
+/* 标准卡片 - 用于列表项 */
+.customer-card {
+  display: flex;
+  gap: 20rpx;
+  padding: 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 12rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+}
+
+/* 可点击卡片 - 添加交互效果 */
+.customer-card-touchable {
+  transition: all 0.2s ease;
+}
+
+.customer-card-touchable:active {
+  transform: scale(0.98);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+}
+
+/* ==================== 卡片图片 ==================== */
+
+/* 方形图片 - 菜品/商品 */
+.customer-card-image {
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+/* 宽图片 - 餐厅/包间 */
+.customer-card-image-wide {
+  width: 240rpx;
+  height: 180rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+/* ==================== 卡片信息区 ==================== */
+
+.customer-card-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+/* 信息行 */
+.customer-card-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.customer-card-row-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+
+/* ==================== 文字样式 ==================== */
+
+/* 标题 - 卡片主标题 */
+.customer-title {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 价格 */
+.customer-price {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #FF6B58;
+}
+
+.customer-price-small {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #FF6B58;
+}
+
+/* 原价（划线） */
+.customer-price-original {
+  font-size: 22rpx;
+  color: #999;
+  text-decoration: line-through;
+}
+
+/* 副标题/描述 */
+.customer-subtitle {
+  font-size: 24rpx;
+  color: #666;
+}
+
+/* 辅助文字 */
+.customer-caption {
+  font-size: 22rpx;
+  color: #999;
+}
+
+/* 评分 */
+.customer-rating {
+  font-size: 24rpx;
+  color: #FFC107;
+  font-weight: 500;
+}
+
+/* ==================== 标签样式 ==================== */
+
+.customer-tag {
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  background: #f5f5f5;
+  color: #666;
+}
+
+.customer-tag-primary {
+  background: #FFF5F3;
+  color: #FF6B58;
+}
+
+.customer-tag-success {
+  background: #E6F7F5;
+  color: #00897B;
+}
+
+/* ==================== 分隔符 ==================== */
+
+.customer-separator {
+  color: #ddd;
+  margin: 0 4rpx;
+}
+
+/* ==================== 空状态/加载 ==================== */
+
+.customer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 48rpx;
+  text-align: center;
+}
+
+.customer-loading {
+  display: flex;
+  justify-content: center;
+  padding: 48rpx 0;
+}
+
+.customer-no-more {
+  text-align: center;
+  padding: 32rpx 0;
+  color: #999;
+  font-size: 24rpx;
+}
+
+/* ==================== 底部安全区 ==================== */
+
+.customer-bottom-safe {
+  height: 120rpx;
+}
+
+/* ==================== 按钮区域 ==================== */
+
+.customer-action-bar {
+  display: flex;
+  gap: 16rpx;
+  padding: 20rpx;
+  background: #fff;
+}
+
+/* ==================== 表单区域 ==================== */
+
+.customer-form-section {
+  background: #fff;
+  padding: 20rpx;
+  margin-bottom: 12rpx;
+}
+
+.customer-form-title {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 16rpx;
+}

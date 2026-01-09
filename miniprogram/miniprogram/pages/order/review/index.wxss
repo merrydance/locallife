@@ -1,0 +1,27 @@
+.container {
+  padding: 32rpx;
+  background: #fff;
+  min-height: 100vh;
+}
+
+.rating-section {
+  display: flex;
+  align-items: center;
+  margin-bottom: 32rpx;
+}
+
+.label {
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-right: 24rpx;
+}
+
+.content-section {
+  margin-bottom: 32rpx;
+  border: 1rpx solid #eee;
+  border-radius: 8rpx;
+}
+
+.upload-section {
+  margin-bottom: 48rpx;
+}

@@ -1,0 +1,81 @@
+<custom-navbar title="确认预定" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+  <!-- 房间信息 -->
+  <view class="room-info">
+    <text class="room-name">{{roomName}}</text>
+    <text class="room-capacity">可容纳{{capacity}}人</text>
+  </view>
+
+  <!-- 预定表单 -->
+  <view class="form-section">
+    <t-cell-group title="预定信息">
+      <t-cell title="日期" arrow hover note="{{form.date || '请选择日期'}}" bindtap="showDatePicker" />
+      <t-cell 
+        title="时间" 
+        arrow 
+        hover 
+        note="{{loadingSlots ? '加载中...' : (form.time || '请选择时间')}}" 
+        bindtap="showTimePicker"
+        disabled="{{loadingSlots || availableTimeSlots.length === 0}}"
+      />
+      <t-cell title="人数">
+        <t-stepper value="{{form.guestCount}}" min="1" max="{{capacity}}" bind:change="onGuestCountChange" slot="note" />
+      </t-cell>
+    </t-cell-group>
+
+    <t-cell-group title="联系人信息" style="margin-top: 24rpx;">
+      <t-input label="姓名" placeholder="请输入姓名" value="{{form.name}}" data-field="name" bindchange="onInputChange" />
+      <t-input label="手机号" placeholder="请输入手机号" type="number" value="{{form.phone}}" data-field="phone" bindchange="onInputChange" />
+      <t-input label="备注" placeholder="如有特殊需求请备注" value="{{form.remark}}" data-field="remark" bindchange="onInputChange" />
+    </t-cell-group>
+
+    <!-- 预订模式选择 -->
+    <t-cell-group title="预订方式" style="margin-top: 24rpx;">
+      <view class="mode-selector">
+        <t-radio-group value="{{paymentMode}}" bind:change="onPaymentModeChange">
+          <t-radio value="deposit" label="预缴定金（到店点菜）" icon="circle" />
+          <t-radio value="full" label="在线点菜（支付全款）" icon="circle" />
+        </t-radio-group>
+      </view>
+    </t-cell-group>
+  </view>
+
+  <!-- 支付提示 -->
+  <view class="payment-tip">
+    <t-icon name="info-circle" size="32rpx" color="#999" />
+    <text>提交预定后需在30分钟内完成支付，否则预定将自动取消。</text>
+  </view>
+</view>
+
+<!-- 底部提交栏 -->
+<view class="bottom-bar">
+  <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit">
+    {{paymentMode === 'deposit' ? '支付定金 ¥' + depositDisplay : '选择菜品'}}
+  </t-button>
+</view>
+
+<!-- 日期选择器 -->
+<t-date-time-picker
+  title="选择日期"
+  visible="{{dateVisible}}"
+  mode="date"
+  defaultValue="{{form.date}}"
+  format="YYYY-MM-DD"
+  bindchange="onDateConfirm"
+  bindcancel="hideDatePicker"
+  start="{{minDate}}"
+/>
+
+<!-- 时间选择器（可用时段列表） -->
+<t-picker
+  visible="{{timePickerVisible}}"
+  value="{{[0]}}"
+  title="选择时段"
+  cancelBtn="取消"
+  confirmBtn="确定"
+  bindconfirm="onTimeSelect"
+  bindcancel="hideTimePicker"
+>
+  <t-picker-item options="{{availableTimeSlots}}" />
+</t-picker>

@@ -1,0 +1,9 @@
+{
+    "navigationBarTitleText": "我的积分",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

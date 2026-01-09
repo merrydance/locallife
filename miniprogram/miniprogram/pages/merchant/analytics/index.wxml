@@ -1,0 +1,219 @@
+<!-- 经营统计页面 - PC-SaaS 布局 -->
+<wxs module="utils">
+  module.exports = {
+    formatAmount: function(fen) {
+      return (fen / 100).toFixed(2)
+    },
+    formatOrderType: function(type) {
+      var map = {
+        'takeout': '外卖',
+        'dine_in': '堂食',
+        'pickup': '自取'
+      }
+      return map[type] || type
+    },
+    formatPercent: function(rate) {
+      return (rate * 100).toFixed(1) + '%'
+    }
+  }
+</wxs>
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="desktop-only-notice">
+    <view class="notice-box">
+      <view class="notice-icon">📊</view>
+      <text class="notice-title">此功能需要在电脑端使用</text>
+      <text class="notice-desc">请使用 1600px 以上分辨率的显示器访问经营统计</text>
+      <navigator url="/pages/merchant/dashboard/index" class="btn-back">返回工作台</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- 大屏布局 -->
+<match-media min-width="1600">
+  <view class="saas-layout">
+    <!-- 侧边栏 -->
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: 0;">
+      <!-- 顶部栏 -->
+
+      <!-- 页面内容 -->
+      <view class="page-container">
+        <!-- 标题栏 -->
+        <view class="page-header">
+          <view class="page-title">
+            <text class="title-icon">📊</text>
+            <text class="title-text">经营统计</text>
+          </view>
+          <!-- 日期范围 -->
+          <view class="date-range-picker">
+            <view class="range-option {{dateRange === 'today' ? 'active' : ''}}" data-range="today" bindtap="onDateRangeChange">今天</view>
+            <view class="range-option {{dateRange === 'week' ? 'active' : ''}}" data-range="week" bindtap="onDateRangeChange">近7天</view>
+            <view class="range-option {{dateRange === 'month' ? 'active' : ''}}" data-range="month" bindtap="onDateRangeChange">近30天</view>
+          </view>
+        </view>
+
+        <!-- 加载状态 -->
+        <view wx:if="{{loading}}" class="loading-state">
+          <view class="loading-spinner"></view>
+          <text>加载中...</text>
+        </view>
+
+        <!-- 内容区 -->
+        <view wx:else class="stats-content">
+          <!-- 概览卡片 -->
+          <view class="overview-cards">
+            <view class="stat-card">
+              <text class="card-label">总销售额</text>
+              <text class="card-value primary">¥{{utils.formatAmount(overview.total_sales || 0)}}</text>
+            </view>
+            <view class="stat-card">
+              <text class="card-label">总订单数</text>
+              <text class="card-value">{{overview.total_orders || 0}}</text>
+            </view>
+            <view class="stat-card">
+              <text class="card-label">日均销售</text>
+              <text class="card-value">¥{{utils.formatAmount(overview.avg_daily_sales || 0)}}</text>
+            </view>
+            <view class="stat-card">
+              <text class="card-label">平台佣金</text>
+              <text class="card-value warning">¥{{utils.formatAmount(overview.total_commission || 0)}}</text>
+            </view>
+          </view>
+
+          <!-- 两列布局 -->
+          <view class="two-column-layout">
+            <!-- 左列 -->
+            <view class="left-column">
+              <!-- 日报趋势 -->
+              <view class="section-card">
+                <text class="section-title">📈 销售趋势</text>
+                <view class="daily-list">
+                  <view wx:if="{{dailyStats.length === 0}}" class="empty-hint">暂无数据</view>
+                  <view wx:for="{{dailyStats}}" wx:key="date" class="daily-row">
+                    <text class="daily-date">{{item.date}}</text>
+                    <text class="daily-orders">{{item.order_count}}单</text>
+                    <text class="daily-sales">¥{{utils.formatAmount(item.total_sales)}}</text>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 时段分析 -->
+              <view class="section-card">
+                <text class="section-title">⏰ 时段分布</text>
+                <view class="hourly-chart">
+                  <view wx:if="{{hourlyStats.length === 0}}" class="empty-hint">暂无数据</view>
+                  <view wx:for="{{hourlyStats}}" wx:key="hour" class="hourly-bar-row">
+                    <text class="hourly-label">{{item.hour}}:00</text>
+                    <view class="hourly-bar-wrap">
+                      <view class="hourly-bar" style="width: {{item.order_count * 10}}px;"></view>
+                    </view>
+                    <text class="hourly-count">{{item.order_count}}单</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+
+            <!-- 右列 -->
+            <view class="right-column">
+              <!-- 订单来源 -->
+              <view class="section-card">
+                <text class="section-title">📱 订单来源</text>
+                <view class="source-list">
+                  <view wx:if="{{sourceStats.length === 0}}" class="empty-hint">暂无数据</view>
+                  <view wx:for="{{sourceStats}}" wx:key="order_type" class="source-row">
+                    <text class="source-type">{{utils.formatOrderType(item.order_type)}}</text>
+                    <text class="source-count">{{item.order_count}}单</text>
+                    <text class="source-sales">¥{{utils.formatAmount(item.total_sales)}}</text>
+                  </view>
+                </view>
+              </view>
+
+              <!-- 复购率 -->
+              <view class="section-card">
+                <text class="section-title">🔄 复购分析</text>
+                <view wx:if="{{repurchaseRate}}" class="repurchase-stats">
+                  <view class="repurchase-row">
+                    <text class="rep-label">复购率</text>
+                    <text class="rep-value highlight">{{utils.formatPercent(repurchaseRate.repurchase_rate)}}</text>
+                  </view>
+                  <view class="repurchase-row">
+                    <text class="rep-label">总顾客数</text>
+                    <text class="rep-value">{{repurchaseRate.total_users}}</text>
+                  </view>
+                  <view class="repurchase-row">
+                    <text class="rep-label">复购顾客</text>
+                    <text class="rep-value">{{repurchaseRate.repeat_users}}</text>
+                  </view>
+                  <view class="repurchase-row">
+                    <text class="rep-label">人均订单</text>
+                    <text class="rep-value">{{repurchaseRate.avg_orders_per_user}}单</text>
+                  </view>
+                </view>
+                <view wx:else class="empty-hint">暂无数据</view>
+              </view>
+
+              <!-- 分类销售 -->
+              <view class="section-card">
+                <text class="section-title">🏷️ 分类销售</text>
+                <view class="category-list">
+                  <view wx:if="{{categoryStats.length === 0}}" class="empty-hint">暂无数据</view>
+                  <view wx:for="{{categoryStats}}" wx:key="category_name" class="category-row">
+                    <text class="cat-name">{{item.category_name}}</text>
+                    <text class="cat-qty">{{item.total_quantity}}份</text>
+                    <text class="cat-sales">¥{{utils.formatAmount(item.total_sales)}}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <!-- 排行榜区域 -->
+          <view class="rankings-section">
+            <!-- 热门菜品 -->
+            <view class="ranking-card">
+              <text class="section-title">🏆 菜品销量 Top 10</text>
+              <view class="ranking-table">
+                <view class="ranking-header">
+                  <text class="rank-col">排名</text>
+                  <text class="name-col">菜品</text>
+                  <text class="qty-col">销量</text>
+                  <text class="amount-col">销售额</text>
+                </view>
+                <view wx:if="{{topDishes.length === 0}}" class="empty-hint">暂无数据</view>
+                <view wx:for="{{topDishes}}" wx:key="dish_id" class="ranking-row">
+                  <text class="rank-col rank-{{index + 1}}">{{index + 1}}</text>
+                  <text class="name-col">{{item.dish_name}}</text>
+                  <text class="qty-col">{{item.total_sold}}</text>
+                  <text class="amount-col">¥{{utils.formatAmount(item.total_revenue)}}</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- 消费排行 -->
+            <view class="ranking-card">
+              <text class="section-title">👤 顾客消费 Top 10</text>
+              <view class="ranking-table">
+                <view class="ranking-header">
+                  <text class="rank-col">排名</text>
+                  <text class="name-col">顾客</text>
+                  <text class="qty-col">订单数</text>
+                  <text class="amount-col">消费额</text>
+                </view>
+                <view wx:if="{{topCustomers.length === 0}}" class="empty-hint">暂无数据</view>
+                <view wx:for="{{topCustomers}}" wx:key="user_id" class="ranking-row">
+                  <text class="rank-col rank-{{index + 1}}">{{index + 1}}</text>
+                  <text class="name-col">{{item.full_name || '匿名顾客'}}</text>
+                  <text class="qty-col">{{item.total_orders}}</text>
+                  <text class="amount-col">¥{{utils.formatAmount(item.total_amount)}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>

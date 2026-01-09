@@ -1,0 +1,12 @@
+{
+    "navigationBarTitleText": "预订详情",
+    "usingComponents": {
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-dialog": "tdesign-miniprogram/dialog/dialog",
+        "t-radio": "tdesign-miniprogram/radio/radio",
+        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group"
+    }
+}

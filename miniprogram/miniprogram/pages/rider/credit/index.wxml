@@ -1,0 +1,49 @@
+<custom-navbar title="骑手信用分" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading}}" class="content">
+    <!-- 信用卡片 -->
+    <view class="credit-card">
+      <view class="card-header">
+        <view class="score-info">
+          <text class="score-value">{{score}}</text>
+          <text class="score-label">当前信用分</text>
+        </view>
+        <view class="level-tag">{{level}}</view>
+      </view>
+      <view class="progress-bar">
+        <view class="progress" style="width: {{score}}%"></view>
+      </view>
+      <text class="level-desc">{{levelDesc}}</text>
+    </view>
+
+    <!-- 核心指标 -->
+    <view class="section">
+      <view class="section-title">本月表现</view>
+      <view class="metrics-grid">
+        <view wx:for="{{metrics}}" wx:key="label" class="metric-item">
+          <text class="metric-value">{{item.value}}</text>
+          <text class="metric-label">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 奖惩记录 -->
+    <view class="section">
+      <view class="section-title">奖惩记录</view>
+      <view class="history-list">
+        <view wx:for="{{history}}" wx:key="id" class="history-item">
+          <view class="item-left">
+            <text class="item-reason">{{item.reason}}</text>
+            <text class="item-time">{{item.created_at}}</text>
+          </view>
+          <text class="item-amount {{item.type === 'REWARD' ? 'positive' : 'negative'}}">
+            {{item.type === 'REWARD' ? '+' : ''}}{{item.amount}}
+          </text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

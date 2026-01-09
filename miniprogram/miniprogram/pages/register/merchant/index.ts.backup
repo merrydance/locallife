@@ -1,0 +1,427 @@
+
+import { ocrBusinessLicense, ocrIdCard } from '../../../api/ocr'
+import { DraftStorage } from '../../../utils/draft-storage'
+import { submitMerchantApplication, ApplyMerchantRequest } from '../../../api/onboarding'
+
+const DRAFT_KEY = 'merchant_register_draft'
+
+Page({
+    data: {
+        navBarHeight: 88,
+        formData: {
+            // 基本信息
+            name: '',
+            phone: '',
+            address: '',
+            addressDetail: '',
+            latitude: 0,
+            longitude: 0,
+            type: '',
+            businessHours: '',
+
+            // 证照信息
+            licenseName: '',
+            creditCode: '',
+            registerAddress: '',
+            licenseValidity: '',
+            businessScope: '',
+            foodLicenseValidity: '',
+
+            // 法人信息
+            legalPerson: '',
+            idCard: '',
+            gender: '',
+            hometown: '',
+            currentAddress: '',
+            idCardValidity: '',
+
+            // 结算信息
+            bankName: '',
+            bankAccount: '',
+            accountName: ''
+        },
+        // 图片
+        licenseImages: [] as Array<any>,
+        foodLicenseImages: [] as Array<any>,
+        idCardFrontImages: [] as Array<any>,
+        idCardBackImages: [] as Array<any>,
+        accountPermitImages: [] as Array<any>,
+        shopImages: [] as Array<any>,
+
+        // 选择器状态
+        typePickerVisible: false,
+        typePickerValue: [],
+        typeOptions: [
+            { label: '中餐', value: 'chinese' },
+            { label: '西餐', value: 'western' },
+            { label: '日韩料理', value: 'japanese_korean' },
+            { label: '快餐', value: 'fast_food' },
+            { label: '小吃', value: 'snack' },
+            { label: '甜品饮品', value: 'dessert' },
+            { label: '其他', value: 'other' }
+        ],
+        timePickerVisible: false,
+        timePickerValue: [],
+        timeOptions: [
+            { label: '全天营业 (00:00-24:00)', value: 'all_day' },
+            { label: '早餐时段 (06:00-10:00)', value: 'breakfast' },
+            { label: '午餐时段 (11:00-14:00)', value: 'lunch' },
+            { label: '晚餐时段 (17:00-21:00)', value: 'dinner' },
+            { label: '自定义时间', value: 'custom' }
+        ]
+    },
+
+    onLoad() {
+        this.loadDraft()
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    // ==================== 草稿管理 ====================
+
+    saveDraft() {
+        const data = {
+            formData: this.data.formData,
+            licenseImages: this.data.licenseImages,
+            foodLicenseImages: this.data.foodLicenseImages,
+            idCardFrontImages: this.data.idCardFrontImages,
+            idCardBackImages: this.data.idCardBackImages,
+            accountPermitImages: this.data.accountPermitImages,
+            shopImages: this.data.shopImages
+        }
+        DraftStorage.save(DRAFT_KEY, data)
+    },
+
+    loadDraft() {
+        const draft = DraftStorage.load(DRAFT_KEY)
+        if (draft) {
+            this.setData(draft)
+        }
+    },
+
+    // ==================== 表单输入 ====================
+
+    updateFormData(key: string, value: any) {
+        this.setData({ [`formData.${key}`]: value })
+        this.saveDraft()
+    },
+
+    onNameInput(e: WechatMiniprogram.Input) { this.updateFormData('name', e.detail.value) },
+    onPhoneInput(e: WechatMiniprogram.Input) { this.updateFormData('phone', e.detail.value) },
+    onAddressDetailInput(e: WechatMiniprogram.Input) { this.updateFormData('addressDetail', e.detail.value) },
+
+    // 证照信息输入
+    onLicenseNameInput(e: WechatMiniprogram.Input) { this.updateFormData('licenseName', e.detail.value) },
+    onCreditCodeInput(e: WechatMiniprogram.Input) { this.updateFormData('creditCode', e.detail.value) },
+    onRegisterAddressInput(e: WechatMiniprogram.Input) { this.updateFormData('registerAddress', e.detail.value) },
+    onLicenseValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('licenseValidity', e.detail.value) },
+    onBusinessScopeInput(e: WechatMiniprogram.Input) { this.updateFormData('businessScope', e.detail.value) },
+    onFoodLicenseValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('foodLicenseValidity', e.detail.value) },
+
+    // 法人信息输入
+    onLegalPersonInput(e: WechatMiniprogram.Input) { this.updateFormData('legalPerson', e.detail.value) },
+    onIdCardInput(e: WechatMiniprogram.Input) { this.updateFormData('idCard', e.detail.value) },
+    onGenderInput(e: WechatMiniprogram.Input) { this.updateFormData('gender', e.detail.value) },
+    onHometownInput(e: WechatMiniprogram.Input) { this.updateFormData('hometown', e.detail.value) },
+    onCurrentAddressInput(e: WechatMiniprogram.Input) { this.updateFormData('currentAddress', e.detail.value) },
+    onIdCardValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('idCardValidity', e.detail.value) },
+
+    // 结算信息输入
+    onBankNameInput(e: WechatMiniprogram.Input) { this.updateFormData('bankName', e.detail.value) },
+    onBankAccountInput(e: WechatMiniprogram.Input) { this.updateFormData('bankAccount', e.detail.value) },
+    onAccountNameInput(e: WechatMiniprogram.Input) { this.updateFormData('accountName', e.detail.value) },
+
+    // ==================== 地址选择 ====================
+
+    onChooseAddress() {
+        wx.chooseLocation({
+            success: (res) => {
+                this.setData({
+                    'formData.address': res.address || res.name,
+                    'formData.latitude': res.latitude,
+                    'formData.longitude': res.longitude
+                })
+                this.saveDraft()
+            },
+            fail: (err) => {
+                if (err.errMsg.includes('auth deny')) {
+                    wx.showModal({
+                        title: '需要位置权限',
+                        content: '请在设置中开启位置权限',
+                        confirmText: '去设置',
+                        success: (modalRes) => {
+                            if (modalRes.confirm) {
+                                wx.openSetting()
+                            }
+                        }
+                    })
+                }
+            }
+        })
+    },
+
+    // ==================== 选择器 ====================
+
+    onChooseType() { this.setData({ typePickerVisible: true }) },
+    onTypeConfirm(e: WechatMiniprogram.CustomEvent) {
+        const { value } = e.detail
+        const selectedOption = this.data.typeOptions.find(opt => opt.value === value[0])
+        if (selectedOption) {
+            this.updateFormData('type', selectedOption.label)
+            this.setData({ typePickerVisible: false })
+        }
+    },
+    onTypeCancel() { this.setData({ typePickerVisible: false }) },
+
+    onChooseTime() { this.setData({ timePickerVisible: true }) },
+    onTimeConfirm(e: WechatMiniprogram.CustomEvent) {
+        const { value } = e.detail
+        const selectedOption = this.data.timeOptions.find(opt => opt.value === value[0])
+        if (selectedOption) {
+            this.updateFormData('businessHours', selectedOption.label)
+            this.setData({ timePickerVisible: false })
+        }
+    },
+    onTimeCancel() { this.setData({ timePickerVisible: false }) },
+
+    // ==================== 图片上传与OCR ====================
+
+    // 营业执照
+    async onLicenseUpload(e: WechatMiniprogram.CustomEvent) {
+        const { files } = e.detail
+        this.setData({ licenseImages: files })
+        this.saveDraft()
+
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' })
+            try {
+                // Use real API
+                // Note: Ensure file is uploaded first. The component usually returns a temp path or uploaded URL.
+                // If the component 'files' contains tempFilePath, we need to upload it first using uploadImage API?
+                // The OCR API requires an image_url (http/https).
+                // Assuming the `upload` component handles uploading and returns a remote URL in `files[0].url`.
+                // If not, we need to check if `url` is remote.
+                
+                const file = files[0]
+                let imageUrl = file.url
+                
+                // Check if it is a temp file (starts with http://tmp or wxfile://) and upload if needed?
+                // But let's assume the uploader component already did the upload if it provides a url.
+                // Or if the component is just selecting files, we might need to upload.
+                // Looking at `miniprogram/api/merchant.ts`: uploadImage exists.
+                
+                // Let's try passing the URL directly.
+                const res = await ocrBusinessLicense(imageUrl)
+                
+                // Map backend response to form data
+                // Backend response structure depends on implementation. 
+                // Assuming standard keys based on Swagger or OCR result.
+                // If `res` wraps the data in `data` field (handled by request helper?), 
+                // check if res is the data object.
+                const info = res // request helper returns T (data)
+                
+                this.setData({
+                    'formData.licenseName': info.name || info.license_name || '',
+                    'formData.creditCode': info.reg_num || info.credit_code || '',
+                    'formData.registerAddress': info.address || '',
+                    'formData.legalPerson': info.person || info.legal_person || '',
+                    'formData.licenseValidity': info.valid_period || info.validity || '',
+                    'formData.businessScope': info.business || info.business_scope || ''
+                })
+                this.saveDraft()
+                wx.showToast({ title: '识别成功', icon: 'success' })
+            } catch (error) {
+                console.error('OCR failed', error)
+                wx.showToast({ title: '识别失败', icon: 'none' })
+            } finally {
+                wx.hideLoading()
+            }
+        }
+    },
+    onLicenseRemove() {
+        this.setData({ licenseImages: [] })
+        this.saveDraft()
+    },
+
+    // 食品经营许可证
+    onFoodLicenseUpload(e: WechatMiniprogram.CustomEvent) {
+        const { files } = e.detail
+        this.setData({ foodLicenseImages: files })
+        this.saveDraft()
+    },
+    onFoodLicenseRemove() {
+        this.setData({ foodLicenseImages: [] })
+        this.saveDraft()
+    },
+
+    // 身份证正面
+    async onIdCardFrontUpload(e: WechatMiniprogram.CustomEvent) {
+        const { files } = e.detail
+        this.setData({ idCardFrontImages: files })
+        this.saveDraft()
+
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' })
+            try {
+                const res = await ocrIdCard(files[0].url, 'front')
+                const info = res
+                
+                this.setData({
+                    'formData.legalPerson': info.name || '',
+                    'formData.idCard': info.id || info.id_num || '',
+                    'formData.gender': info.gender || '',
+                    'formData.hometown': info.addr || info.address || ''
+                })
+                this.saveDraft()
+                wx.showToast({ title: '识别成功', icon: 'success' })
+            } catch (error) {
+                console.error('OCR failed', error)
+                wx.showToast({ title: '识别失败', icon: 'none' })
+            } finally {
+                wx.hideLoading()
+            }
+        }
+    },
+    onIdCardFrontRemove() {
+        this.setData({ idCardFrontImages: [] })
+        this.saveDraft()
+    },
+
+    // 身份证反面
+    async onIdCardBackUpload(e: WechatMiniprogram.CustomEvent) {
+        const { files } = e.detail
+        this.setData({ idCardBackImages: files })
+        this.saveDraft()
+
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' })
+            try {
+                const res = await ocrIdCard(files[0].url, 'back')
+                const info = res
+                
+                this.setData({
+                    'formData.idCardValidity': info.valid_date || info.valid_period || ''
+                })
+                this.saveDraft()
+                wx.showToast({ title: '识别成功', icon: 'success' })
+            } catch (error) {
+                console.error('OCR failed', error)
+                wx.showToast({ title: '识别失败', icon: 'none' })
+            } finally {
+                wx.hideLoading()
+            }
+        }
+    },
+    onIdCardBackRemove() {
+        this.setData({ idCardBackImages: [] })
+        this.saveDraft()
+    },
+
+    // 开户许可证
+    onAccountPermitUpload(e: WechatMiniprogram.CustomEvent) {
+        const { files } = e.detail
+        this.setData({ accountPermitImages: files })
+        this.saveDraft()
+    },
+    onAccountPermitRemove() {
+        this.setData({ accountPermitImages: [] })
+        this.saveDraft()
+    },
+
+    // 店铺门面
+    onShopImageUpload(e: WechatMiniprogram.CustomEvent) {
+        const { files } = e.detail
+        this.setData({ shopImages: files })
+        this.saveDraft()
+    },
+    onShopImageRemove(e: WechatMiniprogram.CustomEvent) {
+        const { index } = e.detail
+        const shopImages = this.data.shopImages
+        shopImages.splice(index, 1)
+        this.setData({ shopImages })
+        this.saveDraft()
+    },
+
+    // ==================== 提交申请 ====================
+
+    async onSubmit() {
+        const { formData, licenseImages, foodLicenseImages, idCardFrontImages, idCardBackImages, shopImages, accountPermitImages } = this.data
+
+        // 验证必填字段
+        if (!licenseImages.length) return wx.showToast({ title: '请上传营业执照', icon: 'none' })
+        if (!foodLicenseImages.length) return wx.showToast({ title: '请上传食品经营许可证', icon: 'none' })
+        if (!idCardFrontImages.length) return wx.showToast({ title: '请上传法人身份证正面', icon: 'none' })
+        if (!idCardBackImages.length) return wx.showToast({ title: '请上传法人身份证反面', icon: 'none' })
+        if (!shopImages.length) return wx.showToast({ title: '请上传店铺门面', icon: 'none' })
+
+        if (!formData.name) return wx.showToast({ title: '请输入店铺名称', icon: 'none' })
+        if (!formData.address) return wx.showToast({ title: '请选择店铺地址', icon: 'none' })
+        if (!formData.phone) return wx.showToast({ title: '请输入联系电话', icon: 'none' })
+
+        if (!formData.licenseName) return wx.showToast({ title: '缺少营业执照信息', icon: 'none' })
+        if (!formData.legalPerson) return wx.showToast({ title: '缺少法人信息', icon: 'none' })
+
+        // 构建提交数据
+        const submitData: ApplyMerchantRequest = {
+            name: formData.name,
+            phone: formData.phone,
+            address: formData.address,
+            address_detail: formData.addressDetail,
+            latitude: formData.latitude,
+            longitude: formData.longitude,
+            type: formData.type,
+            business_hours: formData.businessHours,
+            
+            license_name: formData.licenseName,
+            credit_code: formData.creditCode,
+            register_address: formData.registerAddress,
+            license_validity: formData.licenseValidity,
+            business_scope: formData.businessScope,
+            food_license_validity: formData.foodLicenseValidity,
+            
+            legal_person: formData.legalPerson,
+            id_card: formData.idCard,
+            gender: formData.gender,
+            hometown: formData.hometown,
+            current_address: formData.currentAddress,
+            id_card_validity: formData.idCardValidity,
+            
+            bank_name: formData.bankName,
+            bank_account: formData.bankAccount,
+            account_name: formData.accountName,
+
+            license_images: licenseImages.map(img => img.url),
+            food_license_images: foodLicenseImages.map(img => img.url),
+            id_card_front_images: idCardFrontImages.map(img => img.url),
+            id_card_back_images: idCardBackImages.map(img => img.url),
+            account_permit_images: accountPermitImages.map(img => img.url),
+            shop_images: shopImages.map(img => img.url)
+        }
+
+        wx.showLoading({ title: '提交中...' })
+
+        try {
+            await submitMerchantApplication(submitData)
+            
+            wx.showToast({
+                title: '申请提交成功',
+                icon: 'success',
+                duration: 2000,
+                success: () => {
+                    DraftStorage.clear(DRAFT_KEY)
+                    setTimeout(() => {
+                        wx.navigateBack()
+                    }, 2000)
+                }
+            })
+        } catch (error) {
+            console.error('Apply merchant failed:', error)
+            wx.showToast({ title: '提交失败', icon: 'error' })
+        } finally {
+            wx.hideLoading()
+        }
+    }
+})
+

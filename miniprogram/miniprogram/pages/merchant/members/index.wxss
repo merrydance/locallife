@@ -1,0 +1,584 @@
+/* 会员管理页面样式 - PC-SaaS 风格 */
+
+/* 小屏提示 */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.notice-box {
+  background: white;
+  padding: 48px 64px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.notice-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.notice-title {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 8px;
+}
+
+.notice-desc {
+  display: block;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.btn-back {
+  display: inline-block;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+/* 大屏布局 */
+.saas-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease;
+}
+
+.page-container {
+  flex: 1;
+  padding: 24px 32px;
+  margin-top: 60px;
+  overflow-y: auto;
+}
+
+/* 页面标题 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-icon {
+  font-size: 28px;
+}
+
+.title-text {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  color: #666;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  background: white;
+  border-radius: 12px;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  font-size: 14px;
+  color: #999;
+}
+
+/* 会员表格 */
+.member-table {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  background: #f8f9fc;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+}
+
+.table-row {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.table-row:hover {
+  background: #fafbfc;
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+.col-name {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.col-phone { flex: 1.5; color: #666; }
+.col-balance { flex: 1; }
+.col-recharged { flex: 1; color: #666; }
+.col-consumed { flex: 1; color: #666; }
+.col-date { flex: 1; color: #999; font-size: 13px; }
+.col-action { flex: 0.8; }
+
+.member-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.member-avatar-placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.member-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.balance-value {
+  font-weight: 600;
+  color: #667eea;
+}
+
+/* 按钮 */
+.btn-sm {
+  padding: 6px 16px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+}
+
+.btn-outline {
+  background: white;
+  color: #667eea;
+  border: 1px solid #667eea;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.btn-cancel {
+  background: #f5f5f5;
+  color: #666;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* 加载更多 */
+.load-more {
+  text-align: center;
+  padding: 24px;
+}
+
+.no-more {
+  color: #999;
+  font-size: 14px;
+}
+
+/* 弹窗 */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-modal {
+  width: 500px;
+}
+
+.adjust-modal {
+  width: 420px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.modal-close {
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #eee;
+}
+
+.modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+}
+
+/* 详情弹窗 */
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.detail-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+}
+
+.detail-avatar-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.detail-phone {
+  font-size: 14px;
+  color: #666;
+}
+
+.balance-section {
+  background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%);
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.balance-card {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.balance-label {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.balance-amount {
+  display: block;
+  font-size: 32px;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.balance-stats {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  margin-bottom: 16px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.btn-adjust {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.section-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.no-transactions {
+  text-align: center;
+  padding: 24px;
+  color: #999;
+  font-size: 14px;
+}
+
+.transaction-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.transaction-item:last-child {
+  border-bottom: none;
+}
+
+.tx-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tx-type {
+  font-size: 14px;
+  color: #333;
+}
+
+.tx-notes {
+  font-size: 12px;
+  color: #999;
+}
+
+.tx-right {
+  text-align: right;
+}
+
+.tx-amount {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tx-amount.positive {
+  color: #52c41a;
+}
+
+.tx-amount.negative {
+  color: #ff4d4f;
+}
+
+.tx-date {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
+}
+
+/* 余额调整弹窗 */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  min-height: 80px;
+  box-sizing: border-box;
+}
+
+.type-selector {
+  display: flex;
+  gap: 12px;
+}
+
+.type-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.type-option.active {
+  border-color: #667eea;
+  background: #667eea10;
+}
+
+.type-icon {
+  font-size: 20px;
+}

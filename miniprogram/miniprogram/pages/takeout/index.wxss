@@ -1,0 +1,190 @@
+/* 外卖首页 */
+@import '../../styles/customer.wxss';
+
+/* Skyline 滚动容器 - 继承 customer-scroll */
+.page-scroll {
+  background: #FAFAFA;
+  box-sizing: border-box;
+}
+
+/* ========== 搜索区域 ========== */
+.search-section {
+  padding: 20rpx;
+  background: #fff;
+}
+
+/* ========== Tabs区域 ========== */
+.tabs-section {
+  background: #fff;
+  margin-bottom: 12rpx;
+}
+
+/* ========== 分类导航 ========== */
+.category-section {
+  background: #fff;
+  margin-bottom: 12rpx;
+}
+
+/* ========== 内容区域 ========== */
+.content-section {
+  display: flex;
+  flex-direction: column;
+  padding: 12rpx 20rpx 24rpx;
+}
+
+/* ========== 套餐卡片 - 使用统一设计 Token ========== */
+.package-card {
+  display: flex;
+  gap: var(--customer-card-gap);
+  padding: var(--customer-card-padding);
+  background: #fff;
+  border-radius: var(--customer-card-radius);
+  margin-bottom: var(--customer-card-margin);
+  box-shadow: var(--customer-card-shadow);
+  transition: all 0.2s ease;
+}
+
+.package-card:active {
+  transform: scale(0.98);
+  box-shadow: var(--customer-card-shadow-active);
+}
+
+.package-image {
+  width: var(--customer-image-size);
+  height: var(--customer-image-size);
+  border-radius: var(--customer-image-radius);
+  flex-shrink: 0;
+}
+
+.package-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+/* 行布局 - 与 dish-card 保持一致 */
+.package-card .row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.package-card .row-2,
+.package-card .row-3,
+.package-card .row-4,
+.package-card .row-5 {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.package-card .shop-dish-name {
+  flex: 1;
+  font-size: var(--customer-title-size);
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.package-card .price {
+  font-size: var(--customer-title-size);
+  font-weight: bold;
+  color: var(--brand-coral);
+}
+
+.package-card .separator {
+  color: #ddd;
+  margin: 0 4rpx;
+}
+
+.package-card .sales {
+  color: #666;
+  font-size: var(--customer-subtitle-size);
+}
+
+.package-card .distance {
+  color: #999;
+  font-size: var(--customer-caption-size);
+}
+
+.package-card .delivery-fee {
+  font-size: 20rpx;
+  color: #666;
+  padding: 4rpx 12rpx;
+  background: #f5f5f5;
+  border-radius: 6rpx;
+}
+
+.package-card .discount {
+  font-size: 20rpx;
+  color: var(--brand-coral);
+  padding: 4rpx 12rpx;
+  background: #FFF5F3;
+  border-radius: 6rpx;
+}
+
+.package-card .add-btn {
+  align-self: flex-end;
+  transition: transform 0.2s ease;
+}
+
+.package-card .add-btn:active {
+  transform: scale(0.9);
+}
+
+.loading-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 32rpx 0;
+}
+
+.no-more {
+  text-align: center;
+  padding: 32rpx 0;
+  color: #999;
+  font-size: 24rpx;
+}
+
+/* ========== 位置引导提示 ========== */
+.location-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 48rpx;
+  text-align: center;
+}
+
+.location-guide-icon {
+  font-size: 96rpx;
+  margin-bottom: 32rpx;
+}
+
+.location-guide-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16rpx;
+}
+
+.location-guide-desc {
+  font-size: 28rpx;
+  color: #666;
+  margin-bottom: 48rpx;
+  line-height: 1.6;
+}
+
+.location-guide-buttons {
+  display: flex;
+  gap: 24rpx;
+}
+
+.location-guide-buttons .t-button {
+  min-width: 180rpx;
+}

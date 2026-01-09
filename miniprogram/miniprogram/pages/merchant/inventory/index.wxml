@@ -1,0 +1,105 @@
+<!-- 库存管理 - 桌面级 SaaS 界面 -->
+
+<view class="saas-layout">
+    <!-- 侧边栏 -->
+
+    <!-- 主区域 -->
+    <view class="main-area" style="margin-left: 0;">
+      <!-- 顶部栏 -->
+      <merchant-header 
+        merchant-name="{{merchantName}}"
+        is-open="{{isOpen}}"
+      />
+
+      <!-- 页面内容 - 两栏布局 -->
+      <view class="page-container inventory-page">
+        <!-- 左侧分类列表 -->
+        <view class="category-panel">
+          <view class="panel-title">菜品分类</view>
+          <view class="category-list">
+            <view 
+              class="category-item {{activeCategoryId === 'all' ? 'active' : ''}}"
+              bindtap="onSelectCategory"
+              data-id="all"
+            >
+              <text class="category-name">全部菜品</text>
+              <text class="category-count">{{allDishes.length}}</text>
+            </view>
+            <view 
+              wx:for="{{categories}}"
+              wx:key="id"
+              class="category-item {{activeCategoryId === item.id ? 'active' : ''}}"
+              bindtap="onSelectCategory"
+              data-id="{{item.id}}"
+            >
+              <text class="category-name">{{item.name}}</text>
+              <text class="category-count">{{item.dish_count || 0}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 右侧库存网格 -->
+        <view class="inventory-panel">
+          <!-- 工具栏 -->
+          <view class="panel-header">
+            <view class="header-title">
+              <text class="title-text">今日库存</text>
+              <text class="title-date">{{todayDate}}</text>
+            </view>
+            <button 
+              class="btn-save {{hasChanges ? 'active' : ''}}"
+              disabled="{{!hasChanges || saving}}"
+              bindtap="saveChanges"
+            >
+              {{saving ? '保存中...' : ('保存修改' + (changedDishIds.length > 0 ? '(' + changedDishIds.length + ')' : ''))}}
+            </button>
+          </view>
+          
+          <!-- 提示文字 -->
+          <view class="inventory-hint">
+            <text>💡 不填写库存默认为无限量供应。填写库存可防止当日超卖。</text>
+          </view>
+
+          <!-- 库存网格 -->
+          <view class="inventory-content">
+            <view wx:if="{{loading}}" class="loading-state">
+              <text>加载中...</text>
+            </view>
+            <view wx:elif="{{filteredDishes.length === 0}}" class="empty-state">
+              <text class="empty-icon">📦</text>
+              <text class="empty-text">暂无菜品</text>
+            </view>
+            <view wx:else class="inventory-grid">
+              <view 
+                wx:for="{{filteredDishes}}"
+                wx:key="id"
+                class="inventory-card"
+              >
+                <image 
+                  class="card-image" 
+                  src="{{item.image_url || '/assets/images/dish-placeholder.png'}}" 
+                  mode="aspectFill"
+                />
+                <view class="card-info">
+                  <text class="card-name">{{item.name}}</text>
+                  <text class="card-price">¥{{item.priceDisplay}}</text>
+                </view>
+                <view class="card-inventory">
+                  <text class="inventory-label">库存</text>
+                  <input 
+                    class="inventory-input {{item.inventory === 0 ? 'sold-out' : ''}}"
+                    type="text"
+                    value="{{item.inventory === -1 ? '' : item.inventory}}"
+                    placeholder="无限"
+                    data-dish-id="{{item.id}}"
+                    data-dish-name="{{item.name}}"
+                    bindinput="onInventoryInput"
+                  />
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+</view>

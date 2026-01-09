@@ -1,0 +1,258 @@
+.page-container {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+  padding: 0 20rpx;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 60vh;
+}
+
+/* 空状态容器 - 垂直水平居中 */
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 200rpx);  /* 减去导航栏和底部栏高度 */
+}
+
+/* 商户分组 */
+.cart-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding-top: 24rpx;  /* 与导航栏的间距 */
+  padding-bottom: 40rpx;
+}
+
+.merchant-group {
+  background: #fff;
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+/* 商户头部 */
+.merchant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 24rpx 24rpx 12rpx;  /* 左侧更紧凑 */
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.merchant-info {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* TDesign Checkbox 外部样式 */
+.custom-checkbox {
+  margin-right: 0 !important;
+  padding: 0 !important;
+  flex-shrink: 0;
+}
+
+.custom-checkbox-icon {
+  margin-right: 0 !important;
+}
+
+.merchant-logo {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 8rpx;
+  background-color: #f5f5f5;
+}
+
+.merchant-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.clear-btn {
+  font-size: 24rpx;
+  color: #999;
+  padding: 8rpx 16rpx;
+}
+
+/* 商品列表 */
+.cart-items {
+  padding: 0 24rpx;
+}
+
+.cart-item {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f5f5f5;
+}
+
+.cart-item:last-child {
+  border-bottom: none;
+}
+
+.cart-item.unavailable {
+  opacity: 0.5;
+}
+
+.item-image {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 12rpx;
+  background-color: #f5f5f5;
+  flex-shrink: 0;
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.item-name {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.item-price-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.item-price {
+  font-size: 28rpx;
+  color: #ff6600;
+  font-weight: 600;
+}
+
+.item-status {
+  font-size: 22rpx;
+  color: #ff4d4f;
+  background: #fff2f0;
+  padding: 4rpx 12rpx;
+  border-radius: 4rpx;
+}
+
+/* 数量操作 */
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-shrink: 0;
+}
+
+.quantity-btn {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #f5f5f5;
+}
+
+.quantity-btn.increase {
+  background-color: #ff6600;
+  color: #fff;
+}
+
+.quantity-btn.decrease {
+  color: #666;
+}
+
+.quantity {
+  min-width: 48rpx;
+  text-align: center;
+  font-size: 28rpx;
+  color: #333;
+}
+
+/* 商户小计 */
+.merchant-footer {
+  padding: 20rpx 24rpx;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.fee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fee-label {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.fee-value {
+  font-size: 26rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+/* 底部结算栏 */
+.checkout-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 24rpx 20rpx 32rpx;  /* 右侧24rpx更紧凑 */
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.08);
+}
+
+.total-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.total-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.total-label {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.total-price {
+  font-size: 36rpx;
+  color: #ff6600;
+  font-weight: 700;
+}
+
+.checkout-btn {
+  flex-shrink: 0;
+}
+
+/* TDesign t-button 内部样式 (通过 t-class) */
+.checkout-btn-inner {
+  margin: 0 !important;
+  padding-left: 40rpx !important;
+  padding-right: 40rpx !important;
+}

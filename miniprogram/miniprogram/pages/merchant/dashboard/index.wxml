@@ -1,0 +1,247 @@
+<!-- 商户工作台 v4.0 - 全屏沉浸式设计 -->
+
+<!-- 小屏提示 -->
+<match-media max-width="1599">
+  <view class="mobile-redirect">
+    <view class="redirect-box">
+      <view class="redirect-icon">🏪</view>
+      <text class="redirect-title">请使用电脑端访问工作台</text>
+      <text class="redirect-desc">工作台为大屏优化设计，建议使用 1600px 以上显示器</text>
+      <navigator url="/pages/merchant/orders/index" class="btn-orders">进入订单管理</navigator>
+    </view>
+  </view>
+</match-media>
+
+<!-- PC 全屏布局 (1600px+) -->
+<match-media min-width="1600">
+  <view class="dashboard-fullscreen">
+    <!-- 顶部栏 -->
+    <view class="top-bar">
+      <view class="left-section">
+        <text class="merchant-name">{{merchantName || '商户工作台'}}</text>
+        <view class="status-badge {{isOpen ? 'open' : 'closed'}}" bindtap="onToggleStatus">
+          <text class="status-dot"></text>
+          <text>{{isOpen ? '营业中' : '已打烊'}}</text>
+        </view>
+        <view wx:if="{{wsConnected}}" class="ws-indicator connected">
+          <text class="ws-dot"></text>
+          <text>实时</text>
+        </view>
+      </view>
+      <view class="center-section">
+        <text class="current-date">{{currentDate}}</text>
+      </view>
+      <view class="right-section">
+        <!-- 移除刷新按钮，WebSocket实时更新 -->
+      </view>
+    </view>
+
+
+    <!-- 主体三栏布局 -->
+    <view class="main-content">
+      <!-- 左栏：订单流 -->
+      <view class="orders-column">
+        <view class="column-header">
+          <text class="column-title">📋 订单流</text>
+          <navigator url="/pages/merchant/orders/index" class="view-all">查看全部 →</navigator>
+        </view>
+
+        <!-- 订单状态标签 -->
+        <view class="order-tabs">
+          <view class="tab-item {{orderTab === 'all' ? 'active' : ''}}" bindtap="switchOrderTab" data-tab="all">
+            <text>全部</text>
+            <text class="tab-count">{{pendingOrders.length}}</text>
+          </view>
+          <view class="tab-item {{orderTab === 'paid' ? 'active' : ''}}" bindtap="switchOrderTab" data-tab="paid">
+            <text>待接单</text>
+            <text class="tab-count pending">{{statusCounts.paid}}</text>
+          </view>
+          <view class="tab-item {{orderTab === 'preparing' ? 'active' : ''}}" bindtap="switchOrderTab" data-tab="preparing">
+            <text>制作中</text>
+            <text class="tab-count">{{statusCounts.preparing}}</text>
+          </view>
+          <view class="tab-item {{orderTab === 'ready' ? 'active' : ''}}" bindtap="switchOrderTab" data-tab="ready">
+            <text>待取餐</text>
+            <text class="tab-count">{{statusCounts.ready}}</text>
+          </view>
+        </view>
+
+        <!-- 订单列表 -->
+        <view class="order-list">
+          <view wx:if="{{filteredOrders.length === 0}}" class="empty-orders">暂无订单</view>
+          <view wx:for="{{filteredOrders}}" wx:key="id" 
+                class="order-card {{item.status}}" bindtap="onOrderTap" data-id="{{item.id}}">
+            <view class="order-head">
+              <text class="order-no">#{{item.order_no}}</text>
+              <text class="order-type">{{item.order_type_text}}</text>
+              <text class="order-status-tag {{item.status}}">{{item.status_text}}</text>
+            </view>
+            <view class="order-items">{{item.items_summary}}</view>
+            <view class="order-foot">
+              <text class="order-amount">¥{{item.amount_display}}</text>
+              <text class="order-time">{{item.created_time}}</text>
+            </view>
+            <view class="order-actions">
+              <button wx:if="{{item.status === 'paid'}}" class="btn-accept" catchtap="onAcceptOrder" data-id="{{item.id}}">接单</button>
+              <button wx:if="{{item.status === 'paid'}}" class="btn-reject" catchtap="onRejectOrder" data-id="{{item.id}}">拒绝</button>
+              <button wx:if="{{item.status === 'preparing'}}" class="btn-ready" catchtap="onReadyOrder" data-id="{{item.id}}">已出餐</button>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 中栏：桌台状态 -->
+      <view class="tables-column">
+        <view class="column-header">
+          <text class="column-title">🪑 桌台状态</text>
+          <view class="table-stats">
+            <text class="stat-item">空闲 {{tableStats.available}}</text>
+            <text class="stat-item">就餐 {{tableStats.occupied}}</text>
+            <text class="stat-item">共 {{tableStats.total}}</text>
+          </view>
+        </view>
+
+        <view class="tables-grid">
+          <view wx:if="{{tableGroups.length === 0}}" class="empty-tables">暂无桌台数据</view>
+          <block wx:for="{{tableGroups}}" wx:key="type" wx:for-item="group">
+            <view class="table-group">
+              <text class="group-name">{{group.name}}</text>
+              <view class="group-tables">
+                <view wx:for="{{group.tables}}" wx:key="id" wx:for-item="table"
+                      class="table-card {{table.status_class}}"
+                      bindtap="onTableCardTap" data-table="{{table}}">
+                  <view class="table-no">{{table.table_no}}</view>
+                  <view class="table-status">{{table.status_text}}</view>
+                  <view class="table-info">
+                    <text wx:if="{{table.capacity}}">{{table.capacity}}人座</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 桌台状态操作弹窗 -->
+      <view wx:if="{{showTablePopup}}" class="table-popup-mask" bindtap="closeTablePopup">
+        <view class="table-popup" catchtap="">
+          <view class="popup-header">
+            <text class="popup-title">{{activeTable.table_no}}</text>
+            <text class="popup-close" bindtap="closeTablePopup">×</text>
+          </view>
+          <view class="popup-info">
+            <text>当前状态：{{activeTable.status_text}}</text>
+            <text wx:if="{{activeTable.capacity}}">容量：{{activeTable.capacity}}人</text>
+          </view>
+          
+          <!-- 预订信息（如果有） -->
+          <view wx:if="{{activeTable.reservation}}" class="popup-reservation-info">
+            <view class="res-line"><text class="res-label">预订人：</text>{{activeTable.reservation.contact_name}}</view>
+            <view class="res-line"><text class="res-label">电话：</text>{{activeTable.reservation.contact_phone}}</view>
+            <view class="res-line"><text class="res-label">人数：</text>{{activeTable.reservation.guest_count}}人</view>
+            <view class="res-line"><text class="res-label">时间：</text>{{activeTable.reservation.reservation_time}}</view>
+          </view>
+          
+          <view class="popup-actions">
+            <button wx:if="{{activeTable.status !== 'available'}}" 
+                    class="popup-btn available" bindtap="setTableStatus" data-status="available">
+              设为空闲（离场）
+            </button>
+            <button wx:if="{{activeTable.status !== 'occupied'}}" 
+                    class="popup-btn occupied" bindtap="setTableStatus" data-status="occupied">
+              设为就餐中
+            </button>
+            <button class="popup-btn reserved" bindtap="goToAddReservation">
+              添加预订
+            </button>
+          </view>
+        </view>
+      </view>
+
+      <!-- 右栏：快捷入口 + 今日数据 -->
+      <view class="quick-column">
+        <!-- 今日数据 -->
+        <view class="today-stats">
+          <text class="stats-title">今日营业</text>
+          <view class="stats-main">
+            <text class="stats-label">营业额</text>
+            <text class="stats-value">¥{{revenueDisplay}}</text>
+          </view>
+          <view class="stats-sub">
+            <text>订单 {{stats.todayOrders}} 单</text>
+          </view>
+        </view>
+
+        <!-- 快捷入口 -->
+        <view class="quick-entries">
+          <text class="entries-title">快捷入口</text>
+          
+          <view class="entry-item" bindtap="goToInventory">
+            <text class="entry-icon">📦</text>
+            <text class="entry-text">当日库存设置</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToMembers">
+            <text class="entry-icon">👥</text>
+            <text class="entry-text">会员管理</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToReservations">
+            <text class="entry-icon">📅</text>
+            <text class="entry-text">预订管理</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToKitchen">
+            <text class="entry-icon">🍳</text>
+            <text class="entry-text">后厨显示</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToStats">
+            <text class="entry-icon">📊</text>
+            <text class="entry-text">经营统计</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToFinance">
+            <text class="entry-icon">💰</text>
+            <text class="entry-text">财务管理</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToSettings">
+            <text class="entry-icon">⚙️</text>
+            <text class="entry-text">商户设置</text>
+          </view>
+        </view>
+
+        <!-- 更多管理入口 -->
+        <view class="more-entries">
+          <text class="entries-title">更多管理</text>
+          
+          <view class="entry-item" bindtap="goToDishes">
+            <text class="entry-icon">🍜</text>
+            <text class="entry-text">菜品管理</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToCombos">
+            <text class="entry-icon">🎁</text>
+            <text class="entry-text">套餐管理</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToTables">
+            <text class="entry-icon">🪑</text>
+            <text class="entry-text">桌台管理</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToMarketing">
+            <text class="entry-icon">🎯</text>
+            <text class="entry-text">营销活动</text>
+          </view>
+          
+          <view class="entry-item" bindtap="goToNavigation">
+            <text class="entry-icon">📱</text>
+            <text class="entry-text">全部应用</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</match-media>

@@ -1,0 +1,178 @@
+/** app.wxss **/
+@import './styles/font-fix.wxss';
+@import './styles/common.wxss';
+
+/**
+ * 基于color_guide.md的配色方案
+ * 使用TDesign的CSS变量系统 + 自定义品牌变量
+ */
+page {
+  /* ========== TDesign主题色覆盖 ========== */
+  /* 品牌主色 - 活力珊瑚 #FF6B58 (30%使用) */
+  --td-brand-color: #FF6B58;
+  --td-brand-color-1: #FFF5F3;
+  --td-brand-color-2: #FFE8E5;
+  --td-brand-color-3: #FFD4CE;
+  --td-brand-color-4: #FFBFB6;
+  --td-brand-color-5: #FFAA9E;
+  --td-brand-color-6: #FF9586;
+  --td-brand-color-7: #FF806E;
+  --td-brand-color-8: #FF6B58;
+  --td-brand-color-9: #E66A5C;
+  --td-brand-color-10: #CC5E50;
+  
+  --td-brand-color-light: #FF8A75;
+  --td-brand-color-focus: #E66A5C;
+  --td-brand-color-disabled: #FFBFB6;
+  
+  /* 辅助色 - 极客深青 #00897B (10%使用) */
+  --td-success-color: #00897B;
+  --td-success-color-1: #E6F7F5;
+  --td-success-color-5: #4DB6AC;
+  --td-success-color-7: #00897B;
+  
+  /* 强调色 - 日光芥末 #FFC107 (10%使用) */
+  --td-warning-color: #FFC107;
+  --td-warning-color-1: #FFF9E6;
+  --td-warning-color-5: #FFD54F;
+  --td-warning-color-7: #FFC107;
+  
+  /* 错误色 - 警示红 #E53935 */
+  --td-error-color: #E53935;
+  --td-error-color-1: #FFEBEE;
+  --td-error-color-5: #EF5350;
+  --td-error-color-7: #E53935;
+  
+  /* ========== 背景色 (60%使用) ========== */
+  --td-bg-color-page: #FAFAFA;        /* 陶瓷白 - 页面背景 */
+  --td-bg-color-container: #FFFFFF;   /* 纯白 - 卡片背景 */
+  --td-bg-color-secondarycontainer: #F5F5F5;
+  
+  /* ========== 文字颜色 ========== */
+  --td-text-color-primary: #333333;    /* 炭黑 - 主标题 */
+  --td-text-color-secondary: #666666;  /* 副标题 */
+  --td-text-color-placeholder: #999999; /* 占位文字 */
+  --td-text-color-disabled: #CCCCCC;   /* 禁用 */
+  --td-text-color-anti: rgba(255, 255, 255, 0.87); /* 白色文字 */
+  
+  /* ========== 自定义品牌变量 ========== */
+  /* 用于价格、促销等特殊场景 */
+  --brand-coral: #FF6B58;
+  --brand-coral-gradient: linear-gradient(135deg, #FF8A75 0%, #FF6B58 100%);
+  --brand-teal: #00897B;
+  --brand-mustard: #FFC107;
+  
+  /* 阴影 */
+  --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.12);
+
+  /* ========== 消费侧卡片设计 Token ========== */
+  /* 仅用于消费侧组件，不影响商户侧 */
+  --customer-card-padding: 20rpx;
+  --customer-card-gap: 20rpx;
+  --customer-card-margin: 12rpx;
+  --customer-card-radius: 16rpx;
+  --customer-card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+  --customer-card-shadow-active: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  --customer-image-size: 180rpx;
+  --customer-image-radius: 12rpx;
+  --customer-title-size: 28rpx;
+  --customer-subtitle-size: 24rpx;
+  --customer-caption-size: 22rpx;
+  --customer-section-gap: 12rpx;
+  --customer-page-padding: 20rpx;
+}
+
+/* ========== 深色模式 ========== */
+page[data-theme="dark"] {
+  /* 品牌色微调（深色模式下更柔和） */
+  --td-brand-color: #FF8A7A;
+  --td-brand-color-8: #FF8A7A;
+  
+  /* 背景色 */
+  --td-bg-color-page: #121212;
+  --td-bg-color-container: #1E1E1E;
+  --td-bg-color-secondarycontainer: #2C2C2C;
+  
+  /* 文字颜色 */
+  --td-text-color-primary: #E0E0E0;
+  --td-text-color-secondary: #B0B0B0;
+  --td-text-color-placeholder: #808080;
+  --td-text-color-disabled: #606060;
+  
+  /* 边框 */
+  --td-border-level-1-color: #3C3C3C;
+  --td-border-level-2-color: #2C2C2C;
+  
+  /* 辅助色调整 */
+  --td-success-color: #26A69A;
+  --td-warning-color: #FFD54F;
+  --td-error-color: #FF6B6B;
+  
+  /* 品牌色 */
+  --brand-coral: #FF8A7A;
+  --brand-coral-gradient: linear-gradient(135deg, #FF9B8B 0%, #FF8A7A 100%);
+  --brand-teal: #26A69A;
+  --brand-mustard: #FFD54F;
+  
+  /* 阴影（深色模式下更明显） */
+  --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4rpx 12rpx rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.5);
+}
+
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 200rpx 0;
+  box-sizing: border-box;
+}
+
+/* 
+ * PC 端字体和间距锁定
+ * 防止 rpx 在大屏上过度放大，保持视觉比例一致
+ * 注意：仅锁定尺寸变量，不改变布局结构
+ */
+@media (min-width: 750px) {
+  page {
+    /* 字号锁定 - 防止文字过大 */
+    --td-font-size-xs: 11px !important;
+    --td-font-size-s: 13px !important;
+    --td-font-size-m: 14px !important;
+    --td-font-size-l: 16px !important;
+    --td-font-size-xl: 18px !important;
+    --td-font-size-2xl: 24px !important;
+
+    /* 间距锁定 */
+    --td-spacer-1: 4px !important;
+    --td-spacer-2: 8px !important;
+    --td-spacer-3: 12px !important;
+    --td-spacer-4: 16px !important;
+    --td-spacer-5: 20px !important;
+    --td-spacer-6: 24px !important;
+
+    /* 圆角锁定 */
+    --td-radius-small: 4px !important;
+    --td-radius-default: 6px !important;
+    --td-radius-medium: 8px !important;
+    --td-radius-large: 12px !important;
+
+    /* TDesign 组件尺寸锁定 */
+    --td-button-medium-height: 40px !important;
+    --td-button-large-height: 48px !important;
+    --td-button-small-height: 32px !important;
+    --td-tag-medium-height: 24px !important;
+    --td-tag-large-height: 32px !important;
+  }
+
+  /* 基础字体锁定 */
+  text, view {
+    font-size: 14px;
+  }
+}
+
+

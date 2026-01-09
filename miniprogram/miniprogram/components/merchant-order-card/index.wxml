@@ -1,0 +1,78 @@
+<view class="order-card">
+  <!-- 订单头部 -->
+  <view class="order-header">
+    <view class="order-info">
+      <text class="order-no">订单号：{{order.order_no}}</text>
+      <t-tag 
+        theme="{{order.status === 'completed' ? 'success' : order.status === 'cancelled' ? 'default' : 'primary'}}"
+        size="small"
+      >
+        {{order.status_display}}
+      </t-tag>
+    </view>
+    <text class="order-type">{{order.order_type_display}}</text>
+  </view>
+
+  <!-- 订单商品 -->
+  <view class="order-items-list">
+    <view wx:for="{{order.items}}" wx:for-item="dish" wx:key="id" class="order-item">
+      <text class="dish-name">{{dish.dish_name}}</text>
+      <text class="dish-quantity">x{{dish.quantity}}</text>
+      <text class="dish-price">¥{{dish.total_price_display}}</text>
+    </view>
+  </view>
+
+  <!-- 订单备注 -->
+  <view wx:if="{{order.notes}}" class="order-notes">
+    <t-icon name="info-circle" size="28rpx" color="#999" />
+    <text class="notes-text">{{order.notes}}</text>
+  </view>
+
+  <!-- 订单底部 -->
+  <view class="order-footer">
+    <view class="order-amount">
+      <text class="amount-label">实付金额：</text>
+      <text class="amount-value">¥{{order.total_amount_display}}</text>
+    </view>
+    <view class="order-time">{{order.created_at}}</view>
+  </view>
+
+  <!-- 订单操作 -->
+  <view class="order-actions" catchtap="stopPropagation">
+    <t-button 
+      wx:if="{{order.can_accept}}"
+      theme="primary" 
+      size="small" 
+      bind:tap="onAccept"
+    >
+      接单
+    </t-button>
+    
+    <t-button 
+      wx:if="{{order.can_reject}}"
+      theme="default" 
+      size="small" 
+      bind:tap="onReject"
+    >
+      拒单
+    </t-button>
+    
+    <t-button 
+      wx:if="{{order.can_mark_ready}}"
+      theme="success" 
+      size="small" 
+      bind:tap="onMarkReady"
+    >
+      制作完成
+    </t-button>
+    
+    <t-button 
+      wx:if="{{order.can_complete}}"
+      theme="success" 
+      size="small" 
+      bind:tap="onComplete"
+    >
+      完成订单
+    </t-button>
+  </view>
+</view>

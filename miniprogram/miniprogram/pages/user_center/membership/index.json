@@ -1,0 +1,9 @@
+{
+    "navigationBarTitleText": "会员中心",
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-progress": "tdesign-miniprogram/progress/progress",
+        "t-loading": "tdesign-miniprogram/loading/loading"
+    }
+}

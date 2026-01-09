@@ -1,0 +1,360 @@
+/**
+ * 响应式样式混入
+ * 提供通用的响应式布局样式
+ */
+
+/* 响应式容器 */
+.responsive-container {
+  width: 100%;
+  padding: 32rpx;
+}
+
+@media (min-width: 750px) {
+  .responsive-container {
+    padding: 24px !important;
+  }
+}
+
+/* 顾客端页面容器 - PC 端锁定为手机宽度体验 */
+@media (min-width: 750px) {
+  .customer-page-container {
+    max-width: 750px;
+    margin: 0 auto;
+    background: #fff;
+    min-height: 100vh;
+    box-shadow: 0 0 20px rgba(0,0,0,0.06);
+  }
+  
+  /* TDesign 搜索框锁定 */
+  .customer-page-container .t-search,
+  .customer-page-container .t-search__input-container {
+    height: 36px !important;
+    border-radius: 18px !important;
+  }
+  .customer-page-container .t-search__input {
+    font-size: 14px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+  }
+  
+  /* TDesign Tabs 锁定 */
+  .customer-page-container .t-tabs__wrapper,
+  .customer-page-container .t-tabs__scroll,
+  .customer-page-container .t-tabs__nav {
+    height: 44px !important;
+  }
+  .customer-page-container .t-tabs__item {
+    font-size: 14px !important;
+    height: 44px !important;
+    line-height: 44px !important;
+    padding: 0 16px !important;
+  }
+  
+  /* TDesign Empty/Loading 锁定 */
+  .customer-page-container .t-empty__image {
+    width: 100px !important;
+    height: 100px !important;
+  }
+  .customer-page-container .t-empty__description,
+  .customer-page-container .t-loading__text {
+    font-size: 14px !important;
+  }
+}
+
+@media (min-width: 1280px) and (max-width: 1599px) {
+  .responsive-container {
+    max-width: 1200px !important;
+    margin: 0 auto;
+    padding: 32px !important;
+  }
+}
+
+@media (min-width: 1600px) {
+  .responsive-container {
+    max-width: 1440px !important; /* PC-Full Constraint */
+    margin: 0 auto;
+    padding: 48px !important;
+  }
+  
+  .pc-full-constraint {
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  /* C端/顾客端极致视觉锁定 */
+  .customer-page-container {
+    width: 1024px !important; /* 锁定黄金宽度 */
+    margin: 0 auto;
+    background: #fff;
+    min-height: 100vh;
+    box-shadow: 0 0 50rpx rgba(0,0,0,0.08); /* 增加侧边阴影，营造“杂志感” */
+  }
+  
+  .responsive-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 40rpx;
+  }
+}
+
+/* 响应式字体 PC-Full 增强 */
+@media (min-width: 1600px) {
+  .responsive-title {
+    font-size: 24px !important;
+  }
+  .responsive-subtitle {
+    font-size: 20px !important;
+  }
+  .responsive-body {
+    font-size: 16px !important;
+  }
+}
+
+/* 响应式网格 - 移动优先设计 */
+
+/* 默认手机/平板端: 单列 (使用 rpx) */
+.responsive-grid-2,
+.responsive-grid-3,
+.responsive-grid-4 {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+/* PC 桌面端 (>=750px): 多列布局 (使用 px) */
+@media (min-width: 750px) {
+  .responsive-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+  .responsive-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .responsive-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+  }
+}
+
+/* 大屏桌面 (>=1280px): 增加间距 */
+@media (min-width: 1280px) {
+  .responsive-grid-2 {
+    gap: 32px;
+  }
+  
+  .responsive-grid-3 {
+    gap: 32px;
+  }
+  
+  .responsive-grid-4 {
+    gap: 32px;
+  }
+}
+
+/* 响应式卡片 */
+.responsive-card {
+  background: white;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+@media (min-width: 750px) {
+  .responsive-card {
+    padding: 40rpx;
+  }
+}
+
+@media (min-width: 1280px) {
+  .responsive-card {
+    padding: 48rpx;
+    border-radius: 20rpx;
+  }
+}
+
+/* 响应式字体 */
+.responsive-title {
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+@media (min-width: 750px) {
+  .responsive-title {
+    font-size: 18px !important;
+  }
+  .responsive-subtitle {
+    font-size: 15px !important;
+  }
+  .responsive-body {
+    font-size: 14px !important;
+  }
+  .responsive-caption {
+    font-size: 12px !important;
+  }
+}
+
+.responsive-subtitle {
+  font-size: 28rpx;
+  font-weight: 500;
+}
+
+@media (min-width: 750px) {
+  .responsive-subtitle {
+    font-size: 30rpx;
+  }
+}
+
+@media (min-width: 1280px) {
+  .responsive-subtitle {
+    font-size: 32rpx;
+  }
+}
+
+.responsive-body {
+  font-size: 28rpx;
+}
+
+@media (min-width: 750px) {
+  .responsive-body {
+    font-size: 30rpx;
+  }
+}
+
+.responsive-caption {
+  font-size: 24rpx;
+}
+
+@media (min-width: 750px) {
+  .responsive-caption {
+    font-size: 26rpx;
+  }
+}
+
+/* 响应式间距 */
+.responsive-spacing-sm {
+  margin-bottom: 16rpx;
+}
+
+.responsive-spacing-md {
+  margin-bottom: 24rpx;
+}
+
+.responsive-spacing-lg {
+  margin-bottom: 32rpx;
+}
+
+@media (min-width: 750px) {
+  .responsive-spacing-sm {
+    margin-bottom: 20rpx;
+  }
+  
+  .responsive-spacing-md {
+    margin-bottom: 32rpx;
+  }
+  
+  .responsive-spacing-lg {
+    margin-bottom: 48rpx;
+  }
+}
+
+@media (min-width: 1280px) {
+  .responsive-spacing-sm {
+    margin-bottom: 24rpx;
+  }
+  
+  .responsive-spacing-md {
+    margin-bottom: 40rpx;
+  }
+  
+  .responsive-spacing-lg {
+    margin-bottom: 64rpx;
+  }
+}
+
+/* 隐藏/显示工具类 */
+.hide-mobile {
+  display: none;
+}
+
+@media (min-width: 750px) {
+  .hide-mobile {
+    display: block;
+  }
+}
+
+.hide-tablet {
+  display: block;
+}
+
+@media (min-width: 750px) and (max-width: 1279px) {
+  .hide-tablet {
+    display: none;
+  }
+}
+
+.hide-desktop {
+  display: block;
+}
+
+@media (min-width: 1280px) {
+  .hide-desktop {
+    display: none;
+  }
+}
+
+.show-mobile {
+  display: block;
+}
+
+@media (min-width: 750px) {
+  .show-mobile {
+    display: none;
+  }
+}
+
+.show-tablet {
+  display: none;
+}
+
+@media (min-width: 750px) and (max-width: 1279px) {
+  .show-tablet {
+    display: block;
+  }
+}
+
+/* 响应式多栏布局 */
+.responsive-row {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+}
+
+@media (min-width: 750px) {
+  .responsive-row {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  
+  .responsive-col-main {
+    flex: 2;
+  }
+  
+  .responsive-col-side {
+    flex: 1;
+    position: sticky;
+    top: 32rpx;
+  }
+}
+
+.show-desktop {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .show-desktop {
+    display: block;
+  }
+}

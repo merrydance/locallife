@@ -1,0 +1,119 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.content {
+  padding: 24rpx;
+}
+
+.deposit-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 40rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.label {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.amount-row {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 40rpx;
+  justify-content: center;
+}
+
+.currency {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.amount {
+  font-size: 80rpx;
+  font-weight: bold;
+  color: #333;
+  line-height: 1;
+}
+
+.info-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 24rpx;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 16rpx;
+}
+
+.history-section {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.item-type {
+  font-size: 28rpx;
+  color: #333;
+}
+
+.item-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.item-amount {
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.item-amount.positive { color: #E34D59; }
+.item-amount.negative { color: #333; }

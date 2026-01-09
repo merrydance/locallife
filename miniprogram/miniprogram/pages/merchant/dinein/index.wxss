@@ -1,0 +1,275 @@
+/* 堂食管理 - 桌面级 SaaS 样式 */
+
+/* 小屏提示 */
+.desktop-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.notice-box {
+  background: #fff;
+  padding: 48px 64px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+
+.notice-icon { font-size: 64px; display: block; margin-bottom: 16px; }
+.notice-title { display: block; font-size: 20px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px; }
+.notice-desc { display: block; font-size: 14px; color: #666; margin-bottom: 24px; }
+.btn-back {
+  display: inline-block;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* SaaS 布局 */
+.saas-layout {
+  min-height: 100vh;
+  background: #f0f2f5;
+}
+
+.page-container {
+  padding: 24px 32px;
+  margin-top: 56px;
+}
+
+/* 页面头部 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.page-title-section { display: flex; flex-direction: column; gap: 4px; }
+.page-title { font-size: 24px; font-weight: 700; color: #1a1a2e; }
+.page-subtitle { font-size: 14px; color: #8c8c8c; }
+
+.page-actions { display: flex; gap: 12px; }
+.btn-refresh {
+  padding: 10px 20px;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  color: #888;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 统计卡片 */
+.stats-cards {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  flex: 1;
+  background: #fff;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.stat-card.success { border-left: 4px solid #52c41a; }
+.stat-card.warning { border-left: 4px solid #faad14; }
+
+.stat-value {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #8c8c8c;
+}
+
+/* 双栏布局 */
+.dual-column {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+/* 区块 */
+.section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.section-header {
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px;
+  color: #8c8c8c;
+}
+
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-text { font-size: 15px; }
+
+/* 桌台网格 */
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.table-card {
+  padding: 16px;
+  background: linear-gradient(135deg, #f0fff4, #dcfce7);
+  border: 2px solid #86efac;
+  border-radius: 12px;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.table-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.table-card.occupied {
+  background: linear-gradient(135deg, #fffbe6, #fef08a);
+  border-color: #fde047;
+}
+
+.table-card.disabled {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
+  opacity: 0.6;
+}
+
+.table-name {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 4px;
+}
+
+.table-capacity {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.table-status-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+
+.table-status-tag.available { background: #f6ffed; color: #52c41a; }
+.table-status-tag.occupied { background: #fffbe6; color: #d48806; }
+.table-status-tag.disabled { background: #f5f5f5; color: #999; }
+
+.btn-open-table, .btn-close-table {
+  width: 100%;
+  padding: 8px 0;
+  border-radius: 6px;
+  font-size: 13px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-open-table {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.btn-close-table {
+  background: #faad14;
+  color: #fff;
+}
+
+/* 会话列表 */
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-card {
+  padding: 16px;
+  background: #fafbfc;
+  border-radius: 10px;
+  border-left: 4px solid #667eea;
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.status-tag.active {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #e6f7ff;
+  color: #1890ff;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.session-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-checkout {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  border: none;
+}

@@ -1,0 +1,269 @@
+<!--
+  KDS 厨房显示系统 - 全屏三栏看板
+  专为大屏设计，高对比度，大字体
+-->
+<view class="kds-container">
+  <!-- 顶部状态栏 -->
+  <view class="kds-header">
+    <view class="header-left">
+      <text class="kds-title">🍳 厨房显示系统</text>
+      <view class="status-indicator {{connected ? 'online' : 'offline'}}">
+        <view class="status-dot"></view>
+        <text>{{connected ? '已连接' : '离线'}}</text>
+      </view>
+    </view>
+
+    <view class="header-center">
+      <view class="stats-row">
+        <view class="stat-badge new">待制作 {{stats.new_count || 0}}</view>
+        <view class="stat-badge preparing">制作中 {{stats.preparing_count || 0}}</view>
+        <view class="stat-badge ready">待取餐 {{stats.ready_count || 0}}</view>
+        <view class="stat-badge completed">今日完成 {{stats.completed_today_count || 0}}</view>
+      </view>
+    </view>
+
+    <view class="header-right">
+      <text class="current-time">{{currentTime}}</text>
+      <view class="header-actions">
+        <view class="action-btn {{voiceEnabled ? 'active' : ''}}" bindtap="onToggleVoice">
+          <text>🔊</text>
+        </view>
+        <view class="action-btn {{autoRefresh ? 'active' : ''}}" bindtap="onToggleAutoRefresh">
+          <text>🔄</text>
+        </view>
+        <view class="action-btn" bindtap="onRefresh">
+          <text>刷新</text>
+        </view>
+        <view class="action-btn exit" bindtap="onExit">
+          <text>退出</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="loading-overlay">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <!-- 三栏看板 -->
+  <view class="kanban-board" wx:else>
+    <!-- 新订单列 -->
+    <view class="kanban-column new-column">
+      <view class="column-header">
+        <view class="column-indicator new"></view>
+        <text class="column-title">新订单</text>
+        <text class="column-count">{{newOrders.length}}</text>
+      </view>
+      
+      <scroll-view class="column-content" scroll-y enhanced show-scrollbar="{{false}}">
+        <view wx:if="{{newOrders.length === 0}}" class="empty-state">
+          <text class="empty-icon">📭</text>
+          <text class="empty-text">暂无新订单</text>
+        </view>
+
+        <view 
+          wx:for="{{newOrders}}" 
+          wx:key="id" 
+          class="order-card new-card {{item.is_urged ? 'urged' : ''}}"
+          data-order="{{item}}"
+          bindtap="onViewOrder"
+        >
+          <view class="card-top">
+            <text class="order-no">#{{item.order_no}}</text>
+            <view class="order-type-badge">{{item.order_type_text}}</view>
+          </view>
+
+          <view class="card-table" wx:if="{{item.table_no}}">
+            <text class="table-label">桌号</text>
+            <text class="table-no">{{item.table_no}}</text>
+          </view>
+
+          <view class="card-items">
+            <view wx:for="{{item.items}}" wx:for-item="dish" wx:key="id" class="dish-row">
+              <text class="dish-name">{{dish.name}}</text>
+              <text class="dish-qty">×{{dish.quantity}}</text>
+            </view>
+          </view>
+
+          <view class="card-notes" wx:if="{{item.notes}}">
+            <text class="notes-icon">📝</text>
+            <text class="notes-text">{{item.notes}}</text>
+          </view>
+
+          <view class="card-bottom">
+            <text class="order-time">{{item.paid_time || item.created_time}}</text>
+            <text class="wait-time">等待 {{item.waiting_minutes}}分</text>
+          </view>
+
+          <view class="card-action" catchtap="onStartPreparing" data-id="{{item.id}}">
+            <text>开始制作</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 制作中列 -->
+    <view class="kanban-column preparing-column">
+      <view class="column-header">
+        <view class="column-indicator preparing"></view>
+        <text class="column-title">制作中</text>
+        <text class="column-count">{{preparingOrders.length}}</text>
+      </view>
+
+      <scroll-view class="column-content" scroll-y enhanced show-scrollbar="{{false}}">
+        <view wx:if="{{preparingOrders.length === 0}}" class="empty-state">
+          <text class="empty-icon">🍳</text>
+          <text class="empty-text">暂无制作中订单</text>
+        </view>
+
+        <view 
+          wx:for="{{preparingOrders}}" 
+          wx:key="id" 
+          class="order-card preparing-card {{item.is_urged ? 'urged' : ''}}"
+          data-order="{{item}}"
+          bindtap="onViewOrder"
+        >
+          <view class="card-top">
+            <text class="order-no">#{{item.order_no}}</text>
+            <view class="order-type-badge">{{item.order_type_text}}</view>
+          </view>
+
+          <view class="card-table" wx:if="{{item.table_no}}">
+            <text class="table-label">桌号</text>
+            <text class="table-no">{{item.table_no}}</text>
+          </view>
+
+          <view class="card-items">
+            <view wx:for="{{item.items}}" wx:for-item="dish" wx:key="id" class="dish-row">
+              <text class="dish-name">{{dish.name}}</text>
+              <text class="dish-qty">×{{dish.quantity}}</text>
+            </view>
+          </view>
+
+          <view class="card-notes" wx:if="{{item.notes}}">
+            <text class="notes-icon">📝</text>
+            <text class="notes-text">{{item.notes}}</text>
+          </view>
+
+          <view class="card-bottom">
+            <text class="order-time">开始: {{item.paid_time}}</text>
+            <text class="wait-time urgent">{{item.waiting_minutes}}分</text>
+          </view>
+
+          <view class="card-action ready-action" catchtap="onMarkReady" data-id="{{item.id}}">
+            <text>✓ 制作完成</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 待取餐列 -->
+    <view class="kanban-column ready-column">
+      <view class="column-header">
+        <view class="column-indicator ready"></view>
+        <text class="column-title">待取餐</text>
+        <text class="column-count">{{readyOrders.length}}</text>
+      </view>
+
+      <scroll-view class="column-content" scroll-y enhanced show-scrollbar="{{false}}">
+        <view wx:if="{{readyOrders.length === 0}}" class="empty-state">
+          <text class="empty-icon">✅</text>
+          <text class="empty-text">暂无待取餐订单</text>
+        </view>
+
+        <view 
+          wx:for="{{readyOrders}}" 
+          wx:key="id" 
+          class="order-card ready-card"
+          data-order="{{item}}"
+          bindtap="onViewOrder"
+        >
+          <view class="card-top">
+            <text class="order-no">#{{item.order_no}}</text>
+            <view class="order-type-badge">{{item.order_type_text}}</view>
+          </view>
+
+          <view class="card-table" wx:if="{{item.table_no}}">
+            <text class="table-label">桌号</text>
+            <text class="table-no">{{item.table_no}}</text>
+          </view>
+
+          <view class="card-items">
+            <view wx:for="{{item.items}}" wx:for-item="dish" wx:key="id" class="dish-row">
+              <text class="dish-name">{{dish.name}}</text>
+              <text class="dish-qty">×{{dish.quantity}}</text>
+            </view>
+          </view>
+
+          <view class="card-bottom">
+            <text class="order-time">完成</text>
+            <view class="ready-badge">已出餐</view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 订单详情弹窗 -->
+  <view class="modal-overlay" wx:if="{{showOrderDetail}}" catchtap="onCloseDetail">
+    <view class="modal-content" catchtap="stopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">订单详情</text>
+        <view class="modal-close" bindtap="onCloseDetail">✕</view>
+      </view>
+
+      <view class="modal-body" wx:if="{{selectedOrder}}">
+        <view class="detail-section">
+          <view class="detail-row">
+            <text class="detail-label">订单号</text>
+            <text class="detail-value">{{selectedOrder.order_no}}</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">订单类型</text>
+            <text class="detail-value">{{selectedOrder.order_type_text}}</text>
+          </view>
+          <view class="detail-row" wx:if="{{selectedOrder.table_no}}">
+            <text class="detail-label">桌号</text>
+            <text class="detail-value highlight">{{selectedOrder.table_no}}</text>
+          </view>
+          <view class="detail-row" wx:if="{{selectedOrder.pickup_number}}">
+            <text class="detail-label">取餐号</text>
+            <text class="detail-value highlight">{{selectedOrder.pickup_number}}</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">下单时间</text>
+            <text class="detail-value">{{selectedOrder.created_time}}</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">等待时间</text>
+            <text class="detail-value">{{selectedOrder.waiting_minutes}} 分钟</text>
+          </view>
+        </view>
+
+        <view class="detail-section">
+          <text class="section-title">商品明细</text>
+          <view class="item-list">
+            <view wx:for="{{selectedOrder.items}}" wx:key="id" class="item-row">
+              <view class="item-info">
+                <text class="item-name">{{item.name}}</text>
+                <text class="item-qty">×{{item.quantity}}</text>
+              </view>
+              <view class="item-customs" wx:if="{{item.customizations && item.customizations.length > 0}}">
+                <text wx:for="{{item.customizations}}" wx:for-item="c" wx:key="option_name" class="custom-tag">
+                  {{c.option_name}}
+                </text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="detail-section" wx:if="{{selectedOrder.notes}}">
+          <text class="section-title">订单备注</text>
+          <view class="notes-box">{{selectedOrder.notes}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,36 @@
+/* 骑手注册页面 - 特殊样式 */
+/* 大部分样式已使用common.wxss中的通用类 */
+
+/* t-cell组件内的输入框样式 */
+.input,
+.picker {
+  text-align: right;
+  font-size: 28rpx;
+  color: #333;
+  width: 100%;
+  max-width: 420rpx;
+}
+
+/* 地址显示文本 */
+.address-display {
+  text-align: right;
+  font-size: 28rpx;
+  color: #333;
+  word-break: break-all;
+}
+
+/* picker选择器文本(支持换行) */
+.picker-text {
+  text-align: right;
+  font-size: 28rpx;
+  color: #333;
+  max-width: 420rpx;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+}
+
+/* placeholder颜色 */
+.placeholder {
+  color: #999;
+}

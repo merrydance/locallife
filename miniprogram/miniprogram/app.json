@@ -1,0 +1,194 @@
+{
+  "pages": [
+    "pages/takeout/index",
+    "pages/takeout/cart/index",
+    "pages/reservation/index",
+    "pages/user_center/index",
+    "pages/takeout/dish-detail/index",
+    "pages/dining/index",
+    "pages/orders/detail/index",
+    "pages/orders/list/index",
+    "pages/reservation/confirm/index",
+    "pages/reservation/room-detail/index",
+    "pages/takeout/order-confirm/index",
+    "pages/takeout/restaurant-detail/index",
+    "pages/user_center/addresses/index",
+    "pages/user_center/addresses/edit/index",
+    "pages/user_center/coupons/index",
+    "pages/user_center/credit/index",
+    "pages/user_center/favorites/index",
+    "pages/user_center/membership/index",
+    "pages/user_center/points/index",
+    "pages/user_center/reviews/index",
+    "pages/user_center/wallet/index",
+    "pages/user_center/payment-detail/index",
+    "pages/user_center/refund-detail/index",
+    "pages/user_center/reservations/index",
+    "pages/user_center/reviews/create/index",
+    "pages/dine-in/scan-entry/scan-entry",
+    "pages/dine-in/menu/menu",
+    "pages/dine-in/checkout/checkout",
+    "pages/dine-in/payment-success/payment-success",
+    "pages/orders/tracking/index",
+    "pages/support/index",
+    "pages/message/center/index",
+    "pages/credit/index",
+    "pages/user/bind-merchant/index",
+    "pages/user/claim-boss/index"
+  ],
+  "subPackages": [
+    {
+      "root": "pages/merchant",
+      "name": "merchant",
+      "pages": [
+        "dashboard/index",
+        "analytics/dishes/index",
+        "analytics/enhanced/index",
+        "analytics/index",
+        "analytics/sales/index",
+        "dinein/index",
+        "delivery-settings/index",
+        "dishes/edit/index",
+        "dishes/index",
+        "health/index",
+        "orders/index",
+        "reservations/index",
+        "dishes/manage/manage",
+        "tables/manage/manage",
+        "tables/index",
+        "kds/index",
+        "analytics/dashboard/dashboard",
+        "inventory/index",
+        "finance/index",
+        "admin/index",
+        "combos/index",
+        "members/index",
+        "membership-settings/index",
+        "vouchers/index",
+        "discounts/index",
+        "review/manage/index",
+        "settings/index",
+        "staff/index",
+        "navigation/index"
+      ],
+      "independent": false
+    },
+    {
+      "root": "pages/rider",
+      "name": "rider",
+      "pages": [
+        "dashboard/index",
+        "claims/index",
+        "credit/index",
+        "deposit/index",
+        "task-detail/index",
+        "tasks/index",
+        "delivery/manage/manage",
+        "exception/index"
+      ],
+      "independent": false
+    },
+    {
+      "root": "pages/operator",
+      "name": "operator",
+      "pages": [
+        "analytics/index",
+        "automation/index",
+        "claims/index",
+        "dashboard/index",
+        "merchants/index",
+        "rules/index",
+        "dashboard/dashboard",
+        "merchants/list/list"
+      ],
+      "independent": false
+    },
+    {
+      "root": "pages/register",
+      "name": "register",
+      "pages": [
+        "merchant/index",
+        "rider/index",
+        "operator/index"
+      ],
+      "independent": false
+    },
+    {
+      "root": "pages/platform",
+      "name": "platform",
+      "pages": [
+        "dashboard/dashboard"
+      ],
+      "independent": false
+    }
+  ],
+  "preloadRule": {
+    "pages/takeout/index": {
+      "network": "all",
+      "packages": [
+        "__APP__"
+      ]
+    },
+    "pages/user_center/index": {
+      "network": "all",
+      "packages": [
+        "merchant",
+        "rider"
+      ]
+    }
+  },
+  "window": {
+    "pageOrientation": "auto",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#fff",
+    "navigationBarTitleText": "LocalLife",
+    "navigationBarTextStyle": "black",
+    "navigationStyle": "custom"
+  },
+  "resizable": true,
+  "tabBar": {
+    "custom": false,
+    "color": "#000000",
+    "selectedColor": "#0052D9",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/takeout/index",
+        "text": "外卖",
+        "iconPath": "assets/tabbar/takeout.png",
+        "selectedIconPath": "assets/tabbar/takeout_active.png"
+      },
+      {
+        "pagePath": "pages/reservation/index",
+        "text": "预定",
+        "iconPath": "assets/tabbar/reservation.png",
+        "selectedIconPath": "assets/tabbar/reservation_active.png"
+      },
+      {
+        "pagePath": "pages/user_center/index",
+        "text": "我的",
+        "iconPath": "assets/tabbar/user.png",
+        "selectedIconPath": "assets/tabbar/user_active.png"
+      }
+    ]
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于推荐附近的门店、堂食桌台与配送路线"
+    }
+  },
+  "requiredPrivateInfos": [
+    "chooseAddress",
+    "chooseLocation",
+    "choosePoi",
+    "getLocation",
+    "onLocationChange",
+    "startLocationUpdate",
+    "startLocationUpdateBackground"
+  ],
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents",
+  "resolveAlias": {
+    "@/*": "/*"
+  }
+}

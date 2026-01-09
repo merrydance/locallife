@@ -1,0 +1,148 @@
+.page-container {
+  min-height: 100vh;
+  background: #F6F6F6;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.content {
+  padding: 24rpx;
+}
+
+.credit-card {
+  background: linear-gradient(135deg, #0052D9 0%, #00A870 100%);
+  border-radius: 16rpx;
+  padding: 48rpx;
+  color: #fff;
+  margin-bottom: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 82, 217, 0.2);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32rpx;
+}
+
+.score-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.score-value {
+  font-size: 80rpx;
+  font-weight: bold;
+  line-height: 1;
+  margin-bottom: 8rpx;
+}
+
+.score-label {
+  font-size: 24rpx;
+  opacity: 0.8;
+}
+
+.level-tag {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 8rpx 24rpx;
+  border-radius: 32rpx;
+  font-size: 26rpx;
+  font-weight: bold;
+}
+
+.progress-bar {
+  height: 12rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 6rpx;
+  margin-bottom: 16rpx;
+  overflow: hidden;
+}
+
+.progress {
+  height: 100%;
+  background: #fff;
+  border-radius: 6rpx;
+}
+
+.level-desc {
+  font-size: 24rpx;
+  opacity: 0.8;
+}
+
+.section {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 24rpx;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16rpx;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.metric-value {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.metric-label {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.item-reason {
+  font-size: 28rpx;
+  color: #333;
+}
+
+.item-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.item-amount {
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.item-amount.positive { color: #00A870; }
+.item-amount.negative { color: #E34D59; }

@@ -1,0 +1,44 @@
+<custom-navbar title="异常仲裁" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+
+  <view wx:if="{{!loading}}" class="claims-list">
+    <view class="claims-grid">
+      <view wx:for="{{claims}}" wx:key="id" class="claim-card">
+        <view class="card-header">
+          <t-tag theme="{{item.status === 'PENDING' ? 'warning' : 'success'}}">
+            {{item.status === 'PENDING' ? '待处理' : '已结案'}}
+          </t-tag>
+          <text class="time">{{item.created_at}}</text>
+        </view>
+
+        <view class="card-body">
+          <view class="info-row">
+            <text class="label">上报人:</text>
+            <text class="value">{{item.reporter}}</text>
+          </view>
+          <view class="info-row">
+            <text class="label">投诉对象:</text>
+            <text class="value">{{item.target}}</text>
+          </view>
+          <view class="info-row">
+            <text class="label">类型:</text>
+            <text class="value">{{item.type}}</text>
+          </view>
+          <view class="desc-box">
+            <text>{{item.desc}}</text>
+          </view>
+          <view wx:if="{{item.result}}" class="result-box">
+            <text class="label">仲裁结果:</text>
+            <text class="value">{{item.result}}</text>
+          </view>
+        </view>
+
+        <view class="card-actions" wx:if="{{item.status === 'PENDING'}}">
+          <t-button size="small" theme="primary" data-id="{{item.id}}" bindtap="onResolve">立即仲裁</t-button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
