@@ -14,6 +14,10 @@
       <text class="price">{{dish.priceDisplay}}</text>
       <text class="separator">|</text>
       <text class="sales">{{dish.salesBadge}}</text>
+      <block wx:if="{{dish.repurchaseRateDisplay}}">
+        <text class="separator">|</text>
+        <text class="sales">{{dish.repurchaseRateDisplay}}</text>
+      </block>
     </view>
     
     <!-- 第3行: 距离 + 预估配送时间 -->

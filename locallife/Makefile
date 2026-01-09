@@ -1,4 +1,4 @@
-DB_URL=postgresql:///locallife_test?host=/var/run/postgresql&sslmode=disable
+DB_URL=postgresql:///locallife_dev?host=/var/run/postgresql&sslmode=disable
 
 network:
 	docker network create bank-network
@@ -16,19 +16,19 @@ dropdb:
 	dropdb locallife_test
 
 migrateup:
-	migrate -path db/migration -database "$(DB_URL)" -verbose up
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose up
 
 migrateup1:
-	migrate -path db/migration -database "$(DB_URL)" -verbose up 1
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose up 1
 
 migratedown:
-	migrate -path db/migration -database "$(DB_URL)" -verbose down
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose down
 
 migratedown1:
-	migrate -path db/migration -database "$(DB_URL)" -verbose down 1
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose down 1
 
 new_migration:
-	migrate create -ext sql -dir db/migration -seq $(name)
+	$(HOME)/go/bin/migrate create -ext sql -dir db/migration -seq $(name)
 
 db_docs:
 	dbdocs build doc/db.dbml
@@ -37,11 +37,11 @@ db_schema:
 	dbml2sql --postgres -o doc/schema.sql doc/db.dbml
 
 sqlc:
-	sqlc generate
-	mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
-	mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
-	mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
-	mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
+	$(HOME)/go/bin/sqlc generate
+	$(HOME)/go/bin/mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
+	$(HOME)/go/bin/mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
 
 test:
 	go test -v -cover -short ./...
@@ -57,10 +57,10 @@ server:
 	go run main.go
 
 mock:
-	mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
-	mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
-	mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
-	mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
+	$(HOME)/go/bin/mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
+	$(HOME)/go/bin/mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat PaymentClientInterface,EcommerceClientInterface
 
 proto:
 	rm -f pb/*.go

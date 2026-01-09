@@ -430,10 +430,17 @@ func (server *Server) recommendCombos(ctx *gin.Context) {
 		totalLimit = 100
 	}
 
+	// 准备位置参数
+	var userLat, userLng float64
+	if req.UserLatitude != nil && req.UserLongitude != nil {
+		userLat = *req.UserLatitude
+		userLng = *req.UserLongitude
+	}
+
 	// 生成套餐推荐
 	recommender := algorithm.NewPersonalizedRecommender(server.store)
 	config := algorithm.DefaultPersonalizedConfig()
-	allComboIDs, err := recommender.RecommendCombos(ctx, authPayload.UserID, config, totalLimit)
+	allComboIDs, err := recommender.RecommendCombos(ctx, authPayload.UserID, config, totalLimit, userLat, userLng)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -644,10 +651,17 @@ func (server *Server) recommendMerchants(ctx *gin.Context) {
 		totalLimit = 100
 	}
 
+	// 准备位置参数
+	var userLat, userLng float64
+	if req.UserLatitude != nil && req.UserLongitude != nil {
+		userLat = *req.UserLatitude
+		userLng = *req.UserLongitude
+	}
+
 	// 生成商户推荐
 	recommender := algorithm.NewPersonalizedRecommender(server.store)
 	config := algorithm.DefaultPersonalizedConfig()
-	allMerchantIDs, err := recommender.RecommendMerchants(ctx, authPayload.UserID, config, totalLimit)
+	allMerchantIDs, err := recommender.RecommendMerchants(ctx, authPayload.UserID, config, totalLimit, userLat, userLng)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

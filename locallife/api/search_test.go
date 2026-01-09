@@ -63,15 +63,21 @@ func TestSearchDishesAPI(t *testing.T) {
 			},
 		},
 		{
-			name:  "BadRequest_MissingKeyword",
+			name:  "OK_MissingKeyword",
 			query: "?page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchDishesGlobal(gomock.Any(), gomock.Any()).
-					Times(0)
+					Times(1).
+					Return([]db.Dish{}, nil)
+
+				store.EXPECT().
+					CountSearchDishesGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
@@ -176,7 +182,7 @@ func TestSearchMerchantsAPI(t *testing.T) {
 				store.EXPECT().
 					SearchMerchants(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.Merchant{}, nil)
+					Return([]db.SearchMerchantsRow{}, nil)
 
 				store.EXPECT().
 					CountSearchMerchants(gomock.Any(), gomock.Any()).
@@ -188,15 +194,21 @@ func TestSearchMerchantsAPI(t *testing.T) {
 			},
 		},
 		{
-			name:  "BadRequest_MissingKeyword",
+			name:  "OK_MissingKeyword",
 			query: "?page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchMerchants(gomock.Any(), gomock.Any()).
-					Times(0)
+					Times(1).
+					Return([]db.SearchMerchantsRow{}, nil)
+
+				store.EXPECT().
+					CountSearchMerchants(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
@@ -218,7 +230,7 @@ func TestSearchMerchantsAPI(t *testing.T) {
 				store.EXPECT().
 					SearchMerchants(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.Merchant{}, sql.ErrConnDone)
+					Return([]db.SearchMerchantsRow{}, sql.ErrConnDone)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)

@@ -40,7 +40,7 @@ func (s *Scheduler) Start() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		if err := s.RefreshAutoTags(ctx); err != nil {
+		if err := s.RefreshDishStats(ctx); err != nil {
 			log.Error().Err(err).Msg("failed to refresh auto tags")
 		}
 	})
@@ -56,7 +56,7 @@ func (s *Scheduler) Start() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		if err := s.RefreshAutoTags(ctx); err != nil {
+		if err := s.RefreshDishStats(ctx); err != nil {
 			log.Error().Err(err).Msg("failed to refresh initial auto tags")
 		}
 	}()
@@ -70,10 +70,49 @@ func (s *Scheduler) Stop() {
 	log.Info().Msg("auto-tag scheduler stopped")
 }
 
-// RefreshAutoTags 刷新所有自动标签
-func (s *Scheduler) RefreshAutoTags(ctx context.Context) error {
-	log.Info().Msg("refreshing auto tags...")
+// RefreshDishStats 刷新所有菜品统计数据（销量、复购率）
+// 同时也会刷新自动标签（作为辅助展示）
+func (s *Scheduler) RefreshDishStats(ctx context.Context) error {
+	log.Info().Msg("starting RefreshDishStats...")
 
+	// 1. 获取所有通过软删除检查的菜品ID
+	dishIDs, err := s.store.ListAllDishIDs(ctx)
+	if err != nil {
+		return err
+	}
+	log.Info().Int("total_dishes", len(dishIDs)).Msg("processing dishes for stats update")
+
+	// 2. 遍历更新每个菜品的统计数据
+	// 注意：生产环境应使用批处理或工作池，这里为简单起见使用串行处理
+	for _, id := range dishIDs {
+		// 计算月销量
+		sales, err := s.store.GetDishSales(ctx, pgtype.Int8{Int64: id, Valid: true})
+		if err != nil {
+			log.Error().Err(err).Int64("dish_id", id).Msg("failed to get dish sales")
+			sales = 0
+		}
+
+		// 计算复购率
+		var repurchaseRate float64
+		repurchaseStats, err := s.store.GetDishRepurchaseRate(ctx, pgtype.Int8{Int64: id, Valid: true})
+		if err == nil && repurchaseStats.TotalUsers > 0 {
+			repurchaseRate = float64(repurchaseStats.RepurchaseUsers) / float64(repurchaseStats.TotalUsers)
+		}
+
+		// 更新到 dishes 表
+		err = s.store.UpdateDishStats(ctx, db.UpdateDishStatsParams{
+			ID:             id,
+			MonthlySales:   sales,
+			RepurchaseRate: numericFromFloat(repurchaseRate),
+		})
+		if err != nil {
+			log.Error().Err(err).Int64("dish_id", id).Msg("failed to update dish stats")
+		}
+	}
+
+	log.Info().Msg("dish stats updated successfully")
+
+	// 3. 刷新自动标签（保留原有逻辑作为UI展示辅助）
 	// 刷新热卖标签
 	if err := s.refreshHotSellingTag(ctx); err != nil {
 		log.Error().Err(err).Msg("failed to refresh hot-selling tag")
@@ -84,8 +123,15 @@ func (s *Scheduler) RefreshAutoTags(ctx context.Context) error {
 		log.Error().Err(err).Msg("failed to refresh recommended tag")
 	}
 
-	log.Info().Msg("auto tags refresh completed")
+	log.Info().Msg("RefreshDishStats completed")
 	return nil
+}
+
+// numericFromFloat converts float64 to pgtype.Numeric
+func numericFromFloat(f float64) pgtype.Numeric {
+	var n pgtype.Numeric
+	n.Scan(f)
+	return n
 }
 
 // refreshHotSellingTag 刷新热卖标签
@@ -153,32 +199,6 @@ func (s *Scheduler) refreshRecommendedTag(ctx context.Context) error {
 
 // syncDishTags 同步菜品标签（删除旧的，添加新的）
 func (s *Scheduler) syncDishTags(ctx context.Context, tagID int64, newDishIDs []int64) error {
-	// 获取当前有此标签的菜品
-	currentDishIDs, err := s.store.GetDishIDsWithTag(ctx, tagID)
-	if err != nil {
-		return err
-	}
-
-	// 构建新旧菜品ID集合
-	newSet := make(map[int64]bool)
-	for _, id := range newDishIDs {
-		newSet[id] = true
-	}
-
-	currentSet := make(map[int64]bool)
-	for _, id := range currentDishIDs {
-		currentSet[id] = true
-	}
-
-	// 删除不再符合条件的菜品标签
-	for _, dishID := range currentDishIDs {
-		if !newSet[dishID] {
-			// 需要删除单个标签关联
-			// 注意：这里用 DeleteDishTagByTagID 会删除所有，改用逐个删除
-			// 暂时先用重建策略
-		}
-	}
-
 	// 简单策略：先删除所有该标签的关联，再重新添加
 	if err := s.store.DeleteDishTagByTagID(ctx, tagID); err != nil {
 		return err

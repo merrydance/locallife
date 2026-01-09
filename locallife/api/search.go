@@ -19,10 +19,12 @@ import (
 // ========================= Request/Response Types ============================
 
 type searchDishesRequest struct {
-	Keyword    string `form:"keyword" binding:"omitempty,max=100"`   // 可选：为空时返回全部
-	MerchantID *int64 `form:"merchant_id" binding:"omitempty,min=1"` // 可选：在特定商户内搜索
-	PageID     int32  `form:"page_id" binding:"required,min=1"`
-	PageSize   int32  `form:"page_size" binding:"required,min=1,max=50"`
+	Keyword       string   `form:"keyword" binding:"omitempty,max=100"`   // 可选：为空时返回全部
+	MerchantID    *int64   `form:"merchant_id" binding:"omitempty,min=1"` // 可选：在特定商户内搜索
+	PageID        int32    `form:"page_id" binding:"required,min=1"`
+	PageSize      int32    `form:"page_size" binding:"required,min=1,max=50"`
+	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
+	UserLongitude *float64 `form:"user_longitude" binding:"omitempty"` // 用户当前经度
 }
 
 type searchMerchantsRequest struct {
@@ -34,17 +36,25 @@ type searchMerchantsRequest struct {
 }
 
 type searchDishResponse struct {
-	ID          int64   `json:"id"`
-	MerchantID  int64   `json:"merchant_id"`
-	CategoryID  *int64  `json:"category_id,omitempty"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	ImageURL    string  `json:"image_url"`
-	Price       float64 `json:"price"`
-	MemberPrice float64 `json:"member_price,omitempty"`
-	IsAvailable bool    `json:"is_available"`
-	IsOnline    bool    `json:"is_online"`
-	SortOrder   int16   `json:"sort_order"`
+	ID             int64   `json:"id"`
+	MerchantID     int64   `json:"merchant_id"`
+	CategoryID     *int64  `json:"category_id,omitempty"`
+	Name           string  `json:"name"`
+	Description    string  `json:"description"`
+	ImageURL       string  `json:"image_url"`
+	Price          float64 `json:"price"`
+	MemberPrice    float64 `json:"member_price,omitempty"`
+	IsAvailable    bool    `json:"is_available"`
+	IsOnline       bool    `json:"is_online"`
+	SortOrder      int16   `json:"sort_order"`
+	MonthlySales   int32   `json:"monthly_sales"`
+	RepurchaseRate float64 `json:"repurchase_rate"`
+	// New fields for home feed
+	MerchantName          string `json:"merchant_name,omitempty"`
+	MerchantLogo          string `json:"merchant_logo,omitempty"`
+	MerchantIsOpen        *bool  `json:"merchant_is_open,omitempty"`
+	Distance              int    `json:"distance"`                // Meters
+	EstimatedDeliveryTime int    `json:"estimated_delivery_time"` // Seconds
 }
 
 type searchMerchantResponse struct {
@@ -58,26 +68,13 @@ type searchMerchantResponse struct {
 	LogoURL              string  `json:"logo_url"`
 	Status               string  `json:"status"`
 	RegionID             int64   `json:"region_id"`                        // 区域ID，用于运费计算
+	TotalOrders          int32   `json:"total_orders,omitempty"`           // 总销量
 	Distance             *int    `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
 	EstimatedDeliveryFee *int64  `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
 }
 
-// ========================= Handler Functions =================================
-
 // searchDishes godoc
-// @Summary 搜索菜品
-// @Description 根据关键词搜索菜品，可选在特定商户内搜索
-// @Tags Search
-// @Accept json
-// @Produce json
-// @Param keyword query string true "搜索关键词"
-// @Param merchant_id query int false "商户ID（可选，在特定商户内搜索）"
-// @Param page_id query int true "页码" minimum(1)
-// @Param page_size query int true "每页数量" minimum(1) maximum(50)
-// @Success 200 {object} map[string]interface{} "搜索结果"
-// @Failure 400 {object} map[string]string "请求参数错误"
-// @Failure 500 {object} map[string]string "服务器内部错误"
-// @Router /v1/search/dishes [get]
+// ... (comments remain same)
 func (server *Server) searchDishes(ctx *gin.Context) {
 	var req searchDishesRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -87,7 +84,8 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 	offset := (req.PageID - 1) * req.PageSize
 
-	// 如果指定了商户ID，在特定商户内搜索
+	// 如果指定了商户ID，在特定商户内搜索 (This part uses old query structure, keeping simple response or need upgrade too?
+	// The requirement is mostly for Global Search (Home Feed). Keeping Merchant Search as is for now but we need to match response type.)
 	if req.MerchantID != nil {
 		dishes, err := server.store.SearchDishesByName(ctx, db.SearchDishesByNameParams{
 			MerchantID: *req.MerchantID,
@@ -109,9 +107,10 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 			total = int64(len(dishes))
 		}
 
+		// Convert simple Dish to Enriched Response (with empty merchant info as it's implicit)
 		response := make([]searchDishResponse, len(dishes))
 		for i, dish := range dishes {
-			response[i] = newSearchDishResponse(dish)
+			response[i] = newSearchDishResponseFromDish(dish)
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{
@@ -123,11 +122,20 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		return
 	}
 
+	// 准备位置参数（用于排序）
+	var userLat, userLng float64
+	if req.UserLatitude != nil && req.UserLongitude != nil {
+		userLat = *req.UserLatitude
+		userLng = *req.UserLongitude
+	}
+
 	// 全局搜索 - 使用高效的单次数据库查询（仅搜索已批准商户的上架菜品）
 	dishes, err := server.store.SearchDishesGlobal(ctx, db.SearchDishesGlobalParams{
 		Column1: pgtype.Text{String: req.Keyword, Valid: true},
 		Limit:   req.PageSize,
-		Offset:  offset,
+		Offset:  int32(offset),
+		Column4: userLat,
+		Column5: userLng,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -142,7 +150,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 	response := make([]searchDishResponse, len(dishes))
 	for i, dish := range dishes {
-		response[i] = newSearchDishResponse(dish)
+		response[i] = newSearchDishResponseFromGlobalRow(dish)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -177,10 +185,19 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 
 	offset := (req.PageID - 1) * req.PageSize
 
+	// 准备位置参数（用于排序）
+	var userLat, userLng float64
+	if req.UserLatitude != nil && req.UserLongitude != nil {
+		userLat = *req.UserLatitude
+		userLng = *req.UserLongitude
+	}
+
 	merchants, err := server.store.SearchMerchants(ctx, db.SearchMerchantsParams{
-		Column1: pgtype.Text{String: req.Keyword, Valid: true},
+		Offset:  int32(offset),
 		Limit:   req.PageSize,
-		Offset:  offset,
+		Column3: req.Keyword,
+		Column4: userLat,
+		Column5: userLng,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -195,10 +212,10 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 
 	response := make([]searchMerchantResponse, len(merchants))
 	for i, merchant := range merchants {
-		response[i] = newSearchMerchantResponse(merchant)
+		response[i] = newSearchMerchantResponseFromRow(merchant)
 	}
 
-	// 如果用户提供了位置，计算距离和运费
+	// 如果用户提供了位置，计算精确距离（展示用）和运费
 	if req.UserLatitude != nil && req.UserLongitude != nil && server.mapClient != nil {
 		server.calculateSearchMerchantDistancesAndFees(ctx, response, *req.UserLatitude, *req.UserLongitude)
 	}
@@ -211,25 +228,72 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	})
 }
 
-// ========================= Helper Functions ==================================
-
-func newSearchDishResponse(dish db.Dish) searchDishResponse {
+// Helper for simple Dish (Merchant Search)
+func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 	resp := searchDishResponse{
-		ID:          dish.ID,
-		MerchantID:  dish.MerchantID,
-		Name:        dish.Name,
-		Description: dish.Description.String,
-		ImageURL:    normalizeUploadURLForClient(dish.ImageUrl.String),
-		Price:       float64(dish.Price) / 100, // 分转元
-		IsAvailable: dish.IsAvailable,
-		IsOnline:    dish.IsOnline,
-		SortOrder:   dish.SortOrder,
+		ID:           dish.ID,
+		MerchantID:   dish.MerchantID,
+		Name:         dish.Name,
+		Description:  dish.Description.String,
+		ImageURL:     normalizeUploadURLForClient(dish.ImageUrl.String),
+		Price:        float64(dish.Price) / 100,
+		IsAvailable:  dish.IsAvailable,
+		IsOnline:     dish.IsOnline,
+		SortOrder:    dish.SortOrder,
+		MonthlySales: dish.MonthlySales,
+	}
+	if dish.RepurchaseRate.Valid {
+		val, _ := dish.RepurchaseRate.Float64Value()
+		resp.RepurchaseRate = val.Float64
 	}
 	if dish.CategoryID.Valid {
 		resp.CategoryID = &dish.CategoryID.Int64
 	}
 	if dish.MemberPrice.Valid {
 		resp.MemberPrice = float64(dish.MemberPrice.Int64) / 100
+	}
+	// Merchant info is empty for merchant-specific search
+	return resp
+}
+
+// Helper for Global Search Row
+func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow) searchDishResponse {
+	// Calculate estimated delivery time (PrepareTime + Distance/Speed)
+	// Assume average speed 200m/min (12km/h) for simple estimation if real routing not available
+	deliveryTimeSeconds := int(row.PrepareTime) * 60
+	if row.Distance > 0 {
+		travelTimeSeconds := int(row.Distance / 3.33) // 3.33 m/s = 12 km/h
+		deliveryTimeSeconds += travelTimeSeconds
+	}
+
+	resp := searchDishResponse{
+		ID:           row.ID,
+		MerchantID:   row.MerchantID,
+		Name:         row.Name,
+		Description:  row.Description.String,
+		ImageURL:     normalizeUploadURLForClient(row.ImageUrl.String),
+		Price:        float64(row.Price) / 100,
+		IsAvailable:  row.IsAvailable,
+		IsOnline:     row.IsOnline,
+		SortOrder:    row.SortOrder,
+		MonthlySales: row.MonthlySales,
+		// Enriched Fields
+		MerchantName:          row.MerchantName,
+		MerchantLogo:          normalizeUploadURLForClient(row.MerchantLogo.String),
+		MerchantIsOpen:        &row.MerchantIsOpen,
+		Distance:              int(row.Distance),
+		EstimatedDeliveryTime: deliveryTimeSeconds,
+	}
+
+	if row.RepurchaseRate.Valid {
+		val, _ := row.RepurchaseRate.Float64Value()
+		resp.RepurchaseRate = val.Float64
+	}
+	if row.CategoryID.Valid {
+		resp.CategoryID = &row.CategoryID.Int64
+	}
+	if row.MemberPrice.Valid {
+		resp.MemberPrice = float64(row.MemberPrice.Int64) / 100
 	}
 	return resp
 }
@@ -244,6 +308,30 @@ func newSearchMerchantResponse(merchant db.Merchant) searchMerchantResponse {
 		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
 		Status:      merchant.Status,
 		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
+	}
+	// 转换 pgtype.Numeric 到 float64
+	if merchant.Latitude.Valid {
+		lat, _ := merchant.Latitude.Float64Value()
+		resp.Latitude = lat.Float64
+	}
+	if merchant.Longitude.Valid {
+		lng, _ := merchant.Longitude.Float64Value()
+		resp.Longitude = lng.Float64
+	}
+	return resp
+}
+
+func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerchantResponse {
+	resp := searchMerchantResponse{
+		ID:          merchant.ID,
+		Name:        merchant.Name,
+		Description: merchant.Description.String,
+		Address:     merchant.Address,
+		Phone:       merchant.Phone,
+		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
+		Status:      merchant.Status,
+		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
+		TotalOrders: merchant.TotalOrders,
 	}
 	// 转换 pgtype.Numeric 到 float64
 	if merchant.Latitude.Valid {

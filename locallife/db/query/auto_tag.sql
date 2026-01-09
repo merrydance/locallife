@@ -73,3 +73,12 @@ DELETE FROM dish_tags WHERE tag_id = $1;
 -- name: GetDishIDsWithTag :many
 -- 获取有指定标签的所有菜品ID
 SELECT dish_id FROM dish_tags WHERE tag_id = $1;
+
+-- name: GetDishSales :one
+-- 获取单个菜品近30天销量
+SELECT COALESCE(SUM(oi.quantity), 0)::int
+FROM order_items oi
+JOIN orders o ON oi.order_id = o.id
+WHERE oi.dish_id = $1
+  AND o.status IN ('delivered', 'completed')
+  AND o.created_at >= NOW() - INTERVAL '30 days';

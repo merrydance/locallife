@@ -505,6 +505,8 @@ type Querier interface {
 	GetDishIDsWithTag(ctx context.Context, tagID int64) ([]int64, error)
 	// 获取单个菜品的复购率（用于过滤）
 	GetDishRepurchaseRate(ctx context.Context, dishID pgtype.Int8) (GetDishRepurchaseRateRow, error)
+	// 获取单个菜品近30天销量
+	GetDishSales(ctx context.Context, dishID pgtype.Int8) (int32, error)
 	GetDishWithCustomizations(ctx context.Context, id int64) (GetDishWithCustomizationsRow, error)
 	GetDishWithDetails(ctx context.Context, id int64) (GetDishWithDetailsRow, error)
 	// 批量获取菜品详情（用于推荐结果）
@@ -673,7 +675,7 @@ type Querier interface {
 	// 套餐推荐查询
 	// ============================================
 	// 获取热门套餐（基于销量）
-	GetPopularCombos(ctx context.Context, limit int32) ([]GetPopularCombosRow, error)
+	GetPopularCombos(ctx context.Context, arg GetPopularCombosParams) ([]GetPopularCombosRow, error)
 	// ============================================
 	// 推荐系统查询 (Recommendation Queries)
 	// ============================================
@@ -684,7 +686,7 @@ type Querier interface {
 	// ============================================
 	// 获取热门商户（基于整体销量和评分）
 	// 销量 = 外卖 + 堂食 + 预定，高销量意味着回头客多，是最重要的排序因子
-	GetPopularMerchants(ctx context.Context, limit int32) ([]GetPopularMerchantsRow, error)
+	GetPopularMerchants(ctx context.Context, arg GetPopularMerchantsParams) ([]GetPopularMerchantsRow, error)
 	GetPrimaryTableImage(ctx context.Context, tableID int64) (TableImage, error)
 	GetPrintLog(ctx context.Context, id int64) (PrintLog, error)
 	GetProfitSharingOrder(ctx context.Context, id int64) (ProfitSharingOrder, error)
@@ -882,6 +884,7 @@ type Querier interface {
 	ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
 	ListActiveRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
 	ListActiveVouchers(ctx context.Context, arg ListActiveVouchersParams) ([]Voucher, error)
+	ListAllDishIDs(ctx context.Context) ([]int64, error)
 	ListAllMerchantApplications(ctx context.Context, arg ListAllMerchantApplicationsParams) ([]MerchantApplication, error)
 	ListAllMerchants(ctx context.Context, arg ListAllMerchantsParams) ([]Merchant, error)
 	// 列出所有运营商区域关系（管理后台用）
@@ -1177,9 +1180,9 @@ type Querier interface {
 	SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
 	SearchDishesByName(ctx context.Context, arg SearchDishesByNameParams) ([]Dish, error)
 	// 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
-	SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]Dish, error)
+	SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]SearchDishesGlobalRow, error)
 	SearchIngredients(ctx context.Context, arg SearchIngredientsParams) ([]Ingredient, error)
-	SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]Merchant, error)
+	SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]SearchMerchantsRow, error)
 	SearchRegionsByName(ctx context.Context, arg SearchRegionsByNameParams) ([]Region, error)
 	// ============ Room Search ============
 	// 搜索包间：按日期、时段、人数、菜系（商户标签）等条件过滤
@@ -1253,6 +1256,7 @@ type Querier interface {
 	UpdateDishAvailability(ctx context.Context, arg UpdateDishAvailabilityParams) error
 	UpdateDishCustomizationGroup(ctx context.Context, arg UpdateDishCustomizationGroupParams) (DishCustomizationGroup, error)
 	UpdateDishOnlineStatus(ctx context.Context, arg UpdateDishOnlineStatusParams) error
+	UpdateDishStats(ctx context.Context, arg UpdateDishStatsParams) error
 	UpdateDishesCategory(ctx context.Context, arg UpdateDishesCategoryParams) error
 	UpdateEcommerceApplymentStatus(ctx context.Context, arg UpdateEcommerceApplymentStatusParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentSubMchID(ctx context.Context, arg UpdateEcommerceApplymentSubMchIDParams) (EcommerceApplyment, error)

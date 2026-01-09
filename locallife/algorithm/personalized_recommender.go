@@ -198,9 +198,14 @@ func (r *PersonalizedRecommender) RecommendCombos(
 	_ int64,
 	_ PersonalizedRecommendConfig,
 	limit int,
+	userLat, userLng float64,
 ) ([]int64, error) {
 	// 获取热门套餐
-	rows, err := r.store.GetPopularCombos(ctx, int32(limit))
+	rows, err := r.store.GetPopularCombos(ctx, db.GetPopularCombosParams{
+		Limit:   int32(limit),
+		Column2: userLat,
+		Column3: userLng,
+	})
 	if err != nil {
 		return []int64{}, err
 	}
@@ -218,9 +223,14 @@ func (r *PersonalizedRecommender) RecommendMerchants(
 	_ int64,
 	_ PersonalizedRecommendConfig,
 	limit int,
+	userLat, userLng float64,
 ) ([]int64, error) {
 	// 获取热门商户
-	rows, err := r.store.GetPopularMerchants(ctx, int32(limit))
+	rows, err := r.store.GetPopularMerchants(ctx, db.GetPopularMerchantsParams{
+		Limit:   int32(limit),
+		Column2: userLat,
+		Column3: userLng,
+	})
 	if err != nil {
 		return []int64{}, err
 	}

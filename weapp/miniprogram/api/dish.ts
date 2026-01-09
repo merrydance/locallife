@@ -52,6 +52,7 @@ export interface DishSummary {
     estimated_delivery_time?: number             // 预估配送时间（秒）
     estimated_delivery_fee?: number              // 预估配送费（分）
     monthly_sales?: number                       // 近30天销量
+    repurchase_rate?: number                     // 复购率 (0-1)
 }
 
 /**
@@ -1004,6 +1005,12 @@ export interface SearchDishItem {
     is_available: boolean
     is_online: boolean
     sort_order: number
+    monthly_sales?: number
+    repurchase_rate?: number
+    merchant_name?: string
+    merchant_logo?: string
+    merchant_is_open?: boolean
+    distance?: number
 }
 
 /**
@@ -1017,26 +1024,7 @@ export interface SearchDishesResponse {
     has_more?: boolean
 }
 
-/**
- * 搜索菜品 - 基于 /v1/search/dishes
- */
-export async function searchDishes(params: {
-    keyword: string
-    merchant_id?: number
-    page_id: number
-    page_size: number
-}): Promise<SearchDishItem[]> {
-    const response = await request<SearchDishesResponse>({
-        url: '/v1/search/dishes',
-        method: 'GET',
-        data: params,
-        useCache: true,
-        cacheTTL: 2 * 60 * 1000 // 2分钟缓存
-    })
-    // 后端返回 { dishes: [], total: ..., ... }
-    // 提取 dishes 数组返回
-    return response.dishes || []
-}
+
 
 /**
  * 推荐菜品响应 - 对齐后端实际返回格式
@@ -1048,9 +1036,9 @@ export interface RecommendedDishesResponse {
 }
 
 /**
- * 推荐菜品请求参数
+ * 搜索菜品参数 (UI)
  */
-export interface RecommendDishesParams {
+export interface DishSearchParams {
     merchant_id?: number
     limit?: number
     page?: number              // 页码，从1开始
@@ -1061,9 +1049,9 @@ export interface RecommendDishesParams {
 }
 
 /**
- * 推荐菜品响应（包含分页信息）
+ * 搜索菜品结果 (UI)
  */
-export interface RecommendDishesResult {
+export interface DishSearchResult {
     dishes: DishSummary[]
     has_more: boolean
     page: number
@@ -1071,25 +1059,53 @@ export interface RecommendDishesResult {
 }
 
 /**
- * 获取推荐菜品 - 基于 /v1/recommendations/dishes
+ * 搜索菜品 (原 getRecommendedDishes) - 基于 /v1/search/dishes
  * 支持分页，返回包含 has_more 的完整响应
  */
-export async function getRecommendedDishes(params?: RecommendDishesParams): Promise<RecommendDishesResult> {
-    const response = await request<RecommendedDishesResponse & { has_more?: boolean; page?: number; total_count?: number }>({
-        url: '/v1/recommendations/dishes',
+export async function searchDishes(params?: DishSearchParams): Promise<DishSearchResult> {
+    // 首页推荐重构：使用搜索接口替代推荐接口
+    // 如果没有关键词，表示获取推荐流
+    const searchParams: any = {
+        keyword: params?.keyword || '', // 空字符串表示推荐流
+        page_id: params?.page || 1,
+        page_size: params?.limit || 20,
+    }
+
+    // 仅当参数存在时才添加，避免传递 undefined 导致后端验证失败
+    if (params?.merchant_id) searchParams.merchant_id = params.merchant_id
+    if (params?.user_latitude) searchParams.user_latitude = params.user_latitude
+    if (params?.user_longitude) searchParams.user_longitude = params.user_longitude
+
+    const response = await request<SearchDishesResponse>({
+        url: '/v1/search/dishes',
         method: 'GET',
-        data: params,
-        useCache: params?.page === 1 || !params?.page,  // 只缓存第一页
-        cacheTTL: 3 * 60 * 1000 // 3分钟缓存
+        data: searchParams,
+        useCache: searchParams.page_id === 1 && !searchParams.keyword, // 只缓存首页默认流
+        cacheTTL: 1 * 60 * 1000 // 1分钟缓存 (数据即时性要求高)
     })
-    // 返回完整响应，包含分页信息
+
+    // 转换响应格式以匹配 DishSearchResult
     return {
-        dishes: response.dishes || [],
+        dishes: (response.dishes || []).map(item => ({
+            ...item,
+            // 使用后端返回的商户信息，部分字段暂时缺省
+            merchant_name: item.merchant_name || '未知商户',
+            merchant_logo: item.merchant_logo || '',
+            merchant_latitude: 0,
+            merchant_longitude: 0,
+            merchant_region_id: 0,
+            merchant_is_open: item.merchant_is_open ?? true,
+            distance: item.distance || 0,
+            estimated_delivery_fee: 0,
+            tags: []
+        } as unknown as DishSummary)),
+
         has_more: response.has_more ?? false,
-        page: response.page ?? 1,
-        total_count: response.total_count ?? 0
+        page: response.page_id ?? 1,
+        total_count: response.total ?? 0
     }
 }
+
 
 /**
  * 推荐套餐响应 - 对齐后端实际返回格式

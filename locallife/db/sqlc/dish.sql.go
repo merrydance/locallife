@@ -173,7 +173,7 @@ INSERT INTO dishes (
   prepare_time
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at
+) RETURNING id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate
 `
 
 type CreateDishParams struct {
@@ -224,6 +224,8 @@ func (q *Queries) CreateDish(ctx context.Context, arg CreateDishParams) (Dish, e
 		&i.UpdatedAt,
 		&i.PrepareTime,
 		&i.DeletedAt,
+		&i.MonthlySales,
+		&i.RepurchaseRate,
 	)
 	return i, err
 }
@@ -367,7 +369,7 @@ func (q *Queries) DeleteDishCustomizationOption(ctx context.Context, id int64) e
 }
 
 const getDish = `-- name: GetDish :one
-SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at FROM dishes
+SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate FROM dishes
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -390,6 +392,8 @@ func (q *Queries) GetDish(ctx context.Context, id int64) (Dish, error) {
 		&i.UpdatedAt,
 		&i.PrepareTime,
 		&i.DeletedAt,
+		&i.MonthlySales,
+		&i.RepurchaseRate,
 	)
 	return i, err
 }
@@ -434,7 +438,7 @@ func (q *Queries) GetDishCategoryByName(ctx context.Context, name string) (DishC
 
 const getDishComplete = `-- name: GetDishComplete :one
 SELECT 
-  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate,
   dc.name as category_name,
   COALESCE(
     json_agg(DISTINCT
@@ -511,6 +515,8 @@ type GetDishCompleteRow struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	PrepareTime         int16              `json:"prepare_time"`
 	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales        int32              `json:"monthly_sales"`
+	RepurchaseRate      pgtype.Numeric     `json:"repurchase_rate"`
 	CategoryName        pgtype.Text        `json:"category_name"`
 	Ingredients         interface{}        `json:"ingredients"`
 	Tags                interface{}        `json:"tags"`
@@ -536,6 +542,8 @@ func (q *Queries) GetDishComplete(ctx context.Context, id int64) (GetDishComplet
 		&i.UpdatedAt,
 		&i.PrepareTime,
 		&i.DeletedAt,
+		&i.MonthlySales,
+		&i.RepurchaseRate,
 		&i.CategoryName,
 		&i.Ingredients,
 		&i.Tags,
@@ -616,7 +624,7 @@ func (q *Queries) GetDishIDsByTagID(ctx context.Context, tagID int64) ([]int64, 
 
 const getDishWithCustomizations = `-- name: GetDishWithCustomizations :one
 SELECT 
-  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate,
   COALESCE(
     json_agg(
       json_build_object(
@@ -664,6 +672,8 @@ type GetDishWithCustomizationsRow struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	PrepareTime         int16              `json:"prepare_time"`
 	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales        int32              `json:"monthly_sales"`
+	RepurchaseRate      pgtype.Numeric     `json:"repurchase_rate"`
 	CustomizationGroups interface{}        `json:"customization_groups"`
 }
 
@@ -686,6 +696,8 @@ func (q *Queries) GetDishWithCustomizations(ctx context.Context, id int64) (GetD
 		&i.UpdatedAt,
 		&i.PrepareTime,
 		&i.DeletedAt,
+		&i.MonthlySales,
+		&i.RepurchaseRate,
 		&i.CustomizationGroups,
 	)
 	return i, err
@@ -693,7 +705,7 @@ func (q *Queries) GetDishWithCustomizations(ctx context.Context, id int64) (GetD
 
 const getDishWithDetails = `-- name: GetDishWithDetails :one
 SELECT 
-  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate,
   dc.name as category_name,
   COALESCE(
     json_agg(DISTINCT
@@ -726,24 +738,26 @@ GROUP BY d.id, dc.name
 `
 
 type GetDishWithDetailsRow struct {
-	ID           int64              `json:"id"`
-	MerchantID   int64              `json:"merchant_id"`
-	CategoryID   pgtype.Int8        `json:"category_id"`
-	Name         string             `json:"name"`
-	Description  pgtype.Text        `json:"description"`
-	ImageUrl     pgtype.Text        `json:"image_url"`
-	Price        int64              `json:"price"`
-	MemberPrice  pgtype.Int8        `json:"member_price"`
-	IsAvailable  bool               `json:"is_available"`
-	IsOnline     bool               `json:"is_online"`
-	SortOrder    int16              `json:"sort_order"`
-	CreatedAt    time.Time          `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	PrepareTime  int16              `json:"prepare_time"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	CategoryName pgtype.Text        `json:"category_name"`
-	Ingredients  interface{}        `json:"ingredients"`
-	Tags         interface{}        `json:"tags"`
+	ID             int64              `json:"id"`
+	MerchantID     int64              `json:"merchant_id"`
+	CategoryID     pgtype.Int8        `json:"category_id"`
+	Name           string             `json:"name"`
+	Description    pgtype.Text        `json:"description"`
+	ImageUrl       pgtype.Text        `json:"image_url"`
+	Price          int64              `json:"price"`
+	MemberPrice    pgtype.Int8        `json:"member_price"`
+	IsAvailable    bool               `json:"is_available"`
+	IsOnline       bool               `json:"is_online"`
+	SortOrder      int16              `json:"sort_order"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	PrepareTime    int16              `json:"prepare_time"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales   int32              `json:"monthly_sales"`
+	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
+	CategoryName   pgtype.Text        `json:"category_name"`
+	Ingredients    interface{}        `json:"ingredients"`
+	Tags           interface{}        `json:"tags"`
 }
 
 func (q *Queries) GetDishWithDetails(ctx context.Context, id int64) (GetDishWithDetailsRow, error) {
@@ -765,6 +779,8 @@ func (q *Queries) GetDishWithDetails(ctx context.Context, id int64) (GetDishWith
 		&i.UpdatedAt,
 		&i.PrepareTime,
 		&i.DeletedAt,
+		&i.MonthlySales,
+		&i.RepurchaseRate,
 		&i.CategoryName,
 		&i.Ingredients,
 		&i.Tags,
@@ -1219,6 +1235,30 @@ func (q *Queries) LinkMerchantDishCategory(ctx context.Context, arg LinkMerchant
 	return i, err
 }
 
+const listAllDishIDs = `-- name: ListAllDishIDs :many
+SELECT id FROM dishes WHERE deleted_at IS NULL
+`
+
+func (q *Queries) ListAllDishIDs(ctx context.Context) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listAllDishIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDishCategories = `-- name: ListDishCategories :many
 SELECT c.id, c.name, c.created_at, c.deleted_at, mdc.sort_order FROM dish_categories c
 JOIN merchant_dish_categories mdc ON c.id = mdc.category_id
@@ -1421,7 +1461,7 @@ func (q *Queries) ListDishTags(ctx context.Context, dishID int64) ([]Tag, error)
 }
 
 const listDishesByMerchant = `-- name: ListDishesByMerchant :many
-SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at FROM dishes
+SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate FROM dishes
 WHERE 
   merchant_id = $1
   AND deleted_at IS NULL
@@ -1473,6 +1513,8 @@ func (q *Queries) ListDishesByMerchant(ctx context.Context, arg ListDishesByMerc
 			&i.UpdatedAt,
 			&i.PrepareTime,
 			&i.DeletedAt,
+			&i.MonthlySales,
+			&i.RepurchaseRate,
 		); err != nil {
 			return nil, err
 		}
@@ -1629,7 +1671,7 @@ func (q *Queries) SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text)
 }
 
 const searchDishesByName = `-- name: SearchDishesByName :many
-SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at FROM dishes
+SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate FROM dishes
 WHERE 
   merchant_id = $1
   AND deleted_at IS NULL
@@ -1676,6 +1718,8 @@ func (q *Queries) SearchDishesByName(ctx context.Context, arg SearchDishesByName
 			&i.UpdatedAt,
 			&i.PrepareTime,
 			&i.DeletedAt,
+			&i.MonthlySales,
+			&i.RepurchaseRate,
 		); err != nil {
 			return nil, err
 		}
@@ -1688,7 +1732,13 @@ func (q *Queries) SearchDishesByName(ctx context.Context, arg SearchDishesByName
 }
 
 const searchDishesGlobal = `-- name: SearchDishesGlobal :many
-SELECT d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at FROM dishes d
+SELECT 
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate,
+  m.name AS merchant_name,
+  m.logo_url AS merchant_logo,
+  m.is_open AS merchant_is_open,
+  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
   m.status = 'active'
@@ -1696,7 +1746,12 @@ WHERE
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
-ORDER BY d.sort_order ASC, d.name ASC
+ORDER BY 
+    m.is_open DESC,
+    (d.monthly_sales * (1 + d.repurchase_rate)) DESC,
+    distance ASC,
+    d.sort_order ASC, 
+    d.name ASC
 LIMIT $2 OFFSET $3
 `
 
@@ -1704,18 +1759,50 @@ type SearchDishesGlobalParams struct {
 	Column1 pgtype.Text `json:"column_1"`
 	Limit   int32       `json:"limit"`
 	Offset  int32       `json:"offset"`
+	Column4 float64     `json:"column_4"`
+	Column5 float64     `json:"column_5"`
+}
+
+type SearchDishesGlobalRow struct {
+	ID             int64              `json:"id"`
+	MerchantID     int64              `json:"merchant_id"`
+	CategoryID     pgtype.Int8        `json:"category_id"`
+	Name           string             `json:"name"`
+	Description    pgtype.Text        `json:"description"`
+	ImageUrl       pgtype.Text        `json:"image_url"`
+	Price          int64              `json:"price"`
+	MemberPrice    pgtype.Int8        `json:"member_price"`
+	IsAvailable    bool               `json:"is_available"`
+	IsOnline       bool               `json:"is_online"`
+	SortOrder      int16              `json:"sort_order"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	PrepareTime    int16              `json:"prepare_time"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales   int32              `json:"monthly_sales"`
+	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
+	MerchantName   string             `json:"merchant_name"`
+	MerchantLogo   pgtype.Text        `json:"merchant_logo"`
+	MerchantIsOpen bool               `json:"merchant_is_open"`
+	Distance       float64            `json:"distance"`
 }
 
 // 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
-func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]Dish, error) {
-	rows, err := q.db.Query(ctx, searchDishesGlobal, arg.Column1, arg.Limit, arg.Offset)
+func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]SearchDishesGlobalRow, error) {
+	rows, err := q.db.Query(ctx, searchDishesGlobal,
+		arg.Column1,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Dish{}
+	items := []SearchDishesGlobalRow{}
 	for rows.Next() {
-		var i Dish
+		var i SearchDishesGlobalRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MerchantID,
@@ -1732,6 +1819,12 @@ func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobal
 			&i.UpdatedAt,
 			&i.PrepareTime,
 			&i.DeletedAt,
+			&i.MonthlySales,
+			&i.RepurchaseRate,
+			&i.MerchantName,
+			&i.MerchantLogo,
+			&i.MerchantIsOpen,
+			&i.Distance,
 		); err != nil {
 			return nil, err
 		}
@@ -1773,7 +1866,7 @@ SET
   prepare_time = COALESCE($10, prepare_time),
   updated_at = now()
 WHERE id = $11 AND deleted_at IS NULL
-RETURNING id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at
+RETURNING id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate
 `
 
 type UpdateDishParams struct {
@@ -1821,6 +1914,8 @@ func (q *Queries) UpdateDish(ctx context.Context, arg UpdateDishParams) (Dish, e
 		&i.UpdatedAt,
 		&i.PrepareTime,
 		&i.DeletedAt,
+		&i.MonthlySales,
+		&i.RepurchaseRate,
 	)
 	return i, err
 }
@@ -1894,6 +1989,26 @@ type UpdateDishOnlineStatusParams struct {
 
 func (q *Queries) UpdateDishOnlineStatus(ctx context.Context, arg UpdateDishOnlineStatusParams) error {
 	_, err := q.db.Exec(ctx, updateDishOnlineStatus, arg.ID, arg.IsOnline)
+	return err
+}
+
+const updateDishStats = `-- name: UpdateDishStats :exec
+UPDATE dishes
+SET 
+  monthly_sales = $2,
+  repurchase_rate = $3,
+  updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateDishStatsParams struct {
+	ID             int64          `json:"id"`
+	MonthlySales   int32          `json:"monthly_sales"`
+	RepurchaseRate pgtype.Numeric `json:"repurchase_rate"`
+}
+
+func (q *Queries) UpdateDishStats(ctx context.Context, arg UpdateDishStatsParams) error {
+	_, err := q.db.Exec(ctx, updateDishStats, arg.ID, arg.MonthlySales, arg.RepurchaseRate)
 	return err
 }
 

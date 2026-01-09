@@ -231,7 +231,7 @@ func TestSearchMerchants(t *testing.T) {
 		Name:            uniqueName,
 		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
 		Address:         "test address " + util.RandomString(10),
-		Status:          "approved",
+		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID,
 	}
@@ -240,9 +240,11 @@ func TestSearchMerchants(t *testing.T) {
 
 	// 搜索
 	searchArg := SearchMerchantsParams{
-		Column1: pgtype.Text{String: "SEARCHABLE_MERCHANT", Valid: true},
-		Limit:   10,
 		Offset:  0,
+		Limit:   10,
+		Column3: "SEARCHABLE_MERCHANT",
+		Column4: 0,
+		Column5: 0,
 	}
 
 	merchants, err := testStore.SearchMerchants(context.Background(), searchArg)
@@ -731,7 +733,11 @@ func TestGetPopularMerchants(t *testing.T) {
 	// sqlc 生成代码时不会校验 SQL 是否引用了不存在的列，所以必须通过集成测试兜底。
 	_ = createRandomMerchantForTest(t)
 
-	rows, err := testStore.GetPopularMerchants(context.Background(), 10)
+	rows, err := testStore.GetPopularMerchants(context.Background(), GetPopularMerchantsParams{
+		Limit:   10,
+		Column2: 0, // Lat
+		Column3: 0, // Lng
+	})
 	require.NoError(t, err)
 	// 至少应返回 1 条（刚创建的是 approved 商户）
 	require.NotEmpty(t, rows)

@@ -172,9 +172,14 @@ SELECT
 FROM combo_sets cs
 LEFT JOIN order_items oi ON cs.id = oi.combo_id
 LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('delivered', 'completed')
-WHERE cs.is_online = true AND cs.deleted_at IS NULL
-GROUP BY cs.id
-ORDER BY total_sold DESC, cs.created_at DESC
+LEFT JOIN merchants m ON cs.merchant_id = m.id
+WHERE cs.is_online = true AND cs.deleted_at IS NULL AND m.status = 'active'
+GROUP BY cs.id, m.is_open, m.latitude, m.longitude
+ORDER BY 
+    m.is_open DESC, 
+    total_sold DESC, 
+    cs.created_at DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($2::float8, $3::float8)) ASC
 LIMIT $1;
 
 -- name: GetCombosByIDs :many

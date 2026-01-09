@@ -27,6 +27,8 @@ export interface Dish {
     member_price?: number  // 会员价
     is_available?: boolean  // 是否可用
     prepare_time?: number  // 制作时间
+    repurchaseRate?: number // 复购率
+    repurchaseRateDisplay?: string // 复购率展示
 }
 
 /**
@@ -90,6 +92,7 @@ export interface DishSummary {
     distance: number
     estimated_delivery_fee: number
     monthly_sales: number
+    repurchase_rate?: number
     is_available: boolean
     tags: string[]
 }

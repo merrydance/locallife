@@ -145,7 +145,13 @@ WHERE
 
 -- name: SearchDishesGlobal :many
 -- 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
-SELECT d.* FROM dishes d
+SELECT 
+  d.*,
+  m.name AS merchant_name,
+  m.logo_url AS merchant_logo,
+  m.is_open AS merchant_is_open,
+  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
   m.status = 'active'
@@ -153,8 +159,24 @@ WHERE
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
-ORDER BY d.sort_order ASC, d.name ASC
+ORDER BY 
+    m.is_open DESC,
+    (d.monthly_sales * (1 + d.repurchase_rate)) DESC,
+    distance ASC,
+    d.sort_order ASC, 
+    d.name ASC
 LIMIT $2 OFFSET $3;
+
+-- name: UpdateDishStats :exec
+UPDATE dishes
+SET 
+  monthly_sales = $2,
+  repurchase_rate = $3,
+  updated_at = NOW()
+WHERE id = $1;
+
+-- name: ListAllDishIDs :many
+SELECT id FROM dishes WHERE deleted_at IS NULL;
 
 -- name: CountSearchDishesGlobal :one
 -- 统计全局菜品搜索结果总数

@@ -299,8 +299,10 @@ type Dish struct {
 	CreatedAt   time.Time          `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	// 预估制作时间（分钟），默认10分钟
-	PrepareTime int16              `json:"prepare_time"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	PrepareTime    int16              `json:"prepare_time"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales   int32              `json:"monthly_sales"`
+	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
 }
 
 type DishCategory struct {

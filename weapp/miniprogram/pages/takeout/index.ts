@@ -1,7 +1,7 @@
 import { DishAdapter } from '../../adapters/dish'
 import { Dish } from '../../models/dish'
 import { Category } from '../../models/category'
-import { getRecommendedDishes, DishSummary, getTags } from '../../api/dish'
+import { searchDishes, DishSummary, getTags } from '../../api/dish'
 import { getRecommendedMerchants } from '../../api/merchant'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
@@ -420,7 +420,7 @@ Page({
         if (tagId && !isNaN(tagId)) {
           params.tag_id = tagId
         }
-        const result = await getRecommendedDishes(params)
+        const result = await searchDishes(params)
         newDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
         hasMore = result.has_more
       }
@@ -464,7 +464,7 @@ Page({
     this.setData({ isPrefetching: true })
     try {
       const app = getApp<IAppOption>()
-      const result = await getRecommendedDishes({
+      const result = await searchDishes({
         user_latitude: app.globalData.latitude || undefined,
         user_longitude: app.globalData.longitude || undefined,
         limit: PAGE_SIZE,
@@ -761,7 +761,7 @@ Page({
 
     if (activeTab === 'dishes') {
       // 搜索菜品 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
-      const result = await getRecommendedDishes({
+      const result = await searchDishes({
         keyword,
         page: 1,
         limit: 20,

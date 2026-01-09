@@ -74,6 +74,23 @@ func (q *Queries) GetDishRepurchaseRate(ctx context.Context, dishID pgtype.Int8)
 	return i, err
 }
 
+const getDishSales = `-- name: GetDishSales :one
+SELECT COALESCE(SUM(oi.quantity), 0)::int
+FROM order_items oi
+JOIN orders o ON oi.order_id = o.id
+WHERE oi.dish_id = $1
+  AND o.status IN ('delivered', 'completed')
+  AND o.created_at >= NOW() - INTERVAL '30 days'
+`
+
+// 获取单个菜品近30天销量
+func (q *Queries) GetDishSales(ctx context.Context, dishID pgtype.Int8) (int32, error) {
+	row := q.db.QueryRow(ctx, getDishSales, dishID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getHotSellingDishIDs = `-- name: GetHotSellingDishIDs :many
 SELECT d.id
 FROM dishes d

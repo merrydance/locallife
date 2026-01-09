@@ -58,7 +58,9 @@ export class DishAdapter {
       merchantIsOpen: dto.merchant_is_open ?? true, // 商户营业状态，默认营业
       distance_meters: dto.distance || 0,
       member_price: dto.member_price,
-      is_available: dto.is_available
+      is_available: dto.is_available,
+      repurchaseRate: dto.repurchase_rate,
+      repurchaseRateDisplay: DishAdapter.formatRepurchaseRate(dto.repurchase_rate)
     }
   }
 
@@ -120,5 +122,10 @@ export class DishAdapter {
       return `满${(threshold / 100).toFixed(0)}返${discount}元`
     }
     return ''
+  }
+
+  static formatRepurchaseRate(rate?: number): string {
+    if (!rate || rate <= 0) return ''
+    return `复购率${(rate * 100).toFixed(0)}%`
   }
 }

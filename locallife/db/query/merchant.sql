@@ -157,12 +157,20 @@ RETURNING *;
 UPDATE merchants SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SearchMerchants :many
-SELECT * FROM merchants
-WHERE status = 'active'
-  AND deleted_at IS NULL
-  AND name ILIKE '%' || $1 || '%'
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3;
+SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders FROM merchants m
+  LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND (
+    $3::text IS NULL
+    OR m.name ILIKE '%' || $3 || '%'
+  )
+ORDER BY
+    m.is_open DESC,
+    COALESCE(mp.total_orders, 0) DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)) ASC
+LIMIT $2
+OFFSET $1;
 
 -- name: CountSearchMerchants :one
 SELECT COUNT(*) FROM merchants
@@ -314,10 +322,13 @@ FROM merchants m
 LEFT JOIN orders o ON m.id = o.merchant_id 
   AND o.status IN ('completed')  -- 以已完成订单作为销量口径
 WHERE m.status = 'active'
+  AND m.is_open = true
 GROUP BY m.id
 ORDER BY 
+    m.is_open DESC,
     total_orders DESC,  -- 销量优先：回头客多的商户排前面
-    avg_rating DESC     -- 评分次之
+    avg_rating DESC,     -- 评分次之
+    earth_distance(ll_to_earth(m.latitude, m.longitude), ll_to_earth($2::float8, $3::float8)) ASC
 LIMIT $1;
 
 -- name: GetMerchantsByIDs :many

@@ -925,12 +925,21 @@ FROM merchants m
 LEFT JOIN orders o ON m.id = o.merchant_id 
   AND o.status IN ('completed')  -- 以已完成订单作为销量口径
 WHERE m.status = 'active'
+  AND m.is_open = true
 GROUP BY m.id
 ORDER BY 
+    m.is_open DESC,
     total_orders DESC,  -- 销量优先：回头客多的商户排前面
-    avg_rating DESC     -- 评分次之
+    avg_rating DESC,     -- 评分次之
+    earth_distance(ll_to_earth(m.latitude, m.longitude), ll_to_earth($2::float8, $3::float8)) ASC
 LIMIT $1
 `
+
+type GetPopularMerchantsParams struct {
+	Limit   int32   `json:"limit"`
+	Column2 float64 `json:"column_2"`
+	Column3 float64 `json:"column_3"`
+}
 
 type GetPopularMerchantsRow struct {
 	ID          int64          `json:"id"`
@@ -949,8 +958,8 @@ type GetPopularMerchantsRow struct {
 // ============================================
 // 获取热门商户（基于整体销量和评分）
 // 销量 = 外卖 + 堂食 + 预定，高销量意味着回头客多，是最重要的排序因子
-func (q *Queries) GetPopularMerchants(ctx context.Context, limit int32) ([]GetPopularMerchantsRow, error) {
-	rows, err := q.db.Query(ctx, getPopularMerchants, limit)
+func (q *Queries) GetPopularMerchants(ctx context.Context, arg GetPopularMerchantsParams) ([]GetPopularMerchantsRow, error) {
+	rows, err := q.db.Query(ctx, getPopularMerchants, arg.Limit, arg.Column2, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
@@ -1766,29 +1775,72 @@ func (q *Queries) RemoveMerchantTag(ctx context.Context, arg RemoveMerchantTagPa
 }
 
 const searchMerchants = `-- name: SearchMerchants :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
-WHERE status = 'active'
-  AND deleted_at IS NULL
-  AND name ILIKE '%' || $1 || '%'
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
+SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at, COALESCE(mp.total_orders, 0)::int AS total_orders FROM merchants m
+  LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND (
+    $3::text IS NULL
+    OR m.name ILIKE '%' || $3 || '%'
+  )
+ORDER BY
+    m.is_open DESC,
+    COALESCE(mp.total_orders, 0) DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)) ASC
+LIMIT $2
+OFFSET $1
 `
 
 type SearchMerchantsParams struct {
-	Column1 pgtype.Text `json:"column_1"`
-	Limit   int32       `json:"limit"`
-	Offset  int32       `json:"offset"`
+	Offset  int32   `json:"offset"`
+	Limit   int32   `json:"limit"`
+	Column3 string  `json:"column_3"`
+	Column4 float64 `json:"column_4"`
+	Column5 float64 `json:"column_5"`
 }
 
-func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]Merchant, error) {
-	rows, err := q.db.Query(ctx, searchMerchants, arg.Column1, arg.Limit, arg.Offset)
+type SearchMerchantsRow struct {
+	ID                    int64              `json:"id"`
+	OwnerUserID           int64              `json:"owner_user_id"`
+	Name                  string             `json:"name"`
+	Description           pgtype.Text        `json:"description"`
+	LogoUrl               pgtype.Text        `json:"logo_url"`
+	Phone                 string             `json:"phone"`
+	Address               string             `json:"address"`
+	Latitude              pgtype.Numeric     `json:"latitude"`
+	Longitude             pgtype.Numeric     `json:"longitude"`
+	Status                string             `json:"status"`
+	ApplicationData       []byte             `json:"application_data"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	Version               int32              `json:"version"`
+	RegionID              int64              `json:"region_id"`
+	IsOpen                bool               `json:"is_open"`
+	AutoCloseAt           pgtype.Timestamptz `json:"auto_close_at"`
+	DeletedAt             pgtype.Timestamptz `json:"deleted_at"`
+	PendingOwnerBind      pgtype.Bool        `json:"pending_owner_bind"`
+	BindCode              pgtype.Text        `json:"bind_code"`
+	BindCodeExpiresAt     pgtype.Timestamptz `json:"bind_code_expires_at"`
+	BossBindCode          pgtype.Text        `json:"boss_bind_code"`
+	BossBindCodeExpiresAt pgtype.Timestamptz `json:"boss_bind_code_expires_at"`
+	TotalOrders           int32              `json:"total_orders"`
+}
+
+func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]SearchMerchantsRow, error) {
+	rows, err := q.db.Query(ctx, searchMerchants,
+		arg.Offset,
+		arg.Limit,
+		arg.Column3,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Merchant{}
+	items := []SearchMerchantsRow{}
 	for rows.Next() {
-		var i Merchant
+		var i SearchMerchantsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerUserID,
@@ -1813,6 +1865,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.TotalOrders,
 		); err != nil {
 			return nil, err
 		}

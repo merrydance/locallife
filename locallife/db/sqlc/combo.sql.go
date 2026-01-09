@@ -423,11 +423,22 @@ SELECT
 FROM combo_sets cs
 LEFT JOIN order_items oi ON cs.id = oi.combo_id
 LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('delivered', 'completed')
-WHERE cs.is_online = true AND cs.deleted_at IS NULL
-GROUP BY cs.id
-ORDER BY total_sold DESC, cs.created_at DESC
+LEFT JOIN merchants m ON cs.merchant_id = m.id
+WHERE cs.is_online = true AND cs.deleted_at IS NULL AND m.status = 'active'
+GROUP BY cs.id, m.is_open, m.latitude, m.longitude
+ORDER BY 
+    m.is_open DESC, 
+    total_sold DESC, 
+    cs.created_at DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($2::float8, $3::float8)) ASC
 LIMIT $1
 `
+
+type GetPopularCombosParams struct {
+	Limit   int32   `json:"limit"`
+	Column2 float64 `json:"column_2"`
+	Column3 float64 `json:"column_3"`
+}
 
 type GetPopularCombosRow struct {
 	ID            int64       `json:"id"`
@@ -444,8 +455,8 @@ type GetPopularCombosRow struct {
 // 套餐推荐查询
 // ============================================
 // 获取热门套餐（基于销量）
-func (q *Queries) GetPopularCombos(ctx context.Context, limit int32) ([]GetPopularCombosRow, error) {
-	rows, err := q.db.Query(ctx, getPopularCombos, limit)
+func (q *Queries) GetPopularCombos(ctx context.Context, arg GetPopularCombosParams) ([]GetPopularCombosRow, error) {
+	rows, err := q.db.Query(ctx, getPopularCombos, arg.Limit, arg.Column2, arg.Column3)
 	if err != nil {
 		return nil, err
 	}
@@ -475,7 +486,7 @@ func (q *Queries) GetPopularCombos(ctx context.Context, limit int32) ([]GetPopul
 
 const listComboDishes = `-- name: ListComboDishes :many
 SELECT 
-  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate,
   cd.quantity
 FROM dishes d
 JOIN combo_dishes cd ON d.id = cd.dish_id
@@ -484,22 +495,24 @@ ORDER BY cd.id ASC
 `
 
 type ListComboDishesRow struct {
-	ID          int64              `json:"id"`
-	MerchantID  int64              `json:"merchant_id"`
-	CategoryID  pgtype.Int8        `json:"category_id"`
-	Name        string             `json:"name"`
-	Description pgtype.Text        `json:"description"`
-	ImageUrl    pgtype.Text        `json:"image_url"`
-	Price       int64              `json:"price"`
-	MemberPrice pgtype.Int8        `json:"member_price"`
-	IsAvailable bool               `json:"is_available"`
-	IsOnline    bool               `json:"is_online"`
-	SortOrder   int16              `json:"sort_order"`
-	CreatedAt   time.Time          `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	PrepareTime int16              `json:"prepare_time"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
-	Quantity    int16              `json:"quantity"`
+	ID             int64              `json:"id"`
+	MerchantID     int64              `json:"merchant_id"`
+	CategoryID     pgtype.Int8        `json:"category_id"`
+	Name           string             `json:"name"`
+	Description    pgtype.Text        `json:"description"`
+	ImageUrl       pgtype.Text        `json:"image_url"`
+	Price          int64              `json:"price"`
+	MemberPrice    pgtype.Int8        `json:"member_price"`
+	IsAvailable    bool               `json:"is_available"`
+	IsOnline       bool               `json:"is_online"`
+	SortOrder      int16              `json:"sort_order"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	PrepareTime    int16              `json:"prepare_time"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales   int32              `json:"monthly_sales"`
+	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
+	Quantity       int16              `json:"quantity"`
 }
 
 func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListComboDishesRow, error) {
@@ -527,6 +540,8 @@ func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListCom
 			&i.UpdatedAt,
 			&i.PrepareTime,
 			&i.DeletedAt,
+			&i.MonthlySales,
+			&i.RepurchaseRate,
 			&i.Quantity,
 		); err != nil {
 			return nil, err
