@@ -549,6 +549,11 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant is not active")))
 		return
 	}
+	if !merchant.IsOpen {
+		log.Warn().Int64("merchant_id", merchant.ID).Msg("[DEBUG] createOrder: merchant is closed")
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户已打烊，暂时无法接单")))
+		return
+	}
 
 	log.Info().Msg("[DEBUG] createOrder: merchant validated")
 

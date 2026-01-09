@@ -119,8 +119,10 @@ export interface MerchantSummary {
   estimated_delivery_fee: number              // 预估配送费（分）
   monthly_sales: number                       // 近30天订单量
   region_id: number                            // 区域ID
+  is_open: boolean                             // 是否营业
   tags: string[]                               // 商户标签
 }
+
 
 /**
  * 商户详情响应 - 对齐 api.merchantDetailResponse

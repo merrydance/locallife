@@ -2,10 +2,12 @@
   <t-image class="dish-image" src="{{dish.imageUrl}}" mode="aspectFill" lazy />
   
   <view class="dish-info">
-    <!-- 第1行: 店名·菜名 -->
+    <!-- 第1行: 店名·菜名 + 休息中标签 -->
     <view class="row-1">
       <text class="shop-dish-name">{{dish.shopName}}·{{dish.name}}</text>
+      <t-tag wx:if="{{dish.merchantIsOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
     </view>
+
     
     <!-- 第2行: 价格 | 销量 -->
     <view class="row-2">

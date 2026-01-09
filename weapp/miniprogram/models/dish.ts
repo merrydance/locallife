@@ -21,6 +21,7 @@ export interface Dish {
     discountRule: string
     tags: string[]
     isPremade: boolean
+    merchantIsOpen?: boolean  // 商户是否营业
     customization_groups?: CustomizationGroup[]  // 改为对齐swagger
     distance_meters?: number
     member_price?: number  // 会员价
@@ -85,6 +86,7 @@ export interface DishSummary {
     merchant_latitude: number
     merchant_longitude: number
     merchant_region_id: number
+    merchant_is_open?: boolean  // 商户是否营业
     distance: number
     estimated_delivery_fee: number
     monthly_sales: number

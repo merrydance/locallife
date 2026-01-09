@@ -1176,7 +1176,7 @@ type Querier interface {
 	// 全局菜品搜索，只返回菜品ID（用于推荐接口的关键词过滤）
 	SearchDishIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
 	SearchDishesByName(ctx context.Context, arg SearchDishesByNameParams) ([]Dish, error)
-	// 全局菜品搜索（跨商户），只搜索已批准商户的上架菜品
+	// 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
 	SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]Dish, error)
 	SearchIngredients(ctx context.Context, arg SearchIngredientsParams) ([]Ingredient, error)
 	SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]Merchant, error)

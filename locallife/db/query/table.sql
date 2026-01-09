@@ -146,7 +146,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.id = $1 
   AND t.table_type = 'room'
-  AND m.status = 'approved';
+  AND m.status = 'active';
 
 -- name: ListMerchantRoomsForCustomer :many
 -- 获取商户的包间列表（含主图、月销量）供顾客查看
@@ -252,7 +252,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   -- 按区域筛选（可选）
   AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
   -- 按人数筛选
@@ -295,7 +295,7 @@ INNER JOIN merchants m ON t.merchant_id = m.id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   AND mt.tag_id = sqlc.arg(tag_id)
   -- 按区域筛选（可选）
   AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
@@ -320,7 +320,7 @@ SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
@@ -366,7 +366,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   -- 按区域筛选
   AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
   -- 按人数筛选
@@ -384,7 +384,7 @@ SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
@@ -413,7 +413,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   -- 按区域筛选（可选）
   AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
   -- 按人数筛选

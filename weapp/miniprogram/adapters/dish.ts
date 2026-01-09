@@ -55,11 +55,13 @@ export class DishAdapter {
       discountRule: '',
       tags: dto.tags || [],
       isPremade: dto.tags?.includes('预制') || false,
+      merchantIsOpen: dto.merchant_is_open ?? true, // 商户营业状态，默认营业
       distance_meters: dto.distance || 0,
       member_price: dto.member_price,
       is_available: dto.is_available
     }
   }
+
 
   // 兼容性：保留旧方法名
   static fromFeedDTO = DishAdapter.fromSummaryDTO

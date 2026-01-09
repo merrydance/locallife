@@ -47,6 +47,7 @@ export interface DishSummary {
     merchant_latitude: number                    // 商户纬度
     merchant_longitude: number                   // 商户经度
     merchant_region_id: number                   // 商户区域ID
+    merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
     estimated_delivery_time?: number             // 预估配送时间（秒）
     estimated_delivery_fee?: number              // 预估配送费（分）
@@ -508,6 +509,7 @@ export interface ComboSummary {
     merchant_latitude: number                    // 商户纬度
     merchant_longitude: number                   // 商户经度
     merchant_region_id: number                   // 商户区域ID
+    merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
     estimated_delivery_fee?: number              // 预估配送费（分）
 }

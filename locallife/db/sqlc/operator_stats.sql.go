@@ -30,7 +30,7 @@ LEFT JOIN profit_sharing_orders ps ON ps.merchant_id = m.id
     AND ps.created_at <= $3
     AND ps.status = 'finished'  -- 只统计分账成功的订单
 WHERE m.region_id = $1
-  AND m.status = 'approved'
+  AND m.status = 'active'
 GROUP BY m.id, m.name
 ORDER BY total_sales DESC
 LIMIT $4 OFFSET $5
@@ -233,7 +233,7 @@ SELECT
     COALESCE(SUM(ps.total_amount), 0)::bigint AS total_gmv,
     COALESCE(SUM(ps.platform_commission), 0)::bigint AS total_commission
 FROM regions r
-LEFT JOIN merchants m ON m.region_id = r.id AND m.status = 'approved'
+LEFT JOIN merchants m ON m.region_id = r.id AND m.status = 'active'
 LEFT JOIN profit_sharing_orders ps ON ps.merchant_id = m.id 
     AND ps.created_at >= $2
     AND ps.created_at <= $3

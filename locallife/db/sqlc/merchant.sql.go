@@ -124,7 +124,7 @@ func (q *Queries) CountMerchantsByRegionWithStatus(ctx context.Context, arg Coun
 
 const countSearchMerchants = `-- name: CountSearchMerchants :one
 SELECT COUNT(*) FROM merchants
-WHERE status = 'approved'
+WHERE status = 'active'
   AND deleted_at IS NULL
   AND name ILIKE '%' || $1 || '%'
 `
@@ -789,7 +789,7 @@ SELECT
     status
 FROM merchants
 WHERE id = ANY($1::bigint[])
-  AND status = 'approved'
+  AND status = 'active'
 `
 
 type GetMerchantsByIDsRow struct {
@@ -844,6 +844,7 @@ SELECT
     m.longitude,
     m.region_id,
     m.status,
+    m.is_open,
     COALESCE(mp.trust_score, 500) AS trust_score,
     COALESCE(
         (SELECT COUNT(*)
@@ -856,7 +857,7 @@ SELECT
 FROM merchants m
 LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE m.id = ANY($1::bigint[])
-  AND m.status = 'approved'
+  AND m.status = 'active'
 `
 
 type GetMerchantsWithStatsByIDsRow struct {
@@ -869,6 +870,7 @@ type GetMerchantsWithStatsByIDsRow struct {
 	Longitude     pgtype.Numeric `json:"longitude"`
 	RegionID      int64          `json:"region_id"`
 	Status        string         `json:"status"`
+	IsOpen        bool           `json:"is_open"`
 	TrustScore    int16          `json:"trust_score"`
 	MonthlyOrders int32          `json:"monthly_orders"`
 }
@@ -893,6 +895,7 @@ func (q *Queries) GetMerchantsWithStatsByIDs(ctx context.Context, dollar_1 []int
 			&i.Longitude,
 			&i.RegionID,
 			&i.Status,
+			&i.IsOpen,
 			&i.TrustScore,
 			&i.MonthlyOrders,
 		); err != nil {
@@ -921,7 +924,7 @@ SELECT
 FROM merchants m
 LEFT JOIN orders o ON m.id = o.merchant_id 
   AND o.status IN ('completed')  -- 以已完成订单作为销量口径
-WHERE m.status = 'approved'
+WHERE m.status = 'active'
 GROUP BY m.id
 ORDER BY 
     total_orders DESC,  -- 销量优先：回头客多的商户排前面
@@ -1544,7 +1547,7 @@ const listMerchantsByTag = `-- name: ListMerchantsByTag :many
 SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at FROM merchants m
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE mt.tag_id = $1
-  AND m.status = 'approved'
+  AND m.status = 'active'
 ORDER BY m.created_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -1691,7 +1694,7 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 
 const listOpenMerchants = `-- name: ListOpenMerchants :many
 SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
-WHERE status = 'approved'
+WHERE status = 'active'
   AND is_open = true
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -1764,7 +1767,7 @@ func (q *Queries) RemoveMerchantTag(ctx context.Context, arg RemoveMerchantTagPa
 
 const searchMerchants = `-- name: SearchMerchants :many
 SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
-WHERE status = 'approved'
+WHERE status = 'active'
   AND deleted_at IS NULL
   AND name ILIKE '%' || $1 || '%'
 ORDER BY created_at DESC

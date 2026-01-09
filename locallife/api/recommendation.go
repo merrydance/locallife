@@ -140,6 +140,7 @@ type dishSummary struct {
 	MerchantLatitude  float64 `json:"merchant_latitude"`
 	MerchantLongitude float64 `json:"merchant_longitude"`
 	MerchantRegionID  int64   `json:"merchant_region_id"` // 用于运费计算
+	MerchantIsOpen    bool    `json:"merchant_is_open"`   // 商户是否营业
 
 	// 销量与标签
 	MonthlySales int32    `json:"monthly_sales"` // 近30天销量
@@ -329,9 +330,11 @@ func (server *Server) recommendDishes(ctx *gin.Context) {
 					MerchantLatitude:  numericToFloat64(d.MerchantLatitude),
 					MerchantLongitude: numericToFloat64(d.MerchantLongitude),
 					MerchantRegionID:  d.MerchantRegionID,
+					MerchantIsOpen:    d.MerchantIsOpen,
 					MonthlySales:      d.MonthlySales,
 					Tags:              tags,
 				}
+
 			}
 
 			// 如果用户提供了位置，计算距离和运费
@@ -370,6 +373,7 @@ type comboSummary struct {
 	MerchantLatitude  float64 `json:"merchant_latitude"`
 	MerchantLongitude float64 `json:"merchant_longitude"`
 	MerchantRegionID  int64   `json:"merchant_region_id"`
+	MerchantIsOpen    bool    `json:"merchant_is_open"` // 商户是否营业
 
 	// 销量与标签
 	MonthlySales int32    `json:"monthly_sales"` // 近30天销量
@@ -554,9 +558,11 @@ func (server *Server) recommendCombos(ctx *gin.Context) {
 					MerchantLatitude:  numericToFloat64(c.MerchantLatitude),
 					MerchantLongitude: numericToFloat64(c.MerchantLongitude),
 					MerchantRegionID:  c.MerchantRegionID,
+					MerchantIsOpen:    c.MerchantIsOpen,
 					MonthlySales:      c.MonthlySales,
 					Tags:              tags,
 				}
+
 			}
 
 			// 如果用户提供了位置，计算距离和运费
@@ -585,6 +591,7 @@ type merchantSummary struct {
 	Latitude             float64  `json:"latitude"`
 	Longitude            float64  `json:"longitude"`
 	RegionID             int64    `json:"region_id"`                        // 区域ID，用于运费计算
+	IsOpen               bool     `json:"is_open"`                          // 是否营业
 	MonthlySales         int32    `json:"monthly_sales"`                    // 近30天订单量
 	Tags                 []string `json:"tags"`                             // 商户标签
 	Distance             *int     `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
@@ -692,9 +699,11 @@ func (server *Server) recommendMerchants(ctx *gin.Context) {
 					Latitude:     numericToFloat64(m.Latitude),
 					Longitude:    numericToFloat64(m.Longitude),
 					RegionID:     m.RegionID,
+					IsOpen:       m.IsOpen,
 					MonthlySales: m.MonthlyOrders,
 					Tags:         tags,
 				}
+
 			}
 
 			// 如果用户提供了位置，计算距离和运费

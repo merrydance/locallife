@@ -97,7 +97,7 @@ SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   AND ($1::BIGINT IS NULL OR m.region_id = $1)
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
@@ -129,7 +129,7 @@ SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   AND ($1::BIGINT IS NULL OR m.region_id = $1)
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
@@ -293,7 +293,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   -- 按区域筛选
   AND ($1::BIGINT IS NULL OR m.region_id = $1)
   -- 按人数筛选
@@ -428,7 +428,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.id = $1 
   AND t.table_type = 'room'
-  AND m.status = 'approved'
+  AND m.status = 'active'
 `
 
 type GetRoomDetailForCustomerRow struct {
@@ -980,7 +980,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   -- 按区域筛选（可选）
   AND ($1::BIGINT IS NULL OR m.region_id = $1)
   -- 按人数筛选
@@ -1100,7 +1100,7 @@ INNER JOIN merchants m ON t.merchant_id = m.id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   AND mt.tag_id = $1
   -- 按区域筛选（可选）
   AND ($2::BIGINT IS NULL OR m.region_id = $2)
@@ -1217,7 +1217,7 @@ FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
-  AND m.status = 'approved'
+  AND m.status = 'active'
   -- 按区域筛选（可选）
   AND ($1::BIGINT IS NULL OR m.region_id = $1)
   -- 按人数筛选

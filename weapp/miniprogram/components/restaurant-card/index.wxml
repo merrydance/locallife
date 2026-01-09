@@ -2,10 +2,12 @@
   <t-image class="restaurant-image" src="{{restaurant.imageUrl}}" mode="aspectFill" lazy />
   
   <view class="restaurant-info">
-    <!-- 第1行: 餐厅名 -->
+    <!-- 第1行: 餐厅名 + 休息中标签 -->
     <view class="row-1">
       <text class="restaurant-name">{{restaurant.name}}</text>
+      <t-tag wx:if="{{restaurant.isOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
     </view>
+
     
     <!-- 第2行: 菜系 | 人均 | 距离 -->
     <view class="row-2">

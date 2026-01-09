@@ -220,6 +220,7 @@ SELECT
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
     COALESCE(
         (SELECT SUM(oi.quantity)
          FROM order_items oi 
@@ -234,7 +235,7 @@ JOIN merchants m ON m.id = cs.merchant_id
 WHERE cs.id = ANY($1::bigint[])
   AND cs.deleted_at IS NULL
   AND cs.is_online = true
-  AND m.status = 'approved';
+  AND m.status = 'active';
 
 -- name: ListOnlineCombosByMerchant :many
 -- 获取商户上架套餐（用于扫码点餐菜单展示）
@@ -258,7 +259,7 @@ ORDER BY created_at DESC;
 SELECT cs.id FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND cs.deleted_at IS NULL
   AND cs.is_online = true

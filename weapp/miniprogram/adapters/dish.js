@@ -36,7 +36,7 @@ class DishAdapter {
      * 将菜品摘要DTO转换为视图模型 - 基于swagger api.dishSummary (用于Feed流)
      */
     static fromSummaryDTO(dto) {
-        var _a;
+        var _a, _b;
         return {
             id: dto.id,
             name: dto.name,
@@ -55,6 +55,7 @@ class DishAdapter {
             discountRule: '',
             tags: dto.tags || [],
             isPremade: ((_a = dto.tags) === null || _a === void 0 ? void 0 : _a.includes('预制')) || false,
+            merchantIsOpen: (_b = dto.merchant_is_open) !== null && _b !== void 0 ? _b : true, // 商户营业状态，默认营业
             distance_meters: dto.distance || 0,
             member_price: dto.member_price,
             is_available: dto.is_available

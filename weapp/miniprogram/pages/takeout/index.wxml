@@ -87,10 +87,12 @@
       <view wx:for="{{packages}}" wx:key="id" class="package-card" bindtap="onPackageTap" data-id="{{item.id}}">
         <t-image class="package-image" src="{{item.imageUrl}}" mode="aspectFill" lazy />
         <view class="package-info">
-          <!-- 第1行: 店名·套餐名 -->
+          <!-- 第1行: 店名·套餐名 + 休息中标签 -->
           <view class="row-1">
             <text class="shop-dish-name">{{item.merchantName}}·{{item.name}}</text>
+            <t-tag wx:if="{{item.merchantIsOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
           </view>
+
           <!-- 第2行: 价格 | 销量 -->
           <view class="row-2">
             <text class="price">{{item.priceDisplay}}</text>

@@ -142,7 +142,7 @@ const countSearchDishesGlobal = `-- name: CountSearchDishesGlobal :one
 SELECT COUNT(*) FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
@@ -907,6 +907,7 @@ SELECT
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
     COALESCE(
         (SELECT SUM(oi.quantity)
          FROM order_items oi 
@@ -921,7 +922,7 @@ JOIN merchants m ON m.id = d.merchant_id
 WHERE d.id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
   AND d.is_online = true
-  AND m.status = 'approved'
+  AND m.status = 'active'
 `
 
 type GetDishesWithMerchantByIDsRow struct {
@@ -939,6 +940,7 @@ type GetDishesWithMerchantByIDsRow struct {
 	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
 	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
 	MerchantRegionID  int64          `json:"merchant_region_id"`
+	MerchantIsOpen    bool           `json:"merchant_is_open"`
 	MonthlySales      int32          `json:"monthly_sales"`
 }
 
@@ -968,6 +970,7 @@ func (q *Queries) GetDishesWithMerchantByIDs(ctx context.Context, dollar_1 []int
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
 			&i.MerchantRegionID,
+			&i.MerchantIsOpen,
 			&i.MonthlySales,
 		); err != nil {
 			return nil, err
@@ -1596,7 +1599,7 @@ const searchDishIDsGlobal = `-- name: SearchDishIDsGlobal :many
 SELECT d.id FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
@@ -1688,7 +1691,7 @@ const searchDishesGlobal = `-- name: SearchDishesGlobal :many
 SELECT d.id, d.merchant_id, d.category_id, d.name, d.description, d.image_url, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
@@ -1703,7 +1706,7 @@ type SearchDishesGlobalParams struct {
 	Offset  int32       `json:"offset"`
 }
 
-// 全局菜品搜索（跨商户），只搜索已批准商户的上架菜品
+// 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
 func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]Dish, error) {
 	rows, err := q.db.Query(ctx, searchDishesGlobal, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {

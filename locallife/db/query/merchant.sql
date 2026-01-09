@@ -158,7 +158,7 @@ UPDATE merchants SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SearchMerchants :many
 SELECT * FROM merchants
-WHERE status = 'approved'
+WHERE status = 'active'
   AND deleted_at IS NULL
   AND name ILIKE '%' || $1 || '%'
 ORDER BY created_at DESC
@@ -166,7 +166,7 @@ LIMIT $2 OFFSET $3;
 
 -- name: CountSearchMerchants :one
 SELECT COUNT(*) FROM merchants
-WHERE status = 'approved'
+WHERE status = 'active'
   AND deleted_at IS NULL
   AND name ILIKE '%' || $1 || '%';
 
@@ -194,7 +194,7 @@ ORDER BY t.name;
 SELECT m.* FROM merchants m
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE mt.tag_id = $1
-  AND m.status = 'approved'
+  AND m.status = 'active'
 ORDER BY m.created_at DESC
 LIMIT $2 OFFSET $3;
 
@@ -313,7 +313,7 @@ SELECT
 FROM merchants m
 LEFT JOIN orders o ON m.id = o.merchant_id 
   AND o.status IN ('completed')  -- 以已完成订单作为销量口径
-WHERE m.status = 'approved'
+WHERE m.status = 'active'
 GROUP BY m.id
 ORDER BY 
     total_orders DESC,  -- 销量优先：回头客多的商户排前面
@@ -333,7 +333,7 @@ SELECT
     status
 FROM merchants
 WHERE id = ANY($1::bigint[])
-  AND status = 'approved';
+  AND status = 'active';
 
 -- name: GetMerchantsWithStatsByIDs :many
 -- 批量获取商户详情及统计数据（用于推荐流展示）
@@ -347,6 +347,7 @@ SELECT
     m.longitude,
     m.region_id,
     m.status,
+    m.is_open,
     COALESCE(mp.trust_score, 500) AS trust_score,
     COALESCE(
         (SELECT COUNT(*)
@@ -359,7 +360,7 @@ SELECT
 FROM merchants m
 LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE m.id = ANY($1::bigint[])
-  AND m.status = 'approved';
+  AND m.status = 'active';
 
 -- ==================== 商户营业状态管理 ====================
 
@@ -381,7 +382,7 @@ WHERE id = $1;
 -- name: ListOpenMerchants :many
 -- 获取营业中的商户列表
 SELECT * FROM merchants
-WHERE status = 'approved'
+WHERE status = 'active'
   AND is_open = true
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;

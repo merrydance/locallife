@@ -335,6 +335,7 @@ SELECT
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
     COALESCE(
         (SELECT SUM(oi.quantity)
          FROM order_items oi 
@@ -349,7 +350,7 @@ JOIN merchants m ON m.id = cs.merchant_id
 WHERE cs.id = ANY($1::bigint[])
   AND cs.deleted_at IS NULL
   AND cs.is_online = true
-  AND m.status = 'approved'
+  AND m.status = 'active'
 `
 
 type GetCombosWithMerchantByIDsRow struct {
@@ -366,6 +367,7 @@ type GetCombosWithMerchantByIDsRow struct {
 	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
 	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
 	MerchantRegionID  int64          `json:"merchant_region_id"`
+	MerchantIsOpen    bool           `json:"merchant_is_open"`
 	MonthlySales      int32          `json:"monthly_sales"`
 }
 
@@ -394,6 +396,7 @@ func (q *Queries) GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []int
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
 			&i.MerchantRegionID,
+			&i.MerchantIsOpen,
 			&i.MonthlySales,
 		); err != nil {
 			return nil, err
@@ -743,7 +746,7 @@ const searchComboIDsGlobal = `-- name: SearchComboIDsGlobal :many
 SELECT cs.id FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND cs.deleted_at IS NULL
   AND cs.is_online = true

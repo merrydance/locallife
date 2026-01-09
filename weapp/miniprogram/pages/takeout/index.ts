@@ -513,11 +513,13 @@ Page({
         avgPriceDisplay: '人均未知',
         distance: DishAdapter.formatDistance(m.distance),
         address: m.address,
-        businessHoursDisplay: '营业中',
+        businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
+        isOpen: m.is_open ?? true, // 商户营业状态
         availableRooms: 0,
         availableRoomsBadge: '',
         tags: m.tags ? m.tags.slice(0, 3) : []
       }))
+
 
       if (reset) {
         this.setData({
@@ -579,8 +581,10 @@ Page({
           ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
           : '',
         tags: combo.tags || [],
-        is_online: true  // 推荐API只返回上架套餐
+        is_online: true,  // 推荐API只返回上架套餐
+        merchantIsOpen: combo.merchant_is_open ?? true // 商户营业状态
       }))
+
 
       if (reset) {
         this.setData({

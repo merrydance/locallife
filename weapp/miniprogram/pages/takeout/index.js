@@ -472,20 +472,24 @@ Page({
                 // Map for enrichment (if lat/lng available)
                 const merchantsForEnrich = result.merchants.map((m) => (Object.assign(Object.assign({}, m), { merchant_latitude: m.latitude, merchant_longitude: m.longitude })));
                 const enrichedMerchants = yield (0, geo_1.enrichMerchantsWithDistance)(merchantsForEnrich);
-                const restaurantViewModels = enrichedMerchants.map((m) => ({
-                    id: m.id,
-                    name: m.name,
-                    imageUrl: m.logo_url,
-                    cuisineType: m.tags ? m.tags.slice(0, 2) : [],
-                    avgPrice: 0,
-                    avgPriceDisplay: '人均未知',
-                    distance: dish_1.DishAdapter.formatDistance(m.distance),
-                    address: m.address,
-                    businessHoursDisplay: '营业中',
-                    availableRooms: 0,
-                    availableRoomsBadge: '',
-                    tags: m.tags ? m.tags.slice(0, 3) : []
-                }));
+                const restaurantViewModels = enrichedMerchants.map((m) => {
+                    var _a;
+                    return ({
+                        id: m.id,
+                        name: m.name,
+                        imageUrl: m.logo_url,
+                        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
+                        avgPrice: 0,
+                        avgPriceDisplay: '人均未知',
+                        distance: dish_1.DishAdapter.formatDistance(m.distance),
+                        address: m.address,
+                        businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
+                        isOpen: (_a = m.is_open) !== null && _a !== void 0 ? _a : true, // 商户营业状态
+                        availableRooms: 0,
+                        availableRoomsBadge: '',
+                        tags: m.tags ? m.tags.slice(0, 3) : []
+                    });
+                });
                 if (reset) {
                     this.setData({
                         restaurants: restaurantViewModels,
@@ -526,27 +530,31 @@ Page({
                     user_latitude: app.globalData.latitude || undefined,
                     user_longitude: app.globalData.longitude || undefined
                 });
-                const packageViewModels = result.combos.map((combo) => ({
-                    id: combo.id,
-                    name: combo.name,
-                    merchantId: combo.merchant_id,
-                    merchantName: combo.merchant_name || '',
-                    imageUrl: (0, image_1.getPublicImageUrl)(combo.image_url) || '/assets/placeholder_food.png',
-                    price: combo.combo_price,
-                    priceDisplay: `¥${(combo.combo_price / 100).toFixed(2)}`,
-                    originalPrice: combo.original_price,
-                    originalPriceDisplay: `¥${(combo.original_price / 100).toFixed(2)}`,
-                    savingsPercent: Math.round(combo.savings_percent || 0),
-                    monthlySales: combo.monthly_sales || 0,
-                    salesBadge: `月售${combo.monthly_sales || 0}`,
-                    distance: dish_1.DishAdapter.formatDistance(combo.distance),
-                    deliveryFee: combo.estimated_delivery_fee,
-                    deliveryFeeDisplay: combo.estimated_delivery_fee
-                        ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
-                        : '',
-                    tags: combo.tags || [],
-                    is_online: true // 推荐API只返回上架套餐
-                }));
+                const packageViewModels = result.combos.map((combo) => {
+                    var _a;
+                    return ({
+                        id: combo.id,
+                        name: combo.name,
+                        merchantId: combo.merchant_id,
+                        merchantName: combo.merchant_name || '',
+                        imageUrl: (0, image_1.getPublicImageUrl)(combo.image_url) || '/assets/placeholder_food.png',
+                        price: combo.combo_price,
+                        priceDisplay: `¥${(combo.combo_price / 100).toFixed(2)}`,
+                        originalPrice: combo.original_price,
+                        originalPriceDisplay: `¥${(combo.original_price / 100).toFixed(2)}`,
+                        savingsPercent: Math.round(combo.savings_percent || 0),
+                        monthlySales: combo.monthly_sales || 0,
+                        salesBadge: `月售${combo.monthly_sales || 0}`,
+                        distance: dish_1.DishAdapter.formatDistance(combo.distance),
+                        deliveryFee: combo.estimated_delivery_fee,
+                        deliveryFeeDisplay: combo.estimated_delivery_fee
+                            ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
+                            : '',
+                        tags: combo.tags || [],
+                        is_online: true, // 推荐API只返回上架套餐
+                        merchantIsOpen: (_a = combo.merchant_is_open) !== null && _a !== void 0 ? _a : true // 商户营业状态
+                    });
+                });
                 if (reset) {
                     this.setData({
                         packages: packageViewModels,

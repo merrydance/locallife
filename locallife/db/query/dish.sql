@@ -144,11 +144,11 @@ WHERE
   AND is_online = true;
 
 -- name: SearchDishesGlobal :many
--- 全局菜品搜索（跨商户），只搜索已批准商户的上架菜品
+-- 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
 SELECT d.* FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
@@ -161,7 +161,7 @@ LIMIT $2 OFFSET $3;
 SELECT COUNT(*) FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
@@ -172,7 +172,7 @@ WHERE
 SELECT d.id FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
-  m.status = 'approved'
+  m.status = 'active'
   AND m.deleted_at IS NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
@@ -549,6 +549,7 @@ SELECT
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
+    m.is_open AS merchant_is_open,
     COALESCE(
         (SELECT SUM(oi.quantity)
          FROM order_items oi 
@@ -563,7 +564,7 @@ JOIN merchants m ON m.id = d.merchant_id
 WHERE d.id = ANY($1::bigint[])
   AND d.deleted_at IS NULL
   AND d.is_online = true
-  AND m.status = 'approved';
+  AND m.status = 'active';
 
 -- name: GetDishesByIDsAll :many
 -- 批量获取菜品（不过滤上下架状态，用于权限验证等）

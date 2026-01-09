@@ -20,7 +20,7 @@ SELECT
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_sales
 FROM tags t
 JOIN merchant_tags mt ON mt.tag_id = t.id
-JOIN merchants m ON m.id = mt.merchant_id AND m.status = 'approved'
+JOIN merchants m ON m.id = mt.merchant_id AND m.status = 'active'
 LEFT JOIN orders o ON o.merchant_id = m.id 
     AND o.created_at >= $1 AND o.created_at <= $2
     AND o.status IN ('delivered', 'completed')
@@ -167,7 +167,7 @@ JOIN regions r ON r.id = m.region_id
 LEFT JOIN orders o ON o.merchant_id = m.id 
     AND o.created_at >= $1 AND o.created_at <= $2
     AND o.status IN ('delivered', 'completed')
-WHERE m.status = 'approved'
+WHERE m.status = 'active'
 GROUP BY m.id, m.name, m.region_id, r.name
 ORDER BY total_sales DESC
 LIMIT $3 OFFSET $4
@@ -381,7 +381,7 @@ SELECT
     COALESCE(AVG(o.final_amount), 0)::bigint AS avg_order_amount,
     COUNT(DISTINCT o.user_id)::int AS active_users
 FROM regions r
-LEFT JOIN merchants m ON m.region_id = r.id AND m.status = 'approved'
+LEFT JOIN merchants m ON m.region_id = r.id AND m.status = 'active'
 LEFT JOIN orders o ON o.merchant_id = m.id 
     AND o.created_at >= $1 AND o.created_at <= $2
     AND o.status IN ('delivered', 'completed')
