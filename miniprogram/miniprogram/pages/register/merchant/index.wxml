@@ -30,6 +30,14 @@
 
     <!-- Step 1: 证照上传 -->
     <view class="step-content" wx:if="{{currentStep === 1}}">
+        <view class="section-header">选择入驻身份</view>
+        <view class="role-selection">
+            <t-radio-group value="{{formData.onboardingRole}}" bind:change="onRoleChange">
+                <t-radio value="owner" label="店主 (法人/拥有者)" />
+                <t-radio value="manager" label="店长 (受邀管理者)" />
+            </t-radio-group>
+        </view>
+
         <view class="section-header">证照上传 (自动识别)</view>
         <view class="upload-group">
             <view class="upload-item">
@@ -49,6 +57,41 @@
             <view class="upload-item">
                 <view class="upload-label">法人身份证反面 (必传)</view>
                 <document-uploader type="id-back" title="上传国徽页" value="{{idCardBackImages.length > 0 ? idCardBackImages[0].url : ''}}" rawUrl="{{idCardBackImages.length > 0 ? idCardBackImages[0].rawUrl : ''}}" bind:change="onIdCardBackUpload" bind:remove="onIdCardBackRemove" bind:imageerror="onImageError" />
+            </view>
+        </view>
+
+        <!-- 拍摄要求引导 -->
+        <view class="onboarding-guide">
+            <view class="guide-title">
+                <view class="guide-line"></view>
+                <text>拍摄照片要求</text>
+                <view class="guide-line"></view>
+            </view>
+            <view class="guide-list">
+                <view class="guide-item">
+                    <view class="guide-img-box correct">
+                        <t-icon name="check-circle-filled" size="32rpx" color="#4CAF50" class="guide-status-icon" />
+                    </view>
+                    <text>标准拍摄</text>
+                </view>
+                <view class="guide-item">
+                    <view class="guide-img-box error missing">
+                        <t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" />
+                    </view>
+                    <text>边框缺失</text>
+                </view>
+                <view class="guide-item">
+                    <view class="guide-img-box error blur">
+                        <t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" />
+                    </view>
+                    <text>照片模糊</text>
+                </view>
+                <view class="guide-item">
+                    <view class="guide-img-box error glare">
+                        <t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" />
+                    </view>
+                    <text>闪光强烈</text>
+                </view>
             </view>
         </view>
     </view>

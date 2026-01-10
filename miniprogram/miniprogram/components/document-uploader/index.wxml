@@ -24,27 +24,28 @@
     <view class="placeholder-state" wx:else>
       <!-- ID Front -->
       <view class="icon-wrapper" wx:if="{{type === 'id-front'}}">
-        <t-icon name="user" size="80rpx" color="#B5C4D8" />
-        <div class="icon-deco-lines"></div>
+        <t-icon name="camera" size="64rpx" color="#4A89FF" />
       </view>
 
       <!-- ID Back -->
       <view class="icon-wrapper" wx:elif="{{type === 'id-back'}}">
-         <t-icon name="certificate" size="80rpx" color="#B5C4D8" />
+         <t-icon name="camera" size="64rpx" color="#4A89FF" />
       </view>
 
        <!-- License / Permit -->
       <view class="icon-wrapper" wx:elif="{{type === 'license' || type === 'permit'}}">
-         <t-icon name="file-certificate" size="80rpx" color="#B5C4D8" />
+         <t-icon name="file-certificate" size="64rpx" color="#4A89FF" />
       </view>
 
       <!-- Shop -->
       <view class="icon-wrapper" wx:elif="{{type === 'shop'}}">
-         <t-icon name="shop" size="80rpx" color="#B5C4D8" />
+         <t-icon name="shop" size="64rpx" color="#4A89FF" />
       </view>
 
       <!-- Default -->
-      <t-icon wx:else name="add" size="64rpx" color="#B5C4D8" />
+      <view class="icon-wrapper" wx:else>
+        <t-icon name="add" size="64rpx" color="#4A89FF" />
+      </view>
 
       <text class="placeholder-text">{{title || '点击上传'}}</text>
     </view>

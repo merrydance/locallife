@@ -25,7 +25,7 @@ Page({
     restaurants: [] as any[],
     packages: [] as any[],
     categories: [] as Category[],
-    activeCategoryId: '1',
+    activeCategoryId: '',
     cartTotalCount: 0,
     cartTotalPrice: 0,
     address: '点此获取位置',
@@ -353,9 +353,9 @@ Page({
       // 后备：硬编码标签
       const categories: Category[] = [
         { id: '', name: '全部' },
-        { id: '1', name: '热销' },
-        { id: '2', name: '主食' },
-        { id: '3', name: '小吃' }
+        { id: 'hot', name: '热销' },
+        { id: 'staple', name: '主食' },
+        { id: 'snack', name: '小吃' }
       ]
       this.setData({ categories, activeCategoryId: '' })
     }
@@ -409,7 +409,7 @@ Page({
       } else {
         // 2. 没有缓存则请求当前页
         // 获取选中的标签ID用于过滤（空字符串表示"全部"，不传 tag_id）
-        const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null
+        const tagId = this.data.activeCategoryId || null
         const params: any = {
           user_latitude: app.globalData.latitude || undefined,
           user_longitude: app.globalData.longitude || undefined,
@@ -417,7 +417,7 @@ Page({
           page: currentPage
         }
         // 只有选择了具体标签时才传 tag_id
-        if (tagId && !isNaN(tagId)) {
+        if (tagId) {
           params.tag_id = tagId
         }
         const result = await searchDishes(params)

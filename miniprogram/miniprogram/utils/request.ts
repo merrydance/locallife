@@ -29,33 +29,59 @@ const cache = new CacheManager()
 export function uploadFile<T = any>(filePath: string, url: string = '/upload/image', name: string = 'file', formData: any = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const doUpload = () => {
+      // 适配 Supabase Edge Function: image-service
+      const isImageUpload = url.includes('/images/upload') || url.includes('/upload/image') || url.includes('/ocr')
+      const targetUrl = isImageUpload 
+        ? `${API_CONFIG.EDGE_BASE_URL}/image-service` 
+        : `${API_BASE}${url}`
+
+      // 适配 image-service 参数
+      const finalFormData = { ...formData }
+      if (isImageUpload) {
+        if (!finalFormData.bucket) {
+          const category = (formData.category || '').toLowerCase()
+          const isPrivate = category.includes('idcard') || category.includes('id_card')
+          finalFormData.bucket = isPrivate ? 'identity' : 'assets'
+        }
+        if (!finalFormData.path) {
+          const type = url.includes('dishes') ? 'dishes' : (formData.category || 'misc')
+          const timestamp = Date.now()
+          finalFormData.path = `${type}/${timestamp}`
+        }
+      }
+
       wx.uploadFile({
-        url: `${API_BASE}${url}`,
+        url: targetUrl,
         filePath,
-        name,
+        name: isImageUpload ? 'file' : name, // Edge Function uses 'file' field
         header: {
           'Authorization': `Bearer ${getToken()}`
         },
-        formData: formData,
+        formData: finalFormData,
         success: (res) => {
-          // wx.uploadFile returns data as string
           let data: any
           try {
             data = JSON.parse(res.data)
           } catch (e) {
-            // If not JSON, probably error page or simple string
             data = res.data
           }
 
           if (res.statusCode === 200 || res.statusCode === 201) {
-            // Verify code if it exists in envelope
+            // 兼容性适配：如果是 Edge Function 响应，映射回旧版 DTO 格式
+            if (isImageUpload && data.url) {
+              const compatibleResult = {
+                image_url: data.url,
+                url: data.url,
+                path: data.path
+              }
+              logger.debug('文件上传(Edge)成功', compatibleResult, 'uploadFile')
+              resolve(compatibleResult as any as T)
+              return
+            }
+
             if (data && typeof data === 'object' && data.code !== undefined) {
               if (data.code === 0) {
                 logger.debug('文件上传成功', { url: url }, 'uploadFile')
-                // Return the data part as T, or the whole thing?
-                // request() returns response.data. 
-                // Existing uploadFile returned data.data.url string.
-                // To be generic, let's return data.data usually.
                 resolve(data.data as T)
               } else {
                 reject(new AppError({
@@ -65,18 +91,14 @@ export function uploadFile<T = any>(filePath: string, url: string = '/upload/ima
                 }))
               }
             } else {
-              // Legacy behavior or different format
               resolve(data as T)
             }
           } else if (res.statusCode === 401) {
-            // Token expired
             logger.warn('Token已过期(upload),尝试自动刷新', undefined, 'uploadFile')
             performTokenRefresh(true).then(() => {
-              // Retry upload
               doUpload()
             }).catch((err) => {
               clearToken()
-              // User requested silent login, no redirect.
               reject(new AppError({
                 type: ErrorType.AUTH,
                 message: '登录已过期且刷新失败',
@@ -84,12 +106,9 @@ export function uploadFile<T = any>(filePath: string, url: string = '/upload/ima
               }))
             })
           } else {
-            // 解析后端返回的错误信息
             const errMsg = (data && data.message) || (data && data.error) || '文件上传失败'
             const userMsg = (data && data.userMessage) || '文件上传失败'
-
             logger.warn(`上传失败 HTTP ${res.statusCode}`, { url: url, response: data }, 'uploadFile')
-
             reject(new AppError({
               type: ErrorType.NETWORK,
               message: `HTTP ${res.statusCode}: ${errMsg}`,
@@ -104,7 +123,6 @@ export function uploadFile<T = any>(filePath: string, url: string = '/upload/ima
       })
     }
 
-    // Check token expiry before starting (optional optimization)
     if (isTokenNearExpiry(60000)) {
       refreshTokenOnce().then(doUpload).catch(() => doUpload())
     } else {

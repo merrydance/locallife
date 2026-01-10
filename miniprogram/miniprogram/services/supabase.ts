@@ -8,11 +8,15 @@ interface SupabaseRequestOptions {
     headers?: Record<string, string>
 }
 
+import { getToken } from '../utils/auth'
+
 /**
  * Native Supabase Request Wrapper
- * Replaces supabase-wechat-stable to avoid compatibility issues.
  */
 export async function supabaseRequest<T = unknown>(options: SupabaseRequestOptions): Promise<{ data: T | null; error: Error | { message: string } | null }> {
+    const token = getToken()
+    const authHeader = token ? `Bearer ${token}` : `Bearer ${SUPABASE_KEY}`
+
     return new Promise((resolve) => {
         wx.request({
             url: `${SUPABASE_URL}${options.url}`,
@@ -21,7 +25,7 @@ export async function supabaseRequest<T = unknown>(options: SupabaseRequestOptio
             header: {
                 'Content-Type': 'application/json',
                 'apikey': SUPABASE_KEY,
-                'Authorization': options.headers?.['Authorization'] || `Bearer ${SUPABASE_KEY}`,
+                'Authorization': options.headers?.['Authorization'] || authHeader,
                 ...options.headers
             },
             success: (res) => {
@@ -38,15 +42,14 @@ export async function supabaseRequest<T = unknown>(options: SupabaseRequestOptio
     })
 }
 
-interface PostgrestFilterBuilder<T> {
+interface PostgrestFilterBuilder<T> extends PromiseLike<{ data: T[] | null; error: Error | { message: string } | null }> {
   eq(column: string, value: string | number | boolean): PostgrestFilterBuilder<T>
   order(column: string, options?: { ascending?: boolean }): PostgrestFilterBuilder<T>
-  then(resolve: (result: { data: T[] | null; error: Error | { message: string } | null }) => void): void
+  single(): Promise<{ data: T | null; error: Error | { message: string } | null }>
 }
 
 /**
  * Lightweight Supabase Client Mock
- * Allows using standard syntax: supabase.rpc() and supabase.from().select()
  */
 export const supabase = {
     rpc: async <T = any>(name: string, params: Record<string, unknown> = {}): Promise<{ data: T | null; error: Error | { message: string } | null }> => {
@@ -58,9 +61,10 @@ export const supabase = {
     },
     from: <T = any>(table: string) => ({
         select: (columns: string = '*'): PostgrestFilterBuilder<T> => {
-            const builder = {
+            const builder: any = {
                 _filters: [] as string[],
                 _order: '' as string,
+                _single: false,
                 eq(column: string, value: string | number | boolean) {
                     this._filters.push(`${column}=eq.${value}`)
                     return this
@@ -69,17 +73,68 @@ export const supabase = {
                     this._order = `${column}.${ascending ? 'asc' : 'desc'}`
                     return this
                 },
-                then(resolve: (result: { data: T[] | null; error: Error | { message: string } | null }) => void) {
+                async single() {
+                    this._single = true
+                    const res = await (this as any)
+                    return { ...res, data: res.data ? res.data[0] : null }
+                },
+                then(onfulfilled?: any, onrejected?: any) {
                     const queryStr = builder._filters.length ? `?${builder._filters.join('&')}` : ''
                     const orderStr = builder._order ? `${builder._filters.length ? '&' : '?'}order=${builder._order}` : ''
-                    supabaseRequest<T[]>({
+                    return supabaseRequest<T[]>({
                         url: `/rest/v1/${table}${queryStr}${orderStr}`,
                         method: 'GET',
-                        headers: { 'Prefer': 'return=representation' }
-                    }).then(resolve)
+                        headers: { 
+                            'Prefer': builder._single ? 'return=representation,count=exact' : 'return=representation' 
+                        }
+                    }).then(onfulfilled, onrejected)
                 }
             }
             return builder
+        },
+        insert: async (data: Partial<T> | Partial<T>[]): Promise<{ data: T[] | null; error: any }> => {
+            return supabaseRequest<T[]>({
+                url: `/rest/v1/${table}`,
+                method: 'POST',
+                headers: { 'Prefer': 'return=representation' },
+                data
+            })
+        },
+        update: (data: Partial<T>) => ({
+            eq: async (column: string, value: string | number | boolean): Promise<{ data: T[] | null; error: any }> => {
+                return supabaseRequest<T[]>({
+                    url: `/rest/v1/${table}?${column}=eq.${value}`,
+                    method: 'PATCH',
+                    headers: { 'Prefer': 'return=representation' },
+                    data
+                })
+            }
+        }),
+        upsert: async (data: Partial<T> | Partial<T>[]): Promise<{ data: T[] | null; error: any }> => {
+            return supabaseRequest<T[]>({
+                url: `/rest/v1/${table}`,
+                method: 'POST',
+                headers: { 'Prefer': 'return=representation,resolution=merge-duplicates' },
+                data
+            })
         }
-    })
+    }),
+    storage: {
+        from: (bucket: string) => ({
+            getPublicUrl: (path: string) => ({
+                data: { publicUrl: `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}` }
+            }),
+            createSignedUrl: async (path: string, expiresIn: number = 3600): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
+                const { data, error } = await supabaseRequest<{ signedURL: string }>({
+                    url: `/storage/v1/object/sign/${bucket}/${path}`,
+                    method: 'POST',
+                    data: { expiresIn }
+                })
+                return { 
+                    data: data ? { signedUrl: `${SUPABASE_URL}${data.signedURL}` } : null,
+                    error: error as any 
+                }
+            }
+        })
+    }
 }

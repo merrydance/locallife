@@ -4,6 +4,8 @@ import { ErrorHandler } from '../../../utils/error-handler'
 import { DraftStorage } from '../../../utils/draft-storage'
 import {
   getMerchantApplication,
+  listMerchantApplications,
+  createNewMerchantApplication,
   updateMerchantBasicInfo,
   ocrBusinessLicense,
   ocrFoodPermit,
@@ -51,7 +53,9 @@ Page({
       // 结算信息
       bankName: '',
       bankAccount: '',
-      accountName: ''
+      accountName: '',
+
+      onboardingRole: 'owner' as 'owner' | 'manager'
     },
     // 图片 (包含 url 和 rawUrl)
     licenseImages: [] as Array<{ url: string, rawUrl?: string }>,
@@ -102,55 +106,107 @@ Page({
 
   async initApplication() {
     wx.showLoading({ title: '加载中...' })
-    console.log('[DEBUG] initApplication 开始')
     try {
       const res = await getMerchantApplication()
-      console.log('[DEBUG] getMerchantApplication 返回:', res)
       if (!res) {
-        logger.warn('[MerchantRegister] getMerchantApplication returned null', undefined, 'initApplication')
+        this.setData({ 
+          applicationInitialized: true,
+          currentStep: 0 
+        })
         wx.hideLoading()
-        wx.showToast({ title: '无法创建申请，请重试', icon: 'none' })
         return
       }
 
       const data = res as any
-      console.log('[DEBUG] 后端返回的原始数据:', JSON.stringify(data, null, 2))
-      logger.info('[MerchantRegister] 加载申请数据', data, 'initApplication')
+      const safeStr = (val: any): string => {
+        if (val === null || val === undefined || val === true || val === 'true') return ''
+        return String(val)
+      }
 
-      // 标记申请已初始化成功
-      this.setData({ applicationInitialized: true })
-
-      // 检查申请状态 - 如果已提交或已通过，直接跳转
+      // 检查是否已入驻 (status === 'approved')
       if (data.status === 'approved') {
-        wx.showToast({ title: '您已是商户', icon: 'success' })
-        setTimeout(() => {
-          wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
-        }, 1000)
+        wx.hideLoading()
+        wx.showModal({
+          title: '您已是入驻商户',
+          content: '您可以选择修改该餐厅资料，或者申请入驻新店。',
+          confirmText: '申请新店',
+          cancelText: '修改资料',
+          success: async (modalRes) => {
+            if (modalRes.confirm) {
+              wx.showLoading({ title: '准备中...' })
+              try {
+                await createNewMerchantApplication()
+                this.initApplication()
+              } catch (e) {
+                wx.hideLoading()
+                wx.showToast({ title: '创建失败', icon: 'error' })
+              }
+            } else {
+              wx.showLoading({ title: '加载资料...' })
+              await resetMerchantApplication()
+              this.initApplication()
+            }
+          }
+        })
         return
       }
+
       if (data.status === 'submitted') {
+        wx.hideLoading()
         wx.showToast({ title: '申请审核中', icon: 'none' })
         this.setData({ currentStep: 5 })
         this.startPollingStatus()
         return
       }
 
-      const safeStr = (val: any): string => {
-        if (val === null || val === undefined || val === true || val === 'true') return ''
-        return String(val)
+      // 处理草稿或被拒绝的状态
+      const { resolveImageURL } = require('../../../utils/image-security')
+      const safeResolve = async (url: string): Promise<string> => {
+        if (!url) return ''
+        try { return await resolveImageURL(url) } catch { return '' }
       }
 
-      // 映射 formData
+      // 并行解析图片
+      const [licenseUrl, foodLicenseUrl, idCardFrontUrl, idCardBackUrl] = await Promise.all([
+        safeResolve(data.business_license_image_url || ''),
+        safeResolve(data.food_permit_url || ''),
+        safeResolve(data.legal_person_id_front_url || ''),
+        safeResolve(data.legal_person_id_back_url || '')
+      ])
+
+      const licenseImages = licenseUrl ? [{ url: licenseUrl, rawUrl: data.business_license_image_url }] : []
+      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, rawUrl: data.food_permit_url }] : []
+      const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: data.legal_person_id_front_url }] : []
+      const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: data.legal_person_id_back_url }] : []
+
+      const storefrontImages: any[] = []
+      if (Array.isArray(data.storefront_images)) {
+        for (const url of data.storefront_images) {
+           const resolved = await safeResolve(url)
+           if (resolved) storefrontImages.push({ url: resolved, rawUrl: url })
+        }
+      }
+
+      const environmentImages: any[] = []
+      if (Array.isArray(data.environment_images)) {
+        for (const url of data.environment_images) {
+           const resolved = await safeResolve(url)
+           if (resolved) environmentImages.push({ url: resolved, rawUrl: url })
+        }
+      }
+
       const formData = {
         ...this.data.formData,
+        onboardingRole: data.onboarding_role || 'owner',
         name: safeStr(data.merchant_name),
         phone: safeStr(data.contact_phone),
         address: safeStr(data.business_address),
         addressDetail: safeStr(data.business_address_detail),
         latitude: data.latitude ? parseFloat(data.latitude) : 0,
         longitude: data.longitude ? parseFloat(data.longitude) : 0,
+        regionId: data.region_id || 0,
 
-        // OCR 回填
+        // OCR/基本信息
         licenseName: safeStr(data.business_license_ocr?.enterprise_name),
         creditCode: safeStr(data.business_license_number || data.business_license_ocr?.reg_num || data.business_license_ocr?.credit_code),
         registerAddress: safeStr(data.business_license_ocr?.address),
@@ -158,8 +214,8 @@ Page({
         businessScope: safeStr(data.business_scope || data.business_license_ocr?.business_scope),
         foodLicenseValidity: safeStr(data.food_permit_ocr?.valid_to),
 
-        legalPerson: safeStr(data.id_card_front_ocr?.name || data.legal_person_name || data.business_license_ocr?.legal_representative),
-        idCard: safeStr(data.id_card_front_ocr?.id_number || data.legal_person_id_number),
+        legalPerson: safeStr(data.legal_person_name || data.id_card_front_ocr?.name || data.business_license_ocr?.legal_representative),
+        idCard: safeStr(data.legal_person_id_number || data.id_card_front_ocr?.id_number),
         gender: safeStr(data.id_card_front_ocr?.gender),
         hometown: safeStr(data.id_card_front_ocr?.address),
         idCardValidity: safeStr(data.id_card_back_ocr?.valid_date),
@@ -170,83 +226,32 @@ Page({
         accountName: safeStr(data.bank_account_name)
       }
 
-      // OCR 原始数据
-      const ocrResults = {
-        license: data.business_license_ocr || null,
-        idCard: data.id_card_front_ocr || null
-      }
-
-      // 解析图片 URL
-      const { resolveImageURL } = require('../../../utils/image-security')
-      const safeResolve = async (url: string): Promise<string> => {
-        if (!url) return ''
-        try { return await resolveImageURL(url) } catch { return '' }
-      }
-
-      const licenseUrl = await safeResolve(data.business_license_image_url || '')
-      const foodLicenseUrl = await safeResolve(data.food_permit_url || '')
-      const idCardFrontUrl = await safeResolve(data.legal_person_id_front_url || '')
-      const idCardBackUrl = await safeResolve(data.legal_person_id_back_url || '')
-
-      // 确保所有数组都是数组，绝不为 null，同时保存 rawUrl 用于重试
-      const licenseImages = licenseUrl ? [{ url: licenseUrl, rawUrl: data.business_license_image_url }] : []
-      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, rawUrl: data.food_permit_url }] : []
-      const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: data.legal_person_id_front_url }] : []
-      const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: data.legal_person_id_back_url }] : []
-      const accountPermitImages: Array<{ url: string }> = []
-
-      // 门头照
-      const storefrontRaw: string[] = Array.isArray(data.storefront_images) ? data.storefront_images : []
-      const storefrontImages: Array<{ url: string, rawUrl?: string }> = []
-      for (const url of storefrontRaw) {
-        const resolved = await safeResolve(url)
-        if (resolved) storefrontImages.push({ url: resolved, rawUrl: url })
-      }
-
-      // 环境照
-      const environmentRaw: string[] = Array.isArray(data.environment_images) ? data.environment_images : []
-      const environmentImages: Array<{ url: string, rawUrl?: string }> = []
-      for (const url of environmentRaw) {
-        const resolved = await safeResolve(url)
-        if (resolved) environmentImages.push({ url: resolved, rawUrl: url })
-      }
-
-      console.log('[DEBUG] setData payload:', { formData, licenseImages: licenseImages.length, storefrontImages: storefrontImages.length, environmentImages: environmentImages.length })
-
-      // 关键：一次性设置所有数据
       this.setData({
         formData,
-        ocrResults,
         licenseImages,
         foodLicenseImages,
         idCardFrontImages,
         idCardBackImages,
-        accountPermitImages,
         storefrontImages,
-        environmentImages
+        environmentImages,
+        applicationInitialized: true,
+        currentStep: data.status === 'rejected' ? 4 : 1
       }, () => {
-        // 数据加载后立即进行法人一致性校验
         this.checkLegalPersonConsistency()
       })
 
-      logger.debug('[MerchantRegister] initApplication 完成', formData, 'initApplication')
       wx.hideLoading()
     } catch (e: any) {
       wx.hideLoading()
       console.error('[MerchantRegister] initApplication Error:', e)
-      // 如果初始化失败，提示用户刷新页面
       wx.showModal({
         title: '加载失败',
         content: e?.userMessage || '无法加载申请数据，请检查网络后重试',
         confirmText: '重试',
         cancelText: '返回',
         success: (res) => {
-          if (res.confirm) {
-            // 重试初始化
-            this.initApplication()
-          } else {
-            wx.navigateBack()
-          }
+          if (res.confirm) this.initApplication()
+          else wx.navigateBack()
         }
       })
     }
@@ -271,6 +276,13 @@ Page({
       ocrResults: this.data.ocrResults
     }
     DraftStorage.save(DRAFT_KEY, data)
+  },
+
+  onRoleChange(e: any) {
+    const role = e.detail.value
+    this.setData({ 'formData.onboardingRole': role }, () => {
+      this.syncToBackend()
+    })
   },
 
   async syncToBackend() {
@@ -310,7 +322,10 @@ Page({
 
         // Images (Assuming API supports it, otherwise separate call needed)
         storefront_images: (this.data.storefrontImages || []).map(i => i.url),
-        environment_images: (this.data.environmentImages || []).map(i => i.url)
+        environment_images: (this.data.environmentImages || []).map(i => i.url),
+        
+        // Role
+        onboarding_role: formData.onboardingRole
       }
 
       console.log('[MerchantRegister] syncToBackend payload:', JSON.stringify(payload, null, 2))
@@ -999,7 +1014,11 @@ Page({
       attempts++
       try {
         const res = await getMerchantApplication()
-        const ocrData = res[fieldKey]
+        if (!res) {
+          logger.warn('[pollOcrStatus] Application draft lost during polling')
+          return
+        }
+        const ocrData = (res as any)[fieldKey]
         if (ocrData?.status === 'done') {
           clearInterval(intervalId)
           callback(ocrData)
@@ -1113,6 +1132,11 @@ Page({
       attempts++
       try {
         const res = await getMyApplication()
+        if (!res) {
+          clearInterval(intervalId)
+          return
+        }
+
         if (res.status === 'approved') {
           clearInterval(intervalId)
           DraftStorage.clear(DRAFT_KEY)

@@ -8,90 +8,124 @@
     <view class="upload-group">
       <view class="upload-item">
         <view class="upload-label required">身份证正面</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{idCardFrontImages}}" 
-          max="1" 
-          bind:success="onIdCardFrontUpload" 
-          bind:remove="onIdCardFrontRemove" 
-        />
+        <document-uploader type="id-front" title="上传人像页" value="{{idCardFrontImages.length > 0 ? idCardFrontImages[0].url : ''}}" bind:change="onIdCardFrontUpload" bind:remove="onIdCardFrontRemove" />
       </view>
       
       <view class="upload-item">
         <view class="upload-label required">身份证反面</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{idCardBackImages}}" 
-          max="1" 
-          bind:success="onIdCardBackUpload" 
-          bind:remove="onIdCardBackRemove" 
-        />
+        <document-uploader type="id-back" title="上传国徽页" value="{{idCardBackImages.length > 0 ? idCardBackImages[0].url : ''}}" bind:change="onIdCardBackUpload" bind:remove="onIdCardBackRemove" />
       </view>
-    </view>
 
-    <view class="upload-group">
       <view class="upload-item">
         <view class="upload-label required">健康证</view>
-        <t-upload 
-          mediaType="{{['image']}}" 
-          files="{{healthCertImages}}" 
-          max="1" 
-          bind:success="onHealthCertUpload" 
-          bind:remove="onHealthCertRemove" 
-        />
+        <document-uploader type="permit" title="点击上传健康证" value="{{healthCertImages.length > 0 ? healthCertImages[0].url : ''}}" bind:change="onHealthCertUpload" bind:remove="onHealthCertRemove" />
       </view>
     </view>
 
-    <!-- 2. 基本信息 -->
-    <view class="section-header">基本信息</view>
+    <!-- 拍摄要求引导 -->
+    <view class="onboarding-guide">
+      <view class="guide-title">
+        <view class="guide-line"></view>
+        <text>拍摄照片要求</text>
+        <view class="guide-line"></view>
+      </view>
+      <view class="guide-list">
+        <view class="guide-item">
+          <view class="guide-img-box correct"><t-icon name="check-circle-filled" size="32rpx" color="#4CAF50" class="guide-status-icon" /></view>
+          <text>标准拍摄</text>
+        </view>
+        <view class="guide-item">
+          <view class="guide-img-box error missing"><t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" /></view>
+          <text>边框缺失</text>
+        </view>
+        <view class="guide-item">
+          <view class="guide-img-box error blur"><t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" /></view>
+          <text>照片模糊</text>
+        </view>
+        <view class="guide-item">
+          <view class="guide-img-box error glare"><t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" /></view>
+          <text>闪光强烈</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 2. 信息回填 (仅保留用户要求的核心信息) -->
+    <view class="section-header">信息快速回填</view>
     <t-cell-group theme="card">
       <t-cell title="真实姓名" required>
         <input class="input" placeholder="识别回填" value="{{formData.name}}" bindinput="onNameInput" />
       </t-cell>
       <t-cell title="联系电话" required>
-        <input class="input" type="number" placeholder="请输入联系电话" value="{{formData.phone}}" bindinput="onPhoneInput" />
+        <input class="input" placeholder="请输入联系电话" value="{{formData.phone}}" bindinput="onPhoneInput" />
+      </t-cell>
+      <t-cell title="性别" required>
+        <input class="input" placeholder="识别回填" value="{{formData.gender}}" bindinput="onGenderInput" />
       </t-cell>
       <t-cell title="身份证号" required>
         <input class="input" placeholder="识别回填" value="{{formData.idCard}}" bindinput="onIdCardInput" />
       </t-cell>
-      <t-cell title="常驻地址" required arrow bind:click="onChooseAddress">
-        <view class="picker-text {{formData.address ? '' : 'placeholder'}}">
-          {{formData.address || '请选择常驻地址'}}
-        </view>
-      </t-cell>
-      <t-cell title="详细地址" required>
-        <input class="input" placeholder="门牌号、楼层等" value="{{formData.addressDetail}}" bindinput="onAddressDetailInput" />
-      </t-cell>
-      <t-cell title="配送工具" arrow bind:click="onChooseVehicle">
-        <view class="picker-text {{formData.vehicle ? '' : 'placeholder'}}">
-          {{formData.vehicle || '请选择配送工具'}}
-        </view>
-      </t-cell>
-      <t-cell title="可接单时段" arrow bind:click="onChooseTime">
-        <view class="picker-text {{formData.availableTime ? '' : 'placeholder'}}">
-          {{formData.availableTime || '请选择可接单时段'}}
-        </view>
-      </t-cell>
-    </t-cell-group>
-
-    <!-- 3. 身份信息 (自动回填) -->
-    <view class="section-header">身份信息</view>
-    <t-cell-group theme="card">
-      <t-cell title="性别" required>
-        <input class="input" placeholder="识别回填" value="{{formData.gender}}" bindinput="onGenderInput" />
+       <t-cell title="身份证有效期" required>
+        <input class="input" placeholder="识别回填" value="{{formData.idCardValidity}}" bindinput="onIdCardValidityInput" />
       </t-cell>
       <t-cell title="籍贯地址" required>
         <input class="input" placeholder="识别回填" value="{{formData.hometown}}" bindinput="onHometownInput" />
       </t-cell>
       <t-cell title="当前住址">
-        <input class="input" placeholder="选填" value="{{formData.currentAddress}}" bindinput="onCurrentAddressInput" />
+        <input class="input" placeholder="识别回填" value="{{formData.currentAddress}}" bindinput="onCurrentAddressInput" />
       </t-cell>
-      <t-cell title="身份证有效期" required>
-        <input class="input" placeholder="识别回填" value="{{formData.idCardValidity}}" bindinput="onIdCardValidityInput" />
+    </t-cell-group>
+
+    <!-- 3. 配送设置 -->
+    <view class="section-header">配送设置</view>
+    <t-cell-group theme="card">
+      <t-cell title="服务区域" arrow required bindtap="onChooseAddress">
+        <view class="address-display {{formData.address ? '' : 'placeholder'}}">
+          {{formData.address || '选择配送中心点'}}
+        </view>
+      </t-cell>
+      <t-cell title="详细地址">
+        <input class="input" placeholder="输入详细地址" value="{{formData.addressDetail}}" bindinput="onAddressDetailInput" />
+      </t-cell>
+      <t-cell title="配送载具" arrow required bindtap="onChooseVehicle">
+        <view class="picker-text {{formData.vehicle ? '' : 'placeholder'}}">
+          {{formData.vehicle || '请选择'}}
+        </view>
+      </t-cell>
+      <t-cell title="配送时间" arrow required bindtap="onChooseTime">
+        <view class="picker-text {{formData.availableTime ? '' : 'placeholder'}}">
+          {{formData.availableTime || '请选择'}}
+        </view>
       </t-cell>
     </t-cell-group>
   </view>
 </view>
+
+<!-- 选择器组件 -->
+<t-picker
+  visible="{{vehiclePickerVisible}}"
+  value="{{vehiclePickerValue}}"
+  data-key="vehicle"
+  title="选择配送载具"
+  cancelBtn="取消"
+  confirmBtn="确认"
+  bindconfirm="onVehicleConfirm"
+  bindcancel="onVehicleCancel"
+>
+  <t-picker-item options="{{vehicleOptions}}" />
+</t-picker>
+
+<t-picker
+  visible="{{timePickerVisible}}"
+  value="{{timePickerValue}}"
+  data-key="time"
+  title="选择配送时间"
+  cancelBtn="取消"
+  confirmBtn="确认"
+  bindconfirm="onTimeConfirm"
+  bindcancel="onTimeCancel"
+>
+  <t-picker-item options="{{timeOptions}}" />
+</t-picker>
 
 <!-- 底部提交按钮 -->
 <view class="fixed-bottom-bar">
@@ -100,20 +134,4 @@
   </t-button>
 </view>
 
-<!-- 配送工具选择器 -->
-<t-picker
-  visible="{{vehiclePickerVisible}}"
-  value="{{vehiclePickerValue}}"
-  data-source="{{vehicleOptions}}"
-  bind:confirm="onVehicleConfirm"
-  bind:cancel="onVehicleCancel"
-/>
 
-<!-- 时段选择器 -->
-<t-picker
-  visible="{{timePickerVisible}}"
-  value="{{timePickerValue}}"
-  data-source="{{timeOptions}}"
-  bind:confirm="onTimeConfirm"
-  bind:cancel="onTimeCancel"
-/>

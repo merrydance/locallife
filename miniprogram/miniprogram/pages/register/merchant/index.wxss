@@ -314,3 +314,109 @@
   overflow: hidden;
 }
 
+/* Onboarding Guide Styles */
+.onboarding-guide {
+  margin-top: 48rpx;
+  padding: 0 16rpx;
+}
+
+.guide-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32rpx;
+}
+
+.guide-title text {
+  font-size: 26rpx;
+  color: #999;
+  margin: 0 24rpx;
+}
+
+.guide-line {
+  flex: 1;
+  height: 2rpx;
+  background-color: #EEEEEE;
+}
+
+.guide-list {
+  display: flex;
+  justify-content: space-between;
+}
+
+.guide-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22%;
+}
+
+.guide-img-box {
+  width: 100%;
+  height: 100rpx;
+  background-color: #F8F9FB;
+  border-radius: 8rpx;
+  margin-bottom: 16rpx;
+  position: relative;
+  overflow: hidden;
+  border: 1rpx solid #E8E8E8;
+}
+
+.guide-img-box::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70%;
+  height: 60%;
+  background-color: #DDE2EB;
+  border-radius: 4rpx;
+}
+
+/* Specific state styles */
+.guide-img-box.missing::before {
+  left: 30%; /* Shifted to look cut off */
+}
+
+.guide-img-box.blur::before {
+  filter: blur(4rpx);
+}
+
+.guide-img-box.glare::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  right: 20%;
+  width: 30rpx;
+  height: 30rpx;
+  background: radial-gradient(circle, #FFF 0%, rgba(255,255,255,0) 70%);
+}
+
+.guide-status-icon {
+  position: absolute;
+  bottom: -4rpx;
+  right: -4rpx;
+  background: #FFF;
+  border-radius: 50%;
+  z-index: 5;
+}
+
+.guide-item text {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.role-selection {
+  background: #fff;
+  padding: 24rpx 32rpx;
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+.role-selection t-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}

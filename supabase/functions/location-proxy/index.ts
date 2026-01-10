@@ -17,8 +17,8 @@ serve(async (req: Request) => {
         const { action, latitude, longitude, from, to } = await req.json()
 
         // Configuration for Local OSM Services (Using the Docker gateway for supabase_network_locallife)
-        const NOMINATIM_BASE = Deno.env.get('NOMINATIM_API_BASE') || 'http://172.25.0.1:8081'
-        const OSRM_BASE = Deno.env.get('OSRM_API_BASE') || 'http://172.25.0.1:5000'
+        const NOMINATIM_BASE = Deno.env.get('NOMINATIM_API_BASE') || 'http://172.26.0.15:8080'
+const OSRM_BASE = Deno.env.get('OSRM_API_BASE') || 'http://172.26.0.14:5000'
 
         console.log(`[location-proxy] Action: ${action}, Using Nominatim: ${NOMINATIM_BASE}, OSRM: ${OSRM_BASE}`)
 
@@ -35,7 +35,12 @@ serve(async (req: Request) => {
             console.log(`[location-proxy] Fetching: ${url}`)
 
             const resp = await fetch(url)
-            if (!resp.ok) throw new Error(`Nominatim error: ${resp.statusText}`)
+            console.log(`[location-proxy] Nominatim response: ${resp.status} ${resp.statusText}`)
+            if (!resp.ok) {
+                const errText = await resp.text()
+                console.error(`[location-proxy] Nominatim error body: ${errText}`)
+                throw new Error(`Nominatim error: ${resp.statusText}`)
+            }
 
             const data = await resp.json()
 

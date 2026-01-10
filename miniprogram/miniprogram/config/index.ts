@@ -23,13 +23,19 @@ export const ENV = {
 export const API_CONFIG = {
   // 生产环境API地址 (Supabase Rest API)
   PROD_BASE_URL: 'https://ls.merrydance.cn/rest/v1',
+  PROD_EDGE_URL: 'https://ls.merrydance.cn/functions/v1',
 
   // 开发环境API地址(Supabase Rest API)
   DEV_BASE_URL: 'https://ls.merrydance.cn/rest/v1',
+  DEV_EDGE_URL: 'https://ls.merrydance.cn/functions/v1',
 
   // 获取当前环境的API地址
   get BASE_URL() {
     return ENV.isDev ? this.DEV_BASE_URL : this.PROD_BASE_URL
+  },
+
+  get EDGE_BASE_URL() {
+    return ENV.isDev ? this.DEV_EDGE_URL : this.PROD_EDGE_URL
   },
 
   // 请求超时时间(毫秒)

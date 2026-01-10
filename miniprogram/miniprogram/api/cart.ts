@@ -172,11 +172,11 @@ export async function getCart(params: {
  * 获取购物车摘要（所有商户）
  * @param orderType 订单类型过滤
  */
-export async function getCartSummary(orderType?: string): Promise<CartSummaryResponse> {
+export async function getCartSummary(orderType: string = 'takeout'): Promise<CartSummaryResponse> {
     return request({
-        url: '/v1/cart/summary',
-        method: 'GET',
-        data: orderType ? { order_type: orderType } : undefined
+        url: '/v1/rpc/get_cart_summary_v2',
+        method: 'POST',
+        data: { p_order_type: orderType }
     })
 }
 
@@ -184,12 +184,13 @@ export async function getCartSummary(orderType?: string): Promise<CartSummaryRes
  * 获取用户所有商户的购物车（完整信息）
  * @param orderType 订单类型过滤
  */
-export async function getUserCarts(orderType?: string): Promise<UserCartsResponse> {
-    return request({
-        url: '/v1/cart/summary',
-        method: 'GET',
-        data: orderType ? { order_type: orderType } : undefined
-    })
+export async function getUserCarts(orderType: string = 'takeout'): Promise<UserCartsResponse> {
+    // 这里暂时先返回 summary，如果需要完整 carts 信息，后续再扩展 RPC
+    const summary = await getCartSummary(orderType);
+    return {
+        carts: [], // 暂空，首页主要展示 summary
+        summary
+    }
 }
 
 /**

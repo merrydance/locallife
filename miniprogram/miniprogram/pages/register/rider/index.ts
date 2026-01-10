@@ -3,7 +3,7 @@ import { ocrRiderIdCard } from '../../../api/ocr'
 import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
 import { DraftStorage } from '../../../utils/draft-storage'
-import { submitRiderApplication, ApplyRiderRequest } from '../../../api/onboarding'
+import { getRiderApplicationDraft, submitRiderApplication, updateRiderApplicationBasic } from '../../../api/rider-application'
 
 const DRAFT_KEY = 'rider_register_draft'
 
@@ -54,8 +54,33 @@ Page({
     ]
   },
 
-  onLoad() {
+  async onLoad() {
     this.loadDraft()
+    
+    // 从服务器同步最新草稿
+    try {
+        const serverDraft = await getRiderApplicationDraft()
+        if (serverDraft) {
+            this.setData({
+                'formData.name': serverDraft.real_name || this.data.formData.name,
+                'formData.phone': serverDraft.phone || this.data.formData.phone,
+                'formData.gender': serverDraft.gender || this.data.formData.gender,
+                'formData.hometown': serverDraft.hometown || this.data.formData.hometown,
+                'formData.currentAddress': serverDraft.current_address || this.data.formData.currentAddress,
+                'formData.idCard': serverDraft.id_card_number || this.data.formData.idCard,
+                'formData.idCardValidity': serverDraft.id_card_validity || this.data.formData.idCardValidity,
+                'formData.address': serverDraft.address || this.data.formData.address,
+                'formData.addressDetail': serverDraft.address_detail || this.data.formData.addressDetail,
+                'formData.latitude': serverDraft.latitude || this.data.formData.latitude,
+                'formData.longitude': serverDraft.longitude || this.data.formData.longitude,
+                'formData.vehicle': serverDraft.vehicle_type || this.data.formData.vehicle,
+                'formData.availableTime': serverDraft.available_time || this.data.formData.availableTime,
+            })
+            this.saveDraft()
+        }
+    } catch (error) {
+        logger.error('Load server draft failed', error)
+    }
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
@@ -155,31 +180,33 @@ Page({
   // ==================== 图片上传与OCR ====================
 
   // 身份证正面
-  async onIdCardFrontUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ idCardFrontImages: files })
+  async onIdCardFrontUpload(e: any) {
+    const { path, file } = e.detail
+    if (!path) return
+    
+    // 构造存储格式
+    const fileItem = { url: path, thumb: path, type: 'image', ...file }
+    this.setData({ idCardFrontImages: [fileItem] })
     this.saveDraft()
 
-    if (files.length > 0) {
-      wx.showLoading({ title: '识别中...' })
-      try {
-        const res = await ocrRiderIdCard(files[0].url, 'front')
-        const info = res.ocrData
+    wx.showLoading({ title: '识别中...' })
+    try {
+      const res = await ocrRiderIdCard(path, 'front')
+      const info = res.ocrData
 
-        this.setData({
-          'formData.name': info.name || '',
-          'formData.idCard': info.id || info.id_num || '',
-          'formData.gender': info.gender || '',
-          'formData.hometown': info.addr || info.address || ''
-        })
-        this.saveDraft()
-        wx.showToast({ title: '识别成功', icon: 'success' })
-      } catch (error) {
-        logger.error('OCR failed', error, 'Rider')
-        wx.showToast({ title: '识别失败', icon: 'none' })
-      } finally {
-        wx.hideLoading()
-      }
+      this.setData({
+        'formData.name': info.name || '',
+        'formData.idCard': info.id || info.id_number || info.id_num || '',
+        'formData.gender': info.gender || '',
+        'formData.hometown': info.address || info.addr || ''
+      })
+      this.saveDraft()
+      wx.showToast({ title: '识别成功', icon: 'success' })
+    } catch (error) {
+      logger.error('OCR failed', error, 'Rider')
+      wx.showToast({ title: '识别失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
     }
   },
   onIdCardFrontRemove() {
@@ -188,28 +215,29 @@ Page({
   },
 
   // 身份证反面
-  async onIdCardBackUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ idCardBackImages: files })
+  async onIdCardBackUpload(e: any) {
+    const { path, file } = e.detail
+    if (!path) return
+
+    const fileItem = { url: path, thumb: path, type: 'image', ...file }
+    this.setData({ idCardBackImages: [fileItem] })
     this.saveDraft()
 
-    if (files.length > 0) {
-      wx.showLoading({ title: '识别中...' })
-      try {
-        const res = await ocrRiderIdCard(files[0].url, 'back')
-        const info = res.ocrData
+    wx.showLoading({ title: '识别中...' })
+    try {
+      const res = await ocrRiderIdCard(path, 'back')
+      const info = res.ocrData
 
-        this.setData({
-          'formData.idCardValidity': info.valid_date || info.valid_period || ''
-        })
-        this.saveDraft()
-        wx.showToast({ title: '识别成功', icon: 'success' })
-      } catch (error) {
-        logger.error('OCR failed', error, 'Rider')
-        wx.showToast({ title: '识别失败', icon: 'none' })
-      } finally {
-        wx.hideLoading()
-      }
+      this.setData({
+        'formData.idCardValidity': info.valid_date || info.valid_period || info.valid_end || ''
+      })
+      this.saveDraft()
+      wx.showToast({ title: '识别成功', icon: 'success' })
+    } catch (error) {
+      logger.error('OCR failed', error, 'Rider')
+      wx.showToast({ title: '识别失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
     }
   },
   onIdCardBackRemove() {
@@ -218,9 +246,11 @@ Page({
   },
 
   // 健康证
-  onHealthCertUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ healthCertImages: files })
+  onHealthCertUpload(e: any) {
+    const { path, file } = e.detail
+    if (!path) return
+    const fileItem = { url: path, thumb: path, type: 'image', ...file }
+    this.setData({ healthCertImages: [fileItem] })
     this.saveDraft()
   },
   onHealthCertRemove() {
@@ -233,34 +263,52 @@ Page({
   async onSubmit() {
     const { formData, idCardFrontImages, idCardBackImages, healthCertImages } = this.data
 
-    // 验证必填字段
+    // 验证必填字段 (仅保留用户要求的 6 项核心数据相关的校验)
     if (!idCardFrontImages.length) return wx.showToast({ title: '请上传身份证正面', icon: 'none' })
     if (!idCardBackImages.length) return wx.showToast({ title: '请上传身份证反面', icon: 'none' })
     if (!healthCertImages.length) return wx.showToast({ title: '请上传健康证', icon: 'none' })
 
-    if (!formData.name) return wx.showToast({ title: '请输入真实姓名', icon: 'none' })
-    if (!formData.phone) return wx.showToast({ title: '请输入联系电话', icon: 'none' })
-    if (!formData.idCard) return wx.showToast({ title: '请输入身份证号', icon: 'none' })
-    if (!formData.address) return wx.showToast({ title: '请选择常驻地址', icon: 'none' })
+    const requiredKeys = ['name', 'gender', 'idCard', 'idCardValidity', 'hometown', 'currentAddress']
+    const requiredLabels: Record<string, string> = {
+        name: '真实姓名',
+        gender: '性别',
+        idCard: '身份证号',
+        idCardValidity: '有效期限',
+        hometown: '籍贯地址',
+        currentAddress: '当前住址'
+    }
 
-    if (!formData.gender) return wx.showToast({ title: '缺少身份信息', icon: 'none' })
+    for (const key of requiredKeys) {
+        if (!formData[key as keyof typeof formData]) {
+            return wx.showToast({ title: `请提供${requiredLabels[key]}`, icon: 'none' })
+        }
+    }
 
-    // 构建提交数据
-    const submitData: ApplyRiderRequest = {
-      name: formData.name,
-      phone: formData.phone,
-      id_card: formData.idCard,
-      vehicle_type: formData.vehicle,
-
-      id_card_front_images: idCardFrontImages.map((img) => img.url),
-      id_card_back_images: idCardBackImages.map((img) => img.url),
-      health_certificate_images: healthCertImages.map((img) => img.url)
+    // 同步核心身份信息到数据库草稿
+    try {
+        await updateRiderApplicationBasic({
+            real_name: formData.name,
+            phone: formData.phone,
+            gender: formData.gender,
+            hometown: formData.hometown,
+            current_address: formData.currentAddress,
+            id_card_number: formData.idCard,
+            id_card_validity: formData.idCardValidity,
+            address: formData.address,
+            address_detail: formData.addressDetail,
+            latitude: formData.latitude,
+            longitude: formData.longitude,
+            vehicle_type: formData.vehicle,
+            available_time: formData.availableTime,
+        })
+    } catch (error) {
+        logger.error('Update basic info failed', error)
     }
 
     wx.showLoading({ title: '提交中...' })
 
     try {
-      await submitRiderApplication(submitData)
+      await submitRiderApplication()
 
       wx.showToast({
         title: '申请提交成功',

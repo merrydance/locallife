@@ -1,218 +1,148 @@
 /**
  * 证照上传与OCR识别接口
  * 符合 docs/certificate_upload_guide.md 规范
- * 支持商户、骑手、运营商三种角色
+ * 适配 Supabase 架构
  */
 
+import { supabaseRequest } from '../services/supabase'
 import { uploadFile } from '../utils/request'
 
 // ==================== 类型定义 ====================
 
-// 角色类型
 export type OCRRole = 'merchant' | 'rider' | 'operator'
 
-// Generic OCR Response interface - adjust based on actual returns
 export interface OCRResponse {
-  // Business License OCR fields (营业执照)
   name?: string
-  enterprise_name?: string      // 企业名称
-  reg_num?: string              // 注册号/统一社会信用代码
-  address?: string              // 地址
-  person?: string
-  legal_representative?: string // 法定代表人
-  valid_period?: string         // 营业期限
-  business?: string
-  business_scope?: string       // 经营范围
-  type_of_enterprise?: string   // 企业类型
-  registered_capital?: string   // 注册资本
+  enterprise_name?: string
+  reg_num?: string
+  address?: string
+  legal_representative?: string
+  valid_period?: string
+  business_scope?: string
+  type_of_enterprise?: string
+  registered_capital?: string
   credit_code?: string
-
-  // ID Card OCR fields (身份证)
-  id?: string
-  id_num?: string
-  id_number?: string            // 身份证号码（后端实际字段名）
-  gender?: string               // 性别
-  nation?: string               // 民族
-  valid_date?: string           // 有效期
-  valid_end?: string            // 有效期截止
-  valid_start?: string          // 有效期起始
-
-  // Food License OCR fields (食品经营许可证)
-  license_name?: string
-  legal_person?: string
-  validity?: string
-  valid_from?: string           // 有效期起
-  valid_to?: string             // 有效期止
-  permit_no?: string            // 许可证编号
-
-  // Health Cert fields (健康证 - 骑手)
-  cert_number?: string          // 证书编号
-
-  // Deprecated / Legacy fields for backward compatibility
-  addr?: string
+  id_number?: string
+  gender?: string
+  nation?: string
+  valid_end?: string
+  valid_start?: string
+  permit_no?: string
+  cert_number?: string
+  [key: string]: any
 }
 
-// OCR上传返回结果，包含完整申请数据和OCR结果
 export interface OCRUploadResult {
-  applicationData: any          // 完整的申请数据（用于刷新页面）
-  ocrData: OCRResponse          // OCR识别结果
+  applicationData: any
+  ocrData: OCRResponse
 }
 
-// ==================== 角色端点映射 ====================
-
-const API_ENDPOINTS = {
-  merchant: {
-    license: '/v1/merchant/application/license/ocr',
-    idcard: '/v1/merchant/application/idcard/ocr',
-    foodpermit: '/v1/merchant/application/foodpermit/ocr'
-  },
-  rider: {
-    idcard: '/v1/rider/application/idcard/ocr',
-    healthcert: '/v1/rider/application/healthcert'
-  },
-  operator: {
-    license: '/v1/operator/application/license/ocr',
-    idcard: '/v1/operator/application/idcard/ocr'
-  }
-}
-
-// ==================== 证照上传功能 ====================
+// ==================== 通用 OCR 助手 ====================
 
 /**
- * 通用文件上传（multipart/form-data）
- * @param url API路径
- * @param filePath 本地文件路径
- * @param formData 附加表单数据（如 side 参数）
+ * 通用 Supabase OCR 链路
  */
-function uploadOCR(url: string, filePath: string, formData: any = {}): Promise<any> {
-  return uploadFile(filePath, url, 'image', formData)
+async function performSupabaseOCR(
+    filePath: string, 
+    type: string, 
+    role: OCRRole, 
+    side?: string
+): Promise<OCRUploadResult> {
+    // 1. 上传图片 (assets 桶或 identity 桶由 image-service 根据 category 自动决定)
+    const bucketCategory = (type === 'id_card' || type === 'health_cert') ? 'identity' : 'assets'
+    const uploadRes = await uploadFile(filePath, '', 'file', { category: bucketCategory })
+    const imageUrl = (uploadRes as any).url
+    if (!imageUrl) throw new Error('Upload failed')
+
+    // 2. 映射目标表
+    const tableMap: Record<OCRRole, string> = {
+        merchant: 'merchant_applications',
+        rider: 'rider_applications',
+        operator: 'operator_applications'
+    }
+    const targetTable = tableMap[role]
+
+    // 3. 获取申请单 (获取当前用户的草稿)
+    // 这里我们直接通过 ocr-service 更新，ocr-service 内部会处理 application_id 的查找（如果需要）
+    // 但我们的 ocr-service 需要 application_id。
+    // 所以我们需要先查到 application_id。
+    const { data: appData } = await supabaseRequest<any[]>({
+        url: `/rest/v1/${targetTable}?select=id`,
+        method: 'GET'
+    })
+    const appId = appData?.[0]?.id
+    if (!appId) throw new Error(`No active ${role} application found`)
+
+    // 4. 调用 OCR Edge Function
+    const { data: ocrRes, error } = await supabaseRequest<any>({
+        url: '/functions/v1/ocr-service',
+        method: 'POST',
+        data: {
+            application_id: appId,
+            image_url: imageUrl,
+            type,
+            side,
+            target_table: targetTable
+        }
+    })
+
+    if (error) throw error
+
+    // 5. 获取更新后的完整申请数据
+    const { data: updatedApp } = await supabaseRequest<any[]>({
+        url: `/rest/v1/${targetTable}?id=eq.${appId}`,
+        method: 'GET'
+    })
+
+    return {
+        applicationData: updatedApp?.[0],
+        ocrData: ocrRes.ocr_result || ocrRes
+    }
 }
 
 // ==================== 商户 OCR 接口 ====================
 
-/**
- * 商户营业执照OCR
- * POST /v1/merchant/application/license/ocr
- */
 export function ocrBusinessLicense(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.merchant.license, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Merchant Business License Response:', JSON.stringify(res))
-      return {
-        applicationData: res,
-        ocrData: res.business_license_ocr || res
-      }
-    })
+  return performSupabaseOCR(filePath, 'business_license', 'merchant')
 }
 
-/**
- * 商户身份证OCR
- * POST /v1/merchant/application/idcard/ocr
- * @param filePath 本地文件路径
- * @param side 'front' (正面/Front) 或 'back' (背面/Back)
- */
 export function ocrIdCard(filePath: string, side: 'front' | 'back' = 'front'): Promise<OCRUploadResult> {
-  // 商户接口使用 "Front"/"Back" 首字母大写
   const capitalizedSide = side === 'front' ? 'Front' : 'Back'
-  return uploadOCR(API_ENDPOINTS.merchant.idcard, filePath, { side: capitalizedSide })
-    .then((res: any) => {
-      console.log(`[OCR] Merchant ID Card ${side} Response:`, JSON.stringify(res))
-      const ocrData = side === 'front'
-        ? (res.id_card_front_ocr || res)
-        : (res.id_card_back_ocr || res)
-      return {
-        applicationData: res,
-        ocrData
-      }
-    })
+  return performSupabaseOCR(filePath, 'id_card', 'merchant', capitalizedSide)
 }
 
-/**
- * 商户食品经营许可证OCR
- * POST /v1/merchant/application/foodpermit/ocr
- */
 export function ocrFoodLicense(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.merchant.foodpermit, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Merchant Food License Response:', JSON.stringify(res))
-      return {
-        applicationData: res,
-        ocrData: res.food_permit_ocr || res
-      }
-    })
+  return performSupabaseOCR(filePath, 'food_permit', 'merchant')
 }
 
 // ==================== 骑手 OCR 接口 ====================
 
-/**
- * 骑手身份证OCR
- * POST /v1/rider/application/idcard/ocr
- * @param filePath 本地文件路径
- * @param side 'front' (正面) 或 'back' (背面)
- */
 export function ocrRiderIdCard(filePath: string, side: 'front' | 'back' = 'front'): Promise<OCRUploadResult> {
-  // 骑手接口使用小写 "front"/"back"
-  return uploadOCR(API_ENDPOINTS.rider.idcard, filePath, { side })
-    .then((res: any) => {
-      console.log(`[OCR] Rider ID Card ${side} Response:`, JSON.stringify(res))
-      const ocrData = res.id_card_ocr || res
-      return {
-        applicationData: res,
-        ocrData
-      }
-    })
+  const capitalizedSide = side === 'front' ? 'Front' : 'Back'
+  return performSupabaseOCR(filePath, 'id_card', 'rider', capitalizedSide)
 }
 
-/**
- * 骑手健康证上传
- * POST /v1/rider/application/healthcert
- */
 export function ocrRiderHealthCert(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.rider.healthcert, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Rider Health Cert Response:', JSON.stringify(res))
-      return {
-        applicationData: res,
-        ocrData: res.health_cert_ocr || res
-      }
-    })
+  return performSupabaseOCR(filePath, 'health_cert', 'rider')
 }
 
 // ==================== 运营商 OCR 接口 ====================
 
-/**
- * 运营商营业执照OCR
- * POST /v1/operator/application/license/ocr
- */
 export function ocrOperatorBusinessLicense(filePath: string): Promise<OCRUploadResult> {
-  return uploadOCR(API_ENDPOINTS.operator.license, filePath)
-    .then((res: any) => {
-      console.log('[OCR] Operator Business License Response:', JSON.stringify(res))
-      return {
-        applicationData: res,
-        ocrData: res.business_license_ocr || res
-      }
-    })
+  return performSupabaseOCR(filePath, 'business_license', 'operator')
 }
 
-/**
- * 运营商身份证OCR
- * POST /v1/operator/application/idcard/ocr
- * @param filePath 本地文件路径
- * @param side 'front' (正面/Front) 或 'back' (背面/Back)
- */
 export function ocrOperatorIdCard(filePath: string, side: 'front' | 'back' = 'front'): Promise<OCRUploadResult> {
-  // 运营商接口使用 "Front"/"Back" 首字母大写
   const capitalizedSide = side === 'front' ? 'Front' : 'Back'
-  return uploadOCR(API_ENDPOINTS.operator.idcard, filePath, { side: capitalizedSide })
-    .then((res: any) => {
-      console.log(`[OCR] Operator ID Card ${side} Response:`, JSON.stringify(res))
-      const ocrData = side === 'front'
-        ? (res.id_card_front_ocr || res)
-        : (res.id_card_back_ocr || res)
-      return {
-        applicationData: res,
-        ocrData
-      }
-    })
+  return performSupabaseOCR(filePath, 'id_card', 'operator', capitalizedSide)
+}
+
+export default {
+    ocrBusinessLicense,
+    ocrIdCard,
+    ocrFoodLicense,
+    ocrRiderIdCard,
+    ocrRiderHealthCert,
+    ocrOperatorBusinessLicense,
+    ocrOperatorIdCard
 }

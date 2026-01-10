@@ -42,8 +42,8 @@ export interface FoodPermitOCRData {
 
 // 商户申请草稿数据类型
 export interface MerchantApplicationDraftResponse {
-    id?: number
-    user_id?: number
+    id?: string
+    user_id?: string
     merchant_name?: string
     business_address?: string
     business_license_number?: string
@@ -59,7 +59,7 @@ export interface MerchantApplicationDraftResponse {
     longitude?: string
     region_id?: number
     status?: string
-    reject_reason?: string
+    reject_reason?: string | null
     created_at?: string
     updated_at?: string
     // OCR识别结果
@@ -78,18 +78,18 @@ export interface MerchantApplicationResponse {
     business_scope?: string
     contact_phone?: string
     created_at?: string
-    id?: number
+    id?: string
     legal_person_id_back_url?: string
     legal_person_id_front_url?: string
     legal_person_id_number?: string
     legal_person_name?: string
     merchant_name?: string
-    reject_reason?: string
+    reject_reason?: string | null
     reviewed_at?: string                         // 审核时间
-    reviewed_by?: number                         // 审核人ID
+    reviewed_by?: string                         // 审核人ID
     status?: string
     updated_at?: string
-    user_id?: number                             // 用户ID
+    user_id?: string                             // 用户ID
 }
 
 // 创建商户申请请求类型
@@ -149,107 +149,148 @@ export interface MerchantApplymentStatusResponse {
     sub_mch_id?: string                          // 二级商户号
 }
 
+import { supabase, supabaseRequest } from '../services/supabase'
+import { uploadFile } from '../utils/request'
+
+// ... (types 保持不变) ...
+
 // ==================== 商户申请管理接口 ====================
 
 /**
  * 获取或创建商户申请草稿
- * 如果不存在则自动创建新的草稿
  */
-export function getMerchantApplicationDraft(): Promise<MerchantApplicationDraftResponse> {
-    return request({
-        url: '/v1/merchant/application',
-        method: 'GET'
-    })
+export async function getMerchantApplicationDraft(): Promise<MerchantApplicationDraftResponse> {
+    const { data, error } = await supabase.from<MerchantApplicationDraftResponse>('merchant_applications').select('*')
+    if (error) throw error
+    if (data && data.length > 0) return data[0]
+
+    // 如果不存在，则创建
+    const { data: newData, error: createError } = await supabase.from<MerchantApplicationDraftResponse>('merchant_applications').insert({})
+    if (createError) throw createError
+    return newData![0]
 }
 
 /**
  * 更新商户申请基本信息
  */
-export function updateMerchantApplicationBasic(data: UpdateMerchantApplicationBasicRequest): Promise<MerchantApplicationDraftResponse> {
-    return request({
-        url: '/v1/merchant/application/basic',
-        method: 'PUT',
-        data
-    })
+export async function updateMerchantApplicationBasic(data: UpdateMerchantApplicationBasicRequest): Promise<MerchantApplicationDraftResponse> {
+    const draft = await getMerchantApplicationDraft()
+    const { data: updatedData, error } = await supabase.from<MerchantApplicationDraftResponse>('merchant_applications')
+        .update(data)
+        .eq('id', draft.id!)
+    
+    if (error) throw error
+    return updatedData![0]
 }
 
 /**
  * 提交商户申请
  */
-export function submitMerchantApplication(): Promise<MerchantApplicationDraftResponse> {
-    return request({
-        url: '/v1/merchant/application/submit',
-        method: 'POST'
+export async function submitMerchantApplication(): Promise<MerchantApplicationDraftResponse> {
+    const draft = await getMerchantApplicationDraft()
+    const { data, error } = await supabase.rpc<MerchantApplicationDraftResponse>('submit_merchant_application', {
+        app_id: draft.id
     })
+    
+    if (error) throw error
+    return data!
 }
 
 /**
  * 重置商户申请
  */
-export function resetMerchantApplication(): Promise<MerchantApplicationDraftResponse> {
-    return request({
-        url: '/v1/merchant/application/reset',
-        method: 'POST'
-    })
+export async function resetMerchantApplication(): Promise<MerchantApplicationDraftResponse> {
+    const draft = await getMerchantApplicationDraft()
+    const { data: updatedData, error } = await supabase.from<MerchantApplicationDraftResponse>('merchant_applications')
+        .update({ status: 'draft', reject_reason: null })
+        .eq('id', draft.id!)
+    
+    if (error) throw error
+    return updatedData![0]
 }
 
 /**
  * 获取我的商户申请状态
  */
-export function getMyMerchantApplication(): Promise<MerchantApplicationResponse> {
-    return request({
-        url: '/v1/merchants/applications/me',
-        method: 'GET'
-    })
+export async function getMyMerchantApplication(): Promise<MerchantApplicationResponse> {
+    const { data, error } = await supabase.from<MerchantApplicationResponse>('merchant_applications').select('*').single()
+    if (error) throw error
+    return data!
 }
 
 /**
  * 创建商户申请（正式提交）
  */
-export function createMerchantApplication(data: CreateMerchantApplicationRequest): Promise<MerchantApplicationResponse> {
-    return request({
-        url: '/v1/merchants/applications',
+export async function createMerchantApplication(data: CreateMerchantApplicationRequest): Promise<MerchantApplicationResponse> {
+    // 逻辑类似于 submit，但这里支持传全量数据创建
+    const { data: res, error } = await supabase.from<MerchantApplicationResponse>('merchant_applications').insert(data)
+    if (error) throw error
+    
+    // 插入后尝试执行一次审核
+    return await submitMerchantApplication() as any
+}
+
+// ==================== OCR识别辅助 ====================
+
+async function performOCR(filePath: string, type: string, side?: string) {
+    // 1. 上传图片至 bucket: identity
+    const uploadRes = await uploadFile(filePath, '', 'file', { category: 'identity' })
+    const imageUrl = (uploadRes as any).url
+    if (!imageUrl) throw new Error('Image upload failed')
+
+    // 2. 获取当前申请单 ID
+    const draft = await getMerchantApplicationDraft()
+
+    // 3. 更新图片 URL
+    const urlFieldMap: Record<string, string> = {
+        'business_license': 'business_license_image_url',
+        'food_permit': 'food_permit_url',
+        'id_card_Front': 'legal_person_id_front_url',
+        'id_card_Back': 'legal_person_id_back_url'
+    }
+    const fieldKey = type === 'id_card' ? `${type}_${side}` : type
+    const targetField = urlFieldMap[fieldKey]
+    if (targetField) {
+        await supabase.from('merchant_applications').update({ [targetField]: imageUrl }).eq('id', draft.id!)
+    }
+
+    // 4. 调用 ocr-service
+    await supabaseRequest<any>({
+        url: '/functions/v1/ocr-service',
         method: 'POST',
-        data
+        data: {
+            application_id: draft.id,
+            image_url: imageUrl,
+            type,
+            side,
+            target_table: 'merchant_applications'
+        }
     })
+
+    return await getMerchantApplicationDraft()
 }
 
 // ==================== OCR识别接口 ====================
 
 /**
  * 身份证正面OCR识别
- * 自动识别姓名、身份证号、地址、性别等信息并回填到表单
  */
-export function recognizeIDCardFront(data: OCRUploadRequest): Promise<MerchantApplicationDraftResponse> {
-    return request({
-        url: '/v1/merchant/application/idcard/ocr',
-        method: 'POST',
-        data
-    })
+export async function recognizeIDCardFront(data: OCRUploadRequest): Promise<MerchantApplicationDraftResponse> {
+    return await performOCR(data.image_url, 'id_card', 'Front')
 }
 
 /**
  * 营业执照OCR识别
- * 自动识别企业名称、统一社会信用代码、法定代表人、经营范围、地址等信息并回填到表单
  */
-export function recognizeBusinessLicense(data: OCRUploadRequest): Promise<MerchantApplicationDraftResponse> {
-    return request({
-        url: '/v1/merchant/application/license/ocr',
-        method: 'POST',
-        data
-    })
+export async function recognizeBusinessLicense(data: OCRUploadRequest): Promise<MerchantApplicationDraftResponse> {
+    return await performOCR(data.image_url, 'business_license')
 }
 
 /**
  * 食品经营许可证OCR识别
- * 自动识别许可证编号、企业名称、有效期等信息并回填到表单
  */
-export function recognizeFoodPermit(data: OCRUploadRequest): Promise<MerchantApplicationDraftResponse> {
-    return request({
-        url: '/v1/merchant/application/foodpermit/ocr',
-        method: 'POST',
-        data
-    })
+export async function recognizeFoodPermit(data: OCRUploadRequest): Promise<MerchantApplicationDraftResponse> {
+    return await performOCR(data.image_url, 'food_permit')
 }
 
 // ==================== 银行绑定接口 ====================
@@ -258,21 +299,16 @@ export function recognizeFoodPermit(data: OCRUploadRequest): Promise<MerchantApp
  * 绑定银行账户
  */
 export function bindMerchantBank(data: MerchantBankBindRequest): Promise<any> {
-    return request({
-        url: '/v1/merchant/bindbank',
-        method: 'POST',
-        data
-    })
+    // 后续迁移，暂时留空
+    return Promise.resolve({})
 }
 
 /**
  * 获取申请状态
  */
-export function getMerchantApplymentStatus(): Promise<MerchantApplymentStatusResponse> {
-    return request({
-        url: '/v1/merchant/applyment/status',
-        method: 'GET'
-    })
+export async function getMerchantApplymentStatus(): Promise<MerchantApplymentStatusResponse> {
+    const draft = await getMerchantApplicationDraft()
+    return { status: draft.status, status_desc: draft.status } as any
 }
 
 // ==================== 便捷方法 ====================
