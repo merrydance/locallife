@@ -14,18 +14,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const dish_1 = require("../../adapters/dish");
 const dish_2 = require("../../api/dish");
-const merchant_1 = require("../../api/merchant");
 const cart_1 = __importDefault(require("../../services/cart"));
 const cart_2 = require("../../api/cart");
-const geo_1 = require("../../utils/geo");
 const navigation_1 = __importDefault(require("../../utils/navigation"));
 const logger_1 = require("../../utils/logger");
 const error_handler_1 = require("../../utils/error-handler");
 const global_store_1 = require("../../utils/global-store");
 const request_manager_1 = require("../../utils/request-manager");
-const dish_3 = require("../../api/dish");
 const responsive_1 = require("../../utils/responsive");
 const image_1 = require("../../utils/image");
+const util_1 = require("../../utils/util");
 const PAGE_CONTEXT = 'takeout_index';
 const PAGE_SIZE = 10; // 每页条数，用于无限滚动分页
 Page({
@@ -393,7 +391,7 @@ Page({
                     if (tagId && !isNaN(tagId)) {
                         params.tag_id = tagId;
                     }
-                    const result = yield (0, dish_2.getRecommendedDishes)(params);
+                    const result = yield (0, dish_2.searchDishes)(params);
                     newDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
                     hasMore = result.has_more;
                 }
@@ -437,7 +435,7 @@ Page({
             this.setData({ isPrefetching: true });
             try {
                 const app = getApp();
-                const result = yield (0, dish_2.getRecommendedDishes)({
+                const result = yield (0, dish_2.searchDishes)({
                     user_latitude: app.globalData.latitude || undefined,
                     user_longitude: app.globalData.longitude || undefined,
                     limit: PAGE_SIZE,
@@ -460,19 +458,25 @@ Page({
                 this.setData({ page: 1, restaurants: [], hasMore: true });
             }
             try {
-                // 使用推荐商户接口，传递当前页码
+                // 使用搜索商户接口
                 const app = getApp();
                 const currentPage = reset ? 1 : this.data.page;
-                const result = yield (0, merchant_1.getRecommendedMerchants)({
+                const { searchMerchants } = require('../../api/merchant');
+                const merchants = yield searchMerchants({
+                    keyword: this.data.searchKeyword, // 使用当前搜索词，如果是空字符串则返回默认列表
+                    page_id: currentPage,
+                    page_size: PAGE_SIZE,
                     user_latitude: app.globalData.latitude || undefined,
-                    user_longitude: app.globalData.longitude || undefined,
-                    limit: PAGE_SIZE,
-                    page: currentPage
+                    user_longitude: app.globalData.longitude || undefined
                 });
-                // Map for enrichment (if lat/lng available)
-                const merchantsForEnrich = result.merchants.map((m) => (Object.assign(Object.assign({}, m), { merchant_latitude: m.latitude, merchant_longitude: m.longitude })));
-                const enrichedMerchants = yield (0, geo_1.enrichMerchantsWithDistance)(merchantsForEnrich);
-                const restaurantViewModels = enrichedMerchants.map((m) => {
+                // Backend returns array directly for searchMerchants in some versions, 
+                // but wrapper in api/merchant.ts returns MerchantSummary[]
+                // We need to handle total/hasMore if possible, but searchMerchants wrapper currently swallows it?
+                // Checking api/merchant.ts, it returns response.merchants || []. 
+                // Logic for hasMore might be missing in client wrapper if total isn't returned.
+                // Assuming hasMore = length === PAGE_SIZE for now or update wrapper later.
+                const hasMore = merchants.length === PAGE_SIZE;
+                const restaurantViewModels = merchants.map((m) => {
                     var _a;
                     return ({
                         id: m.id,
@@ -487,19 +491,25 @@ Page({
                         isOpen: (_a = m.is_open) !== null && _a !== void 0 ? _a : true, // 商户营业状态
                         availableRooms: 0,
                         availableRoomsBadge: '',
-                        tags: m.tags ? m.tags.slice(0, 3) : []
+                        tags: m.tags ? m.tags.slice(0, 3) : [],
+                        // New fields
+                        monthlySales: m.monthly_sales || 0,
+                        deliveryFee: m.estimated_delivery_fee,
+                        deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
+                            ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
+                            : ''
                     });
                 });
                 if (reset) {
                     this.setData({
                         restaurants: restaurantViewModels,
-                        hasMore: result.has_more
+                        hasMore
                     });
                 }
                 else {
                     this.setData({
                         restaurants: [...this.data.restaurants, ...restaurantViewModels],
-                        hasMore: result.has_more
+                        hasMore
                     });
                 }
                 // 预加载图片
@@ -521,15 +531,23 @@ Page({
                 this.setData({ page: 1, packages: [], hasMore: true });
             }
             try {
-                // 调用后端推荐套餐接口，传递当前页码和位置
+                // 使用搜索套餐接口
                 const app = getApp();
                 const currentPage = reset ? 1 : this.data.page;
-                const result = yield (0, dish_3.getRecommendedCombos)({
-                    limit: PAGE_SIZE,
-                    page: currentPage,
+                const { searchCombos } = require('../../api/combo');
+                // 构造搜索参数
+                // 注意：getTags 返回的 id 是数字转字符串，searchCombos 可能需要数字？
+                // 当前 backend searchCombos 只接受 keyword。Category 过滤暂不支持？
+                // 如果 activeCategoryId 存在，可能需要作为 keyword 或者后续支持 category_id
+                // 目前主要支持 keyword 搜索。
+                const result = yield searchCombos({
+                    keyword: this.data.searchKeyword,
+                    page_id: currentPage,
+                    page_size: PAGE_SIZE,
                     user_latitude: app.globalData.latitude || undefined,
                     user_longitude: app.globalData.longitude || undefined
                 });
+                const hasMore = result.combos.length === PAGE_SIZE; // 简单分页逻辑，或使用 result.total
                 const packageViewModels = result.combos.map((combo) => {
                     var _a;
                     return ({
@@ -539,32 +557,33 @@ Page({
                         merchantName: combo.merchant_name || '',
                         imageUrl: (0, image_1.getPublicImageUrl)(combo.image_url) || '/assets/placeholder_food.png',
                         price: combo.combo_price,
-                        priceDisplay: `¥${(combo.combo_price / 100).toFixed(2)}`,
+                        priceDisplay: (0, util_1.formatPrice)(combo.combo_price),
                         originalPrice: combo.original_price,
-                        originalPriceDisplay: `¥${(combo.original_price / 100).toFixed(2)}`,
-                        savingsPercent: Math.round(combo.savings_percent || 0),
+                        originalPriceDisplay: (0, util_1.formatPrice)(combo.original_price),
+                        savingsPercent: combo.savings_percent || 0,
                         monthlySales: combo.monthly_sales || 0,
                         salesBadge: `月售${combo.monthly_sales || 0}`,
                         distance: dish_1.DishAdapter.formatDistance(combo.distance),
                         deliveryFee: combo.estimated_delivery_fee,
-                        deliveryFeeDisplay: combo.estimated_delivery_fee
+                        deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
                             ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
                             : '',
-                        tags: combo.tags || [],
-                        is_online: true, // 推荐API只返回上架套餐
-                        merchantIsOpen: (_a = combo.merchant_is_open) !== null && _a !== void 0 ? _a : true // 商户营业状态
+                        tags: [], // search combos doesn't return tags yet? 
+                        is_online: true,
+                        merchantIsOpen: (_a = combo.merchant_is_open) !== null && _a !== void 0 ? _a : true,
+                        estimatedDeliveryTime: combo.estimated_delivery_time
                     });
                 });
                 if (reset) {
                     this.setData({
                         packages: packageViewModels,
-                        hasMore: result.has_more
+                        hasMore
                     });
                 }
                 else {
                     this.setData({
                         packages: [...this.data.packages, ...packageViewModels],
-                        hasMore: result.has_more
+                        hasMore
                     });
                 }
             }
@@ -639,7 +658,7 @@ Page({
                     items: [],
                     totalCount: totalCount,
                     totalPrice: totalPrice,
-                    totalPriceDisplay: `¥${(totalPrice / 100).toFixed(2)}`
+                    totalPriceDisplay: (0, util_1.formatPrice)(totalPrice)
                 });
             }
             catch (error) {
@@ -659,7 +678,19 @@ Page({
        */
     onDishClick(e) {
         const { id } = e.detail;
-        navigation_1.default.toDishDetail(id);
+        // 查找对应菜品
+        const dish = this.data.dishes.find((d) => d.id == id);
+        if (dish) {
+            navigation_1.default.toDishDetail(id, {
+                shopName: dish.shop_name || dish.merchant_name,
+                monthSales: dish.month_sales,
+                distance: dish.distance,
+                estimatedDeliveryTime: Math.ceil((dish.estimated_delivery_time || 0) / 60) // 转换为分钟传递
+            });
+        }
+        else {
+            navigation_1.default.toDishDetail(id);
+        }
     },
     /**
        * 点击商户名称 - 跳转到商户详情
@@ -725,7 +756,7 @@ Page({
             const app = getApp();
             if (activeTab === 'dishes') {
                 // 搜索菜品 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
-                const result = yield (0, dish_2.getRecommendedDishes)({
+                const result = yield (0, dish_2.searchDishes)({
                     keyword,
                     page: 1,
                     limit: 20,

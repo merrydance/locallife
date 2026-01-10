@@ -5,6 +5,7 @@
 
 import { request, API_BASE } from '../utils/request'
 import { getToken } from '../utils/auth'
+import { supabase } from '../services/supabase'
 
 // ==================== 菜品数据类型定义 ====================
 
@@ -12,14 +13,14 @@ import { getToken } from '../utils/auth'
  * 菜品完整信息响应 - 完全对齐 api.dishResponse
  */
 export interface DishResponse {
-    id: number                                   // 菜品ID
-    merchant_id: number                          // 商户ID
+    id: string                                   // 菜品ID
+    merchant_id: string                          // 商户ID
     name: string                                 // 菜品名称
     description: string                          // 菜品描述
     price: number                                // 价格（分）
     member_price?: number                        // 会员价（分）
     image_url: string                            // 菜品图片URL
-    category_id: number                          // 分类ID
+    category_id: string                          // 分类ID
     category_name: string                        // 分类名称
     is_online: boolean                           // 是否上架
     is_available: boolean                        // 是否可用
@@ -34,8 +35,8 @@ export interface DishResponse {
  * 菜品摘要信息 - 对齐 api.dishSummary（用于搜索和推荐）
  */
 export interface DishSummary {
-    id: number                                   // 菜品ID
-    merchant_id: number                          // 商户ID
+    id: string                                   // 菜品ID
+    merchant_id: string                          // 商户ID
     name: string                                 // 菜品名称
     price: number                                // 价格（分）
     member_price?: number                        // 会员价（分）
@@ -46,7 +47,7 @@ export interface DishSummary {
     merchant_logo: string                        // 商户Logo
     merchant_latitude: number                    // 商户纬度
     merchant_longitude: number                   // 商户经度
-    merchant_region_id: number                   // 商户区域ID
+    merchant_region_id: string                   // 商户区域ID
     merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
     estimated_delivery_time?: number             // 预估配送时间（秒）
@@ -59,7 +60,7 @@ export interface DishSummary {
  * 定制化分组 - 对齐 api.customizationGroup
  */
 export interface CustomizationGroup {
-    id: number                                   // 分组ID
+    id: string                                   // 分组ID
     name: string                                 // 分组名称
     is_required: boolean                         // 是否必选
     sort_order: number                           // 排序
@@ -70,8 +71,8 @@ export interface CustomizationGroup {
  * 定制化选项 - 对齐 api.customizationOption
  */
 export interface CustomizationOption {
-    id: number                                   // 选项ID
-    tag_id: number                               // 标签ID
+    id: string                                   // 选项ID
+    tag_id: string                               // 标签ID
     tag_name: string                             // 标签名称
     extra_price: number                          // 加价（分）
     sort_order: number                           // 排序
@@ -81,7 +82,7 @@ export interface CustomizationOption {
  * 配料信息 - 对齐 api.ingredient
  */
 export interface Ingredient {
-    id: number                                   // 配料ID
+    id: string                                   // 配料ID
     name: string                                 // 配料名称
     category?: string                            // 分类
     is_allergen?: boolean                        // 是否过敏原
@@ -91,7 +92,7 @@ export interface Ingredient {
  * 标签信息 - 对齐 api.tagInfo
  */
 export interface TagInfo {
-    id: number                                   // 标签ID
+    id: string                                   // 标签ID
     name: string                                 // 标签名称
 }
 
@@ -99,7 +100,7 @@ export interface TagInfo {
  * 菜品分类 - 对齐 api.dishCategory
  */
 export interface DishCategory {
-    id: number                                   // 分类ID
+    id: string                                   // 分类ID
     name: string                                 // 分类名称
     sort_order: number                           // 排序
     dish_count?: number                          // 菜品数量
@@ -161,7 +162,7 @@ export interface UpdateDishRequest extends Record<string, unknown> {
  * 批量更新菜品状态请求 - 对齐 api.batchUpdateDishStatusRequest
  */
 export interface BatchUpdateDishStatusRequest extends Record<string, unknown> {
-    dish_ids: number[]                           // 菜品ID列表（必填，最多100个）
+    dish_ids: string[]                           // 菜品ID列表（必填，最多100个）
     is_online: boolean                           // true=上架, false=下架（必填）
 }
 
@@ -180,7 +181,7 @@ export interface BatchDishStatusResponse {
  * 套餐响应 - 对齐 api.comboSetResponse
  */
 export interface ComboSetResponse {
-    id: number                                   // 套餐ID
+    id: string                                   // 套餐ID
     name: string                                 // 套餐名称
     description?: string                         // 套餐描述
     combo_price: number                          // 套餐价格（分）
@@ -191,7 +192,7 @@ export interface ComboSetResponse {
  * 套餐中的菜品 - 对齐 api.dishInComboResponse
  */
 export interface DishInComboResponse {
-    dish_id: number                              // 菜品ID
+    dish_id: string                              // 菜品ID
     dish_name: string                            // 菜品名称
     dish_price?: number                          // 菜品价格（分）
     dish_image_url?: string                      // 菜品图片
@@ -202,7 +203,7 @@ export interface DishInComboResponse {
  * 套餐详情响应 - 对齐 api.comboSetWithDetailsResponse
  */
 export interface ComboSetWithDetailsResponse {
-    id: number                                   // 套餐ID
+    id: string                                   // 套餐ID
     name: string                                 // 套餐名称
     description?: string                         // 套餐描述
     combo_price: number                          // 套餐价格（分）
@@ -215,7 +216,7 @@ export interface ComboSetWithDetailsResponse {
  * 套餐菜品输入 - 对齐 api.comboDishInput
  */
 export interface ComboDishInput {
-    dish_id: number                              // 菜品ID（必填）
+    dish_id: string                              // 菜品ID（必填）
     quantity: number                             // 数量，1-99
 }
 
@@ -248,9 +249,9 @@ export interface CreateComboSetRequest extends Record<string, unknown> {
 export interface DailyInventoryResponse {
     available: number                            // 可用数量（计算字段: total - sold）
     date: string                                 // 日期（YYYY-MM-DD）
-    dish_id: number                              // 菜品ID
-    id: number                                   // 库存记录ID
-    merchant_id: number                          // 商户ID
+    dish_id: string                              // 菜品ID
+    id: string                                   // 库存记录ID
+    merchant_id: string                          // 商户ID
     sold_quantity: number                        // 已售数量
     total_quantity: number                       // 总库存数量
 }
@@ -268,11 +269,11 @@ export interface ListDailyInventoryResponse {
 export interface DailyInventoryWithDishResponse {
     available: number
     date: string
-    dish_id: number
+    dish_id: string
     dish_name: string
     dish_price: number
-    id: number
-    merchant_id: number
+    id: string
+    merchant_id: string
     sold_quantity: number
     total_quantity: number
 }
@@ -282,7 +283,7 @@ export interface DailyInventoryWithDishResponse {
  */
 export interface UpdateDailyInventoryRequest extends Record<string, unknown> {
     date: string                                 // 日期（YYYY-MM-DD，必填）
-    dish_id: number                              // 菜品ID（必填）
+    dish_id: string                              // 菜品ID（必填）
     sold_quantity?: number                       // 已售数量
     total_quantity?: number                      // 总库存数量
 }
@@ -292,7 +293,7 @@ export interface UpdateDailyInventoryRequest extends Record<string, unknown> {
  */
 export interface CreateDailyInventoryRequest extends Record<string, unknown> {
     date: string                                 // 日期（YYYY-MM-DD，必填）
-    dish_id: number                              // 菜品ID（必填）
+    dish_id: string                              // 菜品ID（必填）
     total_quantity: number                       // 总库存数量（-1表示无限库存，必填）
 }
 
@@ -309,7 +310,7 @@ export interface UpdateSingleInventoryRequest extends Record<string, unknown> {
  * 检查库存请求 - 对齐 api.checkInventoryRequest
  */
 export interface CheckInventoryRequest extends Record<string, unknown> {
-    dish_id: number                              // 菜品ID（必填）
+    dish_id: string                              // 菜品ID（必填）
     quantity: number                             // 数量（必填）
     date: string                                 // 日期（YYYY-MM-DD，必填）
 }
@@ -337,7 +338,7 @@ export interface InventoryStatsResponse {
  * 菜品分类响应 - 对齐 api.dishCategoryResponse
  */
 export interface DishCategoryResponse {
-    id: number                                   // 分类ID
+    id: string                                   // 分类ID
     name: string                                 // 分类名称
     sort_order: number                           // 排序
 }
@@ -369,7 +370,7 @@ export interface ListDishCategoriesResponse {
  * 菜品状态响应 - 对齐 api.dishStatusResponse
  */
 export interface DishStatusResponse {
-    id: number                                   // 菜品ID
+    id: string                                   // 菜品ID
     name: string                                 // 菜品名称
     is_online: boolean                           // 是否上架
     message?: string                             // 消息
@@ -386,7 +387,7 @@ export interface UpdateDishStatusRequest extends Record<string, unknown> {
  * 菜品定制化响应 - 对齐 api.dishCustomizationsResponse
  */
 export interface DishCustomizationsResponse {
-    dish_id: number                              // 菜品ID
+    dish_id: string                              // 菜品ID
     groups: CustomizationGroupResponse[]         // 定制分组列表
 }
 
@@ -394,7 +395,7 @@ export interface DishCustomizationsResponse {
  * 定制化分组响应 - 对齐 api.customizationGroupResponse
  */
 export interface CustomizationGroupResponse {
-    id: number                                   // 分组ID
+    id: string                                   // 分组ID
     name: string                                 // 分组名称
     is_required: boolean                         // 是否必选
     sort_order: number                           // 排序
@@ -405,8 +406,8 @@ export interface CustomizationGroupResponse {
  * 定制化选项响应 - 对齐 api.customizationOptionResponse
  */
 export interface CustomizationOptionResponse {
-    id: number                                   // 选项ID
-    tag_id: number                               // 标签ID
+    id: string                                   // 选项ID
+    tag_id: string                               // 标签ID
     tag_name: string                             // 标签名称
     extra_price: number                          // 加价（分）
     sort_order: number                           // 排序
@@ -426,7 +427,7 @@ export interface CustomizationGroupInput {
  * 定制化选项输入 - 对齐 api.customizationOptionInput
  */
 export interface CustomizationOptionInput {
-    tag_id: number                               // 标签ID（必填）
+    tag_id: string                               // 标签ID（必填）
     extra_price?: number                         // 加价（分，0-1000000）
     sort_order?: number                          // 排序
 }
@@ -457,7 +458,7 @@ export interface CreateComboSetRequest extends Record<string, unknown> {
  * 添加套餐菜品请求 - 对齐 api.addComboDishBodyRequest
  */
 export interface AddComboDishBodyRequest extends Record<string, unknown> {
-    dish_id: number                              // 菜品ID（必填）
+    dish_id: string                              // 菜品ID（必填）
 }
 
 /**
@@ -496,7 +497,7 @@ export interface RecommendCombosResponse {
  * 套餐摘要 - 对齐 api.comboSummary
  */
 export interface ComboSummary {
-    id: number                                   // 套餐ID
+    id: string                                   // 套餐ID
     name: string                                 // 套餐名称
     image_url: string                            // 套餐图片
     combo_price: number                          // 套餐价（分）
@@ -504,12 +505,12 @@ export interface ComboSummary {
     savings_percent: number                      // 优惠百分比
     monthly_sales: number                        // 近30天销量
     tags: string[]                               // 套餐标签
-    merchant_id: number                          // 商户ID
+    merchant_id: string                          // 商户ID
     merchant_name: string                        // 商户名称
     merchant_logo: string                        // 商户Logo
     merchant_latitude: number                    // 商户纬度
     merchant_longitude: number                   // 商户经度
-    merchant_region_id: number                   // 商户区域ID
+    merchant_region_id: string                   // 商户区域ID
     merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
     estimated_delivery_fee?: number              // 预估配送费（分）
@@ -529,12 +530,18 @@ export class TagService {
      * @param type 标签类型: dish, merchant, combo, table, customization
      */
     static async listTags(type: 'dish' | 'merchant' | 'combo' | 'table' | 'customization'): Promise<TagInfo[]> {
-        const response = await request<{ tags: TagInfo[] }>({
-            url: '/v1/tags',
-            method: 'GET',
-            data: { type }
-        })
-        return response.tags || []
+        const { data, error } = await supabase
+            .from('tags')
+            .select('id, name')
+            .eq('type', type)
+            .eq('status', 'active')
+            .order('sort_order', { ascending: true })
+
+        if (error) {
+            console.error('listTags failed', error)
+            return []
+        }
+        return data || []
     }
 
     /**
@@ -569,7 +576,7 @@ export class TagService {
      * 删除标签
      * DELETE /v1/tags/:id
      */
-    static async deleteTag(id: number): Promise<void> {
+    static async deleteTag(id: string): Promise<void> {
         await request({
             url: `/v1/tags/${id}`,
             method: 'DELETE'
@@ -593,7 +600,7 @@ export class DishManagementService {
         category_id?: number
         is_online?: boolean
         is_available?: boolean
-        page_id: number
+        page_id: string
         page_size: number
     }): Promise<ListDishesResponse> {
         return await request({
@@ -729,7 +736,7 @@ export class DishManagementService {
      * 更新菜品分类
      * PUT /v1/dishes/categories/{id}
      */
-    static async updateDishCategory(id: number, data: CreateDishCategoryRequest): Promise<DishCategory> {
+    static async updateDishCategory(id: string, data: CreateDishCategoryRequest): Promise<DishCategory> {
         return await request({
             url: `/v1/dishes/categories/${id}`,
             method: 'PUT',
@@ -741,7 +748,7 @@ export class DishManagementService {
      * 删除菜品分类
      * DELETE /v1/dishes/categories/{id}
      */
-    static async deleteDishCategory(id: number): Promise<void> {
+    static async deleteDishCategory(id: string): Promise<void> {
         await request({
             url: `/v1/dishes/categories/${id}`,
             method: 'DELETE'
@@ -799,13 +806,13 @@ export class ComboManagementService {
      * GET /v1/combos
      */
     static async listCombos(params: {
-        page_id: number
+        page_id: string
         page_size: number
         is_online?: boolean
     }): Promise<{
         combo_sets: ComboSetResponse[]
         total: number
-        page_id: number
+        page_id: string
         page_size: number
         has_more: boolean
     }> {
@@ -867,7 +874,7 @@ export class ComboManagementService {
      * POST /v1/combos/{id}/dishes
      */
     static async addDishToCombo(comboId: number, data: {
-        dish_id: number
+        dish_id: string
         quantity: number
     }): Promise<void> {
         return await request({
@@ -941,14 +948,14 @@ export class InventoryManagementService {
      */
     static async checkInventory(data: {
         items: Array<{
-            dish_id: number
+            dish_id: string
             quantity: number
         }>
         date?: string
     }): Promise<{
         available: boolean
         unavailable_items?: Array<{
-            dish_id: number
+            dish_id: string
             dish_name: string
             requested_quantity: number
             available_quantity: number
@@ -973,7 +980,7 @@ export class InventoryManagementService {
         low_stock_dishes: number
         out_of_stock_dishes: number
         stats: Array<{
-            dish_id: number
+            dish_id: string
             dish_name: string
             avg_daily_sales: number
             total_sales: number
@@ -994,8 +1001,8 @@ export class InventoryManagementService {
  * 搜索菜品项 - 对齐后端 searchDishResponse
  */
 export interface SearchDishItem {
-    id: number
-    merchant_id: number
+    id: string
+    merchant_id: string
     category_id?: number
     name: string
     description: string
@@ -1041,10 +1048,10 @@ export interface RecommendedDishesResponse {
  * 搜索菜品参数 (UI)
  */
 export interface DishSearchParams {
-    merchant_id?: number
+    merchant_id?: string
     limit?: number
     page?: number              // 页码，从1开始
-    tag_id?: number            // 按标签ID过滤
+    tag_id?: string            // 按标签ID过滤 (UUID)
     keyword?: string           // 搜索关键词
     user_latitude?: number
     user_longitude?: number
@@ -1060,53 +1067,72 @@ export interface DishSearchResult {
     total_count: number
 }
 
+interface DishRPCResult {
+    id: string
+    merchant_id: string
+    name: string
+    price: number
+    member_price?: number
+    image_url: string
+    is_available: boolean
+    merchant_name: string
+    merchant_logo: string
+    merchant_is_open: boolean
+    distance: number
+    estimated_delivery_time: number
+    estimated_delivery_fee: { final_fee: number; base_fee: number; distance_fee: number }
+    monthly_sales: number
+    repurchase_rate?: number
+    total_count: number
+}
+
 /**
  * 搜索菜品 (原 getRecommendedDishes) - 基于 /v1/search/dishes
  * 支持分页，返回包含 has_more 的完整响应
  */
 export async function searchDishes(params?: DishSearchParams): Promise<DishSearchResult> {
-    // 首页推荐重构：使用搜索接口替代推荐接口
-    // 如果没有关键词，表示获取推荐流
-    const searchParams: any = {
-        keyword: params?.keyword || '', // 空字符串表示推荐流
-        page_id: params?.page || 1,
-        page_size: params?.limit || 20,
-    }
-
-    // 仅当参数存在时才添加，避免传递 undefined 导致后端验证失败
-    if (params?.merchant_id) searchParams.merchant_id = params.merchant_id
-    if (params?.tag_id) searchParams.tag_id = params.tag_id // Added
-    if (params?.user_latitude) searchParams.user_latitude = params.user_latitude
-    if (params?.user_longitude) searchParams.user_longitude = params.user_longitude
-
-    const response = await request<SearchDishesResponse>({
-        url: '/v1/search/dishes',
-        method: 'GET',
-        data: searchParams,
-        useCache: searchParams.page_id === 1 && !searchParams.keyword, // 只缓存首页默认流
-        cacheTTL: 1 * 60 * 1000 // 1分钟缓存 (数据即时性要求高)
+    const { data, error } = await supabase.rpc<DishRPCResult[]>('search_dishes', {
+        p_keyword: params?.keyword || null,
+        p_tag_id: params?.tag_id || null,
+        p_user_lat: params?.user_latitude,
+        p_user_lng: params?.user_longitude,
+        p_page_id: params?.page || 1,
+        p_page_size: params?.limit || 20
     })
 
-    // 转换响应格式以匹配 DishSearchResult
-    return {
-        dishes: (response.dishes || []).map(item => ({
-            ...item,
-            // 使用后端返回的商户信息，部分字段暂时缺省
-            merchant_name: item.merchant_name || '未知商户',
-            merchant_logo: item.merchant_logo || '',
-            merchant_latitude: 0,
-            merchant_longitude: 0,
-            merchant_region_id: 0,
-            merchant_is_open: item.merchant_is_open ?? true,
-            distance: item.distance || 0,
-            estimated_delivery_fee: item.estimated_delivery_fee || 0,
-            estimated_delivery_time: item.estimated_delivery_time || 0,
-            tags: []
-        } as unknown as DishSummary)),
+    if (error) {
+        console.error('searchDishes failed', error)
+        return { dishes: [], has_more: false, page: 1, total_count: 0 }
+    }
 
-        has_more: response.has_more ?? false,
-        page: response.page_id ?? 1,
-        total_count: response.total ?? 0
+    const totalCount = (data && data.length > 0) ? data[0].total_count : 0
+    const dishes = (data || []).map(item => ({
+        id: item.id,
+        merchant_id: item.merchant_id,
+        name: item.name,
+        price: item.price,
+        member_price: item.member_price,
+        image_url: item.image_url,
+        is_available: item.is_available,
+        merchant_name: item.merchant_name,
+        merchant_logo: item.merchant_logo,
+        merchant_latitude: 0, 
+        merchant_longitude: 0,
+        merchant_region_id: '',
+        merchant_is_open: item.merchant_is_open,
+        distance: item.distance,
+        estimated_delivery_time: item.estimated_delivery_time,
+        estimated_delivery_fee: item.estimated_delivery_fee?.final_fee || 0,
+        monthly_sales: item.monthly_sales,
+        repurchase_rate: item.repurchase_rate,
+        tags: []
+    } as DishSummary))
+
+    return {
+        dishes: dishes as DishSummary[],
+        has_more: (params?.page || 1) * (params?.limit || 20) < totalCount,
+        page: params?.page || 1,
+        total_count: totalCount
     }
 }
 
@@ -1168,7 +1194,7 @@ export async function getRecommendedCombos(params?: RecommendCombosParams): Prom
  * 标签响应
  */
 export interface Tag {
-    id: number
+    id: string
     name: string
     type: string
     sort_order: number
@@ -1179,24 +1205,25 @@ export interface Tag {
  * @param type 标签类型: dish, combo, merchant, attribute, customization
  */
 export async function getTags(type: string): Promise<Tag[]> {
-    interface TagsResponse {
-        tags: Tag[]
+    const { data, error } = await supabase
+        .from('tags')
+        .select('*')
+        .eq('type', type)
+        .eq('status', 'active')
+        .order('sort_order', { ascending: true })
+
+    if (error) {
+        console.error('getTags failed', error)
+        return []
     }
-    const response = await request<TagsResponse>({
-        url: '/v1/tags',
-        method: 'GET',
-        data: { type },
-        useCache: true,
-        cacheTTL: 10 * 60 * 1000 // 10分钟缓存
-    })
-    return response.tags || []
+    return data || []
 }
 
 // ==================== 套餐搜索 API ====================
 
 export interface SearchComboItem {
-    id: number
-    merchant_id: number
+    id: string
+    merchant_id: string
     name: string
     description: string
     image_url: string
@@ -1223,33 +1250,52 @@ export interface ComboSearchParams {
 export interface ComboSearchResult {
     combos: SearchComboItem[]
     total: number
-    page_id: number
+    page_id: string
     page_size: number
 }
 
 /**
- * 搜索套餐 - 基于 /v1/search/combos
+ * 搜索套餐 - 基于 Supabase search_combos RPC
  */
 export async function searchCombos(params: ComboSearchParams): Promise<ComboSearchResult> {
-    // 过滤掉 undefined 的参数
-    const searchParams: any = {
-        page_id: params.page_id || 1,
-        page_size: params.page_size || 20
-    }
-
-    if (params.keyword) searchParams.keyword = params.keyword
-    if (params.user_latitude !== undefined) searchParams.user_latitude = params.user_latitude
-    if (params.user_longitude !== undefined) searchParams.user_longitude = params.user_longitude
-
-    const response = await request<ComboSearchResult>({
-        url: '/v1/search/combos',
-        method: 'GET',
-        data: searchParams,
-        useCache: true,
-        cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+    const { data, error } = await supabase.rpc('search_combos', {
+        p_keyword: params.keyword || null,
+        p_user_lat: params.user_latitude,
+        p_user_lng: params.user_longitude,
+        p_page_id: params.page_id || 1,
+        p_page_size: params.page_size || 20
     })
 
-    return response
+    if (error) {
+        console.error('searchCombos failed', error)
+        return { combos: [], total: 0, page_id: String(params.page_id || 1), page_size: params.page_size || 20 }
+    }
+
+    const totalCount = data.length > 0 ? (data[0] as any).total_count : 0
+    const combos = (data as any[]).map(item => ({
+        id: item.id,
+        merchant_id: item.merchant_id,
+        name: item.name,
+        description: item.description,
+        image_url: item.image_url,
+        original_price: item.original_price,      // 元
+        combo_price: item.combo_price,           // 元
+        savings_percent: 0, 
+        monthly_sales: item.monthly_sales || 0,
+        merchant_name: item.merchant_name,
+        merchant_logo: item.merchant_logo,
+        merchant_is_open: item.merchant_is_open,
+        distance: item.distance,            // 米
+        estimated_delivery_fee: item.estimated_delivery_fee?.final_fee || 0,
+        estimated_delivery_time: 0 // 暂缺
+    }))
+
+    return {
+        combos: combos as SearchComboItem[],
+        total: totalCount,
+        page_id: String(params.page_id || 1),
+        page_size: params.page_size || 20
+    }
 }
 
 // ==================== 导出默认服务 ====================

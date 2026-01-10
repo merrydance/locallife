@@ -10,9 +10,9 @@ import { getToken } from '../utils/auth';
 
 // WebSocket连接参数
 export interface WebSocketConnectionParams {
-    user_id?: number;              // 实际的用户 ID (用于鉴权校验)
+    user_id?: string | number;              // 实际的用户 ID (使用 string 以支持 Supabase UUID)
     role: 'customer' | 'merchant' | 'rider' | 'operator' | 'admin';
-    entity_id?: number;            // 角色相关的实体 ID (如 merchant_id, rider_id)
+    entity_id?: string | number;            // 角色相关的实体 ID (如 merchant_id)
     channels?: string[];           // 直接指定订阅频道
 }
 
@@ -624,9 +624,9 @@ export class WebSocketUtils {
      */
     static async initializeConnection(
         role: 'customer' | 'merchant' | 'rider' | 'operator' | 'admin',
-        userId?: number, // 这里应为实际的 User ID
+        userId?: string | number, // 这里应为实际的 User ID
         handlers: WebSocketEventHandlers = {},
-        entityId?: number // 这里应为角色关联的 ID (如 merchantId)
+        entityId?: string | number // 这里应为角色关联的 ID (如 merchantId)
     ): Promise<WebSocketManager> {
         // 单例模式：只有在不存在或已关闭时才创建新实例
         if (!this.wsManager) {
@@ -704,7 +704,7 @@ export class RealtimeUtils {
      * 为顾客初始化实时通信
      */
     static async initializeForCustomer(
-        userId: number,
+        userId: string | number,
         onOrderUpdate?: (orderData: any) => void,
         onDeliveryUpdate?: (deliveryData: any) => void
     ): Promise<WebSocketManager> {
@@ -724,8 +724,8 @@ export class RealtimeUtils {
      * 为商户初始化实时通信
      */
     static async initializeForMerchant(
-        userId: number,
-        merchantId: number,
+        userId: string | number,
+        merchantId: string | number,
         handlers: {
             onOpen?: () => void;
             onOrderUpdate?: (orderData: any) => void;
@@ -748,7 +748,7 @@ export class RealtimeUtils {
      * 为骑手初始化实时通信
      */
     static async initializeForRider(
-        userId: number,
+        userId: string | number,
         onDeliveryUpdate?: (deliveryData: any) => void,
         onLocationUpdate?: (locationData: RiderLocationUpdate) => void
     ): Promise<WebSocketManager> {

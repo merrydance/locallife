@@ -166,14 +166,21 @@ function request(options) {
             const app = getApp();
             const latitude = ((_a = app === null || app === void 0 ? void 0 : app.globalData) === null || _a === void 0 ? void 0 : _a.latitude) || 0;
             const longitude = ((_b = app === null || app === void 0 ? void 0 : app.globalData) === null || _b === void 0 ? void 0 : _b.longitude) || 0;
-            logger_1.logger.debug(`API请求: ${method} ${url}`, { data, latitude, longitude, requestId }, 'request');
+            
+            // Supabase Key Support
+            const { SUPABASE_KEY } = require('../services/supabase');
+            const requestUrl = url.startsWith('/v1/') ? url.substring(3) : url;
+            const finalFullUrl = `${exports.API_BASE}${requestUrl}`;
+
+            logger_1.logger.debug(`API请求: ${method} ${finalFullUrl}`, { data, latitude, longitude, requestId }, 'request');
             const result = yield new Promise((resolve, reject) => {
                 const task = wx.request({
-                    url: `${exports.API_BASE}${url}`,
+                    url: finalFullUrl,
                     method: method,
                     data,
                     header: {
                         'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
                         'Authorization': `Bearer ${(0, auth_1.getToken)()}`,
                         'X-User-Latitude': String(latitude),
                         'X-User-Longitude': String(longitude),
@@ -525,7 +532,6 @@ function refreshTokenWithTimeout() {
  */
 function refreshTokenOnce() {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b;
         try {
             const { getRefreshToken } = require('./auth');
             const { getDeviceId } = require('./location');
@@ -534,26 +540,15 @@ function refreshTokenOnce() {
             if (refreshToken) {
                 logger_1.logger.info('尝试使用refresh_token刷新', undefined, 'refreshTokenOnce');
                 try {
-                    const res = yield new Promise((resolve, reject) => {
-                        wx.request({
-                            url: `${exports.API_BASE}/v1/auth/refresh`,
-                            method: 'POST',
-                            data: { refresh_token: refreshToken },
-                            header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-                            success: resolve,
-                            fail: reject,
-                            timeout: 5000
-                        });
-                    });
-                    const response = res.data;
-                    if (res.statusCode === 200 && response.code === types_1.ErrorCode.SUCCESS && ((_a = response.data) === null || _a === void 0 ? void 0 : _a.access_token)) {
-                        const d = response.data;
-                        const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined;
-                        (0, auth_1.setToken)(d.access_token, expiresAt, d.refresh_token);
+                    const { renewAccessToken } = require('../api/auth');
+                    console.log('Calling renewAccessToken with', refreshToken);
+                    const loginData = yield renewAccessToken({ refresh_token: refreshToken });
+                    if (loginData && loginData.access_token) {
+                        const expiresAt = loginData.access_token_expires_at ? new Date(loginData.access_token_expires_at).getTime() : undefined;
+                        (0, auth_1.setToken)(loginData.access_token, expiresAt, loginData.refresh_token);
                         logger_1.logger.info('refresh_token刷新成功', undefined, 'refreshTokenOnce');
                         return;
                     }
-                    logger_1.logger.warn('refresh_token刷新失效，尝试重新登录', response, 'refreshTokenOnce');
                 }
                 catch (e) {
                     logger_1.logger.warn('refresh_token请求失败，尝试重新登录', e, 'refreshTokenOnce');
@@ -569,22 +564,11 @@ function refreshTokenOnce() {
                 });
             });
             const deviceId = getDeviceId();
-            const res2 = yield new Promise((resolve, reject) => {
-                wx.request({
-                    url: `${exports.API_BASE}/v1/auth/wechat-login`,
-                    method: 'POST',
-                    data: { code, device_id: deviceId, device_type: 'miniprogram' },
-                    header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-                    success: resolve,
-                    fail: reject,
-                    timeout: 5000
-                });
-            });
-            const response2 = res2.data;
-            if (res2.statusCode === 200 && response2.code === types_1.ErrorCode.SUCCESS && ((_b = response2.data) === null || _b === void 0 ? void 0 : _b.access_token)) {
-                const d = response2.data;
-                const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined;
-                (0, auth_1.setToken)(d.access_token, expiresAt, d.refresh_token);
+            const { wechatLogin } = require('../api/auth');
+            const loginData = yield wechatLogin({ code, device_id: deviceId, device_type: 'miniprogram' });
+            if (loginData && loginData.access_token) {
+                const expiresAt = loginData.access_token_expires_at ? new Date(loginData.access_token_expires_at).getTime() : undefined;
+                (0, auth_1.setToken)(loginData.access_token, expiresAt, loginData.refresh_token);
                 logger_1.logger.info('wx.login重登录成功', undefined, 'refreshTokenOnce');
                 return;
             }

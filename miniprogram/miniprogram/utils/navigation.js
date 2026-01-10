@@ -10,10 +10,19 @@ class Navigation {
     /**
        * 跳转到菜品详情页
        */
-    static toDishDetail(dishId) {
-        wx.navigateTo({
-            url: `/pages/takeout/dish-detail/index?id=${dishId}`
-        });
+    static toDishDetail(dishId, extraInfo) {
+        let url = `/pages/takeout/dish-detail/index?id=${dishId}`;
+        if (extraInfo) {
+            if (extraInfo.shopName)
+                url += `&shop_name=${encodeURIComponent(extraInfo.shopName)}`;
+            if (extraInfo.monthSales)
+                url += `&month_sales=${extraInfo.monthSales}`;
+            if (extraInfo.distance)
+                url += `&distance=${extraInfo.distance}`;
+            if (extraInfo.estimatedDeliveryTime)
+                url += `&estimated_delivery_time=${extraInfo.estimatedDeliveryTime}`;
+        }
+        wx.navigateTo({ url });
     }
     /**
        * 跳转到商户详情页

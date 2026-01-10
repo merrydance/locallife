@@ -15,10 +15,10 @@ exports.ENV = {
 };
 // API配置
 exports.API_CONFIG = {
-    // 生产环境API地址 (移除/api段，后端basePath为/v1)
-    PROD_BASE_URL: 'https://llapi.merrydance.cn',
-    // 开发环境API地址(可配置)
-    DEV_BASE_URL: 'https://llapi.merrydance.cn',
+    // 生产环境API地址 (Supabase Rest API)
+    PROD_BASE_URL: 'https://ls.merrydance.cn/rest/v1',
+    // 开发环境API地址(Supabase Rest API)
+    DEV_BASE_URL: 'https://ls.merrydance.cn/rest/v1',
     // 获取当前环境的API地址
     get BASE_URL() {
         return exports.ENV.isDev ? this.DEV_BASE_URL : this.PROD_BASE_URL;

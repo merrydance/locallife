@@ -1,6 +1,6 @@
 {
   "libVersion": "3.12.1",
-  "projectname": "weapp",
+  "projectname": "miniprogram-supabase",
   "setting": {
     "urlCheck": false,
     "coverView": true,
@@ -19,17 +19,5 @@
     "bigPackageSizeSupport": false,
     "useIsolateContext": true
   },
-  "condition": {
-    "miniprogram": {
-      "list": [
-        {
-          "name": "pages/dine-in/menu/menu",
-          "pathName": "pages/dine-in/menu/menu",
-          "query": "",
-          "scene": null,
-          "launchMode": "default"
-        }
-      ]
-    }
-  }
+  "condition": {}
 }

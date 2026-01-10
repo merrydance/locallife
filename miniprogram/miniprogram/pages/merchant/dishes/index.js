@@ -17,6 +17,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const dish_1 = require("../../../api/dish");
+const dish_supabase_1 = require("../../../api/dish_supabase");
 const image_security_1 = require("../../../utils/image-security");
 const logger_1 = require("../../../utils/logger");
 const util_1 = require("../../../utils/util");
@@ -34,7 +35,7 @@ Page({
         dishes: [],
         allDishes: [],
         selectedDish: null,
-        selectedDishId: null, // 用于列表高亮，比对比整个对象更快
+        selectedDishId: null, // Used for list highlighting
         // 状态
         loading: true,
         saving: false,
@@ -158,9 +159,11 @@ Page({
         return __awaiter(this, void 0, void 0, function* () {
             this.setData({ loading: true });
             try {
-                const response = yield dish_1.DishManagementService.listDishes({
+                // [Supabase POC] Use DishSupabaseService
+                const response = yield dish_supabase_1.DishSupabaseService.listDishes({
+                    merchant_id: 'b2c3d4e5-f6a7-4890-9123-4567890abcde', // Hardcoded for POC
                     page_id: 1,
-                    page_size: 50 // 后端限制最大50
+                    page_size: 50
                 });
                 // 处理图片 URL
                 const processedDishes = yield Promise.all(response.dishes.map((dish) => __awaiter(this, void 0, void 0, function* () {

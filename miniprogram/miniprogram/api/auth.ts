@@ -26,7 +26,7 @@ export interface WechatLoginRequest extends Record<string, unknown> {
  * 用户信息响应 - 对齐 api.userResponse
  */
 export interface UserResponse {
-  id: number  // 用户ID，改为number类型
+  id: string  // 用户ID (Supabase UUID)
   avatar_url?: string  // 头像URL
   full_name?: string  // 全名
   phone?: string  // 手机号
@@ -43,7 +43,7 @@ export interface WechatLoginResponse {
   access_token_expires_at: string  // 访问令牌过期时间
   refresh_token: string  // 刷新令牌
   refresh_token_expires_at: string  // 刷新令牌过期时间
-  session_id: number  // 会话ID
+  session_id: string  // 会话ID
   user: UserResponse  // 用户信息
 }
 
@@ -115,30 +115,90 @@ export type RefreshTokenRequest = RenewAccessTokenRequest
  * 微信登录 - 使用正确的swagger路径
  * 后端已启用统一响应信封（X-Response-Envelope: 1），返回 { code, message, data } 格式
  */
-export function wechatLogin(data: WechatLoginRequest) {
-  return request<WechatLoginResponse>({
-    url: '/v1/auth/wechat-login',
-    method: 'POST',
-    data,
-    skipAuth: true // 登录接口不需要认证，跳过 token 验证和刷新
-  }).then(res => {
-    if (res.user) {
-      normalizeUser(res.user)
-    }
-    return res
+import { SUPABASE_URL, SUPABASE_KEY } from '../services/supabase'
+
+/**
+ * 微信登录 - 迁移至 Supabase Edge Function
+ */
+export async function wechatLogin(data: WechatLoginRequest): Promise<WechatLoginResponse> {
+  // Edge Function Invoke
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${SUPABASE_URL}/functions/v1/wechat-login`,
+      method: 'POST',
+      data: data,
+      header: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      },
+      success: (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const body = res.data as any
+          const { session, user } = body
+
+          if (!session || !session.access_token) {
+            reject(new Error('Invalid response: missing session'))
+            return
+          }
+
+          resolve({
+            access_token: session.access_token,
+            access_token_expires_at: new Date(Date.now() + session.expires_in * 1000).toISOString(),
+            refresh_token: session.refresh_token,
+            refresh_token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            session_id: '0',
+            user: {
+              id: user.id,
+              full_name: user.user_metadata?.full_name || '',
+              avatar_url: user.user_metadata?.avatar_url || '',
+              roles: user.roles || ['CUSTOMER'],
+              wechat_openid: user.user_metadata?.openid
+            } as any
+          })
+        } else {
+          reject(new Error(`Login failed: ${JSON.stringify(res.data)}`))
+        }
+      },
+      fail: (err) => {
+        reject(new Error(err.errMsg || 'Network request failed'))
+      }
+    })
   })
 }
 
 /**
- * 刷新访问令牌 - 基于 /v1/auth/renew-access
- * 后端已启用统一响应信封（X-Response-Envelope: 1），返回 { code, message, data } 格式
+ * 刷新访问令牌 - 使用 Supabase Auth API
  */
 export function renewAccessToken(data: RefreshTokenRequest) {
-  return request<WechatLoginResponse>({
-    url: '/v1/auth/refresh',
-    method: 'POST',
-    data,
-    skipAuth: true // 刷新接口不需要认证，跳过 token 验证和刷新（避免循环调用）
+  return new Promise<WechatLoginResponse>((resolve, reject) => {
+    wx.request({
+      url: `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
+      method: 'POST',
+      data: { refresh_token: data.refresh_token },
+      header: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY
+      },
+      success: (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const session = res.data as any
+          // Convert Supabase Token Response to WechatLoginResponse format (partial)
+          resolve({
+            access_token: session.access_token,
+            access_token_expires_at: new Date(Date.now() + session.expires_in * 1000).toISOString(),
+            refresh_token: session.refresh_token,
+            refresh_token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Dummy 30d
+            session_id: '0',
+            user: { id: session.user?.id } as any // Minimal user info
+          })
+        } else {
+          reject(new Error(`Token refresh failed: ${JSON.stringify(res.data)}`))
+        }
+      },
+      fail: (err) => {
+        reject(new Error(err.errMsg || 'Network request failed'))
+      }
+    })
   })
 }
 

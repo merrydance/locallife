@@ -55,35 +55,59 @@ class LocationService {
      * 后端接口: GET /v1/location/reverse-geocode?latitude=xxx&longitude=xxx
      */
     async reverseGeocode(latitude: number, longitude: number): Promise<LocationInfo> {
-        try {
-            const response = await request<LocationInfo>({
-                url: '/v1/location/reverse-geocode',
-                method: 'GET',
+        return new Promise((resolve, reject) => {
+            const { SUPABASE_URL, SUPABASE_KEY } = require('../services/supabase')
+
+            wx.request({
+                url: `${SUPABASE_URL}/functions/v1/location-proxy`,
+                method: 'POST',
                 data: {
+                    action: 'reverse-geocode',
                     latitude,
                     longitude
+                },
+                header: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_KEY}`
+                },
+                success: (res) => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        const body = res.data as any
+                        const data = body.data // The Edge Function returns { code: 0, data: {...} }
+
+                        logger.info('逆地理编码成功', data, 'LocationService.reverseGeocode')
+
+                        // 补充经纬度信息
+                        if (!data.latitude) data.latitude = latitude
+                        if (!data.longitude) data.longitude = longitude
+
+                        resolve(data as LocationInfo)
+                    } else {
+                        // Fallback logic
+                        logger.error('逆地理编码失败', res.data, 'LocationService.reverseGeocode')
+                        resolve({
+                            latitude,
+                            longitude,
+                            address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+                            province: '',
+                            city: '',
+                            district: ''
+                        })
+                    }
+                },
+                fail: (err) => {
+                    logger.error('逆地理编码网络失败', err, 'LocationService.reverseGeocode')
+                    resolve({
+                        latitude,
+                        longitude,
+                        address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+                        province: '',
+                        city: '',
+                        district: ''
+                    })
                 }
             })
-
-            logger.info('逆地理编码成功', response, 'LocationService.reverseGeocode')
-
-            // 补充经纬度信息（后端可能不返回）
-            if (!response.latitude) response.latitude = latitude
-            if (!response.longitude) response.longitude = longitude
-
-            return response
-        } catch (err) {
-            logger.error('逆地理编码失败', err, 'LocationService.reverseGeocode')
-            // 即使逆地理编码失败，也返回基本的位置信息
-            return {
-                latitude,
-                longitude,
-                address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
-                province: '',
-                city: '',
-                district: ''
-            }
-        }
+        })
     }
 
     /**

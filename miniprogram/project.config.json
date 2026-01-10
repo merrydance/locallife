@@ -59,7 +59,7 @@
     "localPlugins": false,
     "condition": false,
     "swc": false,
-    "disableSWC": true
+    "disableSWC": false
   },
   "compileType": "miniprogram",
   "libVersion": "3.12.1",

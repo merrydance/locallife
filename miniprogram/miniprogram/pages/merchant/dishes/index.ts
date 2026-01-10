@@ -7,6 +7,7 @@
  */
 
 import { DishManagementService, DishResponse, DishCategory, TagService, TagInfo, CustomizationGroupInput, CustomizationOptionInput } from '../../../api/dish'
+import { DishSupabaseService } from '../../../api/dish_supabase'
 import { resolveImageURL } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
 import { formatPriceNoSymbol } from '../../../utils/util'
@@ -27,13 +28,13 @@ Page({
 
     // 分类
     categories: [] as any[],
-    activeCategoryId: 'all' as string | number,
+    activeCategoryId: 'all' as string,
 
     // 菜品
     dishes: [] as DishItem[],
     allDishes: [] as DishItem[],
     selectedDish: null as DishItem | null,
-    selectedDishId: null as number | null,  // 用于列表高亮，比对比整个对象更快
+    selectedDishId: null as string | null,  // Used for list highlighting
 
     // 状态
     loading: true,
@@ -52,15 +53,15 @@ Page({
 
     // 标签选择
     availableTags: [] as TagInfo[],
-    selectedTagIds: [] as number[],
+    selectedTagIds: [] as string[],
 
     // 批量操作
     isMultiSelectMode: false,
-    selectedDishIds: [] as number[],
+    selectedDishIds: [] as string[],
 
     // 定制选项 - 简化版
     customizationTags: [] as TagInfo[],  // 可用的定制标签
-    selectedCustomizationTagIds: [] as number[],  // 已选中的定制标签 ID
+    selectedCustomizationTagIds: [] as string[],  // 已选中的定制标签 ID
     selectedCustomizationOptions: [] as any[],  // 已选中的定制选项（带加价）
 
     // 标签管理弹窗
@@ -166,9 +167,11 @@ Page({
     this.setData({ loading: true })
 
     try {
-      const response = await DishManagementService.listDishes({
+      // [Supabase POC] Use DishSupabaseService
+      const response = await DishSupabaseService.listDishes({
+        merchant_id: 'b2c3d4e5-f6a7-4890-9123-4567890abcde', // Hardcoded for POC
         page_id: 1,
-        page_size: 50  // 后端限制最大50
+        page_size: 50
       })
 
       // 处理图片 URL

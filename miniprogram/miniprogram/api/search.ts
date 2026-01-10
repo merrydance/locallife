@@ -1,9 +1,9 @@
 /**
  * 搜索相关API接口
- * 基于swagger.json中的搜索和推荐接口
+ * 迁移至 Supabase RPC 实现
  */
 
-import { request } from '../utils/request'
+import { supabase } from '../services/supabase'
 import { logger } from '../utils/logger'
 import type { DishSummary } from './dish'
 import type { MerchantSummary } from './merchant'
@@ -19,75 +19,14 @@ export interface SearchMerchantsParams extends Record<string, unknown> {
     page_size: number
 }
 
-/** 推荐商户参数 */
-export interface RecommendMerchantsParams extends Record<string, unknown> {
+/** 搜索菜品参数 */
+export interface SearchDishesParams extends Record<string, unknown> {
+    keyword: string
+    tag_id?: string
     user_latitude?: number
     user_longitude?: number
-    limit?: number
-}
-
-/** 搜索包间参数 - 对齐后端 searchRoomsRequest */
-export interface SearchRoomsParams extends Record<string, unknown> {
-    reservation_date: string           // 必填：预订日期 YYYY-MM-DD
-    reservation_time: string           // 必填：预订时段 HH:MM
-    min_capacity?: number              // 可选：最小容纳人数
-    max_capacity?: number              // 可选：最大容纳人数
-    max_minimum_spend?: number         // 可选：最大低消（分）
-    tag_id?: number                    // 可选：菜系/标签ID
-    region_id?: number                 // 可选：区域ID
-    user_latitude?: number             // 可选：用户纬度
-    user_longitude?: number            // 可选：用户经度
-    page_id: number                    // 必填：页码
-    page_size: number                  // 必填：每页数量
-}
-
-/** 推荐包间参数 - 对齐后端 exploreRoomsRequest */
-export interface RecommendRoomsParams extends Record<string, unknown> {
-    region_id?: number                 // 区域ID
-    min_capacity?: number              // 最小容纳人数
-    max_capacity?: number              // 最大容纳人数
-    max_minimum_spend?: number         // 最大低消（分）
-    user_latitude?: number             // 用户纬度
-    user_longitude?: number            // 用户经度
-    page_id: number                    // 页码
-    page_size: number                  // 每页数量
-}
-
-/** 包间搜索结果 */
-export interface RoomSearchResult {
-    id: number
-    merchant_id: number
-    merchant_name: string
-    merchant_logo: string
-    merchant_address?: string
-    name: string
-    table_no?: string
-    capacity: number
-    hourly_rate: number
-    minimum_spend: number
-    images: string[]
-    amenities: string[]
-    is_available: boolean
-    distance?: number
-    estimated_delivery_fee?: number
-    primary_image?: string
-    monthly_reservations?: number
-    tags?: string[]
-}
-
-/** 搜索历史记录 */
-export interface SearchHistory {
-    id: number
-    keyword: string
-    search_type: 'dish' | 'merchant' | 'room'
-    created_at: string
-}
-
-/** 热门搜索关键词 */
-export interface PopularKeyword {
-    keyword: string
-    search_count: number
-    trend: 'up' | 'down' | 'stable'
+    page_id: number
+    page_size: number
 }
 
 /** 搜索建议 */
@@ -97,147 +36,139 @@ export interface SearchSuggestion {
     count: number
 }
 
+// RPC 返回原始数据类型定义
+interface MerchantRPCResult {
+  id: string
+  name: string
+  description: string
+  logo_url: string
+  phone: string
+  address: string
+  latitude: number
+  longitude: number
+  status: string
+  region_id: string
+  is_open: boolean
+  distance: number
+  estimated_delivery_fee: { final_fee: number; base_fee: number; distance_fee: number }
+  total_count: number
+}
+
+interface DishRPCResult {
+  id: string
+  merchant_id: string
+  name: string
+  price: number
+  member_price?: number
+  image_url: string
+  is_available: boolean
+  merchant_name: string
+  merchant_logo: string
+  merchant_is_open: boolean
+  distance: number
+  estimated_delivery_time: number
+  estimated_delivery_fee: { final_fee: number; base_fee: number; distance_fee: number }
+  monthly_sales: number
+  repurchase_rate?: number
+  total_count: number
+}
+
+// 汇总结果增强类型
+type MerchantWithMeta = MerchantSummary & { total_count?: number }
+type DishWithMeta = DishSummary & { total_count?: number }
+
 // ==================== API接口函数 ====================
 
 /**
- * Robust parameter cleaner
- * Uses JSON serialization to strip undefined values reliably
+ * 搜索商户 (对接 Supabase search_merchants RPC)
  */
-function cleanParams<T>(params: T): T {
-    try {
-        // Strip undefined
-        const cleaned = JSON.parse(JSON.stringify(params))
+export async function searchMerchants(params: SearchMerchantsParams): Promise<MerchantWithMeta[]> {
+    const { data, error } = await supabase.rpc<MerchantRPCResult[]>('search_merchants', {
+        p_keyword: params.keyword || null,
+        p_user_lat: params.user_latitude,
+        p_user_lng: params.user_longitude,
+        p_page_id: params.page_id,
+        p_page_size: params.page_size
+    })
 
-        // Also strip explicit nulls if needed, or keeping them is fine. 
-        // JSON keeps nulls. If backend dislikes null, we should remove them.
-        // Let's remove nulls too for max safety against "null" string.
-        if (cleaned && typeof cleaned === 'object') {
-            Object.keys(cleaned).forEach(key => {
-                if (cleaned[key] === null) {
-                    delete cleaned[key]
-                }
-            })
-        }
-        return cleaned
-    } catch (e) {
-        logger.error('Param cleaning failed', e)
-        return params
+    if (error) {
+        logger.error('searchMerchants failed', error)
+        throw error
     }
+
+    // Map RPC result to MerchantSummary
+    return (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        logo_url: item.logo_url,
+        phone: item.phone,
+        address: item.address,
+        latitude: item.latitude || 0,
+        longitude: item.longitude || 0,
+        status: item.status,
+        region_id: item.region_id,
+        is_open: item.is_open,
+        distance: item.distance,
+        estimated_delivery_fee: item.estimated_delivery_fee?.final_fee || 0,
+        monthly_sales: 0, 
+        tags: [], 
+        total_count: item.total_count
+    } as MerchantWithMeta))
 }
 
 /**
- * 搜索商户
- * @param params 搜索参数
+ * 搜索菜品 (对接 Supabase search_dishes RPC)
  */
-export async function searchMerchants(params: SearchMerchantsParams): Promise<MerchantSummary[]> {
-    const data = cleanParams(params)
-    if (!data.keyword) data.keyword = ''
-
-    // Response is { merchants: [], total: ... }
-    const res = await request<any>({
-        url: '/v1/search/merchants',
-        method: 'GET',
-        data
+export async function searchDishes(params: SearchDishesParams): Promise<DishWithMeta[]> {
+    const { data, error } = await supabase.rpc<DishRPCResult[]>('search_dishes', {
+        p_keyword: params.keyword || null,
+        p_tag_id: params.tag_id || null,
+        p_user_lat: params.user_latitude,
+        p_user_lng: params.user_longitude,
+        p_page_id: params.page_id,
+        p_page_size: params.page_size
     })
-    return res.merchants || res // Fallback if API changes
+
+    if (error) {
+        logger.error('searchDishes failed', error)
+        throw error
+    }
+
+    return (data || []).map(item => ({
+        id: item.id,
+        merchant_id: item.merchant_id,
+        name: item.name,
+        price: item.price,
+        member_price: item.member_price,
+        image_url: item.image_url,
+        is_available: item.is_available,
+        merchant_name: item.merchant_name,
+        merchant_logo: item.merchant_logo,
+        merchant_is_open: item.merchant_is_open,
+        merchant_latitude: 0, 
+        merchant_longitude: 0, 
+        merchant_region_id: '', 
+        distance: item.distance,
+        estimated_delivery_time: item.estimated_delivery_time,
+        estimated_delivery_fee: item.estimated_delivery_fee?.final_fee || 0,
+        monthly_sales: item.monthly_sales,
+        repurchase_rate: item.repurchase_rate,
+        tags: [], 
+        total_count: item.total_count
+    } as DishWithMeta))
 }
 
 /**
- * 获取推荐商户
- * @param params 推荐参数
+ * 获取推荐商户 (暂用 search_merchants 无参调用)
  */
-export async function getRecommendedMerchants(params: RecommendMerchantsParams = {}): Promise<MerchantSummary[]> {
-    const res = await request<any>({
-        url: '/v1/recommendations/merchants',
-        method: 'GET',
-        data: cleanParams(params)
-    })
-    return res.merchants || res
-}
-
-/**
- * 获取推荐包间
- * @param params 推荐参数（已对齐后端 exploreRoomsRequest）
- */
-export async function getRecommendedRooms(params: RecommendRoomsParams): Promise<RoomSearchResult[]> {
-    logger.debug('Fetching Recommended Rooms', params, 'API')
-
-    const res = await request<any>({
-        url: '/v1/recommendations/rooms',
-        method: 'GET',
-        data: cleanParams(params)
-    })
-    return res.rooms || res
-}
-
-/**
- * 搜索包间
- * @param params 搜索参数
- */
-export async function searchRooms(params: SearchRoomsParams): Promise<RoomSearchResult[]> {
-    const res = await request<any>({
-        url: '/v1/search/rooms',
-        method: 'GET',
-        data: cleanParams(params)
-    })
-    return res.rooms || res
-}
-
-/**
- * 获取搜索建议
- * @param keyword 关键词前缀
- * @param type 搜索类型
- */
-export async function getSearchSuggestions(keyword: string, type?: 'dish' | 'merchant'): Promise<SearchSuggestion[]> {
-    return request({
-        url: '/v1/search/suggestions',
-        method: 'GET',
-        data: { keyword, type }
-    })
-}
-
-/**
- * 获取热门搜索关键词
- * @param type 搜索类型
- */
-export async function getPopularKeywords(type?: 'dish' | 'merchant'): Promise<PopularKeyword[]> {
-    return request({
-        url: '/v1/search/popular',
-        method: 'GET',
-        data: { type }
-    })
-}
-
-/**
- * 获取搜索历史
- * @param limit 返回数量限制
- */
-export async function getSearchHistory(limit: number = 10): Promise<SearchHistory[]> {
-    return request({
-        url: '/v1/search/history',
-        method: 'GET',
-        data: { limit }
-    })
-}
-
-/**
- * 清除搜索历史
- */
-export async function clearSearchHistory(): Promise<void> {
-    return request({
-        url: '/v1/search/history',
-        method: 'DELETE'
-    })
-}
-
-/**
- * 删除单条搜索历史
- * @param historyId 历史记录ID
- */
-export async function deleteSearchHistory(historyId: number): Promise<void> {
-    return request({
-        url: `/v1/search/history/${historyId}`,
-        method: 'DELETE'
+export async function getRecommendedMerchants(params: { user_latitude?: number; user_longitude?: number; limit?: number } = {}): Promise<MerchantWithMeta[]> {
+    return searchMerchants({
+        keyword: '',
+        user_latitude: params.user_latitude,
+        user_longitude: params.user_longitude,
+        page_id: 1,
+        page_size: params.limit || 10
     })
 }
 
@@ -252,9 +183,7 @@ export interface UnifiedSearchResult {
 }
 
 /**
- * 综合搜索（同时搜索菜品和商户）
- * @param keyword 搜索关键词
- * @param params 搜索参数
+ * 综合搜索 (并行调用 Dishes 与 Merchants RPC)
  */
 export async function unifiedSearch(
     keyword: string,
@@ -265,45 +194,37 @@ export async function unifiedSearch(
         merchant_limit?: number
     } = {}
 ): Promise<UnifiedSearchResult> {
-    const { dish_limit = 10, merchant_limit = 10, ...locationParams } = params
-    const cleanedLoc = cleanParams(locationParams)
-
-    // 并行搜索菜品和商户
-    const [dishResults, merchantResults] = await Promise.all([
-        request({
-            url: '/v1/search/dishes',
-            method: 'GET',
-            data: {
-                keyword,
-                page_id: 1,
-                page_size: dish_limit,
-                ...cleanedLoc
-            }
-        }) as Promise<any>,
-        request({
-            url: '/v1/search/merchants',
-            method: 'GET',
-            data: {
-                keyword,
-                page_id: 1,
-                page_size: merchant_limit,
-                ...cleanedLoc
-            }
-        }) as Promise<any>
+    const [dishes, merchants] = await Promise.all([
+        searchDishes({
+            keyword,
+            user_latitude: params.user_latitude,
+            user_longitude: params.user_longitude,
+            page_id: 1,
+            page_size: params.dish_limit || 10
+        }),
+        searchMerchants({
+            keyword,
+            user_latitude: params.user_latitude,
+            user_longitude: params.user_longitude,
+            page_id: 1,
+            page_size: params.merchant_limit || 10
+        })
     ])
 
     return {
-        dishes: dishResults.dishes || dishResults,
-        merchants: merchantResults.merchants || merchantResults,
-        total_dishes: dishResults.total || dishResults.length,
-        total_merchants: merchantResults.total || merchantResults.length
+        dishes,
+        merchants,
+        total_dishes: dishes.length > 0 ? dishes[0].total_count || 0 : 0,
+        total_merchants: merchants.length > 0 ? merchants[0].total_count || 0 : 0
     }
 }
 
+// ==================== 历史记录占位 (前端本地实现或随后迁移) ====================
+
+export async function getSearchHistory(): Promise<string[]> { return [] }
+export async function clearSearchHistory(): Promise<void> { }
+export async function getPopularKeywords(): Promise<string[]> { return [] }
+
 // ==================== 兼容性别名 ====================
-
-/** @deprecated 使用 searchMerchants 替代 */
 export const getMerchants = searchMerchants
-
-/** @deprecated 使用 getRecommendedMerchants 替代 */
 export const getRecommendations = getRecommendedMerchants

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DishAdapter = void 0;
 const image_1 = require("../utils/image");
+const util_1 = require("../utils/util");
 class DishAdapter {
     /**
      * 将菜品响应DTO转换为视图模型 - 基于swagger api.dishResponse
@@ -13,7 +14,7 @@ class DishAdapter {
             name: dto.name,
             imageUrl: (0, image_1.getPublicImageUrl)(dto.image_url),
             price: dto.price,
-            priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+            priceDisplay: (0, util_1.formatPrice)(dto.price),
             shopName: '商户名称', // 需要从商户信息获取
             merchantId: dto.merchant_id,
             attributes: ((_a = dto.ingredients) === null || _a === void 0 ? void 0 : _a.map(ing => ing.name)) || [],
@@ -42,7 +43,7 @@ class DishAdapter {
             name: dto.name,
             imageUrl: (0, image_1.getPublicImageUrl)(dto.image_url),
             price: dto.price,
-            priceDisplay: `¥${(dto.price / 100).toFixed(2)}`,
+            priceDisplay: (0, util_1.formatPrice)(dto.price),
             shopName: dto.merchant_name || '未知商家',
             merchantId: dto.merchant_id,
             attributes: [], // 摘要数据中没有配料信息
@@ -58,7 +59,10 @@ class DishAdapter {
             merchantIsOpen: (_b = dto.merchant_is_open) !== null && _b !== void 0 ? _b : true, // 商户营业状态，默认营业
             distance_meters: dto.distance || 0,
             member_price: dto.member_price,
-            is_available: dto.is_available
+            is_available: dto.is_available,
+            repurchaseRate: dto.repurchase_rate,
+            repurchaseRateDisplay: DishAdapter.formatRepurchaseRate(dto.repurchase_rate),
+            estimated_delivery_time: dto.estimated_delivery_time
         };
     }
     static formatSales(sales) {
@@ -110,6 +114,11 @@ class DishAdapter {
             return `满${(threshold / 100).toFixed(0)}返${discount}元`;
         }
         return '';
+    }
+    static formatRepurchaseRate(rate) {
+        if (!rate || rate <= 0)
+            return '';
+        return `复购率${(rate * 100).toFixed(0)}%`;
     }
 }
 exports.DishAdapter = DishAdapter;

@@ -185,16 +185,24 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     const app = getApp<IAppOption>()
     const latitude = app?.globalData?.latitude || 0
     const longitude = app?.globalData?.longitude || 0
+    
+    // Import Supabase Key for apikey header
+    const { SUPABASE_KEY } = require('../services/supabase')
 
-    logger.debug(`API请求: ${method} ${url}`, { data, latitude, longitude, requestId }, 'request')
+    // Compatibility: Strip /v1 prefix if it exists because API_BASE ends with /rest/v1 or /auth/v1
+    const requestUrl = url.startsWith('/v1/') ? url.substring(3) : url
+    const finalFullUrl = `${API_BASE}${requestUrl}`
+
+    logger.debug(`API请求: ${method} ${finalFullUrl}`, { data, latitude, longitude, requestId }, 'request')
 
     const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
       const task = wx.request({
-        url: `${API_BASE}${url}`,
+        url: finalFullUrl,
         method: method as any,
         data,
         header: {
           'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
           'Authorization': `Bearer ${getToken()}`,
           'X-User-Latitude': String(latitude),
           'X-User-Longitude': String(longitude),
@@ -562,27 +570,16 @@ async function refreshTokenOnce(): Promise<void> {
     if (refreshToken) {
       logger.info('尝试使用refresh_token刷新', undefined, 'refreshTokenOnce')
       try {
-        const res = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
-          wx.request({
-            url: `${API_BASE}/v1/auth/refresh`,
-            method: 'POST',
-            data: { refresh_token: refreshToken },
-            header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-            success: resolve,
-            fail: reject,
-            timeout: 5000
-          })
-        })
+        const { renewAccessToken } = require('../api/auth')
+        console.log('Calling renewAccessToken with', refreshToken)
+        const loginData = await renewAccessToken({ refresh_token: refreshToken })
 
-        const response = res.data as ApiResponse<any>
-        if (res.statusCode === 200 && response.code === ErrorCode.SUCCESS && response.data?.access_token) {
-          const d = response.data
-          const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined
-          setToken(d.access_token, expiresAt, d.refresh_token)
+        if (loginData && loginData.access_token) {
+          const expiresAt = loginData.access_token_expires_at ? new Date(loginData.access_token_expires_at).getTime() : undefined
+          setToken(loginData.access_token, expiresAt, loginData.refresh_token)
           logger.info('refresh_token刷新成功', undefined, 'refreshTokenOnce')
           return
         }
-        logger.warn('refresh_token刷新失效，尝试重新登录', response, 'refreshTokenOnce')
       } catch (e) {
         logger.warn('refresh_token请求失败，尝试重新登录', e, 'refreshTokenOnce')
       }
@@ -599,23 +596,11 @@ async function refreshTokenOnce(): Promise<void> {
     })
 
     const deviceId = getDeviceId()
-    const res2 = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
-      wx.request({
-        url: `${API_BASE}/v1/auth/wechat-login`,
-        method: 'POST',
-        data: { code, device_id: deviceId, device_type: 'miniprogram' },
-        header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-        success: resolve,
-        fail: reject,
-        timeout: 5000
-      })
-    })
-
-    const response2 = res2.data as ApiResponse<any>
-    if (res2.statusCode === 200 && response2.code === ErrorCode.SUCCESS && response2.data?.access_token) {
-      const d = response2.data
-      const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined
-      setToken(d.access_token, expiresAt, d.refresh_token)
+    const { wechatLogin } = require('../api/auth')
+    const loginData = await wechatLogin({ code, device_id: deviceId, device_type: 'miniprogram' })
+    if (loginData && loginData.access_token) {
+      const expiresAt = loginData.access_token_expires_at ? new Date(loginData.access_token_expires_at).getTime() : undefined
+      setToken(loginData.access_token, expiresAt, loginData.refresh_token)
       logger.info('wx.login重登录成功', undefined, 'refreshTokenOnce')
       return
     }

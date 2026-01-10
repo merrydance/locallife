@@ -6,6 +6,7 @@
 import { request, API_BASE } from '../utils/request'
 import { getToken } from '../utils/auth'
 import { logger } from '../utils/logger'
+import { supabase } from '../services/supabase'
 
 // ==================== 数据类型定义 ====================
 
@@ -13,7 +14,7 @@ import { logger } from '../utils/logger'
  * 商户详情响应 - 完全对齐 api.merchantResponse
  */
 export interface MerchantResponse {
-  id: number                                   // 商户ID
+  id: string | number                                   // 商户ID
   name: string                                 // 商户名称
   address: string                              // 商户地址
   description: string                          // 商户描述
@@ -23,8 +24,8 @@ export interface MerchantResponse {
   longitude: string                            // 经度（后端定义为string）
   status: string                               // 商户状态
   is_open: boolean                             // 是否营业
-  owner_user_id: number                        // 商户所有者用户ID
-  region_id: number                            // 区域ID
+  owner_user_id: string | number                        // 商户所有者用户ID
+  region_id: string | number                            // 区域ID
   created_at: string                           // 创建时间
   updated_at: string                           // 更新时间
   version?: number                             // 乐观锁版本号（可选）
@@ -108,7 +109,7 @@ export interface UploadImageResponse {
  * 商户摘要信息 - 对齐 api.merchantSummary（用于搜索和推荐）
  */
 export interface MerchantSummary {
-  id: number                                   // 商户ID
+  id: string | number                                   // 商户ID
   name: string                                 // 商户名称
   address: string                              // 商户地址
   description: string                          // 商户描述
@@ -118,7 +119,7 @@ export interface MerchantSummary {
   distance: number                             // 距离（米）
   estimated_delivery_fee: number              // 预估配送费（分）
   monthly_sales: number                       // 近30天订单量
-  region_id: number                            // 区域ID
+  region_id: string | number                            // 区域ID
   is_open: boolean                             // 是否营业
   tags: string[]                               // 商户标签
 }
@@ -128,7 +129,7 @@ export interface MerchantSummary {
  * 商户详情响应 - 对齐 api.merchantDetailResponse
  */
 export interface MerchantDetailResponse {
-  id: number                                   // 商户ID
+  id: string | number                                   // 商户ID
   name: string                                 // 商户名称
   address: string                              // 商户地址
   description?: string                         // 商户描述
@@ -138,8 +139,8 @@ export interface MerchantDetailResponse {
   longitude: number                            // 经度
   status: string                               // 商户状态
   is_open: boolean                             // 是否营业
-  owner_user_id: number                        // 商户所有者用户ID
-  region_id: number                            // 区域ID
+  owner_user_id: string | number                        // 商户所有者用户ID
+  region_id: string | number                            // 区域ID
   version: number                              // 乐观锁版本号
   created_at: string                           // 创建时间
   updated_at: string                           // 更新时间
@@ -400,31 +401,34 @@ export async function searchMerchants(params: {
   user_latitude?: number
   user_longitude?: number
 }): Promise<MerchantSummary[]> {
-  // 后端要求必填参数，提供默认值
-  const requestParams: any = {
-    keyword: params.keyword || '', // 空字符串表示搜索全部
-    page_id: params.page_id || 1,
-    page_size: params.page_size || 20
-  }
-
-  // 仅添加有效的经纬度
-  if (params.user_latitude !== undefined && params.user_latitude !== null) {
-    requestParams.user_latitude = params.user_latitude
-  }
-  if (params.user_longitude !== undefined && params.user_longitude !== null) {
-    requestParams.user_longitude = params.user_longitude
-  }
-
-  const response = await request<{ merchants: MerchantSummary[], total?: number }>({
-    url: '/v1/search/merchants',
-    method: 'GET',
-    data: requestParams,
-    useCache: true,
-    cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+  const { data, error } = await supabase.rpc('search_merchants', {
+    p_keyword: params.keyword || null,
+    p_user_lat: params.user_latitude,
+    p_user_lng: params.user_longitude,
+    p_page_id: params.page_id || 1,
+    p_page_size: params.page_size || 20
   })
 
-  // 后端返回 { merchants: [...], total, page_id, page_size }，解包返回数组
-  return response.merchants || []
+  if (error) {
+    logger.error('searchMerchants failed', error)
+    return []
+  }
+
+  return (data as any[] || []).map(item => ({
+    id: item.id,
+    name: item.name,
+    address: item.address,
+    description: item.description || '',
+    logo_url: item.logo_url || '',
+    latitude: item.latitude || 0,
+    longitude: item.longitude || 0,
+    distance: item.distance || 0,
+    estimated_delivery_fee: item.estimated_delivery_fee?.final_fee || 0,
+    monthly_sales: 0,
+    region_id: item.region_id,
+    is_open: item.is_open,
+    tags: []
+  }))
 }
 
 /**
@@ -501,7 +505,7 @@ export interface PublicDeliveryPromotion {
 }
 
 export interface PublicMerchantDetail {
-  id: number                                   // 商户ID
+  id: string | number                                   // 商户ID
   name: string                                 // 商户名称
   description?: string                         // 商户描述
   logo_url?: string                            // Logo URL
@@ -510,7 +514,7 @@ export interface PublicMerchantDetail {
   address: string                              // 商户地址
   latitude: number                             // 纬度
   longitude: number                            // 经度
-  region_id: number                            // 区域ID
+  region_id: string | number                            // 区域ID
   is_open: boolean                             // 是否营业
   tags: string[]                               // 商户标签（如：快餐、川菜）
   monthly_sales: number                        // 近30天订单量
@@ -535,7 +539,7 @@ export interface PublicMerchantDetail {
  * GET /v1/public/merchants/:id
  * 返回包含标签、营业时间、证照等完整信息
  */
-export async function getPublicMerchantDetail(merchantId: number): Promise<PublicMerchantDetail> {
+export async function getPublicMerchantDetail(merchantId: string | number): Promise<PublicMerchantDetail> {
   return await request({
     url: `/v1/public/merchants/${merchantId}`,
     method: 'GET',

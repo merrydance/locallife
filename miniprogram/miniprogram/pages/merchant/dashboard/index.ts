@@ -284,8 +284,8 @@ Page({
 
     try {
       await RealtimeUtils.initializeForMerchant(
-        Number(userId || 0),
-        Number(merchantId),
+        userId || '0',
+        merchantId || '0',
         {
           onOpen: () => {
             logger.info('WebSocket 连接成功', { merchantId }, 'Dashboard')

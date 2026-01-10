@@ -24,12 +24,12 @@ interface IAppOption {
         latitude: number | null
         longitude: number | null
         userRole: 'guest' | 'customer' | 'merchant' | 'rider' | 'operator'
-        userId?: number
+        userId?: string
         merchantId?: string
         // 多店铺切换支持
-        currentMerchantId?: number
+        currentMerchantId?: string
         merchantInfo?: {
-            id: number
+            id: string
             name: string
             logo_url?: string
             is_open: boolean

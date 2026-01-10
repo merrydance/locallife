@@ -15,12 +15,12 @@ App<IAppOption>({
     latitude: null,
     longitude: null,
     userRole: 'guest',
-    userId: undefined as number | undefined,
-    merchantId: undefined,
+    userId: undefined as string | undefined,
+    merchantId: undefined as string | undefined,
     // 多店铺切换支持
-    currentMerchantId: undefined as number | undefined,
+    currentMerchantId: undefined as string | undefined,
     merchantInfo: undefined as {
-      id: number
+      id: string
       name: string
       logo_url?: string
       is_open: boolean
