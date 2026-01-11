@@ -360,36 +360,35 @@
   position: relative;
   overflow: hidden;
   border: 1rpx solid #E8E8E8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.guide-img-box::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+.guide-rect {
   width: 70%;
   height: 60%;
   background-color: #DDE2EB;
   border-radius: 4rpx;
+  position: relative;
 }
 
-/* Specific state styles */
-.guide-img-box.missing::before {
-  left: 30%; /* Shifted to look cut off */
+/* Specific state styles via CSS */
+.guide-img-box.missing .guide-rect {
+  transform: translateX(-30%);
 }
 
-.guide-img-box.blur::before {
+.guide-img-box.blur .guide-rect {
   filter: blur(4rpx);
 }
 
-.guide-img-box.glare::after {
+.guide-img-box.glare .guide-rect::after {
   content: '';
   position: absolute;
-  top: 20%;
-  right: 20%;
-  width: 30rpx;
-  height: 30rpx;
+  top: 10%;
+  right: 10%;
+  width: 24rpx;
+  height: 24rpx;
   background: radial-gradient(circle, #FFF 0%, rgba(255,255,255,0) 70%);
 }
 

@@ -70,24 +70,28 @@
             <view class="guide-list">
                 <view class="guide-item">
                     <view class="guide-img-box correct">
+                        <view class="guide-rect"></view>
                         <t-icon name="check-circle-filled" size="32rpx" color="#4CAF50" class="guide-status-icon" />
                     </view>
                     <text>标准拍摄</text>
                 </view>
                 <view class="guide-item">
                     <view class="guide-img-box error missing">
+                        <view class="guide-rect"></view>
                         <t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" />
                     </view>
                     <text>边框缺失</text>
                 </view>
                 <view class="guide-item">
                     <view class="guide-img-box error blur">
+                        <view class="guide-rect"></view>
                         <t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" />
                     </view>
                     <text>照片模糊</text>
                 </view>
                 <view class="guide-item">
                     <view class="guide-img-box error glare">
+                        <view class="guide-rect"></view>
                         <t-icon name="close-circle-filled" size="32rpx" color="#F44336" class="guide-status-icon" />
                     </view>
                     <text>闪光强烈</text>
