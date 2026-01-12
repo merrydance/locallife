@@ -356,6 +356,7 @@ Page({
                 subtotalDisplay: formatPriceNoSymbol(cart.subtotal || 0),
                 items: (cart.items || []).map((item: any) => ({
                     ...item,
+                    image_url: getPublicImageUrl(item.image_url),
                     priceDisplay: formatPriceNoSymbol(item.price || item.unit_price || 0),
                     subtotalDisplay: formatPriceNoSymbol(item.subtotal || (item.unit_price || 0) * (item.quantity || 1))
                 }))

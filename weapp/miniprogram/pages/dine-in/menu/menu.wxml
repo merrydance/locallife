@@ -104,38 +104,44 @@
     </view>
     
     <scroll-view class="cart-items-scroll" scroll-y>
-      <view wx:for="{{cart.items}}" wx:key="dish_id" class="cart-item">
-        <view class="item-info">
-          <text class="item-name">{{item.dish_name}}</text>
-          <text class="item-price">¥{{item.priceDisplay}}</text>
-        </view>
-        <view class="item-stepper">
-          <t-button 
-            size="small" 
-            icon="remove" 
-            shape="circle" 
-            theme="default"
-            data-item-id="{{item.id}}" 
-            data-quantity="{{item.quantity - 1}}"
-            bindtap="updateItemQuantity"
-          />
-          <text class="qty">{{item.quantity}}</text>
-          <t-button 
-            size="small" 
-            icon="add" 
-            shape="circle" 
-            theme="primary"
-            data-item-id="{{item.id}}" 
-            data-quantity="{{item.quantity + 1}}"
-            bindtap="updateItemQuantity"
-          />
+      <view wx:for="{{cart.items}}" wx:key="id" class="cart-item">
+        <image class="cart-thumb" src="{{item.image_url || item.dish_image || ''}}" mode="aspectFill" />
+        <view class="cart-body">
+          <view class="cart-row">
+            <text class="item-name">{{item.dish_name || item.name}}</text>
+            <text class="item-price">¥{{item.priceDisplay}}</text>
+          </view>
+          <view class="cart-row">
+            <text class="item-spec">{{item.spec_text || '标准'}}</text>
+            <view class="item-stepper">
+              <t-button 
+                size="small" 
+                icon="remove" 
+                shape="circle" 
+                theme="default"
+                data-item-id="{{item.id}}" 
+                data-quantity="{{item.quantity - 1}}"
+                bindtap="updateItemQuantity"
+              />
+              <text class="qty">{{item.quantity}}</text>
+              <t-button 
+                size="small" 
+                icon="add" 
+                shape="circle" 
+                theme="primary"
+                data-item-id="{{item.id}}" 
+                data-quantity="{{item.quantity + 1}}"
+                bindtap="updateItemQuantity"
+              />
+            </view>
+          </view>
         </view>
       </view>
     </scroll-view>
     
     <view class="cart-footer">
       <view class="cart-total-info">
-        <text class="total-label">合计：</text>
+        <text class="total-label">合计</text>
         <text class="total-amount">¥{{cart.subtotalDisplay}}</text>
       </view>
       <t-button class="checkout-btn" theme="primary" bindtap="goToCheckout">
