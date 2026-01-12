@@ -150,6 +150,24 @@ Page({
       setTimeout(() => wx.navigateBack(), 1500)
     } catch (error) {
       logger.error('Save address failed:', error, 'AddressEdit')
+
+      // 针对未能自动定位的错误，弹出短文案的确认弹窗
+      const message = (error as any)?.message
+        || (error as any)?.response?.data?.error
+        || (error as any)?.data?.error
+      if (message && (
+        message.includes('未能定位') ||
+        message.includes('geocode no result') ||
+        message.includes('nominatim search')
+      )) {
+        wx.showModal({
+          title: '提示',
+          content: '未能定位，请在地图上选点或补充门牌号',
+          showCancel: false
+        })
+        return
+      }
+
       ErrorHandler.handle(error, 'AddressEdit.save')
     } finally {
       this.setData({ saving: false })

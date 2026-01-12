@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	maps "github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
 )
 
@@ -80,27 +81,43 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 经纬度：优先使用客户端传入，否则用自建 OSM 按地址地理编码
+	// 经纬度：优先使用客户端传入；若格式异常或缺失则回退到 OSM 按地址地理编码
 	var lat, lon float64
-	if req.Latitude != nil && req.Longitude != nil && *req.Latitude != "" && *req.Longitude != "" {
-		var err error
-		lat, err = strconv.ParseFloat(*req.Latitude, 64)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude format: %w", err)))
-			return
+	latStr := ""
+	lonStr := ""
+	if req.Latitude != nil {
+		latStr = strings.TrimSpace(*req.Latitude)
+	}
+	if req.Longitude != nil {
+		lonStr = strings.TrimSpace(*req.Longitude)
+	}
+
+	usePayloadCoords := latStr != "" && lonStr != ""
+	if usePayloadCoords {
+		// 尝试解析前端传入的坐标；失败则回退地理编码
+		if parsedLat, err := strconv.ParseFloat(latStr, 64); err == nil {
+			lat = parsedLat
+		} else {
+			usePayloadCoords = false
 		}
-		lon, err = strconv.ParseFloat(*req.Longitude, 64)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude format: %w", err)))
-			return
+		if parsedLon, err := strconv.ParseFloat(lonStr, 64); err == nil {
+			lon = parsedLon
+		} else {
+			usePayloadCoords = false
 		}
-	} else {
+	}
+
+	if !usePayloadCoords {
 		if server.mapClient == nil {
 			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("longitude/latitude required and map client not configured")))
 			return
 		}
 		geo, err := server.mapClient.Geocode(ctx, req.DetailAddress)
 		if err != nil {
+			if errors.Is(err, maps.ErrGeocodeNoResult) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("未能定位，请在地图上选点或补充门牌号")))
+				return
+			}
 			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("failed to geocode address: %w", err)))
 			return
 		}
@@ -131,15 +148,15 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 		}
 	}
 
-	// 创建经纬度Numeric类型
+	// 创建经纬度Numeric类型（pgtype.Numeric 不接受 float64，需转为字符串）
 	var longitude pgtype.Numeric
-	if err := longitude.Scan(lon); err != nil {
+	if err := longitude.Scan(strconv.FormatFloat(lon, 'f', -1, 64)); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude format: %w", err)))
 		return
 	}
 
 	var latitude pgtype.Numeric
-	if err := latitude.Scan(lat); err != nil {
+	if err := latitude.Scan(strconv.FormatFloat(lat, 'f', -1, 64)); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude format: %w", err)))
 		return
 	}

@@ -176,7 +176,7 @@ LIMIT $2 OFFSET $3;
 UPDATE dishes
 SET 
   monthly_sales = $2,
-  repurchase_rate = $3,
+  repurchase_rate = COALESCE($3, 0),
   updated_at = NOW()
 WHERE id = $1;
 

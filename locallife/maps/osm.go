@@ -3,6 +3,7 @@ package maps
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +11,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
+
+// ErrGeocodeNoResult 表示地理编码未返回结果
+var ErrGeocodeNoResult = errors.New("geocode no result")
 
 // OSMClient 使用自建的 OSRM + Nominatim 服务实现 TencentMapClientInterface
 // 兼容接口：路径规划、距离矩阵、地理编码、逆地理编码。
@@ -173,7 +179,9 @@ func (c *OSMClient) Geocode(ctx context.Context, address string) (*GeocodeResult
 	params.Set("q", address)
 	params.Set("format", "json")
 	params.Set("limit", "1")
-	endpoint := fmt.Sprintf("%s/search?%s", c.baseURL, params.Encode())
+	params.Set("accept-language", "zh-CN")
+	// 使用 search.php 显式请求，避免 MultiViews 协商导致 406
+	endpoint := fmt.Sprintf("%s/search.php?%s", c.baseURL, params.Encode())
 	body, err := c.doRequest(ctx, endpoint)
 	if err != nil {
 		return nil, err
@@ -183,7 +191,8 @@ func (c *OSMClient) Geocode(ctx context.Context, address string) (*GeocodeResult
 		return nil, fmt.Errorf("nominatim search unmarshal: %w", err)
 	}
 	if len(items) == 0 {
-		return nil, fmt.Errorf("nominatim search: no result")
+		log.Warn().Str("address", address).Str("url", endpoint).Msg("nominatim search returned empty result")
+		return nil, ErrGeocodeNoResult
 	}
 	lat, lng, err := parseLatLng(items[0].Lat, items[0].Lon)
 	if err != nil {
@@ -229,7 +238,9 @@ func (c *OSMClient) doRequest(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "*/*")
+	// Nominatim requires a valid User-Agent per usage policy to avoid 406
+	req.Header.Set("User-Agent", "locallife/1.0 (contact: support@locallife)")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
@@ -237,6 +248,12 @@ func (c *OSMClient) doRequest(ctx context.Context, url string) ([]byte, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
+		log.Warn().
+			Int("status", resp.StatusCode).
+			Str("url", url).
+			Str("user_agent", req.UserAgent()).
+			Str("body", string(b)).
+			Msg("osm request failed")
 		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(b))
 	}
 	body, err := io.ReadAll(resp.Body)

@@ -2,6 +2,7 @@ package autotag
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -127,10 +128,15 @@ func (s *Scheduler) RefreshDishStats(ctx context.Context) error {
 	return nil
 }
 
-// numericFromFloat converts float64 to pgtype.Numeric
+// numericFromFloat converts float64 to pgtype.Numeric with guards for NaN/Inf.
 func numericFromFloat(f float64) pgtype.Numeric {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		f = 0
+	}
 	var n pgtype.Numeric
-	n.Scan(f)
+	if err := n.Scan(f); err != nil {
+		_ = n.Scan(0) // fallback to 0 to avoid NULL constraint violations
+	}
 	return n
 }
 
