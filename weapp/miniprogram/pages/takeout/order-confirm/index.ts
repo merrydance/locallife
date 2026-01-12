@@ -98,6 +98,7 @@ Page({
       // 目前只支持单商户结算
       const merchantCart = selectedCarts[0]
       const merchantId = merchantCart.merchant_id
+      const orderType = merchantCart.order_type || 'takeout'
 
       if (!merchantId) {
         wx.showToast({ title: '商户信息缺失', icon: 'none' })
@@ -108,7 +109,9 @@ Page({
       // Step 2: 获取购物车商品详情
       const cartDetail = await CartAPI.getCart({
         merchant_id: merchantId,
-        order_type: 'takeout'
+        order_type: orderType,
+        table_id: merchantCart.table_id || undefined,
+        reservation_id: merchantCart.reservation_id || undefined
       })
 
       if (!cartDetail.items || cartDetail.items.length === 0) {

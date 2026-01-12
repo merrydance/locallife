@@ -6,6 +6,9 @@ import { getPublicImageUrl } from '@/utils/image'
 interface MerchantCartGroup {
   cartId: number
   merchantId: number
+  orderType?: string
+  tableId?: number
+  reservationId?: number
   merchantName: string
   merchantLogo: string
   items: CartItemView[]
@@ -99,9 +102,9 @@ Page({
         try {
           const cartDetail = await CartAPI.getCart({
             merchant_id: merchantCart.merchant_id,
-            order_type: merchantCart.order_type,
-            table_id: merchantCart.table_id || 0,
-            reservation_id: merchantCart.reservation_id || 0
+            order_type: merchantCart.order_type || 'takeout',
+            table_id: merchantCart.table_id ?? undefined,
+            reservation_id: merchantCart.reservation_id ?? undefined
           })
           const group = this.buildMerchantGroup(merchantCart, cartDetail)
           merchantGroups.push(group)
@@ -177,10 +180,14 @@ Page({
     }))
 
     const subtotal = cartDetail.subtotal || 0
+    const orderType = cartDetail.order_type || merchantCart.order_type || 'takeout'
 
     return {
       cartId: cartDetail.id,
       merchantId: merchantCart.merchant_id || 0,
+      orderType,
+      tableId: cartDetail.table_id ?? merchantCart.table_id,
+      reservationId: cartDetail.reservation_id ?? merchantCart.reservation_id,
       merchantName: merchantCart.merchant_name || '未知商户',
       merchantLogo: getPublicImageUrl(merchantCart.merchant_logo || ''),
       items,
@@ -218,6 +225,9 @@ Page({
         // 优先使用 address_id，fallback 到当前位置坐标
         const result = await CartAPI.calculateCart({
           merchant_id: group.merchantId,
+          order_type: group.orderType,
+          table_id: group.tableId,
+          reservation_id: group.reservationId,
           address_id: addressId || undefined,
           latitude: !addressId && latitude ? latitude : undefined,
           longitude: !addressId && longitude ? longitude : undefined
@@ -417,7 +427,13 @@ Page({
       success: async (res) => {
         if (res.confirm) {
           try {
-            await CartAPI.clearCart(merchantId)
+            const group = this.data.merchantGroups.find(g => g.merchantId === merchantId)
+            await CartAPI.clearCart({
+              merchant_id: merchantId,
+              order_type: group?.orderType || 'takeout',
+              table_id: group?.tableId,
+              reservation_id: group?.reservationId
+            })
 
             // 本地移除该商户分组，避免重新加载整个页面
             const { merchantGroups, selectedCartIds } = this.data

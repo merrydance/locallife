@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
+	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
@@ -31,6 +35,15 @@ type cartItemResponse struct {
 	MemberPrice *int64 `json:"member_price,omitempty"`
 	IsAvailable bool   `json:"is_available"`
 	Subtotal    int64  `json:"subtotal"`
+}
+
+func containsString(arr []string, target string) bool {
+	for _, v := range arr {
+		if v == target {
+			return true
+		}
+	}
+	return false
 }
 
 type cartResponse struct {
@@ -201,6 +214,75 @@ func nullableInt64(v pgtype.Int8) *int64 {
 	return nil
 }
 
+// marshalCustomizationsCanonical produces a deterministic JSON encoding so that
+// identical option sets match existing cart rows regardless of map key order.
+func marshalCustomizationsCanonical(v interface{}) ([]byte, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var b strings.Builder
+	if err := writeCanonicalJSON(&b, v); err != nil {
+		return nil, err
+	}
+	return []byte(b.String()), nil
+}
+
+func writeCanonicalJSON(w io.StringWriter, v interface{}) error {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		if _, err := w.WriteString("{"); err != nil {
+			return err
+		}
+		for i, k := range keys {
+			if i > 0 {
+				if _, err := w.WriteString(","); err != nil {
+					return err
+				}
+			}
+			keyBytes, _ := json.Marshal(k)
+			if _, err := w.WriteString(string(keyBytes)); err != nil {
+				return err
+			}
+			if _, err := w.WriteString(":"); err != nil {
+				return err
+			}
+			if err := writeCanonicalJSON(w, val[k]); err != nil {
+				return err
+			}
+		}
+		_, err := w.WriteString("}")
+		return err
+	case []interface{}:
+		if _, err := w.WriteString("["); err != nil {
+			return err
+		}
+		for i, elem := range val {
+			if i > 0 {
+				if _, err := w.WriteString(","); err != nil {
+					return err
+				}
+			}
+			if err := writeCanonicalJSON(w, elem); err != nil {
+				return err
+			}
+		}
+		_, err := w.WriteString("]")
+		return err
+	default:
+		encoded, err := json.Marshal(val)
+		if err != nil {
+			return err
+		}
+		_, err = w.WriteString(string(encoded))
+		return err
+	}
+}
+
 type addCartItemRequest struct {
 	// 商户ID (必填)
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
@@ -251,10 +333,14 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 		return
 	}
 
+	if req.OrderType == "" {
+		req.OrderType = "takeout"
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 验证商户存在
-	_, err := server.store.GetMerchant(ctx, req.MerchantID)
+	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -262,6 +348,12 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
 		return
+	}
+	if req.OrderType == "takeout" {
+		if merchant.Status != "active" || !merchant.IsOpen {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant is not accepting takeout orders")))
+			return
+		}
 	}
 
 	// 验证菜品/套餐存在且属于该商户
@@ -306,10 +398,6 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	}
 
 	// 获取或创建购物车
-	if req.OrderType == "" {
-		req.OrderType = "takeout"
-	}
-
 	var tableID, reservationID pgtype.Int8
 	if req.TableID != nil {
 		tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
@@ -347,10 +435,11 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 		}
 	}
 
-	// 处理定制选项
-	var customizations []byte
-	if req.Customizations != nil {
-		customizations, _ = json.Marshal(req.Customizations)
+	// 处理定制选项（稳定序列化）
+	customizations, err := marshalCustomizationsCanonical(req.Customizations)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid customizations")))
+		return
 	}
 
 	// 检查是否已有相同商品（同菜品+同定制选项）
@@ -361,8 +450,11 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 			Customizations: customizations,
 		})
 		if err == nil {
-			// 已存在相同商品，更新数量
 			newQuantity := existingItem.Quantity + req.Quantity
+			if newQuantity < 1 || newQuantity > 99 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("quantity exceeds limit")))
+				return
+			}
 			_, err = server.store.UpdateCartItem(ctx, db.UpdateCartItemParams{
 				ID:       existingItem.ID,
 				Quantity: pgtype.Int2{Int16: newQuantity, Valid: true},
@@ -382,8 +474,11 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 			ComboID: pgtype.Int8{Int64: *req.ComboID, Valid: true},
 		})
 		if err == nil {
-			// 已存在相同套餐，更新数量
 			newQuantity := existingItem.Quantity + req.Quantity
+			if newQuantity < 1 || newQuantity > 99 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("quantity exceeds limit")))
+				return
+			}
 			_, err = server.store.UpdateCartItem(ctx, db.UpdateCartItemParams{
 				ID:       existingItem.ID,
 				Quantity: pgtype.Int2{Int16: newQuantity, Valid: true},
@@ -504,12 +599,44 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 	}
 
 	if req.Quantity != nil {
+		if *req.Quantity < 1 || *req.Quantity > 99 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("quantity must be between 1 and 99")))
+			return
+		}
 		updateParams.Quantity = pgtype.Int2{Int16: *req.Quantity, Valid: true}
 	}
 
 	if req.Customizations != nil {
-		customizations, _ := json.Marshal(req.Customizations)
+		customizations, err := marshalCustomizationsCanonical(req.Customizations)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid customizations")))
+			return
+		}
 		updateParams.Customizations = customizations
+	}
+
+	// 重新验证商品可售状态
+	if cartItem.DishID.Valid {
+		dish, err := server.store.GetDish(ctx, cartItem.DishID.Int64)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get dish: %w", err)))
+			return
+		}
+		if !dish.IsOnline || !dish.IsAvailable {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dish is not available")))
+			return
+		}
+	}
+	if cartItem.ComboID.Valid {
+		combo, err := server.store.GetComboSet(ctx, cartItem.ComboID.Int64)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get combo: %w", err)))
+			return
+		}
+		if !combo.IsOnline {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("combo is not available")))
+			return
+		}
 	}
 
 	_, err = server.store.UpdateCartItem(ctx, updateParams)
@@ -741,6 +868,12 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
 		return
 	}
+	if req.OrderType == "takeout" {
+		if merchant.Status != "active" || !merchant.IsOpen {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户暂不接单，请选择其他商户")))
+			return
+		}
+	}
 
 	if req.OrderType == "" {
 		req.OrderType = "takeout"
@@ -803,62 +936,54 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	var deliveryFeeDiscount int64
 	if req.AddressID != nil {
 		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
-		if err == nil && address.UserID == authPayload.UserID {
-			// 计算距离：优先调用地图API，失败则使用默认值
-			distance := int32(3000) // 默认3公里
-			if address.Latitude.Valid && address.Longitude.Valid &&
-				merchant.Latitude.Valid && merchant.Longitude.Valid {
-				// 调用自建 OSM 计算骑行距离
-				fromLoc := maps.Location{
-					Lat: numericToFloat64(merchant.Latitude),
-					Lng: numericToFloat64(merchant.Longitude),
-				}
-				toLoc := maps.Location{
-					Lat: numericToFloat64(address.Latitude),
-					Lng: numericToFloat64(address.Longitude),
-				}
-				if server.mapClient != nil {
-					routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-					if err == nil && routeResult != nil {
-						distance = int32(routeResult.Distance)
-					}
-				}
-			}
-
-			// 调用配送费计算
-			feeResult, err := server.calculateDeliveryFeeInternal(
-				ctx,
-				merchant.RegionID,
-				merchant.ID,
-				distance,
-				subtotal,
-			)
-			if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-				deliveryFee = feeResult.FinalFee
-				deliveryFeeDiscount = feeResult.PromotionDiscount
-			}
+		if err != nil || address.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("地址无效")))
+			return
+		}
+		if !address.Latitude.Valid || !address.Longitude.Valid || !merchant.Latitude.Valid || !merchant.Longitude.Valid {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法获取距离，请重新选择地址")))
+			return
+		}
+		if server.mapClient == nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
+			return
+		}
+		fromLoc := maps.Location{Lat: numericToFloat64(merchant.Latitude), Lng: numericToFloat64(merchant.Longitude)}
+		toLoc := maps.Location{Lat: numericToFloat64(address.Latitude), Lng: numericToFloat64(address.Longitude)}
+		routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
+		if err != nil || routeResult == nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))
+			return
+		}
+		distance := int32(routeResult.Distance)
+		feeResult, err := server.calculateDeliveryFeeInternal(
+			ctx,
+			merchant.RegionID,
+			merchant.ID,
+			distance,
+			subtotal,
+		)
+		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
+			deliveryFee = feeResult.FinalFee
+			deliveryFeeDiscount = feeResult.PromotionDiscount
 		}
 	} else if req.Latitude != nil && req.Longitude != nil {
-		// 用户未选择地址但传入了当前位置坐标，使用坐标计算配送费
-		distance := int32(3000) // 默认3公里
-		if merchant.Latitude.Valid && merchant.Longitude.Valid {
-			fromLoc := maps.Location{
-				Lat: numericToFloat64(merchant.Latitude),
-				Lng: numericToFloat64(merchant.Longitude),
-			}
-			toLoc := maps.Location{
-				Lat: *req.Latitude,
-				Lng: *req.Longitude,
-			}
-			if server.mapClient != nil {
-				routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-				if err == nil && routeResult != nil {
-					distance = int32(routeResult.Distance)
-				}
-			}
+		if !merchant.Latitude.Valid || !merchant.Longitude.Valid {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法获取距离，请重新选择位置")))
+			return
 		}
-
-		// 调用配送费计算
+		if server.mapClient == nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
+			return
+		}
+		fromLoc := maps.Location{Lat: numericToFloat64(merchant.Latitude), Lng: numericToFloat64(merchant.Longitude)}
+		toLoc := maps.Location{Lat: *req.Latitude, Lng: *req.Longitude}
+		routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
+		if err != nil || routeResult == nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))
+			return
+		}
+		distance := int32(routeResult.Distance)
 		feeResult, err := server.calculateDeliveryFeeInternal(
 			ctx,
 			merchant.RegionID,
@@ -877,10 +1002,13 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	var discountInfo string
 	if req.VoucherID != nil {
 		voucher, err := server.store.GetUserVoucher(ctx, *req.VoucherID)
-		if err == nil && voucher.UserID == authPayload.UserID &&
-			voucher.Status == "unused" {
-			// 检查优惠券是否适用于该商户和订单金额
-			if voucher.MerchantID == req.MerchantID && subtotal >= voucher.MinOrderAmount {
+		if err == nil && voucher.UserID == authPayload.UserID && voucher.Status == "unused" {
+			now := time.Now()
+			if now.After(voucher.ExpiresAt) {
+				discountInfo = "优惠券已过期"
+			} else if len(voucher.AllowedOrderTypes) > 0 && !containsString(voucher.AllowedOrderTypes, req.OrderType) {
+				discountInfo = "优惠券不适用于该订单类型"
+			} else if voucher.MerchantID == req.MerchantID && subtotal >= voucher.MinOrderAmount {
 				discountAmount = voucher.Amount
 				discountInfo = voucher.Name
 			} else if subtotal < voucher.MinOrderAmount {
@@ -1239,10 +1367,27 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 	var totalSubtotal, totalDeliveryFee, totalAmount int64
 
 	for _, cart := range carts {
+		cartDetail, err := server.store.GetCart(ctx, cart.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get cart: %w", err)))
+			return
+		}
+
 		// 检查商户状态
 		if cart.MerchantStatus != "active" {
 			canCombinePay = false
 			message = "部分商户暂停营业"
+			continue
+		}
+
+		merchant, err := server.store.GetMerchant(ctx, cart.MerchantID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
+			return
+		}
+		if cartDetail.OrderType == "takeout" && !merchant.IsOpen {
+			canCombinePay = false
+			message = "部分商户暂不接单"
 			continue
 		}
 
@@ -1272,49 +1417,48 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 
 		// 计算配送费（调用真实的配送费计算逻辑）
 		var deliveryFee int64 = 0
-		if req.AddressID != nil {
-			// 获取地址信息用于距离计算
+		if cartDetail.OrderType == "takeout" {
+			if req.AddressID == nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("外卖合单需要选择配送地址")))
+				return
+			}
 			address, err := server.store.GetUserAddress(ctx, *req.AddressID)
-			if err == nil && address.UserID == authPayload.UserID {
-				// 计算距离：优先调用地图API，失败则使用默认值
-				distance := int32(3000) // 默认3公里
-				if address.Latitude.Valid && address.Longitude.Valid &&
-					cart.MerchantLatitude.Valid && cart.MerchantLongitude.Valid {
-					// 调用自建 OSM 计算骑行距离
-					fromLoc := maps.Location{
-						Lat: numericToFloat64(cart.MerchantLatitude),
-						Lng: numericToFloat64(cart.MerchantLongitude),
-					}
-					toLoc := maps.Location{
-						Lat: numericToFloat64(address.Latitude),
-						Lng: numericToFloat64(address.Longitude),
-					}
-					if server.mapClient != nil {
-						routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-						if err == nil && routeResult != nil {
-							distance = int32(routeResult.Distance)
-						}
-					}
-				}
-
-				// 调用配送费计算
-				feeResult, err := server.calculateDeliveryFeeInternal(
-					ctx,
-					cart.RegionID,
-					cart.MerchantID,
-					distance,
-					subtotal,
-				)
-				if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-					deliveryFee = feeResult.FinalFee
-				}
+			if err != nil || address.UserID != authPayload.UserID {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("地址无效")))
+				return
+			}
+			if !address.Latitude.Valid || !address.Longitude.Valid || !cart.MerchantLatitude.Valid || !cart.MerchantLongitude.Valid {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法获取配送距离，请重新选择地址")))
+				return
+			}
+			if server.mapClient == nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
+				return
+			}
+			fromLoc := maps.Location{Lat: numericToFloat64(cart.MerchantLatitude), Lng: numericToFloat64(cart.MerchantLongitude)}
+			toLoc := maps.Location{Lat: numericToFloat64(address.Latitude), Lng: numericToFloat64(address.Longitude)}
+			routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
+			if err != nil || routeResult == nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))
+				return
+			}
+			distance := int32(routeResult.Distance)
+			feeResult, err := server.calculateDeliveryFeeInternal(
+				ctx,
+				cart.RegionID,
+				cart.MerchantID,
+				distance,
+				subtotal,
+			)
+			if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
+				deliveryFee = feeResult.FinalFee
 			}
 		}
 
 		items = append(items, combinedCheckoutItem{
 			MerchantID:   cart.MerchantID,
 			MerchantName: cart.MerchantName,
-			OrderType:    "takeout",
+			OrderType:    cartDetail.OrderType,
 			Subtotal:     subtotal,
 			DeliveryFee:  deliveryFee,
 			TotalAmount:  subtotal + deliveryFee,

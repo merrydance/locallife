@@ -232,11 +232,11 @@ export async function removeFromCart(itemId: number): Promise<CartResponse> {
  * 清空指定商户的购物车
  * @param merchantId 商户ID
  */
-export async function clearCart(merchantId?: number): Promise<void> {
+export async function clearCart(params: ClearCartRequest): Promise<void> {
     return request({
         url: '/v1/cart/clear',
         method: 'POST',
-        data: merchantId ? { merchant_id: merchantId } : undefined
+        data: params
     })
 }
 

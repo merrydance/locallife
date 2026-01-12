@@ -14,6 +14,9 @@ class CartService {
   // Cache the current cart to avoid excessive network requests
   private currentCart: CartResponse | null = null
   private currentMerchantId: number | null = null
+  private currentOrderType: string | null = null
+  private currentTableId: number | null = null
+  private currentReservationId: number | null = null
 
   static getInstance(): CartService {
     if (!CartService.instance) {
@@ -40,8 +43,11 @@ class CartService {
   /**
    * Initialize or switch to a specific merchant's cart
    */
-  async loadCart(merchantId: number): Promise<CartResponse> {
+  async loadCart(merchantId: number, options?: { orderType?: string; tableId?: number; reservationId?: number }): Promise<CartResponse> {
     this.currentMerchantId = merchantId
+    this.currentOrderType = options?.orderType ?? this.currentOrderType ?? 'takeout'
+    this.currentTableId = options?.tableId ?? this.currentTableId ?? null
+    this.currentReservationId = options?.reservationId ?? this.currentReservationId ?? null
     return this.refreshCart()
   }
 
@@ -55,7 +61,12 @@ class CartService {
 
     try {
       logger.debug('Refreshing cart from backend', { merchantId: this.currentMerchantId }, 'CartService.refreshCart')
-      const cart = await CartAPI.getCart({ merchant_id: this.currentMerchantId })
+      const cart = await CartAPI.getCart({
+        merchant_id: this.currentMerchantId,
+        order_type: this.currentOrderType ?? undefined,
+        table_id: this.currentTableId ?? undefined,
+        reservation_id: this.currentReservationId ?? undefined
+      })
       this.currentCart = cart
 
       this.notifyListeners()
@@ -82,6 +93,9 @@ class CartService {
 
       const req: AddCartItemRequest = {
         merchant_id: merchantId,
+        order_type: this.currentOrderType ?? undefined,
+        table_id: this.currentTableId ?? undefined,
+        reservation_id: this.currentReservationId ?? undefined,
         dish_id: item.dishId ? Number(item.dishId) : undefined,
         combo_id: item.comboId ? Number(item.comboId) : undefined,
         quantity: quantity,
@@ -156,7 +170,12 @@ class CartService {
     if (!this.currentMerchantId) return false
 
     try {
-      await CartAPI.clearCart(this.currentMerchantId)
+      await CartAPI.clearCart({
+        merchant_id: this.currentMerchantId,
+        order_type: this.currentOrderType ?? undefined,
+        table_id: this.currentTableId ?? undefined,
+        reservation_id: this.currentReservationId ?? undefined
+      })
 
       // Reset local state to empty structure manually or refetch
       // Refetching is safer to ensure backend state
