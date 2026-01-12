@@ -339,6 +339,12 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 			savings = int((float64(originalPrice) - float64(comboPrice)) / float64(originalPrice) * 100)
 		}
 
+		// Prefer combo image; fall back to first dish image if missing
+		imageURL := row.ImageUrl.String
+		if imageURL == "" {
+			imageURL = row.FallbackImageUrl.String
+		}
+
 		// Delivery Fee & Time Calculation
 		var estimatedFee *int64
 		deliveryTime := 1800 // Default 30 mins
@@ -377,7 +383,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 			MerchantID:            row.MerchantID,
 			Name:                  row.Name,
 			Description:           row.Description.String,
-			ImageURL:              normalizeUploadURLForClient(row.ImageUrl),
+			ImageURL:              normalizeUploadURLForClient(imageURL),
 			OriginalPrice:         originalPrice,
 			ComboPrice:            comboPrice,
 			SavingsPercent:        savings,

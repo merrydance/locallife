@@ -820,17 +820,8 @@ SELECT
     cs.merchant_id,
     cs.name,
     cs.description,
-    COALESCE(
-        NULLIF(cs.image_url, ''),
-        (SELECT d.image_url 
-         FROM combo_dishes cd 
-         JOIN dishes d ON cd.dish_id = d.id 
-         WHERE cd.combo_id = cs.id 
-           AND d.image_url IS NOT NULL 
-           AND d.image_url != ''
-         ORDER BY cd.id ASC 
-         LIMIT 1)
-    )::text AS image_url,
+  cs.image_url,
+  dish_img.image_url AS fallback_image_url,
     cs.original_price,
     cs.combo_price,
     cs.is_online,
@@ -854,6 +845,16 @@ SELECT
     earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
 FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
+LEFT JOIN LATERAL (
+    SELECT d.image_url
+    FROM combo_dishes cd
+    JOIN dishes d ON cd.dish_id = d.id
+    WHERE cd.combo_id = cs.id
+      AND d.image_url IS NOT NULL
+      AND d.image_url != ''
+    ORDER BY cd.id ASC
+    LIMIT 1
+) AS dish_img ON TRUE
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
@@ -884,7 +885,8 @@ type SearchCombosGlobalRow struct {
 	MerchantID        int64          `json:"merchant_id"`
 	Name              string         `json:"name"`
 	Description       pgtype.Text    `json:"description"`
-	ImageUrl          string         `json:"image_url"`
+	ImageUrl          pgtype.Text    `json:"image_url"`
+	FallbackImageUrl  pgtype.Text    `json:"fallback_image_url"`
 	OriginalPrice     int64          `json:"original_price"`
 	ComboPrice        int64          `json:"combo_price"`
 	IsOnline          bool           `json:"is_online"`
@@ -923,6 +925,7 @@ func (q *Queries) SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobal
 			&i.Name,
 			&i.Description,
 			&i.ImageUrl,
+			&i.FallbackImageUrl,
 			&i.OriginalPrice,
 			&i.ComboPrice,
 			&i.IsOnline,

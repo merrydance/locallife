@@ -1,19 +1,16 @@
 DB_URL=postgresql:///locallife_dev?host=/var/run/postgresql&sslmode=disable
 
-network:
-	docker network create bank-network
+＃ network:
+#	docker network create bank-network
 
-postgres:
-	docker run --name postgres --network bank-network -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=secret -d postgres:14-alpine
+#postgres:
+#	docker run --name postgres --network bank-network -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=secret -d postgres:14-alpine
 
-mysql:
-	docker run --name mysql8 -p 3306:3306  -e MYSQL_ROOT_PASSWORD=secret -d mysql:8
+#createdb:
+#	createdb locallife_test
 
-createdb:
-	createdb locallife_test
-
-dropdb:
-	dropdb locallife_test
+#dropdb:
+#	dropdb locallife_test
 
 migrateup:
 	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose up
@@ -30,11 +27,11 @@ migratedown1:
 new_migration:
 	$(HOME)/go/bin/migrate create -ext sql -dir db/migration -seq $(name)
 
-db_docs:
-	dbdocs build doc/db.dbml
+#db_docs:
+#	dbdocs build doc/db.dbml
 
-db_schema:
-	dbml2sql --postgres -o doc/schema.sql doc/db.dbml
+#db_schema:
+#	dbml2sql --postgres -o doc/schema.sql doc/db.dbml
 
 sqlc:
 	$(HOME)/go/bin/sqlc generate
