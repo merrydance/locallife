@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +36,7 @@ type Server struct {
 	paymentClient   wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
 	ecommerceClient wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
 	dataEncryptor   util.DataEncryptor              // 敏感数据加密器（本地存储加密）
-	mapClient       maps.TencentMapClientInterface  // 腾讯地图（路径规划）
+	mapClient       maps.TencentMapClientInterface  // 地图客户端（腾讯 / OSM）
 	weatherCache    weather.WeatherCache
 	taskDistributor worker.TaskDistributor
 	wsHub           *websocket.Hub           // WebSocket连接管理（骑手和商户）
@@ -98,8 +99,22 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 
 	// 创建腾讯地图客户端（如果配置了）
 	var mapClient maps.TencentMapClientInterface
-	if config.TencentMapKey != "" {
-		mapClient = maps.NewTencentMapClient(config.TencentMapKey)
+	// LBS_PROVIDER: osm（默认）| tencent
+	switch strings.ToLower(config.LBSProvider) {
+	case "tencent":
+		if config.TencentMapKey != "" {
+			mapClient = maps.NewTencentMapClient(config.TencentMapKey)
+			log.Info().Str("provider", "tencent").Msg("map client initialized")
+		} else {
+			log.Warn().Msg("LBS_PROVIDER=tencent but TENCENT_MAP_KEY not configured, map client disabled")
+		}
+	default:
+		if config.OSMBaseURL != "" {
+			mapClient = maps.NewOSMClient(config.OSMBaseURL)
+			log.Info().Str("provider", "osm").Str("base", config.OSMBaseURL).Msg("map client initialized")
+		} else {
+			log.Warn().Msg("LBS_PROVIDER=osm but OSM_BASE_URL not configured, map client disabled")
+		}
 	}
 
 	// 创建本地数据加密器（用于加密存储敏感信息）

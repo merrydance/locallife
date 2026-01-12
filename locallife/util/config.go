@@ -12,6 +12,8 @@ import (
 type Config struct {
 	Environment          string        `mapstructure:"ENVIRONMENT"`
 	AllowedOrigins       []string      `mapstructure:"ALLOWED_ORIGINS"`
+	LBSProvider          string        `mapstructure:"LBS_PROVIDER"` // "tencent" (默认) 或 "osm"
+	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"` // OSM 反向代理基地址，如 https://lbs.merrydance.cn
 	DBSource             string        `mapstructure:"DB_SOURCE"`
 	MigrationURL         string        `mapstructure:"MIGRATION_URL"`
 	RedisAddress         string        `mapstructure:"REDIS_ADDRESS"`
