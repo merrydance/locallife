@@ -204,20 +204,28 @@ func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrd
 		})
 
 		// 3. Decrement inventory for each dish (with FOR UPDATE lock)
+		inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
+		if result.Order.OrderType == OrderTypeReservation && result.Order.ReservationID.Valid {
+			reservation, err := q.GetTableReservation(ctx, result.Order.ReservationID.Int64)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("get reservation for inventory date: %w", err)
+			}
+			if reservation.ReservationDate.Valid {
+				inventoryDate = reservation.ReservationDate
+			}
+		}
+
 		for _, item := range orderItems {
 			// Skip if it's a combo (combos don't have direct inventory)
 			if !item.DishID.Valid {
 				continue
 			}
 
-			// Get current date for inventory lookup
-			currentDate := time.Now()
-
 			// 🔒 Lock the inventory row (FOR UPDATE)
 			inventory, err := q.GetDailyInventoryForUpdate(ctx, GetDailyInventoryForUpdateParams{
 				MerchantID: result.Order.MerchantID,
 				DishID:     item.DishID.Int64,
-				Date:       pgtype.Date{Time: currentDate, Valid: true},
+				Date:       inventoryDate,
 			})
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
@@ -240,7 +248,7 @@ func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrd
 			_, err = q.CheckAndDecrementInventory(ctx, CheckAndDecrementInventoryParams{
 				MerchantID:   result.Order.MerchantID,
 				DishID:       item.DishID.Int64,
-				Date:         pgtype.Date{Time: currentDate, Valid: true},
+				Date:         inventoryDate,
 				SoldQuantity: int32(item.Quantity),
 			})
 			if err != nil {
@@ -337,20 +345,20 @@ func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrd
 
 			// 创建配送单
 			delivery, err := q.CreateDelivery(ctx, CreateDeliveryParams{
-				OrderID:         result.Order.ID,
-				PickupAddress:   merchant.Address,
-				PickupLongitude: merchant.Longitude,
-				PickupLatitude:  merchant.Latitude,
-				PickupContact:   pgtype.Text{String: merchant.Name, Valid: true},
-				PickupPhone:     pgtype.Text{String: merchant.Phone, Valid: true},
-				DeliveryAddress:   userAddress.DetailAddress,
-				DeliveryLongitude: userAddress.Longitude,
-				DeliveryLatitude:  userAddress.Latitude,
-				DeliveryContact:   pgtype.Text{String: userAddress.ContactName, Valid: true},
-				DeliveryPhone:     pgtype.Text{String: userAddress.ContactPhone, Valid: true},
-				Distance:          deliveryDistance,
-				DeliveryFee:       result.Order.DeliveryFee,
-				EstimatedPickupAt: pgtype.Timestamptz{Time: estimatedPickupAt, Valid: true},
+				OrderID:             result.Order.ID,
+				PickupAddress:       merchant.Address,
+				PickupLongitude:     merchant.Longitude,
+				PickupLatitude:      merchant.Latitude,
+				PickupContact:       pgtype.Text{String: merchant.Name, Valid: true},
+				PickupPhone:         pgtype.Text{String: merchant.Phone, Valid: true},
+				DeliveryAddress:     userAddress.DetailAddress,
+				DeliveryLongitude:   userAddress.Longitude,
+				DeliveryLatitude:    userAddress.Latitude,
+				DeliveryContact:     pgtype.Text{String: userAddress.ContactName, Valid: true},
+				DeliveryPhone:       pgtype.Text{String: userAddress.ContactPhone, Valid: true},
+				Distance:            deliveryDistance,
+				DeliveryFee:         result.Order.DeliveryFee,
+				EstimatedPickupAt:   pgtype.Timestamptz{Time: estimatedPickupAt, Valid: true},
 				EstimatedDeliveryAt: pgtype.Timestamptz{Time: estimatedDeliveryAt, Valid: true},
 			})
 			if err != nil {

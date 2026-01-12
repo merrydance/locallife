@@ -2,8 +2,11 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -136,6 +139,15 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		// 0. 如果订单已扣减库存（paid状态），先准备恢复库存
+		var orderItems []OrderItem
+		if arg.OldStatus == OrderStatusPaid {
+			orderItems, err = q.ListOrderItemsByOrder(ctx, arg.OrderID)
+			if err != nil {
+				return fmt.Errorf("list order items for cancel: %w", err)
+			}
+		}
+
 		// 1. 更新订单为已取消
 		var cancelReason pgtype.Text
 		if arg.CancelReason != "" {
@@ -161,6 +173,54 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 		})
 		if err != nil {
 			return fmt.Errorf("create order status log: %w", err)
+		}
+
+		// 3. 若订单之前处于已支付状态，恢复已售库存
+		if arg.OldStatus == OrderStatusPaid {
+			inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
+			if result.Order.OrderType == OrderTypeReservation && result.Order.ReservationID.Valid {
+				reservation, invErr := q.GetTableReservation(ctx, result.Order.ReservationID.Int64)
+				if invErr != nil && !errors.Is(invErr, pgx.ErrNoRows) {
+					return fmt.Errorf("get reservation for inventory restore: %w", invErr)
+				}
+				if reservation.ReservationDate.Valid {
+					inventoryDate = reservation.ReservationDate
+				}
+			}
+
+			for _, item := range orderItems {
+				if !item.DishID.Valid {
+					continue
+				}
+
+				inv, invErr := q.GetDailyInventoryForUpdate(ctx, GetDailyInventoryForUpdateParams{
+					MerchantID: result.Order.MerchantID,
+					DishID:     item.DishID.Int64,
+					Date:       inventoryDate,
+				})
+				if invErr != nil {
+					if errors.Is(invErr, pgx.ErrNoRows) {
+						continue
+					}
+					return fmt.Errorf("get inventory for restore: %w", invErr)
+				}
+
+				newSold := inv.SoldQuantity - int32(item.Quantity)
+				if newSold < 0 {
+					newSold = 0
+				}
+
+				_, invErr = q.UpdateDailyInventory(ctx, UpdateDailyInventoryParams{
+					TotalQuantity: pgtype.Int4{Int32: inv.TotalQuantity, Valid: true},
+					SoldQuantity:  pgtype.Int4{Int32: newSold, Valid: true},
+					MerchantID:    inv.MerchantID,
+					DishID:        inv.DishID,
+					Date:          inv.Date,
+				})
+				if invErr != nil {
+					return fmt.Errorf("restore inventory for dish %d: %w", item.DishID.Int64, invErr)
+				}
+			}
 		}
 
 		return nil

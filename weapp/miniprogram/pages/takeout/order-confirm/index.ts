@@ -36,11 +36,12 @@ Page({
     address: null as Address | null,
     remark: '',
     deliveryTime: 'ASAP',
+    scheduleSlot: '',
     navBarHeight: 88,
     loading: false,
     orderTotalDisplay: '0.00',
-    deliveryFee: 500,  // 配送费（分）
-    deliveryFeeDisplay: '5.00'
+    deliveryFee: 0,
+    deliveryFeeDisplay: '待计算'
   },
 
   onLoad(options: { cart_ids?: string }) {
@@ -147,14 +148,13 @@ Page({
       }
 
       // 计算订单总价（商品金额 + 配送费）
-      const { deliveryFee } = this.data
-      const orderTotal = totalPrice + deliveryFee
-
       this.setData({
         cart,
-        orderTotalDisplay: formatPriceNoSymbol(orderTotal),
         loading: false
       })
+
+      // 根据地址计算配送费
+      await this.calculateDeliveryFee()
     } catch (error) {
       logger.error('Load cart failed', error, 'Order-confirm')
       wx.showToast({ title: '加载购物车失败', icon: 'error' })
@@ -168,6 +168,7 @@ Page({
       if (addresses && addresses.length > 0) {
         const defaultAddr = addresses.find((a: Address) => a.is_default) || addresses[0]
         this.setData({ address: defaultAddr })
+        await this.calculateDeliveryFee()
       }
     } catch (error) {
       logger.error('Load address failed', error, 'Order-confirm')
@@ -180,6 +181,7 @@ Page({
       const addr = addresses.find((a: Address) => String(a.id) === String(id))
       if (addr) {
         this.setData({ address: addr })
+        await this.calculateDeliveryFee()
       }
     } catch (error) {
       logger.error('Load address failed', error, 'Order-confirm')
@@ -195,7 +197,92 @@ Page({
   },
 
   onDeliveryTimeChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ deliveryTime: e.detail.value })
+    const value = e.detail.value as 'ASAP' | 'SCHEDULED'
+    if (value === 'SCHEDULED') {
+      this.chooseScheduleSlot()
+    } else {
+      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
+    }
+  },
+
+  /**
+   * 选择预约时间（仅当天，默认营业时段 10:00-22:00，30 分钟粒度）
+   */
+  async chooseScheduleSlot() {
+    const slots = this.buildTodaySlots(10, 22, 30)
+    if (slots.length === 0) {
+      wx.showToast({ title: '今日无可选时间', icon: 'none' })
+      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
+      return
+    }
+
+    try {
+      const res = await wx.showActionSheet({ itemList: slots })
+      const picked = slots[res.tapIndex]
+      this.setData({ deliveryTime: 'SCHEDULED', scheduleSlot: picked })
+    } catch (err) {
+      // 取消选择则回退到尽快送达
+      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
+    }
+  },
+
+  /**
+   * 构建当天可选时间段
+   */
+  buildTodaySlots(startHour: number, endHour: number, stepMinutes: number): string[] {
+    const now = new Date()
+    const slots: string[] = []
+    for (let h = startHour; h < endHour; h++) {
+      for (let m = 0; m < 60; m += stepMinutes) {
+        const slot = new Date(now)
+        slot.setHours(h, m, 0, 0)
+        if (slot.getTime() > now.getTime()) {
+          const hh = String(slot.getHours()).padStart(2, '0')
+          const mm = String(slot.getMinutes()).padStart(2, '0')
+          slots.push(`${hh}:${mm}`)
+        }
+      }
+    }
+    return slots
+  },
+
+  /**
+   * 计算配送费并更新应付总额
+   */
+  async calculateDeliveryFee() {
+    const { cart, address } = this.data
+    if (!cart || !cart.merchantId) return
+
+    if (!address) {
+      this.setData({
+        deliveryFee: 0,
+        deliveryFeeDisplay: '待选择地址',
+        orderTotalDisplay: formatPriceNoSymbol(cart.totalPrice)
+      })
+      return
+    }
+
+    try {
+      const result = await CartAPI.calculateCart({
+        merchant_id: cart.merchantId,
+        order_type: 'takeout',
+        address_id: address.id,
+        latitude: address.latitude ? Number(address.latitude) : undefined,
+        longitude: address.longitude ? Number(address.longitude) : undefined
+      })
+
+      const deliveryFee = result.delivery_fee || 0
+      const orderTotal = (cart.totalPrice || 0) + deliveryFee
+
+      this.setData({
+        deliveryFee,
+        deliveryFeeDisplay: deliveryFee > 0 ? formatPriceNoSymbol(deliveryFee) : '免配送费',
+        orderTotalDisplay: formatPriceNoSymbol(orderTotal)
+      })
+    } catch (error) {
+      logger.error('Calculate delivery fee failed', error, 'Order-confirm')
+      // 保留现有金额显示，不打断流程
+    }
   },
 
   async onSubmitOrder() {
@@ -241,6 +328,17 @@ Page({
 
       const order = await createOrder(requestData)
       console.log('[Order-confirm] Order created:', order.id)
+
+      // 订单已创建，移除本次结算的商品（仅限当前 cart.items）避免重复结算
+      const cartItemIds = cart.items.map((item) => item.id).filter(Boolean)
+      if (cartItemIds.length > 0) {
+        try {
+          await Promise.all(cartItemIds.map((id) => CartAPI.removeFromCart(id)))
+        } catch (clearErr) {
+          logger.error('Remove cart items after order failed', clearErr, 'Order-confirm')
+          showDebugModal('清理购物车失败（已创建订单）', clearErr)
+        }
+      }
 
       // Step 2: 创建支付订单
       try {

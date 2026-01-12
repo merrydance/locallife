@@ -5,10 +5,15 @@
 
   <view wx:if="{{!loading && order}}" class="detail-content">
     <!-- 状态 -->
-    <view class="status-section">
-      <t-icon name="check-circle" size="80rpx" color="{{order.statusColor}}" />
-      <text class="status-text">{{order.statusText}}</text>
-      <text class="status-time">{{order.expectDeliverTime ? '预计 ' + order.expectDeliverTime + ' 送达' : order.createTime}}</text>
+    <view class="status-card">
+      <view class="status-header">
+        <t-icon name="check-circle" size="48rpx" color="{{order.statusColor}}" />
+        <view class="status-meta">
+          <text class="status-text">{{order.statusText}}</text>
+          <text class="status-time">{{order.createTime}}</text>
+        </view>
+        <view wx:if="{{order.expectDeliverTime}}" class="status-chip">预计 {{order.expectDeliverTime}} 送达</view>
+      </view>
     </view>
 
     <!-- 商家信息 -->
@@ -26,6 +31,44 @@
       <view class="contact-info">
         <text>{{order.contactName}}</text>
         <text>{{order.contactPhone}}</text>
+      </view>
+    </view>
+
+    <!-- 预订信息 -->
+    <view wx:if="{{order.type === 'reservation'}}" class="address-section">
+      <view class="section-title">预订信息</view>
+      <view class="info-row">
+        <text class="label">预约日期</text>
+        <text class="value">{{reservationInfo && reservationInfo.reservation_date || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">预约时间</text>
+        <text class="value">{{reservationInfo && reservationInfo.reservation_time || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">桌台</text>
+        <text class="value">{{(reservationInfo && reservationInfo.table_no) || ('#' + (order.tableId || ''))}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">人数</text>
+        <text class="value">{{reservationInfo && reservationInfo.guest_count || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">联系人</text>
+        <text class="value">{{(reservationInfo && reservationInfo.contact_name) || order.contactName || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">电话</text>
+        <text class="value">{{(reservationInfo && reservationInfo.contact_phone) || order.contactPhone || '-'}}</text>
+      </view>
+    </view>
+
+    <!-- 堂食信息 -->
+    <view wx:if="{{order.type === 'dine_in'}}" class="address-section">
+      <view class="section-title">堂食信息</view>
+      <view class="info-row">
+        <text class="label">桌台</text>
+        <text class="value">{{order.tableId ? ('#' + order.tableId) : '店内用餐'}}</text>
       </view>
     </view>
 
@@ -48,7 +91,7 @@
         <text class="label">商品总额</text>
         <text class="value">{{order.subtotalDisplay}}</text>
       </view>
-      <view class="cost-row">
+      <view wx:if="{{order.type === 'takeout'}}" class="cost-row">
         <text class="label">配送费</text>
         <text class="value">{{order.deliveryFeeDisplay}}</text>
       </view>
@@ -71,6 +114,14 @@
       <view class="info-row">
         <text class="label">下单时间</text>
         <text class="value">{{order.createTime}}</text>
+      </view>
+      <view wx:if="{{order.type === 'reservation'}}" class="info-row">
+        <text class="label">预订ID</text>
+        <text class="value">{{order.reservationId || '-'}}</text>
+      </view>
+      <view wx:if="{{order.type === 'dine_in'}}" class="info-row">
+        <text class="label">桌台ID</text>
+        <text class="value">{{order.tableId || '-'}}</text>
       </view>
       <view class="info-row link-row" bindtap="onViewPayment">
         <text class="label">支付详情</text>
@@ -102,23 +153,24 @@
 
 <!-- 底部操作 -->
 <view wx:if="{{!loading && order}}" class="bottom-bar">
-  <!-- 取消订单按钮 -->
-  <t-button wx:if="{{showCancelButton}}" class="cancel-btn" bindtap="onCancelOrder">取消订单</t-button>
-  
-  <!-- 催单按钮 -->
-  <t-button wx:if="{{showUrgeButton}}" class="secondary-btn" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">
-    {{urgeCountdown > 0 ? urgeCountdown + 's后可催单' : '催单'}}
-  </t-button>
-  
-  <!-- 查看物流 -->
-  <t-button wx:if="{{showTrackingButton}}" class="secondary-btn" bindtap="onViewTracking">查看物流</t-button>
-  
-  <!-- 确认收货 -->
-  <t-button wx:if="{{showConfirmButton}}" class="primary-btn" bindtap="onConfirmReceipt">确认收货</t-button>
-  
-  <!-- 已完成订单操作 -->
-  <block wx:if="{{order.status === 'completed'}}">
-    <t-button class="secondary-btn" bindtap="onReview">评价订单</t-button>
-    <t-button class="primary-btn" bindtap="onReorder">再来一单</t-button>
-  </block>
+  <view wx:if="{{showPayButton || showCancelButton}}" class="action-row">
+    <t-button wx:if="{{showCancelButton}}" class="btn ghost" variant="outline" size="large" bindtap="onCancelOrder">取消订单</t-button>
+    <t-button wx:if="{{showPayButton}}" class="btn primary" theme="primary" size="large" bindtap="onPayOrder">去支付</t-button>
+  </view>
+
+  <view wx:if="{{showConfirmButton || showTrackingButton}}" class="action-row">
+    <t-button wx:if="{{showTrackingButton}}" class="btn ghost" variant="outline" size="large" bindtap="onViewTracking">查看物流</t-button>
+    <t-button wx:if="{{showConfirmButton}}" class="btn primary" theme="primary" size="large" bindtap="onConfirmReceipt">确认收货</t-button>
+  </view>
+
+  <view wx:if="{{showUrgeButton}}" class="action-row single">
+    <t-button class="btn subtle" size="large" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">
+      {{urgeCountdown > 0 ? urgeCountdown + 's后可催单' : '催单'}}
+    </t-button>
+  </view>
+
+  <view wx:if="{{order.status === 'completed'}}" class="action-row">
+    <t-button class="btn ghost" variant="outline" size="large" bindtap="onReview">评价订单</t-button>
+    <t-button class="btn primary" theme="primary" size="large" bindtap="onReorder">再来一单</t-button>
+  </view>
 </view>

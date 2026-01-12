@@ -14,6 +14,6 @@
   </view>
   
   <view class="checkout-btn {{totalCount > 0 ? 'active' : ''}}" bindtap="onCheckout">
-    去结算
+    去下单
   </view>
 </view>

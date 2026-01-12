@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -48,13 +49,13 @@ func newUserAddressResponse(address db.UserAddress) userAddressResponse {
 }
 
 type createUserAddressRequest struct {
-	RegionID      *int64 `json:"region_id" binding:"omitempty,min=1" example:"1"`
-	DetailAddress string `json:"detail_address" binding:"required,min=1,max=200" example:"深圳市南山区科苑路15号"`
-	ContactName   string `json:"contact_name" binding:"required,min=1,max=50" example:"张三"`
-	ContactPhone  string `json:"contact_phone" binding:"required,min=11,max=11" example:"13800138000"`
-	Longitude     string `json:"longitude" binding:"required" example:"113.946874"`
-	Latitude      string `json:"latitude" binding:"required" example:"22.528499"`
-	IsDefault     bool   `json:"is_default" example:"false"`
+	RegionID      *int64  `json:"region_id" binding:"omitempty,min=1" example:"1"`
+	DetailAddress string  `json:"detail_address" binding:"required,min=1,max=200" example:"深圳市南山区科苑路15号"`
+	ContactName   string  `json:"contact_name" binding:"required,min=1,max=50" example:"张三"`
+	ContactPhone  string  `json:"contact_phone" binding:"required,min=11,max=11" example:"13800138000"`
+	Longitude     *string `json:"longitude" binding:"omitempty" example:"113.946874"`
+	Latitude      *string `json:"latitude" binding:"omitempty" example:"22.528499"`
+	IsDefault     bool    `json:"is_default" example:"false"`
 }
 
 // createUserAddress godoc
@@ -79,6 +80,34 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
+	// 经纬度：优先使用客户端传入，否则用自建 OSM 按地址地理编码
+	var lat, lon float64
+	if req.Latitude != nil && req.Longitude != nil && *req.Latitude != "" && *req.Longitude != "" {
+		var err error
+		lat, err = strconv.ParseFloat(*req.Latitude, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude format: %w", err)))
+			return
+		}
+		lon, err = strconv.ParseFloat(*req.Longitude, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude format: %w", err)))
+			return
+		}
+	} else {
+		if server.mapClient == nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("longitude/latitude required and map client not configured")))
+			return
+		}
+		geo, err := server.mapClient.Geocode(ctx, req.DetailAddress)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("failed to geocode address: %w", err)))
+			return
+		}
+		lat = geo.Location.Lat
+		lon = geo.Location.Lng
+	}
+
 	var regionID int64
 	if req.RegionID != nil {
 		regionID = *req.RegionID
@@ -94,8 +123,6 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 		}
 	} else {
 		// 自动匹配 region_id
-		lat, _ := strconv.ParseFloat(req.Latitude, 64)
-		lon, _ := strconv.ParseFloat(req.Longitude, 64)
 		var err error
 		regionID, err = server.matchRegionID(ctx, lat, lon)
 		if err != nil {
@@ -106,13 +133,13 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 
 	// 创建经纬度Numeric类型
 	var longitude pgtype.Numeric
-	if err := longitude.Scan(req.Longitude); err != nil {
+	if err := longitude.Scan(lon); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude format: %w", err)))
 		return
 	}
 
 	var latitude pgtype.Numeric
-	if err := latitude.Scan(req.Latitude); err != nil {
+	if err := latitude.Scan(lat); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude format: %w", err)))
 		return
 	}
@@ -313,28 +340,38 @@ func (server *Server) updateUserAddress(ctx *gin.Context) {
 	var latValid, lonValid bool
 
 	if req.Longitude != nil {
-		var lng pgtype.Numeric
-		if err := lng.Scan(*req.Longitude); err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude format: %w", err)))
-			return
+		lonStr := strings.TrimSpace(*req.Longitude)
+		if lonStr == "" {
+			lon, _ = parseNumericToFloat(existingAddress.Longitude)
+		} else {
+			var lng pgtype.Numeric
+			if err := lng.Scan(lonStr); err != nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude format: %w", err)))
+				return
+			}
+			arg.Longitude = lng
+			lon, _ = strconv.ParseFloat(lonStr, 64)
+			lonValid = true
 		}
-		arg.Longitude = lng
-		lon, _ = strconv.ParseFloat(*req.Longitude, 64)
-		lonValid = true
 	} else {
 		lon, _ = parseNumericToFloat(existingAddress.Longitude)
 		lonValid = true
 	}
 
 	if req.Latitude != nil {
-		var l pgtype.Numeric
-		if err := l.Scan(*req.Latitude); err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude format: %w", err)))
-			return
+		latStr := strings.TrimSpace(*req.Latitude)
+		if latStr == "" {
+			lat, _ = parseNumericToFloat(existingAddress.Latitude)
+		} else {
+			var l pgtype.Numeric
+			if err := l.Scan(latStr); err != nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude format: %w", err)))
+				return
+			}
+			arg.Latitude = l
+			lat, _ = strconv.ParseFloat(latStr, 64)
+			latValid = true
 		}
-		arg.Latitude = l
-		lat, _ = strconv.ParseFloat(*req.Latitude, 64)
-		latValid = true
 	} else {
 		lat, _ = parseNumericToFloat(existingAddress.Latitude)
 		latValid = true

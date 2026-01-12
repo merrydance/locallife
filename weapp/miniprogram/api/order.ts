@@ -111,6 +111,8 @@ export interface ListOrdersParams extends Record<string, unknown> {
   page_id: number
   page_size: number
   status?: OrderStatus
+  order_type?: OrderType
+  reservation_id?: number
 }
 
 /** 订单计算参数 */

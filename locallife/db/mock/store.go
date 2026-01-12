@@ -10033,6 +10033,21 @@ func (mr *MockStoreMockRecorder) ListOrdersByUserAndStatus(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrdersByUserAndStatus", reflect.TypeOf((*MockStore)(nil).ListOrdersByUserAndStatus), ctx, arg)
 }
 
+// ListOrdersByUserWithFilters mocks base method.
+func (m *MockStore) ListOrdersByUserWithFilters(ctx context.Context, arg db.ListOrdersByUserWithFiltersParams) ([]db.ListOrdersByUserWithFiltersRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOrdersByUserWithFilters", ctx, arg)
+	ret0, _ := ret[0].([]db.ListOrdersByUserWithFiltersRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOrdersByUserWithFilters indicates an expected call of ListOrdersByUserWithFilters.
+func (mr *MockStoreMockRecorder) ListOrdersByUserWithFilters(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrdersByUserWithFilters", reflect.TypeOf((*MockStore)(nil).ListOrdersByUserWithFilters), ctx, arg)
+}
+
 // ListPaymentOrdersByUser mocks base method.
 func (m *MockStore) ListPaymentOrdersByUser(ctx context.Context, arg db.ListPaymentOrdersByUserParams) ([]db.PaymentOrder, error) {
 	m.ctrl.T.Helper()
@@ -10453,19 +10468,19 @@ func (mr *MockStoreMockRecorder) ListReservationsByTableAndDate(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReservationsByTableAndDate", reflect.TypeOf((*MockStore)(nil).ListReservationsByTableAndDate), ctx, arg)
 }
 
-// ListReservationsByUser mocks base method.
-func (m *MockStore) ListReservationsByUser(ctx context.Context, arg db.ListReservationsByUserParams) ([]db.ListReservationsByUserRow, error) {
+// ListReservationsByUserWithStatus mocks base method.
+func (m *MockStore) ListReservationsByUserWithStatus(ctx context.Context, arg db.ListReservationsByUserWithStatusParams) ([]db.ListReservationsByUserWithStatusRow, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListReservationsByUser", ctx, arg)
-	ret0, _ := ret[0].([]db.ListReservationsByUserRow)
+	ret := m.ctrl.Call(m, "ListReservationsByUserWithStatus", ctx, arg)
+	ret0, _ := ret[0].([]db.ListReservationsByUserWithStatusRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ListReservationsByUser indicates an expected call of ListReservationsByUser.
-func (mr *MockStoreMockRecorder) ListReservationsByUser(ctx, arg any) *gomock.Call {
+// ListReservationsByUserWithStatus indicates an expected call of ListReservationsByUserWithStatus.
+func (mr *MockStoreMockRecorder) ListReservationsByUserWithStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReservationsByUser", reflect.TypeOf((*MockStore)(nil).ListReservationsByUser), ctx, arg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReservationsByUserWithStatus", reflect.TypeOf((*MockStore)(nil).ListReservationsByUserWithStatus), ctx, arg)
 }
 
 // ListReviewsByMerchant mocks base method.

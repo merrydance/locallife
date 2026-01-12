@@ -1,6 +1,6 @@
-<custom-navbar title="我的订单" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<scroll-view class="page" scroll-y="true" scroll-with-animation="true" style="padding-top: {{navBarHeight}}px;">
   <!-- 状态筛选Tab -->
   <t-tabs value="{{currentStatus}}" bind:change="onStatusChange">
     <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
@@ -28,7 +28,13 @@
           <view class="merchant">{{item.merchantName}}</view>
           <view class="order-id">#{{item.orderNo}}</view>
         </view>
-        <t-tag variant="light" theme="{{item.statusClass === 'completed' ? 'success' : (item.statusClass === 'cancelled' ? 'default' : 'primary')}}">{{item.statusLabel}}</t-tag>
+        <t-tag
+          class="status-tag {{item.statusClass}}"
+          variant="light"
+          theme="{{item.statusClass === 'completed' ? 'success' : (item.statusClass === 'cancelled' ? 'default' : (item.statusClass === 'pending' ? 'warning' : 'primary'))}}"
+        >
+          {{item.statusLabel}}
+        </t-tag>
       </view>
 
       <view class="highlight" wx:if="{{item.highlight}}">{{item.highlight}}</view>
@@ -64,4 +70,4 @@
       <view wx:elif="{{!hasMore && orders.length > 0}}" class="no-more">没有更多了</view>
     </view>
   </view>
-</view>
+</scroll-view>

@@ -99,6 +99,18 @@ Page({
     Navigation.toOrderList()
   },
 
+  onTakeoutOrders() {
+    wx.navigateTo({ url: '/pages/orders/list/index?order_type=takeout' })
+  },
+
+  onReservationOrders() {
+	wx.navigateTo({ url: '/pages/user_center/reservations/index' })
+  },
+
+  onDineInOrders() {
+    wx.navigateTo({ url: '/pages/orders/list/index?order_type=dine_in' })
+  },
+
   onAddresses() {
     Navigation.toAddressList()
   },

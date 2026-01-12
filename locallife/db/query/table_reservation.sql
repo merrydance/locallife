@@ -38,16 +38,17 @@ FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.id = $1;
 
--- name: ListReservationsByUser :many
+-- name: ListReservationsByUserWithStatus :many
 SELECT 
     tr.*,
     t.table_no,
     t.table_type
 FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
-WHERE tr.user_id = $1
+WHERE tr.user_id = sqlc.arg('user_id')
+  AND (sqlc.narg('status')::text IS NULL OR tr.status = sqlc.narg('status'))
 ORDER BY tr.reservation_date DESC, tr.reservation_time DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListReservationsByMerchant :many
 SELECT 

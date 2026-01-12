@@ -3,6 +3,16 @@
   background: #F6F6F6;
 }
 
+.actions-bar {
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 24rpx 0;
+}
+
+.action-button {
+  flex: 1;
+}
+
 .loading {
   display: flex;
   justify-content: center;
@@ -15,6 +25,17 @@
 
 .empty {
   padding: 100rpx 0;
+}
+
+.empty-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  align-items: center;
+}
+
+.empty-actions .t-button {
+  min-width: 320rpx;
 }
 
 .addresses-list {

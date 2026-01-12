@@ -94,6 +94,6 @@
     bindtap="onCheckout"
     t-class="checkout-btn-inner"
   >
-    去结算
+    去下单
   </t-button>
 </view>

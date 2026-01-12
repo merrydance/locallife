@@ -68,6 +68,7 @@ page {
 .address-arrow {
   font-size: 48rpx;
   color: #999;
+  margin-left: auto;
 }
 
 .delivery-section,
@@ -96,6 +97,17 @@ page {
   margin-left: 16rpx;
   font-size: 28rpx;
   color: #333;
+}
+
+.delivery-text-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.delivery-note {
+  font-size: 24rpx;
+  color: #999;
 }
 
 .item-row {

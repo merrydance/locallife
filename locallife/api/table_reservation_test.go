@@ -465,10 +465,10 @@ func TestListUserReservationsAPI(t *testing.T) {
 	room := randomRoom(merchant.ID)
 
 	n := 5
-	reservations := make([]db.ListReservationsByUserRow, n)
+	reservations := make([]db.ListReservationsByUserWithStatusRow, n)
 	for i := 0; i < n; i++ {
 		r := randomReservation(room.ID, user.ID, merchant.ID)
-		reservations[i] = db.ListReservationsByUserRow{
+		reservations[i] = db.ListReservationsByUserWithStatusRow{
 			ID:              r.ID,
 			TableID:         r.TableID,
 			UserID:          r.UserID,
@@ -505,7 +505,7 @@ func TestListUserReservationsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					ListReservationsByUser(gomock.Any(), gomock.Any()).
+					ListReservationsByUserWithStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(reservations, nil)
 			},
@@ -521,7 +521,7 @@ func TestListUserReservationsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					ListReservationsByUser(gomock.Any(), gomock.Any()).
+					ListReservationsByUserWithStatus(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

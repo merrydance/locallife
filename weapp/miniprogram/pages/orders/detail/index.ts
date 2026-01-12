@@ -1,9 +1,11 @@
 import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
 import { getOrderDetail, confirmOrder, cancelOrder, urgeOrder, OrderResponse } from '../../../api/order'
+import { processPayment } from '../../../api/payment'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
+import { ReservationService, ReservationResponse } from '../../../api/reservation'
 
 // 取消原因选项
 const CANCEL_REASONS = [
@@ -19,11 +21,13 @@ Page({
     orderId: '',
     order: null as OrderDetail | null,
     orderDTO: null as OrderResponse | null,
+    reservationInfo: null as ReservationResponse | null,
     navBarHeight: 88,
     loading: false,
     showTrackingButton: false,
     showConfirmButton: false,
     showCancelButton: false,
+    showPayButton: false,
     showUrgeButton: false,
     lastUrgeTime: 0,  // 上次催单时间
     urgeCountdown: 0  // 催单倒计时（秒）
@@ -47,6 +51,15 @@ Page({
       const orderDTO = await getOrderDetail(parseInt(this.data.orderId))
       const order = OrderAdapter.toDetailViewModel(orderDTO)
 
+      let reservationInfo: ReservationResponse | null = null
+      if (orderDTO.order_type === 'reservation' && orderDTO.reservation_id) {
+        try {
+          reservationInfo = await ReservationService.getReservationDetail(orderDTO.reservation_id)
+        } catch (e) {
+          logger.warn('Fetch reservation detail failed', e)
+        }
+      }
+
       // 判断是否显示物流追踪按钮（外卖订单且状态为配送中）
       const showTrackingButton = orderDTO.order_type === 'takeout' &&
         orderDTO.status === 'delivering'
@@ -54,6 +67,9 @@ Page({
       // 判断是否显示确认收货按钮（配送中或待取餐）
       const showConfirmButton = (orderDTO.order_type === 'takeout' && orderDTO.status === 'delivering') ||
         (orderDTO.order_type === 'takeaway' && orderDTO.status === 'ready')
+
+      // 待支付展示去支付按钮
+      const showPayButton = orderDTO.status === 'pending'
 
       // 判断是否显示取消按钮（待支付、已支付、制作中可取消）
       const showCancelButton = ['pending', 'paid', 'preparing'].includes(orderDTO.status)
@@ -67,10 +83,12 @@ Page({
       this.setData({
         order: { ...order, timeline },
         orderDTO,
+        reservationInfo,
         loading: false,
         showTrackingButton,
         showConfirmButton,
         showCancelButton,
+        showPayButton,
         showUrgeButton
       })
 
@@ -210,6 +228,27 @@ Page({
     wx.navigateTo({
       url: `/pages/orders/tracking/index?orderId=${this.data.orderId}`
     })
+  },
+
+  // 去支付（直接拉起微信支付）
+  async onPayOrder() {
+    const { orderId } = this.data
+    if (!orderId) {
+      wx.showToast({ title: '订单信息缺失', icon: 'none' })
+      return
+    }
+
+    wx.showLoading({ title: '拉起支付...' })
+    try {
+      await processPayment(parseInt(orderId), 'order')
+      wx.showToast({ title: '支付成功', icon: 'success' })
+      setTimeout(() => this.loadOrderDetail(), 800)
+    } catch (error) {
+      logger.error('支付失败', error, 'Detail.onPayOrder')
+      wx.showToast({ title: '支付未完成', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
   },
 
   async onConfirmReceipt() {

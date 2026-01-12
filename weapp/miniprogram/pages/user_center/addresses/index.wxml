@@ -6,6 +6,11 @@
 </custom-navbar>
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view class="actions-bar">
+    <t-button class="action-button" size="small" theme="primary" bindtap="onAddAddress">添加地址</t-button>
+    <t-button class="action-button" size="small" variant="outline" bindtap="onImportWechatAddress">微信导入</t-button>
+  </view>
+
   <!-- 骨架屏 -->
   <view wx:if="{{loading && addresses.length === 0}}" class="skeleton-container">
     <list-skeleton wx:for="{{[1,2,3,4]}}" wx:key="*this" show-avatar="{{false}}" />
@@ -14,7 +19,10 @@
   <!-- 空状态 -->
   <view wx:elif="{{addresses.length === 0}}" class="empty">
     <t-empty description="暂无地址">
-      <t-button slot="action" theme="primary" size="small" bindtap="onAddAddress">添加地址</t-button>
+      <view slot="action" class="empty-actions">
+        <t-button theme="primary" size="small" bindtap="onAddAddress">添加地址</t-button>
+        <t-button variant="outline" size="small" bindtap="onImportWechatAddress">微信导入</t-button>
+      </view>
     </t-empty>
   </view>
 

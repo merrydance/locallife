@@ -1134,6 +1134,120 @@ func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersB
 	return items, nil
 }
 
+const listOrdersByUserWithFilters = `-- name: ListOrdersByUserWithFilters :many
+SELECT
+        o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id,
+        m.name as merchant_name
+FROM orders o
+INNER JOIN merchants m ON o.merchant_id = m.id
+WHERE o.user_id = $1
+    AND ($2::text IS NULL OR o.status = $2)
+    AND ($3::text IS NULL OR o.order_type = $3)
+    AND ($4::bigint IS NULL OR o.reservation_id IS NOT DISTINCT FROM $4)
+ORDER BY o.created_at DESC
+LIMIT $6 OFFSET $5
+`
+
+type ListOrdersByUserWithFiltersParams struct {
+	UserID        int64       `json:"user_id"`
+	Status        pgtype.Text `json:"status"`
+	OrderType     pgtype.Text `json:"order_type"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+	Offset        int32       `json:"offset"`
+	Limit         int32       `json:"limit"`
+}
+
+type ListOrdersByUserWithFiltersRow struct {
+	ID                  int64              `json:"id"`
+	OrderNo             string             `json:"order_no"`
+	UserID              int64              `json:"user_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	OrderType           string             `json:"order_type"`
+	AddressID           pgtype.Int8        `json:"address_id"`
+	DeliveryFee         int64              `json:"delivery_fee"`
+	DeliveryDistance    pgtype.Int4        `json:"delivery_distance"`
+	TableID             pgtype.Int8        `json:"table_id"`
+	ReservationID       pgtype.Int8        `json:"reservation_id"`
+	Subtotal            int64              `json:"subtotal"`
+	DiscountAmount      int64              `json:"discount_amount"`
+	DeliveryFeeDiscount int64              `json:"delivery_fee_discount"`
+	TotalAmount         int64              `json:"total_amount"`
+	Status              string             `json:"status"`
+	PaymentMethod       pgtype.Text        `json:"payment_method"`
+	PaidAt              pgtype.Timestamptz `json:"paid_at"`
+	Notes               pgtype.Text        `json:"notes"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason        pgtype.Text        `json:"cancel_reason"`
+	FinalAmount         pgtype.Int8        `json:"final_amount"`
+	PlatformCommission  pgtype.Int8        `json:"platform_commission"`
+	UserVoucherID       pgtype.Int8        `json:"user_voucher_id"`
+	VoucherAmount       int64              `json:"voucher_amount"`
+	BalancePaid         int64              `json:"balance_paid"`
+	MembershipID        pgtype.Int8        `json:"membership_id"`
+	MerchantName        string             `json:"merchant_name"`
+}
+
+func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error) {
+	rows, err := q.db.Query(ctx, listOrdersByUserWithFilters,
+		arg.UserID,
+		arg.Status,
+		arg.OrderType,
+		arg.ReservationID,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOrdersByUserWithFiltersRow{}
+	for rows.Next() {
+		var i ListOrdersByUserWithFiltersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNo,
+			&i.UserID,
+			&i.MerchantID,
+			&i.OrderType,
+			&i.AddressID,
+			&i.DeliveryFee,
+			&i.DeliveryDistance,
+			&i.TableID,
+			&i.ReservationID,
+			&i.Subtotal,
+			&i.DiscountAmount,
+			&i.DeliveryFeeDiscount,
+			&i.TotalAmount,
+			&i.Status,
+			&i.PaymentMethod,
+			&i.PaidAt,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.CancelReason,
+			&i.FinalAmount,
+			&i.PlatformCommission,
+			&i.UserVoucherID,
+			&i.VoucherAmount,
+			&i.BalancePaid,
+			&i.MembershipID,
+			&i.MerchantName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateOrderStatus = `-- name: UpdateOrderStatus :one
 UPDATE orders
 SET 

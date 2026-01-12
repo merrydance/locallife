@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/rs/zerolog/log"
 )
 
@@ -86,6 +87,32 @@ func (p *RedisTaskProcessor) ProcessTaskPaymentOrderTimeout(ctx context.Context,
 	_, err = p.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
 	if err != nil {
 		return fmt.Errorf("update payment order status: %w", err)
+	}
+
+	// 支付超时后同步取消业务订单，释放占用
+	if paymentOrder.OrderID.Valid {
+		order, err := p.store.GetOrderForUpdate(ctx, paymentOrder.OrderID.Int64)
+		if err != nil {
+			return fmt.Errorf("get order for timeout cancel: %w", err)
+		}
+
+		if order.Status == db.OrderStatusPending {
+			_, err = p.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
+				OrderID:      order.ID,
+				OldStatus:    order.Status,
+				CancelReason: "支付超时未完成",
+				OperatorID:   order.UserID,
+				OperatorType: "system",
+			})
+			if err != nil {
+				return fmt.Errorf("cancel order after payment timeout: %w", err)
+			}
+		} else {
+			log.Info().
+				Int64("order_id", order.ID).
+				Str("status", order.Status).
+				Msg("order already moved past pending, skip timeout cancel")
+		}
 	}
 
 	// 如果有微信支付 prepay_id，需要调用微信关单 API

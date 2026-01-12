@@ -57,6 +57,11 @@ export interface OrderDetail extends Order {
     contactName?: string          // 配送联系人
     contactPhone?: string         // 配送联系电话
     merchantPhone?: string        // 商户电话
+    tableId?: number              // 堂食/预订 桌台ID
+    reservationId?: number        // 预订ID
+    reservationDate?: string
+    reservationTime?: string
+    guestCount?: number
     timeline?: OrderTimelineItem[]
 }
 

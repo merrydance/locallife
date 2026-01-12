@@ -4,6 +4,7 @@
  */
 
 import { OrderResponse, getPayableAmount } from '../api/order'
+import { getPublicImageUrl } from '../utils/image'
 
 export interface OrderCardViewModel {
     id: number
@@ -37,8 +38,8 @@ export const OrderCardAdapter = {
         const status = mapStatus(order.status)
         // 可取消状态：待支付、已支付、制作中
         const canCancel = ['pending', 'paid', 'preparing'].includes(order.status)
-        // 可支付状态：待支付
-        const canPay = order.status === 'pending'
+        // 列表页不直接跳支付，统一在详情页处理
+        const canPay = false
         return {
             id: order.id,
             orderNo: order.order_no,
@@ -123,6 +124,12 @@ function getStatusLabel(status: string): string {
  * 生成高亮信息
  */
 function generateHighlight(order: OrderResponse): string {
+    if (order.order_type === 'reservation') {
+        return '预订点菜订单'
+    }
+    if (order.order_type === 'dine_in') {
+        return '堂食订单'
+    }
     switch (order.status) {
         case 'delivering':
             return '骑手正在配送中，请耐心等待'
@@ -150,6 +157,8 @@ function generateBadges(order: OrderResponse): string[] {
         badges.push('堂食')
     } else if (order.order_type === 'takeaway') {
         badges.push('自取')
+    } else if (order.order_type === 'reservation') {
+        badges.push('预订')
     }
 
     // 支付方式徽章（OrderResponse中没有payment_method字段）
@@ -175,7 +184,7 @@ function extractPreviewItems(order: OrderResponse): PreviewItemViewModel[] {
         dishId: item.dish_id || 0,
         dishName: item.name,  // 对齐swagger: 使用name而非dish_name
         quantity: item.quantity,
-        imageUrl: item.image_url || 'https://tdesign.gtimg.com/mobile/demos/example1.png'  // 对齐swagger: 使用image_url
+        imageUrl: getPublicImageUrl(item.image_url) || 'https://tdesign.gtimg.com/mobile/demos/example1.png'  // 对齐swagger: 使用image_url
     }))
 }
 

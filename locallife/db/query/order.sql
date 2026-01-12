@@ -60,6 +60,19 @@ WHERE o.user_id = $1
 ORDER BY o.created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListOrdersByUserWithFilters :many
+SELECT
+        o.*,
+        m.name as merchant_name
+FROM orders o
+INNER JOIN merchants m ON o.merchant_id = m.id
+WHERE o.user_id = sqlc.arg('user_id')
+    AND (sqlc.narg('status')::text IS NULL OR o.status = sqlc.narg('status'))
+    AND (sqlc.narg('order_type')::text IS NULL OR o.order_type = sqlc.narg('order_type'))
+    AND (sqlc.narg('reservation_id')::bigint IS NULL OR o.reservation_id IS NOT DISTINCT FROM sqlc.narg('reservation_id'))
+ORDER BY o.created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
 -- name: ListOrdersByUserAndStatus :many
 SELECT 
     o.*,

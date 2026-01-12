@@ -32,8 +32,8 @@ export interface CreateAddressRequest {
   detail_address: string      // 必填，详细地址
   contact_name: string        // 必填，联系人姓名
   contact_phone: string       // 必填，联系电话
-  longitude: string           // 必填，经度（字符串）
-  latitude: string            // 必填，纬度（字符串）
+  longitude?: string          // 可选，经度（字符串）
+  latitude?: string           // 可选，纬度（字符串）
   is_default?: boolean        // 可选，是否设为默认
 }
 

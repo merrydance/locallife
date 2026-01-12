@@ -288,60 +288,6 @@ func newOrderResponse(o db.Order) orderResponse {
 	return resp
 }
 
-func newOrderWithMerchantResponse(o db.ListOrdersByUserRow) orderResponse {
-	resp := orderResponse{
-		ID:                  o.ID,
-		OrderNo:             o.OrderNo,
-		UserID:              o.UserID,
-		MerchantID:          o.MerchantID,
-		MerchantName:        o.MerchantName,
-		OrderType:           o.OrderType,
-		DeliveryFee:         o.DeliveryFee,
-		Subtotal:            o.Subtotal,
-		DiscountAmount:      o.DiscountAmount,
-		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
-		TotalAmount:         o.TotalAmount,
-		Status:              o.Status,
-		CreatedAt:           o.CreatedAt,
-	}
-
-	if o.AddressID.Valid {
-		resp.AddressID = &o.AddressID.Int64
-	}
-	if o.DeliveryDistance.Valid {
-		resp.DeliveryDistance = &o.DeliveryDistance.Int32
-	}
-	if o.TableID.Valid {
-		resp.TableID = &o.TableID.Int64
-	}
-	if o.ReservationID.Valid {
-		resp.ReservationID = &o.ReservationID.Int64
-	}
-	if o.PaymentMethod.Valid {
-		resp.PaymentMethod = &o.PaymentMethod.String
-	}
-	if o.Notes.Valid {
-		resp.Notes = &o.Notes.String
-	}
-	if o.PaidAt.Valid {
-		resp.PaidAt = &o.PaidAt.Time
-	}
-	if o.CompletedAt.Valid {
-		resp.CompletedAt = &o.CompletedAt.Time
-	}
-	if o.CancelledAt.Valid {
-		resp.CancelledAt = &o.CancelledAt.Time
-	}
-	if o.CancelReason.Valid {
-		resp.CancelReason = &o.CancelReason.String
-	}
-	if o.UpdatedAt.Valid {
-		resp.UpdatedAt = &o.UpdatedAt.Time
-	}
-
-	return resp
-}
-
 // newOrderWithDetailsResponse 用于订单详情，包含商户信息和配送地址
 func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 	resp := orderResponse{
@@ -413,7 +359,8 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 	return resp
 }
 
-func newOrderWithMerchantFromStatusResponse(o db.ListOrdersByUserAndStatusRow) orderResponse {
+// newOrderWithMerchantFromFilterResponse converts filtered list rows to API response
+func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow) orderResponse {
 	resp := orderResponse{
 		ID:                  o.ID,
 		OrderNo:             o.OrderNo,
@@ -1080,6 +1027,12 @@ type listOrdersRequest struct {
 
 	// 订单状态筛选 (选填，枚举值: pending,paid,preparing,ready,delivering,completed,cancelled)
 	Status string `form:"status" binding:"omitempty,oneof=pending paid preparing ready delivering completed cancelled" enums:"pending,paid,preparing,ready,delivering,completed,cancelled" example:"paid"`
+
+	// 订单类型筛选 (选填，枚举值: takeout,dine_in,takeaway,reservation)
+	OrderType string `form:"order_type" binding:"omitempty,oneof=takeout dine_in takeaway reservation" enums:"takeout,dine_in,takeaway,reservation" example:"takeout"`
+
+	// 预订ID筛选（仅预定点菜订单使用）
+	ReservationID *int64 `form:"reservation_id" binding:"omitempty,min=1" example:"8001"`
 }
 
 // listOrders godoc
@@ -1100,6 +1053,8 @@ type listOrdersRequest struct {
 // @Param page_id query int true "页码(从1开始)" minimum(1)
 // @Param page_size query int true "每页条数" minimum(5) maximum(20)
 // @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,delivering,completed,cancelled)
+// @Param order_type query string false "订单类型筛选" Enums(takeout,dine_in,takeaway,reservation)
+// @Param reservation_id query int false "预订ID筛选（仅预定点菜订单）" minimum(1)
 // @Success 200 {array} orderResponse "订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
@@ -1117,38 +1072,35 @@ func (server *Server) listOrders(ctx *gin.Context) {
 
 	offset := (req.PageID - 1) * req.PageSize
 
-	var resp []orderResponse
-
+	status := pgtype.Text{}
 	if req.Status != "" {
-		// 按状态过滤
-		orders, err := server.store.ListOrdersByUserAndStatus(ctx, db.ListOrdersByUserAndStatusParams{
-			UserID: authPayload.UserID,
-			Status: req.Status,
-			Limit:  req.PageSize,
-			Offset: offset,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		resp = make([]orderResponse, len(orders))
-		for i, o := range orders {
-			resp[i] = newOrderWithMerchantFromStatusResponse(o)
-		}
-	} else {
-		orders, err := server.store.ListOrdersByUser(ctx, db.ListOrdersByUserParams{
-			UserID: authPayload.UserID,
-			Limit:  req.PageSize,
-			Offset: offset,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		resp = make([]orderResponse, len(orders))
-		for i, o := range orders {
-			resp[i] = newOrderWithMerchantResponse(o)
-		}
+		status = pgtype.Text{String: req.Status, Valid: true}
+	}
+	orderType := pgtype.Text{}
+	if req.OrderType != "" {
+		orderType = pgtype.Text{String: req.OrderType, Valid: true}
+	}
+	reservationID := pgtype.Int8{}
+	if req.ReservationID != nil {
+		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+	}
+
+	orders, err := server.store.ListOrdersByUserWithFilters(ctx, db.ListOrdersByUserWithFiltersParams{
+		UserID:        authPayload.UserID,
+		Status:        status,
+		OrderType:     orderType,
+		ReservationID: reservationID,
+		Limit:         req.PageSize,
+		Offset:        offset,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := make([]orderResponse, len(orders))
+	for i, o := range orders {
+		resp[i] = newOrderWithMerchantFromFilterResponse(o)
 	}
 
 	ctx.JSON(http.StatusOK, resp)

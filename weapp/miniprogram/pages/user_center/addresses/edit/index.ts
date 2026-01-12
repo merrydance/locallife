@@ -18,13 +18,15 @@ Page({
     longitude: '',
     isDefault: false,
     saving: false,
-    navBarHeight: 88
+    navBarHeight: 88,
+    navTitle: '编辑地址'
   },
 
   onLoad(options: any) {
     if (options.id) {
       this.setData({ addressId: Number(options.id) })
       this.loadAddress(Number(options.id))
+      this.setData({ navTitle: '编辑地址' })
       wx.setNavigationBarTitle({ title: '编辑地址' })
     } else if (options.wechat_data) {
       // 从微信导入的数据
@@ -33,15 +35,15 @@ Page({
         this.setData({
           contactName: data.contact_name,
           contactPhone: data.contact_phone,
-          detailAddress: data.detail_address
+          detailAddress: data.detail_address,
+          navTitle: '完善地址'
         })
         wx.setNavigationBarTitle({ title: '完善地址' })
-        // 微信地址没有经纬度，需要用户选择位置
-        wx.showToast({ title: '请选择地图位置', icon: 'none', duration: 2000 })
       } catch (e) {
         logger.error('Parse wechat data failed', e, 'AddressEdit')
       }
     } else {
+      this.setData({ navTitle: '新增地址' })
       wx.setNavigationBarTitle({ title: '新增地址' })
     }
   },
@@ -117,9 +119,11 @@ Page({
         const updateData: UpdateAddressRequest = {
           contact_name: this.data.contactName,
           contact_phone: this.data.contactPhone,
-          detail_address: this.data.detailAddress,
-          latitude: this.data.latitude,
-          longitude: this.data.longitude
+          detail_address: this.data.detailAddress
+        }
+        if (this.data.latitude && this.data.longitude) {
+          updateData.latitude = this.data.latitude
+          updateData.longitude = this.data.longitude
         }
         await AddressService.updateAddress(this.data.addressId, updateData)
 
@@ -133,9 +137,11 @@ Page({
           contact_name: this.data.contactName,
           contact_phone: this.data.contactPhone,
           detail_address: this.data.detailAddress,
-          latitude: this.data.latitude,
-          longitude: this.data.longitude,
           is_default: this.data.isDefault
+        }
+        if (this.data.latitude && this.data.longitude) {
+          createData.latitude = this.data.latitude
+          createData.longitude = this.data.longitude
         }
         await AddressService.createAddress(createData)
       }
@@ -172,7 +178,7 @@ Page({
   },
 
   validate(): boolean {
-    const { contactName, contactPhone, detailAddress, latitude, longitude } = this.data
+    const { contactName, contactPhone, detailAddress } = this.data
 
     if (!contactName.trim()) {
       wx.showToast({ title: '请填写联系人', icon: 'none' })
@@ -184,10 +190,6 @@ Page({
     }
     if (!detailAddress.trim()) {
       wx.showToast({ title: '请填写详细地址', icon: 'none' })
-      return false
-    }
-    if (!latitude || !longitude) {
-      wx.showToast({ title: '请选择地图位置', icon: 'none' })
       return false
     }
     return true

@@ -90,7 +90,9 @@ export class OrderAdapter {
       contactName: dto.delivery_contact_name,
       contactPhone: dto.delivery_contact_phone,
       // 商户电话
-      merchantPhone: dto.merchant_phone
+      merchantPhone: dto.merchant_phone,
+      tableId: dto.table_id,
+      reservationId: dto.reservation_id
     }
   }
 }

@@ -1,4 +1,4 @@
-<custom-navbar title="编辑地址" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="{{navTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
   <view class="form-group">

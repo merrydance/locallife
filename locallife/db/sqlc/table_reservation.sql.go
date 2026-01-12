@@ -1194,7 +1194,7 @@ func (q *Queries) ListReservationsByTableAndDate(ctx context.Context, arg ListRe
 	return items, nil
 }
 
-const listReservationsByUser = `-- name: ListReservationsByUser :many
+const listReservationsByUserWithStatus = `-- name: ListReservationsByUserWithStatus :many
 SELECT 
     tr.id, tr.table_id, tr.user_id, tr.merchant_id, tr.reservation_date, tr.reservation_time, tr.guest_count, tr.contact_name, tr.contact_phone, tr.payment_mode, tr.deposit_amount, tr.prepaid_amount, tr.refund_deadline, tr.status, tr.payment_deadline, tr.notes, tr.paid_at, tr.confirmed_at, tr.completed_at, tr.cancelled_at, tr.cancel_reason, tr.created_at, tr.updated_at, tr.checked_in_at, tr.cooking_started_at, tr.source,
     t.table_no,
@@ -1202,17 +1202,19 @@ SELECT
 FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.user_id = $1
+  AND ($2::text IS NULL OR tr.status = $2)
 ORDER BY tr.reservation_date DESC, tr.reservation_time DESC
-LIMIT $2 OFFSET $3
+LIMIT $4 OFFSET $3
 `
 
-type ListReservationsByUserParams struct {
-	UserID int64 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+type ListReservationsByUserWithStatusParams struct {
+	UserID int64       `json:"user_id"`
+	Status pgtype.Text `json:"status"`
+	Offset int32       `json:"offset"`
+	Limit  int32       `json:"limit"`
 }
 
-type ListReservationsByUserRow struct {
+type ListReservationsByUserWithStatusRow struct {
 	ID               int64              `json:"id"`
 	TableID          int64              `json:"table_id"`
 	UserID           int64              `json:"user_id"`
@@ -1243,15 +1245,20 @@ type ListReservationsByUserRow struct {
 	TableType        string             `json:"table_type"`
 }
 
-func (q *Queries) ListReservationsByUser(ctx context.Context, arg ListReservationsByUserParams) ([]ListReservationsByUserRow, error) {
-	rows, err := q.db.Query(ctx, listReservationsByUser, arg.UserID, arg.Limit, arg.Offset)
+func (q *Queries) ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error) {
+	rows, err := q.db.Query(ctx, listReservationsByUserWithStatus,
+		arg.UserID,
+		arg.Status,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListReservationsByUserRow{}
+	items := []ListReservationsByUserWithStatusRow{}
 	for rows.Next() {
-		var i ListReservationsByUserRow
+		var i ListReservationsByUserWithStatusRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TableID,

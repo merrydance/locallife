@@ -145,7 +145,7 @@
         <text class="total-amount">¥{{cart.subtotalDisplay}}</text>
       </view>
       <t-button class="checkout-btn" theme="primary" bindtap="goToCheckout">
-        去结算 ({{cart.total_quantity}})
+        去下单 ({{cart.total_quantity}})
       </t-button>
     </view>
   </view>

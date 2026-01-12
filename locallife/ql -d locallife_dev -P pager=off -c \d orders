@@ -1,0 +1,79 @@
+                                           数据表 "public.orders"
+         栏位          |           类型           | 校对规则 |  可空的  |                预设                
+-----------------------+--------------------------+----------+----------+------------------------------------
+ id                    | bigint                   |          | not null | nextval('orders_id_seq'::regclass)
+ order_no              | text                     |          | not null | 
+ user_id               | bigint                   |          | not null | 
+ merchant_id           | bigint                   |          | not null | 
+ order_type            | text                     |          | not null | 
+ address_id            | bigint                   |          |          | 
+ delivery_fee          | bigint                   |          | not null | 0
+ delivery_distance     | integer                  |          |          | 
+ table_id              | bigint                   |          |          | 
+ reservation_id        | bigint                   |          |          | 
+ subtotal              | bigint                   |          | not null | 
+ discount_amount       | bigint                   |          | not null | 0
+ delivery_fee_discount | bigint                   |          | not null | 0
+ total_amount          | bigint                   |          | not null | 
+ status                | text                     |          | not null | 'pending'::text
+ payment_method        | text                     |          |          | 
+ paid_at               | timestamp with time zone |          |          | 
+ notes                 | text                     |          |          | 
+ created_at            | timestamp with time zone |          | not null | now()
+ updated_at            | timestamp with time zone |          |          | 
+ completed_at          | timestamp with time zone |          |          | 
+ cancelled_at          | timestamp with time zone |          |          | 
+ cancel_reason         | text                     |          |          | 
+ final_amount          | bigint                   |          |          | 0
+ platform_commission   | bigint                   |          |          | 0
+ user_voucher_id       | bigint                   |          |          | 
+ voucher_amount        | bigint                   |          | not null | 0
+ balance_paid          | bigint                   |          | not null | 0
+ membership_id         | bigint                   |          |          | 
+索引：
+    "orders_pkey" PRIMARY KEY, btree (id)
+    "idx_orders_final_amount" btree (final_amount)
+    "idx_orders_merchant_created_status" btree (merchant_id, created_at, status)
+    "idx_orders_user_merchant_created" btree (user_id, merchant_id, created_at) WHERE status = ANY (ARRAY['delivered'::text, 'completed'::text])
+    "orders_created_at_idx" btree (created_at)
+    "orders_membership_id_idx" btree (membership_id) WHERE membership_id IS NOT NULL
+    "orders_merchant_id_idx" btree (merchant_id)
+    "orders_merchant_status_created_idx" btree (merchant_id, status, created_at)
+    "orders_order_no_idx" UNIQUE, btree (order_no)
+    "orders_order_no_key" UNIQUE CONSTRAINT, btree (order_no)
+    "orders_status_idx" btree (status)
+    "orders_user_id_idx" btree (user_id)
+    "orders_user_status_idx" btree (user_id, status)
+    "orders_user_voucher_id_idx" btree (user_voucher_id) WHERE user_voucher_id IS NOT NULL
+检查约束限制
+    "orders_balance_paid_check" CHECK (balance_paid >= 0)
+    "orders_final_amount_check" CHECK (final_amount >= 0)
+    "orders_order_type_check" CHECK (order_type = ANY (ARRAY['takeout'::text, 'dine_in'::text, 'takeaway'::text, 'reservation'::text]))
+    "orders_payment_method_check" CHECK (payment_method IS NULL OR (payment_method = ANY (ARRAY['wechat'::text, 'balance'::text])))
+    "orders_platform_commission_check" CHECK (platform_commission >= 0)
+    "orders_status_check" CHECK (status = ANY (ARRAY['pending'::text, 'paid'::text, 'preparing'::text, 'ready'::text, 'delivering'::text, 'completed'::text, 'cancelled'::text]))
+    "orders_subtotal_check" CHECK (subtotal >= 0)
+    "orders_total_amount_check" CHECK (total_amount >= 0)
+    "orders_voucher_amount_check" CHECK (voucher_amount >= 0)
+外部键(FK)限制：
+    "orders_address_id_fkey" FOREIGN KEY (address_id) REFERENCES user_addresses(id)
+    "orders_membership_id_fkey" FOREIGN KEY (membership_id) REFERENCES merchant_memberships(id)
+    "orders_merchant_id_fkey" FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+    "orders_reservation_id_fkey" FOREIGN KEY (reservation_id) REFERENCES table_reservations(id)
+    "orders_table_id_fkey" FOREIGN KEY (table_id) REFERENCES tables(id)
+    "orders_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    "orders_user_voucher_id_fkey" FOREIGN KEY (user_voucher_id) REFERENCES user_vouchers(id)
+由引用：
+    TABLE "claims" CONSTRAINT "claims_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    TABLE "combined_payment_sub_orders" CONSTRAINT "combined_payment_sub_orders_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id)
+    TABLE "deliveries" CONSTRAINT "deliveries_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id)
+    TABLE "delivery_pool" CONSTRAINT "delivery_pool_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id)
+    TABLE "food_safety_incidents" CONSTRAINT "food_safety_incidents_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    TABLE "order_items" CONSTRAINT "order_items_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    TABLE "order_status_logs" CONSTRAINT "order_status_logs_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    TABLE "payment_orders" CONSTRAINT "payment_orders_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id)
+    TABLE "print_logs" CONSTRAINT "print_logs_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    TABLE "reviews" CONSTRAINT "reviews_order_id_fkey" FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    TABLE "rider_deposits" CONSTRAINT "rider_deposits_related_order_id_fkey" FOREIGN KEY (related_order_id) REFERENCES orders(id)
+    TABLE "rider_premium_score_logs" CONSTRAINT "rider_premium_score_logs_related_order_id_fkey" FOREIGN KEY (related_order_id) REFERENCES orders(id)
+

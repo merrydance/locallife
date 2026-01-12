@@ -43,8 +43,9 @@
       <view class="card-title">常用功能</view>
       <view class="card-body">
         <t-cell-group>
-          <t-cell title="我的订单" arrow hover bind:click="onMyOrders" />
-          <t-cell title="我的预订" arrow hover bind:click="onMyReservations" />
+          <t-cell title="外卖订单" leftIcon="shop" arrow hover bind:click="onTakeoutOrders" />
+          <t-cell title="我的预订" leftIcon="calendar-1" arrow hover bind:click="onMyReservations" />
+          <t-cell title="堂食订单" leftIcon="shop" arrow hover bind:click="onDineInOrders" />
           <t-cell title="地址管理" arrow hover bind:click="onAddresses" />
           <t-cell title="积分中心" arrow hover bind:click="onPoints" />
           <t-cell title="优惠券" arrow hover bind:click="onCoupons" />

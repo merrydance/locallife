@@ -91,6 +91,9 @@ class CartService {
       const merchantId = Number(item.merchantId)
       const quantity = item.quantity || 1
 
+      // 确保有明确的订单类型，避免传递 undefined
+      this.currentOrderType = this.currentOrderType ?? 'takeout'
+
       const req: AddCartItemRequest = {
         merchant_id: merchantId,
         order_type: this.currentOrderType ?? undefined,

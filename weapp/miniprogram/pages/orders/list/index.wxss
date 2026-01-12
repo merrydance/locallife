@@ -1,5 +1,6 @@
 .page {
-  min-height: 100vh;
+  height: 100vh;
+  box-sizing: border-box;
   padding: 48rpx 0 64rpx;
   background: #f5f6fb;
 }
@@ -54,6 +55,35 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20rpx;
+}
+
+.status-tag {
+  min-width: 140rpx;
+  text-align: center;
+  font-weight: 600;
+  border-radius: 999rpx;
+}
+
+.status-tag.completed {
+  color: #0c7032;
+  background: #e4f7ea;
+}
+
+.status-tag.delivering,
+.status-tag.preparing {
+  color: #0f5ac1;
+  background: #e7f0ff;
+}
+
+.status-tag.pending {
+  color: #ffffff !important;
+  background: #ff912c !important;
+  border: none;
+}
+
+.status-tag.cancelled {
+  color: #6f7785;
+  background: #f1f2f5;
 }
 
 .merchant {
@@ -206,7 +236,7 @@ button::after {
 }
 
 .order-list {
-  padding: 0 32rpx;
+  padding: 24rpx 32rpx 0;
 }
 
 .empty {

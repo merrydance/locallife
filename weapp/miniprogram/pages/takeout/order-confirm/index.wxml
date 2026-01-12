@@ -10,13 +10,12 @@
         <t-tag wx:if="{{address.is_default}}" size="small" theme="primary">默认</t-tag>
       </view>
       <text class="address-detail">{{address.detail_address}}</text>
-      <text class="address-arrow">›</text>
     </view>
     <view wx:else class="address-empty">
       <t-icon name="location" size="48rpx" />
       <text class="empty-text">请选择收货地址</text>
-      <text class="address-arrow">›</text>
     </view>
+    <text class="address-arrow">›</text>
   </view>
 
   <!-- 配送时间 -->
@@ -29,7 +28,10 @@
       </label>
       <label class="delivery-item">
         <radio value="SCHEDULED" checked="{{deliveryTime === 'SCHEDULED'}}" />
-        <text class="delivery-text">预约送达</text>
+        <view class="delivery-text-row">
+          <text class="delivery-text">预约送达</text>
+          <text class="delivery-note" wx:if="{{deliveryTime === 'SCHEDULED'}}">{{scheduleSlot || '请选择时间'}}</text>
+        </view>
       </label>
     </radio-group>
   </view>

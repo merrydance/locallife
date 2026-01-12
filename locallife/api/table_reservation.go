@@ -456,8 +456,9 @@ func (server *Server) getReservation(ctx *gin.Context) {
 }
 
 type listUserReservationsRequest struct {
-	PageID   int32 `form:"page_id" binding:"required,min=1"`
-	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
+	PageID   int32  `form:"page_id" binding:"required,min=1"`
+	PageSize int32  `form:"page_size" binding:"required,min=5,max=50"`
+	Status   string `form:"status" binding:"omitempty,oneof=pending paid confirmed checked_in completed cancelled expired no_show"`
 }
 
 // listUserReservations 用户查看自己的预定列表
@@ -483,8 +484,14 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	reservations, err := server.store.ListReservationsByUser(ctx, db.ListReservationsByUserParams{
+	status := pgtype.Text{}
+	if req.Status != "" {
+		status = pgtype.Text{String: req.Status, Valid: true}
+	}
+
+	reservations, err := server.store.ListReservationsByUserWithStatus(ctx, db.ListReservationsByUserWithStatusParams{
 		UserID: authPayload.UserID,
+		Status: status,
 		Limit:  req.PageSize,
 		Offset: (req.PageID - 1) * req.PageSize,
 	})
