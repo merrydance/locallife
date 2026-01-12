@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -36,7 +35,7 @@ type Server struct {
 	paymentClient   wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
 	ecommerceClient wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
 	dataEncryptor   util.DataEncryptor              // 敏感数据加密器（本地存储加密）
-	mapClient       maps.TencentMapClientInterface  // 地图客户端（腾讯 / OSM）
+	mapClient       maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
 	weatherCache    weather.WeatherCache
 	taskDistributor worker.TaskDistributor
 	wsHub           *websocket.Hub           // WebSocket连接管理（骑手和商户）
@@ -97,24 +96,13 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		}
 	}
 
-	// 创建腾讯地图客户端（如果配置了）
+	// 创建自建 OSM 地图客户端（唯一支持的 LBS 提供方）
 	var mapClient maps.TencentMapClientInterface
-	// LBS_PROVIDER: osm（默认）| tencent
-	switch strings.ToLower(config.LBSProvider) {
-	case "tencent":
-		if config.TencentMapKey != "" {
-			mapClient = maps.NewTencentMapClient(config.TencentMapKey)
-			log.Info().Str("provider", "tencent").Msg("map client initialized")
-		} else {
-			log.Warn().Msg("LBS_PROVIDER=tencent but TENCENT_MAP_KEY not configured, map client disabled")
-		}
-	default:
-		if config.OSMBaseURL != "" {
-			mapClient = maps.NewOSMClient(config.OSMBaseURL)
-			log.Info().Str("provider", "osm").Str("base", config.OSMBaseURL).Msg("map client initialized")
-		} else {
-			log.Warn().Msg("LBS_PROVIDER=osm but OSM_BASE_URL not configured, map client disabled")
-		}
+	if config.OSMBaseURL != "" {
+		mapClient = maps.NewOSMClient(config.OSMBaseURL)
+		log.Info().Str("provider", "osm").Str("base", config.OSMBaseURL).Msg("map client initialized")
+	} else {
+		log.Warn().Msg("OSM_BASE_URL not configured, map client disabled")
 	}
 
 	// 创建本地数据加密器（用于加密存储敏感信息）
@@ -262,7 +250,7 @@ func (server *Server) setupRouter() {
 	}
 
 	// M2: 地区查询路由(无需认证)
-	// 说明：当前线上联调阶段前端直接使用腾讯 LBS 接口获取行政区划/POI 等数据。
+	// 说明：前端已改为使用自建 OSM 获取行政区划/POI 数据。
 	// 这里的 /v1/regions* 接口作为后备能力保留（降级/灾备/未来切回），暂时可能不会被调用。
 	v1.GET("/regions/available", server.listAvailableRegions)
 	v1.GET("/regions/:id/check", server.checkRegionAvailability)
@@ -333,7 +321,7 @@ func (server *Server) setupRouter() {
 
 	// M2: 位置服务（需要认证，避免滥用地图 Key）
 	authGroup.GET("/location/reverse-geocode", server.reverseGeocode)
-	authGroup.GET("/location/direction/bicycling", server.proxyTencentBicyclingDirection)
+	authGroup.GET("/location/direction/bicycling", server.getBicyclingRoute)
 
 	// M3: 商户管理路由
 	authGroup.POST("/merchants/images/upload", server.uploadMerchantImage)

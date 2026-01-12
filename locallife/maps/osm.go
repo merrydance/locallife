@@ -199,9 +199,9 @@ func (c *OSMClient) ReverseGeocode(ctx context.Context, location Location) (*Rev
 	params := url.Values{}
 	params.Set("lat", fmt.Sprintf("%f", wgsLat))
 	params.Set("lon", fmt.Sprintf("%f", wgsLng))
-	params.Set("format", "json")
+	params.Set("format", "jsonv2")
 	params.Set("addressdetails", "1")
-	endpoint := fmt.Sprintf("%s/reverse?%s", c.baseURL, params.Encode())
+	endpoint := fmt.Sprintf("%s/reverse.php?%s", c.baseURL, params.Encode())
 	body, err := c.doRequest(ctx, endpoint)
 	if err != nil {
 		return nil, err

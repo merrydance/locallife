@@ -12,7 +12,7 @@ import (
 type Config struct {
 	Environment          string        `mapstructure:"ENVIRONMENT"`
 	AllowedOrigins       []string      `mapstructure:"ALLOWED_ORIGINS"`
-	LBSProvider          string        `mapstructure:"LBS_PROVIDER"` // "tencent" (默认) 或 "osm"
+	LBSProvider          string        `mapstructure:"LBS_PROVIDER"` // 仅支持 "osm"（自建）
 	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"` // OSM 反向代理基地址，如 https://lbs.merrydance.cn
 	DBSource             string        `mapstructure:"DB_SOURCE"`
 	MigrationURL         string        `mapstructure:"MIGRATION_URL"`
@@ -46,7 +46,7 @@ type Config struct {
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）
 
 	// 腾讯地图配置
-	TencentMapKey string `mapstructure:"TENCENT_MAP_KEY"` // 腾讯位置服务 WebService API Key
+	TencentMapKey string `mapstructure:"TENCENT_MAP_KEY"` // 已废弃，保留占位
 
 	// Web前端配置
 	WebBaseURL string `mapstructure:"WEB_BASE_URL"` // H5页面基础URL，用于分享功能

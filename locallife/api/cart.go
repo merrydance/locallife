@@ -808,7 +808,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 			distance := int32(3000) // 默认3公里
 			if address.Latitude.Valid && address.Longitude.Valid &&
 				merchant.Latitude.Valid && merchant.Longitude.Valid {
-				// 调用腾讯地图API计算骑行距离
+				// 调用自建 OSM 计算骑行距离
 				fromLoc := maps.Location{
 					Lat: numericToFloat64(merchant.Latitude),
 					Lng: numericToFloat64(merchant.Longitude),
@@ -1280,7 +1280,7 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 				distance := int32(3000) // 默认3公里
 				if address.Latitude.Valid && address.Longitude.Valid &&
 					cart.MerchantLatitude.Valid && cart.MerchantLongitude.Valid {
-					// 调用腾讯地图API计算骑行距离
+					// 调用自建 OSM 计算骑行距离
 					fromLoc := maps.Location{
 						Lat: numericToFloat64(cart.MerchantLatitude),
 						Lng: numericToFloat64(cart.MerchantLongitude),

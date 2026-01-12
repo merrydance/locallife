@@ -606,7 +606,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			return
 		}
 
-		// 计算配送距离 - 使用腾讯地图 API 计算骑行距离
+		// 计算配送距离 - 使用自建 OSM 计算骑行距离
 		deliveryDistance = DefaultDeliveryDistance
 		if address.Latitude.Valid && address.Longitude.Valid && merchant.Latitude.Valid && merchant.Longitude.Valid {
 			userLat, _ := address.Latitude.Float64Value()
@@ -614,7 +614,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			merchantLat, _ := merchant.Latitude.Float64Value()
 			merchantLng, _ := merchant.Longitude.Float64Value()
 
-			// 优先使用腾讯地图 API 计算骑行距离
+			// 优先使用自建 OSM 计算骑行距离
 			if server.mapClient != nil {
 				fromLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
 				toLoc := maps.Location{Lat: userLat.Float64, Lng: userLng.Float64}
@@ -2387,7 +2387,7 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 			merchantLat, _ := merchant.Latitude.Float64Value()
 			merchantLng, _ := merchant.Longitude.Float64Value()
 
-			// 优先使用腾讯地图 API 计算骑行距离
+			// 优先使用自建 OSM 计算骑行距离
 			if server.mapClient != nil {
 				fromLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
 				toLoc := maps.Location{Lat: userLat, Lng: userLng}

@@ -231,7 +231,7 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 		return
 	}
 
-	// 对 Top N 个订单调用腾讯地图获取真实骑行距离
+	// 对 Top N 个订单调用自建 OSM 获取真实骑行距离
 	realDistances := server.enrichWithRealDistance(ctx, req.Latitude, req.Longitude, scored)
 
 	// 转换响应
@@ -266,7 +266,7 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
-// enrichWithRealDistance 对 Top N 订单调用腾讯地图获取真实骑行距离
+// enrichWithRealDistance 对 Top N 订单调用自建 OSM 获取真实骑行距离
 // 返回 map[orderID] => RouteResult
 func (server *Server) enrichWithRealDistance(ctx context.Context, riderLat, riderLng float64, scored []algorithm.ScoredOrder) map[int64]*maps.RouteResult {
 	result := make(map[int64]*maps.RouteResult)
@@ -516,7 +516,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 
-	// � 骑手接单后，使用腾讯LBS重新计算更精确的预估送达时间
+	// 骑手接单后，使用自建 LBS 重新计算更精确的预估送达时间
 	// 预估送达时间 = 当前时间 + 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
 	server.updateDeliveryEstimatedTime(ctx, result.Delivery, rider, merchant)
 
@@ -548,7 +548,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 }
 
 // updateDeliveryEstimatedTime 骑手接单后重新计算预估送达时间
-// 使用腾讯LBS计算真实骑行距离，预估时间 = 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
+// 使用自建 LBS 计算真实骑行距离，预估时间 = 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
 func (server *Server) updateDeliveryEstimatedTime(ctx context.Context, delivery db.Delivery, rider db.Rider, merchant db.Merchant) {
 	const riderSpeedMetersPerHour = 15000 // 骑手平均速度：15km/h
 
@@ -570,7 +570,7 @@ func (server *Server) updateDeliveryEstimatedTime(ctx context.Context, delivery 
 	// 计算商户到顾客的距离（米）
 	var merchantToCustomerDistance int = int(delivery.Distance) // 使用已存储的距离
 
-	// 使用腾讯LBS计算真实骑行距离
+	// 使用自建 LBS 计算真实骑行距离
 	if server.mapClient != nil {
 		riderLoc := maps.Location{Lat: riderLat.Float64, Lng: riderLng.Float64}
 		merchantLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
