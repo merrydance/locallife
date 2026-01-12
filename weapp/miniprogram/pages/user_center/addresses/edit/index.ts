@@ -89,13 +89,11 @@ Page({
     wx.chooseLocation({
       success: (res) => {
         // 使用选择的位置更新地址和经纬度
-        const newAddress = res.name || res.address
-        const currentDetail = this.data.detailAddress
+        const newAddress = res.name || res.address || ''
 
-        // 如果当前地址为空或是微信导入的，使用新地址
-        // 如果用户已有详细地址，保留
+        // 直接用地图选择的地址覆盖详细地址，避免旧值遗留
         this.setData({
-          detailAddress: currentDetail || newAddress,
+          detailAddress: newAddress,
           latitude: String(res.latitude),
           longitude: String(res.longitude)
         })

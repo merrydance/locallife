@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/maps"
-	"github.com/merrydance/locallife/token"
-
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
+
+	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/token"
 )
 
 // ==================== 购物车 API ====================
-
 type cartItemResponse struct {
 	ID             int64                  `json:"id"`
 	DishID         *int64                 `json:"dish_id,omitempty"`
@@ -823,6 +823,8 @@ type calculateCartResponse struct {
 	DeliveryFee int64 `json:"delivery_fee"`
 	// 配送费满返减免（分）
 	DeliveryFeeDiscount int64 `json:"delivery_fee_discount"`
+	// 配送距离（米），仅当成功计算时返回
+	DeliveryDistance int32 `json:"delivery_distance,omitempty"`
 	// 优惠券减免金额（分）
 	DiscountAmount int64 `json:"discount_amount"`
 	// 实付金额（分）
@@ -857,7 +859,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	}
 
 	// 记录输入参数，便于排查配送费计算问题（不含用户敏感信息）
-	log.Ctx(ctx).Info().
+	log.Info().
 		Int64("merchant_id", req.MerchantID).
 		Str("order_type", req.OrderType).
 		Interface("address_id", req.AddressID).
@@ -943,6 +945,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	// 计算配送费（如果提供了地址或坐标）
 	var deliveryFee int64
 	var deliveryFeeDiscount int64
+	var deliveryDistance int32
 	if req.AddressID != nil {
 		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
 		if err != nil || address.UserID != authPayload.UserID {
@@ -965,6 +968,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 			return
 		}
 		distance := int32(routeResult.Distance)
+		deliveryDistance = distance
 		feeResult, err := server.calculateDeliveryFeeInternal(
 			ctx,
 			merchant.RegionID,
@@ -993,6 +997,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 			return
 		}
 		distance := int32(routeResult.Distance)
+		deliveryDistance = distance
 		feeResult, err := server.calculateDeliveryFeeInternal(
 			ctx,
 			merchant.RegionID,
@@ -1035,10 +1040,21 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		totalAmount = 0
 	}
 
+	log.Info().
+		Int64("merchant_id", req.MerchantID).
+		Str("order_type", req.OrderType).
+		Int32("delivery_distance", deliveryDistance).
+		Int64("delivery_fee", deliveryFee).
+		Int64("delivery_fee_discount", deliveryFeeDiscount).
+		Int64("subtotal", subtotal).
+		Int64("total_amount", totalAmount).
+		Msg("calculateCart result")
+
 	ctx.JSON(http.StatusOK, calculateCartResponse{
 		Subtotal:            subtotal,
 		DeliveryFee:         deliveryFee,
 		DeliveryFeeDiscount: deliveryFeeDiscount,
+		DeliveryDistance:    deliveryDistance,
 		DiscountAmount:      discountAmount,
 		TotalAmount:         totalAmount,
 		DiscountInfo:        discountInfo,

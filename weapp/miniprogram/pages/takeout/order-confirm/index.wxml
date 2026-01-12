@@ -68,7 +68,7 @@
     </view>
     <view class="cost-row">
       <text class="cost-label">配送费</text>
-      <text class="cost-value">¥5.00</text>
+      <text class="cost-value">{{deliveryFeeDisplay}}</text>
     </view>
     <view class="cost-row total">
       <text class="cost-label">实付金额</text>

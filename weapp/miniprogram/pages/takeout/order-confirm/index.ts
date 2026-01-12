@@ -263,13 +263,6 @@ Page({
     }
 
     try {
-      console.log('[Order-confirm] calculateDeliveryFee start', {
-        merchantId: cart.merchantId,
-        addressId: address.id,
-        lat: address.latitude,
-        lng: address.longitude
-      })
-
       const result = await CartAPI.calculateCart({
         merchant_id: cart.merchantId,
         order_type: 'takeout',
@@ -278,14 +271,12 @@ Page({
         longitude: address.longitude ? Number(address.longitude) : undefined
       })
 
-      console.log('[Order-confirm] calculateDeliveryFee result', result)
-
       const deliveryFee = result.delivery_fee || 0
       const orderTotal = (cart.totalPrice || 0) + deliveryFee
 
       this.setData({
         deliveryFee,
-        deliveryFeeDisplay: deliveryFee > 0 ? formatPriceNoSymbol(deliveryFee) : '免配送费',
+        deliveryFeeDisplay: deliveryFee > 0 ? '¥' + formatPriceNoSymbol(deliveryFee) : '免配送费',
         orderTotalDisplay: formatPriceNoSymbol(orderTotal)
       })
     } catch (error) {
