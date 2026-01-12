@@ -263,6 +263,13 @@ Page({
     }
 
     try {
+      console.log('[Order-confirm] calculateDeliveryFee start', {
+        merchantId: cart.merchantId,
+        addressId: address.id,
+        lat: address.latitude,
+        lng: address.longitude
+      })
+
       const result = await CartAPI.calculateCart({
         merchant_id: cart.merchantId,
         order_type: 'takeout',
@@ -270,6 +277,8 @@ Page({
         latitude: address.latitude ? Number(address.latitude) : undefined,
         longitude: address.longitude ? Number(address.longitude) : undefined
       })
+
+      console.log('[Order-confirm] calculateDeliveryFee result', result)
 
       const deliveryFee = result.delivery_fee || 0
       const orderTotal = (cart.totalPrice || 0) + deliveryFee
@@ -281,6 +290,11 @@ Page({
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
+      wx.showModal({
+        title: '调试',
+        content: '计算运费失败: ' + (error as any)?.message || '未知错误',
+        showCancel: false
+      })
       // 保留现有金额显示，不打断流程
     }
   },

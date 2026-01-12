@@ -856,6 +856,15 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		return
 	}
 
+	// 记录输入参数，便于排查配送费计算问题（不含用户敏感信息）
+	log.Ctx(ctx).Info().
+		Int64("merchant_id", req.MerchantID).
+		Str("order_type", req.OrderType).
+		Interface("address_id", req.AddressID).
+		Interface("lat", req.Latitude).
+		Interface("lng", req.Longitude).
+		Msg("calculateCart called")
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息（用于获取region_id和min_order_amount）
