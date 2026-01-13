@@ -66,31 +66,47 @@ type reservationItem struct {
 }
 
 type reservationResponse struct {
-	ID              int64      `json:"id"`
-	TableID         int64      `json:"table_id"`
-	TableNo         string     `json:"table_no,omitempty"`
-	TableType       string     `json:"table_type,omitempty"`
-	UserID          int64      `json:"user_id"`
-	MerchantID      int64      `json:"merchant_id"`
-	ReservationDate string     `json:"reservation_date"`
-	ReservationTime string     `json:"reservation_time"`
-	GuestCount      int16      `json:"guest_count"`
-	ContactName     string     `json:"contact_name"`
-	ContactPhone    string     `json:"contact_phone"`
-	PaymentMode     string     `json:"payment_mode"`
-	DepositAmount   int64      `json:"deposit_amount"`
-	PrepaidAmount   int64      `json:"prepaid_amount"`
-	RefundDeadline  time.Time  `json:"refund_deadline"`
-	PaymentDeadline time.Time  `json:"payment_deadline"`
-	Status          string     `json:"status"`
-	Notes           *string    `json:"notes,omitempty"`
-	PaidAt          *time.Time `json:"paid_at,omitempty"`
-	ConfirmedAt     *time.Time `json:"confirmed_at,omitempty"`
-	CompletedAt     *time.Time `json:"completed_at,omitempty"`
-	CancelledAt     *time.Time `json:"cancelled_at,omitempty"`
-	CancelReason    *string    `json:"cancel_reason,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
+	ID              int64                     `json:"id"`
+	TableID         int64                     `json:"table_id"`
+	TableNo         string                    `json:"table_no,omitempty"`
+	TableType       string                    `json:"table_type,omitempty"`
+	UserID          int64                     `json:"user_id"`
+	MerchantID      int64                     `json:"merchant_id"`
+	MerchantName    string                    `json:"merchant_name,omitempty"`
+	MerchantAddress string                    `json:"merchant_address,omitempty"`
+	MerchantPhone   string                    `json:"merchant_phone,omitempty"`
+	ReservationDate string                    `json:"reservation_date"`
+	ReservationTime string                    `json:"reservation_time"`
+	GuestCount      int16                     `json:"guest_count"`
+	ContactName     string                    `json:"contact_name"`
+	ContactPhone    string                    `json:"contact_phone"`
+	PaymentMode     string                    `json:"payment_mode"`
+	DepositAmount   int64                     `json:"deposit_amount"`
+	PrepaidAmount   int64                     `json:"prepaid_amount"`
+	RefundDeadline  time.Time                 `json:"refund_deadline"`
+	PaymentDeadline time.Time                 `json:"payment_deadline"`
+	Status          string                    `json:"status"`
+	Notes           *string                   `json:"notes,omitempty"`
+	PaidAt          *time.Time                `json:"paid_at,omitempty"`
+	ConfirmedAt     *time.Time                `json:"confirmed_at,omitempty"`
+	CompletedAt     *time.Time                `json:"completed_at,omitempty"`
+	CancelledAt     *time.Time                `json:"cancelled_at,omitempty"`
+	CancelReason    *string                   `json:"cancel_reason,omitempty"`
+	CreatedAt       time.Time                 `json:"created_at"`
+	UpdatedAt       *time.Time                `json:"updated_at,omitempty"`
+	Items           []reservationItemResponse `json:"items,omitempty"`
+}
+
+type reservationItemResponse struct {
+	ID         int64  `json:"id"`
+	DishID     *int64 `json:"dish_id,omitempty"`
+	ComboID    *int64 `json:"combo_id,omitempty"`
+	Name       string `json:"name,omitempty"`
+	ImageURL   string `json:"image_url,omitempty"`
+	Quantity   int16  `json:"quantity"`
+	UnitPrice  int64  `json:"unit_price"`
+	TotalPrice int64  `json:"total_price"`
+	Type       string `json:"type,omitempty"`
 }
 
 func newReservationResponse(r db.TableReservation) reservationResponse {
@@ -192,6 +208,36 @@ func newReservationWithTableResponse(r db.GetTableReservationWithTableRow) reser
 	}
 	if r.UpdatedAt.Valid {
 		resp.UpdatedAt = &r.UpdatedAt.Time
+	}
+
+	return resp
+}
+
+func mapOrderItemsToReservationItems(items []db.ListOrderItemsWithDishByOrderRow) []reservationItemResponse {
+	resp := make([]reservationItemResponse, 0, len(items))
+
+	for _, item := range items {
+		mapped := reservationItemResponse{
+			ID:         item.ID,
+			Quantity:   item.Quantity,
+			UnitPrice:  item.UnitPrice,
+			TotalPrice: item.Subtotal,
+			Name:       item.Name,
+		}
+
+		if item.DishID.Valid {
+			mapped.DishID = &item.DishID.Int64
+			mapped.Type = "dish"
+		}
+		if item.ComboID.Valid {
+			mapped.ComboID = &item.ComboID.Int64
+			mapped.Type = "combo"
+		}
+		if item.DishImageUrl.Valid {
+			mapped.ImageURL = item.DishImageUrl.String
+		}
+
+		resp = append(resp, mapped)
 	}
 
 	return resp
@@ -437,6 +483,12 @@ func (server *Server) getReservation(ctx *gin.Context) {
 		return
 	}
 
+	merchant, err := server.store.GetMerchant(ctx, reservation.MerchantID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	// 权限验证：用户查看自己的预定，或商户查看自己商户的预定
 	isOwner := reservation.UserID == authPayload.UserID
 	isMerchant := false
@@ -452,7 +504,45 @@ func (server *Server) getReservation(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReservationWithTableResponse(reservation))
+	resp := newReservationWithTableResponse(reservation)
+	resp.MerchantName = merchant.Name
+	resp.MerchantAddress = merchant.Address
+	resp.MerchantPhone = merchant.Phone
+
+	orders, err := server.store.ListOrdersByUserWithFilters(ctx, db.ListOrdersByUserWithFiltersParams{
+		UserID: reservation.UserID,
+		Status: pgtype.Text{},
+		OrderType: pgtype.Text{
+			String: OrderTypeReservation,
+			Valid:  true,
+		},
+		ReservationID: pgtype.Int8{
+			Int64: reservation.ID,
+			Valid: true,
+		},
+		Limit:  5,
+		Offset: 0,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	for _, order := range orders {
+		if order.Status == OrderStatusCancelled {
+			continue
+		}
+
+		orderItems, err := server.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		resp.Items = mapOrderItemsToReservationItems(orderItems)
+		break
+	}
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 type listUserReservationsRequest struct {
@@ -501,7 +591,20 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 	}
 
 	resp := make([]reservationResponse, len(reservations))
+	merchantCache := make(map[int64]db.Merchant)
+
 	for i, r := range reservations {
+		merchant, ok := merchantCache[r.MerchantID]
+		if !ok {
+			m, err := server.store.GetMerchant(ctx, r.MerchantID)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			merchant = m
+			merchantCache[r.MerchantID] = m
+		}
+
 		resp[i] = reservationResponse{
 			ID:              r.ID,
 			TableID:         r.TableID,
@@ -509,6 +612,9 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 			TableType:       r.TableType,
 			UserID:          r.UserID,
 			MerchantID:      r.MerchantID,
+			MerchantName:    merchant.Name,
+			MerchantAddress: merchant.Address,
+			MerchantPhone:   merchant.Phone,
 			ReservationDate: r.ReservationDate.Time.Format("2006-01-02"),
 			GuestCount:      r.GuestCount,
 			ContactName:     r.ContactName,
@@ -1233,13 +1339,6 @@ func (server *Server) validateReservationItems(ctx *gin.Context, merchantID int6
 	return validatedItems, total, nil
 }
 
-// calculateReservationItems 计算预定菜品金额（向后兼容）
-// 复用订单系统的菜品验证逻辑
-func (server *Server) calculateReservationItems(ctx *gin.Context, merchantID int64, items []reservationItem) (int64, error) {
-	_, total, err := server.validateReservationItems(ctx, merchantID, items)
-	return total, err
-}
-
 // addDishesToReservation 为预定追加菜品
 // POST /v1/reservations/:id/add-dishes
 // @Summary 为预定追加菜品
@@ -1302,20 +1401,45 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 		return
 	}
 
-	// 计算追加菜品金额
-	addedItems := make([]reservationItem, len(req.Items))
+	// 转换请求项以复用验证逻辑
+	addItems := make([]reservationItem, len(req.Items))
 	for i, item := range req.Items {
-		addedItems[i] = reservationItem{
+		addItems[i] = reservationItem{
 			DishID:   item.DishID,
 			ComboID:  item.ComboID,
 			Quantity: item.Quantity,
 		}
 	}
 
-	addedAmount, err := server.calculateReservationItems(ctx, reservation.MerchantID, addedItems)
+	// 验证并计算追加菜品金额（带单价）
+	validatedItems, addedAmount, err := server.validateReservationItems(ctx, reservation.MerchantID, addItems)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
+	}
+
+	// 记录追加菜品到 reservation_items，便于详情页展示
+	for _, item := range validatedItems {
+		var dishID, comboID pgtype.Int8
+		if item.DishID != nil {
+			dishID = pgtype.Int8{Int64: *item.DishID, Valid: true}
+		}
+		if item.ComboID != nil {
+			comboID = pgtype.Int8{Int64: *item.ComboID, Valid: true}
+		}
+
+		_, err := server.store.CreateReservationItem(ctx, db.CreateReservationItemParams{
+			ReservationID: reservation.ID,
+			DishID:        dishID,
+			ComboID:       comboID,
+			Quantity:      item.Quantity,
+			UnitPrice:     item.UnitPrice,
+			TotalPrice:    item.UnitPrice * int64(item.Quantity),
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	// 如果是全款预付模式，需要创建补差价支付订单

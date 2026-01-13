@@ -150,27 +150,66 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取订单
-	order, err := server.store.GetOrder(ctx, req.OrderID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+	var amount int64
+	var merchantName = "订单支付"
+	var merchantID int64
+	var attach string
+
+	if req.BusinessType == BusinessTypeReservation {
+		reservation, err := server.store.GetTableReservation(ctx, req.OrderID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
 
-	// 验证订单属于当前用户
-	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-		return
-	}
+		if reservation.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
+			return
+		}
 
-	// 验证订单状态
-	if order.Status != OrderStatusPending {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in pending status")))
-		return
+		if reservation.Status != ReservationStatusPending {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation is not in pending status")))
+			return
+		}
+
+		merchantID = reservation.MerchantID
+		if reservation.PaymentMode == PaymentModeDeposit {
+			amount = reservation.DepositAmount
+		} else {
+			amount = reservation.PrepaidAmount
+		}
+		attach = fmt.Sprintf("reservation_id:%d", reservation.ID)
+	} else {
+		// 获取订单
+		order, err := server.store.GetOrder(ctx, req.OrderID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		// 验证订单属于当前用户
+		if order.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
+			return
+		}
+
+		// 验证订单状态
+		if order.Status != OrderStatusPending {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in pending status")))
+			return
+		}
+
+		amount = order.TotalAmount
+		merchantID = order.MerchantID
+		attach = fmt.Sprintf("order_id:%d", order.ID)
 	}
 
 	// 检查是否已存在待支付的支付订单
@@ -193,7 +232,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		UserID:       authPayload.UserID,
 		PaymentType:  req.PaymentType,
 		BusinessType: req.BusinessType,
-		Amount:       order.TotalAmount,
+		Amount:       amount,
 		OutTradeNo:   outTradeNo,
 		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
@@ -215,11 +254,14 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		}
 
 		// 获取商户名称作为商品描述
-		merchantName := "订单支付"
-		if order.MerchantID > 0 {
-			merchant, err := server.store.GetMerchant(ctx, order.MerchantID)
+		if merchantID > 0 {
+			merchant, err := server.store.GetMerchant(ctx, merchantID)
 			if err == nil {
-				merchantName = merchant.Name + " - 订单支付"
+				if req.BusinessType == BusinessTypeReservation {
+					merchantName = merchant.Name + " - 预订押金"
+				} else {
+					merchantName = merchant.Name + " - 订单支付"
+				}
 			}
 		}
 
@@ -227,11 +269,11 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		wxResp, payParams, err := server.paymentClient.CreateJSAPIOrder(ctx, &wechat.JSAPIOrderRequest{
 			OutTradeNo:    outTradeNo,
 			Description:   merchantName,
-			TotalAmount:   order.TotalAmount,
+			TotalAmount:   amount,
 			OpenID:        user.WechatOpenid,
 			ExpireTime:    expiresAt,
-			Attach:        fmt.Sprintf("order_id:%d", order.ID), // 传递订单ID用于回调关联
-			PayerClientIP: ctx.ClientIP(),                       // 用户终端IP（用于风控）
+			Attach:        attach,
+			PayerClientIP: ctx.ClientIP(),
 		})
 		if err != nil {
 			// 微信支付失败，关闭支付订单

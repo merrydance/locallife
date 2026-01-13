@@ -35,11 +35,15 @@ export type ReservationSource = 'online' | 'phone' | 'walkin' | 'merchant'
  * 预订菜品项
  */
 export interface ReservationItem {
+  id?: number
   dish_id?: number
   combo_id?: number
   quantity: number
   name?: string
   price?: number
+  unit_price?: number
+  total_price?: number
+  type?: 'dish' | 'combo'
   image_url?: string
 }
 
@@ -95,6 +99,9 @@ export interface ReservationResponse {
   table_type?: string
   user_id: number
   merchant_id: number
+  merchant_name?: string
+  merchant_address?: string
+  merchant_phone?: string
   reservation_date: string
   reservation_time: string
   guest_count: number
@@ -115,6 +122,7 @@ export interface ReservationResponse {
   checked_in_at?: string
   cooking_started_at?: string
   source?: ReservationSource
+  items?: ReservationItem[]
   created_at: string
   updated_at?: string
 }

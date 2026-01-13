@@ -4,6 +4,11 @@
   background: #f5f6fb;
 }
 
+.tabs-wrapper {
+  padding: 0 32rpx;
+  margin-bottom: 16rpx;
+}
+
 /* 状态筛选Tab */
 .status-tabs {
   display: flex;
@@ -40,15 +45,49 @@
 
 .card-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 12rpx;
   margin-bottom: 20rpx;
   padding-bottom: 20rpx;
   border-bottom: 1rpx dashed #edf0fb;
 }
 
-.table-name {
+.merchant-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.merchant-address,
+.merchant-phone {
+  font-size: 26rpx;
+  color: #57618c;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.status-tag.pending {
+  color: #fff !important;
+  background: linear-gradient(120deg, #ff9f45, #ff7a1a) !important;
+  border: none;
+}
+
+.merchant-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.merchant-name {
   font-size: 32rpx;
+  font-weight: 600;
+  color: #1d2750;
+  flex: 1;
+}
+
+.table-name {
+  font-size: 30rpx;
   font-weight: 600;
   color: #1d2750;
 }
@@ -142,7 +181,7 @@ button::after {
 }
 
 .reservation-list {
-  padding: 0 32rpx;
+  padding: 16rpx 32rpx 0;
 }
 
 /* 空状态 */

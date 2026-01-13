@@ -6,6 +6,57 @@
 import { ReservationService, ReservationResponse, ReservationStatus } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
 
+type ReservationView = ReservationResponse & {
+    _statusText: string
+    _statusClass: string
+    _canCancel: boolean
+    _canOrder: boolean
+    _dateTimeDisplay: string
+    _depositDisplay: string
+    _merchantName: string
+    _merchantAddress: string
+    _merchantPhone: string
+}
+
+function formatReservationDateTime(reservationDate?: string, reservationTime?: string): string {
+    const datePart = (reservationDate || '').trim()
+    const timePart = (reservationTime || '').trim()
+
+    const combined = timePart.includes('T') || timePart.includes('-')
+        ? timePart
+        : `${datePart} ${timePart}`.trim()
+
+    const parsed = combined ? new Date(combined.replace(/-/g, '/')) : null
+
+    if (parsed && !Number.isNaN(parsed.getTime())) {
+        const now = new Date()
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const target = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+        const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000)
+
+        const hours = ('0' + parsed.getHours()).slice(-2)
+        const minutes = ('0' + parsed.getMinutes()).slice(-2)
+
+        let dateLabel = ''
+        if (diffDays === 0) {
+            dateLabel = '今天'
+        } else if (diffDays === 1) {
+            dateLabel = '明天'
+        } else if (diffDays === -1) {
+            dateLabel = '昨天'
+        } else {
+            const month = ('0' + (parsed.getMonth() + 1)).slice(-2)
+            const day = ('0' + parsed.getDate()).slice(-2)
+            dateLabel = `${month}-${day}`
+        }
+
+        return `${dateLabel} · ${hours}:${minutes}`
+    }
+
+    if (datePart && timePart) return `${datePart} ${timePart}`
+    return timePart || datePart || ''
+}
+
 // 状态筛选选项
 const STATUS_TABS = [
     { label: '全部', value: '' },
@@ -25,7 +76,7 @@ const CANCEL_REASONS = [
 
 Page({
     data: {
-        reservations: [] as ReservationResponse[],
+        reservations: [] as ReservationView[],
         navBarHeight: 88,
         loading: false,
         page: 1,
@@ -90,15 +141,43 @@ Page({
         }
     },
 
-    processReservation(r: ReservationResponse): ReservationResponse & { _statusText: string; _statusClass: string; _canCancel: boolean; _canOrder: boolean; _dateTimeDisplay: string; _depositDisplay: string } {
+    processReservation(r: ReservationResponse): ReservationView {
+        const merchantName = (r as any).merchant_name
+            || (r as any).merchantName
+            || (r as any).merchant?.name
+            || (r as any).merchant?.merchant_name
+            || ''
+        const merchantAddress = (r as any).merchant_address || (r as any).merchant?.address || ''
+        const merchantPhone = (r as any).merchant_phone || (r as any).merchant?.phone || ''
         return {
             ...r,
             _statusText: this.getStatusText(r.status || ''),
             _statusClass: r.status || '',
             _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''),
             _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''),  // 已确认或已签到可点菜
-            _dateTimeDisplay: r.reservation_time, // Interface uses reservation_time for full datetime
-            _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : ''
+            _dateTimeDisplay: formatReservationDateTime(r.reservation_date, r.reservation_time),
+            _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '',
+            _merchantName: merchantName,
+            _merchantAddress: merchantAddress,
+            _merchantPhone: merchantPhone
+        }
+    },
+
+    noop() {},
+
+    onShareAppMessage(res: any) {
+        const idFromButton = res?.target?.dataset?.id
+        const targetId = Number(idFromButton || this.data.reservations[0]?.id || 0)
+        const target = this.data.reservations.find((r: any) => r.id === targetId)
+
+        const titleParts = [target?._merchantName || '预订']
+        if (target?._dateTimeDisplay) {
+            titleParts.push(target._dateTimeDisplay)
+        }
+
+        return {
+            title: titleParts.join(' · '),
+            path: `/pages/reservation/detail/index?id=${targetId}`
         }
     },
 
@@ -122,9 +201,14 @@ Page({
     },
 
     onViewDetail(e: WechatMiniprogram.BaseEvent) {
-        const { id } = e.currentTarget.dataset
+        const id = Number((e.currentTarget.dataset as any).id || (e.target as any).dataset?.id || 0)
+        if (!id) {
+            wx.showToast({ title: '缺少预订ID', icon: 'none' })
+            return
+        }
+
         wx.navigateTo({
-            url: `/pages/user_center/reservations/detail/index?id=${id}`
+            url: `/pages/reservation/detail/index?id=${id}`
         })
     },
 

@@ -879,6 +879,29 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	resp := newOrderResponse(txResult.Order)
+
+	// 清空堂食/预订购物车（外卖保留移除已支付商品逻辑）
+	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
+		tableID := pgtype.Int8{}
+		if req.TableID != nil {
+			tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
+		}
+		reservationID := pgtype.Int8{}
+		if req.ReservationID != nil {
+			reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+		}
+
+		cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
+			UserID:        authPayload.UserID,
+			MerchantID:    req.MerchantID,
+			OrderType:     req.OrderType,
+			TableID:       tableID,
+			ReservationID: reservationID,
+		})
+		if err == nil {
+			_ = server.store.ClearCart(ctx, cart.ID)
+		}
+	}
 	ctx.JSON(http.StatusOK, resp)
 }
 

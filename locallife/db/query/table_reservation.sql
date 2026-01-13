@@ -47,7 +47,18 @@ FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.user_id = sqlc.arg('user_id')
   AND (sqlc.narg('status')::text IS NULL OR tr.status = sqlc.narg('status'))
-ORDER BY tr.reservation_date DESC, tr.reservation_time DESC
+ORDER BY
+  CASE tr.status
+    WHEN 'pending' THEN 0
+    WHEN 'paid' THEN 1
+    WHEN 'confirmed' THEN 2
+    WHEN 'checked_in' THEN 3
+    WHEN 'completed' THEN 4
+    WHEN 'cancelled' THEN 5
+    WHEN 'expired' THEN 6
+    ELSE 7
+  END,
+  tr.created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListReservationsByMerchant :many

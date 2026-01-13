@@ -358,6 +358,8 @@
   background: #fff;
   padding: 24rpx;
   min-height: 400rpx;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .room-item {
