@@ -57,6 +57,9 @@ export interface OrderDetail extends Order {
     contactName?: string          // 配送联系人
     contactPhone?: string         // 配送联系电话
     merchantPhone?: string        // 商户电话
+    estimatedDeliveryAt?: string  // 预计送达时间戳
+    deliveryEtaMinutes?: number   // 预计送达总时长（分钟）
+    expectDeliverTime?: string    // 展示用的送达时间段
     tableId?: number              // 堂食/预订 桌台ID
     reservationId?: number        // 预订ID
     reservationDate?: string

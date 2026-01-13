@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -825,6 +826,16 @@ type calculateCartResponse struct {
 	DeliveryFeeDiscount int64 `json:"delivery_fee_discount"`
 	// 配送距离（米），仅当成功计算时返回
 	DeliveryDistance int32 `json:"delivery_distance,omitempty"`
+	// 预计送达总时长（分钟），包含出餐、骑手到店、配送、缓冲
+	DeliveryEtaMinutes int32 `json:"delivery_eta_minutes,omitempty"`
+	// 出餐时间（分钟）
+	PrepareMinutes int32 `json:"prepare_minutes,omitempty"`
+	// 骑手到店时间（分钟）
+	RiderToStoreMinutes int32 `json:"rider_to_store_minutes,omitempty"`
+	// 店到用户路网时间（分钟）
+	StoreToUserMinutes int32 `json:"store_to_user_minutes,omitempty"`
+	// 额外缓冲时间（分钟）
+	BufferMinutes int32 `json:"buffer_minutes,omitempty"`
 	// 优惠券减免金额（分）
 	DiscountAmount int64 `json:"discount_amount"`
 	// 实付金额（分）
@@ -835,6 +846,67 @@ type calculateCartResponse struct {
 	MinOrderAmount int64 `json:"min_order_amount"`
 	// 是否满足起送金额
 	MeetsMinOrder bool `json:"meets_min_order"`
+}
+
+// 预计送达时间计算常量（分钟）
+const (
+	// 当商户无历史出餐数据时的默认出餐时间
+	defaultPrepareMinutes = int32(10)
+	// 骑手从当前位置到店铺的预估时间，后续可替换为实时骑手位置
+	defaultRiderToStoreMinutes = int32(10)
+	// 高峰期/防超时的额外缓冲时间
+	defaultBufferMinutes = int32(20)
+	// 统计商户平均出餐时间的回溯天数
+	prepareTimeLookbackDays = 30
+)
+
+// DeliveryETAResult 描述预计送达时间的各组成部分（单位：分钟）
+type DeliveryETAResult struct {
+	DeliveryEtaMinutes  int32
+	PrepareMinutes      int32
+	RiderToStoreMinutes int32
+	StoreToUserMinutes  int32
+	BufferMinutes       int32
+}
+
+// computeDeliveryETA 粗略估算预计送达时间：出餐 + 骑手到店 + 店到用户 + 缓冲
+// - 出餐时间：优先用近 N 天平均出餐时间，退化为默认值
+// - 骑手到店：默认值与店->用户路网耗时的一半取较大者（缺实时骑手位置的简化）
+// - 店到用户：使用路线规划返回的 Duration（秒）换算为分钟
+// - 缓冲：固定配置，后续可按天气/高峰动态调整
+func (server *Server) computeDeliveryETA(ctx context.Context, merchantID int64, routeDistance int32, routeDurationSec int) DeliveryETAResult {
+	res := DeliveryETAResult{
+		PrepareMinutes:      defaultPrepareMinutes,
+		RiderToStoreMinutes: defaultRiderToStoreMinutes,
+		BufferMinutes:       defaultBufferMinutes,
+	}
+
+	// 没有路线数据时返回默认出餐+缓冲，用于不可达或未选地址情况
+	if routeDistance <= 0 || routeDurationSec <= 0 {
+		return res
+	}
+
+	// 近 30 天平均出餐时间（分钟），仅在有数据时覆盖默认值
+	if avgPrep, err := server.store.GetMerchantAvgPrepareTime(ctx, db.GetMerchantAvgPrepareTimeParams{
+		MerchantID: merchantID,
+		CreatedAt:  time.Now().AddDate(0, 0, -prepareTimeLookbackDays),
+	}); err == nil && avgPrep > 0 {
+		res.PrepareMinutes = int32(avgPrep)
+	}
+
+	// 店到用户路网耗时（分钟，向上取整）
+	res.StoreToUserMinutes = int32((routeDurationSec + 59) / 60)
+
+	// 骑手到店：保守取默认值与店到用户一半中的较大者，避免低估
+	if res.StoreToUserMinutes > 0 {
+		half := res.StoreToUserMinutes / 2
+		if half > res.RiderToStoreMinutes {
+			res.RiderToStoreMinutes = half
+		}
+	}
+
+	res.DeliveryEtaMinutes = res.PrepareMinutes + res.RiderToStoreMinutes + res.StoreToUserMinutes + res.BufferMinutes
+	return res
 }
 
 // calculateCart godoc
@@ -946,6 +1018,8 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	var deliveryFee int64
 	var deliveryFeeDiscount int64
 	var deliveryDistance int32
+	var routeDurationSec int
+	var eta DeliveryETAResult
 	if req.AddressID != nil {
 		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
 		if err != nil || address.UserID != authPayload.UserID {
@@ -979,6 +1053,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
 			deliveryFee = feeResult.FinalFee
 			deliveryFeeDiscount = feeResult.PromotionDiscount
+			routeDurationSec = routeResult.Duration
 		}
 	} else if req.Latitude != nil && req.Longitude != nil {
 		if !merchant.Latitude.Valid || !merchant.Longitude.Valid {
@@ -1008,8 +1083,12 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
 			deliveryFee = feeResult.FinalFee
 			deliveryFeeDiscount = feeResult.PromotionDiscount
+			routeDurationSec = routeResult.Duration
 		}
 	}
+
+	// 计算预计送达时间：出餐 + 骑手到店 + 店到用户 + 缓冲（封装为 helper 复用）
+	eta = server.computeDeliveryETA(ctx, merchant.ID, deliveryDistance, routeDurationSec)
 
 	// 计算优惠券减免（如果提供了优惠券）
 	var discountAmount int64
@@ -1046,6 +1125,11 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		Int32("delivery_distance", deliveryDistance).
 		Int64("delivery_fee", deliveryFee).
 		Int64("delivery_fee_discount", deliveryFeeDiscount).
+		Int32("delivery_eta_minutes", eta.DeliveryEtaMinutes).
+		Int32("prepare_minutes", eta.PrepareMinutes).
+		Int32("rider_to_store_minutes", eta.RiderToStoreMinutes).
+		Int32("store_to_user_minutes", eta.StoreToUserMinutes).
+		Int32("buffer_minutes", eta.BufferMinutes).
 		Int64("subtotal", subtotal).
 		Int64("total_amount", totalAmount).
 		Msg("calculateCart result")
@@ -1055,6 +1139,11 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		DeliveryFee:         deliveryFee,
 		DeliveryFeeDiscount: deliveryFeeDiscount,
 		DeliveryDistance:    deliveryDistance,
+		DeliveryEtaMinutes:  eta.DeliveryEtaMinutes,
+		PrepareMinutes:      eta.PrepareMinutes,
+		RiderToStoreMinutes: eta.RiderToStoreMinutes,
+		StoreToUserMinutes:  eta.StoreToUserMinutes,
+		BufferMinutes:       eta.BufferMinutes,
 		DiscountAmount:      discountAmount,
 		TotalAmount:         totalAmount,
 		DiscountInfo:        discountInfo,

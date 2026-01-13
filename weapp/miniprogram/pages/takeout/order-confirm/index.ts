@@ -41,7 +41,9 @@ Page({
     loading: false,
     orderTotalDisplay: '0.00',
     deliveryFee: 0,
-    deliveryFeeDisplay: '待计算'
+    deliveryFeeDisplay: '待计算',
+    deliveryEtaMinutes: 0,
+    deliveryEtaDisplay: ''
   },
 
   onLoad(options: { cart_ids?: string }) {
@@ -257,7 +259,9 @@ Page({
       this.setData({
         deliveryFee: 0,
         deliveryFeeDisplay: '待选择地址',
-        orderTotalDisplay: formatPriceNoSymbol(cart.totalPrice)
+        orderTotalDisplay: formatPriceNoSymbol(cart.totalPrice),
+        deliveryEtaMinutes: 0,
+        deliveryEtaDisplay: ''
       })
       return
     }
@@ -273,11 +277,15 @@ Page({
 
       const deliveryFee = result.delivery_fee || 0
       const orderTotal = (cart.totalPrice || 0) + deliveryFee
+      const deliveryEtaMinutes = result.delivery_eta_minutes || 0
+      const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
 
       this.setData({
         deliveryFee,
         deliveryFeeDisplay: deliveryFee > 0 ? '¥' + formatPriceNoSymbol(deliveryFee) : '免配送费',
-        orderTotalDisplay: formatPriceNoSymbol(orderTotal)
+        orderTotalDisplay: formatPriceNoSymbol(orderTotal),
+        deliveryEtaMinutes,
+        deliveryEtaDisplay
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
@@ -288,6 +296,21 @@ Page({
       })
       // 保留现有金额显示，不打断流程
     }
+  },
+
+  formatEtaWindow(etaMinutes: number): string {
+    if (!etaMinutes || etaMinutes <= 0) return ''
+    const padding = 5
+    const now = new Date()
+    const start = new Date(now.getTime() + Math.max(etaMinutes - padding, 0) * 60 * 1000)
+    const end = new Date(now.getTime() + (etaMinutes + padding) * 60 * 1000)
+    return `${this.formatTime(start)}-${this.formatTime(end)}`
+  },
+
+  formatTime(date: Date): string {
+    const hh = String(date.getHours()).padStart(2, '0')
+    const mm = String(date.getMinutes()).padStart(2, '0')
+    return `${hh}:${mm}`
   },
 
   async onSubmitOrder() {

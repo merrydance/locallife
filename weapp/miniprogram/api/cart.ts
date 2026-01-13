@@ -142,6 +142,11 @@ export interface CalculateCartResponse {
     subtotal: number              // 商品小计（分）
     delivery_fee: number          // 配送费（分）
     delivery_fee_discount: number // 配送费满返减免（分）
+    delivery_eta_minutes?: number // 预计送达总时长（分钟）
+    prepare_minutes?: number      // 出餐时间（分钟）
+    rider_to_store_minutes?: number // 骑手到店时间（分钟）
+    store_to_user_minutes?: number // 店到用户时间（分钟）
+    buffer_minutes?: number       // 缓冲时间（分钟）
     discount_amount: number       // 优惠券减免金额（分）
     discount_info?: string        // 优惠说明
     meets_min_order: boolean      // 是否满足起送金额

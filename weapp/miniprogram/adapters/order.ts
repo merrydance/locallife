@@ -71,6 +71,8 @@ export class OrderAdapter {
       customizations: item.customizations?.map(c => `${c.name}: ${c.value}`) || []
     }))
 
+    const expectDeliverTime = formatDeliveryWindow(dto.estimated_delivery_at, dto.delivery_eta_minutes)
+
     return {
       ...base,
       items,
@@ -91,8 +93,33 @@ export class OrderAdapter {
       contactPhone: dto.delivery_contact_phone,
       // 商户电话
       merchantPhone: dto.merchant_phone,
+      estimatedDeliveryAt: dto.estimated_delivery_at,
+      deliveryEtaMinutes: dto.delivery_eta_minutes,
+      expectDeliverTime,
       tableId: dto.table_id,
       reservationId: dto.reservation_id
     }
   }
+}
+
+// 生成送达时间段文案（例如 12:40-12:50）
+function formatDeliveryWindow(estimatedAt?: string, etaMinutes?: number): string | undefined {
+  const paddingMinutes = 5
+
+  if (estimatedAt) {
+    const target = dayjs(estimatedAt)
+    if (!target.isValid()) return undefined
+    const start = target.subtract(paddingMinutes, 'minute')
+    const end = target.add(paddingMinutes, 'minute')
+    return `${start.format('HH:mm')}-${end.format('HH:mm')}`
+  }
+
+  if (etaMinutes && etaMinutes > 0) {
+    const now = dayjs()
+    const start = now.add(Math.max(etaMinutes - paddingMinutes, 0), 'minute')
+    const end = now.add(etaMinutes + paddingMinutes, 'minute')
+    return `${start.format('HH:mm')}-${end.format('HH:mm')}`
+  }
+
+  return undefined
 }

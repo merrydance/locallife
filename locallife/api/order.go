@@ -174,6 +174,12 @@ type orderResponse struct {
 	// 配送距离 (单位：米)
 	DeliveryDistance *int32 `json:"delivery_distance,omitempty" example:"2500"`
 
+	// 预计送达总时长（分钟），用于前端 ETA 展示
+	DeliveryEtaMinutes *int32 `json:"delivery_eta_minutes,omitempty" example:"38"`
+
+	// 预计送达时间（时间戳），用于订单详情展示送达时间段
+	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at,omitempty" example:"2025-12-01T12:30:00Z"`
+
 	// 桌台ID (堂食订单时有值)
 	TableID *int64 `json:"table_id,omitempty" example:"301"`
 
@@ -1014,7 +1020,63 @@ func (server *Server) getOrder(ctx *gin.Context) {
 		}
 	}
 
+	// 获取配送预计到达时间用于前端展示 ETA 时间段
+	if order.OrderType == OrderTypeTakeout && order.Status != OrderStatusCancelled {
+		// 先尝试已有配送单的精确时间
+		if delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID); err == nil {
+			if delivery.EstimatedDeliveryAt.Valid {
+				resp.EstimatedDeliveryAt = &delivery.EstimatedDeliveryAt.Time
+				delta := time.Until(delivery.EstimatedDeliveryAt.Time)
+				eta := int32(math.Ceil(delta.Minutes()))
+				if eta < 0 {
+					eta = 0
+				}
+				resp.DeliveryEtaMinutes = &eta
+			} else {
+				// 无精确送达时间时根据距离估算 ETA，避免前端空白
+				distance := extractDistance(delivery.Distance, order.DeliveryDistance)
+				eta := server.computeDeliveryETA(ctx, order.MerchantID, distance, estimateDurationSecByDistance(distance))
+				resp.DeliveryEtaMinutes = &eta.DeliveryEtaMinutes
+				est := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
+				resp.EstimatedDeliveryAt = &est
+			}
+		} else {
+			// 未生成配送单（如待支付）也给出基于距离的预计时间
+			distance := extractDistance(0, order.DeliveryDistance)
+			if distance > 0 {
+				eta := server.computeDeliveryETA(ctx, order.MerchantID, distance, estimateDurationSecByDistance(distance))
+				resp.DeliveryEtaMinutes = &eta.DeliveryEtaMinutes
+				est := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
+				resp.EstimatedDeliveryAt = &est
+			}
+			// err 在此分支恒为非 nil，记录非 pgx.ErrNoRows 的情况
+			if !errors.Is(err, pgx.ErrNoRows) {
+				log.Warn().Err(err).Int64("order_id", order.ID).Msg("get delivery by order failed")
+			}
+		}
+	}
+
 	ctx.JSON(http.StatusOK, resp)
+}
+
+// extractDistance 优先取配送单距离，其次取订单存储的距离
+func extractDistance(deliveryDistance int32, orderDistance pgtype.Int4) int32 {
+	if deliveryDistance > 0 {
+		return deliveryDistance
+	}
+	if orderDistance.Valid {
+		return orderDistance.Int32
+	}
+	return 0
+}
+
+// estimateDurationSecByDistance 给出基于距离的粗略秒级配送耗时估计（假设 15km/h）
+func estimateDurationSecByDistance(distance int32) int {
+	if distance <= 0 {
+		return 0
+	}
+	// 15km/h ≈ 250 米/分钟 → 秒 = 距离/250*60
+	return int(math.Round(float64(distance) / 250 * 60))
 }
 
 // listOrders 获取订单列表 (用户)

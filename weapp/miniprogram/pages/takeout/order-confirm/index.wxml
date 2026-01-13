@@ -34,6 +34,13 @@
         </view>
       </label>
     </radio-group>
+    <view wx:if="{{deliveryEtaDisplay}}" class="eta-row">
+      <text class="eta-label">预计送达</text>
+      <view class="eta-values">
+        <text class="eta-window">{{deliveryEtaDisplay}}</text>
+        <text class="eta-note" wx:if="{{deliveryEtaMinutes}}">约{{deliveryEtaMinutes}}分钟</text>
+      </view>
+    </view>
   </view>
 
   <!-- 商品列表 -->

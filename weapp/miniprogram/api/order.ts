@@ -61,6 +61,8 @@ export interface OrderResponse {
   delivery_fee: number
   delivery_fee_discount: number
   discount_amount: number
+  delivery_eta_minutes?: number      // 预计送达总时长（分钟）
+  estimated_delivery_at?: string     // 预计送达时间（ISO字符串）
   notes?: string
   created_at: string
   updated_at: string
