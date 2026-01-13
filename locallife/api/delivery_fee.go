@@ -1063,11 +1063,8 @@ func (server *Server) calculateDeliveryFeeWithConfig(ctx *gin.Context, config *d
 		}
 	}
 
-	// 9. 计算最终运费（不能为负）
-	finalFee := subtotal - promotionDiscount
-	if finalFee < 0 {
-		finalFee = 0
-	}
+	// 9. 最终运费：不扣减商户满返，骑手费保持完整；满返折扣由上层在订单总价中抵扣
+	finalFee := subtotal
 
 	return &DeliveryFeeResult{
 		BaseFee:             baseFee,
