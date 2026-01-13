@@ -256,10 +256,16 @@ func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrd
 			}
 		}
 
-		// 4. Update order status to paid
-		_, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
-			ID:     result.Order.ID,
-			Status: "paid",
+		// 4. Update order status to paid并推进履约状态
+		newFulfillment := result.Order.FulfillmentStatus
+		if result.Order.OrderType != OrderTypeReservation {
+			newFulfillment = FulfillmentStatusPendingKitchen
+		}
+
+		result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
+			ID:                result.Order.ID,
+			Status:            OrderStatusPaid,
+			FulfillmentStatus: pgtype.Text{String: newFulfillment, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("update order status: %w", err)

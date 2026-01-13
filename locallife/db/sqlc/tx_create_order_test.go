@@ -688,8 +688,10 @@ func TestProcessOrderPaymentTx_TakeoutOrder(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, OrderStatusPaid, result.Order.Status)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// 验证订单状态没有在这个事务中更新（状态更新在外部）
+	// 验证订单已更新为支付完成且ID一致
 	require.Equal(t, createResult.Order.ID, result.Order.ID)
 
 	// ✅ 核心验证：外卖订单应该创建配送单
@@ -752,6 +754,7 @@ func TestProcessOrderPaymentTx_TakeoutOrder_HighDeliveryFee(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
 	// 验证高运费订单的优先级为3
 	require.NotNil(t, result.PoolItem)
@@ -793,6 +796,7 @@ func TestProcessOrderPaymentTx_DineInOrder(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
 	// ✅ 堂食订单不应该有配送单和配送池
 	require.Nil(t, result.Delivery, "堂食订单不应该创建配送单")
@@ -832,6 +836,7 @@ func TestProcessOrderPaymentTx_TakeawayOrder(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
 	// ✅ 外带自取订单不应该有配送单
 	require.Nil(t, result.Delivery, "外带订单不应该创建配送单")
@@ -916,6 +921,7 @@ func TestProcessOrderPaymentTx_TakeoutOrder_MediumDeliveryFee(t *testing.T) {
 		OrderID: createResult.Order.ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
 	// 验证中等运费订单的优先级为2
 	require.NotNil(t, result.PoolItem)

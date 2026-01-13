@@ -43,6 +43,16 @@ const (
 	OrderStatusCancelled  = "cancelled"  // 已取消
 )
 
+// 履约状态常量
+const (
+	FulfillmentStatusScheduled      = "scheduled"       // 已排期，等待开始（预定/预约）
+	FulfillmentStatusPendingKitchen = "pending_kitchen" // 待出餐（已支付，等待接单/下发厨房）
+	FulfillmentStatusPreparing      = "preparing"       // 厨房制作中
+	FulfillmentStatusReady          = "ready"           // 出餐完成，等待取/配送
+	FulfillmentStatusCompleted      = "completed"       // 履约完成
+	FulfillmentStatusCancelled      = "cancelled"       // 履约取消
+)
+
 // 支付方式常量
 const (
 	PaymentMethodWechat  = "wechat"
@@ -208,6 +218,9 @@ type orderResponse struct {
 	// 订单状态 (枚举: pending-待支付, paid-已支付, preparing-制作中, ready-待取餐/待配送, delivering-配送中, completed-已完成, cancelled-已取消)
 	Status string `json:"status" enums:"pending,paid,preparing,ready,delivering,completed,cancelled" example:"paid"`
 
+	// 履约状态 (枚举: scheduled-已排期, pending_kitchen-待出餐, preparing-制作中, ready-已出餐, completed-履约完成, cancelled-已取消)
+	FulfillmentStatus string `json:"fulfillment_status" enums:"scheduled,pending_kitchen,preparing,ready,completed,cancelled" example:"pending_kitchen"`
+
 	// 支付方式 (枚举: wechat-微信支付, balance-余额支付)
 	PaymentMethod *string `json:"payment_method,omitempty" enums:"wechat,balance" example:"wechat"`
 
@@ -228,6 +241,9 @@ type orderResponse struct {
 
 	// 取消原因
 	CancelReason *string `json:"cancel_reason,omitempty" example:"商品缺货"`
+
+	// 替换的新订单ID（仅当此订单被更新菜单替换时存在）
+	ReplacedByOrderID *int64 `json:"replaced_by_order_id,omitempty" example:"100009"`
 
 	// 创建时间
 	CreatedAt time.Time `json:"created_at" example:"2025-12-01T12:20:00Z"`
@@ -261,6 +277,7 @@ func newOrderResponse(o db.Order) orderResponse {
 		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
 		TotalAmount:         o.TotalAmount,
 		Status:              o.Status,
+		FulfillmentStatus:   o.FulfillmentStatus,
 		CreatedAt:           o.CreatedAt,
 	}
 
@@ -294,6 +311,9 @@ func newOrderResponse(o db.Order) orderResponse {
 	if o.CancelReason.Valid {
 		resp.CancelReason = &o.CancelReason.String
 	}
+	if o.ReplacedByOrderID.Valid {
+		resp.ReplacedByOrderID = &o.ReplacedByOrderID.Int64
+	}
 	if o.UpdatedAt.Valid {
 		resp.UpdatedAt = &o.UpdatedAt.Time
 	}
@@ -316,6 +336,7 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
 		TotalAmount:         o.TotalAmount,
 		Status:              o.Status,
+		FulfillmentStatus:   o.FulfillmentStatus,
 		CreatedAt:           o.CreatedAt,
 	}
 
@@ -365,11 +386,24 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 	if o.CancelReason.Valid {
 		resp.CancelReason = &o.CancelReason.String
 	}
+	if o.ReplacedByOrderID.Valid {
+		resp.ReplacedByOrderID = &o.ReplacedByOrderID.Int64
+	}
 	if o.UpdatedAt.Valid {
 		resp.UpdatedAt = &o.UpdatedAt.Time
 	}
 
 	return resp
+}
+
+func ptrString(v string) *string {
+	return &v
+}
+
+// replaceOrderRequest 替换已支付的预订订单（全款改菜单）
+type replaceOrderRequest struct {
+	Items []orderItemRequest `json:"items" binding:"required,min=1,max=50,dive"`
+	Notes string             `json:"notes,omitempty" binding:"omitempty,max=500"`
 }
 
 // newOrderWithMerchantFromFilterResponse converts filtered list rows to API response
@@ -387,6 +421,7 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 		DeliveryFeeDiscount: o.DeliveryFeeDiscount,
 		TotalAmount:         o.TotalAmount,
 		Status:              o.Status,
+		FulfillmentStatus:   o.FulfillmentStatus,
 		CreatedAt:           o.CreatedAt,
 	}
 
@@ -419,6 +454,9 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 	}
 	if o.CancelReason.Valid {
 		resp.CancelReason = &o.CancelReason.String
+	}
+	if o.ReplacedByOrderID.Valid {
+		resp.ReplacedByOrderID = &o.ReplacedByOrderID.Int64
 	}
 	if o.UpdatedAt.Valid {
 		resp.UpdatedAt = &o.UpdatedAt.Time
@@ -530,6 +568,150 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		}
 		if table.MerchantID != req.MerchantID {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table does not belong to this merchant")))
+			return
+		}
+	}
+
+	// 堂食/预订订单需要开放用餐会话，绑定会话到订单
+	var diningSession *db.DiningSession
+	var reservation *db.TableReservation
+	switch req.OrderType {
+	case OrderTypeReservation:
+		if req.ReservationID == nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation_id is required for reservation orders")))
+			return
+		}
+
+		res, err := server.store.GetTableReservation(ctx, *req.ReservationID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if res.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
+			return
+		}
+		if res.MerchantID != req.MerchantID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation does not belong to this merchant")))
+			return
+		}
+		if res.Status != ReservationStatusPaid && res.Status != ReservationStatusConfirmed && res.Status != ReservationStatusCheckedIn {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not ready for ordering")))
+			return
+		}
+		if req.TableID != nil && res.TableID != *req.TableID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table does not match reservation")))
+			return
+		}
+
+		reservation = &res
+
+		session, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: res.ID, Valid: true})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for reservation")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if session.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dining session does not belong to you")))
+			return
+		}
+		if session.TableID != res.TableID {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session table mismatch")))
+			return
+		}
+		if session.MerchantID != req.MerchantID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dining session merchant mismatch")))
+			return
+		}
+
+		tableID := res.TableID
+		req.TableID = &tableID
+		diningSession = &session
+
+	case OrderTypeDineIn:
+		if req.TableID == nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table_id is required for dine-in orders")))
+			return
+		}
+
+		session, err := server.store.GetActiveDiningSessionByTable(ctx, *req.TableID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for table")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if session.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dining session does not belong to you")))
+			return
+		}
+		if session.MerchantID != req.MerchantID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dining session merchant mismatch")))
+			return
+		}
+		if req.ReservationID != nil {
+			if !session.ReservationID.Valid || session.ReservationID.Int64 != *req.ReservationID {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session reservation mismatch")))
+				return
+			}
+
+			res, err := server.store.GetTableReservation(ctx, *req.ReservationID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+					return
+				}
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			if res.UserID != authPayload.UserID {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
+				return
+			}
+			if res.MerchantID != req.MerchantID {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation does not belong to this merchant")))
+				return
+			}
+			if res.TableID != *req.TableID {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table does not match reservation")))
+				return
+			}
+			if res.PaymentMode != PaymentModeDeposit {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not in deposit mode")))
+				return
+			}
+			if res.Status != ReservationStatusPaid && res.Status != ReservationStatusConfirmed && res.Status != ReservationStatusCheckedIn {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not ready for dining")))
+				return
+			}
+
+			reservation = &res
+		}
+
+		diningSession = &session
+	}
+
+	// 定金模式仅允许一笔尾款订单，避免重复抵扣
+	if reservation != nil && reservation.PaymentMode == PaymentModeDeposit {
+		existing, err := server.store.GetLatestOrderByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
+		if err == nil {
+			if existing.Status != OrderStatusCancelled && !existing.ReplacedByOrderID.Valid {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation already has an active order")))
+				return
+			}
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 	}
@@ -736,6 +918,12 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		voucherAmount = uv.Amount
 	}
 
+	// 定金抵扣：预订定金到店点菜直接抵扣应付
+	var depositDeduction int64
+	if reservation != nil && reservation.PaymentMode == PaymentModeDeposit {
+		depositDeduction = reservation.DepositAmount
+	}
+
 	// ==================== 会员余额验证 ====================
 	var membershipID *int64
 	var balancePaid int64 = 0
@@ -795,6 +983,14 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		totalAmount = 0
 	}
 
+	// 定金抵扣应付金额
+	if depositDeduction > 0 {
+		if depositDeduction > totalAmount {
+			depositDeduction = totalAmount
+		}
+		totalAmount -= depositDeduction
+	}
+
 	// 计算余额支付金额
 	if req.UseBalance && membership != nil {
 		// 使用全部余额或订单金额，取较小值
@@ -820,6 +1016,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		DeliveryFeeDiscount: deliveryFeeDiscount,
 		TotalAmount:         totalAmount,
 		Status:              OrderStatusPending,
+		FulfillmentStatus:   "scheduled",
 	}
 
 	// 设置可选字段
@@ -879,6 +1076,20 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	resp := newOrderResponse(txResult.Order)
+
+	// 绑定用餐会话的活跃订单（失败不影响下单返回，但记录日志）
+	if diningSession != nil {
+		_, err := server.store.UpdateDiningSessionActiveOrder(ctx, db.UpdateDiningSessionActiveOrderParams{
+			ID:            diningSession.ID,
+			ActiveOrderID: pgtype.Int8{Int64: txResult.Order.ID, Valid: true},
+		})
+		if err != nil {
+			log.Warn().Err(err).
+				Int64("session_id", diningSession.ID).
+				Int64("order_id", txResult.Order.ID).
+				Msg("createOrder: failed to bind dining session active order")
+		}
+	}
 
 	// 清空堂食/预订购物车（外卖保留移除已支付商品逻辑）
 	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
@@ -1487,6 +1698,248 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 	})
 }
 
+// replaceOrder godoc
+// @Summary 全款预订改菜单，生成新订单并作废旧订单
+// @Description 仅限支付模式为全款的预订订单，生成新的堂食订单，旧订单标记为被替换；差额自动生成支付/退款单。
+// @Tags 订单管理
+// @Accept json
+// @Produce json
+// @Param id path int true "原订单ID"
+// @Param request body replaceOrderRequest true "新的菜品列表"
+// @Success 200 {object} object{order=orderResponse,delta=int64,payment_order_id=*int64,refund_initiated=bool}
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/orders/{id}/replace [post]
+// @Security BearerAuth
+func (server *Server) replaceOrder(ctx *gin.Context) {
+	var uriReq struct {
+		ID int64 `uri:"id" binding:"required,min=1"`
+	}
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var req replaceOrderRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	oldOrder, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if oldOrder.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
+		return
+	}
+	if oldOrder.OrderType != OrderTypeReservation {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only reservation orders can be replaced")))
+		return
+	}
+	if oldOrder.Status != OrderStatusPaid {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("order must be paid before replacement")))
+		return
+	}
+	if oldOrder.ReplacedByOrderID.Valid {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("order already replaced")))
+		return
+	}
+	if !oldOrder.ReservationID.Valid {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order missing reservation")))
+		return
+	}
+
+	reservation, err := server.store.GetTableReservation(ctx, oldOrder.ReservationID.Int64)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if reservation.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
+		return
+	}
+	if reservation.PaymentMode != PaymentModeFull {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only full-payment reservations support replacement")))
+		return
+	}
+	if reservation.Status != ReservationStatusPaid && reservation.Status != ReservationStatusConfirmed && reservation.Status != ReservationStatusCheckedIn {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not ready for replacement")))
+		return
+	}
+
+	// 需要有开放的用餐会话确保桌台占用
+	session, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for reservation")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if session.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dining session does not belong to you")))
+		return
+	}
+
+	// 计算新菜品金额
+	subtotal, items, err := server.calculateOrderItems(ctx, reservation.MerchantID, req.Items)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 简化：沿用满减优惠
+	var discountAmount int64
+	discountRules, err := server.store.ListActiveDiscountRules(ctx, reservation.MerchantID)
+	if err == nil {
+		var best db.DiscountRule
+		var has bool
+		for _, d := range discountRules {
+			if subtotal >= d.MinOrderAmount {
+				if !has || d.DiscountAmount > best.DiscountAmount {
+					best = d
+					has = true
+				}
+			}
+		}
+		if has {
+			discountAmount = best.DiscountAmount
+		}
+	}
+
+	newTotal := subtotal - discountAmount
+	if newTotal < 0 {
+		newTotal = 0
+	}
+
+	delta := newTotal - oldOrder.TotalAmount
+	newStatus := OrderStatusPaid
+	newFulfillment := FulfillmentStatusPendingKitchen
+	if delta > 0 {
+		newStatus = OrderStatusPending
+		newFulfillment = FulfillmentStatusScheduled
+	}
+
+	orderNo := generateOrderNo()
+	arg := db.CreateOrderParams{
+		OrderNo:             orderNo,
+		UserID:              authPayload.UserID,
+		MerchantID:          reservation.MerchantID,
+		OrderType:           OrderTypeDineIn,
+		TableID:             pgtype.Int8{Int64: reservation.TableID, Valid: true},
+		ReservationID:       pgtype.Int8{Int64: reservation.ID, Valid: true},
+		DeliveryFee:         0,
+		Subtotal:            subtotal,
+		DiscountAmount:      discountAmount,
+		DeliveryFeeDiscount: 0,
+		TotalAmount:         newTotal,
+		Status:              newStatus,
+		FulfillmentStatus:   newFulfillment,
+	}
+	if req.Notes != "" {
+		arg.Notes = pgtype.Text{String: req.Notes, Valid: true}
+	}
+
+	createTx, err := server.store.CreateOrderTx(ctx, db.CreateOrderTxParams{
+		CreateOrderParams: arg,
+		Items:             items,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	newOrder := createTx.Order
+
+	// 标记旧订单为被替换
+	_, err = server.store.MarkOrderReplaced(ctx, db.MarkOrderReplacedParams{
+		ID:                oldOrder.ID,
+		ReplacedByOrderID: pgtype.Int8{Int64: newOrder.ID, Valid: true},
+		CancelReason:      pgtype.Text{String: "replaced by new order", Valid: true},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	var paymentOrderID *int64
+	refundInitiated := false
+
+	if delta > 0 {
+		// 生成补差支付单
+		outTradeNo := generateOutTradeNo()
+		expiresAt := time.Now().Add(30 * time.Minute)
+		payOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+			OrderID:      pgtype.Int8{Int64: newOrder.ID, Valid: true},
+			UserID:       authPayload.UserID,
+			PaymentType:  PaymentTypeMiniProgram,
+			BusinessType: BusinessTypeOrder,
+			Amount:       delta,
+			OutTradeNo:   outTradeNo,
+			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		})
+		if err == nil {
+			paymentOrderID = &payOrder.ID
+		}
+	} else if delta < 0 {
+		// 发起差额退款（基于旧订单支付单）
+		paymentOrders, err := server.store.GetPaymentOrdersByOrder(ctx, pgtype.Int8{Int64: oldOrder.ID, Valid: true})
+		if err == nil {
+			for _, po := range paymentOrders {
+				if po.Status == PaymentStatusPaid {
+					refundAmount := -delta
+					if server.taskDistributor != nil {
+						_ = server.taskDistributor.DistributeTaskProcessRefund(ctx, &worker.PayloadProcessRefund{
+							PaymentOrderID: po.ID,
+							OrderID:        oldOrder.ID,
+							RefundAmount:   refundAmount,
+							Reason:         "order replaced diff refund",
+						})
+						refundInitiated = true
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// 差额为零或负数（无需补差），直接推进支付后履约流程：扣减库存、发厨房/通知
+	if delta <= 0 {
+		result, err := server.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{OrderID: newOrder.ID})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		newOrder = result.Order
+	}
+
+	resp := newOrderResponse(newOrder)
+	ctx.JSON(http.StatusOK, gin.H{
+		"order":            resp,
+		"delta":            delta,
+		"payment_order_id": paymentOrderID,
+		"refund_initiated": refundInitiated,
+	})
+}
+
 // confirmOrder godoc
 // @Summary 确认收货
 // @Description 用户确认已收到订单（适用于外卖订单）
@@ -1836,11 +2289,12 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 
 	// 使用事务更新订单状态并创建日志
 	result, err := server.store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
-		OrderID:      req.ID,
-		NewStatus:    OrderStatusPreparing,
-		OldStatus:    order.Status,
-		OperatorID:   authPayload.UserID,
-		OperatorType: "merchant",
+		OrderID:              req.ID,
+		NewStatus:            OrderStatusPreparing,
+		OldStatus:            order.Status,
+		OperatorID:           authPayload.UserID,
+		OperatorType:         "merchant",
+		NewFulfillmentStatus: ptrString(FulfillmentStatusPreparing),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1951,12 +2405,13 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 
 	// 使用事务更新订单状态为已取消，并记录拒单原因
 	result, err := server.store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
-		OrderID:      uriReq.ID,
-		NewStatus:    OrderStatusCancelled,
-		OldStatus:    order.Status,
-		OperatorID:   authPayload.UserID,
-		OperatorType: "merchant",
-		Notes:        fmt.Sprintf("商户拒单：%s", bodyReq.Reason),
+		OrderID:              uriReq.ID,
+		NewStatus:            OrderStatusCancelled,
+		OldStatus:            order.Status,
+		OperatorID:           authPayload.UserID,
+		OperatorType:         "merchant",
+		Notes:                fmt.Sprintf("商户拒单：%s", bodyReq.Reason),
+		NewFulfillmentStatus: ptrString(FulfillmentStatusCancelled),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -2100,11 +2555,12 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 
 	// 使用事务更新订单状态并创建日志
 	result, err := server.store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
-		OrderID:      req.ID,
-		NewStatus:    OrderStatusReady,
-		OldStatus:    order.Status,
-		OperatorID:   authPayload.UserID,
-		OperatorType: "merchant",
+		OrderID:              req.ID,
+		NewStatus:            OrderStatusReady,
+		OldStatus:            order.Status,
+		OperatorID:           authPayload.UserID,
+		OperatorType:         "merchant",
+		NewFulfillmentStatus: ptrString(FulfillmentStatusReady),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

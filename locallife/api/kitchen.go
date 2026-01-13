@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 
@@ -301,10 +302,11 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 		return
 	}
 
-	// 更新订单状态为 preparing
+	// 更新订单状态为 preparing，同时推进履约状态
 	updatedOrder, err := server.store.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-		ID:     uri.OrderID,
-		Status: "preparing",
+		ID:                uri.OrderID,
+		Status:            "preparing",
+		FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusPreparing, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -379,10 +381,11 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 		return
 	}
 
-	// 更新订单状态为 ready
+	// 更新订单状态为 ready，并同步履约状态
 	updatedOrder, err := server.store.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-		ID:     uri.OrderID,
-		Status: "ready",
+		ID:                uri.OrderID,
+		Status:            "ready",
+		FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusReady, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

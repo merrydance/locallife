@@ -130,6 +130,14 @@ SET status = 'paid',
 WHERE id = $1
 RETURNING *;
 
+-- name: AddReservationPrepaidAmount :one
+-- 追加菜品支付成功后累加预付金额
+UPDATE table_reservations
+SET prepaid_amount = prepaid_amount + $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: UpdateReservationToConfirmed :one
 UPDATE table_reservations
 SET status = 'confirmed',

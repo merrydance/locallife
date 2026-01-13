@@ -60,7 +60,7 @@ func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert Ale
 	}
 
 	alert.Timestamp = time.Now()
-	
+
 	wsMessage := map[string]any{
 		"type":      "alert",
 		"data":      alert,
@@ -85,12 +85,12 @@ func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert Ale
 
 // 任务类型常量
 const (
-	TaskProcessPaymentSuccess       = "payment:process_success"
-	TaskProcessRefund               = "payment:initiate_refund"
-	TaskProcessRefundResult         = "payment:process_refund"
-	TaskProcessProfitSharing        = "payment:process_profit_sharing"
-	TaskProcessApplymentResult      = "payment:process_applyment_result"       // 进件结果处理
-	TaskProcessProfitSharingResult  = "payment:process_profit_sharing_result"  // 分账结果处理
+	TaskProcessPaymentSuccess      = "payment:process_success"
+	TaskProcessRefund              = "payment:initiate_refund"
+	TaskProcessRefundResult        = "payment:process_refund"
+	TaskProcessProfitSharing       = "payment:process_profit_sharing"
+	TaskProcessApplymentResult     = "payment:process_applyment_result"      // 进件结果处理
+	TaskProcessProfitSharingResult = "payment:process_profit_sharing_result" // 分账结果处理
 )
 
 // PaymentSuccessPayload 支付成功任务载荷
@@ -341,6 +341,9 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 	case "reservation":
 		return processor.handleReservationPaid(ctx, paymentOrder)
 
+	case "reservation_addon":
+		return processor.handleReservationAddonPaid(ctx, paymentOrder)
+
 	case "membership_recharge":
 		return processor.handleMembershipRechargePaid(ctx, paymentOrder)
 
@@ -443,6 +446,38 @@ func (processor *RedisTaskProcessor) handleReservationPaid(ctx context.Context, 
 	return nil
 }
 
+// handleReservationAddonPaid 处理全款预订追加菜品支付成功：仅累加预付金额，状态不变
+func (processor *RedisTaskProcessor) handleReservationAddonPaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
+	if !paymentOrder.ReservationID.Valid {
+		return fmt.Errorf("reservation_id is required: %w", asynq.SkipRetry)
+	}
+
+	reservationID := paymentOrder.ReservationID.Int64
+
+	updated, err := processor.store.AddReservationPrepaidAmount(ctx, db.AddReservationPrepaidAmountParams{
+		ID:     reservationID,
+		PrepaidAmount: paymentOrder.Amount,
+	})
+	if err != nil {
+		return fmt.Errorf("add reservation prepaid amount: %w", err)
+	}
+
+	log.Info().
+		Int64("reservation_id", reservationID).
+		Int64("added_amount", paymentOrder.Amount).
+		Int64("prepaid_total", updated.PrepaidAmount).
+		Msg("reservation addon paid and prepaid amount updated")
+
+	// 🔔 需发送通知（待实现）
+	log.Info().
+		Int64("reservation_id", reservationID).
+		Int64("user_id", paymentOrder.UserID).
+		Str("action", "send_reservation_addon_notification").
+		Msg("[NOTIFICATION] reservation addon paid - notification pending")
+
+	return nil
+}
+
 // handleMembershipRechargePaid 处理会员充值支付成功
 func (processor *RedisTaskProcessor) handleMembershipRechargePaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
 	// 从attach字段解析充值参数
@@ -520,6 +555,17 @@ func (processor *RedisTaskProcessor) handleOrderPaid(ctx context.Context, paymen
 			return fmt.Errorf("insufficient inventory, refund required: %w", err)
 		}
 		return fmt.Errorf("process order payment: %w", err)
+	}
+
+	// 如果订单关联预订，支付成功后将预订状态推进到已签到，保持堂食与预订一致
+	if result.Order.ReservationID.Valid {
+		_, err := processor.store.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
+			ID:     result.Order.ReservationID.Int64,
+			Status: "checked_in",
+		})
+		if err != nil {
+			return fmt.Errorf("update reservation status after order payment: %w", err)
+		}
 	}
 
 	// 根据订单类型记录日志
@@ -610,10 +656,10 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 
 	// 推送策略：100m起步，每次+100m，超过1000m改为全区县推送
 	const (
-		startDistance     = 100.0  // 起始距离100米
-		stepDistance      = 100.0  // 每次扩大100米
-		regionThreshold   = 1000.0 // 超过1000米改为全区县推送
-		minRiderCount     = 3      // 最少通知骑手数
+		startDistance   = 100.0  // 起始距离100米
+		stepDistance    = 100.0  // 每次扩大100米
+		regionThreshold = 1000.0 // 超过1000米改为全区县推送
+		minRiderCount   = 3      // 最少通知骑手数
 	)
 
 	var ridersToNotify []int64
@@ -668,24 +714,24 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 
 	// 构建完整的新订单池消息数据（骑手App可直接显示）
 	newOrderData := map[string]any{
-		"type":                  "new_delivery_order",
-		"order_id":              order.ID,
-		"delivery_id":           delivery.ID,
-		"merchant_id":           merchant.ID,
-		"merchant_name":         merchant.Name,
-		"pickup_address":        delivery.PickupAddress,
-		"pickup_longitude":      pickupLng.Float64,
-		"pickup_latitude":       pickupLat.Float64,
-		"delivery_address":      delivery.DeliveryAddress,
-		"delivery_longitude":    deliveryLng.Float64,
-		"delivery_latitude":     deliveryLat.Float64,
-		"delivery_fee":          order.DeliveryFee,
-		"distance":              poolItem.Distance,                        // 商家到顾客距离（米）
-		"priority":              poolItem.Priority,                        // 优先级（高值单=2或3）
-		"expected_pickup_at":    poolItem.ExpectedPickupAt,                // 预计出餐时间
-		"expected_delivery_at":  delivery.EstimatedDeliveryAt.Time,        // 预计送达时间
-		"is_high_value":         order.DeliveryFee >= 1000,                // 运费>=10元为高值单
-		"created_at":            poolItem.CreatedAt,
+		"type":                 "new_delivery_order",
+		"order_id":             order.ID,
+		"delivery_id":          delivery.ID,
+		"merchant_id":          merchant.ID,
+		"merchant_name":        merchant.Name,
+		"pickup_address":       delivery.PickupAddress,
+		"pickup_longitude":     pickupLng.Float64,
+		"pickup_latitude":      pickupLat.Float64,
+		"delivery_address":     delivery.DeliveryAddress,
+		"delivery_longitude":   deliveryLng.Float64,
+		"delivery_latitude":    deliveryLat.Float64,
+		"delivery_fee":         order.DeliveryFee,
+		"distance":             poolItem.Distance,                 // 商家到顾客距离（米）
+		"priority":             poolItem.Priority,                 // 优先级（高值单=2或3）
+		"expected_pickup_at":   poolItem.ExpectedPickupAt,         // 预计出餐时间
+		"expected_delivery_at": delivery.EstimatedDeliveryAt.Time, // 预计送达时间
+		"is_high_value":        order.DeliveryFee >= 1000,         // 运费>=10元为高值单
+		"created_at":           poolItem.CreatedAt,
 	}
 	msgData, _ := json.Marshal(newOrderData)
 

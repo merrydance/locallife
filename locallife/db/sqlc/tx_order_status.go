@@ -20,6 +20,8 @@ type UpdateOrderStatusTxParams struct {
 	OperatorID   int64
 	OperatorType string // "user", "merchant", "system"
 	Notes        string // 可选备注
+	// 可选履约状态变更，nil 表示不变
+	NewFulfillmentStatus *string
 }
 
 // UpdateOrderStatusTxResult contains the result of the update order status transaction
@@ -36,9 +38,15 @@ func (store *SQLStore) UpdateOrderStatusTx(ctx context.Context, arg UpdateOrderS
 		var err error
 
 		// 1. 更新订单状态
+		var fulfillment pgtype.Text
+		if arg.NewFulfillmentStatus != nil {
+			fulfillment = pgtype.Text{String: *arg.NewFulfillmentStatus, Valid: true}
+		}
+
 		result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
-			ID:     arg.OrderID,
-			Status: arg.NewStatus,
+			ID:                arg.OrderID,
+			Status:            arg.NewStatus,
+			FulfillmentStatus: fulfillment,
 		})
 		if err != nil {
 			return fmt.Errorf("update order status: %w", err)

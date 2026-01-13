@@ -35,6 +35,8 @@ type Querier interface {
 	AddMerchantTag(ctx context.Context, arg AddMerchantTagParams) error
 	// 为运营商添加管理区域
 	AddOperatorRegion(ctx context.Context, arg AddOperatorRegionParams) (OperatorRegion, error)
+	// 追加菜品支付成功后累加预付金额
+	AddReservationPrepaidAmount(ctx context.Context, arg AddReservationPrepaidAmountParams) (TableReservation, error)
 	// ============ Table Images ============
 	AddTableImage(ctx context.Context, arg AddTableImageParams) (TableImage, error)
 	// ============ Table Tags ============
@@ -81,6 +83,7 @@ type Querier interface {
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error
+	CloseDiningSession(ctx context.Context, id int64) (DiningSession, error)
 	ConfirmFraudPattern(ctx context.Context, arg ConfirmFraudPatternParams) error
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
@@ -228,6 +231,7 @@ type Querier interface {
 	CreateDelivery(ctx context.Context, arg CreateDeliveryParams) (Delivery, error)
 	CreateDeliveryFeeConfig(ctx context.Context, arg CreateDeliveryFeeConfigParams) (DeliveryFeeConfig, error)
 	CreateDeliveryPromotion(ctx context.Context, arg CreateDeliveryPromotionParams) (MerchantDeliveryPromotion, error)
+	CreateDiningSession(ctx context.Context, arg CreateDiningSessionParams) (DiningSession, error)
 	// Discount Rules (满减规则)
 	CreateDiscountRule(ctx context.Context, arg CreateDiscountRuleParams) (DiscountRule, error)
 	// ============================================
@@ -407,6 +411,8 @@ type Querier interface {
 	// 冻结用户余额（提现申请时）
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
+	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
+	GetActiveDiningSessionByTable(ctx context.Context, tableID int64) (DiningSession, error)
 	GetActiveFoodSafetyIncidents(ctx context.Context, limit int32) ([]FoodSafetyIncident, error)
 	// 根据区域获取运营商（通过operator_regions表，支持多区域）
 	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
@@ -488,6 +494,7 @@ type Querier interface {
 	GetDeliveryPoolItemForUpdate(ctx context.Context, id int64) (DeliveryPool, error)
 	GetDeliveryPromotion(ctx context.Context, id int64) (MerchantDeliveryPromotion, error)
 	GetDevicesByUserID(ctx context.Context, userID int64) ([]UserDevice, error)
+	GetDiningSession(ctx context.Context, id int64) (DiningSession, error)
 	GetDiscountRule(ctx context.Context, id int64) (DiscountRule, error)
 	GetDish(ctx context.Context, id int64) (Dish, error)
 	GetDishCategory(ctx context.Context, id int64) (DishCategory, error)
@@ -535,6 +542,7 @@ type Querier interface {
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
 	GetLatestEcommerceApplymentBySubject(ctx context.Context, arg GetLatestEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
+	GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (Order, error)
 	GetLatestPaymentOrderByOrder(ctx context.Context, orderID pgtype.Int8) (PaymentOrder, error)
 	GetLatestPaymentOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (PaymentOrder, error)
 	GetLatestRecommendations(ctx context.Context, userID int64) (Recommendation, error)
@@ -936,6 +944,7 @@ type Querier interface {
 	// 距离越近排名越靠前，同时返回动态优先级供前端展示
 	ListDeliveryPoolNearbyByRegion(ctx context.Context, arg ListDeliveryPoolNearbyByRegionParams) ([]ListDeliveryPoolNearbyByRegionRow, error)
 	ListDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
+	ListDiningSessionsByUser(ctx context.Context, arg ListDiningSessionsByUserParams) ([]DiningSession, error)
 	ListDishCategories(ctx context.Context, merchantID int64) ([]ListDishCategoriesRow, error)
 	ListDishCustomizationGroups(ctx context.Context, dishID int64) ([]DishCustomizationGroup, error)
 	ListDishCustomizationOptions(ctx context.Context, groupID int64) ([]ListDishCustomizationOptionsRow, error)
@@ -1132,6 +1141,7 @@ type Querier interface {
 	MarkExpiredVouchers(ctx context.Context) error
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
+	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)
@@ -1259,6 +1269,7 @@ type Querier interface {
 	UpdateDeliveryToDelivering(ctx context.Context, arg UpdateDeliveryToDeliveringParams) (Delivery, error)
 	UpdateDeliveryToPicked(ctx context.Context, arg UpdateDeliveryToPickedParams) (Delivery, error)
 	UpdateDeliveryToPickup(ctx context.Context, arg UpdateDeliveryToPickupParams) (Delivery, error)
+	UpdateDiningSessionActiveOrder(ctx context.Context, arg UpdateDiningSessionActiveOrderParams) (DiningSession, error)
 	UpdateDiscountRule(ctx context.Context, arg UpdateDiscountRuleParams) (DiscountRule, error)
 	UpdateDish(ctx context.Context, arg UpdateDishParams) (Dish, error)
 	UpdateDishAvailability(ctx context.Context, arg UpdateDishAvailabilityParams) error

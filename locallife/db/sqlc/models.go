@@ -266,6 +266,20 @@ type DeliveryPool struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
+type DiningSession struct {
+	ID            int64              `json:"id"`
+	MerchantID    int64              `json:"merchant_id"`
+	TableID       int64              `json:"table_id"`
+	ReservationID pgtype.Int8        `json:"reservation_id"`
+	UserID        int64              `json:"user_id"`
+	ActiveOrderID pgtype.Int8        `json:"active_order_id"`
+	Status        string             `json:"status"`
+	OpenedAt      time.Time          `json:"opened_at"`
+	ClosedAt      pgtype.Timestamptz `json:"closed_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 // M10: 满减规则表
 type DiscountRule struct {
 	ID                     int64              `json:"id"`
@@ -814,7 +828,9 @@ type Order struct {
 	// 会员余额支付金额(分)
 	BalancePaid int64 `json:"balance_paid"`
 	// 使用的会员卡ID
-	MembershipID pgtype.Int8 `json:"membership_id"`
+	MembershipID      pgtype.Int8 `json:"membership_id"`
+	FulfillmentStatus string      `json:"fulfillment_status"`
+	ReplacedByOrderID pgtype.Int8 `json:"replaced_by_order_id"`
 }
 
 type OrderDisplayConfig struct {

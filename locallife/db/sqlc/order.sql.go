@@ -15,8 +15,9 @@ import (
 const countMerchantOrdersByStatusAfterTime = `-- name: CountMerchantOrdersByStatusAfterTime :one
 SELECT COUNT(*) FROM orders
 WHERE merchant_id = $1 
-  AND status = $2 
-  AND created_at >= $3
+    AND status = $2 
+    AND created_at >= $3
+    AND replaced_by_order_id IS NULL
 `
 
 type CountMerchantOrdersByStatusAfterTimeParams struct {
@@ -113,14 +114,16 @@ INSERT INTO orders (
     delivery_fee_discount,
     total_amount,
     status,
+    fulfillment_status,
     notes,
     user_voucher_id,
     voucher_amount,
     balance_paid,
-    membership_id
+    membership_id,
+    replaced_by_order_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
-) RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+) RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id
 `
 
 type CreateOrderParams struct {
@@ -138,11 +141,13 @@ type CreateOrderParams struct {
 	DeliveryFeeDiscount int64       `json:"delivery_fee_discount"`
 	TotalAmount         int64       `json:"total_amount"`
 	Status              string      `json:"status"`
+	FulfillmentStatus   string      `json:"fulfillment_status"`
 	Notes               pgtype.Text `json:"notes"`
 	UserVoucherID       pgtype.Int8 `json:"user_voucher_id"`
 	VoucherAmount       int64       `json:"voucher_amount"`
 	BalancePaid         int64       `json:"balance_paid"`
 	MembershipID        pgtype.Int8 `json:"membership_id"`
+	ReplacedByOrderID   pgtype.Int8 `json:"replaced_by_order_id"`
 }
 
 func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error) {
@@ -161,11 +166,13 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		arg.DeliveryFeeDiscount,
 		arg.TotalAmount,
 		arg.Status,
+		arg.FulfillmentStatus,
 		arg.Notes,
 		arg.UserVoucherID,
 		arg.VoucherAmount,
 		arg.BalancePaid,
 		arg.MembershipID,
+		arg.ReplacedByOrderID,
 	)
 	var i Order
 	err := row.Scan(
@@ -198,6 +205,55 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
+	)
+	return i, err
+}
+
+const getLatestOrderByReservation = `-- name: GetLatestOrderByReservation :one
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
+WHERE reservation_id = $1
+    AND replaced_by_order_id IS NULL
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (Order, error) {
+	row := q.db.QueryRow(ctx, getLatestOrderByReservation, reservationID)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.UserID,
+		&i.MerchantID,
+		&i.OrderType,
+		&i.AddressID,
+		&i.DeliveryFee,
+		&i.DeliveryDistance,
+		&i.TableID,
+		&i.ReservationID,
+		&i.Subtotal,
+		&i.DiscountAmount,
+		&i.DeliveryFeeDiscount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.PaymentMethod,
+		&i.PaidAt,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.FinalAmount,
+		&i.PlatformCommission,
+		&i.UserVoucherID,
+		&i.VoucherAmount,
+		&i.BalancePaid,
+		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }
@@ -310,7 +366,7 @@ func (q *Queries) GetMerchantPromotionExpenses(ctx context.Context, arg GetMerch
 }
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -347,12 +403,14 @@ func (q *Queries) GetOrder(ctx context.Context, id int64) (Order, error) {
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }
 
 const getOrderByOrderNo = `-- name: GetOrderByOrderNo :one
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
 WHERE order_no = $1 LIMIT 1
 `
 
@@ -389,12 +447,14 @@ func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (Order,
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }
 
 const getOrderForUpdate = `-- name: GetOrderForUpdate :one
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -432,6 +492,8 @@ func (q *Queries) GetOrderForUpdate(ctx context.Context, id int64) (Order, error
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }
@@ -482,7 +544,7 @@ func (q *Queries) GetOrderStats(ctx context.Context, arg GetOrderStatsParams) (G
 
 const getOrderWithDetails = `-- name: GetOrderWithDetails :one
 SELECT 
-    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id,
     m.name as merchant_name,
     m.phone as merchant_phone,
     m.address as merchant_address,
@@ -525,6 +587,8 @@ type GetOrderWithDetailsRow struct {
 	VoucherAmount        int64              `json:"voucher_amount"`
 	BalancePaid          int64              `json:"balance_paid"`
 	MembershipID         pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus    string             `json:"fulfillment_status"`
+	ReplacedByOrderID    pgtype.Int8        `json:"replaced_by_order_id"`
 	MerchantName         string             `json:"merchant_name"`
 	MerchantPhone        string             `json:"merchant_phone"`
 	MerchantAddress      string             `json:"merchant_address"`
@@ -566,6 +630,8 @@ func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWi
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 		&i.MerchantName,
 		&i.MerchantPhone,
 		&i.MerchantAddress,
@@ -578,8 +644,8 @@ func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWi
 
 const listMerchantOrdersByStatus = `-- name: ListMerchantOrdersByStatus :many
 
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id FROM orders
-WHERE merchant_id = $1 AND status = $2
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
+WHERE merchant_id = $1 AND status = $2 AND replaced_by_order_id IS NULL
 ORDER BY created_at ASC
 LIMIT $3 OFFSET $4
 `
@@ -637,6 +703,8 @@ func (q *Queries) ListMerchantOrdersByStatus(ctx context.Context, arg ListMercha
 			&i.VoucherAmount,
 			&i.BalancePaid,
 			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
 		); err != nil {
 			return nil, err
 		}
@@ -726,7 +794,7 @@ func (q *Queries) ListMerchantPromotionOrders(ctx context.Context, arg ListMerch
 }
 
 const listOrdersByMerchant = `-- name: ListOrdersByMerchant :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
 WHERE merchant_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -777,6 +845,8 @@ func (q *Queries) ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerc
 			&i.VoucherAmount,
 			&i.BalancePaid,
 			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
 		); err != nil {
 			return nil, err
 		}
@@ -789,7 +859,7 @@ func (q *Queries) ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerc
 }
 
 const listOrdersByMerchantAndStatus = `-- name: ListOrdersByMerchantAndStatus :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
 WHERE merchant_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -846,6 +916,8 @@ func (q *Queries) ListOrdersByMerchantAndStatus(ctx context.Context, arg ListOrd
 			&i.VoucherAmount,
 			&i.BalancePaid,
 			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
 		); err != nil {
 			return nil, err
 		}
@@ -858,7 +930,7 @@ func (q *Queries) ListOrdersByMerchantAndStatus(ctx context.Context, arg ListOrd
 }
 
 const listOrdersByMerchantAndStatuses = `-- name: ListOrdersByMerchantAndStatuses :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id FROM orders
 WHERE merchant_id = $1 AND status = ANY($2::text[])
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -915,6 +987,8 @@ func (q *Queries) ListOrdersByMerchantAndStatuses(ctx context.Context, arg ListO
 			&i.VoucherAmount,
 			&i.BalancePaid,
 			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
 		); err != nil {
 			return nil, err
 		}
@@ -928,7 +1002,7 @@ func (q *Queries) ListOrdersByMerchantAndStatuses(ctx context.Context, arg ListO
 
 const listOrdersByUser = `-- name: ListOrdersByUser :many
 SELECT 
-    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id,
     m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
@@ -973,6 +1047,8 @@ type ListOrdersByUserRow struct {
 	VoucherAmount       int64              `json:"voucher_amount"`
 	BalancePaid         int64              `json:"balance_paid"`
 	MembershipID        pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus   string             `json:"fulfillment_status"`
+	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
 	MerchantName        string             `json:"merchant_name"`
 }
 
@@ -1015,6 +1091,8 @@ func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserPara
 			&i.VoucherAmount,
 			&i.BalancePaid,
 			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
 			&i.MerchantName,
 		); err != nil {
 			return nil, err
@@ -1029,7 +1107,7 @@ func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserPara
 
 const listOrdersByUserAndStatus = `-- name: ListOrdersByUserAndStatus :many
 SELECT 
-    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id,
     m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
@@ -1075,6 +1153,8 @@ type ListOrdersByUserAndStatusRow struct {
 	VoucherAmount       int64              `json:"voucher_amount"`
 	BalancePaid         int64              `json:"balance_paid"`
 	MembershipID        pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus   string             `json:"fulfillment_status"`
+	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
 	MerchantName        string             `json:"merchant_name"`
 }
 
@@ -1122,6 +1202,8 @@ func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersB
 			&i.VoucherAmount,
 			&i.BalancePaid,
 			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
 			&i.MerchantName,
 		); err != nil {
 			return nil, err
@@ -1136,7 +1218,7 @@ func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersB
 
 const listOrdersByUserWithFilters = `-- name: ListOrdersByUserWithFilters :many
 SELECT
-        o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id,
+        o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id,
         m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
@@ -1187,6 +1269,8 @@ type ListOrdersByUserWithFiltersRow struct {
 	VoucherAmount       int64              `json:"voucher_amount"`
 	BalancePaid         int64              `json:"balance_paid"`
 	MembershipID        pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus   string             `json:"fulfillment_status"`
+	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
 	MerchantName        string             `json:"merchant_name"`
 }
 
@@ -1236,6 +1320,8 @@ func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrder
 			&i.VoucherAmount,
 			&i.BalancePaid,
 			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
 			&i.MerchantName,
 		); err != nil {
 			return nil, err
@@ -1248,22 +1334,27 @@ func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrder
 	return items, nil
 }
 
-const updateOrderStatus = `-- name: UpdateOrderStatus :one
+const markOrderReplaced = `-- name: MarkOrderReplaced :one
 UPDATE orders
 SET 
-    status = $2,
+    status = 'cancelled',
+    fulfillment_status = 'cancelled',
+    cancelled_at = now(),
+    cancel_reason = COALESCE($1, cancel_reason),
+    replaced_by_order_id = $2,
     updated_at = now()
-WHERE id = $1
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id
+WHERE id = $3
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id
 `
 
-type UpdateOrderStatusParams struct {
-	ID     int64  `json:"id"`
-	Status string `json:"status"`
+type MarkOrderReplacedParams struct {
+	CancelReason      pgtype.Text `json:"cancel_reason"`
+	ReplacedByOrderID pgtype.Int8 `json:"replaced_by_order_id"`
+	ID                int64       `json:"id"`
 }
 
-func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error) {
-	row := q.db.QueryRow(ctx, updateOrderStatus, arg.ID, arg.Status)
+func (q *Queries) MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error) {
+	row := q.db.QueryRow(ctx, markOrderReplaced, arg.CancelReason, arg.ReplacedByOrderID, arg.ID)
 	var i Order
 	err := row.Scan(
 		&i.ID,
@@ -1295,6 +1386,63 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
+	)
+	return i, err
+}
+
+const updateOrderStatus = `-- name: UpdateOrderStatus :one
+UPDATE orders
+SET 
+    status = $1,
+    fulfillment_status = COALESCE($2, fulfillment_status),
+    updated_at = now()
+WHERE id = $3
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id
+`
+
+type UpdateOrderStatusParams struct {
+	Status            string      `json:"status"`
+	FulfillmentStatus pgtype.Text `json:"fulfillment_status"`
+	ID                int64       `json:"id"`
+}
+
+func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error) {
+	row := q.db.QueryRow(ctx, updateOrderStatus, arg.Status, arg.FulfillmentStatus, arg.ID)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.UserID,
+		&i.MerchantID,
+		&i.OrderType,
+		&i.AddressID,
+		&i.DeliveryFee,
+		&i.DeliveryDistance,
+		&i.TableID,
+		&i.ReservationID,
+		&i.Subtotal,
+		&i.DiscountAmount,
+		&i.DeliveryFeeDiscount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.PaymentMethod,
+		&i.PaidAt,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.FinalAmount,
+		&i.PlatformCommission,
+		&i.UserVoucherID,
+		&i.VoucherAmount,
+		&i.BalancePaid,
+		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }
@@ -1303,11 +1451,12 @@ const updateOrderToCancelled = `-- name: UpdateOrderToCancelled :one
 UPDATE orders
 SET 
     status = 'cancelled',
+    fulfillment_status = 'cancelled',
     cancelled_at = now(),
     cancel_reason = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id
 `
 
 type UpdateOrderToCancelledParams struct {
@@ -1348,6 +1497,8 @@ func (q *Queries) UpdateOrderToCancelled(ctx context.Context, arg UpdateOrderToC
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }
@@ -1356,10 +1507,11 @@ const updateOrderToCompleted = `-- name: UpdateOrderToCompleted :one
 UPDATE orders
 SET 
     status = 'completed',
+    fulfillment_status = 'completed',
     completed_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id
 `
 
 func (q *Queries) UpdateOrderToCompleted(ctx context.Context, id int64) (Order, error) {
@@ -1395,6 +1547,8 @@ func (q *Queries) UpdateOrderToCompleted(ctx context.Context, id int64) (Order, 
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }
@@ -1407,7 +1561,7 @@ SET
     paid_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'pending'
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id
 `
 
 type UpdateOrderToPaidParams struct {
@@ -1448,6 +1602,8 @@ func (q *Queries) UpdateOrderToPaid(ctx context.Context, arg UpdateOrderToPaidPa
 		&i.VoucherAmount,
 		&i.BalancePaid,
 		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
 	)
 	return i, err
 }

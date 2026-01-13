@@ -53,6 +53,8 @@ type Store interface {
 	CancelOrderTx(ctx context.Context, arg CancelOrderTxParams) (CancelOrderTxResult, error)
 	// M5: Table transactions
 	DeleteTableTx(ctx context.Context, arg DeleteTableParams) (DeleteTableResult, error)
+	// Dining session transactions
+	OpenDiningSessionTx(ctx context.Context, arg OpenDiningSessionTxParams) (OpenDiningSessionTxResult, error)
 	// Claim refund transactions（索赔退款）
 	ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParams) (ClaimRefundTxResult, error)
 	DeductRiderDepositAndRefundTx(ctx context.Context, arg DeductRiderDepositAndRefundTxParams) (DeductRiderDepositAndRefundTxResult, error)

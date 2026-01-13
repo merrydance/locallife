@@ -12,6 +12,54 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addReservationPrepaidAmount = `-- name: AddReservationPrepaidAmount :one
+UPDATE table_reservations
+SET prepaid_amount = prepaid_amount + $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
+`
+
+type AddReservationPrepaidAmountParams struct {
+	ID            int64 `json:"id"`
+	PrepaidAmount int64 `json:"prepaid_amount"`
+}
+
+// 追加菜品支付成功后累加预付金额
+func (q *Queries) AddReservationPrepaidAmount(ctx context.Context, arg AddReservationPrepaidAmountParams) (TableReservation, error) {
+	row := q.db.QueryRow(ctx, addReservationPrepaidAmount, arg.ID, arg.PrepaidAmount)
+	var i TableReservation
+	err := row.Scan(
+		&i.ID,
+		&i.TableID,
+		&i.UserID,
+		&i.MerchantID,
+		&i.ReservationDate,
+		&i.ReservationTime,
+		&i.GuestCount,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.PaymentMode,
+		&i.DepositAmount,
+		&i.PrepaidAmount,
+		&i.RefundDeadline,
+		&i.Status,
+		&i.PaymentDeadline,
+		&i.Notes,
+		&i.PaidAt,
+		&i.ConfirmedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CheckedInAt,
+		&i.CookingStartedAt,
+		&i.Source,
+	)
+	return i, err
+}
+
 const cancelMerchantFutureReservations = `-- name: CancelMerchantFutureReservations :execrows
 UPDATE table_reservations
 SET 

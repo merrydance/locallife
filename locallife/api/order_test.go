@@ -2371,8 +2371,20 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	merchant.Status = "active"
+	merchant.IsOpen = true
 	dish := randomDish(merchant.ID, nil)
 	dish.Price = 5000 // 设置为50元，5个就是250元，满足100元最低消费
+	table := randomTable(merchant.ID)
+	table.Status = "available"
+	session := db.DiningSession{
+		ID:         1,
+		MerchantID: merchant.ID,
+		TableID:    table.ID,
+		UserID:     user.ID,
+		Status:     "open",
+		OpenedAt:   time.Now(),
+		CreatedAt:  time.Now(),
+	}
 
 	// 创建用户优惠券（默认允许所有订单类型）
 	userVoucher := db.GetUserVoucherRow{
@@ -2795,7 +2807,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 			body: gin.H{
 				"merchant_id":     merchant.ID,
 				"order_type":      "dine_in", // 堂食订单
-				"table_id":        int64(1),
+				"table_id":        table.ID,
 				"user_voucher_id": userVoucher.ID,
 				"items": []gin.H{
 					{
@@ -2815,13 +2827,14 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 
 				// 堂食订单需要验证桌台
 				store.EXPECT().
-					GetTable(gomock.Any(), int64(1)).
+					GetTable(gomock.Any(), table.ID).
 					Times(1).
-					Return(db.Table{
-						ID:         1,
-						MerchantID: merchant.ID,
-						Status:     "available",
-					}, nil)
+					Return(table, nil)
+
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(session, nil)
 
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
@@ -2855,7 +2868,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 			body: gin.H{
 				"merchant_id":     merchant.ID,
 				"order_type":      "dine_in", // 堂食订单
-				"table_id":        int64(1),
+				"table_id":        table.ID,
 				"user_voucher_id": userVoucher.ID,
 				"items": []gin.H{
 					{
@@ -2892,13 +2905,14 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					Return(dineInVoucher, nil)
 
 				store.EXPECT().
-					GetTable(gomock.Any(), int64(1)).
+					GetTable(gomock.Any(), table.ID).
 					Times(1).
-					Return(db.Table{
-						ID:         1,
-						MerchantID: merchant.ID,
-						Status:     "available",
-					}, nil)
+					Return(table, nil)
+
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(session, nil)
 
 				store.EXPECT().
 					CreateOrderTx(gomock.Any(), gomock.Any()).
@@ -2920,6 +2934,21 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 							},
 						}, nil
 					})
+
+				store.EXPECT().
+					UpdateDiningSessionActiveOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(session, nil)
+
+				store.EXPECT().
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Cart{ID: util.RandomInt(1, 1000)}, nil)
+
+				store.EXPECT().
+					ClearCart(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2960,6 +2989,15 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 	merchant.Status = "active"
 	dish := randomDish(merchant.ID, nil)
 	table := randomTable(merchant.ID)
+	session := db.DiningSession{
+		ID:         1,
+		MerchantID: merchant.ID,
+		TableID:    table.ID,
+		UserID:     user.ID,
+		Status:     "open",
+		OpenedAt:   time.Now(),
+		CreatedAt:  time.Now(),
+	}
 
 	// 创建会员卡
 	membership := db.MerchantMembership{
@@ -3015,6 +3053,11 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(table, nil)
+
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(session, nil)
 
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
@@ -3153,6 +3196,11 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Return(table, nil)
 
 				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(session, nil)
+
+				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
@@ -3199,6 +3247,11 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(table, nil)
+
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(session, nil)
 
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
@@ -3256,6 +3309,11 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Return(table, nil)
 
 				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(session, nil)
+
+				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
@@ -3309,6 +3367,11 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(table, nil)
+
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(session, nil)
 
 				// 设置固定价格的菜品：200元/个，2个=400元
 				fixedPriceDish := dish
@@ -3399,6 +3462,15 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 	dish := randomDish(merchant.ID, nil)
 	dish.Price = 20000 // 200元
 	table := randomTable(merchant.ID)
+	session := db.DiningSession{
+		ID:         1,
+		MerchantID: merchant.ID,
+		TableID:    table.ID,
+		UserID:     user.ID,
+		Status:     "open",
+		OpenedAt:   time.Now(),
+		CreatedAt:  time.Now(),
+	}
 
 	// 创建用户优惠券（允许堂食）
 	userVoucher := db.GetUserVoucherRow{
@@ -3448,6 +3520,51 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 			GetTable(gomock.Any(), table.ID).
 			Times(1).
 			Return(table, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
+
+		store.EXPECT().
+			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			Times(1).
+			Return(session, nil)
 
 		store.EXPECT().
 			GetDish(gomock.Any(), dish.ID).

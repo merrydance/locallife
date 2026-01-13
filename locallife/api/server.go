@@ -545,6 +545,13 @@ func (server *Server) setupRouter() {
 		reservationsGroup.POST("/:id/no-show", server.markNoShow)
 	}
 
+	// 用餐会话
+	diningSessionsGroup := authGroup.Group("/dining-sessions")
+	{
+		diningSessionsGroup.GET("/precheck", server.precheckDiningSession)
+		diningSessionsGroup.POST("/open", server.openDiningSession)
+	}
+
 	// M7: 订单管理路由
 	ordersGroup := authGroup.Group("/orders")
 	{
@@ -554,6 +561,7 @@ func (server *Server) setupRouter() {
 		ordersGroup.GET("", server.listOrders)
 		ordersGroup.GET("/:id", server.getOrder)
 		ordersGroup.POST("/:id/cancel", server.cancelOrder)
+		ordersGroup.POST("/:id/replace", server.replaceOrder)
 		ordersGroup.POST("/:id/urge", server.urgeOrder)
 		ordersGroup.POST("/:id/confirm", server.confirmOrder)
 	}

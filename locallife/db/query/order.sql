@@ -14,13 +14,15 @@ INSERT INTO orders (
     delivery_fee_discount,
     total_amount,
     status,
+    fulfillment_status,
     notes,
     user_voucher_id,
     voucher_amount,
     balance_paid,
-    membership_id
+    membership_id,
+    replaced_by_order_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
 ) RETURNING *;
 
 -- name: GetOrder :one
@@ -109,12 +111,32 @@ WHERE merchant_id = $1;
 SELECT COUNT(*) FROM orders
 WHERE merchant_id = $1 AND status = $2;
 
+-- name: GetLatestOrderByReservation :one
+SELECT * FROM orders
+WHERE reservation_id = $1
+    AND replaced_by_order_id IS NULL
+ORDER BY created_at DESC
+LIMIT 1;
+
 -- name: UpdateOrderStatus :one
 UPDATE orders
 SET 
-    status = $2,
+    status = sqlc.arg('status'),
+    fulfillment_status = COALESCE(sqlc.narg('fulfillment_status'), fulfillment_status),
     updated_at = now()
-WHERE id = $1
+WHERE id = sqlc.arg('id')
+RETURNING *;
+
+-- name: MarkOrderReplaced :one
+UPDATE orders
+SET 
+    status = 'cancelled',
+    fulfillment_status = 'cancelled',
+    cancelled_at = now(),
+    cancel_reason = COALESCE(sqlc.narg('cancel_reason'), cancel_reason),
+    replaced_by_order_id = sqlc.arg('replaced_by_order_id'),
+    updated_at = now()
+WHERE id = sqlc.arg('id')
 RETURNING *;
 
 -- name: UpdateOrderToPaid :one
@@ -131,6 +153,7 @@ RETURNING *;
 UPDATE orders
 SET 
     status = 'completed',
+    fulfillment_status = 'completed',
     completed_at = now(),
     updated_at = now()
 WHERE id = $1
@@ -140,6 +163,7 @@ RETURNING *;
 UPDATE orders
 SET 
     status = 'cancelled',
+    fulfillment_status = 'cancelled',
     cancelled_at = now(),
     cancel_reason = $2,
     updated_at = now()
@@ -163,7 +187,7 @@ WHERE merchant_id = $1 AND created_at >= $2 AND created_at <= $3;
 -- name: ListMerchantOrdersByStatus :many
 -- 根据商户ID和状态查询订单（用于厨房显示）
 SELECT * FROM orders
-WHERE merchant_id = $1 AND status = $2
+WHERE merchant_id = $1 AND status = $2 AND replaced_by_order_id IS NULL
 ORDER BY created_at ASC
 LIMIT $3 OFFSET $4;
 
@@ -171,8 +195,9 @@ LIMIT $3 OFFSET $4;
 -- 统计商户在某时间后特定状态的订单数
 SELECT COUNT(*) FROM orders
 WHERE merchant_id = $1 
-  AND status = $2 
-  AND created_at >= $3;
+    AND status = $2 
+    AND created_at >= $3
+    AND replaced_by_order_id IS NULL;
 
 -- name: CountOrderUrges :one
 -- 统计订单被催单次数（从状态日志表查询催单记录）
