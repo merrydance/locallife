@@ -98,6 +98,9 @@ export interface CreateOrderRequest extends Record<string, unknown> {
   table_id?: number             // 桌台ID（堂食订单必填）
   use_balance?: boolean         // 是否使用会员余额支付
   user_voucher_id?: number      // 用户优惠券ID
+  delivery_fee?: number         // 前端计算的配送费（分）
+  delivery_fee_discount?: number// 前端计算的配送费优惠（分）
+  delivery_distance?: number    // 前端计算的配送距离（米）
 }
 
 /** 订单商品请求 - 对齐 api.orderItemRequest */

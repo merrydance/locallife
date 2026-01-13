@@ -42,6 +42,8 @@ Page({
     orderTotalDisplay: '0.00',
     deliveryFee: 0,
     deliveryFeeDisplay: '待计算',
+    deliveryFeeDiscount: 0,
+    deliveryDistance: 0,
     deliveryEtaMinutes: 0,
     deliveryEtaDisplay: ''
   },
@@ -259,6 +261,8 @@ Page({
       this.setData({
         deliveryFee: 0,
         deliveryFeeDisplay: '待选择地址',
+        deliveryFeeDiscount: 0,
+        deliveryDistance: 0,
         orderTotalDisplay: formatPriceNoSymbol(cart.totalPrice),
         deliveryEtaMinutes: 0,
         deliveryEtaDisplay: ''
@@ -276,6 +280,8 @@ Page({
       })
 
       const deliveryFee = result.delivery_fee || 0
+      const deliveryFeeDiscount = result.delivery_fee_discount || 0
+      const deliveryDistance = result.delivery_distance || 0
       const orderTotal = (cart.totalPrice || 0) + deliveryFee
       const deliveryEtaMinutes = result.delivery_eta_minutes || 0
       const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
@@ -283,6 +289,8 @@ Page({
       this.setData({
         deliveryFee,
         deliveryFeeDisplay: deliveryFee > 0 ? '¥' + formatPriceNoSymbol(deliveryFee) : '免配送费',
+        deliveryFeeDiscount,
+        deliveryDistance,
         orderTotalDisplay: formatPriceNoSymbol(orderTotal),
         deliveryEtaMinutes,
         deliveryEtaDisplay
@@ -351,7 +359,10 @@ Page({
         }),
         order_type: 'takeout',
         address_id: address.id,
-        notes: remark
+        notes: remark,
+        delivery_fee: this.data.deliveryFee,
+        delivery_fee_discount: this.data.deliveryFeeDiscount,
+        delivery_distance: this.data.deliveryDistance
       }
 
       const order = await createOrder(requestData)
