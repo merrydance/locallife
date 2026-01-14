@@ -20,32 +20,37 @@ interface CartItemView {
   subtotalDisplay: string
 }
 
-interface CartData {
-  items: CartItemView[]
+interface MerchantCartView {
   merchantId: number
   merchantName: string
+  orderType: string
+  tableId?: number
+  reservationId?: number
+  items: CartItemView[]
   totalCount: number
-  totalPrice: number
-  totalPriceDisplay: string
+  subtotal: number
+  subtotalDisplay: string
+  deliveryFee: number
+  deliveryFeeDisplay: string
+  deliveryFeeDiscount: number
+  deliveryDistance: number
+  deliveryEtaMinutes: number
+  deliveryEtaDisplay: string
+  orderTotal: number
+  orderTotalDisplay: string
 }
 
 Page({
   data: {
-    cart: null as CartData | null,
+    carts: [] as MerchantCartView[],
     cartIds: [] as number[],
     address: null as Address | null,
-    remark: '',
-    deliveryTime: 'ASAP',
-    scheduleSlot: '',
+    remarks: {} as Record<number, string>,
     navBarHeight: 88,
     loading: false,
     orderTotalDisplay: '0.00',
-    deliveryFee: 0,
-    deliveryFeeDisplay: '待计算',
-    deliveryFeeDiscount: 0,
-    deliveryDistance: 0,
-    deliveryEtaMinutes: 0,
-    deliveryEtaDisplay: ''
+    summarySubtotalDisplay: '0.00',
+    summaryDeliveryDisplay: '待计算'
   },
 
   onLoad(options: { cart_ids?: string }) {
@@ -100,64 +105,75 @@ Page({
         selectedCarts = [userCarts.carts[0]]
       }
 
-      // 目前只支持单商户结算
-      const merchantCart = selectedCarts[0]
-      const merchantId = merchantCart.merchant_id
-      const orderType = merchantCart.order_type || 'takeout'
+      // 逐商户拉取购物车详情
+      const cartViews: MerchantCartView[] = []
+      for (const merchantCart of selectedCarts) {
+        const merchantId = merchantCart.merchant_id
+        const orderType = merchantCart.order_type || 'takeout'
 
-      if (!merchantId) {
-        wx.showToast({ title: '商户信息缺失', icon: 'none' })
-        setTimeout(() => wx.navigateBack(), 1500)
-        return
+        if (!merchantId) {
+          wx.showToast({ title: '商户信息缺失', icon: 'none' })
+          setTimeout(() => wx.navigateBack(), 1500)
+          return
+        }
+
+        const cartDetail = await CartAPI.getCart({
+          merchant_id: merchantId,
+          order_type: orderType,
+          table_id: merchantCart.table_id || undefined,
+          reservation_id: merchantCart.reservation_id || undefined
+        })
+
+        if (!cartDetail.items || cartDetail.items.length === 0) {
+          continue
+        }
+
+        const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
+          id: item.id,
+          dishId: item.dish_id,
+          comboId: item.combo_id,
+          name: item.name,
+          imageUrl: getPublicImageUrl(item.image_url || ''),
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          priceDisplay: formatPriceNoSymbol(item.unit_price),
+          subtotal: item.subtotal,
+          subtotalDisplay: formatPriceNoSymbol(item.subtotal)
+        }))
+
+        const totalCount = items.reduce((sum, item) => sum + item.quantity, 0)
+        const subtotal = cartDetail.subtotal
+
+        cartViews.push({
+          merchantId,
+          merchantName: merchantCart.merchant_name || '商家',
+          orderType,
+          tableId: merchantCart.table_id || undefined,
+          reservationId: merchantCart.reservation_id || undefined,
+          items,
+          totalCount,
+          subtotal,
+          subtotalDisplay: formatPriceNoSymbol(subtotal),
+          deliveryFee: 0,
+          deliveryFeeDisplay: '待计算',
+          deliveryFeeDiscount: 0,
+          deliveryDistance: 0,
+          deliveryEtaMinutes: 0,
+          deliveryEtaDisplay: '',
+          orderTotal: subtotal,
+          orderTotalDisplay: formatPriceNoSymbol(subtotal)
+        })
       }
 
-      // Step 2: 获取购物车商品详情
-      const cartDetail = await CartAPI.getCart({
-        merchant_id: merchantId,
-        order_type: orderType,
-        table_id: merchantCart.table_id || undefined,
-        reservation_id: merchantCart.reservation_id || undefined
-      })
-
-      if (!cartDetail.items || cartDetail.items.length === 0) {
+      if (cartViews.length === 0) {
         wx.showToast({ title: '购物车为空', icon: 'none' })
         setTimeout(() => wx.navigateBack(), 1500)
         return
       }
 
-      // 转换为页面数据格式
-      const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
-        id: item.id,
-        dishId: item.dish_id,
-        comboId: item.combo_id,
-        name: item.name,
-        imageUrl: getPublicImageUrl(item.image_url || ''),
-        quantity: item.quantity,
-        unitPrice: item.unit_price,
-        priceDisplay: formatPriceNoSymbol(item.unit_price),
-        subtotal: item.subtotal,
-        subtotalDisplay: formatPriceNoSymbol(item.subtotal)
-      }))
+      this.setData({ carts: cartViews, loading: false })
 
-      const totalCount = items.reduce((sum, item) => sum + item.quantity, 0)
-      const totalPrice = cartDetail.subtotal
-
-      const cart: CartData = {
-        items,
-        merchantId,
-        merchantName: merchantCart.merchant_name || '商家',
-        totalCount,
-        totalPrice,
-        totalPriceDisplay: formatPriceNoSymbol(totalPrice)
-      }
-
-      // 计算订单总价（商品金额 + 配送费）
-      this.setData({
-        cart,
-        loading: false
-      })
-
-      // 根据地址计算配送费
+      // 根据地址计算每个商户配送费
       await this.calculateDeliveryFee()
     } catch (error) {
       logger.error('Load cart failed', error, 'Order-confirm')
@@ -197,17 +213,13 @@ Page({
   },
 
   onRemarkInput(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ remark: e.detail.value })
+    const merchantId = Number((e.currentTarget as any).dataset?.merchantId)
+    if (!merchantId) return
+    const remarks = { ...this.data.remarks, [merchantId]: e.detail.value }
+    this.setData({ remarks })
   },
 
-  onDeliveryTimeChange(e: WechatMiniprogram.CustomEvent) {
-    const value = e.detail.value as 'ASAP' | 'SCHEDULED'
-    if (value === 'SCHEDULED') {
-      this.chooseScheduleSlot()
-    } else {
-      this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' })
-    }
-  },
+  onDeliveryTimeChange() {},
 
   /**
    * 选择预约时间（仅当天，默认营业时段 10:00-22:00，30 分钟粒度）
@@ -254,46 +266,58 @@ Page({
    * 计算配送费并更新应付总额
    */
   async calculateDeliveryFee() {
-    const { cart, address } = this.data
-    if (!cart || !cart.merchantId) return
+    const { carts, address } = this.data
+    if (!carts || carts.length === 0) return
 
     if (!address) {
       this.setData({
-        deliveryFee: 0,
-        deliveryFeeDisplay: '待选择地址',
-        deliveryFeeDiscount: 0,
-        deliveryDistance: 0,
-        orderTotalDisplay: formatPriceNoSymbol(cart.totalPrice),
-        deliveryEtaMinutes: 0,
-        deliveryEtaDisplay: ''
+        summaryDeliveryDisplay: '待选择地址',
+        orderTotalDisplay: formatPriceNoSymbol(carts.reduce((s, c) => s + (c.subtotal || 0), 0))
       })
       return
     }
 
     try {
-      const result = await CartAPI.calculateCart({
-        merchant_id: cart.merchantId,
-        order_type: 'takeout',
-        address_id: address.id,
-        latitude: address.latitude ? Number(address.latitude) : undefined,
-        longitude: address.longitude ? Number(address.longitude) : undefined
-      })
+      const updated = [] as MerchantCartView[]
 
-      const deliveryFee = result.delivery_fee || 0
-      const deliveryFeeDiscount = result.delivery_fee_discount || 0
-      const deliveryDistance = result.delivery_distance || 0
-      const orderTotal = (cart.totalPrice || 0) + deliveryFee
-      const deliveryEtaMinutes = result.delivery_eta_minutes || 0
-      const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
+      for (const cart of carts) {
+        const result = await CartAPI.calculateCart({
+          merchant_id: cart.merchantId,
+          order_type: cart.orderType,
+          address_id: address.id,
+          latitude: address.latitude ? Number(address.latitude) : undefined,
+          longitude: address.longitude ? Number(address.longitude) : undefined
+        })
+
+        const deliveryFee = result.delivery_fee || 0
+        const deliveryFeeDiscount = result.delivery_fee_discount || 0
+        const deliveryDistance = result.delivery_distance || 0
+        const orderTotal = (cart.subtotal || 0) + deliveryFee
+        const deliveryEtaMinutes = result.delivery_eta_minutes || 0
+        const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
+
+        updated.push({
+          ...cart,
+          deliveryFee,
+          deliveryFeeDisplay: deliveryFee > 0 ? '¥' + formatPriceNoSymbol(deliveryFee) : '免配送费',
+          deliveryFeeDiscount,
+          deliveryDistance,
+          orderTotal,
+          orderTotalDisplay: formatPriceNoSymbol(orderTotal),
+          deliveryEtaMinutes,
+          deliveryEtaDisplay
+        })
+      }
+
+      const summarySubtotal = updated.reduce((sum, c) => sum + (c.subtotal || 0), 0)
+      const summaryDelivery = updated.reduce((sum, c) => sum + (c.deliveryFee || 0), 0)
+      const orderTotal = summarySubtotal + summaryDelivery
 
       this.setData({
-        deliveryFee,
-        deliveryFeeDisplay: deliveryFee > 0 ? '¥' + formatPriceNoSymbol(deliveryFee) : '免配送费',
-        deliveryFeeDiscount,
-        deliveryDistance,
-        orderTotalDisplay: formatPriceNoSymbol(orderTotal),
-        deliveryEtaMinutes,
-        deliveryEtaDisplay
+        carts: updated,
+        summarySubtotalDisplay: formatPriceNoSymbol(summarySubtotal),
+        summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + formatPriceNoSymbol(summaryDelivery) : '免配送费',
+        orderTotalDisplay: formatPriceNoSymbol(orderTotal)
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
@@ -322,116 +346,115 @@ Page({
   },
 
   async onSubmitOrder() {
-    const { cart, address, remark } = this.data
+    const { carts, address, remarks } = this.data
 
     if (!address || !address.id) {
       wx.showToast({ title: '请选择收货地址', icon: 'none' })
       return
     }
 
-    if (!cart || cart.totalCount === 0) {
+    if (!carts || carts.length === 0) {
       wx.showToast({ title: '购物车为空', icon: 'none' })
-      return
-    }
-
-    if (!cart.merchantId) {
-      wx.showToast({ title: '商户信息丢失', icon: 'none' })
       return
     }
 
     this.setData({ loading: true })
 
     try {
-      // Step 1: 创建订单
-      const requestData: CreateOrderRequest = {
-        merchant_id: cart.merchantId,
-        items: cart.items.map((item) => {
-          const orderItem: { dish_id?: number; combo_id?: number; quantity: number } = {
-            quantity: item.quantity
-          }
-          if (item.dishId) {
-            orderItem.dish_id = item.dishId
-          }
-          if (item.comboId) {
-            orderItem.combo_id = item.comboId
-          }
-          return orderItem
-        }),
-        order_type: 'takeout',
-        address_id: address.id,
-        notes: remark,
-        delivery_fee: this.data.deliveryFee,
-        delivery_fee_discount: this.data.deliveryFeeDiscount,
-        delivery_distance: this.data.deliveryDistance
-      }
+      const ordersCreated: number[] = []
 
-      const order = await createOrder(requestData)
-      console.log('[Order-confirm] Order created:', order.id)
-
-      // 订单已创建，移除本次结算的商品（仅限当前 cart.items）避免重复结算
-      const cartItemIds = cart.items.map((item) => item.id).filter(Boolean)
-      if (cartItemIds.length > 0) {
-        try {
-          await Promise.all(cartItemIds.map((id) => CartAPI.removeFromCart(id)))
-        } catch (clearErr) {
-          logger.error('Remove cart items after order failed', clearErr, 'Order-confirm')
-          showDebugModal('清理购物车失败（已创建订单）', clearErr)
-        }
-      }
-
-      // Step 2: 创建支付订单
-      try {
-        // 调用后端 /v1/payments API (对应 createPaymentOrder)
-        const paymentResult = await request({
-          url: '/v1/payments',
-          method: 'POST',
-          data: {
-            order_id: order.id,
-            payment_type: 'miniprogram',  // 小程序支付
-            business_type: 'order'         // 订单支付
-          }
-        }) as { pay_params?: { timeStamp: string; nonceStr: string; package: string; signType: string; paySign: string } }
-
-        console.log('[Order-confirm] Payment created:', paymentResult)
-
-        // Step 3: 检查是否返回了支付参数 (后端返回 pay_params)
-        if (paymentResult.pay_params) {
-          // 调用微信支付
-          const params = paymentResult.pay_params
-          wx.requestPayment({
-            timeStamp: params.timeStamp,
-            nonceStr: params.nonceStr,
-            package: params.package,
-            signType: (params.signType || 'RSA') as 'RSA' | 'MD5' | 'HMAC-SHA256',
-            paySign: params.paySign,
-            success: () => {
-              wx.showToast({ title: '支付成功', icon: 'success' })
-              setTimeout(() => {
-                wx.redirectTo({ url: `/pages/orders/detail/index?id=${order.id}` })
-              }, 1500)
-            },
-            fail: (err) => {
-              console.log('[Order-confirm] Payment cancelled or failed:', err)
-              wx.showToast({ title: '支付取消', icon: 'none' })
-              // 支付取消/失败，跳转到订单详情（状态为待支付）
-              setTimeout(() => {
-                wx.redirectTo({ url: `/pages/orders/detail/index?id=${order.id}` })
-              }, 1500)
+      for (const cart of carts) {
+        const requestData: CreateOrderRequest = {
+          merchant_id: cart.merchantId,
+          items: cart.items.map((item) => {
+            const orderItem: { dish_id?: number; combo_id?: number; quantity: number } = {
+              quantity: item.quantity
             }
-          })
-        } else {
-          // 支付参数未返回（可能是后端未配置微信支付）
-          this.showPaymentDevModal(order.id)
+            if (item.dishId) orderItem.dish_id = item.dishId
+            if (item.comboId) orderItem.combo_id = item.comboId
+            return orderItem
+          }),
+          order_type: cart.orderType as any,
+          address_id: address.id,
+          notes: remarks[cart.merchantId] || '',
+          delivery_fee: cart.deliveryFee,
+          delivery_fee_discount: cart.deliveryFeeDiscount,
+          delivery_distance: cart.deliveryDistance
         }
-      } catch (paymentError) {
-        console.error('[Order-confirm] Payment creation failed:', paymentError)
-        // 支付订单创建失败，提示开发中
-        this.showPaymentDevModal(order.id)
+
+        const order = await createOrder(requestData)
+        ordersCreated.push(order.id)
+
+        // 清理当前商户购物车项
+        const cartItemIds = cart.items.map((item) => item.id).filter(Boolean)
+        if (cartItemIds.length > 0) {
+          try {
+            await Promise.all(cartItemIds.map((id) => CartAPI.removeFromCart(id)))
+          } catch (clearErr) {
+            logger.error('Remove cart items after order failed', clearErr, 'Order-confirm')
+            showDebugModal('清理购物车失败（已创建订单）', clearErr)
+          }
+        }
+      }
+
+      if (ordersCreated.length === 1) {
+        await this.handlePayment(ordersCreated[0])
+      } else {
+        this.setData({ loading: false })
+        wx.showModal({
+          title: '订单已创建',
+          content: `已创建 ${ordersCreated.length} 个订单，当前不支持合单支付，请在订单列表逐单支付。`,
+          showCancel: false,
+          success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
+        })
       }
     } catch (error) {
       logger.error('Create order failed:', error, 'Order-confirm')
       wx.showToast({ title: '下单失败', icon: 'error' })
       this.setData({ loading: false })
+    }
+  },
+
+  async handlePayment(orderId: number) {
+    try {
+      const paymentResult = await request({
+        url: '/v1/payments',
+        method: 'POST',
+        data: {
+          order_id: orderId,
+          payment_type: 'miniprogram',
+          business_type: 'order'
+        }
+      }) as { pay_params?: { timeStamp: string; nonceStr: string; package: string; signType: string; paySign: string } }
+
+      if (paymentResult.pay_params) {
+        const params = paymentResult.pay_params
+        wx.requestPayment({
+          timeStamp: params.timeStamp,
+          nonceStr: params.nonceStr,
+          package: params.package,
+          signType: (params.signType || 'RSA') as 'RSA' | 'MD5' | 'HMAC-SHA256',
+          paySign: params.paySign,
+          success: () => {
+            wx.showToast({ title: '支付成功', icon: 'success' })
+            setTimeout(() => {
+              wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+            }, 1500)
+          },
+          fail: (err) => {
+            console.log('[Order-confirm] Payment cancelled or failed:', err)
+            wx.showToast({ title: '支付取消', icon: 'none' })
+            setTimeout(() => {
+              wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+            }, 1500)
+          }
+        })
+      } else {
+        this.showPaymentDevModal(orderId)
+      }
+    } catch (paymentError) {
+      console.error('[Order-confirm] Payment creation failed:', paymentError)
+      this.showPaymentDevModal(orderId)
     }
   },
 

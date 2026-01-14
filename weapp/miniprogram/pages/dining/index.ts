@@ -1,4 +1,5 @@
-import { getCurrentDiningSession, openDiningSession, createDiningOrder, DiningSessionDTO } from '../../api/reservation'
+import { precheckDiningSession, openDiningSession, DiningSessionDTO } from '../../api/reservation'
+import { createDiningOrder } from '../../api/dining-session'
 import { getMerchantDishes, DishDTO } from '../../api/merchant'
 import CartService from '../../services/cart'
 import { logger } from '../../utils/logger'
@@ -11,6 +12,7 @@ Page({
         tableId: '',
         merchantId: '',
         session: null as DiningSessionDTO | null,
+        reservationId: undefined as number | undefined,
         dishes: [] as any[],
         categories: [] as any[],
         activeCategoryId: 'all',
@@ -58,36 +60,18 @@ Page({
     },
 
     async checkAndOpenSession() {
-        try {
-            const session = await getCurrentDiningSession(this.data.tableId)
-            this.setData({ session })
-        } catch (error) {
-            // Session likely doesn't exist, try to open
-            // Ask for person count
-            return new Promise((resolve, reject) => {
-                wx.showModal({
-                    title: '开台',
-                    content: '请输入用餐人数',
-                    editable: true,
-                    placeholderText: '1',
-                    success: async (res) => {
-                        if (res.confirm) {
-                            const person = parseInt(res.content || '1')
-                            try {
-                                const session = await openDiningSession(this.data.tableId, person)
-                                this.setData({ session })
-                                resolve(session)
-                            } catch (err) {
-                                reject(err)
-                            }
-                        } else {
-                            wx.navigateBack()
-                            reject(new Error('User cancelled'))
-                        }
-                    }
-                })
-            })
-        }
+        // 先做预检，判断是否存在属于当前用户的预订
+        const precheck = await precheckDiningSession(Number(this.data.tableId))
+        const reservationId = precheck.reserved && precheck.is_reservation_owner ? precheck.reservation_id : undefined
+        this.setData({ reservationId })
+
+        const result = await openDiningSession({
+            table_id: Number(this.data.tableId),
+            reservation_id: reservationId
+        })
+
+        this.setData({ session: result.session })
+        return result.session
     },
 
     async loadMenu() {
@@ -184,10 +168,16 @@ Page({
                         const items = cart.items.map((i) => ({
                             dish_id: i.dishId,
                             quantity: i.quantity,
-                            extra_options: []
+                            customizations: []
                         }))
 
-                        await createDiningOrder(session.id, { items })
+                        await createDiningOrder({
+                            merchant_id: Number(this.data.merchantId),
+                            table_id: Number(this.data.tableId),
+                            reservation_id: this.data.reservationId,
+                            items,
+                            order_type: 'dine_in'
+                        })
 
                         wx.showToast({ title: '下单成功', icon: 'success' })
                         CartService.clear()

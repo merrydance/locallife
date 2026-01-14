@@ -18,64 +18,90 @@
     <text class="address-arrow">›</text>
   </view>
 
-  <!-- 配送时间 -->
-  <view class="delivery-section">
-    <view class="section-title">配送时间</view>
-    <radio-group bindchange="onDeliveryTimeChange">
-      <label class="delivery-item">
-        <radio value="ASAP" checked="{{deliveryTime === 'ASAP'}}" />
-        <text class="delivery-text">尽快送达</text>
-      </label>
-      <label class="delivery-item">
-        <radio value="SCHEDULED" checked="{{deliveryTime === 'SCHEDULED'}}" />
-        <view class="delivery-text-row">
-          <text class="delivery-text">预约送达</text>
-          <text class="delivery-note" wx:if="{{deliveryTime === 'SCHEDULED'}}">{{scheduleSlot || '请选择时间'}}</text>
+  <!-- 商户列表 -->
+  <block wx:for="{{carts}}" wx:key="merchantId">
+    <view class="merchant-card">
+      <view class="merchant-header">
+        <text class="merchant-name">{{item.merchantName}}</text>
+        <text class="merchant-count">共{{item.totalCount}}件</text>
+      </view>
+
+      <!-- 配送时间（按商户） -->
+      <view class="delivery-section">
+        <view class="section-title">预计送达时间</view>
+        <view class="eta-row" wx:if="{{item.deliveryEtaDisplay}}">
+          <text class="eta-label">预计送达</text>
+          <view class="eta-values">
+            <text class="eta-window">{{item.deliveryEtaDisplay}}</text>
+            <text class="eta-note" wx:if="{{item.deliveryEtaMinutes}}">约{{item.deliveryEtaMinutes}}分钟</text>
+          </view>
         </view>
-      </label>
-    </radio-group>
-    <view wx:if="{{deliveryEtaDisplay}}" class="eta-row">
-      <text class="eta-label">预计送达</text>
-      <view class="eta-values">
-        <text class="eta-window">{{deliveryEtaDisplay}}</text>
-        <text class="eta-note" wx:if="{{deliveryEtaMinutes}}">约{{deliveryEtaMinutes}}分钟</text>
+        <view class="eta-row" wx:else>
+          <text class="eta-label">预计送达</text>
+          <text class="eta-window">计算中...</text>
+        </view>
+      </view>
+
+      <!-- 商品列表 -->
+      <view class="items-section">
+        <view class="section-title">商品清单</view>
+        <block wx:for="{{item.items}}" wx:key="id" wx:for-item="cartItem">
+          <view class="item-row">
+            <t-image class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" />
+            <view class="item-info">
+              <text class="item-name">{{cartItem.name}}</text>
+            </view>
+            <text class="item-quantity">×{{cartItem.quantity}}</text>
+            <text class="item-price">¥{{cartItem.priceDisplay}}</text>
+          </view>
+        </block>
+        <view class="merchant-subtotal">
+          <text>小计：¥{{item.subtotalDisplay}}</text>
+          <text class="merchant-delivery">配送费：{{item.deliveryFeeDisplay}}</text>
+        </view>
+      </view>
+
+      <!-- 备注（按商户） -->
+      <view class="remark-section">
+        <view class="section-title">订单备注</view>
+        <textarea 
+          class="remark-input" 
+          placeholder="如：请提前电话联系、放门口等" 
+          maxlength="100"
+          data-merchant-id="{{item.merchantId}}"
+          value="{{remarks[item.merchantId] || ''}}"
+          bindinput="onRemarkInput"
+        />
+      </view>
+
+      <!-- 费用明细（按商户） -->
+      <view class="cost-section">
+        <view class="cost-row">
+          <text class="cost-label">商品金额</text>
+          <text class="cost-value">{{item.subtotalDisplay}}</text>
+        </view>
+        <view class="cost-row">
+          <text class="cost-label">配送费</text>
+          <text class="cost-value">{{item.deliveryFeeDisplay}}</text>
+        </view>
+        <view class="cost-row total">
+          <text class="cost-label">商家合计</text>
+          <text class="cost-value">¥{{item.orderTotalDisplay}}</text>
+        </view>
       </view>
     </view>
-  </view>
+  </block>
 
-  <!-- 商品列表 -->
-  <view class="items-section">
-    <view class="section-title">商品清单</view>
-    <view wx:for="{{cart.items}}" wx:key="id" class="item-row">
-      <t-image class="item-image" src="{{item.imageUrl}}" mode="aspectFill" />
-      <view class="item-info">
-        <text class="item-name">{{item.name}}</text>
-      </view>
-      <text class="item-quantity">×{{item.quantity}}</text>
-      <text class="item-price">¥{{item.priceDisplay}}</text>
-    </view>
-  </view>
-
-  <!-- 备注 -->
-  <view class="remark-section">
-    <view class="section-title">订单备注</view>
-    <textarea 
-      class="remark-input" 
-      placeholder="如：请提前电话联系、放门口等" 
-      maxlength="100"
-      bindinput="onRemarkInput"
-    />
-  </view>
-
-  <!-- 费用明细 -->
-  <view class="cost-section">
+  <!-- 汇总 -->
+  <view class="cost-section summary">
+    <view class="section-title">总计</view>
     <view class="cost-row">
       <text class="cost-label">商品金额</text>
-      <text class="cost-value">{{cart.totalPriceDisplay}}</text>
+      <text class="cost-value">{{summarySubtotalDisplay}}</text>
     </view>
     <view class="cost-row">
       <text class="cost-label">配送费</text>
-      <text class="cost-value">{{deliveryFeeDisplay}}</text>
+      <text class="cost-value">{{summaryDeliveryDisplay}}</text>
     </view>
     <view class="cost-row total">
       <text class="cost-label">实付金额</text>

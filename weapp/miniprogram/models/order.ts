@@ -1,4 +1,4 @@
-import type { OrderStatus, OrderType } from '../api/order'
+import type { OrderStatus, OrderType, FulfillmentStatus } from '../api/order'
 
 /**
  * 订单视图模型 - 用于UI展示
@@ -14,6 +14,7 @@ export interface Order {
     status: OrderStatus           // 使用API层的枚举类型
     statusText: string            // ViewModel: 待支付/已支付等
     statusColor: string           // ViewModel: 状态颜色
+    fulfillmentStatus?: FulfillmentStatus // 履约状态
     totalAmount: number           // 订单总金额（分）
     totalAmountDisplay: string    // ViewModel: ¥xx.xx
     itemCount: number
@@ -62,6 +63,8 @@ export interface OrderDetail extends Order {
     expectDeliverTime?: string    // 展示用的送达时间段
     tableId?: number              // 堂食/预订 桌台ID
     reservationId?: number        // 预订ID
+    replacedByOrderId?: number    // 被替换的新订单ID
+    fulfillmentStatus?: FulfillmentStatus
     reservationDate?: string
     reservationTime?: string
     guestCount?: number

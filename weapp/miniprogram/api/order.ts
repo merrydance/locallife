@@ -7,7 +7,7 @@ import { request } from '../utils/request'
 
 // ==================== 数据类型定义 ====================
 
-/** 订单状态枚举 */
+/** 订单状态枚举（业务状态） */
 export type OrderStatus =
   | 'pending'     // 待支付
   | 'paid'        // 已支付
@@ -16,6 +16,15 @@ export type OrderStatus =
   | 'delivering'  // 配送中
   | 'completed'   // 已完成
   | 'cancelled'   // 已取消
+
+/** 履约状态枚举（厨房/出餐流转） */
+export type FulfillmentStatus =
+  | 'scheduled'
+  | 'pending_kitchen'
+  | 'preparing'
+  | 'ready'
+  | 'completed'
+  | 'cancelled'
 
 /** 订单类型枚举 */
 export type OrderType =
@@ -53,6 +62,7 @@ export interface OrderResponse {
   merchant_name: string
   merchant_phone?: string          // 商户电话
   status: OrderStatus
+  fulfillment_status?: FulfillmentStatus
   order_type: OrderType
   payment_method?: 'wechat' | 'balance'
   items: OrderItemResponse[]
@@ -80,6 +90,7 @@ export interface OrderResponse {
   table_id?: number
   // 预定相关
   reservation_id?: number
+  replaced_by_order_id?: number
 }
 
 /** 计算后的应付金额（便捷属性，total_amount - discount_amount） */
@@ -118,6 +129,7 @@ export interface ListOrdersParams extends Record<string, unknown> {
   status?: OrderStatus
   order_type?: OrderType
   reservation_id?: number
+  fulfillment_status?: FulfillmentStatus
 }
 
 /** 订单计算参数 */
@@ -174,6 +186,9 @@ export interface CancelOrderRequest extends Record<string, unknown> {
 export interface UrgeOrderRequest extends Record<string, unknown> {
   message?: string
 }
+
+/** 替换订单请求体（后端保持向前兼容，使用 Record 以适配变更） */
+export type ReplaceOrderRequest = Record<string, unknown>
 
 /** 拒单请求体 - 对齐 api.rejectOrderBody */
 export interface RejectOrderBody extends Record<string, unknown> {
@@ -280,6 +295,17 @@ export async function urgeOrder(orderId: number, urgeData: UrgeOrderRequest = {}
     url: `/v1/orders/${orderId}/urge`,
     method: 'POST',
     data: urgeData
+  })
+}
+
+/**
+ * 替换订单（生成新订单，旧订单标记为已被替换）
+ */
+export async function replaceOrder(orderId: number, data: ReplaceOrderRequest = {}): Promise<OrderResponse> {
+  return request({
+    url: `/v1/orders/${orderId}/replace`,
+    method: 'POST',
+    data
   })
 }
 

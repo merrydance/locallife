@@ -14,16 +14,17 @@ INSERT INTO user_addresses (
 
 -- name: GetUserAddress :one
 SELECT * FROM user_addresses
-WHERE id = $1 LIMIT 1;
+WHERE id = $1 AND deleted_at IS NULL
+LIMIT 1;
 
 -- name: ListUserAddresses :many
 SELECT * FROM user_addresses
-WHERE user_id = $1
+WHERE user_id = $1 AND deleted_at IS NULL
 ORDER BY is_default DESC, created_at DESC;
 
 -- name: GetUserDefaultAddress :one
 SELECT * FROM user_addresses
-WHERE user_id = $1 AND is_default = true
+WHERE user_id = $1 AND is_default = true AND deleted_at IS NULL
 LIMIT 1;
 
 -- name: UpdateUserAddress :one
@@ -53,9 +54,10 @@ WHERE id = $1 AND user_id = $2
 RETURNING *;
 
 -- name: DeleteUserAddress :exec
-DELETE FROM user_addresses
-WHERE id = $1 AND user_id = $2;
+UPDATE user_addresses
+SET deleted_at = now(), is_default = false
+WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
 
 -- name: CountUserAddresses :one
 SELECT COUNT(*) FROM user_addresses
-WHERE user_id = $1;
+WHERE user_id = $1 AND deleted_at IS NULL;

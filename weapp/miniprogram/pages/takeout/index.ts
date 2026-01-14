@@ -339,10 +339,12 @@ Page({
 
     try {
       const tags = await getTags(tagType)
+      const tagList = tags.map(tag => ({ id: String(tag.id), name: tag.name }))
+
       // 添加"全部"选项作为第一个
       const categories: Category[] = [
         { id: '', name: '全部' },
-        ...tags.map(tag => ({ id: String(tag.id), name: tag.name }))
+        ...tagList
       ]
       this.setData({
         categories,

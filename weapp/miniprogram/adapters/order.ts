@@ -26,6 +26,15 @@ const ORDER_STATUS_MAP: Record<string, { text: string; color: string }> = {
   'cancelled': { text: '已取消', color: '#999999' }
 }
 
+const FULFILLMENT_STATUS_TEXT: Record<string, string> = {
+  'scheduled': '已预约',
+  'pending_kitchen': '待出餐',
+  'preparing': '制作中',
+  'ready': '待取/待配送',
+  'completed': '已完成',
+  'cancelled': '已取消'
+}
+
 export class OrderAdapter {
   /**
    * 将API响应转换为列表视图模型
@@ -43,6 +52,7 @@ export class OrderAdapter {
       status: dto.status,
       statusText: statusInfo.text,
       statusColor: statusInfo.color,
+      fulfillmentStatus: dto.fulfillment_status,
       totalAmount: dto.total_amount,
       totalAmountDisplay: `¥${(dto.total_amount / 100).toFixed(2)}`,
       itemCount: dto.items ? dto.items.reduce((sum, item) => sum + item.quantity, 0) : 0,
@@ -97,7 +107,13 @@ export class OrderAdapter {
       deliveryEtaMinutes: dto.delivery_eta_minutes,
       expectDeliverTime,
       tableId: dto.table_id,
-      reservationId: dto.reservation_id
+      reservationId: dto.reservation_id,
+      replacedByOrderId: dto.replaced_by_order_id,
+      fulfillmentStatus: dto.fulfillment_status,
+      timeline: dto.fulfillment_status ? [{
+        time: dto.updated_at || dto.created_at,
+        title: FULFILLMENT_STATUS_TEXT[dto.fulfillment_status] || dto.fulfillment_status
+      }] : undefined
     }
   }
 }

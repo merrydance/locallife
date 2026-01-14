@@ -1330,16 +1330,17 @@ type User struct {
 }
 
 type UserAddress struct {
-	ID            int64          `json:"id"`
-	UserID        int64          `json:"user_id"`
-	RegionID      int64          `json:"region_id"`
-	DetailAddress string         `json:"detail_address"`
-	ContactName   string         `json:"contact_name"`
-	ContactPhone  string         `json:"contact_phone"`
-	Longitude     pgtype.Numeric `json:"longitude"`
-	Latitude      pgtype.Numeric `json:"latitude"`
-	IsDefault     bool           `json:"is_default"`
-	CreatedAt     time.Time      `json:"created_at"`
+	ID            int64              `json:"id"`
+	UserID        int64              `json:"user_id"`
+	RegionID      int64              `json:"region_id"`
+	DetailAddress string             `json:"detail_address"`
+	ContactName   string             `json:"contact_name"`
+	ContactPhone  string             `json:"contact_phone"`
+	Longitude     pgtype.Numeric     `json:"longitude"`
+	Latitude      pgtype.Numeric     `json:"latitude"`
+	IsDefault     bool               `json:"is_default"`
+	CreatedAt     time.Time          `json:"created_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
 }
 
 // 用户余额账户

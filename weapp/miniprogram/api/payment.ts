@@ -22,8 +22,9 @@ export type PaymentType =
 
 /** 业务类型枚举 */
 export type BusinessType =
-    | 'order'       // 订单支付
-    | 'reservation' // 预定押金
+    | 'order'             // 订单支付
+    | 'reservation'       // 预定押金/全款
+    | 'reservation_addon' // 预订追加菜品支付
 
 /** 小程序支付参数 */
 export interface MiniProgramPayParams {

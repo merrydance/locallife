@@ -21,6 +21,33 @@ export type ReservationStatus =
   | 'expired'     // 已过期
   | 'no_show'     // 未到店
 
+// 用餐会话 DTO（与 /v1/dining-sessions 接口对齐）
+export interface DiningSessionDTO {
+  id: number
+  merchant_id: number
+  table_id: number
+  reservation_id?: number
+  user_id: number
+  active_order_id?: number
+  status: 'open' | 'closed'
+  opened_at: string
+  closed_at?: string
+  created_at: string
+  updated_at?: string
+}
+
+export interface DiningSessionPrecheckResponse {
+  table_id: number
+  reserved: boolean
+  reservation_id?: number
+  is_reservation_owner: boolean
+  payment_mode?: string
+  paid_amount?: number
+  order_id?: number
+  order_status?: string
+  order_fulfillment_status?: string
+}
+
 /**
  * 支付模式
  */
@@ -238,6 +265,32 @@ export class ReservationService {
     })
   }
 
+  // ==================== 用餐会话接口（堂食/预订到店） ====================
+
+  /**
+   * 桌台预检：是否被预订、预订归属、最近订单
+   * GET /v1/dining-sessions/precheck
+   */
+  static async precheckDiningSession(tableId: number): Promise<DiningSessionPrecheckResponse> {
+    return await request({
+      url: '/v1/dining-sessions/precheck',
+      method: 'GET',
+      data: { table_id: tableId }
+    })
+  }
+
+  /**
+   * 开启用餐会话（已存在开放会话时后端直接返回）
+   * POST /v1/dining-sessions/open
+   */
+  static async openDiningSession(params: { table_id: number; reservation_id?: number }): Promise<{ session: DiningSessionDTO; cart_id?: number; imported_items: number }> {
+    return await request({
+      url: '/v1/dining-sessions/open',
+      method: 'POST',
+      data: params
+    })
+  }
+
   // ==================== 商户端接口 ====================
 
   /**
@@ -342,6 +395,8 @@ export const cancelReservation = ReservationService.cancelReservation
 export const addDishesToReservation = ReservationService.addDishes
 export const checkInReservation = ReservationService.checkIn
 export const startCookingReservation = ReservationService.startCooking
+export const precheckDiningSession = ReservationService.precheckDiningSession
+export const openDiningSession = ReservationService.openDiningSession
 
 // 商户端
 export const getMerchantReservations = ReservationService.getMerchantReservations
