@@ -258,6 +258,8 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   -- 按最低消费筛选
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   -- 排除已在指定日期时段被预定的包间
@@ -302,6 +304,10 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
+  -- 按最低消费上限筛选
+  AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
@@ -324,6 +330,7 @@ WHERE t.table_type = 'room'
   AND (sqlc.narg(region_id)::BIGINT IS NULL OR m.region_id = sqlc.narg(region_id))
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
@@ -372,6 +379,8 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   -- 按最低消费筛选
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
 ORDER BY monthly_reservations DESC, t.capacity
@@ -419,6 +428,8 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
+  -- 按最低消费下限筛选
+  AND (sqlc.narg(min_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= sqlc.narg(min_minimum_spend))
   -- 按最低消费筛选
   AND (sqlc.narg(max_minimum_spend)::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= sqlc.narg(max_minimum_spend))
   -- 排除已在指定日期时段被预定的包间

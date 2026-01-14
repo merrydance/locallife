@@ -133,12 +133,13 @@ WHERE t.table_type = 'room'
   AND ($1::BIGINT IS NULL OR m.region_id = $1)
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $6::DATE
+      AND tr.reservation_time = $7::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 `
@@ -147,6 +148,7 @@ type CountSearchRoomsParams struct {
 	RegionID        pgtype.Int8 `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
@@ -158,6 +160,7 @@ func (q *Queries) CountSearchRooms(ctx context.Context, arg CountSearchRoomsPara
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,
@@ -299,17 +302,20 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
+  -- 按最低消费下限筛选
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
   -- 按最低消费筛选
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
 ORDER BY monthly_reservations DESC, t.capacity
-LIMIT $6
-OFFSET $5
+LIMIT $7
+OFFSET $6
 `
 
 type ExploreNearbyRoomsParams struct {
 	RegionID        pgtype.Int8 `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	PageOffset      int32       `json:"page_offset"`
 	PageSize        int32       `json:"page_size"`
@@ -342,6 +348,7 @@ func (q *Queries) ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRooms
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.PageOffset,
 		arg.PageSize,
@@ -986,25 +993,28 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
+  -- 按最低消费下限筛选
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
   -- 按最低消费筛选
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $6::DATE
+      AND tr.reservation_time = $7::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 ORDER BY t.capacity, t.minimum_spend NULLS FIRST
-LIMIT $8
-OFFSET $7
+LIMIT $9
+OFFSET $8
 `
 
 type SearchRoomsParams struct {
 	RegionID        pgtype.Int8 `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
@@ -1038,6 +1048,7 @@ func (q *Queries) SearchRooms(ctx context.Context, arg SearchRoomsParams) ([]Sea
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,
@@ -1107,17 +1118,21 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND ($3::SMALLINT IS NULL OR t.capacity >= $3)
   AND ($4::SMALLINT IS NULL OR t.capacity <= $4)
+  -- 按最低消费下限筛选
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $5)
+  -- 按最低消费上限筛选
+  AND ($6::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $6)
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $7::DATE
+      AND tr.reservation_time = $8::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 ORDER BY t.capacity, t.minimum_spend NULLS FIRST
-LIMIT $8
-OFFSET $7
+LIMIT $10
+OFFSET $9
 `
 
 type SearchRoomsByMerchantTagParams struct {
@@ -1125,6 +1140,8 @@ type SearchRoomsByMerchantTagParams struct {
 	RegionID        pgtype.Int8 `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
+	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
 	PageOffset      int32       `json:"page_offset"`
@@ -1156,6 +1173,8 @@ func (q *Queries) SearchRoomsByMerchantTag(ctx context.Context, arg SearchRoomsB
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
+		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,
 		arg.PageOffset,
@@ -1223,25 +1242,28 @@ WHERE t.table_type = 'room'
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
+  -- 按最低消费下限筛选
+  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
   -- 按最低消费筛选
-  AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
+  AND ($5::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $5)
   -- 排除已在指定日期时段被预定的包间
   AND NOT EXISTS (
     SELECT 1 FROM table_reservations tr
     WHERE tr.table_id = t.id
-      AND tr.reservation_date = $5::DATE
-      AND tr.reservation_time = $6::TIME
+      AND tr.reservation_date = $6::DATE
+      AND tr.reservation_time = $7::TIME
       AND tr.status IN ('pending', 'paid', 'confirmed')
   )
 ORDER BY t.capacity, t.minimum_spend NULLS FIRST
-LIMIT $8
-OFFSET $7
+LIMIT $9
+OFFSET $8
 `
 
 type SearchRoomsWithImageParams struct {
 	RegionID        pgtype.Int8 `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
+	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
 	ReservationDate pgtype.Date `json:"reservation_date"`
 	ReservationTime pgtype.Time `json:"reservation_time"`
@@ -1274,6 +1296,7 @@ func (q *Queries) SearchRoomsWithImage(ctx context.Context, arg SearchRoomsWithI
 		arg.RegionID,
 		arg.MinCapacity,
 		arg.MaxCapacity,
+		arg.MinMinimumSpend,
 		arg.MaxMinimumSpend,
 		arg.ReservationDate,
 		arg.ReservationTime,

@@ -32,6 +32,7 @@ export interface SearchRoomsParams extends Record<string, unknown> {
     reservation_time: string           // 必填：预订时段 HH:MM
     min_capacity?: number              // 可选：最小容纳人数
     max_capacity?: number              // 可选：最大容纳人数
+    min_minimum_spend?: number         // 可选：最小低消（分）
     max_minimum_spend?: number         // 可选：最大低消（分）
     tag_id?: number                    // 可选：菜系/标签ID
     region_id?: number                 // 可选：区域ID

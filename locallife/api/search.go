@@ -518,6 +518,7 @@ type searchRoomsRequest struct {
 	MinCapacity     *int16 `form:"min_capacity" binding:"omitempty,min=1,max=100"` // 最小容纳人数
 	MaxCapacity     *int16 `form:"max_capacity" binding:"omitempty,min=1,max=100"` // 最大容纳人数
 	MaxMinimumSpend *int64 `form:"max_minimum_spend" binding:"omitempty,min=0"`    // 最大低消（分）
+	MinMinimumSpend *int64 `form:"min_minimum_spend" binding:"omitempty,min=0"`    // 最小低消（分）
 	ReservationDate string `form:"reservation_date" binding:"required"`            // 预订日期 YYYY-MM-DD
 	ReservationTime string `form:"reservation_time" binding:"required"`            // 预订时段 HH:MM
 	TagID           *int64 `form:"tag_id" binding:"omitempty,min=1"`               // 菜系/标签ID
@@ -550,6 +551,7 @@ type searchRoomResponse struct {
 // @Param region_id query int false "区域ID"
 // @Param min_capacity query int false "最小容纳人数"
 // @Param max_capacity query int false "最大容纳人数"
+// @Param min_minimum_spend query int false "最小低消（分）"
 // @Param max_minimum_spend query int false "最大低消（分）"
 // @Param reservation_date query string true "预订日期（YYYY-MM-DD）"
 // @Param reservation_time query string true "预订时段（HH:MM）"
@@ -595,7 +597,10 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 		maxCapacity = pgtype.Int2{Int16: *req.MaxCapacity, Valid: true}
 	}
 
-	var maxMinimumSpend pgtype.Int8
+	var minMinimumSpend, maxMinimumSpend pgtype.Int8
+	if req.MinMinimumSpend != nil {
+		minMinimumSpend = pgtype.Int8{Int64: *req.MinMinimumSpend, Valid: true}
+	}
 	if req.MaxMinimumSpend != nil {
 		maxMinimumSpend = pgtype.Int8{Int64: *req.MaxMinimumSpend, Valid: true}
 	}
@@ -610,6 +615,8 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 			RegionID:        regionID,
 			MinCapacity:     minCapacity,
 			MaxCapacity:     maxCapacity,
+			MinMinimumSpend: minMinimumSpend,
+			MaxMinimumSpend: maxMinimumSpend,
 			ReservationDate: reservationDate,
 			ReservationTime: reservationTime,
 			PageOffset:      offset,
@@ -631,6 +638,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 			RegionID:        regionID,
 			MinCapacity:     minCapacity,
 			MaxCapacity:     maxCapacity,
+			MinMinimumSpend: minMinimumSpend,
 			MaxMinimumSpend: maxMinimumSpend,
 			ReservationDate: reservationDate,
 			ReservationTime: reservationTime,
@@ -652,6 +660,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 			RegionID:        regionID,
 			MinCapacity:     minCapacity,
 			MaxCapacity:     maxCapacity,
+			MinMinimumSpend: minMinimumSpend,
 			MaxMinimumSpend: maxMinimumSpend,
 			ReservationDate: reservationDate,
 			ReservationTime: reservationTime,

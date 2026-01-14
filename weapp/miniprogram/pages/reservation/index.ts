@@ -1,5 +1,5 @@
 import { logger } from '../../utils/logger'
-import { searchRooms, getRecommendedRooms, getRecommendedMerchants, RoomSearchResult } from '../../api/search'
+import { searchRooms, getRecommendedMerchants, RoomSearchResult } from '../../api/search'
 import { MerchantSummary } from '../../api/merchant'
 import { globalStore } from '../../utils/global-store'
 import { getPublicImageUrl } from '../../utils/image'
@@ -27,6 +27,8 @@ Page({
     appliedFilters: {
       guestCount: undefined as number | undefined,
       priceRange: '' as string,
+      minSpend: undefined as number | undefined, // 分
+      maxSpend: undefined as number | undefined, // 分
       selectedTime: '' as string,
       date: '' as string,
       startTime: '' as string,
@@ -48,10 +50,10 @@ Page({
       { label: '8人+', value: 8 }
     ],
     priceOptions: [
-      { label: '不限', value: '' },
-      { label: '¥100以下', value: '0-100' },
-      { label: '¥100-300', value: '100-300' },
-      { label: '¥300以上', value: '300-9999' }
+      { label: '不限', value: '', min: undefined, max: undefined },
+      { label: '¥100以下', value: '0-100', min: undefined, max: 100 },
+      { label: '¥100-300', value: '100-300', min: 100, max: 300 },
+      { label: '¥300以上', value: '300-9999', min: 300, max: undefined }
     ],
 
     // Inline Options
@@ -110,55 +112,28 @@ Page({
       let newList: any[] = []
 
       if (activeTab === 'room') {
-        const hasTimeFilter = appliedFilters.date && appliedFilters.startTime
+        // 统一走 search 路由；缺省日期/时段使用默认值
+        const effectiveDate = appliedFilters.date || this.data.dateOptions[0]?.value || this.formatDateLocal(new Date())
+        const effectiveTime = appliedFilters.startTime || this.data.timeOptions[0]?.value || '18:00'
 
-        // 将 priceRange 转换为 max_minimum_spend（分）
-        let max_minimum_spend: number | undefined
-        if (appliedFilters.priceRange) {
-          const parts = appliedFilters.priceRange.split('-')
-          // 使用上限作为 max_minimum_spend，后端期望分值
-          if (parts[1]) {
-            max_minimum_spend = Number(parts[1]) * 100
-          }
-        }
-
-        if (hasTimeFilter) {
-          // Search Mode - 需要日期时间过滤
-          const results = await searchRooms({
-            reservation_date: appliedFilters.date || new Date().toISOString().split('T')[0],
-            reservation_time: appliedFilters.startTime || '18:00',
-            min_capacity: appliedFilters.guestCount,
-            max_minimum_spend,
-            user_latitude: latitude,
-            user_longitude: longitude,
-            page_id: page,
-            page_size: pageSize
-          })
-          // 在 TypeScript 中预处理距离和图片
-          newList = results.map((r: RoomSearchResult) => ({
-            ...r,
-            type: 'room',
-            primary_image: getPublicImageUrl(r.primary_image) || '',
-            distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
-          }))
-        } else {
-          // Feed Mode - 使用推荐接口（支持人数和低消过滤）
-          const results = await getRecommendedRooms({
-            page_id: page,
-            page_size: pageSize,
-            user_latitude: latitude,
-            user_longitude: longitude,
-            min_capacity: appliedFilters.guestCount,
-            max_minimum_spend
-          })
-
-          newList = results.map((r: RoomSearchResult) => ({
-            ...r,
-            type: 'room',
-            primary_image: getPublicImageUrl(r.primary_image) || '',
-            distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
-          }))
-        }
+        const results = await searchRooms({
+          reservation_date: effectiveDate,
+          reservation_time: effectiveTime,
+          min_capacity: appliedFilters.guestCount,
+          min_minimum_spend: appliedFilters.minSpend,
+          max_minimum_spend: appliedFilters.maxSpend,
+          user_latitude: latitude,
+          user_longitude: longitude,
+          page_id: page,
+          page_size: pageSize
+        })
+        // 在 TypeScript 中预处理距离和图片
+        newList = results.map((r: RoomSearchResult) => ({
+          ...r,
+          type: 'room',
+          primary_image: getPublicImageUrl(r.primary_image) || '',
+          distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
+        }))
 
       } else {
         // Restaurant Stream - 与外卖页 loadRestaurants 保持一致的数据格式
@@ -280,7 +255,7 @@ Page({
       uiGuestCount: appliedFilters.guestCount || 2,
       uiPriceRange: appliedFilters.priceRange,
       uiSelectedDate: appliedFilters.date || this.data.dateOptions[0].value,
-      uiSelectedTimeSlot: appliedFilters.startTime || ''
+      uiSelectedTimeSlot: appliedFilters.startTime || this.data.timeOptions[0]?.value || ''
     })
   },
 
@@ -297,26 +272,29 @@ Page({
     this.setData({
       uiGuestCount: 2,
       uiPriceRange: '',
-      uiSelectedDate: this.data.dateOptions[0]?.value || '',
-      uiSelectedTimeSlot: ''
+      uiSelectedDate: this.data.dateOptions[0]?.value || this.formatDateLocal(new Date()),
+      uiSelectedTimeSlot: this.data.timeOptions[0]?.value || '18:00'
     })
   },
 
   applyFilter() {
     const { uiGuestCount, uiPriceRange, uiSelectedDate, uiSelectedTimeSlot } = this.data
 
-    let date = '', startTime = '', endTime = ''
-    if (uiSelectedDate && uiSelectedTimeSlot) {
-      date = uiSelectedDate
-      startTime = uiSelectedTimeSlot
-      const [h, m] = startTime.split(':').map(Number)
-      endTime = `${h + 2}:${m}`
-    }
+    const date = uiSelectedDate || this.data.dateOptions[0]?.value || this.formatDateLocal(new Date())
+    const startTime = uiSelectedTimeSlot || this.data.timeOptions[0]?.value || '18:00'
+    const [h, m] = startTime.split(':').map(Number)
+    const endTime = `${h + 2}:${m}`
+
+    const priceOption = this.data.priceOptions.find(p => p.value === uiPriceRange)
+    const minSpend = priceOption?.min !== undefined ? priceOption.min * 100 : undefined
+    const maxSpend = priceOption?.max !== undefined ? priceOption.max * 100 : undefined
 
     this.setData({
       appliedFilters: {
         guestCount: uiGuestCount,
         priceRange: uiPriceRange,
+        minSpend,
+        maxSpend,
         selectedTime: (date && startTime) ? `${date} ${startTime}` : '',
         date,
         startTime,
@@ -352,6 +330,13 @@ Page({
 
   // ==================== Utils ====================
 
+  formatDateLocal(date: Date): string {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  },
+
   generateDateOptions() {
     const options = []
     const today = new Date()
@@ -359,7 +344,7 @@ Page({
       const date = new Date(today)
       date.setDate(today.getDate() + i)
       const label = i === 0 ? '今天' : i === 1 ? '明天' : `${date.getMonth() + 1}月${date.getDate()}日`
-      options.push({ label, value: date.toISOString().split('T')[0] })
+      options.push({ label, value: this.formatDateLocal(date) })
     }
     this.setData({ dateOptions: options })
   }
