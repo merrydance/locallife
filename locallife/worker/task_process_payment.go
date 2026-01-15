@@ -431,6 +431,12 @@ func (processor *RedisTaskProcessor) handleReservationPaid(ctx context.Context, 
 		return fmt.Errorf("update reservation status: %w", err)
 	}
 
+	if _, err := processor.store.SyncReservationInventoryTx(ctx, db.SyncReservationInventoryTxParams{
+		ReservationID: paymentOrder.ReservationID.Int64,
+	}); err != nil {
+		return fmt.Errorf("sync reservation inventory: %w", err)
+	}
+
 	log.Info().
 		Int64("reservation_id", paymentOrder.ReservationID.Int64).
 		Int64("amount", paymentOrder.Amount).
@@ -460,6 +466,12 @@ func (processor *RedisTaskProcessor) handleReservationAddonPaid(ctx context.Cont
 	})
 	if err != nil {
 		return fmt.Errorf("add reservation prepaid amount: %w", err)
+	}
+
+	if _, err := processor.store.SyncReservationInventoryTx(ctx, db.SyncReservationInventoryTxParams{
+		ReservationID: reservationID,
+	}); err != nil {
+		return fmt.Errorf("sync reservation inventory: %w", err)
 	}
 
 	log.Info().

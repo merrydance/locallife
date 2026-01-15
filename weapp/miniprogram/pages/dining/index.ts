@@ -1,5 +1,7 @@
-import { precheckDiningSession, openDiningSession, DiningSessionDTO } from '../../api/reservation'
+import { precheckDiningSession, openDiningSession, DiningSessionDTO, BillingGroupDTO } from '../../api/reservation'
 import { createDiningOrder } from '../../api/dining-session'
+import { createBillingGroup, listBillingGroupOrders } from '../../api/billing-group'
+import { getOrderDetail } from '../../api/order'
 import { getMerchantDishes, DishDTO } from '../../api/merchant'
 import CartService from '../../services/cart'
 import { logger } from '../../utils/logger'
@@ -12,6 +14,8 @@ Page({
         tableId: '',
         merchantId: '',
         session: null as DiningSessionDTO | null,
+        billingGroup: null as BillingGroupDTO | null,
+        billingGroupId: undefined as number | undefined,
         reservationId: undefined as number | undefined,
         dishes: [] as any[],
         categories: [] as any[],
@@ -19,6 +23,7 @@ Page({
         cartCount: 0,
         cartPrice: 0,
         cartPriceDisplay: '0.00',
+        sharedDishCounts: {} as Record<number, number>,
         navBarHeight: 88,
         loading: true
     },
@@ -70,8 +75,64 @@ Page({
             reservation_id: reservationId
         })
 
-        this.setData({ session: result.session })
+        this.setData({ session: result.session, billingGroup: result.billing_group, billingGroupId: result.billing_group?.id })
+
+        await this.chooseBillingGroup(result.session.id, result.billing_group)
+        await this.loadSharedOrderSummary()
         return result.session
+    },
+
+    async chooseBillingGroup(sessionId: number, defaultGroup: BillingGroupDTO) {
+        return new Promise<void>((resolve) => {
+            wx.showModal({
+                title: '结算方式',
+                content: '是否单独结算？',
+                confirmText: '单独结算',
+                cancelText: '一起点餐',
+                success: async (res) => {
+                    if (res.confirm) {
+                        try {
+                            const group = await createBillingGroup(sessionId)
+                            this.setData({ billingGroup: group, billingGroupId: group.id })
+                        } catch (error) {
+                            logger.error('创建账单组失败', error, 'Dining.chooseBillingGroup')
+                            wx.showToast({ title: '创建账单组失败', icon: 'error' })
+                            this.setData({ billingGroup: defaultGroup, billingGroupId: defaultGroup.id })
+                        }
+                    } else {
+                        this.setData({ billingGroup: defaultGroup, billingGroupId: defaultGroup.id })
+                    }
+                    resolve()
+                }
+            })
+        })
+    },
+
+    async loadSharedOrderSummary() {
+        const billingGroupId = this.data.billingGroupId
+        if (!billingGroupId) {
+            return
+        }
+
+        try {
+            const { orders } = await listBillingGroupOrders(billingGroupId)
+            const summary: Record<number, number> = {}
+            for (const order of orders) {
+                try {
+                    const detail = await getOrderDetail(order.order_id)
+                    for (const item of detail.items || []) {
+                        if (item.dish_id) {
+                            summary[item.dish_id] = (summary[item.dish_id] || 0) + item.quantity
+                        }
+                    }
+                } catch (error) {
+                    logger.warn('获取订单详情失败', error, 'Dining.loadSharedOrderSummary')
+                }
+            }
+            this.setData({ sharedDishCounts: summary })
+        } catch (error) {
+            logger.warn('获取账单组订单失败', error, 'Dining.loadSharedOrderSummary')
+        }
     },
 
     async loadMenu() {
@@ -116,6 +177,21 @@ Page({
         const dish = this.data.dishes.find((d: DishDTO) => d.id === id)
 
         if (dish) {
+            const sharedCount = this.data.sharedDishCounts[dish.id] || 0
+            if (sharedCount > 0) {
+                const proceed = await new Promise<boolean>((resolve) => {
+                    wx.showModal({
+                        title: '同伴已点',
+                        content: `同伴已点 ${sharedCount} 份该菜，是否继续添加？`,
+                        confirmText: '继续添加',
+                        cancelText: '取消',
+                        success: (res) => resolve(res.confirm)
+                    })
+                })
+                if (!proceed) {
+                    return
+                }
+            }
             const success = await CartService.addItem({
                 merchantId: this.data.merchantId,
                 dishId: dish.id,
@@ -145,7 +221,7 @@ Page({
     },
 
     async onSubmitOrder() {
-        const { session, cartCount } = this.data
+        const { session, cartCount, billingGroupId } = this.data
 
         if (cartCount === 0) {
             wx.showToast({ title: '请先选择菜品', icon: 'none' })
@@ -176,12 +252,14 @@ Page({
                             table_id: Number(this.data.tableId),
                             reservation_id: this.data.reservationId,
                             items,
-                            order_type: 'dine_in'
+                            order_type: 'dine_in',
+                            billing_group_id: billingGroupId
                         })
 
                         wx.showToast({ title: '下单成功', icon: 'success' })
                         CartService.clear()
                         this.setData({ cartCount: 0, cartPrice: 0 })
+                        await this.loadSharedOrderSummary()
                     } catch (error) {
                         logger.error('下单失败', error, 'Dining.onSubmitOrder')
                         wx.showToast({ title: '下单失败', icon: 'error' })

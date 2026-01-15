@@ -32,6 +32,37 @@ type Appeal struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type BillingGroup struct {
+	ID              int64              `json:"id"`
+	DiningSessionID int64              `json:"dining_session_id"`
+	Status          string             `json:"status"`
+	IsDefault       bool               `json:"is_default"`
+	TotalAmount     int64              `json:"total_amount"`
+	PaidAmount      int64              `json:"paid_amount"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ClosedAt        pgtype.Timestamptz `json:"closed_at"`
+}
+
+type BillingGroupMember struct {
+	ID             int64              `json:"id"`
+	BillingGroupID int64              `json:"billing_group_id"`
+	UserID         int64              `json:"user_id"`
+	Role           string             `json:"role"`
+	JoinedAt       time.Time          `json:"joined_at"`
+	LeftAt         pgtype.Timestamptz `json:"left_at"`
+}
+
+type BillingGroupOrder struct {
+	ID             int64              `json:"id"`
+	BillingGroupID int64              `json:"billing_group_id"`
+	OrderID        int64              `json:"order_id"`
+	Amount         int64              `json:"amount"`
+	Status         string             `json:"status"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 // 用户浏览历史
 type BrowseHistory struct {
 	ID     int64 `json:"id"`
@@ -181,14 +212,15 @@ type ComboTag struct {
 }
 
 type DailyInventory struct {
-	ID            int64              `json:"id"`
-	MerchantID    int64              `json:"merchant_id"`
-	DishID        int64              `json:"dish_id"`
-	Date          pgtype.Date        `json:"date"`
-	TotalQuantity int32              `json:"total_quantity"`
-	SoldQuantity  int32              `json:"sold_quantity"`
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID               int64              `json:"id"`
+	MerchantID       int64              `json:"merchant_id"`
+	DishID           int64              `json:"dish_id"`
+	Date             pgtype.Date        `json:"date"`
+	TotalQuantity    int32              `json:"total_quantity"`
+	SoldQuantity     int32              `json:"sold_quantity"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ReservedQuantity int32              `json:"reserved_quantity"`
 }
 
 // 配送单表
@@ -1039,6 +1071,15 @@ type Region struct {
 	CreatedAt time.Time      `json:"created_at"`
 	// 和风天气城市ID，首次查询后缓存
 	QweatherLocationID pgtype.Text `json:"qweather_location_id"`
+}
+
+type ReservationInventory struct {
+	ID            int64              `json:"id"`
+	ReservationID int64              `json:"reservation_id"`
+	DishID        int64              `json:"dish_id"`
+	Quantity      int32              `json:"quantity"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ReservationItem struct {

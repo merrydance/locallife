@@ -114,6 +114,39 @@ func (q *Queries) GetReservationItemsByReservation(ctx context.Context, reservat
 	return items, nil
 }
 
+const listReservationDishSummary = `-- name: ListReservationDishSummary :many
+SELECT dish_id, SUM(quantity)::int4 as quantity
+FROM reservation_items
+WHERE reservation_id = $1 AND dish_id IS NOT NULL
+GROUP BY dish_id
+ORDER BY dish_id
+`
+
+type ListReservationDishSummaryRow struct {
+	DishID   pgtype.Int8 `json:"dish_id"`
+	Quantity int32       `json:"quantity"`
+}
+
+func (q *Queries) ListReservationDishSummary(ctx context.Context, reservationID int64) ([]ListReservationDishSummaryRow, error) {
+	rows, err := q.db.Query(ctx, listReservationDishSummary, reservationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReservationDishSummaryRow{}
+	for rows.Next() {
+		var i ListReservationDishSummaryRow
+		if err := rows.Scan(&i.DishID, &i.Quantity); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReservationItems = `-- name: ListReservationItems :many
 SELECT 
     ri.id, ri.reservation_id, ri.dish_id, ri.combo_id, ri.quantity, ri.unit_price, ri.total_price, ri.created_at,

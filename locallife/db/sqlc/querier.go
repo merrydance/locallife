@@ -208,6 +208,12 @@ type Querier interface {
 	// =========================== 商户申诉 ===========================
 	// 创建申诉
 	CreateAppeal(ctx context.Context, arg CreateAppealParams) (Appeal, error)
+	// Billing groups
+	CreateBillingGroup(ctx context.Context, arg CreateBillingGroupParams) (BillingGroup, error)
+	// Billing group members
+	CreateBillingGroupMember(ctx context.Context, arg CreateBillingGroupMemberParams) (BillingGroupMember, error)
+	// Billing group orders
+	CreateBillingGroupOrder(ctx context.Context, arg CreateBillingGroupOrderParams) (BillingGroupOrder, error)
 	// ==================== 商户营业时间 ====================
 	CreateBusinessHour(ctx context.Context, arg CreateBusinessHourParams) (MerchantBusinessHour, error)
 	CreateCart(ctx context.Context, arg CreateCartParams) (Cart, error)
@@ -395,6 +401,7 @@ type Querier interface {
 	DeleteReadNotifications(ctx context.Context, userID int64) error
 	DeleteRechargeRule(ctx context.Context, id int64) error
 	DeleteRegion(ctx context.Context, id int64) error
+	DeleteReservationInventoryByDish(ctx context.Context, arg DeleteReservationInventoryByDishParams) error
 	DeleteReservationItems(ctx context.Context, reservationID int64) error
 	DeleteReview(ctx context.Context, id int64) error
 	DeleteTable(ctx context.Context, id int64) error
@@ -410,6 +417,7 @@ type Querier interface {
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
 	// 冻结用户余额（提现申请时）
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
+	GetActiveBillingGroupMember(ctx context.Context, arg GetActiveBillingGroupMemberParams) (BillingGroupMember, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
 	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
 	GetActiveDiningSessionByTable(ctx context.Context, tableID int64) (DiningSession, error)
@@ -432,6 +440,7 @@ type Querier interface {
 	// 获取满足订单金额条件的最优促销（减免金额最大的那条）
 	GetBestDeliveryPromotion(ctx context.Context, arg GetBestDeliveryPromotionParams) (MerchantDeliveryPromotion, error)
 	GetBestDiscountRule(ctx context.Context, arg GetBestDiscountRuleParams) (DiscountRule, error)
+	GetBillingGroup(ctx context.Context, id int64) (BillingGroup, error)
 	GetBusinessHour(ctx context.Context, id int64) (MerchantBusinessHour, error)
 	GetBusinessHourByDate(ctx context.Context, arg GetBusinessHourByDateParams) (MerchantBusinessHour, error)
 	GetBusinessHourByDayOfWeek(ctx context.Context, arg GetBusinessHourByDayOfWeekParams) (MerchantBusinessHour, error)
@@ -483,6 +492,7 @@ type Querier interface {
 	GetCustomerMerchantDetail(ctx context.Context, arg GetCustomerMerchantDetailParams) (GetCustomerMerchantDetailRow, error)
 	GetDailyInventory(ctx context.Context, arg GetDailyInventoryParams) (DailyInventory, error)
 	GetDailyInventoryForUpdate(ctx context.Context, arg GetDailyInventoryForUpdateParams) (DailyInventory, error)
+	GetDefaultBillingGroupBySession(ctx context.Context, diningSessionID int64) (BillingGroup, error)
 	GetDelivery(ctx context.Context, id int64) (Delivery, error)
 	GetDeliveryByOrderID(ctx context.Context, orderID int64) (Delivery, error)
 	GetDeliveryFeeConfig(ctx context.Context, id int64) (DeliveryFeeConfig, error)
@@ -907,6 +917,8 @@ type Querier interface {
 	ListAvailableRooms(ctx context.Context, merchantID int64) ([]Table, error)
 	// 获取商户的可用包间列表（含主图）供顾客查看
 	ListAvailableRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListAvailableRoomsForCustomerRow, error)
+	ListBillingGroupOrdersByGroup(ctx context.Context, billingGroupID int64) ([]BillingGroupOrder, error)
+	ListBillingGroupsBySession(ctx context.Context, diningSessionID int64) ([]BillingGroup, error)
 	// 获取店铺的所有 Boss
 	ListBossesByMerchant(ctx context.Context, merchantID int64) ([]ListBossesByMerchantRow, error)
 	ListBrowseHistory(ctx context.Context, arg ListBrowseHistoryParams) ([]BrowseHistory, error)
@@ -1078,6 +1090,9 @@ type Querier interface {
 	ListRegionPendingClaims(ctx context.Context, arg ListRegionPendingClaimsParams) ([]ListRegionPendingClaimsRow, error)
 	ListRegions(ctx context.Context, arg ListRegionsParams) ([]Region, error)
 	ListRegionsWithWarning(ctx context.Context) ([]int64, error)
+	ListReservationDishSummary(ctx context.Context, reservationID int64) ([]ListReservationDishSummaryRow, error)
+	// Reservation inventory tracking
+	ListReservationInventoryByReservation(ctx context.Context, reservationID int64) ([]ReservationInventory, error)
 	ListReservationItems(ctx context.Context, reservationID int64) ([]ListReservationItemsRow, error)
 	ListReservationsByMerchant(ctx context.Context, arg ListReservationsByMerchantParams) ([]ListReservationsByMerchantRow, error)
 	ListReservationsByMerchantAndDate(ctx context.Context, arg ListReservationsByMerchantAndDateParams) ([]ListReservationsByMerchantAndDateRow, error)
@@ -1151,6 +1166,7 @@ type Querier interface {
 	RejectOperatorApplication(ctx context.Context, arg RejectOperatorApplicationParams) (OperatorApplication, error)
 	// 拒绝骑手申请
 	RejectRiderApplication(ctx context.Context, arg RejectRiderApplicationParams) (RiderApplication, error)
+	ReleaseReservedInventory(ctx context.Context, arg ReleaseReservedInventoryParams) (DailyInventory, error)
 	RemoveAllComboDishes(ctx context.Context, comboID int64) error
 	RemoveAllComboTags(ctx context.Context, comboID int64) error
 	RemoveAllDishIngredients(ctx context.Context, dishID int64) error
@@ -1171,6 +1187,7 @@ type Querier interface {
 	RemoveTableTag(ctx context.Context, arg RemoveTableTagParams) error
 	// 续约运营商合同
 	RenewOperatorContract(ctx context.Context, arg RenewOperatorContractParams) (Operator, error)
+	ReserveInventory(ctx context.Context, arg ReserveInventoryParams) (DailyInventory, error)
 	// 重置申请为草稿状态（允许用户重新编辑，支持从待审核、被拒绝或已通过状态重置）
 	ResetMerchantApplicationToDraft(ctx context.Context, id int64) (MerchantApplication, error)
 	// 重置被拒绝的申请为草稿（允许重新编辑提交）
@@ -1409,6 +1426,7 @@ type Querier interface {
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertRecommendationConfig(ctx context.Context, arg UpsertRecommendationConfigParams) (RecommendationConfig, error)
+	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)
 	// ==========================================
 	// 设备指纹查询（M9欺诈检测）
 	// ==========================================

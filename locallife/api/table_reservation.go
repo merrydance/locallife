@@ -1123,6 +1123,13 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 		}
 	}
 
+	if err := server.store.ReleaseReservationInventoryTx(ctx, db.ReleaseReservationInventoryTxParams{
+		ReservationID: reservation.ID,
+	}); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, newReservationResponse(result.Reservation))
 }
 
@@ -1198,6 +1205,13 @@ func (server *Server) markNoShow(ctx *gin.Context) {
 		CurrentReservationID: currentReservationID,
 	})
 	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if err := server.store.ReleaseReservationInventoryTx(ctx, db.ReleaseReservationInventoryTxParams{
+		ReservationID: reservation.ID,
+	}); err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1480,7 +1494,212 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	})
 }
 
+// modifyReservationDishes 预订改菜（差量合并/补单/退单）
+// POST /v1/reservations/:id/modify-dishes
+// @Summary 预订改菜
+// @Description 用户修改预订菜品，支持差量补单或退款
+// @Tags 预定管理
+// @Accept json
+// @Produce json
+// @Param id path int64 true "预定ID"
+// @Param body body modifyDishesRequest true "改菜请求"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/reservations/{id}/modify-dishes [post]
+func (server *Server) modifyReservationDishes(ctx *gin.Context) {
+	var uriReq struct {
+		ID int64 `uri:"id" binding:"required,min=1"`
+	}
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var req modifyDishesRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if len(req.Items) == 0 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("at least one item is required")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	reservation, err := server.store.GetTableReservationForUpdate(ctx, uriReq.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if reservation.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only modify your own reservation")))
+		return
+	}
+
+	if reservation.Status != ReservationStatusPaid && reservation.Status != ReservationStatusConfirmed && reservation.Status != ReservationStatusCheckedIn {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("cannot modify reservation in %s status", reservation.Status)))
+		return
+	}
+
+	if reservation.CookingStartedAt.Valid {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("cooking already started, modification is not allowed")))
+		return
+	}
+
+	currentTotal, err := server.store.SumReservationItemsTotal(ctx, reservation.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	modifyItems := make([]reservationItem, len(req.Items))
+	for i, item := range req.Items {
+		modifyItems[i] = reservationItem{
+			DishID:   item.DishID,
+			ComboID:  item.ComboID,
+			Quantity: item.Quantity,
+		}
+	}
+
+	validatedItems, newTotal, err := server.validateReservationItems(ctx, reservation.MerchantID, modifyItems)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	delta := newTotal - currentTotal
+
+	createItems := make([]db.CreateReservationItemParams, 0, len(validatedItems))
+	for _, item := range validatedItems {
+		var dishID, comboID pgtype.Int8
+		if item.DishID != nil {
+			dishID = pgtype.Int8{Int64: *item.DishID, Valid: true}
+		}
+		if item.ComboID != nil {
+			comboID = pgtype.Int8{Int64: *item.ComboID, Valid: true}
+		}
+		createItems = append(createItems, db.CreateReservationItemParams{
+			ReservationID: reservation.ID,
+			DishID:        dishID,
+			ComboID:       comboID,
+			Quantity:      item.Quantity,
+			UnitPrice:     item.UnitPrice,
+			TotalPrice:    item.UnitPrice * int64(item.Quantity),
+		})
+	}
+
+	if _, err := server.store.ReplaceReservationItemsTx(ctx, db.ReplaceReservationItemsTxParams{
+		ReservationID: reservation.ID,
+		Items:         createItems,
+	}); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if reservation.PaymentMode == PaymentModeFull && delta != 0 {
+		if delta > 0 {
+			outTradeNo := fmt.Sprintf("RA%d%d", reservation.ID, time.Now().UnixNano())
+			paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+				UserID:        authPayload.UserID,
+				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+				PaymentType:   "wechat",
+				BusinessType:  "reservation_addon",
+				Amount:        delta,
+				OutTradeNo:    outTradeNo,
+				ExpiresAt:     pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+			})
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+
+			ctx.JSON(http.StatusOK, gin.H{
+				"message":          "reservation modified, payment required",
+				"payment_order_id": paymentOrder.ID,
+				"amount":           delta,
+				"items_count":      len(req.Items),
+			})
+			return
+		}
+
+		refundAmount := -delta
+		if refundAmount > reservation.PrepaidAmount {
+			refundAmount = reservation.PrepaidAmount
+		}
+		if refundAmount > 0 && server.paymentClient != nil {
+			paymentOrder, err := server.store.GetLatestPaymentOrderByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			if paymentOrder.Status == PaymentStatusPaid {
+				outRefundNo := generateOutRefundNo()
+				refundOrder, err := server.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
+					PaymentOrderID: paymentOrder.ID,
+					RefundType:     "partial",
+					RefundAmount:   refundAmount,
+					RefundReason:   pgtype.Text{String: "预定改菜退款", Valid: true},
+					OutRefundNo:    outRefundNo,
+					Status:         "pending",
+				})
+				if err != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+					return
+				}
+
+				wxRefund, err := server.paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
+					OutTradeNo:   paymentOrder.OutTradeNo,
+					OutRefundNo:  outRefundNo,
+					Reason:       "预定改菜退款",
+					RefundAmount: refundAmount,
+					TotalAmount:  paymentOrder.Amount,
+				})
+				if err != nil {
+					server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+					return
+				}
+				if wxRefund.Status == wechat.RefundStatusSuccess {
+					server.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+					_, _ = server.store.AddReservationPrepaidAmount(ctx, db.AddReservationPrepaidAmountParams{
+						ID:            reservation.ID,
+						PrepaidAmount: -refundAmount,
+					})
+				}
+			}
+
+			ctx.JSON(http.StatusOK, gin.H{
+				"message":     "reservation modified, refund initiated",
+				"refund_amount": refundAmount,
+				"items_count": len(req.Items),
+			})
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message":     "reservation modified successfully",
+		"items_count": len(req.Items),
+		"delta":       delta,
+	})
+}
+
 type addDishesRequest struct {
+	Items []addDishItem `json:"items" binding:"required,min=1,max=50,dive"`
+}
+
+type modifyDishesRequest struct {
 	Items []addDishItem `json:"items" binding:"required,min=1,max=50,dive"`
 }
 

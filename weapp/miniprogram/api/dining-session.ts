@@ -41,8 +41,21 @@ export interface OpenDiningSessionRequest {
 
 export interface OpenDiningSessionResponse {
   session: DiningSessionDTO
+  billing_group: BillingGroupDTO
   cart_id?: number
   imported_items: number
+}
+
+export interface BillingGroupDTO {
+  id: number
+  dining_session_id: number
+  status: string
+  is_default: boolean
+  total_amount: number
+  paid_amount: number
+  created_at: string
+  updated_at?: string
+  closed_at?: string
 }
 
 export interface CreateDiningOrderRequest {
@@ -52,6 +65,7 @@ export interface CreateDiningOrderRequest {
   notes?: string
   reservation_id?: number
   order_type?: OrderType
+  billing_group_id?: number
 }
 
 /** 预检桌台预订占用 */
@@ -74,7 +88,7 @@ export async function openDiningSession(data: OpenDiningSessionRequest): Promise
 
 /** 基于用餐会话创建堂食订单（占位，调用通用订单创建接口） */
 export async function createDiningOrder(payload: CreateDiningOrderRequest): Promise<OrderResponse> {
-  const { merchant_id, table_id, reservation_id, items, notes, order_type = 'dine_in' } = payload
+  const { merchant_id, table_id, reservation_id, items, notes, order_type = 'dine_in', billing_group_id } = payload
   return request({
     url: '/v1/orders',
     method: 'POST',
@@ -84,7 +98,8 @@ export async function createDiningOrder(payload: CreateDiningOrderRequest): Prom
       reservation_id,
       order_type,
       items,
-      notes
+      notes,
+      billing_group_id
     }
   })
 }

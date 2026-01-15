@@ -107,6 +107,7 @@ export interface CreateOrderRequest extends Record<string, unknown> {
   order_type: OrderType         // 订单类型
   reservation_id?: number       // 预订ID（预定点菜时必填）
   table_id?: number             // 桌台ID（堂食订单必填）
+  billing_group_id?: number     // 账单组ID（堂食可选）
   use_balance?: boolean         // 是否使用会员余额支付
   user_voucher_id?: number      // 用户优惠券ID
   delivery_fee?: number         // 前端计算的配送费（分）

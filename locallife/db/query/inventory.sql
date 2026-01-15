@@ -46,6 +46,7 @@ UPDATE daily_inventory
 SET
   total_quantity = COALESCE(sqlc.narg('total_quantity'), total_quantity),
   sold_quantity = COALESCE(sqlc.narg('sold_quantity'), sold_quantity),
+  reserved_quantity = COALESCE(sqlc.narg('reserved_quantity'), reserved_quantity),
   updated_at = now()
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND dish_id = sqlc.arg('dish_id')
@@ -70,7 +71,28 @@ SET
 WHERE merchant_id = $1
   AND dish_id = $2
   AND date = $3
-  AND (total_quantity = -1 OR sold_quantity + $4 <= total_quantity)
+  AND (total_quantity = -1 OR sold_quantity + reserved_quantity + $4 <= total_quantity)
+RETURNING *;
+
+-- name: ReserveInventory :one
+UPDATE daily_inventory
+SET
+  reserved_quantity = reserved_quantity + $4,
+  updated_at = now()
+WHERE merchant_id = $1
+  AND dish_id = $2
+  AND date = $3
+  AND (total_quantity = -1 OR sold_quantity + reserved_quantity + $4 <= total_quantity)
+RETURNING *;
+
+-- name: ReleaseReservedInventory :one
+UPDATE daily_inventory
+SET
+  reserved_quantity = GREATEST(reserved_quantity - $4, 0),
+  updated_at = now()
+WHERE merchant_id = $1
+  AND dish_id = $2
+  AND date = $3
 RETURNING *;
 
 -- name: DeleteDailyInventory :exec

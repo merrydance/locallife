@@ -100,6 +100,9 @@
     <t-button wx:if="{{showCancelButton}}" class="btn ghost" variant="outline" size="large" bindtap="onCancel">取消预订</t-button>
     <t-button wx:if="{{showPayButton}}" class="btn primary" theme="primary" size="large" bindtap="onPay">去支付</t-button>
   </view>
+  <view class="action-row" wx:if="{{showModifyButton}}">
+    <t-button class="btn primary" theme="primary" size="large" bindtap="onModifyDishes">修改菜品</t-button>
+  </view>
 </view>
 
 <t-dialog

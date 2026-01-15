@@ -48,6 +48,18 @@ export interface DiningSessionPrecheckResponse {
   order_fulfillment_status?: string
 }
 
+export interface BillingGroupDTO {
+  id: number
+  dining_session_id: number
+  status: string
+  is_default: boolean
+  total_amount: number
+  paid_amount: number
+  created_at: string
+  updated_at?: string
+  closed_at?: string
+}
+
 /**
  * 支付模式
  */
@@ -244,6 +256,18 @@ export class ReservationService {
   }
 
   /**
+   * 预订改菜（差量）
+   * POST /v1/reservations/:id/modify-dishes
+   */
+  static async modifyDishes(id: number, items: ReservationItem[]): Promise<any> {
+    return await request({
+      url: `/v1/reservations/${id}/modify-dishes`,
+      method: 'POST',
+      data: { items }
+    })
+  }
+
+  /**
    * 顾客到店签到
    * POST /v1/reservations/:id/checkin
    */
@@ -283,7 +307,7 @@ export class ReservationService {
    * 开启用餐会话（已存在开放会话时后端直接返回）
    * POST /v1/dining-sessions/open
    */
-  static async openDiningSession(params: { table_id: number; reservation_id?: number }): Promise<{ session: DiningSessionDTO; cart_id?: number; imported_items: number }> {
+  static async openDiningSession(params: { table_id: number; reservation_id?: number }): Promise<{ session: DiningSessionDTO; billing_group: BillingGroupDTO; cart_id?: number; imported_items: number }> {
     return await request({
       url: '/v1/dining-sessions/open',
       method: 'POST',
@@ -393,6 +417,7 @@ export const getUserReservations = ReservationService.getUserReservations
 export const getReservationDetail = ReservationService.getReservationDetail
 export const cancelReservation = ReservationService.cancelReservation
 export const addDishesToReservation = ReservationService.addDishes
+export const modifyDishesToReservation = ReservationService.modifyDishes
 export const checkInReservation = ReservationService.checkIn
 export const startCookingReservation = ReservationService.startCooking
 export const precheckDiningSession = ReservationService.precheckDiningSession

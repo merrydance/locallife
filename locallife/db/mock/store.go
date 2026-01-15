@@ -1940,6 +1940,51 @@ func (mr *MockStoreMockRecorder) CreateAppeal(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAppeal", reflect.TypeOf((*MockStore)(nil).CreateAppeal), ctx, arg)
 }
 
+// CreateBillingGroup mocks base method.
+func (m *MockStore) CreateBillingGroup(ctx context.Context, arg db.CreateBillingGroupParams) (db.BillingGroup, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBillingGroup", ctx, arg)
+	ret0, _ := ret[0].(db.BillingGroup)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBillingGroup indicates an expected call of CreateBillingGroup.
+func (mr *MockStoreMockRecorder) CreateBillingGroup(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBillingGroup", reflect.TypeOf((*MockStore)(nil).CreateBillingGroup), ctx, arg)
+}
+
+// CreateBillingGroupMember mocks base method.
+func (m *MockStore) CreateBillingGroupMember(ctx context.Context, arg db.CreateBillingGroupMemberParams) (db.BillingGroupMember, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBillingGroupMember", ctx, arg)
+	ret0, _ := ret[0].(db.BillingGroupMember)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBillingGroupMember indicates an expected call of CreateBillingGroupMember.
+func (mr *MockStoreMockRecorder) CreateBillingGroupMember(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBillingGroupMember", reflect.TypeOf((*MockStore)(nil).CreateBillingGroupMember), ctx, arg)
+}
+
+// CreateBillingGroupOrder mocks base method.
+func (m *MockStore) CreateBillingGroupOrder(ctx context.Context, arg db.CreateBillingGroupOrderParams) (db.BillingGroupOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBillingGroupOrder", ctx, arg)
+	ret0, _ := ret[0].(db.BillingGroupOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBillingGroupOrder indicates an expected call of CreateBillingGroupOrder.
+func (mr *MockStoreMockRecorder) CreateBillingGroupOrder(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBillingGroupOrder", reflect.TypeOf((*MockStore)(nil).CreateBillingGroupOrder), ctx, arg)
+}
+
 // CreateBusinessHour mocks base method.
 func (m *MockStore) CreateBusinessHour(ctx context.Context, arg db.CreateBusinessHourParams) (db.MerchantBusinessHour, error) {
 	m.ctrl.T.Helper()
@@ -3717,6 +3762,20 @@ func (mr *MockStoreMockRecorder) DeleteRegion(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteRegion", reflect.TypeOf((*MockStore)(nil).DeleteRegion), ctx, id)
 }
 
+// DeleteReservationInventoryByDish mocks base method.
+func (m *MockStore) DeleteReservationInventoryByDish(ctx context.Context, arg db.DeleteReservationInventoryByDishParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteReservationInventoryByDish", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteReservationInventoryByDish indicates an expected call of DeleteReservationInventoryByDish.
+func (mr *MockStoreMockRecorder) DeleteReservationInventoryByDish(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReservationInventoryByDish", reflect.TypeOf((*MockStore)(nil).DeleteReservationInventoryByDish), ctx, arg)
+}
+
 // DeleteReservationItems mocks base method.
 func (m *MockStore) DeleteReservationItems(ctx context.Context, reservationID int64) error {
 	m.ctrl.T.Helper()
@@ -3886,6 +3945,21 @@ func (m *MockStore) FreezeUserBalance(ctx context.Context, arg db.FreezeUserBala
 func (mr *MockStoreMockRecorder) FreezeUserBalance(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FreezeUserBalance", reflect.TypeOf((*MockStore)(nil).FreezeUserBalance), ctx, arg)
+}
+
+// GetActiveBillingGroupMember mocks base method.
+func (m *MockStore) GetActiveBillingGroupMember(ctx context.Context, arg db.GetActiveBillingGroupMemberParams) (db.BillingGroupMember, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveBillingGroupMember", ctx, arg)
+	ret0, _ := ret[0].(db.BillingGroupMember)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveBillingGroupMember indicates an expected call of GetActiveBillingGroupMember.
+func (mr *MockStoreMockRecorder) GetActiveBillingGroupMember(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveBillingGroupMember", reflect.TypeOf((*MockStore)(nil).GetActiveBillingGroupMember), ctx, arg)
 }
 
 // GetActiveDeliveryFeeConfigByRegion mocks base method.
@@ -4111,6 +4185,21 @@ func (m *MockStore) GetBestDiscountRule(ctx context.Context, arg db.GetBestDisco
 func (mr *MockStoreMockRecorder) GetBestDiscountRule(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBestDiscountRule", reflect.TypeOf((*MockStore)(nil).GetBestDiscountRule), ctx, arg)
+}
+
+// GetBillingGroup mocks base method.
+func (m *MockStore) GetBillingGroup(ctx context.Context, id int64) (db.BillingGroup, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBillingGroup", ctx, id)
+	ret0, _ := ret[0].(db.BillingGroup)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBillingGroup indicates an expected call of GetBillingGroup.
+func (mr *MockStoreMockRecorder) GetBillingGroup(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBillingGroup", reflect.TypeOf((*MockStore)(nil).GetBillingGroup), ctx, id)
 }
 
 // GetBusinessHour mocks base method.
@@ -4621,6 +4710,21 @@ func (m *MockStore) GetDailyInventoryForUpdate(ctx context.Context, arg db.GetDa
 func (mr *MockStoreMockRecorder) GetDailyInventoryForUpdate(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDailyInventoryForUpdate", reflect.TypeOf((*MockStore)(nil).GetDailyInventoryForUpdate), ctx, arg)
+}
+
+// GetDefaultBillingGroupBySession mocks base method.
+func (m *MockStore) GetDefaultBillingGroupBySession(ctx context.Context, diningSessionID int64) (db.BillingGroup, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDefaultBillingGroupBySession", ctx, diningSessionID)
+	ret0, _ := ret[0].(db.BillingGroup)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDefaultBillingGroupBySession indicates an expected call of GetDefaultBillingGroupBySession.
+func (mr *MockStoreMockRecorder) GetDefaultBillingGroupBySession(ctx, diningSessionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDefaultBillingGroupBySession", reflect.TypeOf((*MockStore)(nil).GetDefaultBillingGroupBySession), ctx, diningSessionID)
 }
 
 // GetDelivery mocks base method.
@@ -8743,6 +8847,36 @@ func (mr *MockStoreMockRecorder) ListAvailableRoomsForCustomer(ctx, merchantID a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAvailableRoomsForCustomer", reflect.TypeOf((*MockStore)(nil).ListAvailableRoomsForCustomer), ctx, merchantID)
 }
 
+// ListBillingGroupOrdersByGroup mocks base method.
+func (m *MockStore) ListBillingGroupOrdersByGroup(ctx context.Context, billingGroupID int64) ([]db.BillingGroupOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBillingGroupOrdersByGroup", ctx, billingGroupID)
+	ret0, _ := ret[0].([]db.BillingGroupOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBillingGroupOrdersByGroup indicates an expected call of ListBillingGroupOrdersByGroup.
+func (mr *MockStoreMockRecorder) ListBillingGroupOrdersByGroup(ctx, billingGroupID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBillingGroupOrdersByGroup", reflect.TypeOf((*MockStore)(nil).ListBillingGroupOrdersByGroup), ctx, billingGroupID)
+}
+
+// ListBillingGroupsBySession mocks base method.
+func (m *MockStore) ListBillingGroupsBySession(ctx context.Context, diningSessionID int64) ([]db.BillingGroup, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBillingGroupsBySession", ctx, diningSessionID)
+	ret0, _ := ret[0].([]db.BillingGroup)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBillingGroupsBySession indicates an expected call of ListBillingGroupsBySession.
+func (mr *MockStoreMockRecorder) ListBillingGroupsBySession(ctx, diningSessionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBillingGroupsBySession", reflect.TypeOf((*MockStore)(nil).ListBillingGroupsBySession), ctx, diningSessionID)
+}
+
 // ListBossesByMerchant mocks base method.
 func (m *MockStore) ListBossesByMerchant(ctx context.Context, merchantID int64) ([]db.ListBossesByMerchantRow, error) {
 	m.ctrl.T.Helper()
@@ -10498,6 +10632,36 @@ func (mr *MockStoreMockRecorder) ListRegionsWithWarning(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRegionsWithWarning", reflect.TypeOf((*MockStore)(nil).ListRegionsWithWarning), ctx)
 }
 
+// ListReservationDishSummary mocks base method.
+func (m *MockStore) ListReservationDishSummary(ctx context.Context, reservationID int64) ([]db.ListReservationDishSummaryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListReservationDishSummary", ctx, reservationID)
+	ret0, _ := ret[0].([]db.ListReservationDishSummaryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListReservationDishSummary indicates an expected call of ListReservationDishSummary.
+func (mr *MockStoreMockRecorder) ListReservationDishSummary(ctx, reservationID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReservationDishSummary", reflect.TypeOf((*MockStore)(nil).ListReservationDishSummary), ctx, reservationID)
+}
+
+// ListReservationInventoryByReservation mocks base method.
+func (m *MockStore) ListReservationInventoryByReservation(ctx context.Context, reservationID int64) ([]db.ReservationInventory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListReservationInventoryByReservation", ctx, reservationID)
+	ret0, _ := ret[0].([]db.ReservationInventory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListReservationInventoryByReservation indicates an expected call of ListReservationInventoryByReservation.
+func (mr *MockStoreMockRecorder) ListReservationInventoryByReservation(ctx, reservationID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReservationInventoryByReservation", reflect.TypeOf((*MockStore)(nil).ListReservationInventoryByReservation), ctx, reservationID)
+}
+
 // ListReservationItems mocks base method.
 func (m *MockStore) ListReservationItems(ctx context.Context, reservationID int64) ([]db.ListReservationItemsRow, error) {
 	m.ctrl.T.Helper()
@@ -11439,6 +11603,35 @@ func (mr *MockStoreMockRecorder) RejectRiderApplication(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectRiderApplication", reflect.TypeOf((*MockStore)(nil).RejectRiderApplication), ctx, arg)
 }
 
+// ReleaseReservationInventoryTx mocks base method.
+func (m *MockStore) ReleaseReservationInventoryTx(ctx context.Context, arg db.ReleaseReservationInventoryTxParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseReservationInventoryTx", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReleaseReservationInventoryTx indicates an expected call of ReleaseReservationInventoryTx.
+func (mr *MockStoreMockRecorder) ReleaseReservationInventoryTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseReservationInventoryTx", reflect.TypeOf((*MockStore)(nil).ReleaseReservationInventoryTx), ctx, arg)
+}
+
+// ReleaseReservedInventory mocks base method.
+func (m *MockStore) ReleaseReservedInventory(ctx context.Context, arg db.ReleaseReservedInventoryParams) (db.DailyInventory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseReservedInventory", ctx, arg)
+	ret0, _ := ret[0].(db.DailyInventory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReleaseReservedInventory indicates an expected call of ReleaseReservedInventory.
+func (mr *MockStoreMockRecorder) ReleaseReservedInventory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseReservedInventory", reflect.TypeOf((*MockStore)(nil).ReleaseReservedInventory), ctx, arg)
+}
+
 // RemoveAllComboDishes mocks base method.
 func (m *MockStore) RemoveAllComboDishes(ctx context.Context, comboID int64) error {
 	m.ctrl.T.Helper()
@@ -11676,6 +11869,36 @@ func (m *MockStore) RenewOperatorContract(ctx context.Context, arg db.RenewOpera
 func (mr *MockStoreMockRecorder) RenewOperatorContract(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewOperatorContract", reflect.TypeOf((*MockStore)(nil).RenewOperatorContract), ctx, arg)
+}
+
+// ReplaceReservationItemsTx mocks base method.
+func (m *MockStore) ReplaceReservationItemsTx(ctx context.Context, arg db.ReplaceReservationItemsTxParams) (db.ReplaceReservationItemsTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplaceReservationItemsTx", ctx, arg)
+	ret0, _ := ret[0].(db.ReplaceReservationItemsTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplaceReservationItemsTx indicates an expected call of ReplaceReservationItemsTx.
+func (mr *MockStoreMockRecorder) ReplaceReservationItemsTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceReservationItemsTx", reflect.TypeOf((*MockStore)(nil).ReplaceReservationItemsTx), ctx, arg)
+}
+
+// ReserveInventory mocks base method.
+func (m *MockStore) ReserveInventory(ctx context.Context, arg db.ReserveInventoryParams) (db.DailyInventory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReserveInventory", ctx, arg)
+	ret0, _ := ret[0].(db.DailyInventory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReserveInventory indicates an expected call of ReserveInventory.
+func (mr *MockStoreMockRecorder) ReserveInventory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReserveInventory", reflect.TypeOf((*MockStore)(nil).ReserveInventory), ctx, arg)
 }
 
 // ResetMerchantApplicationToDraft mocks base method.
@@ -12238,6 +12461,21 @@ func (m *MockStore) SuspendRider(ctx context.Context, arg db.SuspendRiderParams)
 func (mr *MockStoreMockRecorder) SuspendRider(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SuspendRider", reflect.TypeOf((*MockStore)(nil).SuspendRider), ctx, arg)
+}
+
+// SyncReservationInventoryTx mocks base method.
+func (m *MockStore) SyncReservationInventoryTx(ctx context.Context, arg db.SyncReservationInventoryTxParams) (db.SyncReservationInventoryTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncReservationInventoryTx", ctx, arg)
+	ret0, _ := ret[0].(db.SyncReservationInventoryTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncReservationInventoryTx indicates an expected call of SyncReservationInventoryTx.
+func (mr *MockStoreMockRecorder) SyncReservationInventoryTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReservationInventoryTx", reflect.TypeOf((*MockStore)(nil).SyncReservationInventoryTx), ctx, arg)
 }
 
 // TrackBehavior mocks base method.
@@ -14317,6 +14555,21 @@ func (m *MockStore) UpsertRecommendationConfig(ctx context.Context, arg db.Upser
 func (mr *MockStoreMockRecorder) UpsertRecommendationConfig(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertRecommendationConfig", reflect.TypeOf((*MockStore)(nil).UpsertRecommendationConfig), ctx, arg)
+}
+
+// UpsertReservationInventory mocks base method.
+func (m *MockStore) UpsertReservationInventory(ctx context.Context, arg db.UpsertReservationInventoryParams) (db.ReservationInventory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertReservationInventory", ctx, arg)
+	ret0, _ := ret[0].(db.ReservationInventory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertReservationInventory indicates an expected call of UpsertReservationInventory.
+func (mr *MockStoreMockRecorder) UpsertReservationInventory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertReservationInventory", reflect.TypeOf((*MockStore)(nil).UpsertReservationInventory), ctx, arg)
 }
 
 // UpsertUserDevice mocks base method.

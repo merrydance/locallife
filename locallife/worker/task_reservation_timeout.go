@@ -93,6 +93,12 @@ func (p *RedisTaskProcessor) ProcessTaskReservationPaymentTimeout(ctx context.Co
 		return fmt.Errorf("update reservation status: %w", err)
 	}
 
+	if err := p.store.ReleaseReservationInventoryTx(ctx, db.ReleaseReservationInventoryTxParams{
+		ReservationID: reservation.ID,
+	}); err != nil {
+		return fmt.Errorf("release reservation inventory: %w", err)
+	}
+
 	log.Info().
 		Int64("reservation_id", payload.ReservationID).
 		Msg("reservation payment timeout processed successfully")

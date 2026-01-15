@@ -27,6 +27,7 @@ type ActivateOrderInput struct {
 // OpenDiningSessionTxResult captures the side effects of the transaction.
 type OpenDiningSessionTxResult struct {
 	Session        DiningSession
+	BillingGroup   BillingGroup
 	CartID         *int64
 	ImportedItems  int
 	ActivatedOrder *Order
@@ -51,6 +52,26 @@ func (store *SQLStore) OpenDiningSessionTx(ctx context.Context, arg OpenDiningSe
 		})
 		if err != nil {
 			return fmt.Errorf("create dining session: %w", err)
+		}
+
+		// 1.1) Create default billing group and owner membership
+		result.BillingGroup, err = q.CreateBillingGroup(ctx, CreateBillingGroupParams{
+			DiningSessionID: result.Session.ID,
+			Status:          "open",
+			IsDefault:       true,
+			TotalAmount:     0,
+			PaidAmount:      0,
+		})
+		if err != nil {
+			return fmt.Errorf("create default billing group: %w", err)
+		}
+
+		if _, err := q.CreateBillingGroupMember(ctx, CreateBillingGroupMemberParams{
+			BillingGroupID: result.BillingGroup.ID,
+			UserID:         arg.UserID,
+			Role:           "owner",
+		}); err != nil {
+			return fmt.Errorf("create billing group member: %w", err)
 		}
 
 		// 2) Import reservation items into a dine-in cart if needed

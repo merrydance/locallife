@@ -15,6 +15,7 @@ import (
 type CreateOrderTxParams struct {
 	CreateOrderParams CreateOrderParams
 	Items             []CreateOrderItemParams
+	BillingGroupID    *int64
 
 	// 优惠券相关（可选）
 	UserVoucherID *int64 // 用户优惠券ID
@@ -92,6 +93,22 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 				return fmt.Errorf("create order item: %w", err)
 			}
 			result.Items = append(result.Items, orderItem)
+		}
+
+		// 4.1 账单组订单关联（可选）
+		if arg.BillingGroupID != nil {
+			amount := result.Order.TotalAmount
+			if result.Order.FinalAmount.Valid {
+				amount = result.Order.FinalAmount.Int64
+			}
+			if _, err := q.CreateBillingGroupOrder(ctx, CreateBillingGroupOrderParams{
+				BillingGroupID: *arg.BillingGroupID,
+				OrderID:        result.Order.ID,
+				Amount:         amount,
+				Status:         "linked",
+			}); err != nil {
+				return fmt.Errorf("create billing group order: %w", err)
+			}
 		}
 
 		// 5. 创建初始状态日志
@@ -235,12 +252,25 @@ func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrd
 				return fmt.Errorf("get inventory for dish %d: %w", item.DishID.Int64, err)
 			}
 
+
 			// ✅ Check if there's enough stock
 			if inventory.TotalQuantity != -1 { // -1 means unlimited
-				available := inventory.TotalQuantity - inventory.SoldQuantity
+				available := inventory.TotalQuantity - inventory.SoldQuantity - inventory.ReservedQuantity
 				if available < int32(item.Quantity) {
 					return fmt.Errorf("insufficient inventory for dish %d: need %d, have %d",
 						item.DishID.Int64, item.Quantity, available)
+				}
+			}
+
+			// 预订订单：先释放预留库存
+			if result.Order.OrderType == OrderTypeReservation {
+				if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+					MerchantID:       result.Order.MerchantID,
+					DishID:           item.DishID.Int64,
+					Date:             inventoryDate,
+					ReservedQuantity: int32(item.Quantity),
+				}); err != nil {
+					return fmt.Errorf("release reserved inventory for dish %d: %w", item.DishID.Int64, err)
 				}
 			}
 

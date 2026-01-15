@@ -10,6 +10,7 @@
     "pages/orders/list/index",
     "pages/reservation/confirm/index",
     "pages/reservation/detail/index",
+    "pages/reservation/modify/index",
     "pages/reservation/room-detail/index",
     "pages/takeout/order-confirm/index",
     "pages/takeout/restaurant-detail/index",

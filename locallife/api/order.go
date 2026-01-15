@@ -114,6 +114,9 @@ type createOrderRequest struct {
 	// 预订ID (预定点菜时必填)
 	ReservationID *int64 `json:"reservation_id,omitempty" binding:"omitempty,min=1" example:"8001"`
 
+	// 账单组ID (堂食可选，用于拼桌/单独结算)
+	BillingGroupID *int64 `json:"billing_group_id,omitempty" binding:"omitempty,min=1" example:"12001"`
+
 	// 订单商品列表 (必填，至少包含1个商品，最多50个)
 	Items []orderItemRequest `json:"items" binding:"required,min=1,max=50,dive"`
 
@@ -620,10 +623,6 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		if session.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dining session does not belong to you")))
-			return
-		}
 		if session.TableID != res.TableID {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session table mismatch")))
 			return
@@ -650,10 +649,6 @@ func (server *Server) createOrder(ctx *gin.Context) {
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if session.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dining session does not belong to you")))
 			return
 		}
 		if session.MerchantID != req.MerchantID {
@@ -700,6 +695,68 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		}
 
 		diningSession = &session
+	}
+
+	// 账单组校验（仅堂食/预订）
+	if req.BillingGroupID != nil && req.OrderType != OrderTypeDineIn && req.OrderType != OrderTypeReservation {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("billing_group_id is only allowed for dine-in or reservation orders")))
+		return
+	}
+	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
+		if diningSession == nil {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for billing group")))
+			return
+		}
+
+		var bg db.BillingGroup
+		if req.BillingGroupID != nil {
+			var err error
+			bg, err = server.store.GetBillingGroup(ctx, *req.BillingGroupID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
+					return
+				}
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+		} else {
+			var err error
+			bg, err = server.store.GetDefaultBillingGroupBySession(ctx, diningSession.ID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					ctx.JSON(http.StatusConflict, errorResponse(errors.New("default billing group not found")))
+					return
+				}
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+		}
+
+		if bg.DiningSessionID != diningSession.ID {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group does not belong to this dining session")))
+			return
+		}
+		if bg.Status == "closed" {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group is closed")))
+			return
+		}
+		if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
+			BillingGroupID: bg.ID,
+			UserID:         authPayload.UserID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a member of the billing group")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if req.BillingGroupID == nil {
+			bgID := bg.ID
+			req.BillingGroupID = &bgID
+		}
 	}
 
 	// 定金模式仅允许一笔尾款订单，避免重复抵扣
@@ -1052,6 +1109,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	txResult, err := server.store.CreateOrderTx(ctx, db.CreateOrderTxParams{
 		CreateOrderParams: arg,
 		Items:             items,
+		BillingGroupID:    req.BillingGroupID,
 		UserVoucherID:     userVoucherID,
 		VoucherAmount:     voucherAmount,
 		MembershipID:      membershipID,

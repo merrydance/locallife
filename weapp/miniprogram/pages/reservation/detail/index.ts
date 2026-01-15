@@ -31,7 +31,8 @@ Page({
         cancelReason: '',
         cancelReasons: ['行程改变', '订错了', '不想去了', '其他原因'],
         showPayButton: false,
-        showCancelButton: false
+        showCancelButton: false,
+        showModifyButton: false
     },
 
     onLoad(options: any) {
@@ -74,12 +75,14 @@ Page({
 
             const showPayButton = res.status === 'pending'
             const showCancelButton = ['pending', 'paid', 'confirmed'].includes(res.status)
+            const showModifyButton = ['paid', 'confirmed', 'checked_in'].includes(res.status) && !res.cooking_started_at
 
             this.setData({
                 reservation: formatted,
                 loading: false,
                 showPayButton,
-                showCancelButton
+                showCancelButton,
+                showModifyButton
             })
         } catch (error) {
             console.error(error)
@@ -218,5 +221,17 @@ Page({
         } finally {
             wx.hideLoading()
         }
+    },
+
+    async onModifyDishes() {
+        if (!this.data.reservation) return
+        if (this.data.reservation.cooking_started_at) {
+            wx.showToast({ title: '已开始起菜，无法修改', icon: 'none' })
+            return
+        }
+
+        wx.navigateTo({
+            url: `/pages/reservation/modify/index?id=${this.data.reservation.id}`
+        })
     }
 });

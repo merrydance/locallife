@@ -28,10 +28,36 @@ func TestCreateOrderAPI(t *testing.T) {
 	merchant := randomMerchant(user.ID)
 	// 设置商户状态为 active（order.go 验证需要）
 	merchant.Status = "active"
+	merchant.IsOpen = true
 	dish := randomDish(merchant.ID, nil)
 	region := randomRegion()
 	address := randomUserAddress(user.ID, region.ID)
 	table := randomTable(merchant.ID)
+	openSession := db.DiningSession{
+		ID:         util.RandomInt(1, 1000),
+		MerchantID: merchant.ID,
+		TableID:    table.ID,
+		UserID:     user.ID + 1,
+		Status:     "open",
+		OpenedAt:   time.Now(),
+		CreatedAt:  time.Now(),
+	}
+	billingGroup := db.BillingGroup{
+		ID:              util.RandomInt(1, 1000),
+		DiningSessionID: openSession.ID,
+		Status:          "open",
+		IsDefault:       false,
+		TotalAmount:     0,
+		PaidAmount:      0,
+		CreatedAt:       time.Now(),
+	}
+	member := db.BillingGroupMember{
+		ID:             util.RandomInt(1, 1000),
+		BillingGroupID: billingGroup.ID,
+		UserID:         user.ID,
+		Role:           "member",
+		JoinedAt:       time.Now(),
+	}
 
 	testCases := []struct {
 		name          string
@@ -40,6 +66,170 @@ func TestCreateOrderAPI(t *testing.T) {
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(recorder *httptest.ResponseRecorder)
 	}{
+			{
+				name: "DineInBillingGroupNotMember",
+			body: gin.H{
+				"merchant_id":     merchant.ID,
+				"order_type":      "dine_in",
+				"table_id":        table.ID,
+				"billing_group_id": billingGroup.ID,
+				"items": []gin.H{
+					{
+						"dish_id":  dish.ID,
+						"quantity": 1,
+					},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(openSession, nil)
+				store.EXPECT().
+					GetBillingGroup(gomock.Any(), billingGroup.ID).
+					Times(1).
+					Return(billingGroup, nil)
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(db.BillingGroupMember{}, pgx.ErrNoRows)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name: "DineInBillingGroupMismatch",
+			body: gin.H{
+				"merchant_id":     merchant.ID,
+				"order_type":      "dine_in",
+				"table_id":        table.ID,
+				"billing_group_id": billingGroup.ID,
+				"items": []gin.H{
+					{
+						"dish_id":  dish.ID,
+						"quantity": 1,
+					},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(openSession, nil)
+				mismatch := billingGroup
+				mismatch.DiningSessionID = openSession.ID + 1
+				store.EXPECT().
+					GetBillingGroup(gomock.Any(), billingGroup.ID).
+					Times(1).
+					Return(mismatch, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name: "DineInBillingGroupMemberOK",
+			body: gin.H{
+				"merchant_id":     merchant.ID,
+				"order_type":      "dine_in",
+				"table_id":        table.ID,
+				"billing_group_id": billingGroup.ID,
+				"items": []gin.H{
+					{
+						"dish_id":  dish.ID,
+						"quantity": 1,
+					},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(openSession, nil)
+				store.EXPECT().
+					GetBillingGroup(gomock.Any(), billingGroup.ID).
+					Times(1).
+					Return(billingGroup, nil)
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(member, nil)
+				store.EXPECT().
+					GetDish(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dish, nil)
+				store.EXPECT().
+					ListActiveDiscountRules(gomock.Any(), merchant.ID).
+					Times(1).
+					Return([]db.DiscountRule{}, nil)
+				store.EXPECT().
+					CreateOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateOrderTxResult{
+						Order: db.Order{
+							ID:          1,
+							OrderNo:     "20240101120000123456",
+							UserID:      user.ID,
+							MerchantID:  merchant.ID,
+							OrderType:   "dine_in",
+							Subtotal:    dish.Price,
+							TotalAmount: dish.Price,
+							Status:      "pending",
+							CreatedAt:   time.Now(),
+						},
+					}, nil)
+				store.EXPECT().
+					UpdateDiningSessionActiveOrder(gomock.Any(), gomock.Any()).
+					Times(1)
+				store.EXPECT().
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Cart{}, pgx.ErrNoRows)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
 		{
 			name: "OK",
 			body: gin.H{

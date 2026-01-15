@@ -22,7 +22,7 @@ func createRandomMerchantForDish(t *testing.T) Merchant {
 		Description: pgtype.Text{String: util.RandomString(20), Valid: true},
 		Phone:       util.RandomString(11),
 		Address:     util.RandomString(30),
-		Status:      "approved", // 必须是approved才能被推荐流查询到
+		Status:      "active",
 		RegionID:    region.ID,
 	}
 

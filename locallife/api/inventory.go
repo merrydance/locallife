@@ -17,11 +17,15 @@ import (
 
 // calculateAvailable 计算可用库存，处理无限库存情况
 // total_quantity = -1 表示无限库存，此时返回 -1
-func calculateAvailable(totalQuantity, soldQuantity int32) int32 {
+func calculateAvailable(totalQuantity, soldQuantity, reservedQuantity int32) int32 {
 	if totalQuantity == -1 {
 		return -1 // 无限库存
 	}
-	return totalQuantity - soldQuantity
+	available := totalQuantity - soldQuantity - reservedQuantity
+	if available < 0 {
+		return 0
+	}
+	return available
 }
 
 type createDailyInventoryRequest struct {
@@ -37,7 +41,8 @@ type dailyInventoryResponse struct {
 	Date          string `json:"date"`
 	TotalQuantity int32  `json:"total_quantity"`
 	SoldQuantity  int32  `json:"sold_quantity"`
-	Available     int32  `json:"available"` // 计算字段: total - sold
+	ReservedQuantity int32 `json:"reserved_quantity"`
+	Available        int32 `json:"available"` // 计算字段: total - sold - reserved
 }
 
 // createDailyInventory godoc
@@ -102,7 +107,8 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 		Date:          inventory.Date.Time.Format("2006-01-02"),
 		TotalQuantity: inventory.TotalQuantity,
 		SoldQuantity:  inventory.SoldQuantity,
-		Available:     calculateAvailable(inventory.TotalQuantity, inventory.SoldQuantity),
+		ReservedQuantity: inventory.ReservedQuantity,
+		Available:        calculateAvailable(inventory.TotalQuantity, inventory.SoldQuantity, inventory.ReservedQuantity),
 	})
 }
 
@@ -123,7 +129,8 @@ type dailyInventoryWithDishResponse struct {
 	Date          string `json:"date"`
 	TotalQuantity int32  `json:"total_quantity"`
 	SoldQuantity  int32  `json:"sold_quantity"`
-	Available     int32  `json:"available"`
+	ReservedQuantity int32 `json:"reserved_quantity"`
+	Available        int32 `json:"available"`
 }
 
 // listDailyInventory godoc
@@ -189,7 +196,8 @@ func (server *Server) listDailyInventory(ctx *gin.Context) {
 			Date:          inv.Date.Time.Format("2006-01-02"),
 			TotalQuantity: inv.TotalQuantity,
 			SoldQuantity:  inv.SoldQuantity,
-			Available:     calculateAvailable(inv.TotalQuantity, inv.SoldQuantity),
+			ReservedQuantity: inv.ReservedQuantity,
+			Available:        calculateAvailable(inv.TotalQuantity, inv.SoldQuantity, inv.ReservedQuantity),
 		}
 	}
 
@@ -305,7 +313,8 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 		Date:          updated.Date.Time.Format("2006-01-02"),
 		TotalQuantity: updated.TotalQuantity,
 		SoldQuantity:  updated.SoldQuantity,
-		Available:     calculateAvailable(updated.TotalQuantity, updated.SoldQuantity),
+		ReservedQuantity: updated.ReservedQuantity,
+		Available:        calculateAvailable(updated.TotalQuantity, updated.SoldQuantity, updated.ReservedQuantity),
 	})
 }
 
@@ -389,7 +398,7 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 			}
 			ctx.JSON(http.StatusOK, checkInventoryResponse{
 				Available:    false,
-				CurrentStock: calculateAvailable(existing.TotalQuantity, existing.SoldQuantity),
+				CurrentStock: calculateAvailable(existing.TotalQuantity, existing.SoldQuantity, existing.ReservedQuantity),
 				Message:      "insufficient inventory",
 			})
 			return
@@ -400,7 +409,7 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, checkInventoryResponse{
 		Available:    true,
-		CurrentStock: calculateAvailable(inventory.TotalQuantity, inventory.SoldQuantity),
+		CurrentStock: calculateAvailable(inventory.TotalQuantity, inventory.SoldQuantity, inventory.ReservedQuantity),
 		Message:      "success",
 	})
 }
@@ -584,6 +593,7 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 		Date:          updated.Date.Time.Format("2006-01-02"),
 		TotalQuantity: updated.TotalQuantity,
 		SoldQuantity:  updated.SoldQuantity,
-		Available:     calculateAvailable(updated.TotalQuantity, updated.SoldQuantity),
+		ReservedQuantity: updated.ReservedQuantity,
+		Available:        calculateAvailable(updated.TotalQuantity, updated.SoldQuantity, updated.ReservedQuantity),
 	})
 }

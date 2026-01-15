@@ -1,0 +1,104 @@
+<custom-navbar title="修改菜品" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page" style="padding-top: {{navBarHeight}}px; padding-bottom: 160rpx;">
+  <view wx:if="{{loading}}" class="loading">
+    <t-loading theme="circular" size="40rpx" />
+  </view>
+
+  <view wx:elif="{{hasError}}" class="error">
+    <t-icon name="error-circle" size="80rpx" color="#E34D59" />
+    <text class="error-text">{{errorMessage || '加载失败'}}</text>
+    <t-button theme="primary" size="small" bindtap="onRetry">重试</t-button>
+  </view>
+
+  <view wx:else class="content">
+    <view class="section">
+      <view class="section-title">预订信息</view>
+      <view class="info-row">
+        <text class="label">商户</text>
+        <text class="value">{{reservation.merchant_name || '--'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">时间</text>
+        <text class="value">{{reservation._timeText}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">人数</text>
+        <text class="value">{{reservation._guestCount}}</text>
+      </view>
+    </view>
+
+    <view class="section" wx:if="{{comboItems.length || orphanItems.length}}">
+      <view class="section-title">当前已选项目</view>
+      <block wx:for="{{comboItems}}" wx:key="combo_id">
+        <view class="item-row">
+          <view class="item-info">
+            <text class="item-name">{{item.name}}</text>
+            <text class="item-price">¥{{item.priceDisplay}}</text>
+          </view>
+          <view class="stepper">
+            <t-button size="small" icon="remove" shape="circle" theme="default" data-type="combo" data-id="{{item.combo_id}}" bindtap="onDecrease" />
+            <text class="qty">{{item.quantity}}</text>
+            <t-button size="small" icon="add" shape="circle" theme="primary" data-type="combo" data-id="{{item.combo_id}}" bindtap="onIncrease" />
+          </view>
+        </view>
+      </block>
+      <block wx:for="{{orphanItems}}" wx:key="dish_id">
+        <view class="item-row">
+          <view class="item-info">
+            <text class="item-name">{{item.name}}</text>
+            <text class="item-price">¥{{item.priceDisplay}}</text>
+          </view>
+          <view class="stepper">
+            <t-button size="small" icon="remove" shape="circle" theme="default" data-type="dish" data-id="{{item.dish_id}}" bindtap="onDecrease" />
+            <text class="qty">{{item.quantity}}</text>
+            <t-button size="small" icon="add" shape="circle" theme="primary" data-type="dish" data-id="{{item.dish_id}}" bindtap="onIncrease" />
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view class="section">
+      <view class="section-title">选择菜品</view>
+      <view class="dishes-container">
+        <scroll-view class="category-sidebar" scroll-y>
+          <view
+            wx:for="{{categories}}"
+            wx:key="id"
+            class="category-item {{currentCategoryId === item.id ? 'active' : ''}}"
+            data-id="{{item.id}}"
+            bindtap="switchCategory"
+          >
+            {{item.name}}
+          </view>
+        </scroll-view>
+        <scroll-view class="dishes-list" scroll-y>
+          <block wx:if="{{currentDishes.length}}">
+            <view wx:for="{{currentDishes}}" wx:key="id" class="dish-row">
+              <image class="dish-img" src="{{item.image_url}}" mode="aspectFill" />
+              <view class="dish-info">
+                <text class="dish-name">{{item.name}}</text>
+                <text class="dish-desc" wx:if="{{item.description}}">{{item.description}}</text>
+                <text class="dish-price">¥{{item.priceDisplay}}</text>
+              </view>
+              <view class="stepper">
+                <t-button wx:if="{{item.selectedQty > 0}}" size="small" icon="remove" shape="circle" theme="default" data-type="dish" data-id="{{item.id}}" bindtap="onDecrease" />
+                <text wx:if="{{item.selectedQty > 0}}" class="qty">{{item.selectedQty}}</text>
+                <t-button size="small" icon="add" shape="circle" theme="primary" data-type="dish" data-id="{{item.id}}" bindtap="onIncrease" />
+              </view>
+            </view>
+          </block>
+          <t-empty wx:else description="该分类暂无菜品" />
+        </scroll-view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="bottom-bar">
+  <view class="summary">
+    <text class="summary-count">共{{totalCount}}份</text>
+    <text class="summary-amount">预计¥{{totalAmountDisplay}}</text>
+  </view>
+  <t-button theme="primary" size="large" block bindtap="onSubmit" loading="{{submitting}}">确认修改</t-button>
+</view>

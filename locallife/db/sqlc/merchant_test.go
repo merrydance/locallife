@@ -16,19 +16,29 @@ import (
 
 // createRandomRegion 创建测试用的区域
 func createRandomRegion(t *testing.T) Region {
-	arg := CreateRegionParams{
-		Code:      util.RandomString(6),
-		Name:      util.RandomString(10),
-		Level:     1,
-		ParentID:  pgtype.Int8{Valid: false},
-		Longitude: pgtype.Numeric{},
-		Latitude:  pgtype.Numeric{},
+	for i := 0; i < 5; i++ {
+		code := fmt.Sprintf("REG_%d_%s", time.Now().UnixNano(), util.RandomString(4))
+		arg := CreateRegionParams{
+			Code:      code,
+			Name:      util.RandomString(10),
+			Level:     1,
+			ParentID:  pgtype.Int8{Valid: false},
+			Longitude: pgtype.Numeric{},
+			Latitude:  pgtype.Numeric{},
+		}
+
+		region, err := testStore.CreateRegion(context.Background(), arg)
+		if err == nil {
+			require.NotEmpty(t, region)
+			return region
+		}
+		if ErrorCode(err) != UniqueViolation {
+			require.NoError(t, err)
+		}
 	}
 
-	region, err := testStore.CreateRegion(context.Background(), arg)
-	require.NoError(t, err)
-	require.NotEmpty(t, region)
-	return region
+	t.Fatalf("failed to create unique region")
+	return Region{}
 }
 
 func createRandomMerchantForTest(t *testing.T) Merchant {
@@ -50,7 +60,7 @@ func createRandomMerchantWithOwner(t *testing.T, ownerID int64) Merchant {
 		Address:         util.RandomString(30),
 		Latitude:        pgtype.Numeric{},
 		Longitude:       pgtype.Numeric{},
-		Status:          "approved",
+		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID, // 添加区域ID
 	}
@@ -152,7 +162,7 @@ func TestListMerchants(t *testing.T) {
 	}
 
 	arg := ListMerchantsParams{
-		Status: "approved",
+		Status: "active",
 		Limit:  10,
 		Offset: 0,
 	}
@@ -162,7 +172,7 @@ func TestListMerchants(t *testing.T) {
 	require.GreaterOrEqual(t, len(merchants), 3)
 
 	for _, m := range merchants {
-		require.Equal(t, "approved", m.Status)
+		require.Equal(t, "active", m.Status)
 	}
 }
 
@@ -265,7 +275,7 @@ func TestCountSearchMerchants(t *testing.T) {
 			Name:            prefix + util.RandomString(4),
 			Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
 			Address:         "test address " + util.RandomString(10),
-			Status:          "approved",
+			Status:          "active",
 			ApplicationData: appData,
 			RegionID:        region.ID,
 		}
@@ -297,7 +307,7 @@ func TestCountSearchMerchants_PartialMatch(t *testing.T) {
 		Name:            prefix + "_SUFFIX",
 		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
 		Address:         "test address " + util.RandomString(10),
-		Status:          "approved",
+		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID,
 	}
@@ -718,7 +728,7 @@ func TestListMerchantsWithTagCount(t *testing.T) {
 	}
 
 	arg := ListMerchantsWithTagCountParams{
-		Status: "approved",
+		Status: "active",
 		Limit:  10,
 		Offset: 0,
 	}
@@ -739,7 +749,7 @@ func TestGetPopularMerchants(t *testing.T) {
 		Column3: 0, // Lng
 	})
 	require.NoError(t, err)
-	// 至少应返回 1 条（刚创建的是 approved 商户）
+	// 至少应返回 1 条（刚创建的是 active 商户）
 	require.NotEmpty(t, rows)
 }
 

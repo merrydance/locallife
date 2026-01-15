@@ -36,8 +36,42 @@ type openDiningSessionRequest struct {
 
 type openDiningSessionResponse struct {
 	Session       diningSessionResponse `json:"session"`
+	BillingGroup  billingGroupResponse  `json:"billing_group"`
 	CartID        *int64                `json:"cart_id,omitempty"`
 	ImportedItems int                   `json:"imported_items"`
+}
+
+type billingGroupResponse struct {
+	ID              int64   `json:"id"`
+	DiningSessionID int64   `json:"dining_session_id"`
+	Status          string  `json:"status"`
+	IsDefault       bool    `json:"is_default"`
+	TotalAmount     int64   `json:"total_amount"`
+	PaidAmount      int64   `json:"paid_amount"`
+	CreatedAt       string  `json:"created_at"`
+	UpdatedAt       *string `json:"updated_at,omitempty"`
+	ClosedAt        *string `json:"closed_at,omitempty"`
+}
+
+func newBillingGroupResponse(bg db.BillingGroup) billingGroupResponse {
+	resp := billingGroupResponse{
+		ID:              bg.ID,
+		DiningSessionID: bg.DiningSessionID,
+		Status:          bg.Status,
+		IsDefault:       bg.IsDefault,
+		TotalAmount:     bg.TotalAmount,
+		PaidAmount:      bg.PaidAmount,
+		CreatedAt:       bg.CreatedAt.Format(timeLayout),
+	}
+	if bg.UpdatedAt.Valid {
+		t := bg.UpdatedAt.Time.Format(timeLayout)
+		resp.UpdatedAt = &t
+	}
+	if bg.ClosedAt.Valid {
+		t := bg.ClosedAt.Time.Format(timeLayout)
+		resp.ClosedAt = &t
+	}
+	return resp
 }
 
 type precheckDiningSessionRequest struct {
@@ -258,7 +292,15 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 	// 已有开放会话直接返回（按预订优先，其次按桌台）
 	if reservation != nil {
 		if existing, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true}); err == nil {
-			ctx.JSON(http.StatusOK, openDiningSessionResponse{Session: newDiningSessionResponse(existing)})
+			billingGroup, err := server.getOrCreateDefaultBillingGroup(ctx, existing, authPayload.UserID)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(http.StatusOK, openDiningSessionResponse{
+				Session:      newDiningSessionResponse(existing),
+				BillingGroup: newBillingGroupResponse(billingGroup),
+			})
 			return
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -266,12 +308,25 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 		}
 	}
 	if existing, err := server.store.GetActiveDiningSessionByTable(ctx, req.TableID); err == nil {
-		// 若桌上已有开放会话且未绑定本预订，视为冲突
-		if reservation == nil || !existing.ReservationID.Valid || existing.ReservationID.Int64 != reservation.ID {
+		// 若桌上已有开放会话但绑定的预订与请求不一致，视为冲突
+		if reservation != nil {
+			if !existing.ReservationID.Valid || existing.ReservationID.Int64 != reservation.ID {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("table already has an active session")))
+				return
+			}
+		} else if existing.ReservationID.Valid {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("table already has an active session")))
 			return
 		}
-		ctx.JSON(http.StatusOK, openDiningSessionResponse{Session: newDiningSessionResponse(existing)})
+		billingGroup, err := server.getOrCreateDefaultBillingGroup(ctx, existing, authPayload.UserID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ctx.JSON(http.StatusOK, openDiningSessionResponse{
+			Session:      newDiningSessionResponse(existing),
+			BillingGroup: newBillingGroupResponse(billingGroup),
+		})
 		return
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -329,9 +384,58 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, openDiningSessionResponse{
 		Session:       newDiningSessionResponse(session),
+		BillingGroup:  newBillingGroupResponse(txResult.BillingGroup),
 		CartID:        txResult.CartID,
 		ImportedItems: txResult.ImportedItems,
 	})
+}
+
+func (server *Server) getOrCreateDefaultBillingGroup(ctx *gin.Context, session db.DiningSession, userID int64) (db.BillingGroup, error) {
+	billingGroup, err := server.store.GetDefaultBillingGroupBySession(ctx, session.ID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return db.BillingGroup{}, err
+		}
+
+		billingGroup, err = server.store.CreateBillingGroup(ctx, db.CreateBillingGroupParams{
+			DiningSessionID: session.ID,
+			Status:          "open",
+			IsDefault:       true,
+			TotalAmount:     0,
+			PaidAmount:      0,
+		})
+		if err != nil {
+			if db.ErrorCode(err) != db.UniqueViolation {
+				return db.BillingGroup{}, err
+			}
+			billingGroup, err = server.store.GetDefaultBillingGroupBySession(ctx, session.ID)
+			if err != nil {
+				return db.BillingGroup{}, err
+			}
+		}
+	}
+
+	role := "member"
+	if session.UserID == userID {
+		role = "owner"
+	}
+	if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
+		BillingGroupID: billingGroup.ID,
+		UserID:         userID,
+	}); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return db.BillingGroup{}, err
+		}
+		if _, err := server.store.CreateBillingGroupMember(ctx, db.CreateBillingGroupMemberParams{
+			BillingGroupID: billingGroup.ID,
+			UserID:         userID,
+			Role:           role,
+		}); err != nil && db.ErrorCode(err) != db.UniqueViolation {
+			return db.BillingGroup{}, err
+		}
+	}
+
+	return billingGroup, nil
 }
 
 func (server *Server) findActiveReservationForTable(ctx *gin.Context, tableID int64, now time.Time) (*db.TableReservation, error) {

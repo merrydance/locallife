@@ -40,3 +40,10 @@ WHERE reservation_id = $1;
 SELECT COALESCE(SUM(total_price), 0)::bigint as total
 FROM reservation_items
 WHERE reservation_id = $1;
+
+-- name: ListReservationDishSummary :many
+SELECT dish_id, SUM(quantity)::int4 as quantity
+FROM reservation_items
+WHERE reservation_id = $1 AND dish_id IS NOT NULL
+GROUP BY dish_id
+ORDER BY dish_id;
