@@ -68,6 +68,7 @@
           class="remark-input" 
           placeholder="如：请提前电话联系、放门口等" 
           maxlength="100"
+          auto-height="true"
           data-merchant-id="{{item.merchantId}}"
           value="{{remarks[item.merchantId] || ''}}"
           bindinput="onRemarkInput"

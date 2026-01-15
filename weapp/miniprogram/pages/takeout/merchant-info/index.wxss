@@ -1,0 +1,173 @@
+.page {
+  min-height: 100vh;
+  background: #F6F6F6;
+  box-sizing: border-box;
+}
+
+.content {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.loading-state {
+  padding: 120rpx 0;
+  text-align: center;
+  color: #888;
+}
+
+.hero {
+  position: relative;
+  height: 380rpx;
+  background-size: cover;
+  background-position: center;
+  border-radius: 0;
+  overflow: hidden;
+  margin-bottom: 24rpx;
+}
+
+.hero-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 24rpx;
+  background: linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.15));
+  color: #fff;
+}
+
+.hero-name {
+  font-size: 36rpx;
+  font-weight: bold;
+  margin-bottom: 8rpx;
+}
+
+.hero-meta {
+  display: flex;
+  gap: 12rpx;
+  font-size: 24rpx;
+  margin-bottom: 12rpx;
+}
+
+.hero-tag {
+  background: rgba(0,0,0,0.3);
+  padding: 6rpx 12rpx;
+  border-radius: 6rpx;
+}
+
+.hero-tags {
+  display: flex;
+  gap: 8rpx;
+}
+
+.info-section {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.04);
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  margin-bottom: 16rpx;
+}
+
+.info-desc {
+  font-size: 26rpx;
+  color: #444;
+  line-height: 1.6;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #F0F0F0;
+  font-size: 26rpx;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  color: #666;
+}
+
+.info-value {
+  color: #333;
+}
+
+.info-value.open {
+  color: #1BA57B;
+}
+
+.info-value.closed {
+  color: #E34D59;
+}
+
+.info-value.call {
+  color: #0052D9;
+}
+
+.hours-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  align-items: flex-end;
+}
+
+.hour-line {
+  display: flex;
+  gap: 12rpx;
+  color: #333;
+}
+
+.hour-line.closed {
+  color: #999;
+}
+
+.promotion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.promo-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+  color: #333;
+}
+
+.license-images {
+  display: flex;
+  gap: 20rpx;
+}
+
+.license-item {
+  width: 320rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.license-image {
+  width: 100%;
+  height: 220rpx;
+  border-radius: 12rpx;
+  background: #F7F7F7;
+}
+
+.license-name {
+  font-size: 24rpx;
+  color: #555;
+}
+
+.no-license {
+  font-size: 26rpx;
+  color: #777;
+}

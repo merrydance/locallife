@@ -1,8 +1,6 @@
 {
     "navigationBarTitleText": "外卖",
     "enablePullDownRefresh": true,
-    "renderer": "skyline",
-    "componentFramework": "glass-easel",
     "usingComponents": {
         "t-button": "tdesign-miniprogram/button/button",
         "t-tag": "tdesign-miniprogram/tag/tag",

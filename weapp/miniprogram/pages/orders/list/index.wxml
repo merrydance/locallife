@@ -2,9 +2,11 @@
 
 <scroll-view class="page" scroll-y="true" scroll-with-animation="true" style="padding-top: {{navBarHeight}}px;">
   <!-- 状态筛选Tab -->
-  <t-tabs value="{{currentStatus}}" bind:change="onStatusChange">
-    <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
-  </t-tabs>
+  <view class="tabs-container">
+    <t-tabs value="{{currentStatus}}" bind:change="onStatusChange">
+      <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+    </t-tabs>
+  </view>
 
   <!-- 骨架屏 -->
   <view wx:if="{{loading && orders.length === 0}}" class="skeleton-container">
@@ -24,23 +26,17 @@
   <view wx:else class="order-list">
     <view class="card" wx:for="{{orders}}" wx:key="id">
       <view class="card-header">
-        <view>
+        <view class="merchant-block">
           <view class="merchant">{{item.merchantName}}</view>
           <view class="order-id">#{{item.orderNo}}</view>
         </view>
-        <t-tag
-          class="status-tag {{item.statusClass}}"
-          variant="light"
-          theme="{{item.statusClass === 'completed' ? 'success' : (item.statusClass === 'cancelled' ? 'default' : (item.statusClass === 'pending' ? 'warning' : 'primary'))}}"
-        >
-          {{item.statusLabel}}
-        </t-tag>
+        <view class="status-pill {{item.statusClass}}">{{item.statusLabel}}</view>
       </view>
 
-      <view class="highlight" wx:if="{{item.highlight}}">{{item.highlight}}</view>
+      <view class="status-hint" wx:if="{{item.highlight}}">{{item.highlight}}</view>
 
       <view class="badge-row" wx:if="{{item.badges.length > 0}}">
-        <t-tag wx:for="{{item.badges}}" wx:for-item="badge" wx:key="*this" size="small" variant="light">{{badge}}</t-tag>
+        <view class="pill" wx:for="{{item.badges}}" wx:for-item="badge" wx:key="*this">{{badge}}</view>
       </view>
 
       <view class="preview-list" wx:if="{{item.previewItems.length > 0}}">
@@ -57,10 +53,7 @@
       </view>
 
       <view class="btn-row">
-        <t-button wx:if="{{item.canCancel}}" size="small" theme="danger" variant="text" data-id="{{item.id}}" bindtap="onCancelOrder">取消</t-button>
-        <t-button wx:if="{{item.canPay}}" size="small" theme="primary" data-id="{{item.id}}" bindtap="onPayOrder">去支付</t-button>
-        <t-button size="small" variant="outline" data-id="{{item.id}}" bindtap="onViewOrder">查看详情</t-button>
-        <t-button wx:if="{{item.canReorder}}" size="small" theme="primary" variant="ghost" data-id="{{item.id}}" bindtap="onReorder">再次购买</t-button>
+        <button class="primary-btn" data-id="{{item.id}}" bindtap="onViewOrder">查看详情</button>
       </view>
     </view>
 

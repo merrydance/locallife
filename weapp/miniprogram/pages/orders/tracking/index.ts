@@ -73,10 +73,16 @@ Page({
   },
 
   onLoad(options: { orderId?: string }) {
-    if (options.orderId) {
-      this.setData({ orderId: parseInt(options.orderId) });
+    const orderId = options.orderId ? parseInt(options.orderId) : NaN;
+    if (Number.isFinite(orderId) && orderId > 0) {
+      this.setData({ orderId });
       this.loadDeliveryData();
+      return;
     }
+
+    // 未传或无效订单ID，立即停止加载，避免空白页
+    this.setData({ loading: false });
+    wx.showToast({ title: "缺少订单ID", icon: "none" });
   },
 
   onUnload() {
@@ -291,11 +297,13 @@ Page({
       const fromStr = `${merchantPoint.latitude},${merchantPoint.longitude}`;
       const toStr = `${customerPoint.latitude},${customerPoint.longitude}`;
 
-      const data = await request({
+      const data = await request<{ code: number; message?: string; data?: { distance?: number; duration?: number } }>(
+        {
         url: "/v1/location/direction/bicycling",
         method: "GET",
         data: { from: fromStr, to: toStr },
-      });
+        },
+      );
 
       // 自建 OSM 返回 {code,message,data{distance,duration}}
       if (data.code === 0) {

@@ -1497,37 +1497,51 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 		}
 	}
 
-	// 生成时间段列表（11:00-21:00，每30分钟一个时段）
+	// 生成时间段列表：午餐 11:00-13:00，到店；晚餐 17:00-20:00，到店；间隔 30 分钟
+	allowedStarts := []int{}
+	for hour := 11; hour <= 13; hour++ {
+		for _, minute := range []int{0, 30} {
+			if hour == 13 && minute > 0 {
+				continue // 午餐最晚 13:00 到店
+			}
+			allowedStarts = append(allowedStarts, hour*60+minute)
+		}
+	}
+	for hour := 17; hour <= 20; hour++ {
+		for _, minute := range []int{0, 30} {
+			if hour == 20 && minute > 0 {
+				continue // 晚餐最晚 20:00 到店
+			}
+			allowedStarts = append(allowedStarts, hour*60+minute)
+		}
+	}
+
 	slots := []timeSlot{}
 	durationMin := ReservationDurationHours * 60
-	for hour := 11; hour <= 21; hour++ {
-		for _, minute := range []int{0, 30} {
-			if hour == 21 && minute == 30 {
-				continue // 21:30 不提供预约
-			}
-			currentMin := hour*60 + minute
-			timeStr := fmt.Sprintf("%02d:%02d", hour, minute)
+	for _, currentMin := range allowedStarts {
+		hour := currentMin / 60
+		minute := currentMin % 60
+		timeStr := fmt.Sprintf("%02d:%02d", hour, minute)
 
-			// 检查当前时段起始的 4 小时内是否与已有预约冲突
-			available := true
-			for _, startMin := range reservedStartMinutes {
-				// 冲突条件：两个 4 小时时段有重叠
-				// 即：|currentMin - startMin| < durationMin
-				diff := currentMin - startMin
-				if diff < 0 {
-					diff = -diff
-				}
-				if diff < durationMin {
-					available = false
-					break
-				}
+		// 检查当前时段起始的 4 小时内是否与已有预约冲突
+		available := true
+		for _, startMin := range reservedStartMinutes {
+			// 冲突条件：两个 4 小时时段有重叠
+			// 即：|currentMin - startMin| < durationMin
+			diff := currentMin - startMin
+			if diff < 0 {
+				diff = -diff
 			}
-
-			slots = append(slots, timeSlot{
-				Time:      timeStr,
-				Available: available,
-			})
+			if diff < durationMin {
+				available = false
+				break
+			}
 		}
+
+		slots = append(slots, timeSlot{
+			Time:      timeStr,
+			Available: available,
+		})
 	}
 
 	ctx.JSON(http.StatusOK, roomAvailabilityResponse{

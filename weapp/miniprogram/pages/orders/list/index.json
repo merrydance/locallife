@@ -1,7 +1,5 @@
 {
     "navigationBarTitleText": "我的订单",
-    "renderer": "skyline",
-    "componentFramework": "glass-easel",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "virtual-list": "/components/virtual-list/virtual-list",

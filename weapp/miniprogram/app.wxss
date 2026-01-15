@@ -175,4 +175,21 @@ page[data-theme="dark"] {
   }
 }
 
+/* 全局收紧表单分组标题与内容间距（影响 t-cell-group） */
+.t-cell-group {
+  margin: 0 !important;
+}
+
+.t-cell-group__title {
+  padding: 12rpx 24rpx !important;
+  font-size: 26rpx !important;
+  color: #666 !important;
+  background: #f7f7f7 !important;
+  line-height: 36rpx !important;
+}
+
+.t-cell-group__wrapper {
+  margin-top: 0 !important;
+}
+
 

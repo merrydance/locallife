@@ -71,8 +71,8 @@ Page({
       '七月', '八月', '九月', '十月', '十一月', '十二月']
     this.setData({ currentMonth: monthNames[today.getMonth()] })
 
-    // 从明天开始加载7天
-    for (let i = 1; i <= 7; i++) {
+    // 从今天起加载7天（含当天）
+    for (let i = 0; i < 7; i++) {
       const date = new Date(today)
       date.setDate(today.getDate() + i)
       // 格式化日期为 YYYY-MM-DD（后端需要）
@@ -81,7 +81,7 @@ Page({
 
       calendarDays.push({
         date: dateStr,
-        dayLabel: '周' + weekDays[date.getDay()],
+        dayLabel: i === 0 ? '今天' : '周' + weekDays[date.getDay()],
         dateNum: String(date.getDate()),
         lunchAvailable: false,
         dinnerAvailable: false

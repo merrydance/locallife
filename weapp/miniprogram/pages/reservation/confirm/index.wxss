@@ -56,3 +56,15 @@
   flex-direction: column;
   gap: 24rpx;
 }
+
+/* 收紧分组标题与内容的间距，优化视觉层级 */
+.t-cell-group__title {
+  padding: 12rpx 24rpx;
+  font-size: 24rpx;
+  color: #666;
+  background: #f7f7f7;
+}
+
+.t-cell-group__wrapper {
+  margin-top: 0;
+}

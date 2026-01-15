@@ -14,10 +14,16 @@
   position: fixed;
   left: 0;
   right: 0;
-  height: 400rpx;
+  height: 300rpx;
   background-size: cover;
   background-position: center;
   z-index: 10;
+}
+
+.restaurant-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
 }
 
 .header-overlay {
@@ -35,6 +41,10 @@
   font-weight: bold;
   margin-bottom: 8rpx;
   text-shadow: 0 2rpx 8rpx rgba(0,0,0,0.5);
+}
+
+.name-arrow {
+  font-size: 34rpx;
 }
 
 .restaurant-meta {

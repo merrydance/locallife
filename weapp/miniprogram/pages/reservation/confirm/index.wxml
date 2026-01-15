@@ -12,10 +12,10 @@
     <t-cell-group title="预定信息">
       <t-cell title="日期" arrow hover note="{{form.date || '请选择日期'}}" bindtap="showDatePicker" />
       <t-cell 
-        title="时间" 
+        title="预计到店时间" 
         arrow 
         hover 
-        note="{{loadingSlots ? '加载中...' : (form.time || '请选择时间')}}" 
+        note="{{loadingSlots ? '加载中...' : (selectedTimeLabel || '请选择时间')}}" 
         bindtap="showTimePicker"
         disabled="{{loadingSlots || availableTimeSlots.length === 0}}"
       />
@@ -34,8 +34,8 @@
     <t-cell-group title="预订方式" style="margin-top: 24rpx;">
       <view class="mode-selector">
         <t-radio-group value="{{paymentMode}}" bind:change="onPaymentModeChange">
-          <t-radio value="deposit" label="预缴定金（到店点菜）" icon="circle" />
           <t-radio value="full" label="在线点菜（支付全款）" icon="circle" />
+          <t-radio value="deposit" label="预缴定金（到店点菜）" icon="circle" />
         </t-radio-group>
       </view>
     </t-cell-group>

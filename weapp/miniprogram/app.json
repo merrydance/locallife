@@ -14,6 +14,7 @@
     "pages/reservation/room-detail/index",
     "pages/takeout/order-confirm/index",
     "pages/takeout/restaurant-detail/index",
+    "pages/takeout/merchant-info/index",
     "pages/user_center/addresses/index",
     "pages/user_center/addresses/edit/index",
     "pages/user_center/coupons/index",

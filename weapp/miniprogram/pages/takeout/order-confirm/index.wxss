@@ -206,11 +206,14 @@ page {
 
 .remark-input {
   width: 100%;
-  min-height: 120rpx;
+  min-height: 60rpx;
   padding: 16rpx;
   background: #F3F5F8;
   border-radius: 12rpx;
   font-size: 28rpx;
+  box-sizing: border-box;
+  word-break: break-all;
+  overflow-wrap: break-word;
 }
 
 .cost-section {

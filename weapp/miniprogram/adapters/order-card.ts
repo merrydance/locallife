@@ -10,7 +10,7 @@ export interface OrderCardViewModel {
     id: number
     orderNo: string
     merchantName: string
-    status: 'delivered' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled'
+    status: 'ready' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled'
     statusClass: string
     statusLabel: string
     highlight: string
@@ -65,13 +65,14 @@ export const OrderCardAdapter = {
         const priority: Record<OrderCardViewModel['status'], number> = {
             preparing: 3,
             delivering: 2,
-            delivered: 1,
+            ready: 2,
             completed: 1,
-            pending: 0
+            pending: 0,
+            cancelled: 0
         }
 
         return [...orders].sort((a, b) => {
-            const diff = priority[b.status] - priority[a.status]
+            const diff = (priority[b.status] || 0) - (priority[a.status] || 0)
             if (diff !== 0) {
                 return diff
             }
@@ -84,7 +85,7 @@ export const OrderCardAdapter = {
 /**
  * 映射订单状态到展示状态
  */
-function mapStatus(status: string): 'delivered' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled' {
+function mapStatus(status: string): 'ready' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled' {
     switch (status) {
         case 'completed':
             return 'completed'
@@ -93,8 +94,8 @@ function mapStatus(status: string): 'delivered' | 'delivering' | 'preparing' | '
         case 'delivering':
             return 'delivering'
         case 'ready':
+            return 'ready'
         case 'preparing':
-            return 'preparing'
         case 'paid':
             return 'preparing'
         case 'pending':
@@ -110,10 +111,10 @@ function mapStatus(status: string): 'delivered' | 'delivering' | 'preparing' | '
 function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
         'pending': '待支付',
-        'paid': '已支付',
+        'paid': '商家已接单',
         'preparing': '制作中',
-        'ready': '待配送',
-        'delivering': '配送中',
+        'ready': '等待跑腿接单',
+        'delivering': '派送中',
         'completed': '已完成',
         'cancelled': '已取消'
     }
@@ -133,6 +134,8 @@ function generateHighlight(order: OrderResponse): string {
     switch (order.status) {
         case 'delivering':
             return '骑手正在配送中，请耐心等待'
+        case 'ready':
+            return '商家已备餐，等待跑腿接单'
         case 'ready':
             return '商家已备餐完成，等待骑手取餐'
         case 'preparing':

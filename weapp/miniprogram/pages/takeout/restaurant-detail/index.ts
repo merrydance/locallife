@@ -14,7 +14,7 @@ Page({
   data: {
     restaurantId: '',
     restaurant: null as any,
-    activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms' | 'info',
+    activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms',
     activeCategoryId: '' as string | number,
     categories: [] as PublicDishCategory[],
     dishes: [] as any[],
@@ -41,6 +41,12 @@ Page({
 
   onShow() {
     this.updateCartDisplay()
+  },
+
+  onMerchantInfoTap() {
+    const { restaurantId } = this.data
+    if (!restaurantId) return
+    wx.navigateTo({ url: `/pages/takeout/merchant-info/index?id=${restaurantId}` })
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {

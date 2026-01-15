@@ -135,13 +135,37 @@ Page({
             page_size: pageSize,
             order_type: orderType || undefined,
           };
-      const orderDTOs = await getOrders(params);
+      const result = await getOrders(params);
 
-      // Adapter conversion with enhanced card view
-      const newOrders = orderDTOs.map(OrderCardAdapter.toCardViewModel);
+      // 兼容不同返回结构：数组 / {orders} / {list} / {items} / {data: {...}}
+      const unwrap = (payload: any): any[] => {
+        if (Array.isArray(payload)) return payload;
+        if (payload && typeof payload === 'object') {
+          if (Array.isArray(payload.orders)) return payload.orders;
+          if (Array.isArray(payload.list)) return payload.list;
+          if (Array.isArray(payload.items)) return payload.items;
+          if (payload.data) return unwrap(payload.data);
+        }
+        return [];
+      };
+
+      const orderDTOsRaw = unwrap(result);
+
+      // 过滤掉空值或非对象；并在 map 阶段做单条 try/catch，避免坏数据导致整页崩溃
+      const orderDTOs = (orderDTOsRaw as any[])
+        .filter(item => item && typeof item === 'object')
+        .map((item) => {
+          try {
+            return OrderCardAdapter.toCardViewModel(item as any);
+          } catch (err) {
+            logger.error('Order map failed:', err, item);
+            return null;
+          }
+        })
+        .filter(Boolean) as OrderCardViewModel[];
 
       // Sort by priority (preparing > delivering > completed)
-      const sortedOrders = OrderCardAdapter.sortByPriority(newOrders);
+      const sortedOrders = OrderCardAdapter.sortByPriority(orderDTOs);
 
       const orders = reset
         ? sortedOrders
@@ -149,12 +173,12 @@ Page({
 
       this.setData({
         orders,
-        loading: false,
         hasMore: orderDTOs.length >= pageSize,
       });
     } catch (error) {
       logger.error("Load orders failed:", error, "List");
       wx.showToast({ title: "加载失败", icon: "error" });
+    } finally {
       this.setData({ loading: false });
     }
   },

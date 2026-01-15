@@ -21,7 +21,7 @@ Page({
     capacity: 10,
     deposit: 0,
     depositDisplay: '0.00',
-    paymentMode: 'deposit' as 'deposit' | 'full',
+    paymentMode: 'full' as 'deposit' | 'full',
     form: {
       date: '',
       time: '',
@@ -37,6 +37,7 @@ Page({
     // 时段选择
     timeSlots: [] as TimeSlot[],
     availableTimeSlots: [] as Array<{ label: string, value: string }>,  // 可用时段列表（picker格式）
+    selectedTimeLabel: '',
     timePickerVisible: false,
     loadingSlots: false
   },
@@ -58,15 +59,14 @@ Page({
     if (options.date) {
       this.setData({ 'form.date': options.date })
       if (options.time) {
-        this.setData({ 'form.time': options.time })
+        this.setData({ 'form.time': options.time, selectedTimeLabel: this.buildTimeLabel(options.time) })
       }
       this.loadAvailability(options.date, parseInt(options.roomId))
     } else {
-      // 默认日期为明天
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
+      // 默认日期为当天
+      const today = new Date()
       const pad = (n: number) => n < 10 ? '0' + n : String(n)
-      const dateStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
+      const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
       this.setData({ 'form.date': dateStr })
       if (options.roomId) {
         this.loadAvailability(dateStr, parseInt(options.roomId))
@@ -119,10 +119,13 @@ Page({
       const response = await checkRoomAvailability(tableId, { date })
 
       const timeSlots = response.time_slots || []
-      // 转换为picker需要的格式：{label, value}
+      // 转换为picker需要的格式：{label, value}，并标记午餐/晚餐
       const availableTimeSlots = timeSlots
         .filter(slot => slot.available)
-        .map(slot => ({ label: slot.time, value: slot.time }))
+        .map(slot => {
+          const mealLabel = this.buildTimeLabel(slot.time, true)
+          return { label: mealLabel, value: slot.time }
+        })
 
       this.setData({
         timeSlots,
@@ -159,9 +162,17 @@ Page({
     if (selectedTime) {
       this.setData({
         'form.time': selectedTime,
+        selectedTimeLabel: this.buildTimeLabel(selectedTime),
         timePickerVisible: false
       })
     }
+  },
+
+  buildTimeLabel(time: string, includeTime = false) {
+    if (!time) return ''
+    const hour = parseInt(time.split(':')[0])
+    const meal = hour < 17 ? '午餐' : '晚餐'
+    return includeTime ? `${time} ${meal}` : `${time} ${meal}`
   },
 
   onPaymentModeChange(e: WechatMiniprogram.CustomEvent) {

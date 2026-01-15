@@ -159,6 +159,8 @@ JOIN merchants m ON d.merchant_id = m.id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND m.latitude IS NOT NULL
+  AND m.longitude IS NOT NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true
@@ -192,6 +194,8 @@ JOIN merchants m ON d.merchant_id = m.id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND m.latitude IS NOT NULL
+  AND m.longitude IS NOT NULL
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true

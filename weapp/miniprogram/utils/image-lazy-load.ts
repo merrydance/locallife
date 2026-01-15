@@ -83,16 +83,18 @@ class ImageLazyLoader {
               retryCount: 0
             })
             logger.debug(`图片预加载成功: ${url}`, undefined, 'ImageLazyLoader')
-            resolve()
           } else {
             this.handleLoadError(url)
-            reject(new Error(`HTTP ${res.statusCode}`))
+            logger.warn(`图片预加载失败: ${url} HTTP ${res.statusCode}`, undefined, 'ImageLazyLoader')
           }
+          // 即便失败也 resolve，避免未捕获的拒绝冒泡
+          resolve()
         },
         fail: (err) => {
           this.handleLoadError(url)
           logger.warn(`图片预加载失败: ${url}`, err, 'ImageLazyLoader')
-          reject(err)
+          // 避免未捕获的拒绝，记录后 resolve
+          resolve()
         }
       })
     })
