@@ -179,13 +179,20 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		total = int64(len(dishes))
 	}
 
+	// 若用户提供位置，批量拉取路网距离覆盖直线距离
+	routeDistances := server.getRouteDistancesByMerchant(ctx, dishesToMerchantLocs(dishes), req.UserLatitude, req.UserLongitude)
+
 	response := make([]searchDishResponse, len(dishes))
 	for i, dish := range dishes {
-		response[i] = newSearchDishResponseFromGlobalRow(dish)
+		distanceMeters := int(dish.Distance)
+		if dist, ok := routeDistances[dish.MerchantID]; ok && dist > 0 {
+			distanceMeters = dist
+		}
 
-		// Refatored Delivery Fee: Use robust internal calculator
-		// dish.MerchantRegionID is now available from SearchDishesGlobal
-		feeResult, err := server.calculateDeliveryFeeInternal(ctx, dish.MerchantRegionID, dish.MerchantID, int32(dish.Distance), 0)
+		response[i] = newSearchDishResponseFromGlobalRow(dish, distanceMeters)
+
+		// 使用路网距离计算配送费
+		feeResult, err := server.calculateDeliveryFeeInternal(ctx, dish.MerchantRegionID, dish.MerchantID, int32(distanceMeters), 0)
 		if err != nil {
 			log.Error().Err(err).
 				Int64("region_id", dish.MerchantRegionID).
@@ -194,11 +201,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		} else if feeResult != nil && !feeResult.DeliverySuspended {
 			response[i].EstimatedDeliveryFee = int(feeResult.FinalFee)
 
-			// DEBUG LOG (Updated)
 			log.Info().
 				Int64("dish_id", dish.ID).
 				Int64("region_id", dish.MerchantRegionID).
-				Float64("distance", dish.Distance).
+				Int64("merchant_id", dish.MerchantID).
+				Int("distance", distanceMeters).
 				Int64("final_fee", feeResult.FinalFee).
 				Msg("searchDishes fee calculation details")
 		}
@@ -329,6 +336,9 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		total = int64(len(combos))
 	}
 
+	// 若用户提供位置，批量拉取路网距离覆盖直线距离
+	routeDistances := server.getRouteDistancesByMerchant(ctx, combosToMerchantLocs(combos), req.UserLatitude, req.UserLongitude)
+
 	response := make([]searchComboResponse, len(combos))
 	for i, row := range combos {
 		// Calculate Savings (using int64 cents)
@@ -348,19 +358,23 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		// Delivery Fee & Time Calculation
 		var estimatedFee *int64
 		deliveryTime := 1800 // Default 30 mins
-		if row.Distance > 0 {
+		distanceMeters := int(row.Distance)
+		if dist, ok := routeDistances[row.MerchantID]; ok && dist > 0 {
+			distanceMeters = dist
+		}
+		if distanceMeters > 0 {
 			// Time: 15 mins prep + travel (12km/h)
-			travelTime := int(row.Distance / 3.33)
+			travelTime := int(float64(distanceMeters) / 3.33)
 			deliveryTime = 900 + travelTime
 
 			// Fee: Use standard internal calculator logic from recommendation.go
-			feeResult, err := server.calculateDeliveryFeeInternal(ctx, row.MerchantRegionID, row.MerchantID, int32(row.Distance), 0)
+			feeResult, err := server.calculateDeliveryFeeInternal(ctx, row.MerchantRegionID, row.MerchantID, int32(distanceMeters), 0)
 			if err != nil {
 				// Log error but don't fail the request. Return nil fee.
 				log.Error().Err(err).
 					Int64("region_id", row.MerchantRegionID).
 					Int64("merchant_id", row.MerchantID).
-					Float64("distance", row.Distance).
+					Int("distance", distanceMeters).
 					Msg("calculateDeliveryFeeInternal failed in searchCombos")
 			} else if feeResult != nil && !feeResult.DeliverySuspended {
 				log.Info().
@@ -391,7 +405,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 			MerchantName:          row.MerchantName,
 			MerchantLogo:          normalizeUploadURLForClient(row.MerchantLogo.String),
 			MerchantIsOpen:        row.MerchantIsOpen,
-			Distance:              int(row.Distance),
+			Distance:              distanceMeters,
 			EstimatedDeliveryFee:  estimatedFee,
 			EstimatedDeliveryTime: deliveryTime,
 		}
@@ -434,12 +448,12 @@ func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 }
 
 // Helper for Global Search Row
-func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow) searchDishResponse {
+func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMeters int) searchDishResponse {
 	// Calculate estimated delivery time (PrepareTime + Distance/Speed)
 	// Assume average speed 200m/min (12km/h) for simple estimation if real routing not available
 	deliveryTimeSeconds := int(row.PrepareTime) * 60
-	if row.Distance > 0 {
-		travelTimeSeconds := int(row.Distance / 3.33) // 3.33 m/s = 12 km/h
+	if distanceMeters > 0 {
+		travelTimeSeconds := int(float64(distanceMeters) / 3.33) // 3.33 m/s = 12 km/h
 		deliveryTimeSeconds += travelTimeSeconds
 	}
 
@@ -458,10 +472,10 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow) searchDish
 		MerchantName:   row.MerchantName,
 		MerchantLogo:   normalizeUploadURLForClient(row.MerchantLogo.String),
 		MerchantIsOpen: &row.MerchantIsOpen,
-		Distance:       int(row.Distance),
+		Distance:       distanceMeters,
 
 		EstimatedDeliveryTime: deliveryTimeSeconds,
-		EstimatedDeliveryFee:  int(300 + (row.Distance / 1000 * 100)), // Simple fee: 3 RMB base + 1 RMB/km
+		EstimatedDeliveryFee:  int(float64(distanceMeters)/1000*100 + 300), // Simple fee: 3 RMB base + 1 RMB/km
 	}
 
 	// DEBUG LOG for searchDishes to trace fee issues
@@ -833,4 +847,69 @@ func (server *Server) calculateSearchMerchantDistancesAndFees(ctx *gin.Context, 
 			}
 		}
 	}
+}
+
+// getRouteDistancesByMerchant 使用路网距离批量计算商户到用户的距离（骑行模式）
+func (server *Server) getRouteDistancesByMerchant(ctx *gin.Context, merchantLocs map[int64]maps.Location, userLat, userLng *float64) map[int64]int {
+	if server.mapClient == nil || userLat == nil || userLng == nil || len(merchantLocs) == 0 {
+		return nil
+	}
+
+	merchantIDs := make([]int64, 0, len(merchantLocs))
+	locs := make([]maps.Location, 0, len(merchantLocs))
+	for id, loc := range merchantLocs {
+		if loc.Lat == 0 && loc.Lng == 0 {
+			continue
+		}
+		merchantIDs = append(merchantIDs, id)
+		locs = append(locs, loc)
+	}
+
+	if len(locs) == 0 {
+		return nil
+	}
+
+	userLoc := []maps.Location{{Lat: *userLat, Lng: *userLng}}
+	result, err := server.mapClient.GetDistanceMatrix(ctx, locs, userLoc, "bicycling")
+	if err != nil {
+		return nil
+	}
+
+	distances := make(map[int64]int, len(locs))
+	for i, row := range result.Rows {
+		if i >= len(merchantIDs) {
+			break
+		}
+		if len(row.Elements) > 0 {
+			distances[merchantIDs[i]] = row.Elements[0].Distance
+		}
+	}
+
+	return distances
+}
+
+// dishesToMerchantLocs 提取菜品结果中的商户经纬度
+func dishesToMerchantLocs(rows []db.SearchDishesGlobalRow) map[int64]maps.Location {
+	locs := make(map[int64]maps.Location, len(rows))
+	for _, r := range rows {
+		if r.MerchantLatitude.Valid && r.MerchantLongitude.Valid {
+			lat, _ := r.MerchantLatitude.Float64Value()
+			lng, _ := r.MerchantLongitude.Float64Value()
+			locs[r.MerchantID] = maps.Location{Lat: lat.Float64, Lng: lng.Float64}
+		}
+	}
+	return locs
+}
+
+// combosToMerchantLocs 提取套餐结果中的商户经纬度
+func combosToMerchantLocs(rows []db.SearchCombosGlobalRow) map[int64]maps.Location {
+	locs := make(map[int64]maps.Location, len(rows))
+	for _, r := range rows {
+		if r.MerchantLatitude.Valid && r.MerchantLongitude.Valid {
+			lat, _ := r.MerchantLatitude.Float64Value()
+			lng, _ := r.MerchantLongitude.Float64Value()
+			locs[r.MerchantID] = maps.Location{Lat: lat.Float64, Lng: lng.Float64}
+		}
+	}
+	return locs
 }
