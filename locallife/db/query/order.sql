@@ -284,7 +284,7 @@ SELECT
     COALESCE(SUM(delivery_fee_discount), 0)::bigint as total_discount
 FROM orders
 WHERE merchant_id = $1
-    AND status IN ('user_delivered', 'completed', 'delivered')
+    AND status IN ('user_delivered', 'completed')
   AND created_at >= $2 AND created_at <= $3;
 
 -- name: ListMerchantPromotionOrders :many
@@ -301,8 +301,8 @@ SELECT
     completed_at
 FROM orders
 WHERE merchant_id = $1
-    AND delivery_fee_discount > 0
-    AND status IN ('user_delivered', 'completed', 'delivered')
+        AND delivery_fee_discount > 0
+        AND status IN ('user_delivered', 'completed')
   AND created_at >= $2 AND created_at <= $3
 ORDER BY created_at DESC
 LIMIT $4 OFFSET $5;
@@ -312,7 +312,7 @@ SELECT COUNT(*)::bigint
 FROM orders
 WHERE merchant_id = $1
     AND delivery_fee_discount > 0
-    AND status IN ('user_delivered', 'completed', 'delivered')
+    AND status IN ('user_delivered', 'completed')
   AND created_at >= $2 AND created_at <= $3;
 
 -- name: GetMerchantDailyPromotionExpenses :many
@@ -323,8 +323,8 @@ SELECT
     COALESCE(SUM(delivery_fee_discount), 0)::bigint as promotion_amount
 FROM orders
 WHERE merchant_id = $1
-    AND delivery_fee_discount > 0
-    AND status IN ('user_delivered', 'completed', 'delivered')
+        AND delivery_fee_discount > 0
+        AND status IN ('user_delivered', 'completed')
   AND created_at >= $2 AND created_at <= $3
 GROUP BY DATE(created_at)
 ORDER BY date DESC;

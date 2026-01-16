@@ -12,6 +12,13 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func numericFromString(t *testing.T, value string) pgtype.Numeric {
+	t.Helper()
+	var n pgtype.Numeric
+	require.NoError(t, n.Scan(value))
+	return n
+}
+
 func TestHasGeofenceDwell_EnoughSamples(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -32,21 +39,21 @@ func TestHasGeofenceDwell_EnoughSamples(t *testing.T) {
 		Times(1).
 		Return([]db.RiderLocation{
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(10),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "10"),
 				RecordedAt: now.Add(-60 * time.Second),
 			},
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(10),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "10"),
 				RecordedAt: now.Add(-30 * time.Second),
 			},
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(10),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "10"),
 				RecordedAt: now,
 			},
 		}, nil)
@@ -75,15 +82,15 @@ func TestHasGeofenceDwell_InsufficientSamples(t *testing.T) {
 		Times(1).
 		Return([]db.RiderLocation{
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(10),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "10"),
 				RecordedAt: now.Add(-60 * time.Second),
 			},
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(10),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "10"),
 				RecordedAt: now.Add(-30 * time.Second),
 			},
 		}, nil)
@@ -112,21 +119,21 @@ func TestHasGeofenceDwell_SkipLowAccuracy(t *testing.T) {
 		Times(1).
 		Return([]db.RiderLocation{
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(200),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "200"),
 				RecordedAt: now.Add(-60 * time.Second),
 			},
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(200),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "200"),
 				RecordedAt: now.Add(-30 * time.Second),
 			},
 			{
-				Longitude:  numericFromFloat(116.404),
-				Latitude:   numericFromFloat(39.915),
-				Accuracy:   numericFromFloat(200),
+				Longitude:  numericFromString(t, "116.404"),
+				Latitude:   numericFromString(t, "39.915"),
+				Accuracy:   numericFromString(t, "200"),
 				RecordedAt: now,
 			},
 		}, nil)
@@ -155,11 +162,11 @@ func TestGeofenceWithinRadius(t *testing.T) {
 
 func TestGeofenceTargetForDelivery(t *testing.T) {
 	pickupDelivery := db.Delivery{
-		PickupLongitude:   numericFromFloat(116.404),
-		PickupLatitude:    numericFromFloat(39.915),
+		PickupLongitude:   numericFromString(t, "116.404"),
+		PickupLatitude:    numericFromString(t, "39.915"),
 		Status:            "assigned",
-		DeliveryLongitude: numericFromFloat(116.410),
-		DeliveryLatitude:  numericFromFloat(39.920),
+		DeliveryLongitude: numericFromString(t, "116.410"),
+		DeliveryLatitude:  numericFromString(t, "39.920"),
 	}
 
 	target, arrive, dwell, ok := geofenceTargetForDelivery(pickupDelivery)
@@ -170,10 +177,10 @@ func TestGeofenceTargetForDelivery(t *testing.T) {
 	require.Equal(t, 39.915, target.Latitude)
 
 	dropoffDelivery := db.Delivery{
-		PickupLongitude:   numericFromFloat(116.404),
-		PickupLatitude:    numericFromFloat(39.915),
-		DeliveryLongitude: numericFromFloat(116.410),
-		DeliveryLatitude:  numericFromFloat(39.920),
+		PickupLongitude:   numericFromString(t, "116.404"),
+		PickupLatitude:    numericFromString(t, "39.915"),
+		DeliveryLongitude: numericFromString(t, "116.410"),
+		DeliveryLatitude:  numericFromString(t, "39.920"),
 		Status:            "delivering",
 		RiderID:           pgtype.Int8{Int64: 1, Valid: true},
 	}
@@ -184,4 +191,89 @@ func TestGeofenceTargetForDelivery(t *testing.T) {
 	require.Equal(t, geofenceEventDwellDropoff, dwell)
 	require.Equal(t, 116.410, target.Longitude)
 	require.Equal(t, 39.920, target.Latitude)
+}
+
+func TestMaybeAutoConfirmPickup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.config.GeofenceAutoPickupEnabled = true
+
+	rider := randomRider(100)
+	delivery := db.Delivery{
+		ID:      10,
+		OrderID: 20,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Status:  "picking",
+	}
+
+	order := db.Order{
+		ID:     delivery.OrderID,
+		UserID: 200,
+		Status: OrderStatusCourierAccepted,
+	}
+
+	store.EXPECT().
+		GetOrder(gomock.Any(), gomock.Eq(delivery.OrderID)).
+		Times(1).
+		Return(order, nil)
+
+	store.EXPECT().
+		UpdateDeliveryToPickedTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.UpdateDeliveryToPickedTxResult{Delivery: delivery}, nil)
+
+	store.EXPECT().
+		CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.OrderStatusLog{}, nil)
+
+	server.maybeAutoConfirmPickup(t.Context(), delivery, rider)
+}
+
+func TestMaybeAutoConfirmDelivery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.config.GeofenceAutoDeliverEnabled = true
+
+	rider := randomRider(101)
+	delivery := db.Delivery{
+		ID:              11,
+		OrderID:         21,
+		RiderID:         pgtype.Int8{Int64: rider.ID, Valid: true},
+		Status:          "delivering",
+		DeliveryFee:     2000,
+		Distance:        1500,
+		CreatedAt:       time.Now(),
+		PickupAddress:   "pickup",
+		DeliveryAddress: "dropoff",
+	}
+
+	order := db.Order{
+		ID:     delivery.OrderID,
+		UserID: 201,
+		Status: OrderStatusDelivering,
+	}
+
+	store.EXPECT().
+		GetOrder(gomock.Any(), gomock.Eq(delivery.OrderID)).
+		Times(1).
+		Return(order, nil)
+
+	store.EXPECT().
+		CompleteDeliveryTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CompleteDeliveryTxResult{Delivery: delivery}, nil)
+
+	store.EXPECT().
+		CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.OrderStatusLog{}, nil)
+
+	server.maybeAutoConfirmDelivery(t.Context(), delivery, rider)
 }

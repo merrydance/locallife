@@ -16,7 +16,7 @@ const countMerchantCustomers = `-- name: CountMerchantCustomers :one
 SELECT COUNT(DISTINCT user_id)::int
 FROM orders
 WHERE merchant_id = $1
-  AND status IN ('user_delivered', 'completed', 'delivered')
+  AND status IN ('user_delivered', 'completed')
 `
 
 // 统计商户的顾客总数
@@ -38,7 +38,7 @@ JOIN dishes d ON d.id = oi.dish_id
 JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('user_delivered', 'completed', 'delivered')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY oi.dish_id, d.name
 ORDER BY order_count DESC, total_quantity DESC
 LIMIT $3
@@ -102,7 +102,7 @@ FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('user_delivered', 'completed', 'delivered')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
 `
 
@@ -155,7 +155,7 @@ LEFT JOIN order_items oi ON oi.dish_id = d.id
 LEFT JOIN orders o ON o.id = oi.order_id 
     AND o.created_at >= $2 
     AND o.created_at <= $3
-    AND o.status IN ('user_delivered', 'completed', 'delivered')
+    AND o.status IN ('user_delivered', 'completed')
 WHERE mdc.merchant_id = $1
 GROUP BY dc.id, dc.name, mdc.sort_order
 ORDER BY mdc.sort_order ASC, total_revenue DESC
@@ -243,7 +243,7 @@ SELECT
 FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
-  AND o.status IN ('user_delivered', 'completed', 'delivered')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
 ORDER BY 
     CASE 
@@ -322,7 +322,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('user_delivered', 'completed', 'delivered')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY DATE(created_at)
 ORDER BY date DESC
 `
@@ -468,7 +468,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('user_delivered', 'completed', 'delivered')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY EXTRACT(HOUR FROM created_at)
 ORDER BY hour
 `
@@ -593,7 +593,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('user_delivered', 'completed', 'delivered')
+  AND status IN ('user_delivered', 'completed')
 GROUP BY order_type
 ORDER BY order_count DESC
 `
@@ -652,7 +652,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('user_delivered', 'completed', 'delivered')
+  AND status IN ('user_delivered', 'completed')
 `
 
 type GetMerchantOverviewParams struct {
@@ -692,7 +692,7 @@ WITH customer_order_counts AS (
     WHERE merchant_id = $1
       AND created_at >= $2
       AND created_at <= $3
-      AND status IN ('user_delivered', 'completed', 'delivered')
+      AND status IN ('user_delivered', 'completed')
     GROUP BY user_id
 )
 SELECT 
@@ -755,7 +755,7 @@ JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
   AND o.created_at >= $2
   AND o.created_at <= $3
-  AND o.status IN ('user_delivered', 'completed', 'delivered')
+  AND o.status IN ('user_delivered', 'completed')
 GROUP BY oi.dish_id, d.name, d.price
 ORDER BY total_sold DESC
 LIMIT $4

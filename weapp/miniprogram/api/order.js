@@ -152,7 +152,7 @@ function getPendingOrders() {
  */
 function getActiveOrders() {
     return __awaiter(this, void 0, void 0, function* () {
-        const statuses = ['paid', 'preparing', 'ready', 'delivering'];
+        const statuses = ['paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering', 'rider_delivered'];
         const results = yield Promise.all(statuses.map(status => getOrdersByStatus(status, 20)));
         return results.reduce((acc, curr) => acc.concat(curr), []);
     });
@@ -162,7 +162,7 @@ function getActiveOrders() {
  */
 function getHistoryOrders() {
     return __awaiter(this, void 0, void 0, function* () {
-        const statuses = ['completed', 'cancelled'];
+        const statuses = ['user_delivered', 'completed', 'cancelled'];
         const results = yield Promise.all(statuses.map(status => getOrdersByStatus(status, 20)));
         return results.reduce((acc, curr) => acc.concat(curr), []);
     });

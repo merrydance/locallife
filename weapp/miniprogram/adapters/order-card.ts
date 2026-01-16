@@ -21,6 +21,7 @@ export interface OrderCardViewModel {
     canReorder: boolean
     canCancel: boolean
     canPay: boolean
+    actions?: string[]
 }
 
 export interface PreviewItemViewModel {
@@ -36,25 +37,26 @@ export const OrderCardAdapter = {
      */
     toCardViewModel(order: OrderResponse): OrderCardViewModel {
         const status = mapStatus(order.status)
-        // 可取消状态：待支付、已支付、制作中
-        const canCancel = ['pending', 'paid', 'preparing'].includes(order.status)
+        const actions = order.actions || []
+        const canCancel = actions.includes('cancel')
         // 列表页不直接跳支付，统一在详情页处理
-        const canPay = false
+        const canPay = actions.includes('pay') && false
         return {
             id: order.id,
             orderNo: order.order_no,
             merchantName: order.merchant_name,
             status,
             statusClass: status,
-            statusLabel: getStatusLabel(order.status),
+            statusLabel: getStatusLabel(order.status, order.status_hint),
             highlight: generateHighlight(order),
             createTimeDisplay: formatCreatedAt(order.created_at),
             totalDisplay: formatPrice(getPayableAmount(order)),
             badges: generateBadges(order),
             previewItems: extractPreviewItems(order),
-            canReorder: order.status === 'completed' || order.status === 'cancelled',
+            canReorder: ['completed', 'cancelled', 'user_delivered'].includes(order.status),
             canCancel,
-            canPay
+            canPay,
+            actions
         }
     },
 
@@ -87,10 +89,14 @@ export const OrderCardAdapter = {
  */
 function mapStatus(status: string): 'ready' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled' {
     switch (status) {
+        case 'user_delivered':
         case 'completed':
             return 'completed'
         case 'cancelled':
             return 'cancelled'
+        case 'courier_accepted':
+        case 'picked':
+        case 'rider_delivered':
         case 'delivering':
             return 'delivering'
         case 'ready':
@@ -108,13 +114,20 @@ function mapStatus(status: string): 'ready' | 'delivering' | 'preparing' | 'comp
 /**
  * 获取状态标签
  */
-function getStatusLabel(status: string): string {
+function getStatusLabel(status: string, statusHint?: string): string {
+    if (statusHint && statusHint.trim()) {
+        return statusHint
+    }
     const labels: Record<string, string> = {
         'pending': '待支付',
         'paid': '商家已接单',
         'preparing': '制作中',
         'ready': '等待跑腿接单',
+        'courier_accepted': '骑手已接单',
+        'picked': '骑手已取餐',
         'delivering': '派送中',
+        'rider_delivered': '待确认收货',
+        'user_delivered': '已送达',
         'completed': '已完成',
         'cancelled': '已取消'
     }
@@ -125,6 +138,9 @@ function getStatusLabel(status: string): string {
  * 生成高亮信息
  */
 function generateHighlight(order: OrderResponse): string {
+    if (order.status_hint && order.status_hint.trim()) {
+        return order.status_hint
+    }
     if (order.order_type === 'reservation') {
         return '预订点菜订单'
     }
@@ -132,12 +148,16 @@ function generateHighlight(order: OrderResponse): string {
         return '堂食订单'
     }
     switch (order.status) {
+        case 'courier_accepted':
+            return '骑手已接单，正在前往取餐'
+        case 'picked':
+            return '骑手已取餐，正在配送'
         case 'delivering':
             return '骑手正在配送中，请耐心等待'
+        case 'rider_delivered':
+            return '订单已送达，请确认收餐'
         case 'ready':
             return '商家已备餐，等待跑腿接单'
-        case 'ready':
-            return '商家已备餐完成，等待骑手取餐'
         case 'preparing':
             return '商家正在制作您的餐品'
         case 'completed':
@@ -172,7 +192,16 @@ function generateBadges(order: OrderResponse): string[] {
         badges.push(`已减¥${(order.discount_amount / 100).toFixed(2)}`)
     }
 
-    return badges
+    const extraBadges = normalizeBadges(order.badges)
+    return [...badges, ...extraBadges]
+}
+
+function normalizeBadges(badges?: Array<{ text: string }> | string[]): string[] {
+    if (!badges || badges.length === 0) return []
+    if (typeof badges[0] === 'string') {
+        return badges as string[]
+    }
+    return (badges as Array<{ text: string }>).map(badge => badge.text).filter(Boolean)
 }
 
 /**

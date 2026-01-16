@@ -79,7 +79,7 @@ SELECT COALESCE(SUM(oi.quantity), 0)::int
 FROM order_items oi
 JOIN orders o ON oi.order_id = o.id
 WHERE oi.dish_id = $1
-  AND o.status IN ('user_delivered', 'completed', 'delivered')
+  AND o.status IN ('user_delivered', 'completed')
   AND o.created_at >= NOW() - INTERVAL '30 days'
 `
 

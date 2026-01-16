@@ -13,7 +13,11 @@ export type OrderStatus =
   | 'paid'        // 已支付
   | 'preparing'   // 制作中
   | 'ready'       // 待配送/待取餐
+  | 'courier_accepted' // 骑手已接单
+  | 'picked'      // 已取餐
   | 'delivering'  // 配送中
+  | 'rider_delivered' // 骑手已送达
+  | 'user_delivered'  // 用户已确认
   | 'completed'   // 已完成
   | 'cancelled'   // 已取消
 
@@ -62,6 +66,11 @@ export interface OrderResponse {
   merchant_name: string
   merchant_phone?: string          // 商户电话
   status: OrderStatus
+  status_hint?: string
+  badges?: Array<{ text: string; type?: string; locale?: string }> | string[]
+  actions?: string[]
+  pickup_code_masked?: string
+  overtime?: boolean
   fulfillment_status?: FulfillmentStatus
   order_type: OrderType
   payment_method?: 'wechat' | 'balance'
@@ -336,7 +345,15 @@ export async function getPendingOrders(): Promise<OrderResponse[]> {
  * 获取进行中的订单（已支付但未完成）
  */
 export async function getActiveOrders(): Promise<OrderResponse[]> {
-  const statuses: OrderStatus[] = ['paid', 'preparing', 'ready', 'delivering']
+  const statuses: OrderStatus[] = [
+    'paid',
+    'preparing',
+    'ready',
+    'courier_accepted',
+    'picked',
+    'delivering',
+    'rider_delivered'
+  ]
   const results = await Promise.all(
     statuses.map(status => getOrdersByStatus(status, 20))
   )
@@ -347,7 +364,7 @@ export async function getActiveOrders(): Promise<OrderResponse[]> {
  * 获取历史订单（已完成或已取消）
  */
 export async function getHistoryOrders(): Promise<OrderResponse[]> {
-  const statuses: OrderStatus[] = ['completed', 'cancelled']
+  const statuses: OrderStatus[] = ['user_delivered', 'completed', 'cancelled']
   const results = await Promise.all(
     statuses.map(status => getOrdersByStatus(status, 20))
   )

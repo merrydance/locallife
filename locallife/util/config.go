@@ -65,6 +65,8 @@ type Config struct {
 	GeofenceDwellMinSamples    int  `mapstructure:"GEOFENCE_DWELL_MIN_SAMPLES"`
 	GeofenceMinAccuracyMeters  int  `mapstructure:"GEOFENCE_MIN_ACCURACY_M"`
 	GeofenceAutoAdvanceEnabled bool `mapstructure:"GEOFENCE_AUTO_ADVANCE_ENABLED"`
+	GeofenceAutoPickupEnabled  bool `mapstructure:"GEOFENCE_AUTO_PICKUP_ENABLED"`
+	GeofenceAutoDeliverEnabled bool `mapstructure:"GEOFENCE_AUTO_DELIVER_ENABLED"`
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -83,6 +85,8 @@ func LoadConfig(path string) (config Config, err error) {
 	viper.SetDefault("GEOFENCE_DWELL_MIN_SAMPLES", 3)
 	viper.SetDefault("GEOFENCE_MIN_ACCURACY_M", 80)
 	viper.SetDefault("GEOFENCE_AUTO_ADVANCE_ENABLED", false)
+	viper.SetDefault("GEOFENCE_AUTO_PICKUP_ENABLED", false)
+	viper.SetDefault("GEOFENCE_AUTO_DELIVER_ENABLED", false)
 
 	err = viper.ReadInConfig()
 	if err != nil {

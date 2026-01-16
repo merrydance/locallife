@@ -15,8 +15,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const logger_1 = require("../../../utils/logger");
 const cart_1 = __importDefault(require("../../../services/cart"));
 const order_1 = require("../../../api/order");
+const payment_1 = require("../../../api/payment");
 const order_2 = require("../../../adapters/order");
 const timeline_1 = require("../../../utils/timeline");
+const reservation_1 = require("../../../api/reservation");
 // 取消原因选项
 const CANCEL_REASONS = [
     '不想要了',
@@ -30,11 +32,13 @@ Page({
         orderId: '',
         order: null,
         orderDTO: null,
+        reservationInfo: null,
         navBarHeight: 88,
         loading: false,
         showTrackingButton: false,
         showConfirmButton: false,
         showCancelButton: false,
+        showPayButton: false,
         showUrgeButton: false,
         lastUrgeTime: 0, // 上次催单时间
         urgeCountdown: 0 // 催单倒计时（秒）
@@ -54,25 +58,38 @@ Page({
             try {
                 const orderDTO = yield (0, order_1.getOrderDetail)(parseInt(this.data.orderId));
                 const order = order_2.OrderAdapter.toDetailViewModel(orderDTO);
-                // 判断是否显示物流追踪按钮（外卖订单且状态为配送中）
+                let reservationInfo = null;
+                if (orderDTO.order_type === 'reservation' && orderDTO.reservation_id) {
+                    try {
+                        reservationInfo = yield reservation_1.ReservationService.getReservationDetail(orderDTO.reservation_id);
+                    }
+                    catch (e) {
+                        logger_1.logger.warn('Fetch reservation detail failed', e);
+                    }
+                }
+                const actions = orderDTO.actions || [];
+                // 判断是否显示物流追踪按钮（外卖订单且状态为配送中/待确认）
                 const showTrackingButton = orderDTO.order_type === 'takeout' &&
-                    orderDTO.status === 'delivering';
-                // 判断是否显示确认收货按钮（配送中或待取餐）
-                const showConfirmButton = (orderDTO.order_type === 'takeout' && orderDTO.status === 'delivering') ||
-                    (orderDTO.order_type === 'takeaway' && orderDTO.status === 'ready');
-                // 判断是否显示取消按钮（待支付、已支付、制作中可取消）
-                const showCancelButton = ['pending', 'paid', 'preparing'].includes(orderDTO.status);
-                // 判断是否显示催单按钮（已支付、制作中、配送中可催单）
-                const showUrgeButton = ['paid', 'preparing', 'delivering'].includes(orderDTO.status);
+                    ['delivering', 'rider_delivered'].includes(orderDTO.status);
+                // 判断是否显示确认收货按钮（服务端 actions 控制）
+                const showConfirmButton = actions.includes('confirm');
+                // 待支付展示去支付按钮
+                const showPayButton = actions.includes('pay');
+                // 判断是否显示取消按钮（服务端 actions 控制）
+                const showCancelButton = actions.includes('cancel');
+                // 判断是否显示催单按钮（服务端 actions 控制）
+                const showUrgeButton = actions.includes('urge');
                 // 生成订单时间线
                 const timeline = (0, timeline_1.generateOrderTimeline)(orderDTO);
                 this.setData({
                     order: Object.assign(Object.assign({}, order), { timeline }),
                     orderDTO,
+                    reservationInfo,
                     loading: false,
                     showTrackingButton,
                     showConfirmButton,
                     showCancelButton,
+                    showPayButton,
                     showUrgeButton
                 });
                 // 检查催单冷却时间
@@ -205,6 +222,29 @@ Page({
     onViewTracking() {
         wx.navigateTo({
             url: `/pages/orders/tracking/index?orderId=${this.data.orderId}`
+        });
+    },
+    // 去支付（直接拉起微信支付）
+    onPayOrder() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { orderId } = this.data;
+            if (!orderId) {
+                wx.showToast({ title: '订单信息缺失', icon: 'none' });
+                return;
+            }
+            wx.showLoading({ title: '拉起支付...' });
+            try {
+                yield (0, payment_1.processPayment)(parseInt(orderId), 'order');
+                wx.showToast({ title: '支付成功', icon: 'success' });
+                setTimeout(() => this.loadOrderDetail(), 800);
+            }
+            catch (error) {
+                logger_1.logger.error('支付失败', error, 'Detail.onPayOrder');
+                wx.showToast({ title: '支付未完成', icon: 'none' });
+            }
+            finally {
+                wx.hideLoading();
+            }
         });
     },
     onConfirmReceipt() {

@@ -66,6 +66,11 @@ func (server *Server) processDeliveryLocationEvents(ctx context.Context, rider d
 
 	if created && dwellEvent == geofenceEventDwellPickup {
 		server.maybeAutoAdvancePickup(ctx, delivery, rider)
+		server.maybeAutoConfirmPickup(ctx, delivery, rider)
+	}
+
+	if created && dwellEvent == geofenceEventDwellDropoff {
+		server.maybeAutoConfirmDelivery(ctx, delivery, rider)
 	}
 }
 
@@ -259,6 +264,110 @@ func (server *Server) maybeAutoAdvancePickup(ctx context.Context, delivery db.De
 			"骑手已到店并开始取餐",
 		)
 	}
+}
+
+func (server *Server) maybeAutoConfirmPickup(ctx context.Context, delivery db.Delivery, rider db.Rider) {
+	if !server.config.GeofenceAutoPickupEnabled {
+		return
+	}
+	if delivery.Status != "picking" {
+		return
+	}
+
+	order, err := server.store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto pickup")
+		}
+		return
+	}
+	oldStatus := order.Status
+
+	result, err := server.store.UpdateDeliveryToPickedTx(ctx, db.UpdateDeliveryToPickedTxParams{
+		DeliveryID: delivery.ID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
+	})
+	if err != nil {
+		log.Warn().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to auto confirm pickup")
+		return
+	}
+
+	if oldStatus != OrderStatusPicked {
+		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     OrderStatusPicked,
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "围栏驻留自动确认取餐", Valid: true},
+		}); err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for auto picked")
+		}
+	}
+
+	server.sendDeliveryStatusNotification(
+		ctx,
+		order.UserID,
+		result.Delivery.OrderID,
+		result.Delivery.ID,
+		"picked",
+		"骑手已取餐",
+		"骑手已到店完成取餐",
+	)
+}
+
+func (server *Server) maybeAutoConfirmDelivery(ctx context.Context, delivery db.Delivery, rider db.Rider) {
+	if !server.config.GeofenceAutoDeliverEnabled {
+		return
+	}
+	if delivery.Status != "delivering" {
+		return
+	}
+
+	order, err := server.store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto delivery")
+		}
+		return
+	}
+	oldStatus := order.Status
+
+	result, err := server.store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
+		DeliveryID:     delivery.ID,
+		RiderID:        rider.ID,
+		OrderID:        delivery.OrderID,
+		UnfreezeAmount: int64(5000),
+		DeliveryFee:    delivery.DeliveryFee,
+	})
+	if err != nil {
+		log.Warn().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to auto confirm delivery")
+		return
+	}
+
+	if oldStatus != OrderStatusRiderDelivered {
+		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     OrderStatusRiderDelivered,
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "围栏驻留自动确认送达", Valid: true},
+		}); err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for auto rider_delivered")
+		}
+	}
+
+	server.sendDeliveryStatusNotification(
+		ctx,
+		order.UserID,
+		result.Delivery.OrderID,
+		result.Delivery.ID,
+		"delivered",
+		"订单已送达",
+		"骑手已送达，请确认收餐",
+	)
 }
 
 func optionalNumericFromFloat(value *float64) pgtype.Numeric {

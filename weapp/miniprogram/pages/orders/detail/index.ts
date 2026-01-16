@@ -60,22 +60,23 @@ Page({
         }
       }
 
-      // 判断是否显示物流追踪按钮（外卖订单且状态为配送中）
-      const showTrackingButton = orderDTO.order_type === 'takeout' &&
-        orderDTO.status === 'delivering'
+      const actions = orderDTO.actions || []
 
-      // 判断是否显示确认收货按钮（配送中或待取餐）
-      const showConfirmButton = (orderDTO.order_type === 'takeout' && orderDTO.status === 'delivering') ||
-        (orderDTO.order_type === 'takeaway' && orderDTO.status === 'ready')
+      // 判断是否显示物流追踪按钮（外卖订单且状态为配送中/待确认）
+      const showTrackingButton = orderDTO.order_type === 'takeout' &&
+        ['delivering', 'rider_delivered'].includes(orderDTO.status)
+
+      // 判断是否显示确认收货按钮（服务端 actions 控制）
+      const showConfirmButton = actions.includes('confirm')
 
       // 待支付展示去支付按钮
-      const showPayButton = orderDTO.status === 'pending'
+      const showPayButton = actions.includes('pay')
 
-      // 判断是否显示取消按钮（待支付、已支付、制作中可取消）
-      const showCancelButton = ['pending', 'paid', 'preparing'].includes(orderDTO.status)
+      // 判断是否显示取消按钮（服务端 actions 控制）
+      const showCancelButton = actions.includes('cancel')
 
-      // 判断是否显示催单按钮（已支付、制作中、配送中可催单）
-      const showUrgeButton = ['paid', 'preparing', 'delivering'].includes(orderDTO.status)
+      // 判断是否显示催单按钮（服务端 actions 控制）
+      const showUrgeButton = actions.includes('urge')
 
       // 生成订单时间线
       const timeline = generateOrderTimeline(orderDTO)

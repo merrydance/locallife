@@ -491,7 +491,7 @@ SELECT
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
 FROM dishes d
 LEFT JOIN order_items oi ON d.id = oi.dish_id
-LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed', 'delivered')
+LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
@@ -526,7 +526,7 @@ SELECT DISTINCT oi.dish_id
 FROM order_items oi
 JOIN orders o ON o.id = oi.order_id
 WHERE o.user_id = $1
-  AND o.status IN ('user_delivered', 'completed', 'delivered')
+  AND o.status IN ('user_delivered', 'completed')
   AND o.created_at >= $2;
 
 -- name: GetExploreDishes :many
@@ -536,7 +536,7 @@ SELECT
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
 FROM dishes d
 LEFT JOIN order_items oi ON d.id = oi.dish_id
-LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed', 'delivered')
+LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed')
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
@@ -545,7 +545,7 @@ WHERE d.is_online = true
     FROM order_items oi2
     JOIN orders o2 ON o2.id = oi2.order_id
     WHERE o2.user_id = $1
-      AND o2.status IN ('user_delivered', 'completed', 'delivered')
+      AND o2.status IN ('user_delivered', 'completed')
   )
 GROUP BY d.id
 ORDER BY total_sold DESC
@@ -592,7 +592,7 @@ SELECT
          FROM order_items oi 
          JOIN orders o ON o.id = oi.order_id 
          WHERE oi.dish_id = d.id 
-           AND o.status IN ('user_delivered', 'completed', 'delivered')
+           AND o.status IN ('user_delivered', 'completed')
            AND o.created_at >= NOW() - INTERVAL '30 days'
         ), 0
     )::int AS monthly_sales

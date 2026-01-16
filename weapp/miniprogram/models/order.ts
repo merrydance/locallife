@@ -14,6 +14,11 @@ export interface Order {
     status: OrderStatus           // 使用API层的枚举类型
     statusText: string            // ViewModel: 待支付/已支付等
     statusColor: string           // ViewModel: 状态颜色
+    statusHint?: string           // 后端提示文案
+    badges?: string[]             // 徽章文本
+    actions?: string[]            // 可执行动作
+    pickupCodeMasked?: string     // 取餐码（脱敏）
+    overtime?: boolean            // 是否超时
     fulfillmentStatus?: FulfillmentStatus // 履约状态
     totalAmount: number           // 订单总金额（分）
     totalAmountDisplay: string    // ViewModel: ¥xx.xx

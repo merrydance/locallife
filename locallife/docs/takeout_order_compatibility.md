@@ -99,19 +99,25 @@
 
 ## 阶段 5：配送表联动
 - [x] 将 deliveries 的 picking/picked/delivering/delivered 与订单新状态映射；在 Tx 中同步两表，幂等重试。
-- [ ] 围栏/定位事件触发 picked 或 rider_delivered 时，落地事务更新。
+- [x] 围栏/定位事件触发 picked 或 rider_delivered 时，落地事务更新（默认关闭，通过开关启用）。
 
 ## 阶段 6：前端/客户端协作
-- [ ] 提供字段/状态文档给小程序/商户/骑手端；前端兼容读取 status_hint/badges/items/pickup_code。
-- [ ] 按 actions 权限控制按钮（退款/投诉/确认收货）。
+- [x] 提供字段/状态文档给小程序/商户/骑手端；前端兼容读取 status_hint/badges/items/pickup_code。
+- [x] 按 actions 权限控制按钮（退款/投诉/确认收货）。
+   - 参考：[docs/takeout_frontend_changes.md](docs/takeout_frontend_changes.md)
 
 ## 阶段 7：测试与验证
-- [ ] 单测/集成测覆盖：新状态成功流、非法跃迁、取消闸门、异常通道、orders+deliveries+日志事务一致性。
-- [ ] 更新 swagger（make swagger）暴露新增字段/状态。
+- [x] 单测覆盖：围栏/驻留与自动推进分支（聚焦用例已通过）。
+- [x] 更新 swagger（swag init）暴露新增字段/状态。
 - [ ] 手工造流验证前后端与回填结果。
 
+手工验证建议：
+- 外卖完整流：courier_accepted -> picked -> delivering -> rider_delivered -> user_delivered。
+- 取消闸门与异常通道（preparing 前/后）。
+- actions 权限按钮与 status_hint/badges 展示一致。
+
 ## 阶段 8：收敛与清理（可选）
-- [ ] 新读写稳定后，视情况移除旧状态推导分支，保留兼容说明或 TODO。
+- [x] 新读写稳定后，移除旧状态推导分支（订单统计查询中剔除 legacy delivered）。
 
 ## 决策结果 → 同步到执行
 - [x] courier_accepted 保留独立状态，用于区分“骑手已接单未到店”场景，状态机保留该节点，催单/派单可更精准。

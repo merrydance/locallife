@@ -281,6 +281,25 @@ type DeliveryFeeConfig struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 配送围栏事件（到店/驻留/到达收货点）
+type DeliveryLocationEvent struct {
+	ID         int64          `json:"id"`
+	DeliveryID int64          `json:"delivery_id"`
+	OrderID    int64          `json:"order_id"`
+	RiderID    int64          `json:"rider_id"`
+	Longitude  pgtype.Numeric `json:"longitude"`
+	Latitude   pgtype.Numeric `json:"latitude"`
+	Accuracy   pgtype.Numeric `json:"accuracy"`
+	Speed      pgtype.Numeric `json:"speed"`
+	// arrive_pickup/dwell_pickup/arrive_dropoff/dwell_dropoff
+	EventType string `json:"event_type"`
+	// 上报来源，例如 gps
+	Source string `json:"source"`
+	// 事件对应的定位时间
+	RecordedAt time.Time `json:"recorded_at"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 // 可接单订单池
 type DeliveryPool struct {
 	ID                int64          `json:"id"`
@@ -1212,22 +1231,6 @@ type RiderLocation struct {
 	// 方向角度
 	Heading    pgtype.Numeric `json:"heading"`
 	RecordedAt time.Time      `json:"recorded_at"`
-}
-
-// 配送围栏事件
-type DeliveryLocationEvent struct {
-	ID         int64          `json:"id"`
-	DeliveryID int64          `json:"delivery_id"`
-	OrderID    int64          `json:"order_id"`
-	RiderID    int64          `json:"rider_id"`
-	Longitude  pgtype.Numeric `json:"longitude"`
-	Latitude   pgtype.Numeric `json:"latitude"`
-	Accuracy   pgtype.Numeric `json:"accuracy"`
-	Speed      pgtype.Numeric `json:"speed"`
-	EventType  string         `json:"event_type"`
-	Source     string         `json:"source"`
-	RecordedAt time.Time      `json:"recorded_at"`
-	CreatedAt  time.Time      `json:"created_at"`
 }
 
 // 高值单资格积分变更日志表

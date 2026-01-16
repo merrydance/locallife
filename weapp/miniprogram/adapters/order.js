@@ -24,7 +24,11 @@ const ORDER_STATUS_MAP = {
     'paid': { text: '已支付', color: '#ED7B2F' },
     'preparing': { text: '制作中', color: '#0052D9' },
     'ready': { text: '待配送', color: '#0052D9' },
+    'courier_accepted': { text: '骑手已接单', color: '#0052D9' },
+    'picked': { text: '骑手已取餐', color: '#0052D9' },
     'delivering': { text: '配送中', color: '#0052D9' },
+    'rider_delivered': { text: '已送达待确认', color: '#0052D9' },
+    'user_delivered': { text: '已送达', color: '#00A870' },
     'completed': { text: '已完成', color: '#00A870' },
     'cancelled': { text: '已取消', color: '#999999' }
 };
@@ -34,6 +38,8 @@ class OrderAdapter {
      */
     static toViewModel(dto) {
         const statusInfo = ORDER_STATUS_MAP[dto.status] || { text: dto.status, color: '#999999' };
+        const statusHint = dto.status_hint && dto.status_hint.trim();
+        const badgeTexts = normalizeBadges(dto.badges);
         return {
             id: dto.id,
             orderNo: dto.order_no,
@@ -42,8 +48,13 @@ class OrderAdapter {
             type: dto.order_type,
             typeText: ORDER_TYPE_MAP[dto.order_type] || '订单',
             status: dto.status,
-            statusText: statusInfo.text,
+            statusText: statusHint || statusInfo.text,
             statusColor: statusInfo.color,
+            statusHint: statusHint || undefined,
+            badges: badgeTexts,
+            actions: dto.actions,
+            pickupCodeMasked: dto.pickup_code_masked,
+            overtime: dto.overtime,
             totalAmount: dto.total_amount,
             totalAmountDisplay: `¥${(dto.total_amount / 100).toFixed(2)}`,
             itemCount: dto.items ? dto.items.reduce((sum, item) => sum + item.quantity, 0) : 0,
@@ -80,3 +91,12 @@ class OrderAdapter {
     }
 }
 exports.OrderAdapter = OrderAdapter;
+
+function normalizeBadges(badges) {
+    if (!badges || badges.length === 0)
+        return [];
+    if (typeof badges[0] === 'string') {
+        return badges;
+    }
+    return badges.map((badge) => badge.text).filter(Boolean);
+}
