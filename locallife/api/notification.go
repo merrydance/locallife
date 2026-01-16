@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -529,18 +530,27 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 		return
 	}
 
-	// 创建客户端并注册
-	client := websocket.NewClient(server.wsHub, conn, websocket.ClientInfo{
+	clientInfo := websocket.ClientInfo{
 		UserID:     authPayload.UserID,
 		ClientType: clientType,
 		EntityID:   entityID,
-	})
+	}
+
+	// 创建客户端并注册
+	client := websocket.NewClient(server.wsHub, conn, clientInfo)
 
 	server.wsHub.Register(client)
 
 	// 启动读写协程
 	go client.WritePump()
 	go client.ReadPump()
+
+	// 可选：断线重连后的消息回放
+	if lastSeq := ctx.Query("last_sequence"); lastSeq != "" {
+		if seq, err := strconv.ParseUint(lastSeq, 10, 64); err == nil {
+			server.wsHub.ReplayToClient(clientInfo, seq, 200)
+		}
+	}
 }
 
 // handlePlatformWebSocket godoc
@@ -590,16 +600,25 @@ func (server *Server) handlePlatformWebSocket(ctx *gin.Context) {
 		return
 	}
 
-	// 创建客户端并注册（使用用户ID作为实体ID）
-	client := websocket.NewClient(server.wsHub, conn, websocket.ClientInfo{
+	clientInfo := websocket.ClientInfo{
 		UserID:     authPayload.UserID,
 		ClientType: websocket.ClientTypePlatform,
 		EntityID:   authPayload.UserID, // 平台用户使用 user_id 作为实体ID
-	})
+	}
+
+	// 创建客户端并注册（使用用户ID作为实体ID）
+	client := websocket.NewClient(server.wsHub, conn, clientInfo)
 
 	server.wsHub.Register(client)
 
 	// 启动读写协程
 	go client.WritePump()
 	go client.ReadPump()
+
+	// 可选：断线重连后的消息回放
+	if lastSeq := ctx.Query("last_sequence"); lastSeq != "" {
+		if seq, err := strconv.ParseUint(lastSeq, 10, 64); err == nil {
+			server.wsHub.ReplayToClient(clientInfo, seq, 200)
+		}
+	}
 }

@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -21,6 +23,134 @@ type GrabOrderTxParams struct {
 type GrabOrderTxResult struct {
 	Delivery   Delivery
 	DepositLog RiderDeposit
+}
+
+// ==================== 配送状态同步事务 ====================
+
+// UpdateDeliveryToPickedTxParams contains the input parameters for updating delivery to picked
+type UpdateDeliveryToPickedTxParams struct {
+	DeliveryID int64
+	RiderID    int64
+	OrderID    int64
+}
+
+// UpdateDeliveryToPickedTxResult contains the result of the picked transaction
+type UpdateDeliveryToPickedTxResult struct {
+	Delivery Delivery
+	Order    Order
+}
+
+// UpdateDeliveryToPickupTxParams contains the input parameters for updating delivery to picking
+type UpdateDeliveryToPickupTxParams struct {
+	DeliveryID int64
+	RiderID    int64
+	OrderID    int64
+}
+
+// UpdateDeliveryToPickupTxResult contains the result of the picking transaction
+type UpdateDeliveryToPickupTxResult struct {
+	Delivery Delivery
+	Order    Order
+}
+
+// UpdateDeliveryToPickupTx updates delivery to picking and syncs order status in a single transaction
+func (store *SQLStore) UpdateDeliveryToPickupTx(ctx context.Context, arg UpdateDeliveryToPickupTxParams) (UpdateDeliveryToPickupTxResult, error) {
+	var result UpdateDeliveryToPickupTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Delivery, err = q.UpdateDeliveryToPickup(ctx, UpdateDeliveryToPickupParams{
+			ID:      arg.DeliveryID,
+			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("update delivery to picking: %w", err)
+		}
+
+		result.Order, err = q.UpdateOrderToCourierAccepted(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("update order to courier_accepted: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// UpdateDeliveryToPickedTx updates delivery to picked and syncs order status in a single transaction
+func (store *SQLStore) UpdateDeliveryToPickedTx(ctx context.Context, arg UpdateDeliveryToPickedTxParams) (UpdateDeliveryToPickedTxResult, error) {
+	var result UpdateDeliveryToPickedTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Delivery, err = q.UpdateDeliveryToPicked(ctx, UpdateDeliveryToPickedParams{
+			ID:      arg.DeliveryID,
+			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("update delivery to picked: %w", err)
+		}
+
+		result.Order, err = q.UpdateOrderToPicked(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("update order to picked: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// UpdateDeliveryToDeliveringTxParams contains the input parameters for updating delivery to delivering
+type UpdateDeliveryToDeliveringTxParams struct {
+	DeliveryID int64
+	RiderID    int64
+	OrderID    int64
+}
+
+// UpdateDeliveryToDeliveringTxResult contains the result of the delivering transaction
+type UpdateDeliveryToDeliveringTxResult struct {
+	Delivery Delivery
+	Order    Order
+}
+
+// UpdateDeliveryToDeliveringTx updates delivery to delivering and syncs order status in a single transaction
+func (store *SQLStore) UpdateDeliveryToDeliveringTx(ctx context.Context, arg UpdateDeliveryToDeliveringTxParams) (UpdateDeliveryToDeliveringTxResult, error) {
+	var result UpdateDeliveryToDeliveringTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.Delivery, err = q.UpdateDeliveryToDelivering(ctx, UpdateDeliveryToDeliveringParams{
+			ID:      arg.DeliveryID,
+			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("update delivery to delivering: %w", err)
+		}
+
+		result.Order, err = q.UpdateOrderToDelivering(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("update order to delivering: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
 }
 
 // GrabOrderTx executes all operations for grabbing an order in a single transaction:
@@ -109,6 +239,7 @@ type CompleteDeliveryTxResult struct {
 	DepositLog            RiderDeposit
 	PremiumScoreLog       *RiderPremiumScoreLog // 高值单资格积分变更记录
 	NewPremiumScore       int16                 // 更新后的高值单资格积分
+	Order                 Order
 }
 
 // 高值单阈值：运费 >= 10 元（1000分）
@@ -146,6 +277,14 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 		})
 		if err != nil {
 			return fmt.Errorf("update delivery to delivered: %w", err)
+		}
+
+		// 2.1 同步订单状态为 rider_delivered（允许幂等）
+		result.Order, err = q.UpdateOrderToRiderDelivered(ctx, arg.OrderID)
+		if err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("update order to rider_delivered: %w", err)
+			}
 		}
 
 		// 3. 解冻押金（使用事务内获取的最新值）

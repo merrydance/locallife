@@ -20,9 +20,10 @@ INSERT INTO orders (
     voucher_amount,
     balance_paid,
     membership_id,
-    replaced_by_order_id
+    replaced_by_order_id,
+    pickup_code
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
 ) RETURNING *;
 
 -- name: GetOrder :one
@@ -159,6 +160,60 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateOrderToCourierAccepted :one
+UPDATE orders
+SET 
+    status = 'courier_accepted',
+    courier_accept_at = COALESCE(courier_accept_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status IN ('ready', 'courier_accepted')
+RETURNING *;
+
+-- name: UpdateOrderToPicked :one
+UPDATE orders
+SET 
+    status = 'picked',
+    picked_at = COALESCE(picked_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status IN ('ready', 'courier_accepted', 'picked')
+RETURNING *;
+
+-- name: UpdateOrderToDelivering :one
+UPDATE orders
+SET 
+    status = 'delivering',
+    updated_at = now()
+WHERE id = $1 AND status IN ('picked', 'delivering')
+RETURNING *;
+
+-- name: UpdateOrderToRiderDelivered :one
+UPDATE orders
+SET 
+    status = 'rider_delivered',
+    rider_delivered_at = COALESCE(rider_delivered_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status IN ('delivering', 'rider_delivered')
+RETURNING *;
+
+-- name: UpdateOrderToUserDelivered :one
+UPDATE orders
+SET 
+    status = 'user_delivered',
+    user_delivered_at = COALESCE(user_delivered_at, now()),
+    completed_at = COALESCE(completed_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status IN ('rider_delivered', 'user_delivered')
+RETURNING *;
+
+-- name: UpdateOrderExceptionState :one
+UPDATE orders
+SET 
+    exception_state = sqlc.arg('exception_state'),
+    claim_channel = sqlc.arg('claim_channel'),
+    updated_at = now()
+WHERE id = sqlc.arg('id')
+RETURNING *;
+
 -- name: UpdateOrderToCancelled :one
 UPDATE orders
 SET 
@@ -176,8 +231,8 @@ SELECT
     COUNT(*) FILTER (WHERE status = 'paid') as paid_count,
     COUNT(*) FILTER (WHERE status = 'preparing') as preparing_count,
     COUNT(*) FILTER (WHERE status = 'ready') as ready_count,
-    COUNT(*) FILTER (WHERE status = 'delivering') as delivering_count,
-    COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
+    COUNT(*) FILTER (WHERE status IN ('courier_accepted', 'picked', 'delivering', 'rider_delivered')) as delivering_count,
+    COUNT(*) FILTER (WHERE status IN ('completed', 'user_delivered')) as completed_count,
     COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count
 FROM orders
 WHERE merchant_id = $1 AND created_at >= $2 AND created_at <= $3;
@@ -229,7 +284,7 @@ SELECT
     COALESCE(SUM(delivery_fee_discount), 0)::bigint as total_discount
 FROM orders
 WHERE merchant_id = $1
-  AND status IN ('delivered', 'completed')
+    AND status IN ('user_delivered', 'completed', 'delivered')
   AND created_at >= $2 AND created_at <= $3;
 
 -- name: ListMerchantPromotionOrders :many
@@ -246,8 +301,8 @@ SELECT
     completed_at
 FROM orders
 WHERE merchant_id = $1
-  AND delivery_fee_discount > 0
-  AND status IN ('delivered', 'completed')
+    AND delivery_fee_discount > 0
+    AND status IN ('user_delivered', 'completed', 'delivered')
   AND created_at >= $2 AND created_at <= $3
 ORDER BY created_at DESC
 LIMIT $4 OFFSET $5;
@@ -256,8 +311,8 @@ LIMIT $4 OFFSET $5;
 SELECT COUNT(*)::bigint
 FROM orders
 WHERE merchant_id = $1
-  AND delivery_fee_discount > 0
-  AND status IN ('delivered', 'completed')
+    AND delivery_fee_discount > 0
+    AND status IN ('user_delivered', 'completed', 'delivered')
   AND created_at >= $2 AND created_at <= $3;
 
 -- name: GetMerchantDailyPromotionExpenses :many
@@ -268,8 +323,8 @@ SELECT
     COALESCE(SUM(delivery_fee_discount), 0)::bigint as promotion_amount
 FROM orders
 WHERE merchant_id = $1
-  AND delivery_fee_discount > 0
-  AND status IN ('delivered', 'completed')
+    AND delivery_fee_discount > 0
+    AND status IN ('user_delivered', 'completed', 'delivered')
   AND created_at >= $2 AND created_at <= $3
 GROUP BY DATE(created_at)
 ORDER BY date DESC;

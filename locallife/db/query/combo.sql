@@ -171,7 +171,7 @@ SELECT
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
 FROM combo_sets cs
 LEFT JOIN order_items oi ON cs.id = oi.combo_id
-LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('delivered', 'completed')
+LEFT JOIN orders o ON o.id = oi.order_id AND o.status IN ('user_delivered', 'completed', 'delivered')
 LEFT JOIN merchants m ON cs.merchant_id = m.id
 WHERE cs.is_online = true AND cs.deleted_at IS NULL AND m.status = 'active'
 GROUP BY cs.id, m.is_open, m.latitude, m.longitude
@@ -231,7 +231,7 @@ SELECT
          FROM order_items oi 
          JOIN orders o ON o.id = oi.order_id 
          WHERE oi.combo_id = cs.id 
-           AND o.status IN ('delivered', 'completed')
+           AND o.status IN ('user_delivered', 'completed', 'delivered')
            AND o.created_at >= NOW() - INTERVAL '30 days'
         ), 0
     )::int AS monthly_sales
@@ -298,7 +298,7 @@ SELECT
          FROM order_items oi 
          JOIN orders o ON o.id = oi.order_id 
          WHERE oi.combo_id = cs.id 
-           AND o.status IN ('delivered', 'completed')
+           AND o.status IN ('user_delivered', 'completed', 'delivered')
            AND o.created_at >= NOW() - INTERVAL '30 days'
         ), 0
     )::int AS monthly_sales,

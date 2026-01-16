@@ -12876,6 +12876,21 @@ func (mr *MockStoreMockRecorder) UpdateDeliveryToDelivering(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeliveryToDelivering", reflect.TypeOf((*MockStore)(nil).UpdateDeliveryToDelivering), ctx, arg)
 }
 
+// UpdateDeliveryToDeliveringTx mocks base method.
+func (m *MockStore) UpdateDeliveryToDeliveringTx(ctx context.Context, arg db.UpdateDeliveryToDeliveringTxParams) (db.UpdateDeliveryToDeliveringTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeliveryToDeliveringTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateDeliveryToDeliveringTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeliveryToDeliveringTx indicates an expected call of UpdateDeliveryToDeliveringTx.
+func (mr *MockStoreMockRecorder) UpdateDeliveryToDeliveringTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeliveryToDeliveringTx", reflect.TypeOf((*MockStore)(nil).UpdateDeliveryToDeliveringTx), ctx, arg)
+}
+
 // UpdateDeliveryToPicked mocks base method.
 func (m *MockStore) UpdateDeliveryToPicked(ctx context.Context, arg db.UpdateDeliveryToPickedParams) (db.Delivery, error) {
 	m.ctrl.T.Helper()
@@ -12891,6 +12906,21 @@ func (mr *MockStoreMockRecorder) UpdateDeliveryToPicked(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeliveryToPicked", reflect.TypeOf((*MockStore)(nil).UpdateDeliveryToPicked), ctx, arg)
 }
 
+// UpdateDeliveryToPickedTx mocks base method.
+func (m *MockStore) UpdateDeliveryToPickedTx(ctx context.Context, arg db.UpdateDeliveryToPickedTxParams) (db.UpdateDeliveryToPickedTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeliveryToPickedTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateDeliveryToPickedTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeliveryToPickedTx indicates an expected call of UpdateDeliveryToPickedTx.
+func (mr *MockStoreMockRecorder) UpdateDeliveryToPickedTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeliveryToPickedTx", reflect.TypeOf((*MockStore)(nil).UpdateDeliveryToPickedTx), ctx, arg)
+}
+
 // UpdateDeliveryToPickup mocks base method.
 func (m *MockStore) UpdateDeliveryToPickup(ctx context.Context, arg db.UpdateDeliveryToPickupParams) (db.Delivery, error) {
 	m.ctrl.T.Helper()
@@ -12904,6 +12934,21 @@ func (m *MockStore) UpdateDeliveryToPickup(ctx context.Context, arg db.UpdateDel
 func (mr *MockStoreMockRecorder) UpdateDeliveryToPickup(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeliveryToPickup", reflect.TypeOf((*MockStore)(nil).UpdateDeliveryToPickup), ctx, arg)
+}
+
+// UpdateDeliveryToPickupTx mocks base method.
+func (m *MockStore) UpdateDeliveryToPickupTx(ctx context.Context, arg db.UpdateDeliveryToPickupTxParams) (db.UpdateDeliveryToPickupTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDeliveryToPickupTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateDeliveryToPickupTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateDeliveryToPickupTx indicates an expected call of UpdateDeliveryToPickupTx.
+func (mr *MockStoreMockRecorder) UpdateDeliveryToPickupTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDeliveryToPickupTx", reflect.TypeOf((*MockStore)(nil).UpdateDeliveryToPickupTx), ctx, arg)
 }
 
 // UpdateDiningSessionActiveOrder mocks base method.
@@ -13603,6 +13648,21 @@ func (mr *MockStoreMockRecorder) UpdateOrderDisplayConfig(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderDisplayConfig", reflect.TypeOf((*MockStore)(nil).UpdateOrderDisplayConfig), ctx, arg)
 }
 
+// UpdateOrderExceptionState mocks base method.
+func (m *MockStore) UpdateOrderExceptionState(ctx context.Context, arg db.UpdateOrderExceptionStateParams) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderExceptionState", ctx, arg)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderExceptionState indicates an expected call of UpdateOrderExceptionState.
+func (mr *MockStoreMockRecorder) UpdateOrderExceptionState(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderExceptionState", reflect.TypeOf((*MockStore)(nil).UpdateOrderExceptionState), ctx, arg)
+}
+
 // UpdateOrderStatus mocks base method.
 func (m *MockStore) UpdateOrderStatus(ctx context.Context, arg db.UpdateOrderStatusParams) (db.Order, error) {
 	m.ctrl.T.Helper()
@@ -13663,6 +13723,36 @@ func (mr *MockStoreMockRecorder) UpdateOrderToCompleted(ctx, id any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToCompleted", reflect.TypeOf((*MockStore)(nil).UpdateOrderToCompleted), ctx, id)
 }
 
+// UpdateOrderToCourierAccepted mocks base method.
+func (m *MockStore) UpdateOrderToCourierAccepted(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderToCourierAccepted", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderToCourierAccepted indicates an expected call of UpdateOrderToCourierAccepted.
+func (mr *MockStoreMockRecorder) UpdateOrderToCourierAccepted(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToCourierAccepted", reflect.TypeOf((*MockStore)(nil).UpdateOrderToCourierAccepted), ctx, id)
+}
+
+// UpdateOrderToDelivering mocks base method.
+func (m *MockStore) UpdateOrderToDelivering(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderToDelivering", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderToDelivering indicates an expected call of UpdateOrderToDelivering.
+func (mr *MockStoreMockRecorder) UpdateOrderToDelivering(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToDelivering", reflect.TypeOf((*MockStore)(nil).UpdateOrderToDelivering), ctx, id)
+}
+
 // UpdateOrderToPaid mocks base method.
 func (m *MockStore) UpdateOrderToPaid(ctx context.Context, arg db.UpdateOrderToPaidParams) (db.Order, error) {
 	m.ctrl.T.Helper()
@@ -13676,6 +13766,51 @@ func (m *MockStore) UpdateOrderToPaid(ctx context.Context, arg db.UpdateOrderToP
 func (mr *MockStoreMockRecorder) UpdateOrderToPaid(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToPaid", reflect.TypeOf((*MockStore)(nil).UpdateOrderToPaid), ctx, arg)
+}
+
+// UpdateOrderToPicked mocks base method.
+func (m *MockStore) UpdateOrderToPicked(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderToPicked", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderToPicked indicates an expected call of UpdateOrderToPicked.
+func (mr *MockStoreMockRecorder) UpdateOrderToPicked(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToPicked", reflect.TypeOf((*MockStore)(nil).UpdateOrderToPicked), ctx, id)
+}
+
+// UpdateOrderToRiderDelivered mocks base method.
+func (m *MockStore) UpdateOrderToRiderDelivered(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderToRiderDelivered", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderToRiderDelivered indicates an expected call of UpdateOrderToRiderDelivered.
+func (mr *MockStoreMockRecorder) UpdateOrderToRiderDelivered(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToRiderDelivered", reflect.TypeOf((*MockStore)(nil).UpdateOrderToRiderDelivered), ctx, id)
+}
+
+// UpdateOrderToUserDelivered mocks base method.
+func (m *MockStore) UpdateOrderToUserDelivered(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderToUserDelivered", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderToUserDelivered indicates an expected call of UpdateOrderToUserDelivered.
+func (mr *MockStoreMockRecorder) UpdateOrderToUserDelivered(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToUserDelivered", reflect.TypeOf((*MockStore)(nil).UpdateOrderToUserDelivered), ctx, id)
 }
 
 // UpdatePaymentOrderPrepayId mocks base method.

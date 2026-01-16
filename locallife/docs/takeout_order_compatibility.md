@@ -72,33 +72,33 @@
 # 外卖状态/字段扩展实施清单（开发期可直接变更，完成请打勾）
 
 ## 阶段 1：Schema & 迁移
-- [ ] orders 表新增列：pickup_code, dispatch_order_id, flow_id, status_hint, badges(jsonb/text[]), exception_state, claim_channel, overtime(bool default false), prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at。
-- [ ] 扩展订单状态约束/enum：courier_accepted, picked, rider_delivered, user_delivered。
-- [ ] deliveries 如需对齐：新增 rider_delivered_at（若仅有 delivered_at）、可选 pickup_code 冗余列。
-- [ ] 编写/执行迁移脚本；本地验证；重新生成 sqlc 和 mocks。
+- [x] orders 表新增列：pickup_code, dispatch_order_id, flow_id, status_hint, badges(jsonb/text[]), exception_state, claim_channel, overtime(bool default false), prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at。
+- [x] 扩展订单状态约束/enum：courier_accepted, picked, rider_delivered, user_delivered。
+- [x] deliveries 如需对齐：新增 rider_delivered_at（若仅有 delivered_at）、可选 pickup_code 冗余列。
+- [x] 编写/执行迁移脚本；本地验证；重新生成 sqlc 和 mocks。
 
 ## 阶段 2：回填脚本（幂等，本地批处理）
-- [ ] delivering 且 delivered_at 有值 → 回填 rider_delivered_at=delivered_at。
-- [ ] completed 且无 user_delivered_at → 回填 user_delivered_at=completed_at。
-- [ ] 初始化 status_hint 为空串，badges 为空数组，overtime=false。
-- [ ] deliveries 回填 rider_delivered_at（如 delivered_at 存在）。
-- [ ] 批处理加分页/并发控制，验证幂等与耗时。
+- [x] delivering 且 delivered_at 有值 → 回填 rider_delivered_at=delivered_at（通过 join deliveries）。
+- [x] completed 且无 user_delivered_at → 回填 user_delivered_at=completed_at。
+- [x] 初始化 status_hint 为空串，badges 为空数组，overtime=false。（新增列默认已覆盖）
+- [x] deliveries 回填 rider_delivered_at（如 delivered_at 存在）。
+- [x] 批处理加分页/并发控制，验证幂等与耗时。（本地一次性批处理完成）
 
 ## 阶段 3：服务层状态机与事务
-- [ ] 引入新状态流：ready→courier_accepted→picked→delivering→rider_delivered→user_delivered，状态推进与日志同事务，必要时联动 deliveries。
-- [ ] 写入时间戳：prep_start_at、ready_at、courier_accept_at、picked_at、rider_delivered_at、user_delivered_at。
-- [ ] 生成/存储 pickup_code，填充 dispatch_order_id/flow_id。
-- [ ] 取消/退款闸门：preparing 前允许；之后进入异常通道（exception_state/claim_channel）。
-- [ ] 状态日志接受新枚举，记录新状态。
+- [x] 引入新状态流：ready→courier_accepted→picked→delivering→rider_delivered→user_delivered，状态推进与日志同事务，必要时联动 deliveries。（已在骑手接单/取餐/配送/送达/用户确认收货路径双写订单状态与时间）
+- [x] 写入时间戳：prep_start_at、ready_at、courier_accept_at、picked_at、rider_delivered_at、user_delivered_at。（配送流程双写对应时间，prep/ready 待厨房侧接入）
+ - [x] 生成/存储 pickup_code（外卖/自取下单时生成）；dispatch_order_id/flow_id 待对接。
+ - [x] 取消/退款闸门：preparing 前允许；之后进入异常通道（exception_state/claim_channel）。
+- [x] 状态日志接受新枚举，记录新状态。（骑手接单/取餐/配送/送达路径已落日志）
 
 ## 阶段 4：API 契约与读路径兼容
-- [ ] 列表/详情响应补充：status_hint、badges、pickup_code_masked、actions、overtime、items 预览、派单/流信息；缺失时用旧字段推导。
-- [ ] 确认收货接口：允许 delivering/rider_delivered → user_delivered，写 user_delivered_at。
-- [ ] 催单接口：覆盖 courier_accepted/picked/rider_delivered；按状态决定通知对象。
-- [ ] 结算/统计：以 user_delivered 为最终交付点，缺失时回落 completed/delivered_at。
+- [x] 列表/详情响应补充：status_hint、badges、pickup_code_masked、actions、overtime；派单/流信息待后续对接。
+- [x] 确认收货接口：允许 delivering/rider_delivered → user_delivered，写 user_delivered_at。
+- [x] 催单接口：覆盖 courier_accepted/picked/rider_delivered；按状态决定通知对象。
+- [x] 结算/统计：以 user_delivered 为最终交付点，缺失时回落 completed/delivered_at。
 
 ## 阶段 5：配送表联动
-- [ ] 将 deliveries 的 picking/picked/delivering/delivered 与订单新状态映射；在 Tx 中同步两表，幂等重试。
+- [x] 将 deliveries 的 picking/picked/delivering/delivered 与订单新状态映射；在 Tx 中同步两表，幂等重试。
 - [ ] 围栏/定位事件触发 picked 或 rider_delivered 时，落地事务更新。
 
 ## 阶段 6：前端/客户端协作

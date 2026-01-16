@@ -3,10 +3,13 @@ package api
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
@@ -117,9 +120,22 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		log.Warn().Msg("⚠️ DATA_ENCRYPTION_KEY not configured, sensitive data will be stored in plaintext")
 	}
 
-	// 创建WebSocket Hub（用于骑手和商户实时通知）
 	// 创建WebSocket Hub（管理骑手和商户的实时连接）
-	wsHub := websocket.NewHub(context.Background())
+	hubOptions := []websocket.HubOption{
+		websocket.WithMetricsRecorder(WSMetricsRecorder{}),
+		websocket.WithReliableGate(wsReliableGate(config.WebSocketReliableEnabled, config.WebSocketReliablePercent)),
+	}
+	if config.RedisAddress != "" {
+		queueClient := redis.NewClient(&redis.Options{
+			Addr:     config.RedisAddress,
+			Password: config.RedisPassword,
+		})
+		queueStore := websocket.NewRedisQueueStore(queueClient, 30*time.Minute, 200)
+		hubOptions = append(hubOptions, websocket.WithQueueStore(queueStore))
+	} else {
+		hubOptions = append(hubOptions, websocket.WithQueueStore(websocket.NewMemoryQueueStore(30*time.Minute, 200, time.Now)))
+	}
+	wsHub := websocket.NewHub(context.Background(), hubOptions...)
 
 	// 创建Redis Pub/Sub管理器（用于跨进程推送通知）
 	var wsPubSub *websocket.PubSubManager
@@ -158,6 +174,27 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 
 	server.setupRouter()
 	return server, nil
+}
+
+func wsReliableGate(enabled bool, percent int) func(websocket.ClientInfo) bool {
+	if !enabled {
+		return func(websocket.ClientInfo) bool { return false }
+	}
+	if percent <= 0 {
+		return func(websocket.ClientInfo) bool { return false }
+	}
+	if percent >= 100 {
+		return func(websocket.ClientInfo) bool { return true }
+	}
+
+	return func(info websocket.ClientInfo) bool {
+		h := fnv.New32a()
+		_, _ = h.Write([]byte(string(info.ClientType)))
+		_, _ = h.Write([]byte(":"))
+		_, _ = h.Write([]byte(strconv.FormatInt(info.EntityID, 10)))
+		bucket := int(h.Sum32() % 100)
+		return bucket < percent
+	}
 }
 
 // GetWebSocketHub returns the WebSocket hub for external access

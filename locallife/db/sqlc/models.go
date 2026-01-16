@@ -256,6 +256,7 @@ type Delivery struct {
 	CreatedAt           time.Time          `json:"created_at"`
 	AssignedAt          pgtype.Timestamptz `json:"assigned_at"`
 	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
 }
 
 // 运费配置表，按区县配置基础运费规则
@@ -860,9 +861,24 @@ type Order struct {
 	// 会员余额支付金额(分)
 	BalancePaid int64 `json:"balance_paid"`
 	// 使用的会员卡ID
-	MembershipID      pgtype.Int8 `json:"membership_id"`
-	FulfillmentStatus string      `json:"fulfillment_status"`
-	ReplacedByOrderID pgtype.Int8 `json:"replaced_by_order_id"`
+	MembershipID        pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus   string             `json:"fulfillment_status"`
+	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
+	PickupCode          pgtype.Text        `json:"pickup_code"`
+	DispatchOrderID     pgtype.Int8        `json:"dispatch_order_id"`
+	FlowID              pgtype.Int8        `json:"flow_id"`
+	StatusHint          pgtype.Text        `json:"status_hint"`
+	Badges              []byte             `json:"badges"`
+	ExceptionState      pgtype.Text        `json:"exception_state"`
+	ClaimChannel        pgtype.Text        `json:"claim_channel"`
+	Overtime            bool               `json:"overtime"`
+	PrepStartAt         pgtype.Timestamptz `json:"prep_start_at"`
+	ReadyAt             pgtype.Timestamptz `json:"ready_at"`
+	CourierAcceptAt     pgtype.Timestamptz `json:"courier_accept_at"`
+	PickedAt            pgtype.Timestamptz `json:"picked_at"`
+	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
+	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
+	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
 }
 
 type OrderDisplayConfig struct {

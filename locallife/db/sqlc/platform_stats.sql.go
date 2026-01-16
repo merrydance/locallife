@@ -23,7 +23,7 @@ JOIN merchant_tags mt ON mt.tag_id = t.id
 JOIN merchants m ON m.id = mt.merchant_id AND m.status = 'active'
 LEFT JOIN orders o ON o.merchant_id = m.id 
     AND o.created_at >= $1 AND o.created_at <= $2
-    AND o.status IN ('delivered', 'completed')
+    AND o.status IN ('user_delivered', 'completed', 'delivered')
 WHERE t.type = 'merchant'
 GROUP BY t.id, t.name
 ORDER BY total_sales DESC
@@ -71,7 +71,7 @@ const getHourlyDistribution = `-- name: GetHourlyDistribution :many
 SELECT 
     EXTRACT(HOUR FROM created_at)::int AS hour,
     COUNT(*)::int AS order_count,
-    COALESCE(SUM(CASE WHEN status IN ('delivered', 'completed') THEN final_amount ELSE 0 END), 0)::bigint AS total_gmv
+    COALESCE(SUM(CASE WHEN status IN ('user_delivered', 'completed', 'delivered') THEN final_amount ELSE 0 END), 0)::bigint AS total_gmv
 FROM orders
 WHERE created_at >= $1 AND created_at <= $2
 GROUP BY EXTRACT(HOUR FROM created_at)
@@ -166,7 +166,7 @@ FROM merchants m
 JOIN regions r ON r.id = m.region_id
 LEFT JOIN orders o ON o.merchant_id = m.id 
     AND o.created_at >= $1 AND o.created_at <= $2
-    AND o.status IN ('delivered', 'completed')
+    AND o.status IN ('user_delivered', 'completed', 'delivered')
 WHERE m.status = 'active'
 GROUP BY m.id, m.name, m.region_id, r.name
 ORDER BY total_sales DESC
@@ -230,8 +230,8 @@ const getPlatformDailyStats = `-- name: GetPlatformDailyStats :many
 SELECT 
     DATE(o.created_at) AS date,
     COUNT(*)::int AS order_count,
-    COALESCE(SUM(CASE WHEN o.status IN ('delivered', 'completed') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
-    COALESCE(SUM(CASE WHEN o.status IN ('delivered', 'completed') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
+    COALESCE(SUM(CASE WHEN o.status IN ('user_delivered', 'completed', 'delivered') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
+    COALESCE(SUM(CASE WHEN o.status IN ('user_delivered', 'completed', 'delivered') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
     COUNT(DISTINCT o.merchant_id)::int AS active_merchants,
     COUNT(DISTINCT o.user_id)::int AS active_users,
     COUNT(CASE WHEN o.order_type = 'takeout' THEN 1 END)::int AS takeout_orders,
@@ -292,8 +292,8 @@ const getPlatformOverview = `-- name: GetPlatformOverview :one
 
 SELECT 
     COUNT(DISTINCT CASE WHEN o.created_at >= $1 AND o.created_at <= $2 THEN o.id END)::int AS total_orders,
-    COALESCE(SUM(CASE WHEN o.created_at >= $1 AND o.created_at <= $2 AND o.status IN ('delivered', 'completed') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
-    COALESCE(SUM(CASE WHEN o.created_at >= $1 AND o.created_at <= $2 AND o.status IN ('delivered', 'completed') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
+    COALESCE(SUM(CASE WHEN o.created_at >= $1 AND o.created_at <= $2 AND o.status IN ('user_delivered', 'completed', 'delivered') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
+    COALESCE(SUM(CASE WHEN o.created_at >= $1 AND o.created_at <= $2 AND o.status IN ('user_delivered', 'completed', 'delivered') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
     COUNT(DISTINCT CASE WHEN o.created_at >= $1 AND o.created_at <= $2 THEN o.merchant_id END)::int AS active_merchants,
     COUNT(DISTINCT CASE WHEN o.created_at >= $1 AND o.created_at <= $2 THEN o.user_id END)::int AS active_users
 FROM orders o
@@ -331,7 +331,7 @@ func (q *Queries) GetPlatformOverview(ctx context.Context, arg GetPlatformOvervi
 const getRealtimeDashboard = `-- name: GetRealtimeDashboard :one
 SELECT 
     COUNT(*)::int AS orders_24h,
-    COALESCE(SUM(CASE WHEN status IN ('delivered', 'completed') THEN final_amount ELSE 0 END), 0)::bigint AS gmv_24h,
+    COALESCE(SUM(CASE WHEN status IN ('user_delivered', 'completed', 'delivered') THEN final_amount ELSE 0 END), 0)::bigint AS gmv_24h,
     COUNT(DISTINCT merchant_id)::int AS active_merchants_24h,
     COUNT(DISTINCT user_id)::int AS active_users_24h,
     COUNT(CASE WHEN status = 'pending' THEN 1 END)::int AS pending_orders,
@@ -384,7 +384,7 @@ FROM regions r
 LEFT JOIN merchants m ON m.region_id = r.id AND m.status = 'active'
 LEFT JOIN orders o ON o.merchant_id = m.id 
     AND o.created_at >= $1 AND o.created_at <= $2
-    AND o.status IN ('delivered', 'completed')
+    AND o.status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY r.id, r.name
 ORDER BY total_gmv DESC
 `

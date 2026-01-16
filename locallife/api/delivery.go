@@ -503,6 +503,18 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 
+	// 获取订单用于状态同步与日志记录
+	order, err := server.store.GetOrder(ctx, req.OrderID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	oldStatus := order.Status
+
 	// 使用事务执行抢单操作：分配骑手 + 移除订单池 + 冻结押金 + 创建流水
 	freezeAmount := int64(5000) // 冻结 50 元
 	result, err := server.store.GrabOrderTx(ctx, db.GrabOrderTxParams{
@@ -516,25 +528,41 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 
+	// 同步订单状态为骑手已接单（忽略状态不匹配）
+	if _, err := server.store.UpdateOrderToCourierAccepted(ctx, req.OrderID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if oldStatus != OrderStatusCourierAccepted {
+		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     OrderStatusCourierAccepted,
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "骑手接单", Valid: true},
+		}); err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for courier_accepted")
+		}
+	}
+
+	order.Status = OrderStatusCourierAccepted
+
 	// 骑手接单后，使用自建 LBS 重新计算更精确的预估送达时间
 	// 预估送达时间 = 当前时间 + 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
 	server.updateDeliveryEstimatedTime(ctx, result.Delivery, rider, merchant)
 
 	// 📢 P1: 异步发送骑手接单通知给商家
-	// 查询订单获取商户信息
-	if order, err := server.store.GetOrder(ctx, req.OrderID); err == nil {
-		if merchant, err := server.store.GetMerchant(ctx, order.MerchantID); err == nil {
-			server.sendDeliveryStatusNotification(
-				ctx,
-				merchant.OwnerUserID,
-				req.OrderID,
-				delivery.ID,
-				"assigned",
-				"骑手已接单",
-				fmt.Sprintf("订单%s已有骑手接单，正在前往取餐", order.OrderNo),
-			)
-		}
-	}
+	server.sendDeliveryStatusNotification(
+		ctx,
+		merchant.OwnerUserID,
+		req.OrderID,
+		delivery.ID,
+		"assigned",
+		"骑手已接单",
+		fmt.Sprintf("订单%s已有骑手接单，正在前往取餐", order.OrderNo),
+	)
 
 	// 重新获取更新后的配送单
 	updatedDelivery, err := server.store.GetDelivery(ctx, result.Delivery.ID)
@@ -712,14 +740,17 @@ func (server *Server) startPickup(ctx *gin.Context) {
 		return
 	}
 
-	updated, err := server.store.UpdateDeliveryToPickup(ctx, db.UpdateDeliveryToPickupParams{
-		ID:      req.ID,
-		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	result, err := server.store.UpdateDeliveryToPickupTx(ctx, db.UpdateDeliveryToPickupTxParams{
+		DeliveryID: req.ID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	updated := result.Delivery
 
 	// 📢 P1: 异步发送骑手开始取餐通知给用户
 	if order, err := server.store.GetOrder(ctx, updated.OrderID); err == nil {
@@ -794,27 +825,54 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		return
 	}
 
-	updated, err := server.store.UpdateDeliveryToPicked(ctx, db.UpdateDeliveryToPickedParams{
-		ID:      req.ID,
-		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	order, err := server.store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	oldStatus := order.Status
+
+	result, err := server.store.UpdateDeliveryToPickedTx(ctx, db.UpdateDeliveryToPickedTxParams{
+		DeliveryID: req.ID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 📢 P1: 异步发送骑手已取餐通知给用户
-	if order, err := server.store.GetOrder(ctx, updated.OrderID); err == nil {
-		server.sendDeliveryStatusNotification(
-			ctx,
-			order.UserID,
-			updated.OrderID,
-			updated.ID,
-			"picked",
-			"骑手已取餐",
-			fmt.Sprintf("订单%s骑手已取到餐品，即将配送", order.OrderNo),
-		)
+	updated := result.Delivery
+
+	if oldStatus != OrderStatusPicked {
+		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     OrderStatusPicked,
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "骑手确认取餐", Valid: true},
+		}); err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for picked")
+		}
 	}
+
+	order.Status = OrderStatusPicked
+
+	// 📢 P1: 异步发送骑手已取餐通知给用户
+	server.sendDeliveryStatusNotification(
+		ctx,
+		order.UserID,
+		updated.OrderID,
+		updated.ID,
+		"picked",
+		"骑手已取餐",
+		fmt.Sprintf("订单%s骑手已取到餐品，即将配送", order.OrderNo),
+	)
 
 	ctx.JSON(http.StatusOK, newDeliveryResponse(updated))
 }
@@ -876,27 +934,54 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 		return
 	}
 
-	updated, err := server.store.UpdateDeliveryToDelivering(ctx, db.UpdateDeliveryToDeliveringParams{
-		ID:      req.ID,
-		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	order, err := server.store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	oldStatus := order.Status
+
+	result, err := server.store.UpdateDeliveryToDeliveringTx(ctx, db.UpdateDeliveryToDeliveringTxParams{
+		DeliveryID: req.ID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 📢 P1: 异步发送骑手配送中通知给用户
-	if order, err := server.store.GetOrder(ctx, updated.OrderID); err == nil {
-		server.sendDeliveryStatusNotification(
-			ctx,
-			order.UserID,
-			updated.OrderID,
-			updated.ID,
-			"delivering",
-			"骑手配送中",
-			fmt.Sprintf("订单%s骑手正在配送途中，请保持电话畅通", order.OrderNo),
-		)
+	updated := result.Delivery
+
+	if oldStatus != OrderStatusDelivering {
+		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     OrderStatusDelivering,
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "骑手开始配送", Valid: true},
+		}); err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for delivering")
+		}
 	}
+
+	order.Status = OrderStatusDelivering
+
+	// 📢 P1: 异步发送骑手配送中通知给用户
+	server.sendDeliveryStatusNotification(
+		ctx,
+		order.UserID,
+		updated.OrderID,
+		updated.ID,
+		"delivering",
+		"骑手配送中",
+		fmt.Sprintf("订单%s骑手正在配送途中，请保持电话畅通", order.OrderNo),
+	)
 
 	ctx.JSON(http.StatusOK, newDeliveryResponse(updated))
 }
@@ -942,6 +1027,17 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 		return
 	}
 
+	order, err := server.store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	oldStatus := order.Status
+
 	// 使用事务执行送达操作：更新状态 + 解冻押金 + 创建流水 + 更新统计
 	unfreezeAmount := int64(5000)
 	result, err := server.store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
@@ -956,18 +1052,31 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 		return
 	}
 
-	// 📢 P1: 异步发送送达通知给用户
-	if order, err := server.store.GetOrder(ctx, delivery.OrderID); err == nil {
-		server.sendDeliveryStatusNotification(
-			ctx,
-			order.UserID,
-			delivery.OrderID,
-			req.ID,
-			"delivered",
-			"订单已送达",
-			fmt.Sprintf("您的订单%s已送达，请确认收餐", order.OrderNo),
-		)
+	if oldStatus != OrderStatusRiderDelivered {
+		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     OrderStatusRiderDelivered,
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "骑手确认送达", Valid: true},
+		}); err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for rider_delivered")
+		}
 	}
+
+	order.Status = OrderStatusRiderDelivered
+
+	// 📢 P1: 异步发送送达通知给用户
+	server.sendDeliveryStatusNotification(
+		ctx,
+		order.UserID,
+		delivery.OrderID,
+		req.ID,
+		"delivered",
+		"订单已送达",
+		fmt.Sprintf("您的订单%s已送达，请确认收餐", order.OrderNo),
+	)
 
 	ctx.JSON(http.StatusOK, newDeliveryResponse(result.Delivery))
 }

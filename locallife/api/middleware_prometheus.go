@@ -85,6 +85,47 @@ var (
 		},
 		[]string{"type", "level"},
 	)
+
+	wsMessagesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_messages_total",
+			Help: "Total number of WebSocket messages",
+		},
+		[]string{"type", "result"}, // rider/merchant/platform, sent/queued/dropped/replayed/skipped
+	)
+
+	wsAcksTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_acks_total",
+			Help: "Total number of WebSocket message acknowledgements",
+		},
+		[]string{"type"},
+	)
+
+	wsRetriesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_retries_total",
+			Help: "Total number of WebSocket message retries",
+		},
+		[]string{"type"},
+	)
+
+	wsReplaysTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "websocket_replays_total",
+			Help: "Total number of WebSocket message replays",
+		},
+		[]string{"type"},
+	)
+
+	wsAckLatency = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "websocket_ack_latency_seconds",
+			Help:    "WebSocket ack latency in seconds",
+			Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+		},
+		[]string{"type"},
+	)
 )
 
 // PrometheusMiddleware 记录 HTTP 请求指标
@@ -159,4 +200,29 @@ func RecordPaymentProcessed(success bool) {
 // RecordAlertSent 记录告警发送
 func RecordAlertSent(alertType, level string) {
 	alertsSentTotal.WithLabelValues(alertType, level).Inc()
+}
+
+// RecordWSMessage records WebSocket message delivery outcomes.
+func RecordWSMessage(clientType, result string) {
+	wsMessagesTotal.WithLabelValues(clientType, result).Inc()
+}
+
+// RecordWSAck records WebSocket acknowledgements.
+func RecordWSAck(clientType string) {
+	wsAcksTotal.WithLabelValues(clientType).Inc()
+}
+
+// RecordWSRetry records WebSocket retries.
+func RecordWSRetry(clientType string) {
+	wsRetriesTotal.WithLabelValues(clientType).Inc()
+}
+
+// RecordWSReplay records WebSocket replays.
+func RecordWSReplay(clientType string) {
+	wsReplaysTotal.WithLabelValues(clientType).Inc()
+}
+
+// RecordWSAckLatency records WebSocket ack latency.
+func RecordWSAckLatency(clientType string, seconds float64) {
+	wsAckLatency.WithLabelValues(clientType).Observe(seconds)
 }

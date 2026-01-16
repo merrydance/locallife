@@ -36,6 +36,9 @@ type Store interface {
 	UseVoucherTx(ctx context.Context, arg UseVoucherTxParams) (UseVoucherTxResult, error)
 	// M15: Delivery transactions
 	GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (GrabOrderTxResult, error)
+	UpdateDeliveryToPickupTx(ctx context.Context, arg UpdateDeliveryToPickupTxParams) (UpdateDeliveryToPickupTxResult, error)
+	UpdateDeliveryToPickedTx(ctx context.Context, arg UpdateDeliveryToPickedTxParams) (UpdateDeliveryToPickedTxResult, error)
+	UpdateDeliveryToDeliveringTx(ctx context.Context, arg UpdateDeliveryToDeliveringTxParams) (UpdateDeliveryToDeliveringTxResult, error)
 	CompleteDeliveryTx(ctx context.Context, arg CompleteDeliveryTxParams) (CompleteDeliveryTxResult, error)
 	// M15: Rider transactions
 	WithdrawDepositTx(ctx context.Context, arg WithdrawDepositTxParams) (WithdrawDepositTxResult, error)

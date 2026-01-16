@@ -68,7 +68,8 @@ RETURNING *;
 UPDATE deliveries
 SET 
     status = 'delivered',
-    delivered_at = now()
+    delivered_at = now(),
+    rider_delivered_at = now()
 WHERE id = $1 AND rider_id = $2 AND status = 'delivering'
 RETURNING *;
 

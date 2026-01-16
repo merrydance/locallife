@@ -34,13 +34,17 @@ const (
 
 // 订单状态常量
 const (
-	OrderStatusPending    = "pending"    // 待支付
-	OrderStatusPaid       = "paid"       // 已支付
-	OrderStatusPreparing  = "preparing"  // 制作中
-	OrderStatusReady      = "ready"      // 待取餐/待配送
-	OrderStatusDelivering = "delivering" // 配送中
-	OrderStatusCompleted  = "completed"  // 已完成
-	OrderStatusCancelled  = "cancelled"  // 已取消
+	OrderStatusPending         = "pending"          // 待支付
+	OrderStatusPaid            = "paid"             // 已支付
+	OrderStatusPreparing       = "preparing"        // 制作中
+	OrderStatusReady           = "ready"            // 待取餐/待配送
+	OrderStatusCourierAccepted = "courier_accepted" // 骑手已接单
+	OrderStatusPicked          = "picked"           // 已取餐
+	OrderStatusDelivering      = "delivering"       // 配送中
+	OrderStatusRiderDelivered  = "rider_delivered"  // 骑手送达（待用户确认）
+	OrderStatusUserDelivered   = "user_delivered"   // 用户确认送达
+	OrderStatusCompleted       = "completed"        // 已完成
+	OrderStatusCancelled       = "cancelled"        // 已取消
 )
 
 // 履约状态常量
@@ -166,6 +170,12 @@ type orderItemResponse struct {
 	ImageURL *string `json:"image_url,omitempty" example:"https://example.com/images/dish1001.jpg"`
 }
 
+type orderBadge struct {
+	Text   string `json:"text,omitempty"`
+	Type   string `json:"type,omitempty"`
+	Locale string `json:"locale,omitempty"`
+}
+
 type orderResponse struct {
 	// 订单ID
 	ID int64 `json:"id" example:"100001"`
@@ -200,6 +210,12 @@ type orderResponse struct {
 	// 预计送达时间（时间戳），用于订单详情展示送达时间段
 	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at,omitempty" example:"2025-12-01T12:30:00Z"`
 
+	// 三方派单/履约信息
+	DispatchOrderID  *int64  `json:"dispatch_order_id,omitempty"`
+	FlowID           *int64  `json:"flow_id,omitempty"`
+	PickupCode       *string `json:"pickup_code,omitempty"`
+	PickupCodeMasked *string `json:"pickup_code_masked,omitempty"`
+
 	// 桌台ID (堂食订单时有值)
 	TableID *int64 `json:"table_id,omitempty" example:"301"`
 
@@ -218,8 +234,18 @@ type orderResponse struct {
 	// 订单总金额 (单位：分)
 	TotalAmount int64 `json:"total_amount" example:"5760"`
 
-	// 订单状态 (枚举: pending-待支付, paid-已支付, preparing-制作中, ready-待取餐/待配送, delivering-配送中, completed-已完成, cancelled-已取消)
-	Status string `json:"status" enums:"pending,paid,preparing,ready,delivering,completed,cancelled" example:"paid"`
+	// 订单状态 (枚举: pending-待支付, paid-已支付, preparing-制作中, ready-待取餐/待配送, courier_accepted-骑手已接单, picked-已取餐, delivering-配送中, rider_delivered-骑手送达, user_delivered-用户确认送达, completed-已完成, cancelled-已取消)
+	Status string `json:"status" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
+
+	// 状态提示与徽标
+	StatusHint *string      `json:"status_hint,omitempty"`
+	Badges     []orderBadge `json:"badges,omitempty"`
+	Actions    []string     `json:"actions,omitempty"`
+
+	// 异常/投诉通道
+	ExceptionState *string `json:"exception_state,omitempty"`
+	ClaimChannel   *string `json:"claim_channel,omitempty"`
+	Overtime       bool    `json:"overtime,omitempty"`
 
 	// 履约状态 (枚举: scheduled-已排期, pending_kitchen-待出餐, preparing-制作中, ready-已出餐, completed-履约完成, cancelled-已取消)
 	FulfillmentStatus string `json:"fulfillment_status" enums:"scheduled,pending_kitchen,preparing,ready,completed,cancelled" example:"pending_kitchen"`
@@ -236,7 +262,16 @@ type orderResponse struct {
 	// 支付时间
 	PaidAt *time.Time `json:"paid_at,omitempty" example:"2025-12-01T12:30:00Z"`
 
-	// 完成时间
+	// 准备/配送关键时间点
+	PrepStartAt         *time.Time `json:"prep_start_at,omitempty"`
+	ReadyAt             *time.Time `json:"ready_at,omitempty"`
+	CourierAcceptAt     *time.Time `json:"courier_accept_at,omitempty"`
+	PickedAt            *time.Time `json:"picked_at,omitempty"`
+	RiderDeliveredAt    *time.Time `json:"rider_delivered_at,omitempty"`
+	UserDeliveredAt     *time.Time `json:"user_delivered_at,omitempty"`
+	AutoUserDeliveredAt *time.Time `json:"auto_user_delivered_at,omitempty"`
+
+	// 完成时间（历史兼容）
 	CompletedAt *time.Time `json:"completed_at,omitempty" example:"2025-12-01T13:15:00Z"`
 
 	// 取消时间
@@ -282,6 +317,11 @@ func newOrderResponse(o db.Order) orderResponse {
 		Status:              o.Status,
 		FulfillmentStatus:   o.FulfillmentStatus,
 		CreatedAt:           o.CreatedAt,
+		Overtime:            o.Overtime,
+	}
+
+	if len(o.Badges) > 0 {
+		resp.Badges = decodeOrderBadges(o.Badges)
 	}
 
 	if o.AddressID.Valid {
@@ -320,6 +360,48 @@ func newOrderResponse(o db.Order) orderResponse {
 	if o.UpdatedAt.Valid {
 		resp.UpdatedAt = &o.UpdatedAt.Time
 	}
+	if o.PickupCode.Valid {
+		resp.PickupCode = &o.PickupCode.String
+		resp.PickupCodeMasked = maskPickupCode(o.PickupCode.String)
+	}
+	if o.DispatchOrderID.Valid {
+		resp.DispatchOrderID = &o.DispatchOrderID.Int64
+	}
+	if o.FlowID.Valid {
+		resp.FlowID = &o.FlowID.Int64
+	}
+	if o.StatusHint.Valid {
+		resp.StatusHint = &o.StatusHint.String
+	}
+	if o.ExceptionState.Valid {
+		resp.ExceptionState = &o.ExceptionState.String
+	}
+	if o.ClaimChannel.Valid {
+		resp.ClaimChannel = &o.ClaimChannel.String
+	}
+	if o.PrepStartAt.Valid {
+		resp.PrepStartAt = &o.PrepStartAt.Time
+	}
+	if o.ReadyAt.Valid {
+		resp.ReadyAt = &o.ReadyAt.Time
+	}
+	if o.CourierAcceptAt.Valid {
+		resp.CourierAcceptAt = &o.CourierAcceptAt.Time
+	}
+	if o.PickedAt.Valid {
+		resp.PickedAt = &o.PickedAt.Time
+	}
+	if o.RiderDeliveredAt.Valid {
+		resp.RiderDeliveredAt = &o.RiderDeliveredAt.Time
+	}
+	if o.UserDeliveredAt.Valid {
+		resp.UserDeliveredAt = &o.UserDeliveredAt.Time
+	}
+	if o.AutoUserDeliveredAt.Valid {
+		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
+	}
+
+	resp.Actions = orderActions(o)
 
 	return resp
 }
@@ -341,6 +423,11 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 		Status:              o.Status,
 		FulfillmentStatus:   o.FulfillmentStatus,
 		CreatedAt:           o.CreatedAt,
+		Overtime:            o.Overtime,
+	}
+
+	if len(o.Badges) > 0 {
+		resp.Badges = decodeOrderBadges(o.Badges)
 	}
 
 	// 商户电话
@@ -395,8 +482,98 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 	if o.UpdatedAt.Valid {
 		resp.UpdatedAt = &o.UpdatedAt.Time
 	}
+	if o.PickupCode.Valid {
+		resp.PickupCode = &o.PickupCode.String
+		resp.PickupCodeMasked = maskPickupCode(o.PickupCode.String)
+	}
+	if o.DispatchOrderID.Valid {
+		resp.DispatchOrderID = &o.DispatchOrderID.Int64
+	}
+	if o.FlowID.Valid {
+		resp.FlowID = &o.FlowID.Int64
+	}
+	if o.StatusHint.Valid {
+		resp.StatusHint = &o.StatusHint.String
+	}
+	if o.ExceptionState.Valid {
+		resp.ExceptionState = &o.ExceptionState.String
+	}
+	if o.ClaimChannel.Valid {
+		resp.ClaimChannel = &o.ClaimChannel.String
+	}
+	if o.PrepStartAt.Valid {
+		resp.PrepStartAt = &o.PrepStartAt.Time
+	}
+	if o.ReadyAt.Valid {
+		resp.ReadyAt = &o.ReadyAt.Time
+	}
+	if o.CourierAcceptAt.Valid {
+		resp.CourierAcceptAt = &o.CourierAcceptAt.Time
+	}
+	if o.PickedAt.Valid {
+		resp.PickedAt = &o.PickedAt.Time
+	}
+	if o.RiderDeliveredAt.Valid {
+		resp.RiderDeliveredAt = &o.RiderDeliveredAt.Time
+	}
+	if o.UserDeliveredAt.Valid {
+		resp.UserDeliveredAt = &o.UserDeliveredAt.Time
+	}
+	if o.AutoUserDeliveredAt.Valid {
+		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
+	}
+
+	resp.Actions = orderActions(db.Order{
+		ID:                o.ID,
+		Status:            o.Status,
+		FulfillmentStatus: o.FulfillmentStatus,
+	})
 
 	return resp
+}
+
+func decodeOrderBadges(raw []byte) []orderBadge {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var badges []orderBadge
+	if err := json.Unmarshal(raw, &badges); err != nil {
+		log.Warn().Err(err).Msg("failed to decode order badges")
+		return nil
+	}
+
+	return badges
+}
+
+func maskPickupCode(code string) *string {
+	if code == "" {
+		return nil
+	}
+	if len(code) <= 2 {
+		return ptrString(code)
+	}
+	masked := "****" + code[len(code)-2:]
+	return &masked
+}
+
+func orderActions(o db.Order) []string {
+	switch o.Status {
+	case OrderStatusPending:
+		return []string{"pay", "cancel"}
+	case OrderStatusPaid:
+		return []string{"cancel", "urge"}
+	case OrderStatusPreparing, OrderStatusReady:
+		return []string{"urge"}
+	case OrderStatusCourierAccepted, OrderStatusPicked, OrderStatusDelivering:
+		return []string{"urge"}
+	case OrderStatusRiderDelivered:
+		return []string{"confirm", "complain"}
+	case OrderStatusUserDelivered, OrderStatusCompleted:
+		return []string{"complain"}
+	default:
+		return nil
+	}
 }
 
 func ptrString(v string) *string {
@@ -426,6 +603,11 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 		Status:              o.Status,
 		FulfillmentStatus:   o.FulfillmentStatus,
 		CreatedAt:           o.CreatedAt,
+		Overtime:            o.Overtime,
+	}
+
+	if len(o.Badges) > 0 {
+		resp.Badges = decodeOrderBadges(o.Badges)
 	}
 
 	if o.AddressID.Valid {
@@ -464,6 +646,45 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 	if o.UpdatedAt.Valid {
 		resp.UpdatedAt = &o.UpdatedAt.Time
 	}
+	if o.PickupCode.Valid {
+		resp.PickupCode = &o.PickupCode.String
+	}
+	if o.DispatchOrderID.Valid {
+		resp.DispatchOrderID = &o.DispatchOrderID.Int64
+	}
+	if o.FlowID.Valid {
+		resp.FlowID = &o.FlowID.Int64
+	}
+	if o.StatusHint.Valid {
+		resp.StatusHint = &o.StatusHint.String
+	}
+	if o.ExceptionState.Valid {
+		resp.ExceptionState = &o.ExceptionState.String
+	}
+	if o.ClaimChannel.Valid {
+		resp.ClaimChannel = &o.ClaimChannel.String
+	}
+	if o.PrepStartAt.Valid {
+		resp.PrepStartAt = &o.PrepStartAt.Time
+	}
+	if o.ReadyAt.Valid {
+		resp.ReadyAt = &o.ReadyAt.Time
+	}
+	if o.CourierAcceptAt.Valid {
+		resp.CourierAcceptAt = &o.CourierAcceptAt.Time
+	}
+	if o.PickedAt.Valid {
+		resp.PickedAt = &o.PickedAt.Time
+	}
+	if o.RiderDeliveredAt.Valid {
+		resp.RiderDeliveredAt = &o.RiderDeliveredAt.Time
+	}
+	if o.UserDeliveredAt.Valid {
+		resp.UserDeliveredAt = &o.UserDeliveredAt.Time
+	}
+	if o.AutoUserDeliveredAt.Valid {
+		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
+	}
 
 	return resp
 }
@@ -479,6 +700,14 @@ func generateOrderNo() string {
 	randomNum := fmt.Sprintf("%06d", int(b[0])*10000+int(b[1])*100+int(b[2]))
 
 	return dateStr + randomNum[:6]
+}
+
+// generatePickupCode 生成6位取餐码（数字）
+func generatePickupCode() string {
+	b := make([]byte, 3)
+	rand.Read(b)
+	num := int(b[0])<<16 | int(b[1])<<8 | int(b[2])
+	return fmt.Sprintf("%06d", num%1000000)
 }
 
 // ==================== 订单API ====================
@@ -1076,6 +1305,10 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		FulfillmentStatus:   "scheduled",
 	}
 
+	if req.OrderType == OrderTypeTakeout || req.OrderType == OrderTypeTakeaway {
+		arg.PickupCode = pgtype.Text{String: generatePickupCode(), Valid: true}
+	}
+
 	// 设置可选字段
 	if req.AddressID != nil {
 		arg.AddressID = pgtype.Int8{Int64: *req.AddressID, Valid: true}
@@ -1462,8 +1695,8 @@ type listOrdersRequest struct {
 	// 每页条数 (必填，范围：5-20)
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=20" example:"10"`
 
-	// 订单状态筛选 (选填，枚举值: pending,paid,preparing,ready,delivering,completed,cancelled)
-	Status string `form:"status" binding:"omitempty,oneof=pending paid preparing ready delivering completed cancelled" enums:"pending,paid,preparing,ready,delivering,completed,cancelled" example:"paid"`
+	// 订单状态筛选 (选填，枚举值: pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
+	Status string `form:"status" binding:"omitempty,oneof=pending paid preparing ready courier_accepted picked delivering rider_delivered user_delivered completed cancelled" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
 
 	// 订单类型筛选 (选填，枚举值: takeout,dine_in,takeaway,reservation)
 	OrderType string `form:"order_type" binding:"omitempty,oneof=takeout dine_in takeaway reservation" enums:"takeout,dine_in,takeaway,reservation" example:"takeout"`
@@ -1481,7 +1714,11 @@ type listOrdersRequest struct {
 // @Description - paid: 已支付
 // @Description - preparing: 制作中
 // @Description - ready: 待配送/待取餐
+// @Description - courier_accepted: 骑手已接单
+// @Description - picked: 已取餐
 // @Description - delivering: 配送中
+// @Description - rider_delivered: 骑手送达
+// @Description - user_delivered: 用户确认送达
 // @Description - completed: 已完成
 // @Description - cancelled: 已取消
 // @Tags 订单管理
@@ -1489,7 +1726,7 @@ type listOrdersRequest struct {
 // @Produce json
 // @Param page_id query int true "页码(从1开始)" minimum(1)
 // @Param page_size query int true "每页条数" minimum(5) maximum(20)
-// @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,delivering,completed,cancelled)
+// @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
 // @Param order_type query string false "订单类型筛选" Enums(takeout,dine_in,takeaway,reservation)
 // @Param reservation_id query int false "预订ID筛选（仅预定点菜订单）" minimum(1)
 // @Success 200 {array} orderResponse "订单列表"
@@ -1600,6 +1837,42 @@ func (server *Server) cancelOrder(ctx *gin.Context) {
 		return
 	}
 
+	lateStatuses := map[string]bool{
+		OrderStatusPreparing:       true,
+		OrderStatusReady:           true,
+		OrderStatusCourierAccepted: true,
+		OrderStatusPicked:          true,
+		OrderStatusDelivering:      true,
+		OrderStatusRiderDelivered:  true,
+	}
+
+	if lateStatuses[order.Status] {
+		// 已进入制作/配送，记录异常通道，拒绝直接取消
+		_, err := server.store.UpdateOrderExceptionState(ctx, db.UpdateOrderExceptionStateParams{
+			ID:             order.ID,
+			ExceptionState: pgtype.Text{String: "cancel_requested", Valid: true},
+			ClaimChannel:   pgtype.Text{String: "user", Valid: true},
+		})
+		if err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("record cancel request exception state failed")
+		}
+
+		_, err = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: order.Status, Valid: true},
+			ToStatus:     order.Status,
+			OperatorID:   pgtype.Int8{Int64: authPayload.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "user", Valid: true},
+			Notes:        pgtype.Text{String: "用户申请取消，进入售后通道", Valid: true},
+		})
+		if err != nil {
+			log.Warn().Err(err).Int64("order_id", order.ID).Msg("record cancel request log failed")
+		}
+
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("订单已制作/配送，已记录取消诉求，请联系商户或客服处理")))
+		return
+	}
+
 	// 验证订单状态可取消：只允许 pending(待支付) 和 paid(已支付,商户未接单) 状态
 	if order.Status != OrderStatusPending && order.Status != OrderStatusPaid {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("订单当前状态无法取消，商户已接单后请联系商户处理")))
@@ -1697,10 +1970,13 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 
 	// 验证订单状态允许催单（已支付、制作中、待取餐、配送中）
 	allowedStatuses := map[string]bool{
-		OrderStatusPaid:       true,
-		OrderStatusPreparing:  true,
-		OrderStatusReady:      true,
-		OrderStatusDelivering: true,
+		OrderStatusPaid:            true,
+		OrderStatusPreparing:       true,
+		OrderStatusReady:           true,
+		OrderStatusCourierAccepted: true,
+		OrderStatusPicked:          true,
+		OrderStatusDelivering:      true,
+		OrderStatusRiderDelivered:  true,
 	}
 	if !allowedStatuses[order.Status] {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order cannot be urged in current status")))
@@ -1723,7 +1999,7 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 	}
 
 	// 2. 配送中的订单发送给骑手
-	if order.Status == OrderStatusDelivering {
+	if order.Status == OrderStatusDelivering || order.Status == OrderStatusCourierAccepted || order.Status == OrderStatusPicked || order.Status == OrderStatusRiderDelivered {
 		// 查询配送信息获取骑手ID
 		delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
 		if err == nil && delivery.RiderID.Valid {
@@ -2047,13 +2323,13 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 		return
 	}
 
-	if order.Status != OrderStatusDelivering {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in delivering status")))
+	if order.Status != OrderStatusDelivering && order.Status != OrderStatusRiderDelivered {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not deliverable")))
 		return
 	}
 
-	// 更新订单状态为已完成
-	updatedOrder, err := server.store.UpdateOrderToCompleted(ctx, order.ID)
+	// 更新订单状态为用户确认送达
+	updatedOrder, err := server.store.UpdateOrderToUserDelivered(ctx, order.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -2063,7 +2339,7 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 	_, _ = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
 		OrderID:      order.ID,
 		FromStatus:   pgtype.Text{String: order.Status, Valid: true},
-		ToStatus:     OrderStatusCompleted,
+		ToStatus:     OrderStatusUserDelivered,
 		OperatorID:   pgtype.Int8{Int64: authPayload.UserID, Valid: true},
 		OperatorType: pgtype.Text{String: "user", Valid: true},
 		Notes:        pgtype.Text{String: "用户确认收货", Valid: true},
@@ -2108,8 +2384,8 @@ type listMerchantOrdersRequest struct {
 	// 每页条数 (必填，范围：5-50)
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50" example:"20"`
 
-	// 订单状态筛选 (选填，枚举值: pending,paid,preparing,ready,delivering,completed,cancelled)
-	Status string `form:"status" binding:"omitempty,oneof=pending paid preparing ready delivering completed cancelled" enums:"pending,paid,preparing,ready,delivering,completed,cancelled" example:"paid"`
+	// 订单状态筛选 (选填，枚举值: pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
+	Status string `form:"status" binding:"omitempty,oneof=pending paid preparing ready courier_accepted picked delivering rider_delivered user_delivered completed cancelled" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
 }
 
 // listMerchantOrders godoc
@@ -2121,7 +2397,11 @@ type listMerchantOrdersRequest struct {
 // @Description - paid: 已支付
 // @Description - preparing: 制作中
 // @Description - ready: 待配送/待取餐
+// @Description - courier_accepted: 骑手已接单
+// @Description - picked: 已取餐
 // @Description - delivering: 配送中
+// @Description - rider_delivered: 骑手送达
+// @Description - user_delivered: 用户确认送达
 // @Description - completed: 已完成
 // @Description - cancelled: 已取消
 // @Tags 商户订单管理
@@ -2129,7 +2409,7 @@ type listMerchantOrdersRequest struct {
 // @Produce json
 // @Param page_id query int true "页码(从1开始)" minimum(1)
 // @Param page_size query int true "每页条数" minimum(5) maximum(50)
-// @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,delivering,completed,cancelled)
+// @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
 // @Success 200 {array} orderResponse "订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"

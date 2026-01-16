@@ -479,6 +479,136 @@ func TestHub_SendBufferFull(t *testing.T) {
 	require.Len(t, client.send, 1)
 }
 
+func TestHub_AckDedup(t *testing.T) {
+	ctx := context.Background()
+	ackStore := NewMemoryAckStore(5*time.Minute, time.Now)
+	hub := NewHub(ctx, WithAckStore(ackStore))
+
+	go hub.Run()
+	defer hub.Shutdown()
+
+	client := &Client{
+		info: ClientInfo{
+			UserID:     1,
+			ClientType: ClientTypeRider,
+			EntityID:   100,
+		},
+		hub:  hub,
+		send: make(chan Message, 10),
+		done: make(chan struct{}),
+	}
+
+	hub.Register(client)
+	time.Sleep(50 * time.Millisecond)
+
+	msgID := "msg-ack-1"
+	hub.SendToRider(100, Message{
+		ID:        msgID,
+		Type:      "notification",
+		Timestamp: time.Now(),
+	})
+
+	var received Message
+	select {
+	case received = <-client.send:
+		require.Equal(t, msgID, received.ID)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected to receive first message")
+	}
+
+	hub.RecordAck(client.info, Ack{MessageID: msgID, Sequence: received.Sequence, Timestamp: time.Now()})
+
+	hub.SendToRider(100, Message{
+		ID:        msgID,
+		Type:      "notification",
+		Timestamp: time.Now(),
+	})
+
+	select {
+	case <-client.send:
+		t.Fatal("expected dedup to skip sending acked message")
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
+func TestHub_Replay(t *testing.T) {
+	ctx := context.Background()
+	hub := NewHub(ctx)
+
+	go hub.Run()
+	defer hub.Shutdown()
+
+	client := &Client{
+		info: ClientInfo{
+			UserID:     1,
+			ClientType: ClientTypeRider,
+			EntityID:   100,
+		},
+		hub:  hub,
+		send: make(chan Message, 10),
+		done: make(chan struct{}),
+	}
+
+	hub.Register(client)
+	time.Sleep(50 * time.Millisecond)
+
+	msgID := "msg-replay-1"
+	hub.SendToRider(100, Message{
+		ID:        msgID,
+		Type:      "notification",
+		Timestamp: time.Now(),
+	})
+
+	select {
+	case received := <-client.send:
+		require.Equal(t, msgID, received.ID)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected to receive initial message")
+	}
+
+	hub.ReplayToClient(client.info, 0, 1)
+
+	select {
+	case replayed := <-client.send:
+		require.Equal(t, msgID, replayed.ID)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected replayed message")
+	}
+}
+
+func BenchmarkHubBroadcastToRiders(b *testing.B) {
+	ctx := context.Background()
+	hub := NewHub(ctx)
+
+	go hub.Run()
+	defer hub.Shutdown()
+
+	const riderCount = 200
+	for i := int64(1); i <= riderCount; i++ {
+		client := &Client{
+			info: ClientInfo{
+				UserID:     i,
+				ClientType: ClientTypeRider,
+				EntityID:   i,
+			},
+			hub:  hub,
+			send: make(chan Message, 256),
+			done: make(chan struct{}),
+		}
+		hub.Register(client)
+	}
+	// ensure registration processing
+	time.Sleep(50 * time.Millisecond)
+
+	msg := Message{Type: "benchmark", Data: json.RawMessage(`{"benchmark":true}`)}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		hub.BroadcastToAllRiders(msg)
+	}
+}
+
 func TestHub_Shutdown(t *testing.T) {
 	ctx := context.Background()
 	hub := NewHub(ctx)

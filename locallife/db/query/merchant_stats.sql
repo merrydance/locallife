@@ -13,7 +13,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
 
@@ -33,7 +33,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed');
+  AND status IN ('user_delivered', 'completed', 'delivered');
 
 -- name: GetTopSellingDishes :many
 -- 菜品销量排行: 从order_items实时聚合
@@ -49,7 +49,7 @@ JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
   AND o.created_at >= $2
   AND o.created_at <= $3
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY oi.dish_id, d.name, d.price
 ORDER BY total_sold DESC
 LIMIT $4;
@@ -73,7 +73,7 @@ SELECT
 FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
 ORDER BY 
     CASE 
@@ -88,7 +88,7 @@ LIMIT $2 OFFSET $3;
 SELECT COUNT(DISTINCT user_id)::int
 FROM orders
 WHERE merchant_id = $1
-  AND status IN ('delivered', 'completed');
+  AND status IN ('user_delivered', 'completed', 'delivered');
 
 -- name: GetCustomerMerchantDetail :one
 -- 单个顾客在某商户的消费详情
@@ -110,7 +110,7 @@ FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url;
 
 -- name: GetCustomerFavoriteDishes :many
@@ -125,7 +125,7 @@ JOIN dishes d ON d.id = oi.dish_id
 JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
-  AND o.status IN ('delivered', 'completed')
+  AND o.status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY oi.dish_id, d.name
 ORDER BY order_count DESC, total_quantity DESC
 LIMIT $3;
@@ -141,7 +141,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY EXTRACT(HOUR FROM created_at)
 ORDER BY hour;
 
@@ -156,7 +156,7 @@ FROM orders
 WHERE merchant_id = $1
   AND created_at >= $2
   AND created_at <= $3
-  AND status IN ('delivered', 'completed')
+  AND status IN ('user_delivered', 'completed', 'delivered')
 GROUP BY order_type
 ORDER BY order_count DESC;
 
@@ -172,7 +172,7 @@ WITH customer_order_counts AS (
     WHERE merchant_id = $1
       AND created_at >= $2
       AND created_at <= $3
-      AND status IN ('delivered', 'completed')
+      AND status IN ('user_delivered', 'completed', 'delivered')
     GROUP BY user_id
 )
 SELECT 
@@ -206,7 +206,7 @@ LEFT JOIN order_items oi ON oi.dish_id = d.id
 LEFT JOIN orders o ON o.id = oi.order_id 
     AND o.created_at >= @start_date 
     AND o.created_at <= @end_date
-    AND o.status IN ('delivered', 'completed')
+    AND o.status IN ('user_delivered', 'completed', 'delivered')
 WHERE mdc.merchant_id = $1
 GROUP BY dc.id, dc.name, mdc.sort_order
 ORDER BY mdc.sort_order ASC, total_revenue DESC;
@@ -247,7 +247,7 @@ SELECT
   ) as tags,
   COALESCE(
     (SELECT SUM(oi.quantity)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id 
-     WHERE oi.dish_id = d.id AND o.status IN ('completed', 'delivered') 
+    WHERE oi.dish_id = d.id AND o.status IN ('user_delivered', 'completed', 'delivered') 
      AND o.created_at > NOW() - INTERVAL '30 days'),
     0
   ) as monthly_sales

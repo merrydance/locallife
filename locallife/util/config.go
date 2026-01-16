@@ -54,6 +54,10 @@ type Config struct {
 	// 上传文件安全访问（签名URL）
 	UploadURLSigningKey string        `mapstructure:"UPLOAD_URL_SIGNING_KEY"` // HMAC签名密钥（建议随机长字符串）
 	UploadURLTTL        time.Duration `mapstructure:"UPLOAD_URL_TTL"`         // 签名URL有效期（例如 10m, 1h）
+
+	// WebSocket reliable push rollout
+	WebSocketReliableEnabled bool `mapstructure:"WS_RELIABLE_ENABLED"`
+	WebSocketReliablePercent int  `mapstructure:"WS_RELIABLE_PERCENT"`
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -63,6 +67,9 @@ func LoadConfig(path string) (config Config, err error) {
 	viper.SetConfigType("env")
 
 	viper.AutomaticEnv()
+	// WebSocket rollout defaults
+	viper.SetDefault("WS_RELIABLE_ENABLED", true)
+	viper.SetDefault("WS_RELIABLE_PERCENT", 100)
 
 	err = viper.ReadInConfig()
 	if err != nil {

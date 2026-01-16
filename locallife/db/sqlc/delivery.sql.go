@@ -18,7 +18,7 @@ SET
     status = 'assigned',
     assigned_at = now()
 WHERE id = $1 AND rider_id IS NULL
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type AssignDeliveryParams struct {
@@ -58,6 +58,7 @@ func (q *Queries) AssignDelivery(ctx context.Context, arg AssignDeliveryParams) 
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -106,7 +107,7 @@ INSERT INTO deliveries (
     status
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'pending'
-) RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+) RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type CreateDeliveryParams struct {
@@ -175,12 +176,13 @@ func (q *Queries) CreateDelivery(ctx context.Context, arg CreateDeliveryParams) 
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
 
 const getDelivery = `-- name: GetDelivery :one
-SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE id = $1 LIMIT 1
 `
 
@@ -216,12 +218,13 @@ func (q *Queries) GetDelivery(ctx context.Context, id int64) (Delivery, error) {
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
 
 const getDeliveryByOrderID = `-- name: GetDeliveryByOrderID :one
-SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE order_id = $1 LIMIT 1
 `
 
@@ -257,12 +260,13 @@ func (q *Queries) GetDeliveryByOrderID(ctx context.Context, orderID int64) (Deli
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
 
 const getDeliveryForUpdate = `-- name: GetDeliveryForUpdate :one
-SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -299,6 +303,7 @@ func (q *Queries) GetDeliveryForUpdate(ctx context.Context, id int64) (Delivery,
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -339,7 +344,7 @@ func (q *Queries) GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (in
 }
 
 const listDeliveriesByRider = `-- name: ListDeliveriesByRider :many
-SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE rider_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -389,6 +394,7 @@ func (q *Queries) ListDeliveriesByRider(ctx context.Context, arg ListDeliveriesB
 			&i.CreatedAt,
 			&i.AssignedAt,
 			&i.CompletedAt,
+			&i.RiderDeliveredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -401,7 +407,7 @@ func (q *Queries) ListDeliveriesByRider(ctx context.Context, arg ListDeliveriesB
 }
 
 const listDeliveriesByRiderAndStatus = `-- name: ListDeliveriesByRiderAndStatus :many
-SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE rider_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -457,6 +463,7 @@ func (q *Queries) ListDeliveriesByRiderAndStatus(ctx context.Context, arg ListDe
 			&i.CreatedAt,
 			&i.AssignedAt,
 			&i.CompletedAt,
+			&i.RiderDeliveredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -469,7 +476,7 @@ func (q *Queries) ListDeliveriesByRiderAndStatus(ctx context.Context, arg ListDe
 }
 
 const listPendingDeliveries = `-- name: ListPendingDeliveries :many
-SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE status = 'pending'
 ORDER BY created_at ASC
 LIMIT $1
@@ -513,6 +520,7 @@ func (q *Queries) ListPendingDeliveries(ctx context.Context, limit int32) ([]Del
 			&i.CreatedAt,
 			&i.AssignedAt,
 			&i.CompletedAt,
+			&i.RiderDeliveredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -525,7 +533,7 @@ func (q *Queries) ListPendingDeliveries(ctx context.Context, limit int32) ([]Del
 }
 
 const listRiderActiveDeliveries = `-- name: ListRiderActiveDeliveries :many
-SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at FROM deliveries
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE rider_id = $1 AND status IN ('assigned', 'picking', 'picked', 'delivering')
 ORDER BY created_at ASC
 `
@@ -568,6 +576,7 @@ func (q *Queries) ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.
 			&i.CreatedAt,
 			&i.AssignedAt,
 			&i.CompletedAt,
+			&i.RiderDeliveredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -586,7 +595,7 @@ SET
     damage_amount = $2,
     damage_reason = $3
 WHERE id = $1
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type UpdateDeliveryDamageParams struct {
@@ -627,6 +636,7 @@ func (q *Queries) UpdateDeliveryDamage(ctx context.Context, arg UpdateDeliveryDa
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -635,7 +645,7 @@ const updateDeliveryDelayed = `-- name: UpdateDeliveryDelayed :one
 UPDATE deliveries
 SET is_delayed = true
 WHERE id = $1
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 func (q *Queries) UpdateDeliveryDelayed(ctx context.Context, id int64) (Delivery, error) {
@@ -670,6 +680,7 @@ func (q *Queries) UpdateDeliveryDelayed(ctx context.Context, id int64) (Delivery
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -679,7 +690,7 @@ UPDATE deliveries
 SET 
     estimated_delivery_at = $2
 WHERE id = $1
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type UpdateDeliveryEstimatedTimeParams struct {
@@ -719,6 +730,7 @@ func (q *Queries) UpdateDeliveryEstimatedTime(ctx context.Context, arg UpdateDel
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -728,7 +740,7 @@ UPDATE deliveries
 SET 
     status = 'cancelled'
 WHERE id = $1
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 func (q *Queries) UpdateDeliveryToCancelled(ctx context.Context, id int64) (Delivery, error) {
@@ -763,6 +775,7 @@ func (q *Queries) UpdateDeliveryToCancelled(ctx context.Context, id int64) (Deli
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -774,7 +787,7 @@ SET
     rider_earnings = $2,
     completed_at = now()
 WHERE id = $1 AND status = 'delivered'
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type UpdateDeliveryToCompletedParams struct {
@@ -814,6 +827,7 @@ func (q *Queries) UpdateDeliveryToCompleted(ctx context.Context, arg UpdateDeliv
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -822,9 +836,10 @@ const updateDeliveryToDelivered = `-- name: UpdateDeliveryToDelivered :one
 UPDATE deliveries
 SET 
     status = 'delivered',
-    delivered_at = now()
+    delivered_at = now(),
+    rider_delivered_at = now()
 WHERE id = $1 AND rider_id = $2 AND status = 'delivering'
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type UpdateDeliveryToDeliveredParams struct {
@@ -864,6 +879,7 @@ func (q *Queries) UpdateDeliveryToDelivered(ctx context.Context, arg UpdateDeliv
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -873,7 +889,7 @@ UPDATE deliveries
 SET 
     status = 'delivering'
 WHERE id = $1 AND rider_id = $2 AND status = 'picked'
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type UpdateDeliveryToDeliveringParams struct {
@@ -913,6 +929,7 @@ func (q *Queries) UpdateDeliveryToDelivering(ctx context.Context, arg UpdateDeli
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -923,7 +940,7 @@ SET
     status = 'picked',
     picked_at = now()
 WHERE id = $1 AND rider_id = $2 AND status = 'picking'
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type UpdateDeliveryToPickedParams struct {
@@ -963,6 +980,7 @@ func (q *Queries) UpdateDeliveryToPicked(ctx context.Context, arg UpdateDelivery
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
@@ -972,7 +990,7 @@ UPDATE deliveries
 SET 
     status = 'picking'
 WHERE id = $1 AND rider_id = $2
-RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at
+RETURNING id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at
 `
 
 type UpdateDeliveryToPickupParams struct {
@@ -1012,6 +1030,7 @@ func (q *Queries) UpdateDeliveryToPickup(ctx context.Context, arg UpdateDelivery
 		&i.CreatedAt,
 		&i.AssignedAt,
 		&i.CompletedAt,
+		&i.RiderDeliveredAt,
 	)
 	return i, err
 }
