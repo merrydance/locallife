@@ -52,6 +52,9 @@ export interface OrderItemResponse {
 
 /** 订单商品定制化 - 对齐swagger api.orderCustomizationItem */
 export interface OrderCustomizationItem {
+  group_id?: number       // 定制分组ID
+  option_id?: number      // 定制选项ID
+  tag_id?: number         // 标签ID
   extra_price: number     // 额外价格（分）
   name: string            // 定制项名称
   value: string           // 定制项取值
@@ -127,7 +130,7 @@ export interface CreateOrderRequest extends Record<string, unknown> {
 /** 订单商品请求 - 对齐 api.orderItemRequest */
 export interface OrderItemRequest {
   combo_id?: number             // 套餐ID
-  customizations?: OrderCustomizationItem[]  // 定制化选项
+  customizations?: Record<string, number | string>  // 定制化选项：{group_id: option_id}
   dish_id?: number              // 菜品ID
   quantity: number              // 数量
 }

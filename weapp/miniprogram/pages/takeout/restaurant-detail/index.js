@@ -49,6 +49,12 @@ Page({
     onShow() {
         this.updateCartDisplay();
     },
+    onMerchantInfoTap() {
+        const { restaurantId } = this.data;
+        if (!restaurantId)
+            return;
+        wx.navigateTo({ url: `/pages/takeout/merchant-info/index?id=${restaurantId}` });
+    },
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },

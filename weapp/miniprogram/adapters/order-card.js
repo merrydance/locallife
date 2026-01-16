@@ -75,7 +75,6 @@ function mapStatus(status) {
         case 'ready':
             return 'ready';
         case 'preparing':
-            return 'preparing';
         case 'paid':
             return 'preparing';
         case 'pending':

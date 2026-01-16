@@ -103,6 +103,15 @@ Page({
     onMyOrders() {
         navigation_1.default.toOrderList();
     },
+    onTakeoutOrders() {
+        wx.navigateTo({ url: '/pages/orders/list/index?order_type=takeout' });
+    },
+    onReservationOrders() {
+        wx.navigateTo({ url: '/pages/user_center/reservations/index' });
+    },
+    onDineInOrders() {
+        wx.navigateTo({ url: '/pages/orders/list/index?order_type=dine_in' });
+    },
     onAddresses() {
         navigation_1.default.toAddressList();
     },

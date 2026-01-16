@@ -22,6 +22,7 @@ exports.calculateOrder = calculateOrder;
 exports.cancelOrder = cancelOrder;
 exports.confirmOrder = confirmOrder;
 exports.urgeOrder = urgeOrder;
+exports.replaceOrder = replaceOrder;
 exports.getOrdersByStatus = getOrdersByStatus;
 exports.getPendingOrders = getPendingOrders;
 exports.getActiveOrders = getActiveOrders;
@@ -124,6 +125,18 @@ function urgeOrder(orderId_1) {
         });
     });
 }
+/**
+ * 替换订单（生成新订单，旧订单标记为已被替换）
+ */
+function replaceOrder(orderId_1) {
+    return __awaiter(this, arguments, void 0, function* (orderId, data = {}) {
+        return (0, request_1.request)({
+            url: `/v1/orders/${orderId}/replace`,
+            method: 'POST',
+            data
+        });
+    });
+}
 // ==================== 便捷方法 ====================
 /**
  * 获取指定状态的订单
@@ -152,7 +165,15 @@ function getPendingOrders() {
  */
 function getActiveOrders() {
     return __awaiter(this, void 0, void 0, function* () {
-        const statuses = ['paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering', 'rider_delivered'];
+        const statuses = [
+            'paid',
+            'preparing',
+            'ready',
+            'courier_accepted',
+            'picked',
+            'delivering',
+            'rider_delivered'
+        ];
         const results = yield Promise.all(statuses.map(status => getOrdersByStatus(status, 20)));
         return results.reduce((acc, curr) => acc.concat(curr), []);
     });

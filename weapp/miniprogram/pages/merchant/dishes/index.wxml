@@ -295,48 +295,65 @@
                     </view>
                   </view>
 
-                  <!-- 定制选项 -->
+                  <!-- 定制分组 -->
                   <view class="form-section">
                     <view class="section-header">
-                      <view class="section-title">定制选项 <text class="section-hint">(选中即支持定制)</text></view>
-                      <view class="section-action" bindtap="onOpenTagManager" data-type="customization">管理</view>
+                      <view class="section-title">定制分组 <text class="section-hint">(支持多分组/必选)</text></view>
+                      <view class="section-action" bindtap="onAddCustomizationGroup">新增分组</view>
+                      <view class="section-action" bindtap="onOpenTagManager" data-type="customization">管理标签</view>
                     </view>
-                    <view class="tags-container">
-                      <view 
-                        wx:for="{{customizationTags}}" 
-                        wx:key="id" 
-                        class="tag-item customization {{utils.contains(selectedCustomizationTagIds, item.id) ? 'selected' : ''}}"
-                        bindtap="onCustomizationTagToggle"
-                        data-id="{{item.id}}"
-                        data-name="{{item.name}}"
-                      >
-                        <text class="tag-name">{{item.name}}</text>
-                        <text class="tag-check" wx:if="{{utils.contains(selectedCustomizationTagIds, item.id)}}">✓</text>
-                      </view>
-                      <view wx:if="{{customizationTags.length === 0}}" class="tags-empty">
-                        <text>暂无定制标签</text>
-                      </view>
+
+                    <view wx:if="{{customizationGroupsDraft.length === 0}}" class="tags-empty">
+                      <text>暂无分组，请先新增</text>
                     </view>
-                    
-                    <!-- 已选定制选项及加价设置 -->
-                    <view wx:if="{{selectedCustomizationOptions.length > 0}}" class="selected-customizations">
-                      <view class="customization-list-header">已选定制选项</view>
-                      <view 
-                        wx:for="{{selectedCustomizationOptions}}" 
-                        wx:key="tag_id" 
-                        class="customization-option-row"
-                      >
-                        <text class="option-label">{{item.tag_name}}</text>
-                        <view class="option-price-wrapper">
-                          <text class="price-prefix">加价 ¥</text>
-                          <input 
-                            class="price-input-small" 
-                            type="digit"
-                            placeholder="0"
-                            value="{{item.extra_price ? item.extra_price / 100 : ''}}"
-                            data-tag-id="{{item.tag_id}}"
-                            bindinput="onCustomizationPriceChange"
-                          />
+
+                    <view class="customization-groups">
+                      <view wx:for="{{customizationGroupsDraft}}" wx:key="index" wx:for-item="group" wx:for-index="index" class="customization-group">
+                        <view class="group-header">
+                          <input class="group-name-input" placeholder="分组名称" value="{{group.name}}" data-index="{{index}}" bindinput="onCustomizationGroupNameInput" />
+                          <view class="group-required">
+                            <text>必选</text>
+                            <switch checked="{{group.is_required}}" data-index="{{index}}" bindchange="onCustomizationGroupRequiredChange" />
+                          </view>
+                          <view class="group-actions">
+                            <view class="group-toggle {{activeCustomizationGroupIndex === index ? 'active' : ''}}" bindtap="onSelectCustomizationGroup" data-index="{{index}}">编辑</view>
+                            <view class="group-delete" bindtap="onRemoveCustomizationGroup" data-index="{{index}}">×</view>
+                          </view>
+                        </view>
+
+                        <view wx:if="{{activeCustomizationGroupIndex === index}}">
+                          <view class="tags-container">
+                            <view 
+                              wx:for="{{customizationTags}}" 
+                              wx:key="id" 
+                              wx:for-item="tag"
+                              class="tag-item customization {{utils.contains(group.tag_ids, tag.id) ? 'selected' : ''}}"
+                              bindtap="onCustomizationTagToggle"
+                              data-id="{{tag.id}}"
+                              data-name="{{tag.name}}"
+                            >
+                              <text class="tag-name">{{tag.name}}</text>
+                              <text class="tag-check" wx:if="{{utils.contains(group.tag_ids, tag.id)}}">✓</text>
+                            </view>
+                            <view wx:if="{{customizationTags.length === 0}}" class="tags-empty">
+                              <text>暂无定制标签</text>
+                            </view>
+                          </view>
+
+                          <view wx:if="{{group.options.length > 0}}" class="group-options">
+                            <view wx:for="{{group.options}}" wx:key="tag_id" wx:for-item="opt" class="option-item">
+                              <text class="option-name">{{opt.tag_name}}</text>
+                              <input 
+                                class="option-price-input" 
+                                type="digit"
+                                placeholder="0"
+                                value="{{opt.extra_price ? opt.extra_price / 100 : ''}}"
+                                data-tag-id="{{opt.tag_id}}"
+                                data-group-index="{{index}}"
+                                bindinput="onCustomizationPriceChange"
+                              />
+                            </view>
+                          </view>
                         </view>
                       </view>
                     </view>

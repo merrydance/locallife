@@ -53,10 +53,10 @@ Page({
         // 批量操作
         isMultiSelectMode: false,
         selectedDishIds: [],
-        // 定制选项 - 简化版
+        // 定制选项（完整分组）
         customizationTags: [], // 可用的定制标签
-        selectedCustomizationTagIds: [], // 已选中的定制标签 ID
-        selectedCustomizationOptions: [], // 已选中的定制选项（带加价）
+        customizationGroupsDraft: [],
+        activeCustomizationGroupIndex: 0,
         // 标签管理弹窗
         showTagManager: false,
         tagManagerType: 'dish',
@@ -249,8 +249,8 @@ Page({
                 selectedDish: dishFromList,
                 isAdding: false,
                 selectedTagIds: [],
-                selectedCustomizationTagIds: [],
-                selectedCustomizationOptions: []
+                customizationGroupsDraft: [],
+                activeCustomizationGroupIndex: -1
             });
             // 从API获取完整的菜品信息（包含标签和定制选项）
             let dish = dishFromList;
@@ -284,30 +284,34 @@ Page({
             const categoryIndex = categories.findIndex((c) => c.id === dish.category_id);
             // 回填已有属性标签
             const tagIds = (dish.tags || []).map((t) => t.id);
-            // 回填定制选项 - 直接从 getDishDetail 返回的 customization_groups 中提取
-            const customizationOptions = [];
-            const customizationTagIds = [];
-            if (dish.customization_groups && dish.customization_groups.length > 0) {
-                for (const group of dish.customization_groups) {
-                    for (const opt of (group.options || [])) {
-                        customizationOptions.push({
-                            tag_id: opt.tag_id,
-                            tag_name: opt.tag_name,
-                            extra_price: opt.extra_price || 0,
-                            sort_order: opt.sort_order || 0
-                        });
-                        customizationTagIds.push(opt.tag_id);
-                    }
-                }
-            }
+            // 回填定制选项分组
+            const customizationGroupsDraft = (dish.customization_groups || []).map((group, index) => {
+                var _a;
+                const options = (group.options || []).map((opt, optIndex) => {
+                    var _a;
+                    return ({
+                        tag_id: opt.tag_id,
+                        tag_name: opt.tag_name,
+                        extra_price: opt.extra_price || 0,
+                        sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
+                    });
+                });
+                return {
+                    name: group.name,
+                    is_required: !!group.is_required,
+                    sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : index,
+                    options,
+                    tag_ids: options.map((opt) => opt.tag_id)
+                };
+            });
             this.setData({
                 selectedDish: Object.assign(Object.assign({}, dish), { category_name: (category === null || category === void 0 ? void 0 : category.name) || dish.category_name || '', image_url_display: imageUrlDisplay // 用于显示的完整URL
                  }),
                 isAdding: false,
                 categoryPickerIndex: categoryIndex >= 0 ? categoryIndex : 0,
                 selectedTagIds: tagIds,
-                selectedCustomizationTagIds: customizationTagIds,
-                selectedCustomizationOptions: customizationOptions
+                customizationGroupsDraft,
+                activeCustomizationGroupIndex: customizationGroupsDraft.length > 0 ? 0 : -1
             });
         });
     },
@@ -316,23 +320,28 @@ Page({
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const result = yield dish_1.DishManagementService.getDishCustomizations(dishId);
-                // 从所有分组中提取选项到扁平列表
-                const options = [];
-                const tagIds = [];
-                for (const group of (result || [])) {
-                    for (const opt of (group.options || [])) {
-                        options.push({
+                const customizationGroupsDraft = (result || []).map((group, index) => {
+                    var _a;
+                    const options = (group.options || []).map((opt, optIndex) => {
+                        var _a;
+                        return ({
                             tag_id: opt.tag_id,
                             tag_name: opt.tag_name,
                             extra_price: opt.extra_price || 0,
-                            sort_order: opt.sort_order || 0
+                            sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
                         });
-                        tagIds.push(opt.tag_id);
-                    }
-                }
+                    });
+                    return {
+                        name: group.name,
+                        is_required: !!group.is_required,
+                        sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : index,
+                        options,
+                        tag_ids: options.map((opt) => opt.tag_id)
+                    };
+                });
                 this.setData({
-                    selectedCustomizationTagIds: tagIds,
-                    selectedCustomizationOptions: options
+                    customizationGroupsDraft,
+                    activeCustomizationGroupIndex: customizationGroupsDraft.length > 0 ? 0 : -1
                 });
             }
             catch (error) {
@@ -449,19 +458,26 @@ Page({
             const imageUrl = this.extractImagePath(selectedDish.image_url);
             try {
                 if (isAdding) {
-                    // 构建定制选项分组（如果有选中的定制标签）
                     let customizationGroups = undefined;
-                    if (this.data.selectedCustomizationOptions.length > 0) {
-                        customizationGroups = [{
-                                name: '定制选项',
-                                is_required: false,
-                                sort_order: 0,
-                                options: this.data.selectedCustomizationOptions.map((o, i) => ({
-                                    tag_id: o.tag_id,
-                                    extra_price: o.extra_price || 0,
-                                    sort_order: i
-                                }))
-                            }];
+                    if (this.data.customizationGroupsDraft.length > 0) {
+                        customizationGroups = this.data.customizationGroupsDraft
+                            .filter((group) => group.options && group.options.length > 0)
+                            .map((group, groupIndex) => {
+                            var _a;
+                            return ({
+                                name: group.name,
+                                is_required: !!group.is_required,
+                                sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : groupIndex,
+                                options: (group.options || []).map((opt, optIndex) => {
+                                    var _a;
+                                    return ({
+                                        tag_id: opt.tag_id,
+                                        extra_price: opt.extra_price || 0,
+                                        sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
+                                    });
+                                })
+                            });
+                        });
                     }
                     // 创建菜品（包含标签和定制选项）
                     yield dish_1.DishManagementService.createDish({
@@ -496,7 +512,7 @@ Page({
                         tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : []
                     });
                     // 保存定制选项
-                    if (this.data.selectedCustomizationOptions.length > 0 || selectedDish.id) {
+                    if (this.data.customizationGroupsDraft.length > 0 || selectedDish.id) {
                         yield this.saveDishCustomizations();
                     }
                     wx.showToast({ title: '保存成功', icon: 'success' });
@@ -504,8 +520,8 @@ Page({
                 this.setData({
                     isAdding: false,
                     selectedDish: null, // 清除选中状态
-                    selectedCustomizationTagIds: [], // 清除定制选项
-                    selectedCustomizationOptions: []
+                    customizationGroupsDraft: [],
+                    activeCustomizationGroupIndex: -1
                 });
                 yield this.loadDishes();
             }
@@ -740,64 +756,120 @@ Page({
             }
         });
     },
-    // ========== 定制选项管理 (简化版) ==========
-    // 切换定制标签选中状态
+    // ========== 定制选项管理（完整分组） ==========
+    onAddCustomizationGroup() {
+        const { customizationGroupsDraft } = this.data;
+        const nextIndex = customizationGroupsDraft.length + 1;
+        const newGroup = {
+            name: `分组${nextIndex}`,
+            is_required: false,
+            sort_order: customizationGroupsDraft.length,
+            options: [],
+            tag_ids: []
+        };
+        this.setData({
+            customizationGroupsDraft: [...customizationGroupsDraft, newGroup],
+            activeCustomizationGroupIndex: customizationGroupsDraft.length
+        });
+    },
+    onRemoveCustomizationGroup(e) {
+        const index = Number(e.currentTarget.dataset.index);
+        const { customizationGroupsDraft } = this.data;
+        if (index < 0 || index >= customizationGroupsDraft.length)
+            return;
+        const nextGroups = customizationGroupsDraft.filter((_, i) => i !== index);
+        this.setData({
+            customizationGroupsDraft: nextGroups,
+            activeCustomizationGroupIndex: nextGroups.length > 0 ? Math.min(index, nextGroups.length - 1) : -1
+        });
+    },
+    onSelectCustomizationGroup(e) {
+        const index = Number(e.currentTarget.dataset.index);
+        if (Number.isNaN(index))
+            return;
+        this.setData({ activeCustomizationGroupIndex: index });
+    },
+    onCustomizationGroupNameInput(e) {
+        const index = Number(e.currentTarget.dataset.index);
+        const value = e.detail.value || '';
+        if (index < 0)
+            return;
+        this.setData({
+            [`customizationGroupsDraft[${index}].name`]: value
+        });
+    },
+    onCustomizationGroupRequiredChange(e) {
+        const index = Number(e.currentTarget.dataset.index);
+        const checked = !!e.detail.value;
+        if (index < 0)
+            return;
+        this.setData({
+            [`customizationGroupsDraft[${index}].is_required`]: checked
+        });
+    },
+    // 切换定制标签选中状态（作用于当前分组）
     onCustomizationTagToggle(e) {
         const tagId = e.currentTarget.dataset.id;
         const tagName = e.currentTarget.dataset.name;
-        const { selectedCustomizationTagIds, selectedCustomizationOptions } = this.data;
-        const index = selectedCustomizationTagIds.indexOf(tagId);
-        if (index === -1) {
-            // 添加标签
-            const newOption = {
+        const { customizationGroupsDraft, activeCustomizationGroupIndex } = this.data;
+        if (activeCustomizationGroupIndex < 0 || activeCustomizationGroupIndex >= customizationGroupsDraft.length) {
+            wx.showToast({ title: '请先添加分组', icon: 'none' });
+            return;
+        }
+        const group = customizationGroupsDraft[activeCustomizationGroupIndex];
+        const tagIds = new Set(group.tag_ids || []);
+        const options = [...(group.options || [])];
+        if (!tagIds.has(tagId)) {
+            tagIds.add(tagId);
+            options.push({
                 tag_id: tagId,
                 tag_name: tagName,
                 extra_price: 0,
-                sort_order: selectedCustomizationOptions.length
-            };
-            this.setData({
-                selectedCustomizationTagIds: [...selectedCustomizationTagIds, tagId],
-                selectedCustomizationOptions: [...selectedCustomizationOptions, newOption]
+                sort_order: options.length
             });
         }
         else {
-            // 移除标签
-            const newTagIds = selectedCustomizationTagIds.filter((id) => id !== tagId);
-            const newOptions = selectedCustomizationOptions.filter((o) => o.tag_id !== tagId);
-            this.setData({
-                selectedCustomizationTagIds: newTagIds,
-                selectedCustomizationOptions: newOptions
-            });
+            tagIds.delete(tagId);
+            const nextOptions = options.filter((o) => o.tag_id !== tagId);
+            options.length = 0;
+            options.push(...nextOptions);
         }
+        this.setData({
+            [`customizationGroupsDraft[${activeCustomizationGroupIndex}].options`]: options,
+            [`customizationGroupsDraft[${activeCustomizationGroupIndex}].tag_ids`]: Array.from(tagIds)
+        });
     },
     // 修改定制选项加价
     onCustomizationPriceChange(e) {
         const tagId = e.currentTarget.dataset.tagId;
+        const groupIndex = Number(e.currentTarget.dataset.groupIndex);
         const value = e.detail.value;
         const priceInCents = value ? Math.round(parseFloat(value) * 100) : 0;
-        const { selectedCustomizationOptions } = this.data;
-        const index = selectedCustomizationOptions.findIndex((o) => o.tag_id === tagId);
-        if (index >= 0) {
+        const { customizationGroupsDraft } = this.data;
+        const group = customizationGroupsDraft[groupIndex];
+        if (!group)
+            return;
+        const optionIndex = (group.options || []).findIndex((o) => o.tag_id === tagId);
+        if (optionIndex >= 0) {
             this.setData({
-                [`selectedCustomizationOptions[${index}].extra_price`]: priceInCents
+                [`customizationGroupsDraft[${groupIndex}].options[${optionIndex}].extra_price`]: priceInCents
             });
         }
     },
-    // 保存定制选项 - 简化版
+    // 保存定制选项
     saveDishCustomizations() {
         return __awaiter(this, void 0, void 0, function* () {
-            const { selectedDish, selectedCustomizationOptions } = this.data;
+            const { selectedDish, customizationGroupsDraft } = this.data;
             console.log('[DEBUG] saveDishCustomizations 被调用', {
                 dishId: selectedDish === null || selectedDish === void 0 ? void 0 : selectedDish.id,
-                optionsCount: selectedCustomizationOptions.length,
-                options: selectedCustomizationOptions
+                groupCount: customizationGroupsDraft.length,
+                groups: customizationGroupsDraft
             });
             if (!selectedDish || !selectedDish.id) {
                 console.log('[DEBUG] saveDishCustomizations 跳过：无有效菜品ID');
                 return;
             }
-            // 如果没有选中任何定制选项，清空定制
-            if (selectedCustomizationOptions.length === 0) {
+            if (customizationGroupsDraft.length === 0 || customizationGroupsDraft.every((g) => !g.options || g.options.length === 0)) {
                 try {
                     console.log('[DEBUG] 清空定制选项');
                     yield dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups: [] });
@@ -808,17 +880,24 @@ Page({
                     throw error;
                 }
             }
-            // 创建单一默认分组存储所有选项
-            const groups = [{
-                    name: '定制选项',
-                    is_required: false,
-                    sort_order: 0,
-                    options: selectedCustomizationOptions.map((o, i) => ({
-                        tag_id: o.tag_id,
-                        extra_price: o.extra_price || 0,
-                        sort_order: i
-                    }))
-                }];
+            const groups = customizationGroupsDraft
+                .filter((group) => group.options && group.options.length > 0)
+                .map((group, groupIndex) => {
+                var _a;
+                return ({
+                    name: group.name,
+                    is_required: !!group.is_required,
+                    sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : groupIndex,
+                    options: (group.options || []).map((opt, optIndex) => {
+                        var _a;
+                        return ({
+                            tag_id: opt.tag_id,
+                            extra_price: opt.extra_price || 0,
+                            sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
+                        });
+                    })
+                });
+            });
             console.log('[DEBUG] 保存定制选项', { groups });
             try {
                 yield dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups });

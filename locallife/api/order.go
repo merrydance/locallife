@@ -87,11 +87,20 @@ type orderItemRequest struct {
 	// 数量 (必填，范围：1-99)
 	Quantity int16 `json:"quantity" binding:"required,min=1,max=99" example:"2"`
 
-	// 定制化选项列表 (选填，如规格、口味等，最多10个)
-	Customizations []orderCustomizationItem `json:"customizations,omitempty" binding:"omitempty,max=10,dive"`
+	// 定制化选项（选填，格式：{group_id: option_id}）
+	Customizations map[string]interface{} `json:"customizations,omitempty"`
 }
 
 type orderCustomizationItem struct {
+	// 分组ID
+	GroupID int64 `json:"group_id,omitempty"`
+
+	// 选项ID
+	OptionID int64 `json:"option_id,omitempty"`
+
+	// 标签ID
+	TagID int64 `json:"tag_id,omitempty"`
+
 	// 定制项名称 (如: "辣度", "甜度", "规格"，最多50字符)
 	Name string `json:"name" binding:"required,max=50" example:"辣度"`
 
@@ -1506,11 +1515,29 @@ func (server *Server) calculateOrderItems(ctx *gin.Context, merchantID int64, it
 			comboID = pgtype.Int8{Int64: *item.ComboID, Valid: true}
 		}
 
-		// 计算定制选项额外费用
+		var normalizedCustomizations []orderCustomizationItem
 		var extraPrice int64 = 0
-		for _, c := range item.Customizations {
-			extraPrice += c.ExtraPrice
+
+		if len(item.Customizations) > 0 {
+			if item.DishID == nil {
+				return 0, nil, fmt.Errorf("customizations only supported for dish items")
+			}
+			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID.Int64, item.Customizations)
+			if err != nil {
+				return 0, nil, err
+			}
+			normalizedCustomizations = normalized
+			extraPrice = extra
+		} else if item.DishID != nil {
+			normalized, _, _, err := server.normalizeDishCustomizations(ctx, dishID.Int64, nil)
+			if err != nil {
+				return 0, nil, err
+			}
+			if len(normalized) > 0 {
+				return 0, nil, fmt.Errorf("missing required customizations for dish %d", dishID.Int64)
+			}
 		}
+
 		unitPrice += extraPrice
 
 		itemSubtotal := unitPrice * int64(item.Quantity)
@@ -1518,8 +1545,8 @@ func (server *Server) calculateOrderItems(ctx *gin.Context, merchantID int64, it
 
 		// 序列化定制选项
 		var customizations []byte
-		if len(item.Customizations) > 0 {
-			customizations, _ = json.Marshal(item.Customizations)
+		if len(normalizedCustomizations) > 0 {
+			customizations, _ = json.Marshal(normalizedCustomizations)
 		}
 
 		orderItems = append(orderItems, db.CreateOrderItemParams{
@@ -3244,9 +3271,27 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 		if item.DishID.Valid {
 			name = item.DishName.String
 			price = item.DishPrice.Int64
+
+			var customizationMap map[string]interface{}
+			if len(item.Customizations) > 0 {
+				if err := json.Unmarshal(item.Customizations, &customizationMap); err != nil {
+					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid customizations in cart")))
+					return
+				}
+			}
+			_, extraPrice, _, err := server.normalizeDishCustomizations(ctx, item.DishID.Int64, customizationMap)
+			if err != nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			price += extraPrice
 		} else if item.ComboID.Valid {
 			name = item.ComboName.String
 			price = item.ComboPrice.Int64
+			if len(item.Customizations) > 0 {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("customizations not supported for combo items")))
+				return
+			}
 		}
 
 		itemSubtotal := price * int64(item.Quantity)

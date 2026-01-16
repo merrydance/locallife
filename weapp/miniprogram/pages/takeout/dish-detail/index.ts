@@ -9,21 +9,90 @@ import { getMerchantReviews } from '../../../api/personal'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
+type ExtraInfo = {
+  shopName?: string
+  monthSales?: number
+  distanceMeters?: number
+  estimatedDeliveryTime?: number
+}
+
+type ReviewViewModel = {
+  user_name: string
+  content: string
+  images: string[]
+  created_at: string
+}
+
+type CustomizationOption = {
+  id: number
+  tag_name: string
+  extra_price?: number
+}
+
+type CustomizationGroup = {
+  id: number
+  name: string
+  is_required?: boolean
+  options?: CustomizationOption[]
+}
+
+type SpecOption = {
+  id: string
+  name: string
+  price_diff: number
+  priceDiffDisplay: string | null
+}
+
+type SpecGroup = {
+  id: string
+  name: string
+  is_required?: boolean
+  specs: SpecOption[]
+}
+
+type DishViewModel = {
+  id: number
+  name: string
+  shop_name: string
+  shop_id?: number
+  merchant_id?: number
+  images: string[]
+  image_url?: string
+  price: number
+  priceDisplay: string
+  original_price: number
+  originalPriceDisplay: string
+  member_price?: number
+  memberPriceDisplay: string | null
+  description: string
+  is_available?: boolean
+  is_online?: boolean
+  prepare_time?: number
+  spec_groups: SpecGroup[]
+  reviews: ReviewViewModel[]
+  tags: string[]
+  ingredients: string[]
+  month_sales: number
+  distance_meters: number
+  estimated_delivery_time: number
+}
+
 Page({
   data: {
     dishId: '',
     merchantId: '',
-    dish: null as any,
+    dish: null as DishViewModel | null,
     selectedSpecs: {} as Record<string, string>,
     quantity: 1,
     navBarHeight: 88,
     currentImageIndex: 0,
     loading: true,
     totalPrice: 0,
-    totalPriceDisplay: '0.00'
+    totalPriceDisplay: '0.00',
+    extraInfo: {} as ExtraInfo
   },
 
-  onLoad(options: any) {
+  onLoad(options: Record<string, string>) {
     const dishId = options.id
     const merchantId = options.merchant_id || ''
     // 从列表页传递过来的额外信息
@@ -66,14 +135,14 @@ Page({
       }
 
       // 加载评价（如果有商户ID）
-      let reviews: any[] = []
+      let reviews: ReviewViewModel[] = []
       if (dishData.merchant_id) {
         try {
           const reviewsResult = await getMerchantReviews(dishData.merchant_id, {
             page_id: 1,
             page_size: 5
           })
-          reviews = (reviewsResult.reviews || []).map(r => ({
+          reviews = (reviewsResult.reviews || []).map((r) => ({
             user_name: '用户' + r.user_id,
             content: r.content,
             images: r.images || [],
@@ -85,7 +154,7 @@ Page({
       }
 
       // 从 URL 参数获取额外信息
-      const extraInfo = (this.data as any).extraInfo || {}
+      const extraInfo = (this.data as { extraInfo?: ExtraInfo }).extraInfo || {}
       const imageUrl = getPublicImageUrl(dishData.image_url)
 
       // 构建菜品视图模型
@@ -109,8 +178,8 @@ Page({
         prepare_time: dishData.prepare_time,
         spec_groups: this.convertCustomizationGroups(dishData.customization_groups),
         reviews,
-        tags: dishData.tags?.map(t => t.name) || [],
-        ingredients: dishData.ingredients || [],
+        tags: dishData.tags?.map((t) => t.name) || [],
+        ingredients: (dishData.ingredients || []).map((ingredient) => ingredient.name),
         // 额外展示字段（从列表页传递）
         month_sales: extraInfo.monthSales || 0,
         distance_meters: extraInfo.distanceMeters || 0,
@@ -120,7 +189,7 @@ Page({
       // 初始化规格选择
       const selectedSpecs: Record<string, string> = {}
       if (dish.spec_groups) {
-        dish.spec_groups.forEach((group: any) => {
+        dish.spec_groups.forEach((group: SpecGroup) => {
           if (group.specs && group.specs.length > 0) {
             selectedSpecs[group.id] = group.specs[0].id
           }
@@ -150,14 +219,14 @@ Page({
   },
 
   // 转换定制化分组为规格组格式
-  convertCustomizationGroups(groups: any[] | undefined): any[] {
+  convertCustomizationGroups(groups: CustomizationGroup[] | undefined): SpecGroup[] {
     if (!groups || groups.length === 0) return []
 
-    return groups.map(group => ({
+    return groups.map((group) => ({
       id: group.id.toString(),
       name: group.name,
       is_required: group.is_required,
-      specs: (group.options || []).map((opt: any) => ({
+      specs: (group.options || []).map((opt: CustomizationOption) => ({
         id: opt.id.toString(),
         name: opt.tag_name,
         price_diff: opt.extra_price || 0,
@@ -189,9 +258,9 @@ Page({
     let totalPrice = dish.price
 
     if (dish.spec_groups) {
-      dish.spec_groups.forEach((group: any) => {
+      dish.spec_groups.forEach((group: SpecGroup) => {
         const selectedSpecId = selectedSpecs[group.id]
-        const spec = group.specs?.find((s: any) => s.id === selectedSpecId)
+        const spec = group.specs?.find((s: SpecOption) => s.id === selectedSpecId)
         if (spec) {
           totalPrice += spec.price_diff
         }
@@ -223,12 +292,14 @@ Page({
 
     // 构建规格描述
     const specNames: string[] = []
+    const customizations: Record<string, string> = {}
     if (dish.spec_groups) {
-      dish.spec_groups.forEach((group: any) => {
+      dish.spec_groups.forEach((group: SpecGroup) => {
         const selectedSpecId = selectedSpecs[group.id]
-        const spec = group.specs?.find((s: any) => s.id === selectedSpecId)
+        const spec = group.specs?.find((s: SpecOption) => s.id === selectedSpecId)
         if (spec) {
           specNames.push(spec.name)
+          customizations[group.id] = selectedSpecId
         }
       })
     }
@@ -243,14 +314,15 @@ Page({
       imageUrl: dish.images?.[0] || dish.image_url,
       price: totalPrice,
       priceDisplay: `¥${(totalPrice / 100).toFixed(2)}`,
-      quantity
+      quantity,
+      customizations: Object.keys(customizations).length > 0 ? customizations : undefined
     })
 
     if (!success) {
       return
     }
 
-    tracker.log(EventType.ADD_CART, dish.id, {
+    tracker.log(EventType.ADD_CART, String(dish.id), {
       shop_id: dish.shop_id,
       quantity,
       price: totalPrice,

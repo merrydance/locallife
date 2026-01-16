@@ -15,9 +15,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryManagementService = exports.ComboManagementService = exports.DishManagementService = exports.TagService = void 0;
 exports.searchDishes = searchDishes;
-exports.getRecommendedDishes = getRecommendedDishes;
 exports.getRecommendedCombos = getRecommendedCombos;
 exports.getTags = getTags;
+exports.searchCombos = searchCombos;
 const request_1 = require("../utils/request");
 const auth_1 = require("../utils/auth");
 // ==================== 标签管理服务 ====================
@@ -474,42 +474,46 @@ class InventoryManagementService {
 }
 exports.InventoryManagementService = InventoryManagementService;
 /**
- * 搜索菜品 - 基于 /v1/search/dishes
+ * 搜索菜品 (原 getRecommendedDishes) - 基于 /v1/search/dishes
+ * 支持分页，返回包含 has_more 的完整响应
  */
 function searchDishes(params) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
+        // 首页推荐重构：使用搜索接口替代推荐接口
+        // 如果没有关键词，表示获取推荐流
+        const searchParams = {
+            keyword: (params === null || params === void 0 ? void 0 : params.keyword) || '', // 空字符串表示推荐流
+            page_id: (params === null || params === void 0 ? void 0 : params.page) || 1,
+            page_size: (params === null || params === void 0 ? void 0 : params.limit) || 20,
+        };
+        // 仅当参数存在时才添加，避免传递 undefined 导致后端验证失败
+        if (params === null || params === void 0 ? void 0 : params.merchant_id)
+            searchParams.merchant_id = params.merchant_id;
+        if (params === null || params === void 0 ? void 0 : params.tag_id)
+            searchParams.tag_id = params.tag_id; // Added
+        if (params === null || params === void 0 ? void 0 : params.user_latitude)
+            searchParams.user_latitude = params.user_latitude;
+        if (params === null || params === void 0 ? void 0 : params.user_longitude)
+            searchParams.user_longitude = params.user_longitude;
         const response = yield (0, request_1.request)({
             url: '/v1/search/dishes',
             method: 'GET',
-            data: params,
-            useCache: true,
-            cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+            data: searchParams,
+            useCache: searchParams.page_id === 1 && !searchParams.keyword, // 只缓存首页默认流
+            cacheTTL: 1 * 60 * 1000 // 1分钟缓存 (数据即时性要求高)
         });
-        // 后端返回 { dishes: [], total: ..., ... }
-        // 提取 dishes 数组返回
-        return response.dishes || [];
-    });
-}
-/**
- * 获取推荐菜品 - 基于 /v1/recommendations/dishes
- * 支持分页，返回包含 has_more 的完整响应
- */
-function getRecommendedDishes(params) {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c;
-        const response = yield (0, request_1.request)({
-            url: '/v1/recommendations/dishes',
-            method: 'GET',
-            data: params,
-            useCache: (params === null || params === void 0 ? void 0 : params.page) === 1 || !(params === null || params === void 0 ? void 0 : params.page), // 只缓存第一页
-            cacheTTL: 3 * 60 * 1000 // 3分钟缓存
-        });
-        // 返回完整响应，包含分页信息
+        // 转换响应格式以匹配 DishSearchResult
         return {
-            dishes: response.dishes || [],
+            dishes: (response.dishes || []).map(item => {
+                var _a;
+                return (Object.assign(Object.assign({}, item), { 
+                    // 使用后端返回的商户信息，部分字段暂时缺省
+                    merchant_name: item.merchant_name || '未知商户', merchant_logo: item.merchant_logo || '', merchant_latitude: 0, merchant_longitude: 0, merchant_region_id: 0, merchant_is_open: (_a = item.merchant_is_open) !== null && _a !== void 0 ? _a : true, distance: item.distance || 0, estimated_delivery_fee: item.estimated_delivery_fee || 0, estimated_delivery_time: item.estimated_delivery_time || 0, tags: [] }));
+            }),
             has_more: (_a = response.has_more) !== null && _a !== void 0 ? _a : false,
-            page: (_b = response.page) !== null && _b !== void 0 ? _b : 1,
-            total_count: (_c = response.total_count) !== null && _c !== void 0 ? _c : 0
+            page: (_b = response.page_id) !== null && _b !== void 0 ? _b : 1,
+            total_count: (_c = response.total) !== null && _c !== void 0 ? _c : 0
         };
     });
 }
@@ -549,6 +553,32 @@ function getTags(type) {
             cacheTTL: 10 * 60 * 1000 // 10分钟缓存
         });
         return response.tags || [];
+    });
+}
+/**
+ * 搜索套餐 - 基于 /v1/search/combos
+ */
+function searchCombos(params) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // 过滤掉 undefined 的参数
+        const searchParams = {
+            page_id: params.page_id || 1,
+            page_size: params.page_size || 20
+        };
+        if (params.keyword)
+            searchParams.keyword = params.keyword;
+        if (params.user_latitude !== undefined)
+            searchParams.user_latitude = params.user_latitude;
+        if (params.user_longitude !== undefined)
+            searchParams.user_longitude = params.user_longitude;
+        const response = yield (0, request_1.request)({
+            url: '/v1/search/combos',
+            method: 'GET',
+            data: searchParams,
+            useCache: true,
+            cacheTTL: 2 * 60 * 1000 // 2分钟缓存
+        });
+        return response;
     });
 }
 // ==================== 导出默认服务 ====================

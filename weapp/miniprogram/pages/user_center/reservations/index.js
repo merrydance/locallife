@@ -15,6 +15,41 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const reservation_1 = require("../../../api/reservation");
 const logger_1 = require("../../../utils/logger");
+function formatReservationDateTime(reservationDate, reservationTime) {
+    const datePart = (reservationDate || '').trim();
+    const timePart = (reservationTime || '').trim();
+    const combined = timePart.includes('T') || timePart.includes('-')
+        ? timePart
+        : `${datePart} ${timePart}`.trim();
+    const parsed = combined ? new Date(combined.replace(/-/g, '/')) : null;
+    if (parsed && !Number.isNaN(parsed.getTime())) {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const target = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+        const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+        const hours = ('0' + parsed.getHours()).slice(-2);
+        const minutes = ('0' + parsed.getMinutes()).slice(-2);
+        let dateLabel = '';
+        if (diffDays === 0) {
+            dateLabel = '今天';
+        }
+        else if (diffDays === 1) {
+            dateLabel = '明天';
+        }
+        else if (diffDays === -1) {
+            dateLabel = '昨天';
+        }
+        else {
+            const month = ('0' + (parsed.getMonth() + 1)).slice(-2);
+            const day = ('0' + parsed.getDate()).slice(-2);
+            dateLabel = `${month}-${day}`;
+        }
+        return `${dateLabel} · ${hours}:${minutes}`;
+    }
+    if (datePart && timePart)
+        return `${datePart} ${timePart}`;
+    return timePart || datePart || '';
+}
 // 状态筛选选项
 const STATUS_TABS = [
     { label: '全部', value: '' },
@@ -91,7 +126,30 @@ Page({
         });
     },
     processReservation(r) {
-        return Object.assign(Object.assign({}, r), { _statusText: this.getStatusText(r.status || ''), _statusClass: r.status || '', _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''), _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''), _dateTimeDisplay: r.reservation_time, _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '' });
+        var _a, _b, _c, _d;
+        const merchantName = r.merchant_name
+            || r.merchantName
+            || ((_a = r.merchant) === null || _a === void 0 ? void 0 : _a.name)
+            || ((_b = r.merchant) === null || _b === void 0 ? void 0 : _b.merchant_name)
+            || '';
+        const merchantAddress = r.merchant_address || ((_c = r.merchant) === null || _c === void 0 ? void 0 : _c.address) || '';
+        const merchantPhone = r.merchant_phone || ((_d = r.merchant) === null || _d === void 0 ? void 0 : _d.phone) || '';
+        return Object.assign(Object.assign({}, r), { _statusText: this.getStatusText(r.status || ''), _statusClass: r.status || '', _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''), _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''), _dateTimeDisplay: formatReservationDateTime(r.reservation_date, r.reservation_time), _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '', _merchantName: merchantName, _merchantAddress: merchantAddress, _merchantPhone: merchantPhone });
+    },
+    noop() { },
+    onShareAppMessage(res) {
+        var _a, _b, _c;
+        const idFromButton = (_b = (_a = res === null || res === void 0 ? void 0 : res.target) === null || _a === void 0 ? void 0 : _a.dataset) === null || _b === void 0 ? void 0 : _b.id;
+        const targetId = Number(idFromButton || ((_c = this.data.reservations[0]) === null || _c === void 0 ? void 0 : _c.id) || 0);
+        const target = this.data.reservations.find((r) => r.id === targetId);
+        const titleParts = [(target === null || target === void 0 ? void 0 : target._merchantName) || '预订'];
+        if (target === null || target === void 0 ? void 0 : target._dateTimeDisplay) {
+            titleParts.push(target._dateTimeDisplay);
+        }
+        return {
+            title: titleParts.join(' · '),
+            path: `/pages/reservation/detail/index?id=${targetId}`
+        };
     },
     getStatusText(status) {
         const statusMap = {
@@ -112,9 +170,14 @@ Page({
         this.loadReservations(true);
     },
     onViewDetail(e) {
-        const { id } = e.currentTarget.dataset;
+        var _a;
+        const id = Number(e.currentTarget.dataset.id || ((_a = e.target.dataset) === null || _a === void 0 ? void 0 : _a.id) || 0);
+        if (!id) {
+            wx.showToast({ title: '缺少预订ID', icon: 'none' });
+            return;
+        }
         wx.navigateTo({
-            url: `/pages/user_center/reservations/detail/index?id=${id}`
+            url: `/pages/reservation/detail/index?id=${id}`
         });
     },
     onCancelReservation(e) {

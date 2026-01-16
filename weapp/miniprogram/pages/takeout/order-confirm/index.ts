@@ -18,6 +18,7 @@ interface CartItemView {
   priceDisplay: string
   subtotal: number
   subtotalDisplay: string
+  customizations?: Record<string, unknown>
 }
 
 interface MerchantCartView {
@@ -138,7 +139,8 @@ Page({
           unitPrice: item.unit_price,
           priceDisplay: formatPriceNoSymbol(item.unit_price),
           subtotal: item.subtotal,
-          subtotalDisplay: formatPriceNoSymbol(item.subtotal)
+          subtotalDisplay: formatPriceNoSymbol(item.subtotal),
+          customizations: item.customizations || undefined
         }))
 
         const totalCount = items.reduce((sum, item) => sum + item.quantity, 0)
@@ -367,11 +369,12 @@ Page({
         const requestData: CreateOrderRequest = {
           merchant_id: cart.merchantId,
           items: cart.items.map((item) => {
-            const orderItem: { dish_id?: number; combo_id?: number; quantity: number } = {
+            const orderItem: { dish_id?: number; combo_id?: number; quantity: number; customizations?: Record<string, unknown> } = {
               quantity: item.quantity
             }
             if (item.dishId) orderItem.dish_id = item.dishId
             if (item.comboId) orderItem.combo_id = item.comboId
+            if (item.customizations) orderItem.customizations = item.customizations
             return orderItem
           }),
           order_type: cart.orderType as any,

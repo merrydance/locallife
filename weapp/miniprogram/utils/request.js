@@ -191,6 +191,12 @@ function request(options) {
                 // 注册请求任务以便取消
                 request_manager_1.requestManager.register(requestId, task, context);
             });
+            // 204 No Content 视为成功（如 DELETE 返回空）
+            if (result.statusCode === 204) {
+                performance_monitor_1.performanceMonitor.recordRequest(false);
+                logger_1.logger.debug(`API响应成功(204): ${method} ${url}`, undefined, 'request');
+                return undefined;
+            }
             // 检查HTTP状态码
             if (result.statusCode !== 200 && result.statusCode !== 201) {
                 // 特殊处理 401 Unauthorized
@@ -304,13 +310,17 @@ function request(options) {
                 });
             }
             // 检查 code 字段是否存在（统一响应信封格式要求所有接口都有 code 字段）
+            // 部分旧接口仍直接返回数组/对象，此时视为成功并直接返回原始数据，避免前端崩溃
             if (response.code === undefined || response.code === null) {
-                logger_1.logger.error(`API响应缺少code字段: ${method} ${url}`, response, 'request');
-                throw new error_handler_1.AppError({
-                    type: error_handler_1.ErrorType.BUSINESS,
-                    message: 'API响应缺少code字段',
-                    userMessage: '服务器响应异常,请稍后重试'
-                });
+                logger_1.logger.warn(`API响应缺少code字段，按兼容模式处理: ${method} ${url}`, response, 'request');
+                // 记录性能监控 - 网络请求成功
+                performance_monitor_1.performanceMonitor.recordRequest(false);
+                // 缓存兼容：直接缓存原始数据
+                if (useCache && method === 'GET') {
+                    const cacheKey = `api_${url}_${JSON.stringify(data || {})}`;
+                    cache.set(cacheKey, response, cacheTTL, cache_1.CacheStrategy.MEMORY_FIRST);
+                }
+                return response;
             }
             if (response.code === types_1.ErrorCode.SUCCESS) {
                 logger_1.logger.debug(`API响应成功: ${method} ${url}`, response.data, 'request');

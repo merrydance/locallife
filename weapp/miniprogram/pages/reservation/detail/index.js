@@ -13,15 +13,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const reservation_1 = require("../../../api/reservation");
+const payment_1 = require("../../../api/payment");
 const reservation_2 = __importDefault(require("../../../adapters/reservation"));
 Page({
     data: {
         id: 0,
         reservation: null,
         loading: true,
+        navBarHeight: 88,
         showCancelDialog: false,
         cancelReason: '',
-        cancelReasons: ['行程改变', '订错了', '不想去了', '其他原因']
+        cancelReasons: ['行程改变', '订错了', '不想去了', '其他原因'],
+        showPayButton: false,
+        showCancelButton: false,
+        showModifyButton: false
     },
     onLoad(options) {
         if (options.id) {
@@ -29,13 +34,32 @@ Page({
             this.loadDetail();
         }
     },
+    onShow() {
+        // refresh when returning from pay/menu/cart
+        if (this.data.id) {
+            this.loadDetail();
+        }
+    },
+    onNavHeight(e) {
+        this.setData({ navBarHeight: e.detail.navBarHeight || 88 });
+    },
     loadDetail() {
         return __awaiter(this, void 0, void 0, function* () {
             this.setData({ loading: true });
             try {
                 const res = yield reservation_1.ReservationService.getReservationDetail(this.data.id);
-                const formatted = Object.assign(Object.assign({}, res), { _statusText: reservation_2.default.formatStatus(res.status), _statusTheme: reservation_2.default.getStatusTheme(res.status), _timeText: reservation_2.default.formatFullDateTime(res.reservation_time) });
-                this.setData({ reservation: formatted, loading: false });
+                const mappedItems = this.mapReservationItems(res.items || []);
+                const formatted = Object.assign(Object.assign({}, res), { items: mappedItems, _statusText: reservation_2.default.formatStatus(res.status), _statusTheme: reservation_2.default.getStatusTheme(res.status), _statusColor: this.getStatusColor(res.status), _timeText: this.formatReservationDateTime(res.reservation_date, res.reservation_time), _createdAt: this.formatDateSafe(res.created_at), _reservationDate: res.reservation_date || '--', _reservationTime: res.reservation_time || '--', _guestCount: (res.guest_count || res.party_size) ? `${res.guest_count || res.party_size}人` : '--' });
+                const showPayButton = res.status === 'pending';
+                const showCancelButton = ['pending', 'paid', 'confirmed'].includes(res.status);
+                const showModifyButton = ['paid', 'confirmed', 'checked_in'].includes(res.status) && !res.cooking_started_at;
+                this.setData({
+                    reservation: formatted,
+                    loading: false,
+                    showPayButton,
+                    showCancelButton,
+                    showModifyButton
+                });
             }
             catch (error) {
                 console.error(error);
@@ -43,6 +67,78 @@ Page({
                 this.setData({ loading: false });
             }
         });
+    },
+    getStatusColor(status) {
+        switch (status) {
+            case 'completed':
+            case 'checked_in':
+                return '#00A870';
+            case 'cancelled':
+            case 'expired':
+            case 'no_show':
+                return '#A0A4B3';
+            case 'pending':
+                return '#FF9F45';
+            default:
+                return '#1F7AEC';
+        }
+    },
+    formatDateSafe(value) {
+        if (!value)
+            return '--';
+        const d = new Date(value.replace(/-/g, '/'));
+        if (Number.isNaN(d.getTime()))
+            return value;
+        return reservation_2.default.formatFullDateTime(value);
+    },
+    formatReservationDateTime(dateStr, timeStr) {
+        const datePart = (dateStr || '').trim();
+        const timePart = (timeStr || '').trim();
+        if (!datePart && !timePart)
+            return '--';
+        // Prefer combined parsing to avoid NaN when time lacks date
+        if (datePart && timePart) {
+            const combined = `${datePart} ${timePart}`.replace(/-/g, '/');
+            const parsed = new Date(combined);
+            if (!Number.isNaN(parsed.getTime())) {
+                const y = parsed.getFullYear();
+                const m = ('0' + (parsed.getMonth() + 1)).slice(-2);
+                const d = ('0' + parsed.getDate()).slice(-2);
+                const hh = ('0' + parsed.getHours()).slice(-2);
+                const mm = ('0' + parsed.getMinutes()).slice(-2);
+                return `${y}-${m}-${d} ${hh}:${mm}`;
+            }
+        }
+        // Fallback to whichever parts we have
+        if (datePart && timePart)
+            return `${datePart} ${timePart}`;
+        if (datePart)
+            return datePart;
+        return timePart;
+    },
+    mapReservationItems(items) {
+        if (!items || items.length === 0)
+            return [];
+        return items.map((item) => {
+            var _a, _b, _c, _d;
+            const unitPrice = this.formatPrice((_a = item.unit_price) !== null && _a !== void 0 ? _a : item.price);
+            const totalPrice = this.formatPrice((_b = item.total_price) !== null && _b !== void 0 ? _b : ((_d = (_c = item.unit_price) !== null && _c !== void 0 ? _c : item.price) !== null && _d !== void 0 ? _d : 0) * (item.quantity || 1));
+            return Object.assign(Object.assign({}, item), { _displayName: item.name || (item.type === 'combo' ? '套餐' : '菜品'), _unitPrice: unitPrice, _totalPrice: totalPrice, _image: this.normalizeImage(item.image_url) });
+        });
+    },
+    formatPrice(amount) {
+        if (amount === undefined || amount === null)
+            return '--';
+        return `¥${(amount / 100).toFixed(2)}`;
+    },
+    normalizeImage(url) {
+        if (!url)
+            return '';
+        if (url.startsWith('http'))
+            return url;
+        if (url.startsWith('/'))
+            return url;
+        return url;
     },
     onCancel() {
         this.setData({ showCancelDialog: true });
@@ -67,7 +163,7 @@ Page({
                 this.loadDetail();
             }
             catch (error) {
-                wx.showToast({ title: error.message || '取消失败', icon: 'none' });
+                wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.message) || '取消失败', icon: 'none' });
             }
             finally {
                 wx.hideLoading();
@@ -75,18 +171,43 @@ Page({
         });
     },
     onCallMerchant() {
-        // Placeholder for calling merchant
-        wx.makePhoneCall({ phoneNumber: '13800000000' });
-    },
-    /**
-     * 跳转到点菜页面（定金模式顾客到店后点菜）
-     */
-    onGoToOrder() {
-        const { reservation } = this.data;
-        if (!reservation)
+        var _a, _b;
+        const phone = ((_a = this.data.reservation) === null || _a === void 0 ? void 0 : _a.merchant_phone) || ((_b = this.data.reservation) === null || _b === void 0 ? void 0 : _b.contact_phone);
+        if (!phone) {
+            wx.showToast({ title: '暂无电话', icon: 'none' });
             return;
-        wx.navigateTo({
-            url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${reservation.merchant_id}`
+        }
+        wx.makePhoneCall({ phoneNumber: phone });
+    },
+    onPay() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.data.reservation)
+                return;
+            try {
+                wx.showLoading({ title: '拉起支付' });
+                yield (0, payment_1.processPayment)(this.data.reservation.id, 'reservation');
+                wx.showToast({ title: '支付成功', icon: 'success' });
+                this.loadDetail();
+            }
+            catch (error) {
+                wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.message) || '支付失败', icon: 'none' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        });
+    },
+    onModifyDishes() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.data.reservation)
+                return;
+            if (this.data.reservation.cooking_started_at) {
+                wx.showToast({ title: '已开始起菜，无法修改', icon: 'none' });
+                return;
+            }
+            wx.navigateTo({
+                url: `/pages/reservation/modify/index?id=${this.data.reservation.id}`
+            });
         });
     }
 });

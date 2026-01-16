@@ -18,6 +18,15 @@ interface DishItem extends DishResponse {
   image_url_resolved?: string
 }
 
+interface CustomizationOptionDraft extends CustomizationOptionInput {
+  tag_name?: string
+}
+
+interface CustomizationGroupDraft extends CustomizationGroupInput {
+  tag_ids?: number[]
+  options: CustomizationOptionDraft[]
+}
+
 Page({
   data: {
     // 布局状态
@@ -58,10 +67,10 @@ Page({
     isMultiSelectMode: false,
     selectedDishIds: [] as number[],
 
-    // 定制选项 - 简化版
+    // 定制选项（完整分组）
     customizationTags: [] as TagInfo[],  // 可用的定制标签
-    selectedCustomizationTagIds: [] as number[],  // 已选中的定制标签 ID
-    selectedCustomizationOptions: [] as any[],  // 已选中的定制选项（带加价）
+    customizationGroupsDraft: [] as CustomizationGroupDraft[],
+    activeCustomizationGroupIndex: 0,
 
     // 标签管理弹窗
     showTagManager: false,
@@ -276,8 +285,8 @@ Page({
       selectedDish: dishFromList,
       isAdding: false,
       selectedTagIds: [],
-      selectedCustomizationTagIds: [],
-      selectedCustomizationOptions: []
+      customizationGroupsDraft: [],
+      activeCustomizationGroupIndex: -1
     })
 
     // 从API获取完整的菜品信息（包含标签和定制选项）
@@ -316,22 +325,23 @@ Page({
     // 回填已有属性标签
     const tagIds = (dish.tags || []).map((t: TagInfo) => t.id)
 
-    // 回填定制选项 - 直接从 getDishDetail 返回的 customization_groups 中提取
-    const customizationOptions: any[] = []
-    const customizationTagIds: number[] = []
-    if (dish.customization_groups && dish.customization_groups.length > 0) {
-      for (const group of dish.customization_groups) {
-        for (const opt of (group.options || [])) {
-          customizationOptions.push({
-            tag_id: opt.tag_id,
-            tag_name: opt.tag_name,
-            extra_price: opt.extra_price || 0,
-            sort_order: opt.sort_order || 0
-          })
-          customizationTagIds.push(opt.tag_id)
-        }
+    // 回填定制选项分组
+    const customizationGroupsDraft: CustomizationGroupDraft[] = (dish.customization_groups || []).map((group: any, index: number) => {
+      const options: CustomizationOptionDraft[] = (group.options || []).map((opt: any, optIndex: number) => ({
+        tag_id: opt.tag_id,
+        tag_name: opt.tag_name,
+        extra_price: opt.extra_price || 0,
+        sort_order: opt.sort_order ?? optIndex
+      }))
+
+      return {
+        name: group.name,
+        is_required: !!group.is_required,
+        sort_order: group.sort_order ?? index,
+        options,
+        tag_ids: options.map((opt) => opt.tag_id)
       }
-    }
+    })
 
     this.setData({
       selectedDish: {
@@ -342,8 +352,8 @@ Page({
       isAdding: false,
       categoryPickerIndex: categoryIndex >= 0 ? categoryIndex : 0,
       selectedTagIds: tagIds,
-      selectedCustomizationTagIds: customizationTagIds,
-      selectedCustomizationOptions: customizationOptions
+      customizationGroupsDraft,
+      activeCustomizationGroupIndex: customizationGroupsDraft.length > 0 ? 0 : -1
     })
   },
 
@@ -351,25 +361,26 @@ Page({
   async loadDishCustomizations(dishId: number) {
     try {
       const result = await DishManagementService.getDishCustomizations(dishId)
-      // 从所有分组中提取选项到扁平列表
-      const options: any[] = []
-      const tagIds: number[] = []
+      const customizationGroupsDraft: CustomizationGroupDraft[] = (result || []).map((group: any, index: number) => {
+        const options: CustomizationOptionDraft[] = (group.options || []).map((opt: any, optIndex: number) => ({
+          tag_id: opt.tag_id,
+          tag_name: opt.tag_name,
+          extra_price: opt.extra_price || 0,
+          sort_order: opt.sort_order ?? optIndex
+        }))
 
-      for (const group of (result || [])) {
-        for (const opt of (group.options || [])) {
-          options.push({
-            tag_id: opt.tag_id,
-            tag_name: opt.tag_name,
-            extra_price: opt.extra_price || 0,
-            sort_order: opt.sort_order || 0
-          })
-          tagIds.push(opt.tag_id)
+        return {
+          name: group.name,
+          is_required: !!group.is_required,
+          sort_order: group.sort_order ?? index,
+          options,
+          tag_ids: options.map((opt) => opt.tag_id)
         }
-      }
+      })
 
       this.setData({
-        selectedCustomizationTagIds: tagIds,
-        selectedCustomizationOptions: options
+        customizationGroupsDraft,
+        activeCustomizationGroupIndex: customizationGroupsDraft.length > 0 ? 0 : -1
       })
     } catch (error) {
       logger.error('加载定制选项失败', error, 'Dishes')
@@ -495,19 +506,20 @@ Page({
 
     try {
       if (isAdding) {
-        // 构建定制选项分组（如果有选中的定制标签）
         let customizationGroups = undefined
-        if (this.data.selectedCustomizationOptions.length > 0) {
-          customizationGroups = [{
-            name: '定制选项',
-            is_required: false,
-            sort_order: 0,
-            options: this.data.selectedCustomizationOptions.map((o: any, i: number) => ({
-              tag_id: o.tag_id,
-              extra_price: o.extra_price || 0,
-              sort_order: i
+        if (this.data.customizationGroupsDraft.length > 0) {
+          customizationGroups = this.data.customizationGroupsDraft
+            .filter((group) => group.options && group.options.length > 0)
+            .map((group, groupIndex) => ({
+              name: group.name,
+              is_required: !!group.is_required,
+              sort_order: group.sort_order ?? groupIndex,
+              options: (group.options || []).map((opt, optIndex) => ({
+                tag_id: opt.tag_id,
+                extra_price: opt.extra_price || 0,
+                sort_order: opt.sort_order ?? optIndex
+              }))
             }))
-          }]
         }
 
         // 创建菜品（包含标签和定制选项）
@@ -543,7 +555,7 @@ Page({
         })
 
         // 保存定制选项
-        if (this.data.selectedCustomizationOptions.length > 0 || selectedDish.id) {
+        if (this.data.customizationGroupsDraft.length > 0 || selectedDish.id) {
           await this.saveDishCustomizations()
         }
 
@@ -553,8 +565,8 @@ Page({
       this.setData({
         isAdding: false,
         selectedDish: null,  // 清除选中状态
-        selectedCustomizationTagIds: [],  // 清除定制选项
-        selectedCustomizationOptions: []
+        customizationGroupsDraft: [],
+        activeCustomizationGroupIndex: -1
       })
       await this.loadDishes()
     } catch (error: any) {
@@ -791,60 +803,121 @@ Page({
     }
   },
 
-  // ========== 定制选项管理 (简化版) ==========
+  // ========== 定制选项管理（完整分组） ==========
 
-  // 切换定制标签选中状态
+  onAddCustomizationGroup() {
+    const { customizationGroupsDraft } = this.data
+    const nextIndex = customizationGroupsDraft.length + 1
+    const newGroup: CustomizationGroupDraft = {
+      name: `分组${nextIndex}`,
+      is_required: false,
+      sort_order: customizationGroupsDraft.length,
+      options: [],
+      tag_ids: []
+    }
+    this.setData({
+      customizationGroupsDraft: [...customizationGroupsDraft, newGroup],
+      activeCustomizationGroupIndex: customizationGroupsDraft.length
+    })
+  },
+
+  onRemoveCustomizationGroup(e: any) {
+    const index = Number(e.currentTarget.dataset.index)
+    const { customizationGroupsDraft } = this.data
+    if (index < 0 || index >= customizationGroupsDraft.length) return
+    const nextGroups = customizationGroupsDraft.filter((_, i) => i !== index)
+    this.setData({
+      customizationGroupsDraft: nextGroups,
+      activeCustomizationGroupIndex: nextGroups.length > 0 ? Math.min(index, nextGroups.length - 1) : -1
+    })
+  },
+
+  onSelectCustomizationGroup(e: any) {
+    const index = Number(e.currentTarget.dataset.index)
+    if (Number.isNaN(index)) return
+    this.setData({ activeCustomizationGroupIndex: index })
+  },
+
+  onCustomizationGroupNameInput(e: any) {
+    const index = Number(e.currentTarget.dataset.index)
+    const value = e.detail.value || ''
+    if (index < 0) return
+    this.setData({
+      [`customizationGroupsDraft[${index}].name`]: value
+    })
+  },
+
+  onCustomizationGroupRequiredChange(e: any) {
+    const index = Number(e.currentTarget.dataset.index)
+    const checked = !!e.detail.value
+    if (index < 0) return
+    this.setData({
+      [`customizationGroupsDraft[${index}].is_required`]: checked
+    })
+  },
+
+  // 切换定制标签选中状态（作用于当前分组）
   onCustomizationTagToggle(e: any) {
     const tagId = e.currentTarget.dataset.id
     const tagName = e.currentTarget.dataset.name
-    const { selectedCustomizationTagIds, selectedCustomizationOptions } = this.data
+    const { customizationGroupsDraft, activeCustomizationGroupIndex } = this.data
 
-    const index = selectedCustomizationTagIds.indexOf(tagId)
-    if (index === -1) {
-      // 添加标签
-      const newOption = {
+    if (activeCustomizationGroupIndex < 0 || activeCustomizationGroupIndex >= customizationGroupsDraft.length) {
+      wx.showToast({ title: '请先添加分组', icon: 'none' })
+      return
+    }
+
+    const group = customizationGroupsDraft[activeCustomizationGroupIndex]
+    const tagIds = new Set(group.tag_ids || [])
+    const options = [...(group.options || [])]
+
+    if (!tagIds.has(tagId)) {
+      tagIds.add(tagId)
+      options.push({
         tag_id: tagId,
         tag_name: tagName,
         extra_price: 0,
-        sort_order: selectedCustomizationOptions.length
-      }
-      this.setData({
-        selectedCustomizationTagIds: [...selectedCustomizationTagIds, tagId],
-        selectedCustomizationOptions: [...selectedCustomizationOptions, newOption]
+        sort_order: options.length
       })
     } else {
-      // 移除标签
-      const newTagIds = selectedCustomizationTagIds.filter((id: number) => id !== tagId)
-      const newOptions = selectedCustomizationOptions.filter((o: any) => o.tag_id !== tagId)
-      this.setData({
-        selectedCustomizationTagIds: newTagIds,
-        selectedCustomizationOptions: newOptions
-      })
+      tagIds.delete(tagId)
+      const nextOptions = options.filter((o) => o.tag_id !== tagId)
+      options.length = 0
+      options.push(...nextOptions)
     }
+
+    this.setData({
+      [`customizationGroupsDraft[${activeCustomizationGroupIndex}].options`]: options,
+      [`customizationGroupsDraft[${activeCustomizationGroupIndex}].tag_ids`]: Array.from(tagIds)
+    })
   },
 
   // 修改定制选项加价
   onCustomizationPriceChange(e: any) {
     const tagId = e.currentTarget.dataset.tagId
+    const groupIndex = Number(e.currentTarget.dataset.groupIndex)
     const value = e.detail.value
     const priceInCents = value ? Math.round(parseFloat(value) * 100) : 0
 
-    const { selectedCustomizationOptions } = this.data
-    const index = selectedCustomizationOptions.findIndex((o: any) => o.tag_id === tagId)
-    if (index >= 0) {
+    const { customizationGroupsDraft } = this.data
+    const group = customizationGroupsDraft[groupIndex]
+    if (!group) return
+
+    const optionIndex = (group.options || []).findIndex((o: any) => o.tag_id === tagId)
+    if (optionIndex >= 0) {
       this.setData({
-        [`selectedCustomizationOptions[${index}].extra_price`]: priceInCents
+        [`customizationGroupsDraft[${groupIndex}].options[${optionIndex}].extra_price`]: priceInCents
       })
     }
   },
 
-  // 保存定制选项 - 简化版
+  // 保存定制选项
   async saveDishCustomizations() {
-    const { selectedDish, selectedCustomizationOptions } = this.data
+    const { selectedDish, customizationGroupsDraft } = this.data
     console.log('[DEBUG] saveDishCustomizations 被调用', {
       dishId: selectedDish?.id,
-      optionsCount: selectedCustomizationOptions.length,
-      options: selectedCustomizationOptions
+      groupCount: customizationGroupsDraft.length,
+      groups: customizationGroupsDraft
     })
 
     if (!selectedDish || !selectedDish.id) {
@@ -852,8 +925,7 @@ Page({
       return
     }
 
-    // 如果没有选中任何定制选项，清空定制
-    if (selectedCustomizationOptions.length === 0) {
+    if (customizationGroupsDraft.length === 0 || customizationGroupsDraft.every((g) => !g.options || g.options.length === 0)) {
       try {
         console.log('[DEBUG] 清空定制选项')
         await DishManagementService.setDishCustomizations(selectedDish.id, { groups: [] })
@@ -864,17 +936,18 @@ Page({
       }
     }
 
-    // 创建单一默认分组存储所有选项
-    const groups = [{
-      name: '定制选项',
-      is_required: false,
-      sort_order: 0,
-      options: selectedCustomizationOptions.map((o: any, i: number) => ({
-        tag_id: o.tag_id,
-        extra_price: o.extra_price || 0,
-        sort_order: i
+    const groups: CustomizationGroupInput[] = customizationGroupsDraft
+      .filter((group) => group.options && group.options.length > 0)
+      .map((group, groupIndex) => ({
+        name: group.name,
+        is_required: !!group.is_required,
+        sort_order: group.sort_order ?? groupIndex,
+        options: (group.options || []).map((opt, optIndex) => ({
+          tag_id: opt.tag_id,
+          extra_price: opt.extra_price || 0,
+          sort_order: opt.sort_order ?? optIndex
+        }))
       }))
-    }]
 
     console.log('[DEBUG] 保存定制选项', { groups })
 

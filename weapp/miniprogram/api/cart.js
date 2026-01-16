@@ -110,12 +110,12 @@ function removeFromCart(itemId) {
  * 清空指定商户的购物车
  * @param merchantId 商户ID
  */
-function clearCart(merchantId) {
+function clearCart(params) {
     return __awaiter(this, void 0, void 0, function* () {
         return (0, request_1.request)({
             url: '/v1/cart/clear',
             method: 'POST',
-            data: merchantId ? { merchant_id: merchantId } : undefined
+            data: params
         });
     });
 }

@@ -14,7 +14,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.markReservationNoShow = exports.completeReservationByMerchant = exports.confirmReservationByMerchant = exports.updateReservation = exports.merchantCreateReservation = exports.getReservationStats = exports.getTodayReservations = exports.getMerchantReservations = exports.startCookingReservation = exports.checkInReservation = exports.addDishesToReservation = exports.cancelReservation = exports.getReservationDetail = exports.getUserReservations = exports.createReservation = exports.ReservationService = void 0;
+exports.markReservationNoShow = exports.completeReservationByMerchant = exports.confirmReservationByMerchant = exports.updateReservation = exports.merchantCreateReservation = exports.getReservationStats = exports.getTodayReservations = exports.getMerchantReservations = exports.openDiningSession = exports.precheckDiningSession = exports.startCookingReservation = exports.checkInReservation = exports.modifyDishesToReservation = exports.addDishesToReservation = exports.cancelReservation = exports.getReservationDetail = exports.getUserReservations = exports.createReservation = exports.ReservationService = void 0;
 exports.getRoomDetail = getRoomDetail;
 const request_1 = require("../utils/request");
 // ==================== 预订服务 ====================
@@ -85,6 +85,19 @@ class ReservationService {
         });
     }
     /**
+     * 预订改菜（差量）
+     * POST /v1/reservations/:id/modify-dishes
+     */
+    static modifyDishes(id, items) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: `/v1/reservations/${id}/modify-dishes`,
+                method: 'POST',
+                data: { items }
+            });
+        });
+    }
+    /**
      * 顾客到店签到
      * POST /v1/reservations/:id/checkin
      */
@@ -105,6 +118,33 @@ class ReservationService {
             return yield (0, request_1.request)({
                 url: `/v1/reservations/${id}/start-cooking`,
                 method: 'POST'
+            });
+        });
+    }
+    // ==================== 用餐会话接口（堂食/预订到店） ====================
+    /**
+     * 桌台预检：是否被预订、预订归属、最近订单
+     * GET /v1/dining-sessions/precheck
+     */
+    static precheckDiningSession(tableId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: '/v1/dining-sessions/precheck',
+                method: 'GET',
+                data: { table_id: tableId }
+            });
+        });
+    }
+    /**
+     * 开启用餐会话（已存在开放会话时后端直接返回）
+     * POST /v1/dining-sessions/open
+     */
+    static openDiningSession(params) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, request_1.request)({
+                url: '/v1/dining-sessions/open',
+                method: 'POST',
+                data: params
             });
         });
     }
@@ -217,8 +257,11 @@ exports.getUserReservations = ReservationService.getUserReservations;
 exports.getReservationDetail = ReservationService.getReservationDetail;
 exports.cancelReservation = ReservationService.cancelReservation;
 exports.addDishesToReservation = ReservationService.addDishes;
+exports.modifyDishesToReservation = ReservationService.modifyDishes;
 exports.checkInReservation = ReservationService.checkIn;
 exports.startCookingReservation = ReservationService.startCooking;
+exports.precheckDiningSession = ReservationService.precheckDiningSession;
+exports.openDiningSession = ReservationService.openDiningSession;
 // 商户端
 exports.getMerchantReservations = ReservationService.getMerchantReservations;
 exports.getTodayReservations = ReservationService.getTodayReservations;

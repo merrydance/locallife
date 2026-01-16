@@ -55,6 +55,9 @@ class CartService {
         // Cache the current cart to avoid excessive network requests
         this.currentCart = null;
         this.currentMerchantId = null;
+        this.currentOrderType = null;
+        this.currentTableId = null;
+        this.currentReservationId = null;
     }
     static getInstance() {
         if (!CartService.instance) {
@@ -78,9 +81,13 @@ class CartService {
     /**
      * Initialize or switch to a specific merchant's cart
      */
-    loadCart(merchantId) {
+    loadCart(merchantId, options) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e, _f;
             this.currentMerchantId = merchantId;
+            this.currentOrderType = (_b = (_a = options === null || options === void 0 ? void 0 : options.orderType) !== null && _a !== void 0 ? _a : this.currentOrderType) !== null && _b !== void 0 ? _b : 'takeout';
+            this.currentTableId = (_d = (_c = options === null || options === void 0 ? void 0 : options.tableId) !== null && _c !== void 0 ? _c : this.currentTableId) !== null && _d !== void 0 ? _d : null;
+            this.currentReservationId = (_f = (_e = options === null || options === void 0 ? void 0 : options.reservationId) !== null && _e !== void 0 ? _e : this.currentReservationId) !== null && _f !== void 0 ? _f : null;
             return this.refreshCart();
         });
     }
@@ -89,12 +96,18 @@ class CartService {
      */
     refreshCart() {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
             if (!this.currentMerchantId) {
                 throw new Error('No merchant selected for CartService');
             }
             try {
                 logger_1.logger.debug('Refreshing cart from backend', { merchantId: this.currentMerchantId }, 'CartService.refreshCart');
-                const cart = yield CartAPI.getCart({ merchant_id: this.currentMerchantId });
+                const cart = yield CartAPI.getCart({
+                    merchant_id: this.currentMerchantId,
+                    order_type: (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : undefined,
+                    table_id: (_b = this.currentTableId) !== null && _b !== void 0 ? _b : undefined,
+                    reservation_id: (_c = this.currentReservationId) !== null && _c !== void 0 ? _c : undefined
+                });
                 this.currentCart = cart;
                 this.notifyListeners();
                 return cart;
@@ -110,11 +123,17 @@ class CartService {
      */
     addItem(item) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d;
             try {
                 const merchantId = Number(item.merchantId);
                 const quantity = item.quantity || 1;
+                // 确保有明确的订单类型，避免传递 undefined
+                this.currentOrderType = (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : 'takeout';
                 const req = {
                     merchant_id: merchantId,
+                    order_type: (_b = this.currentOrderType) !== null && _b !== void 0 ? _b : undefined,
+                    table_id: (_c = this.currentTableId) !== null && _c !== void 0 ? _c : undefined,
+                    reservation_id: (_d = this.currentReservationId) !== null && _d !== void 0 ? _d : undefined,
                     dish_id: item.dishId ? Number(item.dishId) : undefined,
                     combo_id: item.comboId ? Number(item.comboId) : undefined,
                     quantity: quantity,
@@ -189,10 +208,16 @@ class CartService {
      */
     clear() {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
             if (!this.currentMerchantId)
                 return false;
             try {
-                yield CartAPI.clearCart(this.currentMerchantId);
+                yield CartAPI.clearCart({
+                    merchant_id: this.currentMerchantId,
+                    order_type: (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : undefined,
+                    table_id: (_b = this.currentTableId) !== null && _b !== void 0 ? _b : undefined,
+                    reservation_id: (_c = this.currentReservationId) !== null && _c !== void 0 ? _c : undefined
+                });
                 // Reset local state to empty structure manually or refetch
                 // Refetching is safer to ensure backend state
                 return this.refreshCart().then(() => true);

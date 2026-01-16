@@ -338,6 +338,19 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 		req.OrderType = "takeout"
 	}
 
+	if req.DishID != nil {
+		_, _, normalized, err := server.normalizeDishCustomizations(ctx, *req.DishID, req.Customizations)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		req.Customizations = normalized
+	}
+	if req.ComboID != nil && len(req.Customizations) > 0 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("customizations not supported for combo items")))
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 验证商户存在

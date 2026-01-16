@@ -29,7 +29,8 @@ Page({
         currentImageIndex: 0,
         loading: true,
         totalPrice: 0,
-        totalPriceDisplay: '0.00'
+        totalPriceDisplay: '0.00',
+        extraInfo: {}
     },
     onLoad(options) {
         const dishId = options.id;
@@ -38,7 +39,7 @@ Page({
         const shopName = decodeURIComponent(options.shop_name || '');
         const monthSales = parseInt(options.month_sales || '0');
         const distanceMeters = parseInt(options.distance || '0');
-        const deliveryTimeMinutes = parseInt(options.delivery_time || '0');
+        const estimatedDeliveryTime = parseInt(options.estimated_delivery_time || '0');
         if (!dishId) {
             wx.showToast({ title: '菜品ID缺失', icon: 'error' });
             setTimeout(() => wx.navigateBack(), 1500);
@@ -47,7 +48,7 @@ Page({
         this.setData({
             dishId,
             merchantId,
-            extraInfo: { shopName, monthSales, distanceMeters, deliveryTimeMinutes }
+            extraInfo: { shopName, monthSales, distanceMeters, estimatedDeliveryTime }
         });
         this.loadDishDetail();
     },
@@ -115,7 +116,7 @@ Page({
                     // 额外展示字段（从列表页传递）
                     month_sales: extraInfo.monthSales || 0,
                     distance_meters: extraInfo.distanceMeters || 0,
-                    delivery_time_minutes: extraInfo.deliveryTimeMinutes || Math.round((dishData.prepare_time || 10) + 15) // 制作时间+配送时间
+                    estimated_delivery_time: extraInfo.estimatedDeliveryTime || Math.round((dishData.prepare_time || 10) + 15) // 制作时间+配送时间
                 };
                 // 初始化规格选择
                 const selectedSpecs = {};
@@ -214,6 +215,7 @@ Page({
                 return;
             // 构建规格描述
             const specNames = [];
+            const customizations = {};
             if (dish.spec_groups) {
                 dish.spec_groups.forEach((group) => {
                     var _a;
@@ -221,6 +223,7 @@ Page({
                     const spec = (_a = group.specs) === null || _a === void 0 ? void 0 : _a.find((s) => s.id === selectedSpecId);
                     if (spec) {
                         specNames.push(spec.name);
+                        customizations[group.id] = selectedSpecId;
                     }
                 });
             }
@@ -234,7 +237,8 @@ Page({
                 imageUrl: ((_a = dish.images) === null || _a === void 0 ? void 0 : _a[0]) || dish.image_url,
                 price: totalPrice,
                 priceDisplay: `¥${(totalPrice / 100).toFixed(2)}`,
-                quantity
+                quantity,
+                customizations: Object.keys(customizations).length > 0 ? customizations : undefined
             });
             if (!success) {
                 return;

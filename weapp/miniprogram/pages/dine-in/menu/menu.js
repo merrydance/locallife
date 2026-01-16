@@ -310,7 +310,7 @@ Page({
                     reservation_id: this.data.reservationId || 0
                 });
                 // 预处理购物车价格，添加 total_quantity 别名
-                const processedCart = Object.assign(Object.assign({}, cart), { total_quantity: cart.total_count || 0, subtotalDisplay: (0, util_1.formatPriceNoSymbol)(cart.subtotal || 0), items: (cart.items || []).map((item) => (Object.assign(Object.assign({}, item), { priceDisplay: (0, util_1.formatPriceNoSymbol)(item.price || item.unit_price || 0), subtotalDisplay: (0, util_1.formatPriceNoSymbol)(item.subtotal || (item.unit_price || 0) * (item.quantity || 1)) }))) });
+                const processedCart = Object.assign(Object.assign({}, cart), { total_quantity: cart.total_count || 0, subtotalDisplay: (0, util_1.formatPriceNoSymbol)(cart.subtotal || 0), items: (cart.items || []).map((item) => (Object.assign(Object.assign({}, item), { image_url: (0, image_1.getPublicImageUrl)(item.image_url), priceDisplay: (0, util_1.formatPriceNoSymbol)(item.price || item.unit_price || 0), subtotalDisplay: (0, util_1.formatPriceNoSymbol)(item.subtotal || (item.unit_price || 0) * (item.quantity || 1)) }))) });
                 // 构建菜品ID到购物车数量的映射
                 const cartQtyMap = new Map();
                 for (const item of processedCart.items) {

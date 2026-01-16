@@ -20,58 +20,58 @@ const order_2 = require("../../../adapters/order");
 // 不同订单类型的状态筛选选项
 const STATUS_TABS_MAP = {
     takeout: [
-        { label: '全部', value: '' },
-        { label: '待支付', value: 'pending' },
-        { label: '待接单', value: 'paid' },
-        { label: '制作中', value: 'preparing' },
-        { label: '已接单', value: 'courier_accepted' },
-        { label: '已取餐', value: 'picked' },
-        { label: '配送中', value: 'delivering' },
-        { label: '待确认', value: 'rider_delivered' },
-        { label: '已送达', value: 'user_delivered' },
-        { label: '已完成', value: 'completed' },
-        { label: '已取消', value: 'cancelled' }
+        { label: "全部", value: "" },
+        { label: "待支付", value: "pending" },
+        { label: "待接单", value: "paid" },
+        { label: "制作中", value: "preparing" },
+        { label: "已接单", value: "courier_accepted" },
+        { label: "已取餐", value: "picked" },
+        { label: "配送中", value: "delivering" },
+        { label: "待确认", value: "rider_delivered" },
+        { label: "已送达", value: "user_delivered" },
+        { label: "已完成", value: "completed" },
+        { label: "已取消", value: "cancelled" },
     ],
     dine_in: [
-        { label: '全部', value: '' },
-        { label: '待支付', value: 'pending' },
-        { label: '待确认', value: 'paid' },
-        { label: '制作中', value: 'preparing' },
-        { label: '已完成', value: 'completed' },
-        { label: '已取消', value: 'cancelled' }
+        { label: "全部", value: "" },
+        { label: "待支付", value: "pending" },
+        { label: "待确认", value: "paid" },
+        { label: "制作中", value: "preparing" },
+        { label: "已完成", value: "completed" },
+        { label: "已取消", value: "cancelled" },
     ],
     reservation: [
-        { label: '全部', value: '' },
-        { label: '待支付', value: 'pending' },
-        { label: '待确认', value: 'paid' },
-        { label: '制作中', value: 'preparing' },
-        { label: '已完成', value: 'completed' },
-        { label: '已取消', value: 'cancelled' }
+        { label: "全部", value: "" },
+        { label: "待支付", value: "pending" },
+        { label: "待确认", value: "paid" },
+        { label: "制作中", value: "preparing" },
+        { label: "已完成", value: "completed" },
+        { label: "已取消", value: "cancelled" },
     ],
     takeaway: [
-        { label: '全部', value: '' },
-        { label: '待支付', value: 'pending' },
-        { label: '待接单', value: 'paid' },
-        { label: '制作中', value: 'preparing' },
-        { label: '已取餐', value: 'picked' },
-        { label: '已完成', value: 'completed' },
-        { label: '已送达', value: 'user_delivered' },
-        { label: '已取消', value: 'cancelled' }
+        { label: "全部", value: "" },
+        { label: "待支付", value: "pending" },
+        { label: "待接单", value: "paid" },
+        { label: "制作中", value: "preparing" },
+        { label: "已取餐", value: "picked" },
+        { label: "已完成", value: "completed" },
+        { label: "已送达", value: "user_delivered" },
+        { label: "已取消", value: "cancelled" },
     ],
     default: [
-        { label: '全部', value: '' },
-        { label: '待支付', value: 'pending' },
-        { label: '已完成', value: 'completed' },
-        { label: '已取消', value: 'cancelled' }
-    ]
+        { label: "全部", value: "" },
+        { label: "待支付", value: "pending" },
+        { label: "已完成", value: "completed" },
+        { label: "已取消", value: "cancelled" },
+    ],
 };
 // 取消原因选项
 const CANCEL_REASONS = [
-    '不想要了',
-    '信息填写错误',
-    '商品价格较贵',
-    '配送时间太长',
-    '其他原因'
+    "不想要了",
+    "信息填写错误",
+    "商品价格较贵",
+    "配送时间太长",
+    "其他原因",
 ];
 Page({
     data: {
@@ -82,21 +82,21 @@ Page({
         pageSize: 10,
         hasMore: true,
         statusTabs: STATUS_TABS_MAP.default,
-        currentStatus: '',
-        orderType: '',
-        pageTitle: '我的订单'
+        currentStatus: "",
+        orderType: "",
+        pageTitle: "我的订单",
     },
     onLoad(options) {
-        const orderType = (options === null || options === void 0 ? void 0 : options.order_type) || '';
+        const orderType = (options === null || options === void 0 ? void 0 : options.order_type) || "";
         const titleMap = {
-            takeout: '外卖订单',
-            reservation: '预订订单',
-            dine_in: '堂食订单'
+            takeout: "外卖订单",
+            reservation: "预订订单",
+            dine_in: "堂食订单",
         };
         this.setData({
             orderType: orderType,
-            pageTitle: titleMap[orderType] || '我的订单',
-            statusTabs: STATUS_TABS_MAP[orderType] || STATUS_TABS_MAP.default
+            pageTitle: titleMap[orderType] || "我的订单",
+            statusTabs: STATUS_TABS_MAP[orderType] || STATUS_TABS_MAP.default,
         });
         this.loadOrders(true);
     },
@@ -131,12 +131,12 @@ Page({
                         status: currentStatus,
                         page_id: page,
                         page_size: pageSize,
-                        order_type: orderType || undefined
+                        order_type: orderType || undefined,
                     }
                     : {
                         page_id: page,
                         page_size: pageSize,
-                        order_type: orderType || undefined
+                        order_type: orderType || undefined,
                     };
                 const result = yield (0, order_1.getOrders)(params);
                 // 兼容不同返回结构：数组 / {orders} / {list} / {items} / {data: {...}}
@@ -176,12 +176,12 @@ Page({
                     : [...this.data.orders, ...sortedOrders];
                 this.setData({
                     orders,
-                    hasMore: orderDTOs.length >= pageSize
+                    hasMore: orderDTOs.length >= pageSize,
                 });
             }
             catch (error) {
-                logger_1.logger.error('Load orders failed:', error, 'List');
-                wx.showToast({ title: '加载失败', icon: 'error' });
+                logger_1.logger.error("Load orders failed:", error, "List");
+                wx.showToast({ title: "加载失败", icon: "error" });
             }
             finally {
                 this.setData({ loading: false });
@@ -190,7 +190,7 @@ Page({
     },
     // 状态筛选切换
     onStatusChange(e) {
-        const status = e.detail.value || '';
+        const status = e.detail.value || "";
         if (status === this.data.currentStatus)
             return;
         this.setData({ currentStatus: status });
@@ -210,22 +210,22 @@ Page({
             success: (res) => __awaiter(this, void 0, void 0, function* () {
                 const reason = CANCEL_REASONS[res.tapIndex];
                 yield this.doCancelOrder(Number(id), reason);
-            })
+            }),
         });
     },
     doCancelOrder(orderId, reason) {
         return __awaiter(this, void 0, void 0, function* () {
-            wx.showLoading({ title: '取消中...' });
+            wx.showLoading({ title: "取消中..." });
             try {
                 yield (0, order_1.cancelOrder)(orderId, { reason });
                 wx.hideLoading();
-                wx.showToast({ title: '已取消', icon: 'success' });
+                wx.showToast({ title: "已取消", icon: "success" });
                 setTimeout(() => this.loadOrders(true), 1500);
             }
             catch (error) {
                 wx.hideLoading();
-                logger_1.logger.error('取消订单失败', error, 'List.doCancelOrder');
-                wx.showToast({ title: '取消失败', icon: 'error' });
+                logger_1.logger.error("取消订单失败", error, "List.doCancelOrder");
+                wx.showToast({ title: "取消失败", icon: "error" });
             }
         });
     },
@@ -233,21 +233,21 @@ Page({
     onPayOrder(e) {
         const { id } = e.currentTarget.dataset;
         if (!id) {
-            wx.showToast({ title: '订单信息缺失', icon: 'none' });
+            wx.showToast({ title: "订单信息缺失", icon: "none" });
             return;
         }
         wx.navigateTo({
-            url: `/pages/user_center/payment-detail/index?orderId=${id}`
+            url: `/pages/user_center/payment-detail/index?orderId=${id}`,
         });
     },
     onReorder(e) {
         const { id } = e.currentTarget.dataset;
         const orderId = Number(id);
         if (!orderId) {
-            wx.showToast({ title: '订单信息缺失', icon: 'none' });
+            wx.showToast({ title: "订单信息缺失", icon: "none" });
             return;
         }
-        wx.showLoading({ title: '再次购买中...' });
+        wx.showLoading({ title: "再次购买中..." });
         (() => __awaiter(this, void 0, void 0, function* () {
             try {
                 const orderDTO = yield (0, order_1.getOrderDetail)(orderId);
@@ -267,24 +267,24 @@ Page({
                     merchantId: orderDetail.merchantId,
                     dishId: item.dishId,
                     comboId: item.comboId,
-                    quantity: item.quantity
+                    quantity: item.quantity,
                 })));
                 if (addResults.some((ok) => !ok)) {
                     wx.hideLoading();
-                    wx.showToast({ title: '部分商品添加失败', icon: 'none' });
+                    wx.showToast({ title: "部分商品添加失败", icon: "none" });
                     return;
                 }
                 wx.hideLoading();
-                wx.showToast({ title: '已加入购物车', icon: 'success' });
+                wx.showToast({ title: "已加入购物车", icon: "success" });
                 setTimeout(() => {
-                    wx.navigateTo({ url: '/pages/takeout/cart/index' });
+                    wx.navigateTo({ url: "/pages/takeout/cart/index" });
                 }, 300);
             }
             catch (error) {
                 wx.hideLoading();
-                logger_1.logger.error('再次购买失败', error, 'List.onReorder');
-                wx.showToast({ title: '操作失败', icon: 'error' });
+                logger_1.logger.error("再次购买失败", error, "List.onReorder");
+                wx.showToast({ title: "操作失败", icon: "error" });
             }
         }))();
-    }
+    },
 });
