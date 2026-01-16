@@ -249,6 +249,7 @@ export class WebSocketManager {
   private handleMessage(message: WebSocketMessage): void {
     this.eventHandlers.onMessage?.(message);
 
+    // 记录最新序号，供断线重连后的消息回放使用。
     if (
       typeof message.sequence === "number" &&
       message.sequence > this.lastSequence
@@ -262,7 +263,7 @@ export class WebSocketManager {
       return;
     }
 
-    // 2. 自动确认重要通知 (ACK)
+    // 2. 自动确认重要通知 (ACK) — 服务端用于“有效恰好一次”幂等
     const messageId = message.id || message.message_id;
     if (messageId) {
       this.send("ack", {

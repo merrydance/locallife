@@ -422,12 +422,14 @@ func (h *Hub) sendToClient(client *Client, msg Message, label string) {
 	if message.ID == "" {
 		message.ID = h.idGenerator()
 	}
+	// 为客户端生成单调递增序号，用于断线重连后的消息回放。
 	message.Sequence = client.nextSequence()
 	if h.messageStore != nil {
 		h.messageStore.Save(h.ctx, client.info, message)
 	}
 	h.storeSentAt(client.info, message)
 
+	// 非心跳消息加入重试调度，用于“有效恰好一次”（至少一次 + 客户端幂等）。
 	if message.Type != "ping" && message.Type != "pong" {
 		h.scheduleRetry(client.info, message)
 	}
@@ -436,6 +438,7 @@ func (h *Hub) sendToClient(client *Client, msg Message, label string) {
 	case client.send <- message:
 		h.metrics.RecordSend(client.info.ClientType, "sent")
 	default:
+		// 连接侧背压：缓冲满时落入队列（若启用可靠投递）。
 		if h.queueStore != nil && h.reliableGate(client.info) {
 			if err := h.queueStore.Enqueue(h.ctx, client.info, message); err != nil {
 				h.logDrop(label, client.info)
