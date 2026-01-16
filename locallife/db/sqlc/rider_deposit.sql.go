@@ -17,11 +17,12 @@ INSERT INTO rider_deposits (
     amount,
     type,
     related_order_id,
+    payment_order_id,
     balance_after,
     remark
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-) RETURNING id, rider_id, amount, type, related_order_id, balance_after, remark, created_at
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id
 `
 
 type CreateRiderDepositParams struct {
@@ -29,6 +30,7 @@ type CreateRiderDepositParams struct {
 	Amount         int64       `json:"amount"`
 	Type           string      `json:"type"`
 	RelatedOrderID pgtype.Int8 `json:"related_order_id"`
+	PaymentOrderID pgtype.Int8 `json:"payment_order_id"`
 	BalanceAfter   int64       `json:"balance_after"`
 	Remark         pgtype.Text `json:"remark"`
 }
@@ -39,6 +41,7 @@ func (q *Queries) CreateRiderDeposit(ctx context.Context, arg CreateRiderDeposit
 		arg.Amount,
 		arg.Type,
 		arg.RelatedOrderID,
+		arg.PaymentOrderID,
 		arg.BalanceAfter,
 		arg.Remark,
 	)
@@ -52,12 +55,13 @@ func (q *Queries) CreateRiderDeposit(ctx context.Context, arg CreateRiderDeposit
 		&i.BalanceAfter,
 		&i.Remark,
 		&i.CreatedAt,
+		&i.PaymentOrderID,
 	)
 	return i, err
 }
 
 const getRiderDeposit = `-- name: GetRiderDeposit :one
-SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at FROM rider_deposits
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE id = $1 LIMIT 1
 `
 
@@ -73,6 +77,29 @@ func (q *Queries) GetRiderDeposit(ctx context.Context, id int64) (RiderDeposit, 
 		&i.BalanceAfter,
 		&i.Remark,
 		&i.CreatedAt,
+		&i.PaymentOrderID,
+	)
+	return i, err
+}
+
+const getRiderDepositByPaymentOrderID = `-- name: GetRiderDepositByPaymentOrderID :one
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
+WHERE payment_order_id = $1 LIMIT 1
+`
+
+func (q *Queries) GetRiderDepositByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (RiderDeposit, error) {
+	row := q.db.QueryRow(ctx, getRiderDepositByPaymentOrderID, paymentOrderID)
+	var i RiderDeposit
+	err := row.Scan(
+		&i.ID,
+		&i.RiderID,
+		&i.Amount,
+		&i.Type,
+		&i.RelatedOrderID,
+		&i.BalanceAfter,
+		&i.Remark,
+		&i.CreatedAt,
+		&i.PaymentOrderID,
 	)
 	return i, err
 }
@@ -100,7 +127,7 @@ func (q *Queries) GetRiderDepositStats(ctx context.Context, riderID int64) (GetR
 }
 
 const listRiderDeposits = `-- name: ListRiderDeposits :many
-SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at FROM rider_deposits
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -130,6 +157,7 @@ func (q *Queries) ListRiderDeposits(ctx context.Context, arg ListRiderDepositsPa
 			&i.BalanceAfter,
 			&i.Remark,
 			&i.CreatedAt,
+			&i.PaymentOrderID,
 		); err != nil {
 			return nil, err
 		}
@@ -142,7 +170,7 @@ func (q *Queries) ListRiderDeposits(ctx context.Context, arg ListRiderDepositsPa
 }
 
 const listRiderDepositsByType = `-- name: ListRiderDepositsByType :many
-SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at FROM rider_deposits
+SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1 AND type = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -178,6 +206,7 @@ func (q *Queries) ListRiderDepositsByType(ctx context.Context, arg ListRiderDepo
 			&i.BalanceAfter,
 			&i.Remark,
 			&i.CreatedAt,
+			&i.PaymentOrderID,
 		); err != nil {
 			return nil, err
 		}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,7 +45,7 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		start := time.Now()
 		path := ctx.Request.URL.Path
-		query := ctx.Request.URL.RawQuery
+		query := sanitizeQuery(ctx.Request.URL.RawQuery)
 
 		// 获取 request_id
 		requestID, _ := ctx.Get(RequestIDKey)
@@ -95,6 +96,22 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 
 		logEvent.Msg("HTTP request")
 	}
+}
+
+func sanitizeQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "<redacted>"
+	}
+	for _, key := range []string{"token", "access_token", "refresh_token"} {
+		if _, ok := values[key]; ok {
+			values.Set(key, "***")
+		}
+	}
+	return values.Encode()
 }
 
 // GetRequestID 从 Context 获取 request_id

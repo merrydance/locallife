@@ -1,7 +1,7 @@
 package api
 
 import (
-	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -60,7 +60,7 @@ func (server *Server) joinMembership(ctx *gin.Context) {
 	// 验证商户是否存在
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -163,7 +163,7 @@ func (server *Server) getMembership(ctx *gin.Context) {
 
 	membership, err := server.store.GetMerchantMembership(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
 			return
 		}
@@ -407,7 +407,7 @@ func (server *Server) updateRechargeRule(ctx *gin.Context) {
 	// 获取原规则验证权限
 	rule, err := server.store.GetRechargeRule(ctx, uriReq.RuleID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rule not found")))
 			return
 		}
@@ -505,7 +505,7 @@ func (server *Server) deleteRechargeRule(ctx *gin.Context) {
 	// 获取规则验证权限
 	rule, err := server.store.GetRechargeRule(ctx, req.RuleID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rule not found")))
 			return
 		}
@@ -583,7 +583,7 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	// 验证会员卡所有权
 	membership, err := server.store.GetMerchantMembership(ctx, req.MembershipID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
 			return
 		}
@@ -608,7 +608,7 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 		// 找到匹配的规则，应用赠送
 		bonusAmount = matchingRule.BonusAmount
 		ruleID = &matchingRule.ID
-	} else if errors.Is(err, sql.ErrNoRows) {
+	} else if isNotFoundError(err) {
 		// 没有匹配规则，不赠送
 		bonusAmount = 0
 		ruleID = nil
@@ -634,12 +634,21 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 
 	// 准备attach数据
-	var ruleIDValue interface{} = nil
-	if ruleID != nil {
-		ruleIDValue = *ruleID
+	attachPayload := struct {
+		MembershipID  int64  `json:"membership_id"`
+		BonusAmount   int64  `json:"bonus_amount"`
+		RechargeRuleID *int64 `json:"recharge_rule_id"`
+	}{
+		MembershipID:  req.MembershipID,
+		BonusAmount:   bonusAmount,
+		RechargeRuleID: ruleID,
 	}
-	attachStr := fmt.Sprintf(`{"membership_id":%d,"bonus_amount":%d,"recharge_rule_id":%v}`,
-		req.MembershipID, bonusAmount, ruleIDValue)
+	attachBytes, err := json.Marshal(attachPayload)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to marshal attach payload: %w", err)))
+		return
+	}
+	attachStr := string(attachBytes)
 
 	// 创建支付订单记录
 	paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
@@ -723,7 +732,7 @@ func (server *Server) listMembershipTransactions(ctx *gin.Context) {
 	// 验证会员卡所有权
 	membership, err := server.store.GetMerchantMembership(ctx, req.MembershipID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
 			return
 		}
@@ -826,7 +835,7 @@ func (server *Server) getMerchantMembershipSettings(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -837,7 +846,7 @@ func (server *Server) getMerchantMembershipSettings(ctx *gin.Context) {
 	// 获取会员设置
 	settings, err := server.store.GetMerchantMembershipSettings(ctx, merchant.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 返回默认设置
 			ctx.JSON(http.StatusOK, membershipSettingsResponse{
 				MerchantID:          merchant.ID,
@@ -898,7 +907,7 @@ func (server *Server) updateMerchantMembershipSettings(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -1116,7 +1125,7 @@ func (server *Server) getMerchantMemberDetail(ctx *gin.Context) {
 		UserID:     req.UserID,
 	})
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
 			return
 		}
@@ -1236,7 +1245,7 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		UserID:     uriReq.UserID,
 	})
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("membership not found")))
 			return
 		}

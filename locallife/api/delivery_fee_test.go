@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -856,33 +857,8 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 
@@ -909,11 +885,10 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware: 用户不是商户
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "customer", Status: "active"}}, nil)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -933,33 +908,8 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 			},
@@ -981,33 +931,8 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 			},
@@ -1028,33 +953,8 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 			},
@@ -1132,33 +1032,8 @@ func TestListDeliveryPromotionsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 
@@ -1183,33 +1058,8 @@ func TestListDeliveryPromotionsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 			},
@@ -1277,33 +1127,8 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 
@@ -1329,33 +1154,8 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 
@@ -1376,33 +1176,8 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware 调用
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}}, nil)
-
-				// LoadMerchantMiddleware 调用
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "merchant_owner",
-					}).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant.ID).
+					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
 					Return(merchant, nil)
 

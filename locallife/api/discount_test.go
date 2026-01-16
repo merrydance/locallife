@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -46,6 +46,11 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				// Mock GetUserRoleByType
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
@@ -91,6 +96,11 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(0)
 				store.EXPECT().
@@ -117,9 +127,9 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(regularUser.ID)).
 					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 
 				store.EXPECT().
 					CreateDiscountRule(gomock.Any(), gomock.Any()).
@@ -143,6 +153,11 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -181,8 +196,8 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 }
 
 func TestGetApplicableDiscountRulesAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	merchant := randomMerchant(1)
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
 
 	testCases := []struct {
 		name          string
@@ -197,9 +212,14 @@ func TestGetApplicableDiscountRulesAPI(t *testing.T) {
 			merchantID: merchant.ID,
 			query:      "?order_amount=10000", // 100元订单
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				arg := db.GetApplicableDiscountRulesParams{
 					MerchantID:     merchant.ID,
 					MinOrderAmount: 10000,
@@ -244,9 +264,14 @@ func TestGetApplicableDiscountRulesAPI(t *testing.T) {
 			merchantID: merchant.ID,
 			query:      "?order_amount=1000", // 10元订单（低于最低消费）
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				store.EXPECT().
 					GetApplicableDiscountRules(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -266,9 +291,14 @@ func TestGetApplicableDiscountRulesAPI(t *testing.T) {
 			merchantID: merchant.ID,
 			query:      "", // Missing order_amount
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				store.EXPECT().
 					GetApplicableDiscountRules(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -303,8 +333,8 @@ func TestGetApplicableDiscountRulesAPI(t *testing.T) {
 }
 
 func TestGetBestDiscountRuleAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	merchant := randomMerchant(1)
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
 
 	testCases := []struct {
 		name          string
@@ -319,9 +349,14 @@ func TestGetBestDiscountRuleAPI(t *testing.T) {
 			merchantID: merchant.ID,
 			query:      "?order_amount=10000",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				arg := db.GetBestDiscountRuleParams{
 					MerchantID:     merchant.ID,
 					MinOrderAmount: 10000,
@@ -355,13 +390,18 @@ func TestGetBestDiscountRuleAPI(t *testing.T) {
 			merchantID: merchant.ID,
 			query:      "?order_amount=1000",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
 					GetBestDiscountRule(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DiscountRule{}, sql.ErrNoRows)
+					Return(db.DiscountRule{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

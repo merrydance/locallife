@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -138,7 +137,7 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -271,7 +270,7 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -282,7 +281,7 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 	// 获取订单
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -350,7 +349,7 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -361,7 +360,7 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 	// 获取订单
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -429,7 +428,7 @@ func (server *Server) getKitchenOrderDetails(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -440,7 +439,7 @@ func (server *Server) getKitchenOrderDetails(ctx *gin.Context) {
 	// 获取订单
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}

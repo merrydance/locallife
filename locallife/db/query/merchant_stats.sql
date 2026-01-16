@@ -196,7 +196,7 @@ FROM customer_order_counts;
 SELECT 
     dc.id AS category_id,
     dc.name AS category_name,
-    COUNT(DISTINCT oi.dish_id)::int AS dish_count,
+  COUNT(DISTINCT o.id)::int AS order_count,
     SUM(oi.quantity)::int AS total_quantity,
     COALESCE(SUM(oi.subtotal), 0)::bigint AS total_revenue
 FROM dish_categories dc

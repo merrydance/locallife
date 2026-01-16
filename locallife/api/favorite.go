@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"strconv"
@@ -75,7 +74,7 @@ func (server *Server) addFavoriteMerchant(ctx *gin.Context) {
 	// 验证商户存在
 	_, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -241,7 +240,7 @@ func (server *Server) addFavoriteDish(ctx *gin.Context) {
 	// 验证菜品存在
 	_, err := server.store.GetDish(ctx, req.DishID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}

@@ -272,20 +272,17 @@ func TestSubmitRiderApplication(t *testing.T) {
 					Times(1).
 					Return(submittedApp, nil)
 
-				// 审核通过
+				// 审核通过 + 创建骑手（事务）
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveRiderApplication(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(approvedApp, nil)
-
-				// 创建骑手记录
 				rider := randomRider(user.ID)
 				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
+					ApproveRiderApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(rider, nil)
+					Return(db.ApproveRiderApplicationTxResult{
+						Application: approvedApp,
+						Rider:       rider,
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -435,16 +432,14 @@ func TestSubmitRiderApplication(t *testing.T) {
 
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
-				store.EXPECT().
-					ApproveRiderApplication(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(approvedApp, nil)
-
 				rider := randomRider(user.ID)
 				store.EXPECT().
-					CreateRider(gomock.Any(), gomock.Any()).
+					ApproveRiderApplicationTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(rider, nil)
+					Return(db.ApproveRiderApplicationTxResult{
+						Application: approvedApp,
+						Rider:       rider,
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

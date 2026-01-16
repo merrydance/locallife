@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -89,7 +89,7 @@ func TestCreatePrinterAPI(t *testing.T) {
 				store.EXPECT().
 					GetCloudPrinterBySN(gomock.Any(), gomock.Eq("SN123456789")).
 					Times(1).
-					Return(db.CloudPrinter{}, sql.ErrNoRows)
+					Return(db.CloudPrinter{}, pgx.ErrNoRows)
 
 				store.EXPECT().
 					CreateCloudPrinter(gomock.Any(), gomock.Any()).
@@ -137,7 +137,7 @@ func TestCreatePrinterAPI(t *testing.T) {
 				store.EXPECT().
 					GetCloudPrinterBySN(gomock.Any(), gomock.Eq("SN_OTHER_001")).
 					Times(1).
-					Return(db.CloudPrinter{}, sql.ErrNoRows)
+					Return(db.CloudPrinter{}, pgx.ErrNoRows)
 
 				store.EXPECT().
 					CreateCloudPrinter(gomock.Any(), gomock.Any()).
@@ -196,7 +196,7 @@ func TestCreatePrinterAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -429,7 +429,7 @@ func TestListPrintersAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -530,7 +530,7 @@ func TestGetPrinterAPI(t *testing.T) {
 				store.EXPECT().
 					GetCloudPrinter(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.CloudPrinter{}, sql.ErrNoRows)
+					Return(db.CloudPrinter{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -721,7 +721,7 @@ func TestUpdatePrinterAPI(t *testing.T) {
 				store.EXPECT().
 					GetCloudPrinter(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.CloudPrinter{}, sql.ErrNoRows)
+					Return(db.CloudPrinter{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -870,7 +870,7 @@ func TestDeletePrinterAPI(t *testing.T) {
 				store.EXPECT().
 					GetCloudPrinter(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.CloudPrinter{}, sql.ErrNoRows)
+					Return(db.CloudPrinter{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -990,7 +990,7 @@ func TestTestPrinterAPI(t *testing.T) {
 				store.EXPECT().
 					GetCloudPrinter(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.CloudPrinter{}, sql.ErrNoRows)
+					Return(db.CloudPrinter{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1097,7 +1097,7 @@ func TestGetDisplayConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrderDisplayConfigByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(db.OrderDisplayConfig{}, sql.ErrNoRows)
+					Return(db.OrderDisplayConfig{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1135,7 +1135,7 @@ func TestGetDisplayConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1236,7 +1236,7 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrderDisplayConfigByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(db.OrderDisplayConfig{}, sql.ErrNoRows)
+					Return(db.OrderDisplayConfig{}, pgx.ErrNoRows)
 
 				newConfig := config
 				newConfig.EnableKds = true
@@ -1279,7 +1279,7 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

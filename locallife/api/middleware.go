@@ -31,10 +31,6 @@ func authMiddleware(tokenMaker token.Maker) gin.HandlerFunc {
 			}
 		}
 
-		if len(accessToken) == 0 && isWebSocketUpgrade(ctx) {
-			accessToken = ctx.Query("token")
-		}
-
 		if len(accessToken) == 0 {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, errorResponse(errors.New("access token is not provided")))
 			return

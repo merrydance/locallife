@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -64,7 +63,7 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 	user, err := server.store.GetUserByWechatOpenID(ctx, wechatResp.OpenID)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 用户不存在,创建新用户(使用事务确保原子性)
 			txResult, err := server.store.CreateUserTx(ctx, db.CreateUserTxParams{
 				WechatOpenid: wechatResp.OpenID,
@@ -172,7 +171,7 @@ func (server *Server) bindPhone(ctx *gin.Context) {
 		String: req.Phone,
 		Valid:  true,
 	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to check phone availability: %w", err)))
 		return
 	}

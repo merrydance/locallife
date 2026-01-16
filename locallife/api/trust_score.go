@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -55,7 +54,7 @@ type RiderProfileDTO struct {
 
 // TrustScoreProfileResponse 信用分画像响应（包含三种角色）
 type TrustScoreProfileResponse struct {
-	Customer *UserProfileDTO    `json:"customer,omitempty"`
+	Customer *UserProfileDTO     `json:"customer,omitempty"`
 	Merchant *MerchantProfileDTO `json:"merchant,omitempty"`
 	Rider    *RiderProfileDTO    `json:"rider,omitempty"`
 }
@@ -115,7 +114,7 @@ func (server *Server) GetTrustScoreProfile(ctx *gin.Context) {
 			Role:   role,
 		})
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 			} else {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user profile: %w", err)))
@@ -136,7 +135,7 @@ func (server *Server) GetTrustScoreProfile(ctx *gin.Context) {
 	case algorithm.EntityTypeMerchant:
 		p, err := server.store.GetMerchantProfile(ctx, id)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 			} else {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant profile: %w", err)))
@@ -158,7 +157,7 @@ func (server *Server) GetTrustScoreProfile(ctx *gin.Context) {
 	case algorithm.EntityTypeRider:
 		p, err := server.store.GetRiderProfile(ctx, id)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 			} else {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider profile: %w", err)))
@@ -229,7 +228,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	// 1. 验证订单存在
 	order, err := server.store.GetOrder(ctx, req.OrderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
 			return
 		}
@@ -254,7 +253,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		UserID:    authPayload.UserID,
 		CreatedAt: order.CreatedAt, // 从订单创建时间开始查
 	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list user claims in period: %w", err)))
 		return
 	}
@@ -426,7 +425,7 @@ func (server *Server) ReviewClaim(ctx *gin.Context) {
 	// 获取索赔记录
 	claim, err := server.store.GetClaim(ctx, claimID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("索赔记录不存在")))
 		} else {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
@@ -929,7 +928,7 @@ func (server *Server) ResumeMerchant(ctx *gin.Context) {
 	// 获取商户信息以验证区域
 	merchant, err := server.store.GetMerchant(ctx, merchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -982,7 +981,7 @@ func (server *Server) SuspendRider(ctx *gin.Context) {
 	// 获取骑手信息以验证区域
 	rider, err := server.store.GetRider(ctx, riderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rider not found")))
 			return
 		}
@@ -1040,7 +1039,7 @@ func (server *Server) ResumeRider(ctx *gin.Context) {
 	// 获取骑手信息以验证区域
 	rider, err := server.store.GetRider(ctx, riderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rider not found")))
 			return
 		}
@@ -1212,7 +1211,7 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 
 	claim, err := server.store.GetClaim(ctx, claimID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("索赔不存在")))
 			return
 		}

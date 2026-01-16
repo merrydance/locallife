@@ -23,6 +23,86 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func dishWithCustomizationsFromDish(dish db.Dish) db.GetDishWithCustomizationsRow {
+	return db.GetDishWithCustomizationsRow{
+		ID:                  dish.ID,
+		MerchantID:          dish.MerchantID,
+		CategoryID:          dish.CategoryID,
+		Name:                dish.Name,
+		Description:         dish.Description,
+		ImageUrl:            dish.ImageUrl,
+		Price:               dish.Price,
+		MemberPrice:         dish.MemberPrice,
+		IsAvailable:         dish.IsAvailable,
+		IsOnline:            dish.IsOnline,
+		SortOrder:           dish.SortOrder,
+		CreatedAt:           dish.CreatedAt,
+		UpdatedAt:           dish.UpdatedAt,
+		PrepareTime:         dish.PrepareTime,
+		DeletedAt:           dish.DeletedAt,
+		MonthlySales:        dish.MonthlySales,
+		RepurchaseRate:      dish.RepurchaseRate,
+		CustomizationGroups: []interface{}{},
+	}
+}
+
+func orderWithDetailsFromOrder(order db.Order) db.GetOrderWithDetailsRow {
+	return db.GetOrderWithDetailsRow{
+		ID:                  order.ID,
+		OrderNo:             order.OrderNo,
+		UserID:              order.UserID,
+		MerchantID:          order.MerchantID,
+		OrderType:           order.OrderType,
+		AddressID:           order.AddressID,
+		DeliveryFee:         order.DeliveryFee,
+		DeliveryDistance:    order.DeliveryDistance,
+		TableID:             order.TableID,
+		ReservationID:       order.ReservationID,
+		Subtotal:            order.Subtotal,
+		DiscountAmount:      order.DiscountAmount,
+		DeliveryFeeDiscount: order.DeliveryFeeDiscount,
+		TotalAmount:         order.TotalAmount,
+		Status:              order.Status,
+		PaymentMethod:       order.PaymentMethod,
+		PaidAt:              order.PaidAt,
+		Notes:               order.Notes,
+		CreatedAt:           order.CreatedAt,
+		UpdatedAt:           order.UpdatedAt,
+		CompletedAt:         order.CompletedAt,
+		CancelledAt:         order.CancelledAt,
+		CancelReason:        order.CancelReason,
+		FinalAmount:         order.FinalAmount,
+		PlatformCommission:  order.PlatformCommission,
+		UserVoucherID:       order.UserVoucherID,
+		VoucherAmount:       order.VoucherAmount,
+		BalancePaid:         order.BalancePaid,
+		MembershipID:        order.MembershipID,
+		FulfillmentStatus:   order.FulfillmentStatus,
+		ReplacedByOrderID:   order.ReplacedByOrderID,
+		PickupCode:          order.PickupCode,
+		DispatchOrderID:     order.DispatchOrderID,
+		FlowID:              order.FlowID,
+		StatusHint:          order.StatusHint,
+		Badges:              order.Badges,
+		ExceptionState:      order.ExceptionState,
+		ClaimChannel:        order.ClaimChannel,
+		Overtime:            order.Overtime,
+		PrepStartAt:         order.PrepStartAt,
+		ReadyAt:             order.ReadyAt,
+		CourierAcceptAt:     order.CourierAcceptAt,
+		PickedAt:            order.PickedAt,
+		RiderDeliveredAt:    order.RiderDeliveredAt,
+		UserDeliveredAt:     order.UserDeliveredAt,
+		AutoUserDeliveredAt: order.AutoUserDeliveredAt,
+		MerchantName:        "",
+		MerchantPhone:       "",
+		MerchantAddress:     "",
+		DeliveryContactName: pgtype.Text{},
+		DeliveryContactPhone: pgtype.Text{},
+		DeliveryAddress:     pgtype.Text{},
+	}
+}
+
 func TestCreateOrderAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
@@ -199,6 +279,10 @@ func TestCreateOrderAPI(t *testing.T) {
 					Times(1).
 					Return(dish, nil)
 				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
+				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
 					Times(1).
 					Return([]db.DiscountRule{}, nil)
@@ -256,6 +340,10 @@ func TestCreateOrderAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				// 满减规则查询
 				store.EXPECT().
@@ -407,6 +495,10 @@ func TestCreateOrderAPI(t *testing.T) {
 					Times(1).
 					Return(dish, nil)
 				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
+				store.EXPECT().
 					GetUserAddress(gomock.Any(), int64(99999)).
 					Times(1).
 					Return(db.UserAddress{}, pgx.ErrNoRows)
@@ -441,6 +533,10 @@ func TestCreateOrderAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 				// 返回属于其他用户的地址
 				otherUserAddress := address
 				otherUserAddress.UserID = user.ID + 1
@@ -629,6 +725,10 @@ func TestCreateOrderAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(50).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(50).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -835,9 +935,9 @@ func TestGetOrderAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetOrder(gomock.Any(), order.ID).
+					GetOrderWithDetails(gomock.Any(), order.ID).
 					Times(1).
-					Return(order, nil)
+					Return(orderWithDetailsFromOrder(order), nil)
 
 				store.EXPECT().
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
@@ -856,9 +956,9 @@ func TestGetOrderAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetOrder(gomock.Any(), order.ID).
+					GetOrderWithDetails(gomock.Any(), order.ID).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.GetOrderWithDetailsRow{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -872,9 +972,9 @@ func TestGetOrderAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetOrder(gomock.Any(), order.ID).
+					GetOrderWithDetails(gomock.Any(), order.ID).
 					Times(1).
-					Return(order, nil)
+					Return(orderWithDetailsFromOrder(order), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -999,6 +1099,16 @@ func TestCancelOrderAPI(t *testing.T) {
 					GetOrderForUpdate(gomock.Any(), order.ID).
 					Times(1).
 					Return(preparingOrder, nil)
+
+				store.EXPECT().
+					UpdateOrderExceptionState(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(preparingOrder, nil)
+
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1796,12 +1906,12 @@ func TestConfirmOrderAPI(t *testing.T) {
 					Times(1).
 					Return(deliveringOrder, nil)
 
-				completedOrder := order
-				completedOrder.Status = "completed"
+				userDeliveredOrder := order
+				userDeliveredOrder.Status = "user_delivered"
 				store.EXPECT().
-					UpdateOrderToCompleted(gomock.Any(), order.ID).
+					UpdateOrderToUserDelivered(gomock.Any(), order.ID).
 					Times(1).
-					Return(completedOrder, nil)
+					Return(userDeliveredOrder, nil)
 				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -2421,7 +2531,7 @@ func TestListOrdersAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 
-	orders := []db.ListOrdersByUserRow{
+	orders := []db.ListOrdersByUserWithFiltersRow{
 		{
 			ID:           1,
 			OrderNo:      "20251210000001",
@@ -2451,7 +2561,7 @@ func TestListOrdersAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					ListOrdersByUser(gomock.Any(), gomock.Any()).
+					ListOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(orders, nil)
 			},
@@ -2467,9 +2577,9 @@ func TestListOrdersAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					ListOrdersByUserAndStatus(gomock.Any(), gomock.Any()).
+					ListOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.ListOrdersByUserAndStatusRow{}, nil)
+					Return([]db.ListOrdersByUserWithFiltersRow{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2575,6 +2685,22 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 		OpenedAt:   time.Now(),
 		CreatedAt:  time.Now(),
 	}
+	billingGroup := db.BillingGroup{
+		ID:              util.RandomInt(1, 1000),
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		TotalAmount:     0,
+		PaidAmount:      0,
+		CreatedAt:       time.Now(),
+	}
+	member := db.BillingGroupMember{
+		ID:             util.RandomInt(1, 1000),
+		BillingGroupID: billingGroup.ID,
+		UserID:         user.ID,
+		Role:           "member",
+		JoinedAt:       time.Now(),
+	}
 
 	// 创建用户优惠券（默认允许所有订单类型）
 	userVoucher := db.GetUserVoucherRow{
@@ -2624,6 +2750,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -2690,6 +2820,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -2731,6 +2865,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -2775,6 +2913,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -2818,6 +2960,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -2861,6 +3007,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -2907,6 +3057,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(lowPriceDish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(lowPriceDish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -2951,6 +3105,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(lowPriceDish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(lowPriceDish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3025,11 +3183,26 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(session, nil)
+				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+					Times(1).
+					Return(billingGroup, nil)
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(member, nil)
 
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3080,6 +3253,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3103,6 +3280,17 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(session, nil)
+				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+					Times(1).
+					Return(billingGroup, nil)
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(member, nil)
 
 				store.EXPECT().
 					CreateOrderTx(gomock.Any(), gomock.Any()).
@@ -3177,6 +3365,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	merchant.Status = "active"
+	merchant.IsOpen = true
 	dish := randomDish(merchant.ID, nil)
 	table := randomTable(merchant.ID)
 	session := db.DiningSession{
@@ -3187,6 +3376,22 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 		Status:     "open",
 		OpenedAt:   time.Now(),
 		CreatedAt:  time.Now(),
+	}
+	billingGroup := db.BillingGroup{
+		ID:              util.RandomInt(1, 1000),
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		TotalAmount:     0,
+		PaidAmount:      0,
+		CreatedAt:       time.Now(),
+	}
+	member := db.BillingGroupMember{
+		ID:             util.RandomInt(1, 1000),
+		BillingGroupID: billingGroup.ID,
+		UserID:         user.ID,
+		Role:           "member",
+		JoinedAt:       time.Now(),
 	}
 
 	// 创建会员卡
@@ -3248,11 +3453,27 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(session, nil)
+				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+					Times(1).
+					Return(billingGroup, nil)
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(member, nil)
 
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3297,6 +3518,14 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 							},
 						}, nil
 					})
+				store.EXPECT().
+					UpdateDiningSessionActiveOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(session, nil)
+				store.EXPECT().
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Cart{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -3336,6 +3565,11 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3389,25 +3623,21 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetActiveDiningSessionByTable(gomock.Any(), table.ID).
 					Times(1).
 					Return(session, nil)
+				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+					Times(1).
+					Return(billingGroup, nil)
 
 				store.EXPECT().
-					GetDish(gomock.Any(), dish.ID).
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
 					Times(1).
-					Return(dish, nil)
-
-				store.EXPECT().
-					ListActiveDiscountRules(gomock.Any(), merchant.ID).
-					Times(1).
-					Return([]db.DiscountRule{}, nil)
-
-				// 用户不是会员
-				store.EXPECT().
-					GetMembershipByMerchantAndUser(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.MerchantMembership{}, pgx.ErrNoRows)
+					Return(db.BillingGroupMember{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
@@ -3444,9 +3674,27 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Return(session, nil)
 
 				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+					Times(1).
+					Return(billingGroup, nil)
+
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(member, nil)
+
+				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3504,9 +3752,27 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Return(session, nil)
 
 				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+					Times(1).
+					Return(billingGroup, nil)
+
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(member, nil)
+
+				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(dish, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(dish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3563,6 +3829,19 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Times(1).
 					Return(session, nil)
 
+				store.EXPECT().
+					GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+					Times(1).
+					Return(billingGroup, nil)
+
+				store.EXPECT().
+					GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+						BillingGroupID: billingGroup.ID,
+						UserID:         user.ID,
+					}).
+					Times(1).
+					Return(member, nil)
+
 				// 设置固定价格的菜品：200元/个，2个=400元
 				fixedPriceDish := dish
 				fixedPriceDish.Price = 20000 // 200元
@@ -3570,6 +3849,10 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
 					Return(fixedPriceDish, nil)
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), dish.ID).
+					Times(1).
+					Return(dishWithCustomizationsFromDish(fixedPriceDish), nil)
 
 				store.EXPECT().
 					ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3611,6 +3894,14 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 							},
 						}, nil
 					})
+					store.EXPECT().
+						UpdateDiningSessionActiveOrder(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(session, nil)
+					store.EXPECT().
+						GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(db.Cart{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -3649,6 +3940,7 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	merchant.Status = "active"
+	merchant.IsOpen = true
 	dish := randomDish(merchant.ID, nil)
 	dish.Price = 20000 // 200元
 	table := randomTable(merchant.ID)
@@ -3660,6 +3952,22 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 		Status:     "open",
 		OpenedAt:   time.Now(),
 		CreatedAt:  time.Now(),
+	}
+	billingGroup := db.BillingGroup{
+		ID:              util.RandomInt(1, 1000),
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		TotalAmount:     0,
+		PaidAmount:      0,
+		CreatedAt:       time.Now(),
+	}
+	member := db.BillingGroupMember{
+		ID:             util.RandomInt(1, 1000),
+		BillingGroupID: billingGroup.ID,
+		UserID:         user.ID,
+		Role:           "member",
+		JoinedAt:       time.Now(),
 	}
 
 	// 创建用户优惠券（允许堂食）
@@ -3715,51 +4023,28 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
 			Times(1).
 			Return(session, nil)
+		store.EXPECT().
+			GetDefaultBillingGroupBySession(gomock.Any(), session.ID).
+			Times(1).
+			Return(billingGroup, nil)
 
 		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
+			GetActiveBillingGroupMember(gomock.Any(), db.GetActiveBillingGroupMemberParams{
+				BillingGroupID: billingGroup.ID,
+				UserID:         user.ID,
+			}).
 			Times(1).
-			Return(session, nil)
-
-		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
-			Times(1).
-			Return(session, nil)
-
-		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
-			Times(1).
-			Return(session, nil)
-
-		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
-			Times(1).
-			Return(session, nil)
-
-		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
-			Times(1).
-			Return(session, nil)
-
-		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
-			Times(1).
-			Return(session, nil)
-
-		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
-			Times(1).
-			Return(session, nil)
-
-		store.EXPECT().
-			GetActiveDiningSessionByTable(gomock.Any(), table.ID).
-			Times(1).
-			Return(session, nil)
+			Return(member, nil)
 
 		store.EXPECT().
 			GetDish(gomock.Any(), dish.ID).
 			Times(1).
 			Return(dish, nil)
+
+		store.EXPECT().
+			GetDishWithCustomizations(gomock.Any(), dish.ID).
+			Times(1).
+			Return(dishWithCustomizationsFromDish(dish), nil)
 
 		store.EXPECT().
 			ListActiveDiscountRules(gomock.Any(), merchant.ID).
@@ -3809,6 +4094,14 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 					},
 				}, nil
 			})
+		store.EXPECT().
+			UpdateDiningSessionActiveOrder(gomock.Any(), gomock.Any()).
+			Times(1).
+			Return(session, nil)
+		store.EXPECT().
+			GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+			Times(1).
+			Return(db.Cart{}, pgx.ErrNoRows)
 
 		server := newTestServer(t, store)
 		recorder := httptest.NewRecorder()

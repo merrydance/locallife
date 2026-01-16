@@ -4,15 +4,20 @@ INSERT INTO rider_deposits (
     amount,
     type,
     related_order_id,
+    payment_order_id,
     balance_after,
     remark
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7
 ) RETURNING *;
 
 -- name: GetRiderDeposit :one
 SELECT * FROM rider_deposits
 WHERE id = $1 LIMIT 1;
+
+-- name: GetRiderDepositByPaymentOrderID :one
+SELECT * FROM rider_deposits
+WHERE payment_order_id = $1 LIMIT 1;
 
 -- name: ListRiderDeposits :many
 SELECT * FROM rider_deposits

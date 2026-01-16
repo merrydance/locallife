@@ -1,8 +1,6 @@
 package api
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 	"time"
 
@@ -60,7 +58,7 @@ func (server *Server) getCurrentUser(ctx *gin.Context) {
 
 	user, err := server.store.GetUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}
@@ -128,7 +126,7 @@ func (server *Server) updateCurrentUser(ctx *gin.Context) {
 
 	user, err := server.store.UpdateUser(ctx, arg)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}

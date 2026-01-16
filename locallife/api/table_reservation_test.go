@@ -352,6 +352,16 @@ func TestGetReservationAPI(t *testing.T) {
 						TableType:       room.TableType,
 						Capacity:        room.Capacity,
 					}, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(reservation.MerchantID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					ListOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListOrdersByUserWithFiltersRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -420,6 +430,11 @@ func TestGetReservationAPI(t *testing.T) {
 						TableType:       room.TableType,
 						Capacity:        room.Capacity,
 					}, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(reservation.MerchantID)).
+					Times(1).
+					Return(merchant, nil)
 
 				// 检查是否为商户 - 不是商户
 				store.EXPECT().
@@ -508,6 +523,11 @@ func TestListUserReservationsAPI(t *testing.T) {
 					ListReservationsByUserWithStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(reservations, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -714,6 +734,11 @@ func TestCancelReservationAPI(t *testing.T) {
 					CancelReservationTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CancelReservationTxResult{Reservation: cancelledReservation}, nil)
+
+				store.EXPECT().
+					ReleaseReservationInventoryTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1110,6 +1135,11 @@ func TestMarkNoShowAPI(t *testing.T) {
 					GetTable(gomock.Any(), gomock.Eq(confirmedReservation.TableID)).
 					Times(1).
 					Return(room, nil)
+
+				store.EXPECT().
+					ReleaseReservationInventoryTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil)
 
 				store.EXPECT().
 					MarkNoShowTx(gomock.Any(), gomock.Any()).

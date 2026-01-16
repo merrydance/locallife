@@ -585,23 +585,30 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		}
 
 		// 自动通过
-		approvedApp, err := server.store.ApproveRiderApplication(ctx, db.ApproveRiderApplicationParams{
-			ID: submitted.ID,
-		})
-		if err != nil {
-			log.Error().Err(err).Msg("审核骑手申请失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("approve rider application: %w", err)))
+		var ocrData IDCardOCRData
+		if len(submitted.IDCardOcr) > 0 {
+			_ = json.Unmarshal(submitted.IDCardOcr, &ocrData)
+		}
+		if ocrData.IDNumber == "" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("身份证号不能为空")))
 			return
 		}
 
-		// 创建骑手记录
-		err = server.createRiderFromApplication(ctx, approvedApp)
+		approvedResult, err := server.store.ApproveRiderApplicationTx(ctx, db.ApproveRiderApplicationTxParams{
+			ApplicationID: submitted.ID,
+			ReviewedBy:    pgtype.Int8{},
+			RiderRealName: submitted.RealName.String,
+			RiderIDCardNo: ocrData.IDNumber,
+			RiderPhone:    submitted.Phone.String,
+			RegionID:      pgtype.Int8{},
+		})
 		if err != nil {
-			log.Error().Err(err).Msg("从申请创建骑手记录失败")
-			// 回滚？暂时只记录日志
+			log.Error().Err(err).Msg("审核骑手申请并创建骑手失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("approve rider application tx: %w", err)))
+			return
 		}
 
-		ctx.JSON(http.StatusOK, newRiderApplicationResponse(approvedApp))
+		ctx.JSON(http.StatusOK, newRiderApplicationResponse(approvedResult.Application))
 		return
 	}
 
@@ -722,38 +729,6 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 	}
 
 	return true, ""
-}
-
-// createRiderFromApplication 从申请创建骑手记录
-func (server *Server) createRiderFromApplication(ctx *gin.Context, app db.RiderApplication) error {
-	// 获取身份证号
-	var ocrData IDCardOCRData
-	if len(app.IDCardOcr) > 0 {
-		json.Unmarshal(app.IDCardOcr, &ocrData)
-	}
-
-	idCardNo := ocrData.IDNumber
-	if idCardNo == "" {
-		return errors.New("身份证号不能为空")
-	}
-
-	arg := db.CreateRiderParams{
-		UserID:   app.UserID,
-		RealName: app.RealName.String,
-		IDCardNo: idCardNo,
-		Phone:    app.Phone.String,
-	}
-
-	rider, err := server.store.CreateRider(ctx, arg)
-	if err != nil {
-		return err
-	}
-
-	// 更新申请表的关联（需要在riders表中保存application_id）
-	// 这里简化处理，通过user_id关联
-	log.Info().Int64("rider_id", rider.ID).Int64("application_id", app.ID).Msg("骑手记录创建成功")
-
-	return nil
 }
 
 // ==================== 重置申请（被拒绝后） ====================

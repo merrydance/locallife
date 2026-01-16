@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -92,7 +91,7 @@ func (server *Server) getRegionStats(ctx *gin.Context) {
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("region not found")))
 			return
 		}

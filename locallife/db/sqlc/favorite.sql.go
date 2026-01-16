@@ -16,7 +16,7 @@ const addFavoriteDish = `-- name: AddFavoriteDish :one
 INSERT INTO favorites (user_id, favorite_type, dish_id)
 VALUES ($1, 'dish', $2)
 ON CONFLICT (user_id, favorite_type, dish_id) WHERE dish_id IS NOT NULL 
-DO NOTHING
+DO UPDATE SET user_id = EXCLUDED.user_id
 RETURNING id, user_id, favorite_type, merchant_id, dish_id, created_at
 `
 
@@ -43,7 +43,7 @@ const addFavoriteMerchant = `-- name: AddFavoriteMerchant :one
 INSERT INTO favorites (user_id, favorite_type, merchant_id)
 VALUES ($1, 'merchant', $2)
 ON CONFLICT (user_id, favorite_type, merchant_id) WHERE merchant_id IS NOT NULL 
-DO NOTHING
+DO UPDATE SET user_id = EXCLUDED.user_id
 RETURNING id, user_id, favorite_type, merchant_id, dish_id, created_at
 `
 

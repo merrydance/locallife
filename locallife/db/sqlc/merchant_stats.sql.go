@@ -145,7 +145,7 @@ const getDishCategoryStats = `-- name: GetDishCategoryStats :many
 SELECT 
     dc.id AS category_id,
     dc.name AS category_name,
-    COUNT(DISTINCT oi.dish_id)::int AS dish_count,
+  COUNT(DISTINCT o.id)::int AS order_count,
     SUM(oi.quantity)::int AS total_quantity,
     COALESCE(SUM(oi.subtotal), 0)::bigint AS total_revenue
 FROM dish_categories dc
@@ -170,7 +170,7 @@ type GetDishCategoryStatsParams struct {
 type GetDishCategoryStatsRow struct {
 	CategoryID    int64  `json:"category_id"`
 	CategoryName  string `json:"category_name"`
-	DishCount     int32  `json:"dish_count"`
+	OrderCount    int32  `json:"order_count"`
 	TotalQuantity int32  `json:"total_quantity"`
 	TotalRevenue  int64  `json:"total_revenue"`
 }
@@ -188,7 +188,7 @@ func (q *Queries) GetDishCategoryStats(ctx context.Context, arg GetDishCategoryS
 		if err := rows.Scan(
 			&i.CategoryID,
 			&i.CategoryName,
-			&i.DishCount,
+			&i.OrderCount,
 			&i.TotalQuantity,
 			&i.TotalRevenue,
 		); err != nil {

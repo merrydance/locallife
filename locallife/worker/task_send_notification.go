@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/rs/zerolog/log"
 )
 
@@ -142,13 +143,11 @@ func (processor *RedisTaskProcessor) tryWebSocketPush(ctx context.Context, userI
 		"created_at": notification.CreatedAt,
 	})
 
-	wsMessage := map[string]any{
-		"type":      "notification",
-		"data":      json.RawMessage(notificationData),
-		"timestamp": time.Now(),
+	wsMessage := websocket.Message{
+		Type:      "notification",
+		Data:      json.RawMessage(notificationData),
+		Timestamp: time.Now(),
 	}
-
-	wsMessageJSON, _ := json.Marshal(wsMessage)
 
 	pushed := false
 
@@ -158,8 +157,14 @@ func (processor *RedisTaskProcessor) tryWebSocketPush(ctx context.Context, userI
 			riderID := role.RelatedEntityID.Int64
 
 			// 通过Redis Pub/Sub发布推送请求
+			pushMsg := websocket.NotificationPushMessage{
+				EntityType: "rider",
+				EntityID:   riderID,
+				Message:    wsMessage,
+			}
+			payload, _ := json.Marshal(pushMsg)
 			channel := fmt.Sprintf("notification:rider:%d", riderID)
-			if err := processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err(); err != nil {
+			if err := processor.redisClient.Publish(ctx, channel, payload).Err(); err != nil {
 				log.Error().Err(err).Int64("rider_id", riderID).Msg("publish to redis failed")
 			} else {
 				pushed = true
@@ -175,8 +180,14 @@ func (processor *RedisTaskProcessor) tryWebSocketPush(ctx context.Context, userI
 			merchantID := role.RelatedEntityID.Int64
 
 			// 通过Redis Pub/Sub发布推送请求
+			pushMsg := websocket.NotificationPushMessage{
+				EntityType: "merchant",
+				EntityID:   merchantID,
+				Message:    wsMessage,
+			}
+			payload, _ := json.Marshal(pushMsg)
 			channel := fmt.Sprintf("notification:merchant:%d", merchantID)
-			if err := processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err(); err != nil {
+			if err := processor.redisClient.Publish(ctx, channel, payload).Err(); err != nil {
 				log.Error().Err(err).Int64("merchant_id", merchantID).Msg("publish to redis failed")
 			} else {
 				pushed = true

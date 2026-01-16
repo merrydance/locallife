@@ -458,9 +458,23 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListPaymentOrdersByUser(gomock.Any(), db.ListPaymentOrdersByUserParams{
+						UserID: user.ID,
+						Limit:  10,
+						Offset: 0,
+					}).
+					Times(1).
+					Return([]db.PaymentOrder{paymentOrder}, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response []paymentOrderResponse
+				err := json.NewDecoder(recorder.Body).Decode(&response)
+				require.NoError(t, err)
+				require.Len(t, response, 1)
 			},
 		},
 		{
@@ -469,9 +483,23 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListPaymentOrdersByUser(gomock.Any(), db.ListPaymentOrdersByUserParams{
+						UserID: user.ID,
+						Limit:  4,
+						Offset: 0,
+					}).
+					Times(1).
+					Return([]db.PaymentOrder{paymentOrder}, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response []paymentOrderResponse
+				err := json.NewDecoder(recorder.Body).Decode(&response)
+				require.NoError(t, err)
+				require.Len(t, response, 1)
 			},
 		},
 		{

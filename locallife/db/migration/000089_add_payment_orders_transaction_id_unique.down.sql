@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS payment_orders_transaction_id_unique_idx;

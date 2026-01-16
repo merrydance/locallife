@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -106,13 +105,24 @@ func (server *Server) getDiscountRule(ctx *gin.Context) {
 		return
 	}
 
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
+		return
+	}
+	merchant := merchantVal.(db.Merchant)
+
 	rule, err := server.store.GetDiscountRule(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("discount rule not found")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if rule.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
 		return
 	}
 
@@ -144,6 +154,17 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 		return
 	}
 
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
+		return
+	}
+	merchant := merchantVal.(db.Merchant)
+	if uriReq.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
+		return
+	}
+
 	rules, err := server.store.ListMerchantDiscountRules(ctx, db.ListMerchantDiscountRulesParams{
 		MerchantID: uriReq.MerchantID,
 		Limit:      queryReq.PageSize,
@@ -172,6 +193,17 @@ func (server *Server) listActiveDiscountRules(ctx *gin.Context) {
 	var req listActiveDiscountRulesRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
+		return
+	}
+	merchant := merchantVal.(db.Merchant)
+	if req.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
 		return
 	}
 
@@ -247,7 +279,7 @@ func (server *Server) getBestDiscountRule(ctx *gin.Context) {
 		MinOrderAmount: queryReq.OrderAmount,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("no applicable discount rule found")))
 			return
 		}
@@ -286,7 +318,7 @@ func (server *Server) updateDiscountRule(ctx *gin.Context) {
 	// 获取原规则验证权限
 	rule, err := server.store.GetDiscountRule(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("discount rule not found")))
 			return
 		}
@@ -362,7 +394,7 @@ func (server *Server) deleteDiscountRule(ctx *gin.Context) {
 	// 获取规则验证权限
 	rule, err := server.store.GetDiscountRule(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("discount rule not found")))
 			return
 		}

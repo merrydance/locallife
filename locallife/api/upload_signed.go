@@ -51,7 +51,12 @@ func (server *Server) signUploadURL(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("path参数必须是本地uploads相对路径")))
 		return
 	}
-	if !isUploadPathOwnedByUser(normalized, authPayload.UserID) {
+	allowed, err := server.canSignUploadPath(ctx, authPayload.UserID, normalized)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !allowed {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权访问该文件")))
 		return
 	}
@@ -116,7 +121,12 @@ func (server *Server) getSignedUpload(ctx *gin.Context) {
 		return
 	}
 
-	if !isUploadPathOwnedByUser(normalized, uid) {
+	allowed, err := server.canSignUploadPath(ctx, uid, normalized)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !allowed {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权访问该文件")))
 		return
 	}
@@ -147,11 +157,10 @@ func isPubliclyAccessibleUploadPath(normalized string) bool {
 			return true
 		}
 	}
-	// 评价图片一般需要对外展示
+	// 评价图片对外展示
 	if strings.HasPrefix(normalized, "uploads/reviews/") {
 		return true
 	}
-
 	return false
 }
 
@@ -190,19 +199,70 @@ func isUploadPathOwnedByUser(normalized string, uid int64) bool {
 	if normalized == "" {
 		return false
 	}
-	// 对外展示的公共素材：允许任意已登录用户签名访问（仍然需要短期签名）
-	if strings.HasPrefix(normalized, "uploads/public/") {
-		return true
-	}
-	// 商户证照对所有登录用户公开可见（营业执照、食品经营许可证）
-	// 路径格式: uploads/merchants/{id}/business_license/... 或 uploads/merchants/{id}/food_permit/...
-	if strings.Contains(normalized, "/merchants/") &&
-		(strings.Contains(normalized, "/business_license/") || strings.Contains(normalized, "/food_permit/")) {
-		return true
-	}
 	uidStr := fmt.Sprintf("/%d/", uid)
 	return strings.Contains(normalized, "/merchants"+uidStr) ||
 		strings.Contains(normalized, "/riders"+uidStr) ||
 		strings.Contains(normalized, "/operators"+uidStr) ||
 		strings.Contains(normalized, "/reviews"+uidStr)
+}
+
+func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized string) (bool, error) {
+	if normalized == "" {
+		return false, nil
+	}
+	if isPubliclyAccessibleUploadPath(normalized) {
+		return true, nil
+	}
+	if isMerchantLicensePath(normalized) {
+		return true, nil
+	}
+	if isIDCardPath(normalized) {
+		if isUploadPathOwnedByUser(normalized, uid) {
+			return true, nil
+		}
+		isAdmin, err := server.hasActiveRole(ctx, uid, RoleAdmin)
+		if err != nil {
+			return false, err
+		}
+		return isAdmin, nil
+	}
+	return isUploadPathOwnedByUser(normalized, uid), nil
+}
+
+func (server *Server) hasActiveRole(ctx *gin.Context, uid int64, role string) (bool, error) {
+	userRoles, err := server.store.ListUserRoles(ctx, uid)
+	if err != nil {
+		return false, err
+	}
+	for _, userRole := range userRoles {
+		if userRole.Status != "active" {
+			continue
+		}
+		if userRole.Role == role {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func isMerchantLicensePath(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	if !strings.Contains(normalized, "/merchants/") {
+		return false
+	}
+	return strings.Contains(normalized, "/business_license/") || strings.Contains(normalized, "/food_permit/")
+}
+
+func isIDCardPath(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	lower := strings.ToLower(normalized)
+	return strings.Contains(lower, "/idcard/") ||
+		strings.Contains(lower, "/idcard_front/") ||
+		strings.Contains(lower, "/idcard_back/") ||
+		strings.Contains(lower, "/id_front/") ||
+		strings.Contains(lower, "/id_back/")
 }

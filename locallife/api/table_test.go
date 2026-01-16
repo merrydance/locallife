@@ -370,6 +370,11 @@ func TestListTablesAPI(t *testing.T) {
 					ListTablesByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
 					Return(tables, nil)
+
+				store.EXPECT().
+					ListTableTags(gomock.Any(), gomock.Any()).
+					Times(len(tables)).
+					Return([]db.ListTableTagsRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -391,6 +396,11 @@ func TestListTablesAPI(t *testing.T) {
 					ListTablesByMerchantAndType(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(tables, nil)
+
+				store.EXPECT().
+					ListTableTags(gomock.Any(), gomock.Any()).
+					Times(len(tables)).
+					Return([]db.ListTableTagsRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1338,11 +1348,11 @@ func TestGetRoomAvailabilityAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				// 验证返回的时间段数量 (11:00-21:00, 每30分钟)
+				// 验证返回的时间段数量 (午餐 11:00-13:00 + 晚餐 17:00-20:00, 每30分钟)
 				var resp roomAvailabilityResponse
 				err := json.NewDecoder(recorder.Body).Decode(&resp)
 				require.NoError(t, err)
-				require.Equal(t, 21, len(resp.TimeSlots)) // 11:00, 11:30, ..., 21:00 = 21个
+				require.Equal(t, 12, len(resp.TimeSlots)) // 11:00-13:00 共5个，17:00-20:00 共7个
 				require.Equal(t, "2025-01-15", resp.Date)
 			},
 		},

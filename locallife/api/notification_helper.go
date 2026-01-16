@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -91,7 +89,7 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 	var shouldPush bool = true
 	if !params.IgnorePreferences {
 		prefs, err := server.store.GetUserNotificationPreferences(ctx, params.UserID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !isNotFoundError(err) {
 			log.Error().Err(err).Int64("user_id", params.UserID).Msg("failed to get notification preferences")
 			// 获取偏好失败时不阻止通知创建，但记录日志
 		} else if err == nil {

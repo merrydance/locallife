@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -216,7 +215,7 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
 			return
 		}
@@ -289,7 +288,7 @@ func (server *Server) suspendOperatorMerchant(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchant(ctx, merchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
 			return
 		}
@@ -371,7 +370,7 @@ func (server *Server) resumeOperatorMerchant(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchant(ctx, merchantID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
 			return
 		}
@@ -610,7 +609,7 @@ func (server *Server) getOperatorRider(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
 			return
 		}
@@ -715,7 +714,7 @@ func (server *Server) suspendOperatorRider(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRider(ctx, riderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
 			return
 		}
@@ -811,7 +810,7 @@ func (server *Server) resumeOperatorRider(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRider(ctx, riderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
 			return
 		}

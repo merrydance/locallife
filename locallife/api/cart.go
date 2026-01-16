@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 
@@ -108,7 +107,7 @@ func (server *Server) getCart(ctx *gin.Context) {
 		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 购物车不存在，返回空购物车
 			ctx.JSON(http.StatusOK, cartResponse{
 				MerchantID: merchantID,
@@ -356,7 +355,7 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	// 验证商户存在
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -374,7 +373,7 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	if req.DishID != nil {
 		dish, err := server.store.GetDish(ctx, *req.DishID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 				return
 			}
@@ -394,7 +393,7 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	if req.ComboID != nil {
 		combo, err := server.store.GetComboSet(ctx, *req.ComboID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo not found")))
 				return
 			}
@@ -430,7 +429,7 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 不存在，则创建新购物车
 			cart, err = server.store.CreateCart(ctx, db.CreateCartParams{
 				UserID:        authPayload.UserID,
@@ -582,7 +581,7 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 	// 获取购物车商品信息
 	cartItem, err := server.store.GetCartItem(ctx, itemID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart item not found")))
 			return
 		}
@@ -593,7 +592,7 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 	// P0安全：通过cart_id获取购物车，验证所有权
 	cart, err := server.store.GetCart(ctx, cartItem.CartID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart not found")))
 			return
 		}
@@ -690,7 +689,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	// 获取购物车商品
 	cartItem, err := server.store.GetCartItem(ctx, itemID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart item not found")))
 			return
 		}
@@ -701,7 +700,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	// P0安全：通过cart_id获取购物车，验证所有权
 	cart, err := server.store.GetCart(ctx, cartItem.CartID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("cart not found")))
 			return
 		}
@@ -778,7 +777,7 @@ func (server *Server) clearCart(ctx *gin.Context) {
 		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 购物车不存在，返回空购物车
 			ctx.JSON(http.StatusOK, cartResponse{
 				MerchantID: req.MerchantID,
@@ -957,7 +956,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	// 获取商户信息（用于获取region_id和min_order_amount）
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
 			return
 		}
@@ -991,7 +990,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		ReservationID: reservationID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("购物车为空")))
 			return
 		}

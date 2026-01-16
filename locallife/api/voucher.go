@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -306,7 +305,7 @@ func (server *Server) updateVoucher(ctx *gin.Context) {
 	// 获取原代金券验证权限
 	voucher, err := server.store.GetVoucher(ctx, uriReq.VoucherID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("voucher not found")))
 			return
 		}
@@ -427,7 +426,7 @@ func (server *Server) deleteVoucher(ctx *gin.Context) {
 	// 获取代金券验证权限
 	voucher, err := server.store.GetVoucher(ctx, req.VoucherID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("voucher not found")))
 			return
 		}
@@ -522,7 +521,7 @@ func (server *Server) claimVoucher(ctx *gin.Context) {
 		UserID:    authPayload.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("voucher not found")))
 			return
 		}

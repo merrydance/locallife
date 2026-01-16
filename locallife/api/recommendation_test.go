@@ -158,6 +158,16 @@ func TestRecommendDishesAPI(t *testing.T) {
 						PurchaseFrequency: 10,
 					}, nil)
 
+				store.EXPECT().
+					GetSystemTagByName(gomock.Any(), "推荐").
+					Times(1).
+					Return(db.Tag{}, pgx.ErrNoRows)
+
+				store.EXPECT().
+					GetSystemTagByName(gomock.Any(), "热卖").
+					Times(1).
+					Return(db.Tag{}, pgx.ErrNoRows)
+
 				// Mock algorithm queries
 				store.EXPECT().
 					GetDishIDsByCuisines(gomock.Any(), gomock.Any()).
@@ -720,6 +730,11 @@ func TestExploreRoomsAPI(t *testing.T) {
 							MonthlyReservations: 15,
 						},
 					}, nil)
+
+				store.EXPECT().
+					ListTableTags(gomock.Any(), int64(1)).
+					Times(1).
+					Return([]db.ListTableTagsRow{}, nil)
 
 				store.EXPECT().
 					CountExploreNearbyRooms(gomock.Any(), gomock.Any()).

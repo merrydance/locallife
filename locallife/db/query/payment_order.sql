@@ -106,3 +106,10 @@ SELECT * FROM payment_orders
 WHERE status = 'pending' AND expires_at < now()
 ORDER BY created_at
 LIMIT $1;
+
+-- name: UpdatePaymentOrderProcessedAt :one
+UPDATE payment_orders
+SET
+    processed_at = now()
+WHERE id = $1 AND status = 'paid' AND processed_at IS NULL
+RETURNING *;

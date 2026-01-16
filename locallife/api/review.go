@@ -1,9 +1,8 @@
 package api
 
 import (
-	"database/sql"
-	"fmt"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -136,7 +135,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 	// 4.1 评价文本内容安全检测：先审后存
 	user, err := server.store.GetUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("user not found")))
 			return
 		}
@@ -474,7 +473,7 @@ func (server *Server) replyReview(ctx *gin.Context) {
 	// 2.1 回复文本内容安全检测：先审后存
 	merchantUser, err := server.store.GetUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("user not found")))
 			return
 		}
@@ -534,7 +533,7 @@ func (server *Server) deleteReview(ctx *gin.Context) {
 	// 获取评价信息
 	review, err := server.store.GetReview(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("review not found")))
 			return
 		}

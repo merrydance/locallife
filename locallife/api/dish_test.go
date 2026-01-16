@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"github.com/merrydance/locallife/util"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -131,7 +131,7 @@ func TestCreateDishCategoryAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -311,9 +311,12 @@ func TestCreateDishAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				store.EXPECT().
-					GetDishCategory(gomock.Any(), gomock.Eq(category.ID)).
+					GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+						MerchantID: merchant.ID,
+						CategoryID: category.ID,
+					})).
 					Times(1).
-					Return(category, nil)
+					Return(db.MerchantDishCategory{}, nil)
 
 				store.EXPECT().
 					CreateDishTx(gomock.Any(), gomock.Any()).
@@ -444,7 +447,7 @@ func TestGetDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDishComplete(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.GetDishCompleteRow{}, sql.ErrNoRows)
+					Return(db.GetDishCompleteRow{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -630,9 +633,12 @@ func TestUpdateDishAPI(t *testing.T) {
 					Return(dish, nil)
 
 				store.EXPECT().
-					UpdateDish(gomock.Any(), gomock.Any()).
+					UpdateDishTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(dish, nil)
+					Return(db.UpdateDishTxResult{
+						Dish: dish,
+						Tags: []db.DishTag{},
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -656,7 +662,7 @@ func TestUpdateDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.Dish{}, sql.ErrNoRows)
+					Return(db.Dish{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -744,7 +750,7 @@ func TestDeleteDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.Dish{}, sql.ErrNoRows)
+					Return(db.Dish{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

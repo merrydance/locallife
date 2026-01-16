@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	mockwechat "github.com/merrydance/locallife/wechat/mock"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -70,6 +74,13 @@ func TestScanTableAPI(t *testing.T) {
 	merchant := randomMerchant(user.ID)
 	table := randomTable(merchant.ID)
 	category := randomDishCategory()
+	listCategory := db.ListDishCategoriesRow{
+		ID:        category.ID,
+		Name:      category.Name,
+		CreatedAt: category.CreatedAt,
+		DeletedAt: category.DeletedAt,
+		SortOrder: 1,
+	}
 	dish := randomDishForMenu(category.ID)
 	combo := randomComboForMenu(merchant.ID)
 	deliveryPromo := randomDeliveryPromotion(merchant.ID)
@@ -103,7 +114,7 @@ func TestScanTableAPI(t *testing.T) {
 				store.EXPECT().
 					ListDishCategories(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return([]db.DishCategory{category}, nil)
+					Return([]db.ListDishCategoriesRow{listCategory}, nil)
 
 				store.EXPECT().
 					ListDishesForMenu(gomock.Any(), gomock.Eq(merchant.ID)).
@@ -331,7 +342,7 @@ func TestScanTableAPI(t *testing.T) {
 				store.EXPECT().
 					ListDishCategories(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.DishCategory{category}, nil)
+					Return([]db.ListDishCategoriesRow{listCategory}, nil)
 
 				store.EXPECT().
 					ListDishesForMenu(gomock.Any(), gomock.Any()).
@@ -360,7 +371,7 @@ func TestScanTableAPI(t *testing.T) {
 				store.EXPECT().
 					ListDishCategories(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.DishCategory{category}, nil)
+					Return([]db.ListDishCategoriesRow{listCategory}, nil)
 
 				store.EXPECT().
 					ListDishesForMenu(gomock.Any(), gomock.Any()).
@@ -394,7 +405,7 @@ func TestScanTableAPI(t *testing.T) {
 				store.EXPECT().
 					ListDishCategories(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.DishCategory{}, nil)
+					Return([]db.ListDishCategoriesRow{}, nil)
 
 				store.EXPECT().
 					ListDishesForMenu(gomock.Any(), gomock.Any()).
@@ -444,7 +455,7 @@ func TestScanTableAPI(t *testing.T) {
 				store.EXPECT().
 					ListDishCategories(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.DishCategory{category}, nil)
+					Return([]db.ListDishCategoriesRow{listCategory}, nil)
 
 				store.EXPECT().
 					ListDishesForMenu(gomock.Any(), gomock.Any()).
@@ -493,6 +504,8 @@ func TestScanTableAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			recorder := httptest.NewRecorder()
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
@@ -506,12 +519,14 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	table := randomTable(merchant.ID)
+	table.QrCodeUrl = pgtype.Text{}
+	qrCodeData := []byte("fake-qrcode-png-data")
 
 	testCases := []struct {
 		name          string
 		tableID       int64
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -520,7 +535,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
@@ -530,6 +545,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(merchant, nil)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(qrCodeData, nil)
 
 				store.EXPECT().
 					UpdateTable(gomock.Any(), gomock.Any()).
@@ -542,10 +562,13 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				err := json.Unmarshal(recorder.Body.Bytes(), &response)
 				require.NoError(t, err)
 				require.NotEmpty(t, response.QrCodeUrl)
-				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("merchant_id=%d", merchant.ID))
-				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("table_no=%s", table.TableNo))
+				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("uploads/public/merchants/%d/qrcodes/", merchant.ID))
+				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("qrcode_m%d_t%d.png", merchant.ID, table.ID))
 				require.Equal(t, table.TableNo, response.TableNo)
 				require.Equal(t, merchant.ID, response.MerchantID)
+
+				_ = os.Remove(strings.TrimPrefix(response.QrCodeUrl, "/"))
+				_ = os.RemoveAll(filepath.Join("uploads", "public", "merchants", fmt.Sprintf("%d", merchant.ID), "qrcodes"))
 			},
 		},
 		{
@@ -554,8 +577,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				// No authorization
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				// No calls expected
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -567,11 +593,15 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(int64(9999))).
 					Times(1).
 					Return(db.Table{}, pgx.ErrNoRows)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -583,7 +613,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
@@ -593,6 +623,10 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(db.Merchant{}, pgx.ErrNoRows)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -604,7 +638,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
@@ -617,6 +651,10 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(otherMerchant, nil)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -628,8 +666,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				// No calls expected
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -641,11 +682,15 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Table{}, errors.New("internal error"))
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -657,7 +702,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
@@ -667,6 +712,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(merchant, nil)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(qrCodeData, nil)
 
 				store.EXPECT().
 					UpdateTable(gomock.Any(), gomock.Any()).
@@ -686,9 +736,10 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			wechatClient := mockwechat.NewMockWechatClient(ctrl)
+			tc.buildStubs(store, wechatClient)
 
-			server := newTestServer(t, store)
+			server := newTestServerWithWechat(t, store, wechatClient)
 
 			var url string
 			if tc.name == "InvalidTableID_NonNumeric" {

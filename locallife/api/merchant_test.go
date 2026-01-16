@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -142,7 +142,7 @@ func TestCreateMerchantApplicationAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserMerchantApplication(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.MerchantApplication{}, sql.ErrNoRows)
+					Return(db.MerchantApplication{}, pgx.ErrNoRows)
 
 				// Create application
 				store.EXPECT().
@@ -298,7 +298,7 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -406,7 +406,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -543,7 +543,7 @@ func TestGetUserMerchantApplicationAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserMerchantApplication(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.MerchantApplication{}, sql.ErrNoRows)
+					Return(db.MerchantApplication{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -853,7 +853,7 @@ func TestReviewMerchantApplicationAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantApplication(gomock.Any(), gomock.Eq(int64(99999))).
 					Times(1).
-					Return(db.MerchantApplication{}, sql.ErrNoRows)
+					Return(db.MerchantApplication{}, pgx.ErrNoRows)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

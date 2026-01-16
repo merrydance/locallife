@@ -153,7 +153,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	// 初始化 Casbin 权限控制（仅当尚未初始化时）
 	if GetGlobalCasbinEnforcer() == nil {
 		if err := InitCasbin("casbin"); err != nil {
-			log.Warn().Err(err).Msg("failed to initialize Casbin, RBAC will use fallback middleware")
+			return nil, fmt.Errorf("failed to initialize Casbin: %w", err)
 		}
 	}
 
@@ -286,18 +286,23 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
 	}
 
-	// M2: 地区查询路由(无需认证)
+	// 需要认证的路由
+	authGroup := v1.Group("")
+	authGroup.Use(authMiddleware(server.tokenMaker))
+	authGroup.POST("/uploads/sign", server.signUploadURL)
+
+	// M2: 地区查询路由
 	// 说明：前端已改为使用自建 OSM 获取行政区划/POI 数据。
 	// 这里的 /v1/regions* 接口作为后备能力保留（降级/灾备/未来切回），暂时可能不会被调用。
-	v1.GET("/regions/available", server.listAvailableRegions)
-	v1.GET("/regions/:id/check", server.checkRegionAvailability)
-	v1.GET("/regions/:id", server.getRegion)
-	v1.GET("/regions", server.listRegions)
-	v1.GET("/regions/:id/children", server.listRegionChildren)
-	v1.GET("/regions/search", server.searchRegions)
+	authGroup.GET("/regions/available", server.listAvailableRegions)
+	authGroup.GET("/regions/:id/check", server.checkRegionAvailability)
+	authGroup.GET("/regions/:id", server.getRegion)
+	authGroup.GET("/regions", server.listRegions)
+	authGroup.GET("/regions/:id/children", server.listRegionChildren)
+	authGroup.GET("/regions/search", server.searchRegions)
 
-	// 搜索路由（无需认证）
-	searchGroup := v1.Group("/search")
+	// 搜索路由
+	searchGroup := authGroup.Group("/search")
 	{
 		searchGroup.GET("/dishes", server.searchDishes)
 		searchGroup.GET("/merchants", server.searchMerchants)
@@ -305,16 +310,11 @@ func (server *Server) setupRouter() {
 		searchGroup.GET("/rooms", server.searchRooms)   // 包间搜索：按日期、时段、人数、菜系等条件
 	}
 
-	// 餐厅优惠活动（无需认证）
-	v1.GET("/merchants/:id/promotions", server.getMerchantPromotions)
+	// 餐厅优惠活动
+	authGroup.GET("/merchants/:id/promotions", server.getMerchantPromotions)
 
-	// 扫码点餐路由（无需认证）
-	v1.GET("/scan/table", server.scanTable)
-
-	// 需要认证的路由
-	authGroup := v1.Group("")
-	authGroup.Use(authMiddleware(server.tokenMaker))
-	authGroup.POST("/uploads/sign", server.signUploadURL)
+	// 扫码点餐路由
+	authGroup.GET("/scan/table", server.scanTable)
 
 	// 消费者菜品详情（需认证，但不需要商户权限）
 	authGroup.GET("/public/dishes/:id", server.getPublicDishDetail)
@@ -440,7 +440,7 @@ func (server *Server) setupRouter() {
 	tagsGroup := authGroup.Group("/tags")
 	{
 		tagsGroup.GET("", server.listTags)   // 获取标签列表（按类型）
-		tagsGroup.POST("", server.createTag) // 创建标签
+		tagsGroup.POST("", server.RoleMiddleware(RoleAdmin), server.createTag) // 创建标签
 	}
 
 	// M4: 菜品管理路由
@@ -1091,6 +1091,7 @@ func (server *Server) setupRouter() {
 
 	// 折扣规则管理（商户）
 	discountGroup := authGroup.Group("/merchants/:id/discounts")
+	discountGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		// 创建折扣规则
 		discountGroup.POST("", server.createDiscountRule)

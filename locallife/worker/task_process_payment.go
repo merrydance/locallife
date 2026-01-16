@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -314,290 +313,36 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 		Str("business_type", payload.BusinessType).
 		Msg("processing payment success")
 
-	// 获取支付订单
-	paymentOrder, err := processor.store.GetPaymentOrder(ctx, payload.PaymentOrderID)
+	result, err := processor.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID: payload.PaymentOrderID,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			log.Error().Int64("payment_order_id", payload.PaymentOrderID).Msg("payment order not found")
 			return fmt.Errorf("payment order not found: %w", asynq.SkipRetry)
 		}
-		return fmt.Errorf("get payment order: %w", err)
+		return fmt.Errorf("process payment success: %w", err)
 	}
 
-	// 检查是否已处理
-	if paymentOrder.Status != "paid" {
-		log.Warn().
+	if !result.Processed {
+		log.Info().
 			Int64("payment_order_id", payload.PaymentOrderID).
-			Str("status", paymentOrder.Status).
-			Msg("payment order not in paid status, skip")
+			Msg("payment order already processed or not eligible, skip")
 		return nil
 	}
 
-	// 根据业务类型执行后续逻辑
-	switch payload.BusinessType {
-	case "rider_deposit":
-		return processor.handleRiderDepositPaid(ctx, paymentOrder)
+	paymentOrder := result.PaymentOrder
 
-	case "reservation":
-		return processor.handleReservationPaid(ctx, paymentOrder)
-
-	case "reservation_addon":
-		return processor.handleReservationAddonPaid(ctx, paymentOrder)
-
-	case "membership_recharge":
-		return processor.handleMembershipRechargePaid(ctx, paymentOrder)
-
-	case "order":
-		// 订单支付成功后，需要触发分账
-		if err := processor.handleOrderPaid(ctx, paymentOrder); err != nil {
-			return err
-		}
-		// 如果是收付通分账类型，触发分账任务
+	// 订单支付成功后，需要触发分账与通知
+	if paymentOrder.BusinessType == "order" && result.OrderResult != nil {
+		processor.sendOrderPaidNotifications(ctx, *result.OrderResult)
 		if paymentOrder.PaymentType == "profit_sharing" && paymentOrder.OrderID.Valid {
 			return processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
 				PaymentOrderID: paymentOrder.ID,
 				OrderID:        paymentOrder.OrderID.Int64,
 			})
 		}
-		return nil
-
-	default:
-		log.Warn().
-			Str("business_type", payload.BusinessType).
-			Int64("payment_order_id", payload.PaymentOrderID).
-			Msg("unknown business type")
-		return nil
 	}
-}
-
-// handleRiderDepositPaid 处理骑手押金支付成功
-func (processor *RedisTaskProcessor) handleRiderDepositPaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
-	// 获取骑手信息
-	rider, err := processor.store.GetRiderByUserID(ctx, paymentOrder.UserID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			log.Error().Int64("user_id", paymentOrder.UserID).Msg("rider not found")
-			return fmt.Errorf("rider not found: %w", asynq.SkipRetry)
-		}
-		return fmt.Errorf("get rider: %w", err)
-	}
-
-	// 计算新余额
-	newBalance := rider.DepositAmount + paymentOrder.Amount
-
-	// 更新骑手押金
-	_, err = processor.store.UpdateRiderDeposit(ctx, db.UpdateRiderDepositParams{
-		ID:            rider.ID,
-		DepositAmount: newBalance,
-		FrozenDeposit: rider.FrozenDeposit,
-	})
-	if err != nil {
-		return fmt.Errorf("update rider deposit: %w", err)
-	}
-
-	// 创建押金流水
-	_, err = processor.store.CreateRiderDeposit(ctx, db.CreateRiderDepositParams{
-		RiderID:      rider.ID,
-		Amount:       paymentOrder.Amount,
-		Type:         "deposit",
-		BalanceAfter: newBalance,
-		Remark:       pgtype.Text{String: "微信支付充值", Valid: true},
-	})
-	if err != nil {
-		return fmt.Errorf("create rider deposit record: %w", err)
-	}
-
-	log.Info().
-		Int64("rider_id", rider.ID).
-		Int64("amount", paymentOrder.Amount).
-		Int64("new_balance", newBalance).
-		Msg("rider deposit charged")
-
-	return nil
-}
-
-// handleReservationPaid 处理预定支付成功
-func (processor *RedisTaskProcessor) handleReservationPaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
-	if !paymentOrder.ReservationID.Valid {
-		return fmt.Errorf("reservation_id is required: %w", asynq.SkipRetry)
-	}
-
-	// 更新预定状态为已支付
-	_, err := processor.store.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
-		ID:     paymentOrder.ReservationID.Int64,
-		Status: "paid",
-	})
-	if err != nil {
-		return fmt.Errorf("update reservation status: %w", err)
-	}
-
-	if _, err := processor.store.SyncReservationInventoryTx(ctx, db.SyncReservationInventoryTxParams{
-		ReservationID: paymentOrder.ReservationID.Int64,
-	}); err != nil {
-		return fmt.Errorf("sync reservation inventory: %w", err)
-	}
-
-	log.Info().
-		Int64("reservation_id", paymentOrder.ReservationID.Int64).
-		Int64("amount", paymentOrder.Amount).
-		Msg("reservation paid")
-
-	// 🔔 需发送通知（待实现）
-	log.Info().
-		Int64("reservation_id", paymentOrder.ReservationID.Int64).
-		Int64("user_id", paymentOrder.UserID).
-		Str("action", "send_reservation_notification").
-		Msg("[NOTIFICATION] reservation success - user and merchant notification pending")
-
-	return nil
-}
-
-// handleReservationAddonPaid 处理全款预订追加菜品支付成功：仅累加预付金额，状态不变
-func (processor *RedisTaskProcessor) handleReservationAddonPaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
-	if !paymentOrder.ReservationID.Valid {
-		return fmt.Errorf("reservation_id is required: %w", asynq.SkipRetry)
-	}
-
-	reservationID := paymentOrder.ReservationID.Int64
-
-	updated, err := processor.store.AddReservationPrepaidAmount(ctx, db.AddReservationPrepaidAmountParams{
-		ID:     reservationID,
-		PrepaidAmount: paymentOrder.Amount,
-	})
-	if err != nil {
-		return fmt.Errorf("add reservation prepaid amount: %w", err)
-	}
-
-	if _, err := processor.store.SyncReservationInventoryTx(ctx, db.SyncReservationInventoryTxParams{
-		ReservationID: reservationID,
-	}); err != nil {
-		return fmt.Errorf("sync reservation inventory: %w", err)
-	}
-
-	log.Info().
-		Int64("reservation_id", reservationID).
-		Int64("added_amount", paymentOrder.Amount).
-		Int64("prepaid_total", updated.PrepaidAmount).
-		Msg("reservation addon paid and prepaid amount updated")
-
-	// 🔔 需发送通知（待实现）
-	log.Info().
-		Int64("reservation_id", reservationID).
-		Int64("user_id", paymentOrder.UserID).
-		Str("action", "send_reservation_addon_notification").
-		Msg("[NOTIFICATION] reservation addon paid - notification pending")
-
-	return nil
-}
-
-// handleMembershipRechargePaid 处理会员充值支付成功
-func (processor *RedisTaskProcessor) handleMembershipRechargePaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
-	// 从attach字段解析充值参数
-	if !paymentOrder.Attach.Valid || paymentOrder.Attach.String == "" {
-		return fmt.Errorf("attach data is missing: %w", asynq.SkipRetry)
-	}
-
-	var attachData struct {
-		MembershipID   int64  `json:"membership_id"`
-		BonusAmount    int64  `json:"bonus_amount"`
-		RechargeRuleID *int64 `json:"recharge_rule_id"`
-	}
-
-	if err := json.Unmarshal([]byte(paymentOrder.Attach.String), &attachData); err != nil {
-		return fmt.Errorf("parse attach data: %w", asynq.SkipRetry)
-	}
-
-	// 执行充值事务
-	result, err := processor.store.RechargeTx(ctx, db.RechargeTxParams{
-		MembershipID:   attachData.MembershipID,
-		RechargeAmount: paymentOrder.Amount,
-		BonusAmount:    attachData.BonusAmount,
-		RechargeRuleID: attachData.RechargeRuleID,
-		Notes:          fmt.Sprintf("微信支付充值，订单号：%s", paymentOrder.OutTradeNo),
-	})
-	if err != nil {
-		return fmt.Errorf("recharge membership: %w", err)
-	}
-
-	log.Info().
-		Int64("membership_id", attachData.MembershipID).
-		Int64("recharge_amount", paymentOrder.Amount).
-		Int64("bonus_amount", attachData.BonusAmount).
-		Int64("new_balance", result.Membership.Balance).
-		Msg("membership recharged")
-
-	// 🔔 需发送通知（待实现）
-	log.Info().
-		Int64("user_id", paymentOrder.UserID).
-		Int64("membership_id", attachData.MembershipID).
-		Str("action", "send_recharge_notification").
-		Msg("[NOTIFICATION] recharge success notification pending")
-
-	return nil
-}
-
-// handleOrderPaid 处理订单支付成功
-func (processor *RedisTaskProcessor) handleOrderPaid(ctx context.Context, paymentOrder db.PaymentOrder) error {
-	if !paymentOrder.OrderID.Valid {
-		return fmt.Errorf("order_id is required: %w", asynq.SkipRetry)
-	}
-
-	// ✅ 使用事务处理：更新订单状态 + 扣减库存 + 创建配送单 + 推入配送池 (原子操作)
-	result, err := processor.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{
-		OrderID: paymentOrder.OrderID.Int64,
-	})
-	if err != nil {
-		// 如果是库存不足错误，记录详细日志
-		if strings.Contains(err.Error(), "insufficient inventory") {
-			log.Error().
-				Err(err).
-				Int64("order_id", paymentOrder.OrderID.Int64).
-				Int64("payment_order_id", paymentOrder.ID).
-				Int64("user_id", paymentOrder.UserID).
-				Str("out_trade_no", paymentOrder.OutTradeNo).
-				Msg("⚠️ order payment failed: insufficient inventory")
-
-			// 🔔 需触发退款流程（待实现）
-			log.Warn().
-				Int64("payment_order_id", paymentOrder.ID).
-				Int64("amount", paymentOrder.Amount).
-				Str("action", "trigger_auto_refund").
-				Msg("[REFUND] auto refund required due to insufficient inventory")
-
-			return fmt.Errorf("insufficient inventory, refund required: %w", err)
-		}
-		return fmt.Errorf("process order payment: %w", err)
-	}
-
-	// 如果订单关联预订，支付成功后将预订状态推进到已签到，保持堂食与预订一致
-	if result.Order.ReservationID.Valid {
-		_, err := processor.store.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
-			ID:     result.Order.ReservationID.Int64,
-			Status: "checked_in",
-		})
-		if err != nil {
-			return fmt.Errorf("update reservation status after order payment: %w", err)
-		}
-	}
-
-	// 根据订单类型记录日志
-	if result.Delivery != nil {
-		log.Info().
-			Int64("order_id", paymentOrder.OrderID.Int64).
-			Int64("delivery_id", result.Delivery.ID).
-			Int64("amount", paymentOrder.Amount).
-			Str("order_type", result.Order.OrderType).
-			Msg("order paid, delivery created and added to pool")
-	} else {
-		log.Info().
-			Int64("order_id", paymentOrder.OrderID.Int64).
-			Int64("amount", paymentOrder.Amount).
-			Str("order_type", result.Order.OrderType).
-			Msg("order paid (non-delivery order)")
-	}
-
-	// ✅ 发送实时通知
-	processor.sendOrderPaidNotifications(ctx, result)
 
 	return nil
 }

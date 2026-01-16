@@ -28,6 +28,21 @@ type wechatPaymentNotifyResponse struct {
 	Message string `json:"message"`
 }
 
+const maxWebhookBodyBytes int64 = 1 << 20 // 1MB
+
+func readWebhookBody(ctx *gin.Context) ([]byte, int, error) {
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxWebhookBodyBytes)
+	body, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, http.StatusRequestEntityTooLarge, err
+		}
+		return nil, http.StatusBadRequest, err
+	}
+	return body, 0, nil
+}
+
 // handlePaymentNotify 处理微信支付回调通知
 // POST /v1/webhooks/wechat-pay/notify
 // 设计原则：快速响应微信，耗时操作放入队列
@@ -41,10 +56,10 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	}
 
 	// 读取请求体
-	body, err := io.ReadAll(ctx.Request.Body)
+	body, status, err := readWebhookBody(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("read payment notification body")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "read body failed",
 		})
@@ -72,7 +87,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	// 解析通知
 	var notification wechat.PaymentNotification
 	if err := json.Unmarshal(body, &notification); err != nil {
-		log.Error().Err(err).Str("body", string(body)).Msg("parse payment notification")
+		log.Error().Err(err).Msg("parse payment notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "parse notification failed",
@@ -281,10 +296,10 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	}
 
 	// 读取请求体用于验签
-	body, err := io.ReadAll(ctx.Request.Body)
+	body, status, err := readWebhookBody(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("read refund notification body")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "read body failed",
 		})
@@ -413,10 +428,10 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	}
 
 	// 读取请求体用于验签
-	body, err := io.ReadAll(ctx.Request.Body)
+	body, status, err := readWebhookBody(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("read ecommerce refund notification body")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "read body failed",
 		})
@@ -548,10 +563,10 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	}
 
 	// 读取请求体用于验签
-	body, err := io.ReadAll(ctx.Request.Body)
+	body, status, err := readWebhookBody(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("read profit sharing notification body")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "read body failed",
 		})
@@ -743,10 +758,10 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 	}
 
 	// 读取请求体用于验签
-	body, err := io.ReadAll(ctx.Request.Body)
+	body, status, err := readWebhookBody(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("read combine payment notification body")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "read body failed",
 		})
@@ -956,10 +971,10 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	}
 
 	// 读取请求体
-	body, err := io.ReadAll(ctx.Request.Body)
+	body, status, err := readWebhookBody(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("read applyment notification body")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "read body failed",
 		})
@@ -987,7 +1002,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	// 解析通知
 	var notification ApplymentStateNotification
 	if err := json.Unmarshal(body, &notification); err != nil {
-		log.Error().Err(err).Str("body", string(body)).Msg("parse applyment notification")
+		log.Error().Err(err).Msg("parse applyment notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "parse notification failed",
@@ -1022,7 +1037,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	// 构造 PaymentNotification 结构以复用现有解密逻辑
 	var paymentNotification wechat.PaymentNotification
 	if err := json.Unmarshal(body, &paymentNotification); err != nil {
-		log.Error().Err(err).Str("body", string(body)).Msg("parse payment notification for decryption")
+		log.Error().Err(err).Msg("parse payment notification for decryption")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "parse notification failed",

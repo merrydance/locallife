@@ -774,7 +774,7 @@ func TestGetMerchantsWithStatsByIDs(t *testing.T) {
 		require.NotEmpty(t, r.Name)
 		require.NotEmpty(t, r.Address)
 		require.NotZero(t, r.RegionID)
-		require.Equal(t, "approved", r.Status)
+		require.Equal(t, "active", r.Status)
 		// TrustScore 默认是500
 		require.GreaterOrEqual(t, r.TrustScore, int16(0))
 		// MonthlyOrders 新商户应该是0

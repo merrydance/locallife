@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -131,7 +130,7 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 		// 验证 region 是否存在
 		_, err := server.store.GetRegion(ctx, regionID)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("region not found")))
 				return
 			}
@@ -172,22 +171,15 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 		IsDefault:     req.IsDefault,
 	}
 
-	// 如果设置为默认地址，先清除其他默认地址
-	if req.IsDefault {
-		err := server.store.SetDefaultAddress(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to clear default addresses: %w", err)))
-			return
-		}
-	}
-
-	address, err := server.store.CreateUserAddress(ctx, arg)
+	result, err := server.store.CreateUserAddressTx(ctx, db.CreateUserAddressTxParams{
+		CreateUserAddressParams: arg,
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newUserAddressResponse(address))
+	ctx.JSON(http.StatusOK, newUserAddressResponse(result.Address))
 }
 
 // getUserAddress godoc
@@ -217,7 +209,7 @@ func (server *Server) getUserAddress(ctx *gin.Context) {
 
 	address, err := server.store.GetUserAddress(ctx, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}
@@ -306,7 +298,7 @@ func (server *Server) updateUserAddress(ctx *gin.Context) {
 	// 验证地址存在且属于当前用户
 	existingAddress, err := server.store.GetUserAddress(ctx, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}
@@ -441,7 +433,7 @@ func (server *Server) setDefaultAddress(ctx *gin.Context) {
 	// 验证地址存在且属于当前用户
 	existingAddress, err := server.store.GetUserAddress(ctx, addressID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}
@@ -454,24 +446,16 @@ func (server *Server) setDefaultAddress(ctx *gin.Context) {
 		return
 	}
 
-	// 先清除所有默认地址
-	err = server.store.SetDefaultAddress(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to clear default addresses: %w", err)))
-		return
-	}
-
-	// 设置新的默认地址
-	address, err := server.store.SetAddressAsDefault(ctx, db.SetAddressAsDefaultParams{
-		ID:     addressID,
-		UserID: authPayload.UserID,
+	result, err := server.store.SetDefaultAddressTx(ctx, db.SetDefaultAddressTxParams{
+		UserID:    authPayload.UserID,
+		AddressID: addressID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newUserAddressResponse(address))
+	ctx.JSON(http.StatusOK, newUserAddressResponse(result.Address))
 }
 
 // deleteUserAddress godoc
@@ -502,7 +486,7 @@ func (server *Server) deleteUserAddress(ctx *gin.Context) {
 	// 验证地址存在且属于当前用户
 	existingAddress, err := server.store.GetUserAddress(ctx, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}

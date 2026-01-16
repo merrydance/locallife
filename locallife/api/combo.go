@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,7 +67,7 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -104,7 +103,7 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 	for _, d := range dishesWithQty {
 		dish, err := server.store.GetDish(ctx, d.DishID)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("dish %d not found", d.DishID)))
 				return
 			}
@@ -207,7 +206,7 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -218,7 +217,7 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 	// 获取套餐详情（使用优化的JSON聚合查询）
 	result, err := server.store.GetComboSetWithDetails(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -338,7 +337,7 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -429,7 +428,7 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -440,7 +439,7 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 	// 验证套餐是否属于该商户
 	existingCombo, err := server.store.GetComboSet(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -512,7 +511,7 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		for _, d := range req.Dishes {
 			dish, err := server.store.GetDish(ctx, d.DishID)
 			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
+				if isNotFoundError(err) {
 					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("dish %d not found", d.DishID)))
 					return
 				}
@@ -622,7 +621,7 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -633,7 +632,7 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -690,7 +689,7 @@ func (server *Server) deleteComboSet(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -701,7 +700,7 @@ func (server *Server) deleteComboSet(ctx *gin.Context) {
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -767,7 +766,7 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -778,7 +777,7 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, uriReq.ComboID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}
@@ -794,7 +793,7 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 	// P1修复: 验证菜品是否属于该商户
 	dish, err := server.store.GetDish(ctx, bodyReq.DishID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -854,7 +853,7 @@ func (server *Server) removeComboDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -865,7 +864,7 @@ func (server *Server) removeComboDish(ctx *gin.Context) {
 	// 验证套餐是否属于该商户
 	combo, err := server.store.GetComboSet(ctx, req.ComboID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
 			return
 		}

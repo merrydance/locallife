@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -26,6 +25,10 @@ type dailyStatRow struct {
 	Commission    int64  `json:"commission"`
 	TakeoutOrders int32  `json:"takeout_orders"`
 	DineInOrders  int32  `json:"dine_in_orders"`
+}
+
+func normalizeEndOfDay(endDate time.Time) time.Time {
+	return endDate.AddDate(0, 0, 1).Add(-time.Nanosecond)
 }
 
 // getMerchantDailyStats 获取商户日报
@@ -69,13 +72,15 @@ func (server *Server) getMerchantDailyStats(ctx *gin.Context) {
 		return
 	}
 
+	endDate = normalizeEndOfDay(endDate)
+
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -166,13 +171,15 @@ func (server *Server) getMerchantOverview(ctx *gin.Context) {
 		return
 	}
 
+	endDate = normalizeEndOfDay(endDate)
+
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -263,13 +270,15 @@ func (server *Server) getTopSellingDishes(ctx *gin.Context) {
 		return
 	}
 
+	endDate = normalizeEndOfDay(endDate)
+
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -366,7 +375,7 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -480,7 +489,7 @@ func (server *Server) getCustomerDetail(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -494,7 +503,7 @@ func (server *Server) getCustomerDetail(ctx *gin.Context) {
 		UserID:     req.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("customer not found")))
 			return
 		}
@@ -589,7 +598,7 @@ func (server *Server) getMerchantHourlyStats(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -615,6 +624,8 @@ func (server *Server) getMerchantHourlyStats(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	endDate = normalizeEndOfDay(endDate)
 
 	stats, err := server.store.GetMerchantHourlyStats(ctx, db.GetMerchantHourlyStatsParams{
 		MerchantID:  merchant.ID,
@@ -674,7 +685,7 @@ func (server *Server) getMerchantOrderSourceStats(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -700,6 +711,8 @@ func (server *Server) getMerchantOrderSourceStats(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	endDate = normalizeEndOfDay(endDate)
 
 	stats, err := server.store.GetMerchantOrderSourceStats(ctx, db.GetMerchantOrderSourceStatsParams{
 		MerchantID:  merchant.ID,
@@ -760,7 +773,7 @@ func (server *Server) getMerchantRepurchaseRate(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -786,6 +799,8 @@ func (server *Server) getMerchantRepurchaseRate(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	endDate = normalizeEndOfDay(endDate)
 
 	stats, err := server.store.GetMerchantRepurchaseRate(ctx, db.GetMerchantRepurchaseRateParams{
 		MerchantID:  merchant.ID,
@@ -842,7 +857,7 @@ func (server *Server) getMerchantDishCategoryStats(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -869,6 +884,8 @@ func (server *Server) getMerchantDishCategoryStats(ctx *gin.Context) {
 		return
 	}
 
+	endDate = normalizeEndOfDay(endDate)
+
 	stats, err := server.store.GetDishCategoryStats(ctx, db.GetDishCategoryStatsParams{
 		MerchantID: merchant.ID,
 		StartDate:  startDate,
@@ -883,7 +900,7 @@ func (server *Server) getMerchantDishCategoryStats(ctx *gin.Context) {
 	for i, stat := range stats {
 		result[i] = dishCategoryStatsRow{
 			CategoryName:  stat.CategoryName,
-			OrderCount:    stat.DishCount,
+			OrderCount:    stat.OrderCount,
 			TotalSales:    stat.TotalRevenue,
 			TotalQuantity: stat.TotalQuantity,
 		}

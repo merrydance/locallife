@@ -242,7 +242,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			},
 		},
 		{
-			name: "NotDraft_AutoReset",
+			name: "NotEditable_Submitted",
 			body: updateMerchantBasicInfoRequest{
 				MerchantName: "新店名",
 			},
@@ -256,27 +256,9 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
-
-				// 应该自动重置为草稿
-				resetApp := app
-				resetApp.Status = "draft"
-				store.EXPECT().
-					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
-						ApplicationID: app.ID,
-						UserID:        user.ID,
-					}).
-					Times(1).
-					Return(db.ResetMerchantApplicationTxResult{
-						Application: resetApp,
-					}, nil)
-
-				store.EXPECT().
-					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(resetApp, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 	}

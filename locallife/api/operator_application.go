@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -192,7 +191,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已是运营商，无需重复申请")))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -207,7 +206,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 验证区域存在
 	region, err := server.store.GetRegion(ctx, req.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("指定的区域不存在")))
 			return
 		}
@@ -221,7 +220,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请选择其他区域")))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -334,7 +333,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 验证新区域存在
 	region, err := server.store.GetRegion(ctx, req.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("指定的区域不存在")))
 			return
 		}
@@ -348,7 +347,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请选择其他区域")))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -769,7 +768,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请修改申请区域")))
 		return
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

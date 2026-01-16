@@ -812,15 +812,20 @@ func TestUpdateOperatorApplicationRegionAPI(t *testing.T) {
 
 // 添加区域可用性检查测试
 func TestListAvailableRegionsForOperatorAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	testCases := []struct {
 		name          string
 		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name:  "OK",
 			query: "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
 			buildStubs: func(store *mockdb.MockStore) {
 				region := randomRegion()
 				store.EXPECT().
@@ -841,6 +846,9 @@ func TestListAvailableRegionsForOperatorAPI(t *testing.T) {
 		{
 			name:  "BadRequest_MissingPageID",
 			query: "?page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
 			buildStubs: func(store *mockdb.MockStore) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -866,6 +874,7 @@ func TestListAvailableRegionsForOperatorAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(recorder)
 		})

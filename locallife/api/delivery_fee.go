@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -30,7 +29,7 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 		var err error
 		operator, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if isNotFoundError(err) {
 				return nil, errors.New("operator record not found")
 			}
 			return nil, err
@@ -72,7 +71,7 @@ func (server *Server) getOperatorRegionID(ctx *gin.Context) (int64, error) {
 		Role:   "operator",
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			return 0, errors.New("operator role not found")
 		}
 		return 0, err
@@ -231,7 +230,7 @@ func (server *Server) getDeliveryFeeConfig(ctx *gin.Context) {
 
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, uri.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery fee config not found")))
 			return
 		}
@@ -290,7 +289,7 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	// 获取现有配置
 	existingConfig, err := server.store.GetDeliveryFeeConfigByRegion(ctx, uri.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery fee config not found")))
 			return
 		}
@@ -531,7 +530,7 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 	// 先获取配置以验证区域权限
 	config, err := server.store.GetPeakHourConfig(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("peak hour config not found")))
 			return
 		}
@@ -774,7 +773,7 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 	// 先获取促销活动，验证归属
 	promo, err := server.store.GetDeliveryPromotion(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery promotion not found")))
 			return
 		}
@@ -851,7 +850,7 @@ func (server *Server) calculateDeliveryFee(ctx *gin.Context) {
 	// API 层严格检查：配置必须存在且激活
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, req.RegionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryFeeConfigNotFound))
 			return
 		}
@@ -911,7 +910,7 @@ func (server *Server) calculateDeliveryFeeInternal(ctx *gin.Context, regionID, m
 	// 获取基础运费配置
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, regionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 没有配置，返回默认运费（内部调用降级处理）
 			return &DeliveryFeeResult{
 				BaseFee:             DefaultBaseFee,

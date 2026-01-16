@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -79,7 +78,7 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -166,7 +165,7 @@ func (server *Server) listDailyInventory(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -247,7 +246,7 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -262,7 +261,7 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 		Date:       pgtype.Date{Time: date, Valid: true},
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("inventory not found")))
 			return
 		}
@@ -360,7 +359,7 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -377,7 +376,7 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 没有库存记录或库存不足
 			existing, getErr := server.store.GetDailyInventory(ctx, db.GetDailyInventoryParams{
 				MerchantID: merchant.ID,
@@ -385,11 +384,11 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 				Date:       pgtype.Date{Time: date, Valid: true},
 			})
 			if getErr != nil {
-				if errors.Is(getErr, sql.ErrNoRows) {
+				if isNotFoundError(getErr) {
 					ctx.JSON(http.StatusOK, checkInventoryResponse{
-						Available:    true,
-						CurrentStock: -1,
-						Message:      "unlimited inventory",
+						Available:    false,
+						CurrentStock: 0,
+						Message:      "inventory not found",
 					})
 					return
 				}
@@ -454,7 +453,7 @@ func (server *Server) getInventoryStats(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -467,7 +466,7 @@ func (server *Server) getInventoryStats(ctx *gin.Context) {
 		Date:       pgtype.Date{Time: date, Valid: true},
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusOK, inventoryStatsResponse{})
 			return
 		}
@@ -534,7 +533,7 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -549,7 +548,7 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 		Date:       pgtype.Date{Time: date, Valid: true},
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("inventory not found for this dish")))
 			return
 		}

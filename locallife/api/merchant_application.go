@@ -138,9 +138,11 @@ func checkApplicationEditable(status string) (editable bool, needReset bool, err
 	switch status {
 	case "draft":
 		return true, false, ""
-	case "submitted", "rejected", "approved":
-		// 待审核、被拒绝或已通过的申请都可以编辑，但需要重置为草稿状态
+	case "rejected":
+		// 被拒绝的申请允许编辑，但需要重置为草稿状态
 		return true, true, ""
+	case "submitted", "approved":
+		return false, false, "申请已提交审核，当前不可编辑"
 	default:
 		return false, false, "申请状态异常"
 	}
@@ -343,7 +345,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 	if requestID == "" {
 		requestID = ctx.GetHeader("X-Request-ID")
 	}
-	log.Info().Str("request_id", requestID).Interface("req_payload", req).Msg("update merchant basic info received")
+	log.Info().Str("request_id", requestID).Msg("update merchant basic info received")
 
 	// 获取申请
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)

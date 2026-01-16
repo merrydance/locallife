@@ -281,10 +281,11 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	// 构建响应
 	response := scanTableResponse{
 		Merchant: scanTableMerchantInfo{
-			ID:     merchant.ID,
-			Name:   merchant.Name,
-			Phone:  merchant.Phone,
-			Status: merchant.Status,
+			ID:      merchant.ID,
+			Name:    merchant.Name,
+			Phone:   merchant.Phone,
+			Address: merchant.Address,
+			Status:  merchant.Status,
 		},
 		Table: scanTableTableInfo{
 			ID:        table.ID,

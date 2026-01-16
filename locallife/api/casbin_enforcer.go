@@ -198,8 +198,10 @@ func GetGlobalCasbinEnforcer() *CasbinEnforcer {
 func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if globalCasbinEnforcer == nil {
-			log.Warn().Msg("Casbin enforcer not initialized, skipping permission check")
-			ctx.Next()
+			log.Error().Msg("Casbin enforcer not initialized, denying request")
+			ctx.AbortWithStatusJSON(http.StatusServiceUnavailable, errorResponse(
+				errors.New("permission system unavailable"),
+			))
 			return
 		}
 
@@ -274,8 +276,10 @@ func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 func (server *Server) CasbinRoleMiddleware(requiredRole string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if globalCasbinEnforcer == nil {
-			log.Warn().Msg("Casbin enforcer not initialized, skipping permission check")
-			ctx.Next()
+			log.Error().Msg("Casbin enforcer not initialized, denying request")
+			ctx.AbortWithStatusJSON(http.StatusServiceUnavailable, errorResponse(
+				errors.New("permission system unavailable"),
+			))
 			return
 		}
 

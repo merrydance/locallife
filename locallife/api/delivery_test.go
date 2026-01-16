@@ -233,7 +233,7 @@ func TestGrabOrderAPI(t *testing.T) {
 					Times(1).
 					Return(db.GrabOrderTxResult{Delivery: delivery}, nil)
 
-				// Mock for notification - GetOrder and GetMerchant (second call)
+				// Mock for notification - GetOrder
 				order := db.Order{
 					ID:         orderID,
 					UserID:     util.RandomInt(1, 1000),
@@ -246,9 +246,19 @@ func TestGrabOrderAPI(t *testing.T) {
 					Return(order, nil)
 
 				store.EXPECT().
-					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
+					UpdateOrderToCourierAccepted(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(merchant, nil)
+					Return(db.Order{}, nil)
+
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
+
+				store.EXPECT().
+					UpdateDeliveryEstimatedTime(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.Delivery{}, nil)
 
 				// Mock for final GetDelivery to return updated delivery
 				store.EXPECT().
@@ -373,11 +383,6 @@ func TestConfirmPickupAPI(t *testing.T) {
 					Times(1).
 					Return(delivery, nil)
 
-				store.EXPECT().
-					UpdateDeliveryToPicked(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(delivery, nil)
-
 				// Mock for notification
 				order := db.Order{
 					ID:         orderID,
@@ -389,6 +394,16 @@ func TestConfirmPickupAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(order, nil)
+
+				store.EXPECT().
+					UpdateDeliveryToPickedTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateDeliveryToPickedTxResult{Delivery: delivery}, nil)
+
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -843,9 +858,9 @@ func TestStartPickupAPI(t *testing.T) {
 				pickingDelivery := delivery
 				pickingDelivery.Status = "picking"
 				store.EXPECT().
-					UpdateDeliveryToPickup(gomock.Any(), gomock.Any()).
+					UpdateDeliveryToPickupTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(pickingDelivery, nil)
+					Return(db.UpdateDeliveryToPickupTxResult{Delivery: pickingDelivery}, nil)
 
 				order := db.Order{
 					ID:         orderID,
@@ -1009,11 +1024,6 @@ func TestStartDeliveryAPI(t *testing.T) {
 
 				deliveringDelivery := delivery
 				deliveringDelivery.Status = "delivering"
-				store.EXPECT().
-					UpdateDeliveryToDelivering(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(deliveringDelivery, nil)
-
 				order := db.Order{
 					ID:         orderID,
 					UserID:     util.RandomInt(1, 1000),
@@ -1024,6 +1034,16 @@ func TestStartDeliveryAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(order, nil)
+
+				store.EXPECT().
+					UpdateDeliveryToDeliveringTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateDeliveryToDeliveringTxResult{Delivery: deliveringDelivery}, nil)
+
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1153,6 +1173,11 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(order, nil)
+
+				store.EXPECT().
+					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.OrderStatusLog{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

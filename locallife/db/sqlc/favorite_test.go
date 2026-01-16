@@ -59,12 +59,15 @@ func TestAddFavoriteMerchant_Duplicate(t *testing.T) {
 	// 第一次收藏
 	_ = addFavoriteMerchantHelper(t, user.ID, merchant.ID)
 
-	// 重复收藏 (ON CONFLICT DO NOTHING, 不应返回数据)
-	_, err := testStore.AddFavoriteMerchant(context.Background(), AddFavoriteMerchantParams{
+	// 重复收藏 (ON CONFLICT DO UPDATE, 返回已有记录)
+	favorite, err := testStore.AddFavoriteMerchant(context.Background(), AddFavoriteMerchantParams{
 		UserID:     user.ID,
 		MerchantID: pgtype.Int8{Int64: merchant.ID, Valid: true},
 	})
-	require.Error(t, err) // DO NOTHING 会导致 no rows in result set
+	require.NoError(t, err)
+	require.Equal(t, user.ID, favorite.UserID)
+	require.True(t, favorite.MerchantID.Valid)
+	require.Equal(t, merchant.ID, favorite.MerchantID.Int64)
 }
 
 func TestAddFavoriteMerchant_MultipleMerchants(t *testing.T) {
@@ -111,12 +114,15 @@ func TestAddFavoriteDish_Duplicate(t *testing.T) {
 	// 第一次收藏
 	_ = addFavoriteDishHelper(t, user.ID, dish.ID)
 
-	// 重复收藏
-	_, err := testStore.AddFavoriteDish(context.Background(), AddFavoriteDishParams{
+	// 重复收藏 (ON CONFLICT DO UPDATE, 返回已有记录)
+	favorite, err := testStore.AddFavoriteDish(context.Background(), AddFavoriteDishParams{
 		UserID: user.ID,
 		DishID: pgtype.Int8{Int64: dish.ID, Valid: true},
 	})
-	require.Error(t, err) // DO NOTHING 会导致 no rows in result set
+	require.NoError(t, err)
+	require.Equal(t, user.ID, favorite.UserID)
+	require.True(t, favorite.DishID.Valid)
+	require.Equal(t, dish.ID, favorite.DishID.Int64)
 }
 
 func TestAddFavoriteDish_MultipleDishes(t *testing.T) {

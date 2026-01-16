@@ -194,247 +194,268 @@ type ProcessOrderPaymentTxResult struct {
 func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrderPaymentTxParams) (ProcessOrderPaymentTxResult, error) {
 	var result ProcessOrderPaymentTxResult
 
-	err := store.execTx(ctx, func(q *Queries) error {
+ 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
-
-		// 1. Get order with items
-		result.Order, err = q.GetOrder(ctx, arg.OrderID)
+		result, err = processOrderPaymentWithQueries(ctx, q, arg.OrderID)
 		if err != nil {
-			return fmt.Errorf("get order: %w", err)
+			return err
 		}
-
-		// 2. Get order items
-		orderItems, err := q.ListOrderItemsByOrder(ctx, result.Order.ID)
-		if err != nil {
-			return fmt.Errorf("list order items: %w", err)
-		}
-
-		// ✅ P2-4: 按dish_id排序，确保所有事务按相同顺序加锁，避免死锁
-		sort.Slice(orderItems, func(i, j int) bool {
-			if !orderItems[i].DishID.Valid {
-				return false
-			}
-			if !orderItems[j].DishID.Valid {
-				return true
-			}
-			return orderItems[i].DishID.Int64 < orderItems[j].DishID.Int64
-		})
-
-		// 3. Decrement inventory for each dish (with FOR UPDATE lock)
-		inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
-		if result.Order.OrderType == OrderTypeReservation && result.Order.ReservationID.Valid {
-			reservation, err := q.GetTableReservation(ctx, result.Order.ReservationID.Int64)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("get reservation for inventory date: %w", err)
-			}
-			if reservation.ReservationDate.Valid {
-				inventoryDate = reservation.ReservationDate
-			}
-		}
-
-		for _, item := range orderItems {
-			// Skip if it's a combo (combos don't have direct inventory)
-			if !item.DishID.Valid {
-				continue
-			}
-
-			// 🔒 Lock the inventory row (FOR UPDATE)
-			inventory, err := q.GetDailyInventoryForUpdate(ctx, GetDailyInventoryForUpdateParams{
-				MerchantID: result.Order.MerchantID,
-				DishID:     item.DishID.Int64,
-				Date:       inventoryDate,
-			})
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					// No inventory configured means unlimited stock
-					continue
-				}
-				return fmt.Errorf("get inventory for dish %d: %w", item.DishID.Int64, err)
-			}
-
-
-			// ✅ Check if there's enough stock
-			if inventory.TotalQuantity != -1 { // -1 means unlimited
-				available := inventory.TotalQuantity - inventory.SoldQuantity - inventory.ReservedQuantity
-				if available < int32(item.Quantity) {
-					return fmt.Errorf("insufficient inventory for dish %d: need %d, have %d",
-						item.DishID.Int64, item.Quantity, available)
-				}
-			}
-
-			// 预订订单：先释放预留库存
-			if result.Order.OrderType == OrderTypeReservation {
-				if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
-					MerchantID:       result.Order.MerchantID,
-					DishID:           item.DishID.Int64,
-					Date:             inventoryDate,
-					ReservedQuantity: int32(item.Quantity),
-				}); err != nil {
-					return fmt.Errorf("release reserved inventory for dish %d: %w", item.DishID.Int64, err)
-				}
-			}
-
-			// ✅ Decrement inventory (already holding FOR UPDATE lock)
-			_, err = q.CheckAndDecrementInventory(ctx, CheckAndDecrementInventoryParams{
-				MerchantID:   result.Order.MerchantID,
-				DishID:       item.DishID.Int64,
-				Date:         inventoryDate,
-				SoldQuantity: int32(item.Quantity),
-			})
-			if err != nil {
-				return fmt.Errorf("decrement inventory for dish %d: %w", item.DishID.Int64, err)
-			}
-		}
-
-		// 4. Update order status to paid并推进履约状态
-		newFulfillment := result.Order.FulfillmentStatus
-		if result.Order.OrderType != OrderTypeReservation {
-			newFulfillment = FulfillmentStatusPendingKitchen
-		}
-
-		result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
-			ID:                result.Order.ID,
-			Status:            OrderStatusPaid,
-			FulfillmentStatus: pgtype.Text{String: newFulfillment, Valid: true},
-		})
-		if err != nil {
-			return fmt.Errorf("update order status: %w", err)
-		}
-
-		// 5. 🚀 如果是外卖订单(takeout)，创建配送单并推入配送池
-		if result.Order.OrderType == "takeout" {
-			// 获取商户信息（取餐地址）
-			merchant, err := q.GetMerchant(ctx, result.Order.MerchantID)
-			if err != nil {
-				return fmt.Errorf("get merchant: %w", err)
-			}
-
-			// 获取收货地址
-			if !result.Order.AddressID.Valid {
-				return fmt.Errorf("takeout order missing delivery address")
-			}
-			userAddress, err := q.GetUserAddress(ctx, result.Order.AddressID.Int64)
-			if err != nil {
-				return fmt.Errorf("get user address: %w", err)
-			}
-
-			// ========== 计算预估出餐时间 ==========
-			// 策略：取订单中各菜品制作时间的最大值
-			// 如果没有菜品制作时间数据，则使用商户平均出餐时间
-			// 如果商户也没有历史数据，使用默认值20分钟
-			const (
-				defaultPrepareTimeMinutes = 20    // 默认出餐时间（分钟）
-				avgPrepareTimeCalcDays    = 7     // 计算平均出餐时间的天数范围
-				riderSpeedMetersPerHour   = 15000 // 骑手平均速度：15km/h = 15000m/h
-			)
-
-			now := time.Now()
-			var maxPrepareTime int16 = 0
-
-			// 遍历订单菜品，获取最长制作时间
-			for _, item := range orderItems {
-				if item.DishID.Valid {
-					dish, err := q.GetDish(ctx, item.DishID.Int64)
-					if err == nil && dish.PrepareTime > maxPrepareTime {
-						maxPrepareTime = dish.PrepareTime
-					}
-				}
-			}
-
-			// 如果没有找到菜品制作时间，尝试获取商户平均出餐时间
-			if maxPrepareTime == 0 {
-				calcStartTime := now.AddDate(0, 0, -avgPrepareTimeCalcDays)
-				avgTime, err := q.GetMerchantAvgPrepareTime(ctx, GetMerchantAvgPrepareTimeParams{
-					MerchantID: merchant.ID,
-					CreatedAt:  calcStartTime,
-				})
-				if err == nil && avgTime > 0 {
-					maxPrepareTime = int16(avgTime)
-				}
-			}
-
-			// 如果仍然没有数据，使用默认值
-			if maxPrepareTime == 0 {
-				maxPrepareTime = defaultPrepareTimeMinutes
-			}
-
-			// 预计出餐时间 = 当前时间 + 最大菜品制作时间
-			estimatedPickupAt := now.Add(time.Duration(maxPrepareTime) * time.Minute)
-
-			// ========== 计算预估送达时间 ==========
-			// 配送时间 = 出餐时间 + 配送距离/骑手速度
-			// 注意：这里只计算商户到顾客的距离，暂不考虑骑手到商户的距离（因为接单骑手未知）
-			deliveryDistance := int32(0)
-			if result.Order.DeliveryDistance.Valid {
-				deliveryDistance = result.Order.DeliveryDistance.Int32
-			}
-
-			// 配送时间（分钟）= 距离(米) / 速度(米/小时) * 60
-			deliveryTimeMinutes := float64(deliveryDistance) / float64(riderSpeedMetersPerHour) * 60
-			// 最少5分钟配送时间
-			if deliveryTimeMinutes < 5 {
-				deliveryTimeMinutes = 5
-			}
-
-			// 预计送达时间 = 预计出餐时间 + 配送时间
-			estimatedDeliveryAt := estimatedPickupAt.Add(time.Duration(deliveryTimeMinutes) * time.Minute)
-
-			// 创建配送单
-			delivery, err := q.CreateDelivery(ctx, CreateDeliveryParams{
-				OrderID:             result.Order.ID,
-				PickupAddress:       merchant.Address,
-				PickupLongitude:     merchant.Longitude,
-				PickupLatitude:      merchant.Latitude,
-				PickupContact:       pgtype.Text{String: merchant.Name, Valid: true},
-				PickupPhone:         pgtype.Text{String: merchant.Phone, Valid: true},
-				DeliveryAddress:     userAddress.DetailAddress,
-				DeliveryLongitude:   userAddress.Longitude,
-				DeliveryLatitude:    userAddress.Latitude,
-				DeliveryContact:     pgtype.Text{String: userAddress.ContactName, Valid: true},
-				DeliveryPhone:       pgtype.Text{String: userAddress.ContactPhone, Valid: true},
-				Distance:            deliveryDistance,
-				DeliveryFee:         result.Order.DeliveryFee,
-				EstimatedPickupAt:   pgtype.Timestamptz{Time: estimatedPickupAt, Valid: true},
-				EstimatedDeliveryAt: pgtype.Timestamptz{Time: estimatedDeliveryAt, Valid: true},
-			})
-			if err != nil {
-				return fmt.Errorf("create delivery: %w", err)
-			}
-			result.Delivery = &delivery
-
-			// 推入配送池
-			// 优先级根据运费金额设置：运费越高优先级越高，骑手更愿意接
-			priority := int32(1)
-			if result.Order.DeliveryFee >= 1000 { // 运费>=10元，提高优先级
-				priority = 2
-			}
-			if result.Order.DeliveryFee >= 2000 { // 运费>=20元，高优先级
-				priority = 3
-			}
-
-			// expires_at 字段不再用于过滤，设置一个很远的未来时间
-			// 外卖订单会一直在配送池中可见，直到被骑手接单或订单取消
-			poolItem, err := q.AddToDeliveryPool(ctx, AddToDeliveryPoolParams{
-				OrderID:           result.Order.ID,
-				MerchantID:        merchant.ID,
-				PickupLongitude:   merchant.Longitude,
-				PickupLatitude:    merchant.Latitude,
-				DeliveryLongitude: userAddress.Longitude,
-				DeliveryLatitude:  userAddress.Latitude,
-				Distance:          deliveryDistance,
-				DeliveryFee:       result.Order.DeliveryFee,
-				ExpectedPickupAt:  estimatedPickupAt,
-				ExpiresAt:         now.Add(365 * 24 * time.Hour), // 设置一年后，实际不再用于过滤
-				Priority:          priority,
-			})
-			if err != nil {
-				return fmt.Errorf("add to delivery pool: %w", err)
-			}
-			result.PoolItem = &poolItem
-		}
-
 		return nil
 	})
 
 	return result, err
+}
+
+func processOrderPaymentWithQueries(ctx context.Context, q *Queries, orderID int64) (ProcessOrderPaymentTxResult, error) {
+	var result ProcessOrderPaymentTxResult
+
+	// 1. Get order with lock for idempotency
+	order, err := q.GetOrderForUpdate(ctx, orderID)
+	if err != nil {
+		return result, fmt.Errorf("get order: %w", err)
+	}
+	result.Order = order
+
+	if order.Status == OrderStatusPaid {
+		if order.OrderType == "takeout" {
+			if delivery, err := q.GetDeliveryByOrderID(ctx, order.ID); err == nil {
+				result.Delivery = &delivery
+			}
+			if poolItem, err := q.GetDeliveryPoolByOrderID(ctx, order.ID); err == nil {
+				result.PoolItem = &poolItem
+			}
+		}
+		return result, nil
+	}
+
+	// 2. Get order items
+	orderItems, err := q.ListOrderItemsByOrder(ctx, order.ID)
+	if err != nil {
+		return result, fmt.Errorf("list order items: %w", err)
+	}
+
+	// ✅ P2-4: 按dish_id排序，确保所有事务按相同顺序加锁，避免死锁
+	sort.Slice(orderItems, func(i, j int) bool {
+		if !orderItems[i].DishID.Valid {
+			return false
+		}
+		if !orderItems[j].DishID.Valid {
+			return true
+		}
+		return orderItems[i].DishID.Int64 < orderItems[j].DishID.Int64
+	})
+
+	// 3. Decrement inventory for each dish (with FOR UPDATE lock)
+	inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
+	if order.OrderType == OrderTypeReservation && order.ReservationID.Valid {
+		reservation, err := q.GetTableReservation(ctx, order.ReservationID.Int64)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return result, fmt.Errorf("get reservation for inventory date: %w", err)
+		}
+		if reservation.ReservationDate.Valid {
+			inventoryDate = reservation.ReservationDate
+		}
+	}
+
+	for _, item := range orderItems {
+		// Skip if it's a combo (combos don't have direct inventory)
+		if !item.DishID.Valid {
+			continue
+		}
+
+		// 🔒 Lock the inventory row (FOR UPDATE)
+		inventory, err := q.GetDailyInventoryForUpdate(ctx, GetDailyInventoryForUpdateParams{
+			MerchantID: order.MerchantID,
+			DishID:     item.DishID.Int64,
+			Date:       inventoryDate,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// No inventory configured means unlimited stock
+				continue
+			}
+			return result, fmt.Errorf("get inventory for dish %d: %w", item.DishID.Int64, err)
+		}
+
+		// ✅ Check if there's enough stock
+		if inventory.TotalQuantity != -1 { // -1 means unlimited
+			available := inventory.TotalQuantity - inventory.SoldQuantity - inventory.ReservedQuantity
+			if available < int32(item.Quantity) {
+				return result, fmt.Errorf("insufficient inventory for dish %d: need %d, have %d",
+					item.DishID.Int64, item.Quantity, available)
+			}
+		}
+
+		// 预订订单：先释放预留库存
+		if order.OrderType == OrderTypeReservation {
+			if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+				MerchantID:       order.MerchantID,
+				DishID:           item.DishID.Int64,
+				Date:             inventoryDate,
+				ReservedQuantity: int32(item.Quantity),
+			}); err != nil {
+				return result, fmt.Errorf("release reserved inventory for dish %d: %w", item.DishID.Int64, err)
+			}
+		}
+
+		// ✅ Decrement inventory (already holding FOR UPDATE lock)
+		_, err = q.CheckAndDecrementInventory(ctx, CheckAndDecrementInventoryParams{
+			MerchantID:   order.MerchantID,
+			DishID:       item.DishID.Int64,
+			Date:         inventoryDate,
+			SoldQuantity: int32(item.Quantity),
+		})
+		if err != nil {
+			return result, fmt.Errorf("decrement inventory for dish %d: %w", item.DishID.Int64, err)
+		}
+	}
+
+	// 4. Update order status to paid并推进履约状态
+	newFulfillment := order.FulfillmentStatus
+	if order.OrderType != OrderTypeReservation {
+		newFulfillment = FulfillmentStatusPendingKitchen
+	}
+
+	result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
+		ID:                order.ID,
+		Status:            OrderStatusPaid,
+		FulfillmentStatus: pgtype.Text{String: newFulfillment, Valid: true},
+	})
+	if err != nil {
+		return result, fmt.Errorf("update order status: %w", err)
+	}
+
+	// 5. 🚀 如果是外卖订单(takeout)，创建配送单并推入配送池
+	if result.Order.OrderType == "takeout" {
+		// 获取商户信息（取餐地址）
+		merchant, err := q.GetMerchant(ctx, result.Order.MerchantID)
+		if err != nil {
+			return result, fmt.Errorf("get merchant: %w", err)
+		}
+
+		// 获取收货地址
+		if !result.Order.AddressID.Valid {
+			return result, fmt.Errorf("takeout order missing delivery address")
+		}
+		userAddress, err := q.GetUserAddress(ctx, result.Order.AddressID.Int64)
+		if err != nil {
+			return result, fmt.Errorf("get user address: %w", err)
+		}
+
+		// ========== 计算预估出餐时间 ==========
+		// 策略：取订单中各菜品制作时间的最大值
+		// 如果没有菜品制作时间数据，则使用商户平均出餐时间
+		// 如果商户也没有历史数据，使用默认值20分钟
+		const (
+			defaultPrepareTimeMinutes = 20    // 默认出餐时间（分钟）
+			avgPrepareTimeCalcDays    = 7     // 计算平均出餐时间的天数范围
+			riderSpeedMetersPerHour   = 15000 // 骑手平均速度：15km/h = 15000m/h
+		)
+
+		now := time.Now()
+		var maxPrepareTime int16 = 0
+
+		// 遍历订单菜品，获取最长制作时间
+		for _, item := range orderItems {
+			if item.DishID.Valid {
+				dish, err := q.GetDish(ctx, item.DishID.Int64)
+				if err == nil && dish.PrepareTime > maxPrepareTime {
+					maxPrepareTime = dish.PrepareTime
+				}
+			}
+		}
+
+		// 如果没有找到菜品制作时间，尝试获取商户平均出餐时间
+		if maxPrepareTime == 0 {
+			calcStartTime := now.AddDate(0, 0, -avgPrepareTimeCalcDays)
+			avgTime, err := q.GetMerchantAvgPrepareTime(ctx, GetMerchantAvgPrepareTimeParams{
+				MerchantID: merchant.ID,
+				CreatedAt:  calcStartTime,
+			})
+			if err == nil && avgTime > 0 {
+				maxPrepareTime = int16(avgTime)
+			}
+		}
+
+		// 如果仍然没有数据，使用默认值
+		if maxPrepareTime == 0 {
+			maxPrepareTime = defaultPrepareTimeMinutes
+		}
+
+		// 预计出餐时间 = 当前时间 + 最大菜品制作时间
+		estimatedPickupAt := now.Add(time.Duration(maxPrepareTime) * time.Minute)
+
+		// ========== 计算预估送达时间 ==========
+		// 配送时间 = 出餐时间 + 配送距离/骑手速度
+		// 注意：这里只计算商户到顾客的距离，暂不考虑骑手到商户的距离（因为接单骑手未知）
+		deliveryDistance := int32(0)
+		if result.Order.DeliveryDistance.Valid {
+			deliveryDistance = result.Order.DeliveryDistance.Int32
+		}
+
+		// 配送时间（分钟）= 距离(米) / 速度(米/小时) * 60
+		deliveryTimeMinutes := float64(deliveryDistance) / float64(riderSpeedMetersPerHour) * 60
+		// 最少5分钟配送时间
+		if deliveryTimeMinutes < 5 {
+			deliveryTimeMinutes = 5
+		}
+
+		// 预计送达时间 = 预计出餐时间 + 配送时间
+		estimatedDeliveryAt := estimatedPickupAt.Add(time.Duration(deliveryTimeMinutes) * time.Minute)
+
+		// 创建配送单
+		delivery, err := q.CreateDelivery(ctx, CreateDeliveryParams{
+			OrderID:             result.Order.ID,
+			PickupAddress:       merchant.Address,
+			PickupLongitude:     merchant.Longitude,
+			PickupLatitude:      merchant.Latitude,
+			PickupContact:       pgtype.Text{String: merchant.Name, Valid: true},
+			PickupPhone:         pgtype.Text{String: merchant.Phone, Valid: true},
+			DeliveryAddress:     userAddress.DetailAddress,
+			DeliveryLongitude:   userAddress.Longitude,
+			DeliveryLatitude:    userAddress.Latitude,
+			DeliveryContact:     pgtype.Text{String: userAddress.ContactName, Valid: true},
+			DeliveryPhone:       pgtype.Text{String: userAddress.ContactPhone, Valid: true},
+			Distance:            deliveryDistance,
+			DeliveryFee:         result.Order.DeliveryFee,
+			EstimatedPickupAt:   pgtype.Timestamptz{Time: estimatedPickupAt, Valid: true},
+			EstimatedDeliveryAt: pgtype.Timestamptz{Time: estimatedDeliveryAt, Valid: true},
+		})
+		if err != nil {
+			return result, fmt.Errorf("create delivery: %w", err)
+		}
+		result.Delivery = &delivery
+
+		// 推入配送池
+		// 优先级根据运费金额设置：运费越高优先级越高，骑手更愿意接
+		priority := int32(1)
+		if result.Order.DeliveryFee >= 1000 { // 运费>=10元，提高优先级
+			priority = 2
+		}
+		if result.Order.DeliveryFee >= 2000 { // 运费>=20元，高优先级
+			priority = 3
+		}
+
+		// expires_at 字段不再用于过滤，设置一个很远的未来时间
+		// 外卖订单会一直在配送池中可见，直到被骑手接单或订单取消
+		poolItem, err := q.AddToDeliveryPool(ctx, AddToDeliveryPoolParams{
+			OrderID:           result.Order.ID,
+			MerchantID:        merchant.ID,
+			PickupLongitude:   merchant.Longitude,
+			PickupLatitude:    merchant.Latitude,
+			DeliveryLongitude: userAddress.Longitude,
+			DeliveryLatitude:  userAddress.Latitude,
+			Distance:          deliveryDistance,
+			DeliveryFee:       result.Order.DeliveryFee,
+			ExpectedPickupAt:  estimatedPickupAt,
+			ExpiresAt:         now.Add(365 * 24 * time.Hour), // 设置一年后，实际不再用于过滤
+			Priority:          priority,
+		})
+		if err != nil {
+			return result, fmt.Errorf("add to delivery pool: %w", err)
+		}
+		result.PoolItem = &poolItem
+	}
+
+	return result, nil
 }

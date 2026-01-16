@@ -154,6 +154,43 @@ func (server *Server) joinBillingGroup(ctx *gin.Context) {
 		return
 	}
 
+	session, err := server.store.GetDiningSession(ctx, billingGroup.DiningSessionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if session.Status != "open" {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session is not open")))
+		return
+	}
+
+	if session.UserID != authPayload.UserID {
+		defaultGroup, err := server.store.GetDefaultBillingGroupBySession(ctx, session.ID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
+			BillingGroupID: defaultGroup.ID,
+			UserID:         authPayload.UserID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+
 	if _, err := server.store.CreateBillingGroupMember(ctx, db.CreateBillingGroupMemberParams{
 		BillingGroupID: billingGroup.ID,
 		UserID:         authPayload.UserID,
@@ -182,6 +219,41 @@ func (server *Server) listBillingGroups(ctx *gin.Context) {
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	session, err := server.store.GetDiningSession(ctx, req.DiningSessionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if session.UserID != authPayload.UserID {
+		defaultGroup, err := server.store.GetDefaultBillingGroupBySession(ctx, session.ID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
+			BillingGroupID: defaultGroup.ID,
+			UserID:         authPayload.UserID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	groups, err := server.store.ListBillingGroupsBySession(ctx, req.DiningSessionID)
@@ -214,6 +286,42 @@ func (server *Server) listBillingGroupOrders(ctx *gin.Context) {
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	billingGroup, err := server.store.GetBillingGroup(ctx, req.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	session, err := server.store.GetDiningSession(ctx, billingGroup.DiningSessionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if session.UserID != authPayload.UserID {
+		if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
+			BillingGroupID: billingGroup.ID,
+			UserID:         authPayload.UserID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	orders, err := server.store.ListBillingGroupOrdersByGroup(ctx, req.ID)

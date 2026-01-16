@@ -267,114 +267,122 @@ func (store *SQLStore) SyncReservationInventoryTx(ctx context.Context, arg SyncR
 	var result SyncReservationInventoryTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
-		reservation, err := q.GetTableReservation(ctx, arg.ReservationID)
+		reservation, err := syncReservationInventoryWithQueries(ctx, q, arg.ReservationID)
 		if err != nil {
-			return fmt.Errorf("get reservation: %w", err)
+			return err
 		}
 		result.Reservation = reservation
-
-		items, err := q.ListReservationDishSummary(ctx, arg.ReservationID)
-		if err != nil {
-			return fmt.Errorf("list reservation dish summary: %w", err)
-		}
-		existing, err := q.ListReservationInventoryByReservation(ctx, arg.ReservationID)
-		if err != nil {
-			return fmt.Errorf("list reservation inventory: %w", err)
-		}
-
-		existingMap := make(map[int64]int32, len(existing))
-		for _, e := range existing {
-			existingMap[e.DishID] = e.Quantity
-		}
-
-		for _, it := range items {
-			if !it.DishID.Valid {
-				continue
-			}
-			dishID := it.DishID.Int64
-			desired := it.Quantity
-			current := existingMap[dishID]
-			delta := desired - current
-
-			if delta > 0 {
-				_, err := q.ReserveInventory(ctx, ReserveInventoryParams{
-					MerchantID: reservation.MerchantID,
-					DishID:     dishID,
-					Date:       reservation.ReservationDate,
-					ReservedQuantity: delta,
-				})
-				if err != nil {
-					if !errors.Is(err, pgx.ErrNoRows) {
-						return fmt.Errorf("reserve inventory: %w", err)
-					}
-					// No inventory record means unlimited; otherwise insufficient stock
-					if _, getErr := q.GetDailyInventory(ctx, GetDailyInventoryParams{
-						MerchantID: reservation.MerchantID,
-						DishID:     dishID,
-						Date:       reservation.ReservationDate,
-					}); getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
-						return fmt.Errorf("get daily inventory: %w", getErr)
-					}
-					if _, getErr := q.GetDailyInventory(ctx, GetDailyInventoryParams{
-						MerchantID: reservation.MerchantID,
-						DishID:     dishID,
-						Date:       reservation.ReservationDate,
-					}); getErr == nil {
-						return fmt.Errorf("insufficient inventory for reservation")
-					}
-				}
-			} else if delta < 0 {
-				_, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
-					MerchantID: reservation.MerchantID,
-					DishID:     dishID,
-					Date:       reservation.ReservationDate,
-					ReservedQuantity: -delta,
-				})
-				if err != nil {
-					return fmt.Errorf("release reserved inventory: %w", err)
-				}
-			}
-
-			if _, err := q.UpsertReservationInventory(ctx, UpsertReservationInventoryParams{
-				ReservationID: arg.ReservationID,
-				DishID:        dishID,
-				Quantity:      desired,
-			}); err != nil {
-				return fmt.Errorf("upsert reservation inventory: %w", err)
-			}
-			delete(existingMap, dishID)
-		}
-
-		for dishID, qty := range existingMap {
-			if qty <= 0 {
-				if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
-					ReservationID: arg.ReservationID,
-					DishID:        dishID,
-				}); err != nil {
-					return fmt.Errorf("delete reservation inventory: %w", err)
-				}
-				continue
-			}
-			if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
-				MerchantID: reservation.MerchantID,
-				DishID:     dishID,
-				Date:       reservation.ReservationDate,
-				ReservedQuantity: qty,
-			}); err != nil {
-				return fmt.Errorf("release reserved inventory: %w", err)
-			}
-			if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
-				ReservationID: arg.ReservationID,
-				DishID:        dishID,
-			}); err != nil {
-				return fmt.Errorf("delete reservation inventory: %w", err)
-			}
-		}
-
 		return nil
 	})
 
 	return result, err
+}
+
+func syncReservationInventoryWithQueries(ctx context.Context, q *Queries, reservationID int64) (TableReservation, error) {
+	reservation, err := q.GetTableReservation(ctx, reservationID)
+	if err != nil {
+		return reservation, fmt.Errorf("get reservation: %w", err)
+	}
+
+	items, err := q.ListReservationDishSummary(ctx, reservationID)
+	if err != nil {
+		return reservation, fmt.Errorf("list reservation dish summary: %w", err)
+	}
+	existing, err := q.ListReservationInventoryByReservation(ctx, reservationID)
+	if err != nil {
+		return reservation, fmt.Errorf("list reservation inventory: %w", err)
+	}
+
+	existingMap := make(map[int64]int32, len(existing))
+	for _, e := range existing {
+		existingMap[e.DishID] = e.Quantity
+	}
+
+	for _, it := range items {
+		if !it.DishID.Valid {
+			continue
+		}
+		dishID := it.DishID.Int64
+		desired := it.Quantity
+		current := existingMap[dishID]
+		delta := desired - current
+
+		if delta > 0 {
+			_, err := q.ReserveInventory(ctx, ReserveInventoryParams{
+				MerchantID: reservation.MerchantID,
+				DishID:     dishID,
+				Date:       reservation.ReservationDate,
+				ReservedQuantity: delta,
+			})
+			if err != nil {
+				if !errors.Is(err, pgx.ErrNoRows) {
+					return reservation, fmt.Errorf("reserve inventory: %w", err)
+				}
+				// No inventory record means unlimited; otherwise insufficient stock
+				if _, getErr := q.GetDailyInventory(ctx, GetDailyInventoryParams{
+					MerchantID: reservation.MerchantID,
+					DishID:     dishID,
+					Date:       reservation.ReservationDate,
+				}); getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
+					return reservation, fmt.Errorf("get daily inventory: %w", getErr)
+				}
+				if _, getErr := q.GetDailyInventory(ctx, GetDailyInventoryParams{
+					MerchantID: reservation.MerchantID,
+					DishID:     dishID,
+					Date:       reservation.ReservationDate,
+				}); getErr == nil {
+					return reservation, fmt.Errorf("insufficient inventory for reservation")
+				}
+			}
+		} else if delta < 0 {
+			_, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+				MerchantID: reservation.MerchantID,
+				DishID:     dishID,
+				Date:       reservation.ReservationDate,
+				ReservedQuantity: -delta,
+			})
+			if err != nil {
+				return reservation, fmt.Errorf("release reserved inventory: %w", err)
+			}
+		}
+
+		if _, err := q.UpsertReservationInventory(ctx, UpsertReservationInventoryParams{
+			ReservationID: reservationID,
+			DishID:        dishID,
+			Quantity:      desired,
+		}); err != nil {
+			return reservation, fmt.Errorf("upsert reservation inventory: %w", err)
+		}
+		delete(existingMap, dishID)
+	}
+
+	for dishID, qty := range existingMap {
+		if qty <= 0 {
+			if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
+				ReservationID: reservationID,
+				DishID:        dishID,
+			}); err != nil {
+				return reservation, fmt.Errorf("delete reservation inventory: %w", err)
+			}
+			continue
+		}
+		if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+			MerchantID: reservation.MerchantID,
+			DishID:     dishID,
+			Date:       reservation.ReservationDate,
+			ReservedQuantity: qty,
+		}); err != nil {
+			return reservation, fmt.Errorf("release reserved inventory: %w", err)
+		}
+		if err := q.DeleteReservationInventoryByDish(ctx, DeleteReservationInventoryByDishParams{
+			ReservationID: reservationID,
+			DishID:        dishID,
+		}); err != nil {
+			return reservation, fmt.Errorf("delete reservation inventory: %w", err)
+		}
+	}
+
+	return reservation, nil
 }
 
 // ==================== 预订库存释放事务 ====================

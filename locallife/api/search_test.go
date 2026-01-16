@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -17,6 +18,7 @@ import (
 // ==================== 菜品搜索测试 ====================
 
 func TestSearchDishesAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	merchant := randomMerchant(util.RandomInt(1, 100))
 
 	testCases := []struct {
@@ -33,7 +35,7 @@ func TestSearchDishesAPI(t *testing.T) {
 				store.EXPECT().
 					SearchDishesGlobal(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.Dish{}, nil)
+					Return([]db.SearchDishesGlobalRow{}, nil)
 
 				store.EXPECT().
 					CountSearchDishesGlobal(gomock.Any(), gomock.Any()).
@@ -69,7 +71,7 @@ func TestSearchDishesAPI(t *testing.T) {
 				store.EXPECT().
 					SearchDishesGlobal(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.Dish{}, nil)
+					Return([]db.SearchDishesGlobalRow{}, nil)
 
 				store.EXPECT().
 					CountSearchDishesGlobal(gomock.Any(), gomock.Any()).
@@ -135,7 +137,7 @@ func TestSearchDishesAPI(t *testing.T) {
 				store.EXPECT().
 					SearchDishesGlobal(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.Dish{}, sql.ErrConnDone)
+					Return([]db.SearchDishesGlobalRow{}, sql.ErrConnDone)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -160,6 +162,8 @@ func TestSearchDishesAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -169,6 +173,7 @@ func TestSearchDishesAPI(t *testing.T) {
 // ==================== 商户搜索测试 ====================
 
 func TestSearchMerchantsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	testCases := []struct {
 		name          string
 		query         string
@@ -255,6 +260,8 @@ func TestSearchMerchantsAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -264,6 +271,7 @@ func TestSearchMerchantsAPI(t *testing.T) {
 // ==================== 包间搜索测试 ====================
 
 func TestSearchRoomsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	testCases := []struct {
 		name          string
 		query         string
@@ -446,6 +454,8 @@ func TestSearchRoomsAPI(t *testing.T) {
 			url := "/v1/search/rooms" + tc.query
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
+
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)

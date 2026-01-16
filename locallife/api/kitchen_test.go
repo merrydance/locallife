@@ -193,8 +193,9 @@ func TestStartPreparingAPI(t *testing.T) {
 				updatedOrder.Status = "preparing"
 				store.EXPECT().
 					UpdateOrderStatus(gomock.Any(), db.UpdateOrderStatusParams{
-						ID:     order.ID,
-						Status: "preparing",
+						ID:                order.ID,
+						Status:            "preparing",
+						FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusPreparing, Valid: true},
 					}).
 					Times(1).
 					Return(updatedOrder, nil)
@@ -360,8 +361,9 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 				updatedOrder.Status = "ready"
 				store.EXPECT().
 					UpdateOrderStatus(gomock.Any(), db.UpdateOrderStatusParams{
-						ID:     order.ID,
-						Status: "ready",
+						ID:                order.ID,
+						Status:            "ready",
+						FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusReady, Valid: true},
 					}).
 					Times(1).
 					Return(updatedOrder, nil)
@@ -409,8 +411,9 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 				updatedOrder.Status = "ready"
 				store.EXPECT().
 					UpdateOrderStatus(gomock.Any(), db.UpdateOrderStatusParams{
-						ID:     order.ID,
-						Status: "ready",
+						ID:                order.ID,
+						Status:            "ready",
+						FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusReady, Valid: true},
 					}).
 					Times(1).
 					Return(updatedOrder, nil)

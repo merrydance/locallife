@@ -266,6 +266,7 @@ type Querier interface {
 	CreateIngredient(ctx context.Context, arg CreateIngredientParams) (Ingredient, error)
 	// Membership Transactions
 	CreateMembershipTransaction(ctx context.Context, arg CreateMembershipTransactionParams) (MembershipTransaction, error)
+	CreateMembershipTransactionWithPaymentOrderID(ctx context.Context, arg CreateMembershipTransactionWithPaymentOrderIDParams) (MembershipTransaction, error)
 	// ==================== 商户管理 ====================
 	CreateMerchant(ctx context.Context, arg CreateMerchantParams) (Merchant, error)
 	// ==================== 商户入驻申请 ====================
@@ -305,6 +306,7 @@ type Querier interface {
 	CreateRefundOrder(ctx context.Context, arg CreateRefundOrderParams) (RefundOrder, error)
 	CreateRegion(ctx context.Context, arg CreateRegionParams) (Region, error)
 	CreateReservationItem(ctx context.Context, arg CreateReservationItemParams) (ReservationItem, error)
+	CreateReservationPayment(ctx context.Context, arg CreateReservationPaymentParams) (ReservationPayment, error)
 	CreateReview(ctx context.Context, arg CreateReviewParams) (Review, error)
 	CreateRider(ctx context.Context, arg CreateRiderParams) (Rider, error)
 	// 创建骑手申请草稿
@@ -564,6 +566,7 @@ type Querier interface {
 	GetMembershipByMerchantAndUserForUpdate(ctx context.Context, arg GetMembershipByMerchantAndUserForUpdateParams) (MerchantMembership, error)
 	GetMembershipForUpdate(ctx context.Context, id int64) (MerchantMembership, error)
 	GetMembershipTransaction(ctx context.Context, id int64) (MembershipTransaction, error)
+	GetMembershipTransactionByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (MembershipTransaction, error)
 	GetMembershipTransactionStats(ctx context.Context, membershipID int64) (GetMembershipTransactionStatsRow, error)
 	GetMerchant(ctx context.Context, id int64) (Merchant, error)
 	// 商户查看自己的申诉详情
@@ -749,6 +752,7 @@ type Querier interface {
 	// 获取已开通运费配置的区县（带市名，用于天气抓取）
 	GetRegionsWithDeliveryFeeConfig(ctx context.Context) ([]GetRegionsWithDeliveryFeeConfigRow, error)
 	GetReservationItemsByReservation(ctx context.Context, reservationID int64) ([]ReservationItem, error)
+	GetReservationPaymentByPaymentOrderID(ctx context.Context, paymentOrderID int64) (ReservationPayment, error)
 	// Get reservation statistics for a merchant
 	GetReservationStats(ctx context.Context, merchantID int64) (GetReservationStatsRow, error)
 	// Get reservation statistics for a merchant within date range
@@ -775,6 +779,7 @@ type Querier interface {
 	// 获取骑手在指定时间窗口内的配送统计
 	GetRiderDeliveryStats(ctx context.Context, arg GetRiderDeliveryStatsParams) (GetRiderDeliveryStatsRow, error)
 	GetRiderDeposit(ctx context.Context, id int64) (RiderDeposit, error)
+	GetRiderDepositByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (RiderDeposit, error)
 	GetRiderDepositStats(ctx context.Context, riderID int64) (GetRiderDepositStatsRow, error)
 	GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (interface{}, error)
 	// 获取骑手押金信息（用于扣款前检查）
@@ -1364,6 +1369,7 @@ type Querier interface {
 	UpdateOrderToRiderDelivered(ctx context.Context, id int64) (Order, error)
 	UpdateOrderToUserDelivered(ctx context.Context, id int64) (Order, error)
 	UpdatePaymentOrderPrepayId(ctx context.Context, arg UpdatePaymentOrderPrepayIdParams) (PaymentOrder, error)
+	UpdatePaymentOrderProcessedAt(ctx context.Context, id int64) (PaymentOrder, error)
 	UpdatePaymentOrderToClosed(ctx context.Context, id int64) (PaymentOrder, error)
 	UpdatePaymentOrderToFailed(ctx context.Context, id int64) (PaymentOrder, error)
 	UpdatePaymentOrderToPaid(ctx context.Context, arg UpdatePaymentOrderToPaidParams) (PaymentOrder, error)

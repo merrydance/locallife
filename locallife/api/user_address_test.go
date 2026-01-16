@@ -52,9 +52,9 @@ func TestCreateUserAddressAPI(t *testing.T) {
 					Return(region, nil)
 
 				store.EXPECT().
-					CreateUserAddress(gomock.Any(), gomock.Any()).
+					CreateUserAddressTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(address, nil)
+					Return(db.CreateUserAddressTxResult{Address: address}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -81,7 +81,7 @@ func TestCreateUserAddressAPI(t *testing.T) {
 					Return(db.Region{}, sql.ErrNoRows)
 
 				store.EXPECT().
-					CreateUserAddress(gomock.Any(), gomock.Any()).
+					CreateUserAddressTx(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -109,14 +109,9 @@ func TestCreateUserAddressAPI(t *testing.T) {
 					Return(region, nil)
 
 				store.EXPECT().
-					SetDefaultAddress(gomock.Any(), gomock.Eq(user.ID)).
+					CreateUserAddressTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(nil)
-
-				store.EXPECT().
-					CreateUserAddress(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(address, nil)
+					Return(db.CreateUserAddressTxResult{Address: address}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -446,14 +441,9 @@ func TestSetDefaultAddressAPI(t *testing.T) {
 					Return(address, nil)
 
 				store.EXPECT().
-					SetDefaultAddress(gomock.Any(), gomock.Eq(user.ID)).
+					SetDefaultAddressTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(nil)
-
-				store.EXPECT().
-					SetAddressAsDefault(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(address, nil)
+					Return(db.SetDefaultAddressTxResult{Address: address}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -474,7 +464,7 @@ func TestSetDefaultAddressAPI(t *testing.T) {
 					Return(address, nil)
 
 				store.EXPECT().
-					SetDefaultAddress(gomock.Any(), gomock.Any()).
+					SetDefaultAddressTx(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

@@ -82,11 +82,13 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 				RegionID:  pgtype.Int8{Int64: arg.RegionID, Valid: true},
 			})
 			if err == nil {
-				// 确保状态也是 approved
-				result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
-					ID:     existingMerchant.ID,
-					Status: "approved",
-				})
+				// 仅在非 active/suspended 状态下推进到 approved，避免降级
+				if existingMerchant.Status != "active" && existingMerchant.Status != "suspended" {
+					result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
+						ID:     existingMerchant.ID,
+						Status: "approved",
+					})
+				}
 			}
 		}
 		if err != nil {
@@ -155,15 +157,17 @@ func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg Reset
 			return fmt.Errorf("reset application: %w", err)
 		}
 
-		// Step 2: 如果商户记录已存在，将其状态改为 pending
+		// Step 2: 如果商户记录已存在，仅在非 active/approved 状态下改为 pending
 		merchant, err := q.GetMerchantByOwner(ctx, arg.UserID)
 		if err == nil {
-			result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
-				ID:     merchant.ID,
-				Status: "pending",
-			})
-			if err != nil {
-				return fmt.Errorf("update merchant status: %w", err)
+			if merchant.Status != "active" && merchant.Status != "approved" {
+				result.Merchant, err = q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
+					ID:     merchant.ID,
+					Status: "pending",
+				})
+				if err != nil {
+					return fmt.Errorf("update merchant status: %w", err)
+				}
 			}
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("get merchant: %w", err)

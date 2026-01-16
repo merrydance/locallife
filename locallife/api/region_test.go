@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -18,6 +19,7 @@ import (
 )
 
 func TestGetRegionAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	region := randomRegion()
 
 	testCases := []struct {
@@ -109,6 +111,8 @@ func TestGetRegionAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -116,6 +120,7 @@ func TestGetRegionAPI(t *testing.T) {
 }
 
 func TestListRegionsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	n := 5
 	regions := make([]db.Region, n)
 	for i := 0; i < n; i++ {
@@ -238,6 +243,8 @@ func TestListRegionsAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -246,6 +253,7 @@ func TestListRegionsAPI(t *testing.T) {
 
 func TestListRegionChildrenAPI(t *testing.T) {
 	parentRegion := randomRegion()
+	user, _ := randomUser(t)
 	childRegions := make([]db.Region, 3)
 	for i := 0; i < 3; i++ {
 		childRegions[i] = randomRegion()
@@ -349,6 +357,8 @@ func TestListRegionChildrenAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -356,6 +366,7 @@ func TestListRegionChildrenAPI(t *testing.T) {
 }
 
 func TestSearchRegionsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	regions := make([]db.Region, 3)
 	for i := 0; i < 3; i++ {
 		regions[i] = randomRegion()
@@ -416,6 +427,8 @@ func TestSearchRegionsAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -465,6 +478,7 @@ func requireBodyMatchRegions(t *testing.T, body *bytes.Buffer, regions []db.Regi
 // ==================== 新增测试：listAvailableRegions ====================
 
 func TestListAvailableRegionsAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	parentRegion := randomRegion()
 	parentRegion.Level = 2 // 市级
 
@@ -635,6 +649,8 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
@@ -644,6 +660,7 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 // ==================== 新增测试：checkRegionAvailability ====================
 
 func TestCheckRegionAvailabilityAPI(t *testing.T) {
+	user, _ := randomUser(t)
 	region := randomRegion()
 	region.Level = 3 // 区县级
 
@@ -793,6 +810,8 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 
 			request, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			require.NoError(t, err)
+
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)

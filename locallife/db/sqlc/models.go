@@ -537,6 +537,7 @@ type MembershipTransaction struct {
 	RechargeRuleID pgtype.Int8 `json:"recharge_rule_id"`
 	Notes          pgtype.Text `json:"notes"`
 	CreatedAt      time.Time   `json:"created_at"`
+	PaymentOrderID pgtype.Int8 `json:"payment_order_id"`
 }
 
 type Merchant struct {
@@ -957,7 +958,8 @@ type PaymentOrder struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	Attach        pgtype.Text        `json:"attach"`
 	// 关联的合单支付ID，单商户支付时为NULL
-	CombinedPaymentID pgtype.Int8 `json:"combined_payment_id"`
+	CombinedPaymentID pgtype.Int8        `json:"combined_payment_id"`
+	ProcessedAt       pgtype.Timestamptz `json:"processed_at"`
 }
 
 // 高峰/特殊时段配置表（午高峰、晚高峰、深夜配送等）
@@ -1128,6 +1130,15 @@ type ReservationItem struct {
 	CreatedAt     time.Time   `json:"created_at"`
 }
 
+type ReservationPayment struct {
+	ID             int64     `json:"id"`
+	ReservationID  int64     `json:"reservation_id"`
+	PaymentOrderID int64     `json:"payment_order_id"`
+	Amount         int64     `json:"amount"`
+	Type           string    `json:"type"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 // 订单评价表
 type Review struct {
 	ID int64 `json:"id"`
@@ -1215,6 +1226,7 @@ type RiderDeposit struct {
 	BalanceAfter   int64       `json:"balance_after"`
 	Remark         pgtype.Text `json:"remark"`
 	CreatedAt      time.Time   `json:"created_at"`
+	PaymentOrderID pgtype.Int8 `json:"payment_order_id"`
 }
 
 // 骑手位置记录

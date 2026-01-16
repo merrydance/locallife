@@ -1134,9 +1134,9 @@ func TestGetMerchantDishCategoryStatsAPI(t *testing.T) {
 					GetDishCategoryStats(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.GetDishCategoryStatsRow{
-						{CategoryID: 1, CategoryName: "热菜", DishCount: 10, TotalQuantity: 500, TotalRevenue: 5000000},
-						{CategoryID: 2, CategoryName: "凉菜", DishCount: 5, TotalQuantity: 200, TotalRevenue: 1000000},
-						{CategoryID: 3, CategoryName: "主食", DishCount: 3, TotalQuantity: 300, TotalRevenue: 600000},
+						{CategoryID: 1, CategoryName: "热菜", OrderCount: 10, TotalQuantity: 500, TotalRevenue: 5000000},
+						{CategoryID: 2, CategoryName: "凉菜", OrderCount: 5, TotalQuantity: 200, TotalRevenue: 1000000},
+						{CategoryID: 3, CategoryName: "主食", OrderCount: 3, TotalQuantity: 300, TotalRevenue: 600000},
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

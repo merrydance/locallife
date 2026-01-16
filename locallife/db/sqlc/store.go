@@ -13,6 +13,9 @@ type Store interface {
 	Ping(ctx context.Context) error
 	// User registration transaction
 	CreateUserTx(ctx context.Context, arg CreateUserTxParams) (CreateUserTxResult, error)
+	// User address transactions
+	CreateUserAddressTx(ctx context.Context, arg CreateUserAddressTxParams) (CreateUserAddressTxResult, error)
+	SetDefaultAddressTx(ctx context.Context, arg SetDefaultAddressTxParams) (SetDefaultAddressTxResult, error)
 	// Dish transactions
 	CreateDishTx(ctx context.Context, arg CreateDishTxParams) (CreateDishTxResult, error)
 	UpdateDishTx(ctx context.Context, arg UpdateDishTxParams) (UpdateDishTxResult, error)
@@ -22,10 +25,13 @@ type Store interface {
 	// Merchant application approval transaction
 	ApproveMerchantApplicationTx(ctx context.Context, arg ApproveMerchantApplicationTxParams) (ApproveMerchantApplicationTxResult, error)
 	ResetMerchantApplicationTx(ctx context.Context, arg ResetMerchantApplicationTxParams) (ResetMerchantApplicationTxResult, error)
+	// Rider application approval transaction
+	ApproveRiderApplicationTx(ctx context.Context, arg ApproveRiderApplicationTxParams) (ApproveRiderApplicationTxResult, error)
 	// Combo transactions
 	CreateComboSetTx(ctx context.Context, arg CreateComboSetTxParams) (CreateComboSetTxResult, error)
 	CreateOrderTx(ctx context.Context, arg CreateOrderTxParams) (CreateOrderTxResult, error)
 	ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrderPaymentTxParams) (ProcessOrderPaymentTxResult, error)
+	ProcessPaymentSuccessTx(ctx context.Context, arg ProcessPaymentSuccessTxParams) (ProcessPaymentSuccessTxResult, error)
 	// M10: Membership transactions
 	JoinMembershipTx(ctx context.Context, arg JoinMembershipTxParams) (JoinMembershipTxResult, error)
 	RechargeTx(ctx context.Context, arg RechargeTxParams) (RechargeTxResult, error)

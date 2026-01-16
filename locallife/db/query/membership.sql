@@ -139,9 +139,27 @@ INSERT INTO membership_transactions (
     $1, $2, $3, $4, $5, $6, $7
 ) RETURNING *;
 
+-- name: CreateMembershipTransactionWithPaymentOrderID :one
+INSERT INTO membership_transactions (
+    membership_id,
+    type,
+    amount,
+    balance_after,
+    related_order_id,
+    recharge_rule_id,
+    notes,
+    payment_order_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8
+) RETURNING *;
+
 -- name: GetMembershipTransaction :one
 SELECT * FROM membership_transactions
 WHERE id = $1 LIMIT 1;
+
+-- name: GetMembershipTransactionByPaymentOrderID :one
+SELECT * FROM membership_transactions
+WHERE payment_order_id = $1 LIMIT 1;
 
 -- name: ListMembershipTransactions :many
 SELECT * FROM membership_transactions

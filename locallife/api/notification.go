@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -221,7 +220,7 @@ func (server *Server) markNotificationAsRead(ctx *gin.Context) {
 		UserID: authPayload.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("notification not found or already read")))
 			return
 		}
@@ -292,7 +291,7 @@ func (server *Server) deleteNotification(ctx *gin.Context) {
 		UserID: authPayload.UserID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("notification not found")))
 			return
 		}
@@ -458,12 +457,32 @@ func (server *Server) updateNotificationPreferences(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newNotificationPreferencesResponse(prefs))
 }
 
-var upgrader = gorilla_websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // 生产环境需要验证Origin
-	},
+func (server *Server) isOriginAllowed(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	allowed := server.config.AllowedOrigins
+	if len(allowed) == 0 {
+		return false
+	}
+	for _, item := range allowed {
+		if item == "*" || item == origin {
+			return true
+		}
+	}
+	return false
+}
+
+func (server *Server) upgradeWebSocket(ctx *gin.Context) (*gorilla_websocket.Conn, error) {
+	upgrader := gorilla_websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return server.isOriginAllowed(r.Header.Get("Origin"))
+		},
+	}
+
+	return upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 }
 
 // handleWebSocket godoc
@@ -472,7 +491,6 @@ var upgrader = gorilla_websocket.Upgrader{
 // @Tags 通知管理
 // @Accept json
 // @Produce json
-// @Param token query string false "Authentication token (required if Authorization header is missing)"
 // @Success 101 "协议升级成功"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "仅骑手和商户可连接"
@@ -524,7 +542,7 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 	}
 
 	// 升级到WebSocket
-	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	conn, err := server.upgradeWebSocket(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("WebSocket upgrade failed")
 		return
@@ -594,7 +612,7 @@ func (server *Server) handlePlatformWebSocket(ctx *gin.Context) {
 	}
 
 	// 升级到WebSocket
-	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+	conn, err := server.upgradeWebSocket(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Platform WebSocket upgrade failed")
 		return

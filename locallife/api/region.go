@@ -4,8 +4,6 @@ package api
 // 前端已使用自建 OSM 服务获取行政区划数据，这里的接口仅作为灾备/回退能力。
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -73,7 +71,7 @@ func (server *Server) getRegion(ctx *gin.Context) {
 
 	region, err := server.store.GetRegion(ctx, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("区域不存在")))
 			return
 		}
@@ -337,7 +335,7 @@ func (server *Server) checkRegionAvailability(ctx *gin.Context) {
 	// 获取区域信息
 	region, err := server.store.GetRegion(ctx, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("区域不存在")))
 			return
 		}
@@ -354,7 +352,7 @@ func (server *Server) checkRegionAvailability(ctx *gin.Context) {
 	// 检查是否已有运营商绑定
 	operator, err := server.store.GetOperatorByRegion(ctx, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 没有运营商，可用
 			response.IsAvailable = true
 		} else {
