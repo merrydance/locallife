@@ -1214,6 +1214,22 @@ type RiderLocation struct {
 	RecordedAt time.Time      `json:"recorded_at"`
 }
 
+// 配送围栏事件
+type DeliveryLocationEvent struct {
+	ID         int64          `json:"id"`
+	DeliveryID int64          `json:"delivery_id"`
+	OrderID    int64          `json:"order_id"`
+	RiderID    int64          `json:"rider_id"`
+	Longitude  pgtype.Numeric `json:"longitude"`
+	Latitude   pgtype.Numeric `json:"latitude"`
+	Accuracy   pgtype.Numeric `json:"accuracy"`
+	Speed      pgtype.Numeric `json:"speed"`
+	EventType  string         `json:"event_type"`
+	Source     string         `json:"source"`
+	RecordedAt time.Time      `json:"recorded_at"`
+	CreatedAt  time.Time      `json:"created_at"`
+}
+
 // 高值单资格积分变更日志表
 type RiderPremiumScoreLog struct {
 	ID                int64       `json:"id"`

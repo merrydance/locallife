@@ -795,6 +795,58 @@ definitions:
     - dish_ids
     - is_online
     type: object
+  api.billingGroupListResponse:
+    properties:
+      billing_groups:
+        items:
+          $ref: '#/definitions/api.billingGroupResponse'
+        type: array
+    type: object
+  api.billingGroupOrderListResponse:
+    properties:
+      orders:
+        items:
+          $ref: '#/definitions/api.billingGroupOrderResponse'
+        type: array
+    type: object
+  api.billingGroupOrderResponse:
+    properties:
+      amount:
+        type: integer
+      billing_group_id:
+        type: integer
+      created_at:
+        type: string
+      id:
+        type: integer
+      order_id:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.billingGroupResponse:
+    properties:
+      closed_at:
+        type: string
+      created_at:
+        type: string
+      dining_session_id:
+        type: integer
+      id:
+        type: integer
+      is_default:
+        type: boolean
+      paid_amount:
+        type: integer
+      status:
+        type: string
+      total_amount:
+        type: integer
+      updated_at:
+        type: string
+    type: object
   api.bindMerchantRequest:
     properties:
       invite_code:
@@ -917,6 +969,15 @@ definitions:
     type: object
   api.calculateCartResponse:
     properties:
+      buffer_minutes:
+        description: 额外缓冲时间（分钟）
+        type: integer
+      delivery_distance:
+        description: 配送距离（米），仅当成功计算时返回
+        type: integer
+      delivery_eta_minutes:
+        description: 预计送达总时长（分钟），包含出餐、骑手到店、配送、缓冲
+        type: integer
       delivery_fee:
         description: 配送费（分）
         type: integer
@@ -934,6 +995,15 @@ definitions:
         type: boolean
       min_order_amount:
         description: 最小起送金额（分），0表示无限制
+        type: integer
+      prepare_minutes:
+        description: 出餐时间（分钟）
+        type: integer
+      rider_to_store_minutes:
+        description: 骑手到店时间（分钟）
+        type: integer
+      store_to_user_minutes:
+        description: 店到用户路网时间（分钟）
         type: integer
       subtotal:
         description: 商品小计（分）
@@ -1302,6 +1372,14 @@ definitions:
           type: string
         type: array
     type: object
+  api.createBillingGroupRequest:
+    properties:
+      dining_session_id:
+        minimum: 1
+        type: integer
+    required:
+    - dining_session_id
+    type: object
   api.createComboSetRequest:
     properties:
       combo_price:
@@ -1581,6 +1659,23 @@ definitions:
         description: 配送地址ID (外卖订单必填)
         example: 5001
         minimum: 1
+        type: integer
+      billing_group_id:
+        description: 账单组ID (堂食可选，用于拼桌/单独结算)
+        example: 12001
+        minimum: 1
+        type: integer
+      delivery_distance:
+        description: 前端已计算的配送距离（米）
+        example: 2500
+        type: integer
+      delivery_fee:
+        description: 前端已计算的配送费（分），用于直落且供服务端校验
+        example: 500
+        type: integer
+      delivery_fee_discount:
+        description: 前端已计算的配送费优惠（分）
+        example: 200
         type: integer
       items:
         description: 订单商品列表 (必填，至少包含1个商品，最多50个)
@@ -1895,8 +1990,6 @@ definitions:
     - contact_name
     - contact_phone
     - detail_address
-    - latitude
-    - longitude
     type: object
   api.createVoucherRequest:
     properties:
@@ -2067,7 +2160,7 @@ definitions:
   api.dailyInventoryResponse:
     properties:
       available:
-        description: '计算字段: total - sold'
+        description: '计算字段: total - sold - reserved'
         type: integer
       date:
         type: string
@@ -2076,6 +2169,8 @@ definitions:
       id:
         type: integer
       merchant_id:
+        type: integer
+      reserved_quantity:
         type: integer
       sold_quantity:
         type: integer
@@ -2097,6 +2192,8 @@ definitions:
       id:
         type: integer
       merchant_id:
+        type: integer
+      reserved_quantity:
         type: integer
       sold_quantity:
         type: integer
@@ -2287,6 +2384,52 @@ definitions:
         type: integer
       type:
         type: string
+    type: object
+  api.diningSessionPrecheckResponse:
+    properties:
+      is_reservation_owner:
+        type: boolean
+      order_fulfillment_status:
+        type: string
+      order_id:
+        type: integer
+      order_status:
+        type: string
+      paid_amount:
+        type: integer
+      payment_mode:
+        type: string
+      reservation_id:
+        type: integer
+      reserved:
+        type: boolean
+      table_id:
+        type: integer
+    type: object
+  api.diningSessionResponse:
+    properties:
+      active_order_id:
+        type: integer
+      closed_at:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      merchant_id:
+        type: integer
+      opened_at:
+        type: string
+      reservation_id:
+        type: integer
+      status:
+        type: string
+      table_id:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
     type: object
   api.dishCategoryResponse:
     properties:
@@ -2945,6 +3088,9 @@ definitions:
         maximum: 1000
         minimum: 0
         type: number
+      delivery_id:
+        minimum: 1
+        type: integer
       heading:
         description: 航向角(度)，0-360
         maximum: 360
@@ -2959,6 +3105,8 @@ definitions:
         minimum: -180
         type: number
       recorded_at:
+        type: string
+      source:
         type: string
       speed:
         description: 速度(m/s)，0-200(约720km/h)
@@ -3570,6 +3718,17 @@ definitions:
       timeStamp:
         type: string
     type: object
+  api.modifyDishesRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.addDishItem'
+        maxItems: 50
+        minItems: 1
+        type: array
+    required:
+    - items
+    type: object
   api.notificationPreferencesResponse:
     properties:
       created_at:
@@ -3622,6 +3781,28 @@ definitions:
         type: string
       user_id:
         type: integer
+    type: object
+  api.openDiningSessionRequest:
+    properties:
+      reservation_id:
+        minimum: 1
+        type: integer
+      table_id:
+        minimum: 1
+        type: integer
+    required:
+    - table_id
+    type: object
+  api.openDiningSessionResponse:
+    properties:
+      billing_group:
+        $ref: '#/definitions/api.billingGroupResponse'
+      cart_id:
+        type: integer
+      imported_items:
+        type: integer
+      session:
+        $ref: '#/definitions/api.diningSessionResponse'
     type: object
   api.operatorApplicationResponse:
     properties:
@@ -3857,6 +4038,15 @@ definitions:
       total_earnings:
         type: integer
     type: object
+  api.orderBadge:
+    properties:
+      locale:
+        type: string
+      text:
+        type: string
+      type:
+        type: string
+    type: object
   api.orderCalculationItem:
     properties:
       combo_id:
@@ -4017,10 +4207,20 @@ definitions:
     type: object
   api.orderResponse:
     properties:
+      actions:
+        items:
+          type: string
+        type: array
       address_id:
         description: 配送地址ID (外卖订单时有值)
         example: 5001
         type: integer
+      auto_user_delivered_at:
+        type: string
+      badges:
+        items:
+          $ref: '#/definitions/api.orderBadge'
+        type: array
       cancel_reason:
         description: 取消原因
         example: 商品缺货
@@ -4029,9 +4229,13 @@ definitions:
         description: 取消时间
         example: "2025-12-01T12:25:00Z"
         type: string
+      claim_channel:
+        type: string
       completed_at:
-        description: 完成时间
+        description: 完成时间（历史兼容）
         example: "2025-12-01T13:15:00Z"
+        type: string
+      courier_accept_at:
         type: string
       created_at:
         description: 创建时间
@@ -4053,6 +4257,10 @@ definitions:
         description: 配送距离 (单位：米)
         example: 2500
         type: integer
+      delivery_eta_minutes:
+        description: 预计送达总时长（分钟），用于前端 ETA 展示
+        example: 38
+        type: integer
       delivery_fee:
         description: 配送费 (单位：分)
         example: 500
@@ -4065,6 +4273,30 @@ definitions:
         description: 优惠金额 (单位：分)
         example: 500
         type: integer
+      dispatch_order_id:
+        description: 三方派单/履约信息
+        type: integer
+      estimated_delivery_at:
+        description: 预计送达时间（时间戳），用于订单详情展示送达时间段
+        example: "2025-12-01T12:30:00Z"
+        type: string
+      exception_state:
+        description: 异常/投诉通道
+        type: string
+      flow_id:
+        type: integer
+      fulfillment_status:
+        description: '履约状态 (枚举: scheduled-已排期, pending_kitchen-待出餐, preparing-制作中,
+          ready-已出餐, completed-履约完成, cancelled-已取消)'
+        enum:
+        - scheduled
+        - pending_kitchen
+        - preparing
+        - ready
+        - completed
+        - cancelled
+        example: pending_kitchen
+        type: string
       id:
         description: 订单ID
         example: 100001
@@ -4103,6 +4335,8 @@ definitions:
         - reservation
         example: takeout
         type: string
+      overtime:
+        type: boolean
       paid_at:
         description: 支付时间
         example: "2025-12-01T12:30:00Z"
@@ -4114,22 +4348,47 @@ definitions:
         - balance
         example: wechat
         type: string
+      picked_at:
+        type: string
+      pickup_code:
+        type: string
+      pickup_code_masked:
+        type: string
+      prep_start_at:
+        description: 准备/配送关键时间点
+        type: string
+      ready_at:
+        type: string
+      replaced_by_order_id:
+        description: 替换的新订单ID（仅当此订单被更新菜单替换时存在）
+        example: 100009
+        type: integer
       reservation_id:
         description: 预订ID (预定点菜时有值)
         example: 8001
         type: integer
+      rider_delivered_at:
+        type: string
       status:
         description: '订单状态 (枚举: pending-待支付, paid-已支付, preparing-制作中, ready-待取餐/待配送,
-          delivering-配送中, completed-已完成, cancelled-已取消)'
+          courier_accepted-骑手已接单, picked-已取餐, delivering-配送中, rider_delivered-骑手送达,
+          user_delivered-用户确认送达, completed-已完成, cancelled-已取消)'
         enum:
         - pending
         - paid
         - preparing
         - ready
+        - courier_accepted
+        - picked
         - delivering
+        - rider_delivered
+        - user_delivered
         - completed
         - cancelled
         example: paid
+        type: string
+      status_hint:
+        description: 状态提示与徽标
         type: string
       subtotal:
         description: 商品小计 (单位：分，不含配送费)
@@ -4146,6 +4405,8 @@ definitions:
       updated_at:
         description: 更新时间
         example: "2025-12-01T12:30:00Z"
+        type: string
+      user_delivered_at:
         type: string
       user_id:
         description: 用户ID
@@ -4841,6 +5102,31 @@ definitions:
       access_token_expires_at:
         type: string
     type: object
+  api.replaceOrderRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.orderItemRequest'
+        maxItems: 50
+        minItems: 1
+        type: array
+      notes:
+        maxLength: 500
+        type: string
+    required:
+    - items
+    type: object
+  api.replaceOrderResponse:
+    properties:
+      delta:
+        type: integer
+      order:
+        $ref: '#/definitions/api.orderResponse'
+      payment_order_id:
+        type: integer
+      refund_initiated:
+        type: boolean
+    type: object
   api.replyReviewRequest:
     properties:
       reply:
@@ -4880,6 +5166,27 @@ definitions:
     required:
     - quantity
     type: object
+  api.reservationItemResponse:
+    properties:
+      combo_id:
+        type: integer
+      dish_id:
+        type: integer
+      id:
+        type: integer
+      image_url:
+        type: string
+      name:
+        type: string
+      quantity:
+        type: integer
+      total_price:
+        type: integer
+      type:
+        type: string
+      unit_price:
+        type: integer
+    type: object
   api.reservationResponse:
     properties:
       cancel_reason:
@@ -4902,8 +5209,18 @@ definitions:
         type: integer
       id:
         type: integer
+      items:
+        items:
+          $ref: '#/definitions/api.reservationItemResponse'
+        type: array
+      merchant_address:
+        type: string
       merchant_id:
         type: integer
+      merchant_name:
+        type: string
+      merchant_phone:
+        type: string
       notes:
         type: string
       paid_at:
@@ -5376,6 +5693,17 @@ definitions:
       status:
         type: string
     type: object
+  api.routeAPIResponse:
+    properties:
+      code:
+        example: 0
+        type: integer
+      data:
+        $ref: '#/definitions/maps.RouteResult'
+      message:
+        example: ok
+        type: string
+    type: object
   api.scanTableCategoryInfo:
     properties:
       dishes:
@@ -5659,16 +5987,6 @@ definitions:
       id:
         type: integer
       name:
-        type: string
-    type: object
-  api.tencentDirectionAPIResponse:
-    properties:
-      code:
-        example: 0
-        type: integer
-      data: {}
-      message:
-        example: ok
         type: string
     type: object
   api.timeSlot:
@@ -6478,6 +6796,15 @@ definitions:
       preparing_count:
         type: integer
       ready_count:
+        type: integer
+    type: object
+  maps.RouteResult:
+    properties:
+      distance:
+        description: 距离（米）
+        type: integer
+      duration:
+        description: 时间（秒）
         type: integer
     type: object
 host: localhost:8080
@@ -8100,6 +8427,152 @@ paths:
       summary: 上报用户行为埋点
       tags:
       - 推荐引擎
+  /v1/billing-groups:
+    get:
+      parameters:
+      - description: 用餐会话ID
+        in: query
+        name: dining_session_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.billingGroupListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 账单组列表
+      tags:
+      - 账单组
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建账单组请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createBillingGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.billingGroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建账单组
+      tags:
+      - 账单组
+  /v1/billing-groups/{id}/join:
+    post:
+      parameters:
+      - description: 账单组ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.billingGroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 加入账单组
+      tags:
+      - 账单组
+  /v1/billing-groups/{id}/orders:
+    get:
+      parameters:
+      - description: 账单组ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.billingGroupOrderListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 账单组订单列表
+      tags:
+      - 账单组
   /v1/bind-merchant:
     post:
       consumes:
@@ -9437,6 +9910,99 @@ paths:
       summary: 获取推荐订单
       tags:
       - 配送管理-骑手
+  /v1/dining-sessions/open:
+    post:
+      consumes:
+      - application/json
+      description: 扫码后为桌台/预订创建开放会话；若已存在开放会话则直接返回
+      parameters:
+      - description: 开台请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.openDiningSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.openDiningSessionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 开启用餐会话（堂食/预订到店）
+      tags:
+      - 用餐会话
+  /v1/dining-sessions/precheck:
+    get:
+      description: 扫码后检查桌台当前时段是否被预订，返回预订及订单信息
+      parameters:
+      - description: 桌台ID
+        in: query
+        name: table_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.diningSessionPrecheckResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 用餐会话预检
+      tags:
+      - 用餐会话
   /v1/dishes:
     get:
       consumes:
@@ -10718,7 +11284,7 @@ paths:
       - 厨房管理(KDS)
   /v1/location/direction/bicycling:
     get:
-      description: 后端请求腾讯 LBS /ws/direction/v1/bicycling 并原样返回 JSON（不暴露 key）。
+      description: 调用自建 OSRM /route 获取骑行距离与耗时。
       parameters:
       - description: '起点坐标，格式: lat,lng'
         example: '"39.908722,116.397499"'
@@ -10732,18 +11298,13 @@ paths:
         name: to
         required: true
         type: string
-      - description: 路线策略（腾讯 LBS policy 参数）
-        example: 0
-        in: query
-        name: policy
-        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.tencentDirectionAPIResponse'
+            $ref: '#/definitions/api.routeAPIResponse'
         "400":
           description: Bad Request
           schema:
@@ -10752,12 +11313,12 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-      summary: 腾讯骑行路线（后端代理）
+      summary: 自建 OSM 骑行路线
       tags:
       - 位置
   /v1/location/reverse-geocode:
     get:
-      description: 使用腾讯 LBS 将经纬度解析为地址（服务端调用腾讯接口，不暴露 key）。
+      description: 使用自建 OSM Nominatim 将经纬度解析为地址。
       parameters:
       - description: 纬度
         example: 39.908722
@@ -12447,7 +13008,11 @@ paths:
         - paid: 已支付
         - preparing: 制作中
         - ready: 待配送/待取餐
+        - courier_accepted: 骑手已接单
+        - picked: 已取餐
         - delivering: 配送中
+        - rider_delivered: 骑手送达
+        - user_delivered: 用户确认送达
         - completed: 已完成
         - cancelled: 已取消
       parameters:
@@ -12470,7 +13035,11 @@ paths:
         - paid
         - preparing
         - ready
+        - courier_accepted
+        - picked
         - delivering
+        - rider_delivered
+        - user_delivered
         - completed
         - cancelled
         in: query
@@ -15890,7 +16459,11 @@ paths:
         - paid: 已支付
         - preparing: 制作中
         - ready: 待配送/待取餐
+        - courier_accepted: 骑手已接单
+        - picked: 已取餐
         - delivering: 配送中
+        - rider_delivered: 骑手送达
+        - user_delivered: 用户确认送达
         - completed: 已完成
         - cancelled: 已取消
       parameters:
@@ -15913,12 +16486,30 @@ paths:
         - paid
         - preparing
         - ready
+        - courier_accepted
+        - picked
         - delivering
+        - rider_delivered
+        - user_delivered
         - completed
         - cancelled
         in: query
         name: status
         type: string
+      - description: 订单类型筛选
+        enum:
+        - takeout
+        - dine_in
+        - takeaway
+        - reservation
+        in: query
+        name: order_type
+        type: string
+      - description: 预订ID筛选（仅预定点菜订单）
+        in: query
+        minimum: 1
+        name: reservation_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -16145,6 +16736,59 @@ paths:
       security:
       - BearerAuth: []
       summary: 确认收货
+      tags:
+      - 订单管理
+  /v1/orders/{id}/replace:
+    post:
+      consumes:
+      - application/json
+      description: 仅限支付模式为全款的预订订单，生成新的堂食订单，旧订单标记为被替换；差额自动生成支付/退款单。
+      parameters:
+      - description: 原订单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 新的菜品列表
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.replaceOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.replaceOrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 全款预订改菜单，生成新订单并作废旧订单
       tags:
       - 订单管理
   /v1/orders/{id}/urge:
@@ -17627,6 +18271,59 @@ paths:
       summary: 确认预定
       tags:
       - 预定管理-商户
+  /v1/reservations/{id}/modify-dishes:
+    post:
+      consumes:
+      - application/json
+      description: 用户修改预订菜品，支持差量补单或退款
+      parameters:
+      - description: 预定ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 改菜请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.modifyDishesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 预订改菜
+      tags:
+      - 预定管理
   /v1/reservations/{id}/no-show:
     post:
       consumes:
@@ -19085,7 +19782,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 批量上报骑手GPS位置点，仅在线状态可调用
+      description: 批量上报骑手GPS位置点，仅在线状态可调用。可选传 delivery_id（必须为当前进行中配送）与 source 标识上报来源
       parameters:
       - description: 位置点数组
         in: body
@@ -19621,6 +20318,10 @@ paths:
       - description: 最大容纳人数
         in: query
         name: max_capacity
+        type: integer
+      - description: 最小低消（分）
+        in: query
+        name: min_minimum_spend
         type: integer
       - description: 最大低消（分）
         in: query

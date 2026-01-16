@@ -56,6 +56,7 @@ type Querier interface {
 	BatchCreateDailyInventory(ctx context.Context, arg []BatchCreateDailyInventoryParams) (int64, error)
 	BatchCreateOrderItems(ctx context.Context, arg []BatchCreateOrderItemsParams) (int64, error)
 	BatchCreateRiderLocations(ctx context.Context, arg []BatchCreateRiderLocationsParams) (int64, error)
+	CreateDeliveryLocationEvent(ctx context.Context, arg CreateDeliveryLocationEventParams) (DeliveryLocationEvent, error)
 	// 批量更新菜品上下架状态（只更新属于指定商户的菜品）
 	BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) (int64, error)
 	BlacklistUser(ctx context.Context, arg BlacklistUserParams) error

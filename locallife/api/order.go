@@ -586,6 +586,16 @@ type replaceOrderRequest struct {
 	Notes string             `json:"notes,omitempty" binding:"omitempty,max=500"`
 }
 
+// replaceOrderResponse 替换订单响应
+type replaceOrderResponse struct {
+	Order           orderResponse `json:"order"`
+	Delta           int64         `json:"delta"`
+	PaymentOrderID  *int64        `json:"payment_order_id,omitempty"`
+	RefundInitiated bool          `json:"refund_initiated"`
+}
+
+var _ = replaceOrderResponse{}
+
 // newOrderWithMerchantFromFilterResponse converts filtered list rows to API response
 func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow) orderResponse {
 	resp := orderResponse{
@@ -2040,7 +2050,7 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 // @Produce json
 // @Param id path int true "原订单ID"
 // @Param request body replaceOrderRequest true "新的菜品列表"
-// @Success 200 {object} object{order=orderResponse,delta=int64,payment_order_id=*int64,refund_initiated=bool}
+// @Success 200 {object} replaceOrderResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse

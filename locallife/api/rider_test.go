@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -1568,6 +1569,89 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestUpdateRiderLocationGeofenceEvents(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	rider.Status = "active"
+	rider.IsOnline = true
+
+	now := time.Now()
+	deliveryID := int64(101)
+	orderID := int64(202)
+
+	delivery := db.Delivery{
+		ID:              deliveryID,
+		OrderID:         orderID,
+		RiderID:         pgtype.Int8{Int64: rider.ID, Valid: true},
+		PickupLongitude: numericFromFloat(116.404),
+		PickupLatitude:  numericFromFloat(39.915),
+		Status:          "assigned",
+	}
+
+	body := map[string]interface{}{
+		"locations": []map[string]interface{}{
+			{
+				"delivery_id": deliveryID,
+				"longitude":   116.404,
+				"latitude":    39.915,
+				"accuracy":    10.0,
+				"recorded_at": now.Format(time.RFC3339),
+				"source":      "gps",
+			},
+		},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(rider, nil)
+
+	store.EXPECT().
+		ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.Delivery{delivery}, nil)
+
+	store.EXPECT().
+		BatchCreateRiderLocations(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(int64(1), nil)
+
+	store.EXPECT().
+		UpdateRiderLocation(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(rider, nil)
+
+	store.EXPECT().
+		GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+		Times(1).
+		Return(delivery, nil)
+
+	server := newTestServer(t, store)
+	server.config.GeofenceRadiusMeters = 80
+	server.config.GeofenceDwellMinSeconds = 60
+	server.config.GeofenceDwellMinSamples = 3
+	server.config.GeofenceMinAccuracyMeters = 80
+	server.config.GeofenceAutoAdvanceEnabled = false
+
+	recorder := httptest.NewRecorder()
+	url := "/v1/rider/location"
+	requestBody, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(requestBody))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
 // ==================== 高值单资格积分测试 ====================

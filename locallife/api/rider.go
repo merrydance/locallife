@@ -850,17 +850,19 @@ type updateLocationRequest struct {
 }
 
 type locationPoint struct {
+	DeliveryID *int64    `json:"delivery_id,omitempty" binding:"omitempty,min=1"`
 	Longitude  float64   `json:"longitude" binding:"required,gte=-180,lte=180"`
 	Latitude   float64   `json:"latitude" binding:"required,gte=-90,lte=90"`
 	Accuracy   *float64  `json:"accuracy,omitempty" binding:"omitempty,gte=0,lte=1000"` // GPS精度(米)，0-1000
 	Speed      *float64  `json:"speed,omitempty" binding:"omitempty,gte=0,lte=200"`     // 速度(m/s)，0-200(约720km/h)
 	Heading    *float64  `json:"heading,omitempty" binding:"omitempty,gte=0,lte=360"`   // 航向角(度)，0-360
 	RecordedAt time.Time `json:"recorded_at" binding:"required"`
+	Source     string    `json:"source,omitempty"`
 }
 
 // updateRiderLocation godoc
 // @Summary 更新骑手位置
-// @Description 批量上报骑手GPS位置点，仅在线状态可调用
+// @Description 批量上报骑手GPS位置点，仅在线状态可调用。可选传 delivery_id（必须为当前进行中配送）与 source 标识上报来源
 // @Tags 骑手
 // @Accept json
 // @Produce json
@@ -923,6 +925,13 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	var latestLocation locationPoint
 
 	for _, loc := range req.Locations {
+		if loc.DeliveryID != nil {
+			if activeDeliveryID == nil || *loc.DeliveryID != *activeDeliveryID {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能上报当前进行中的配送单")))
+				return
+			}
+		}
+
 		param := db.BatchCreateRiderLocationsParams{
 			RiderID:    rider.ID,
 			Longitude:  numericFromFloat(loc.Longitude),
@@ -930,8 +939,12 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 			RecordedAt: loc.RecordedAt,
 		}
 
-		if activeDeliveryID != nil {
-			param.DeliveryID = pgtype.Int8{Int64: *activeDeliveryID, Valid: true}
+		deliveryID := activeDeliveryID
+		if loc.DeliveryID != nil {
+			deliveryID = loc.DeliveryID
+		}
+		if deliveryID != nil {
+			param.DeliveryID = pgtype.Int8{Int64: *deliveryID, Valid: true}
 		}
 		if loc.Accuracy != nil {
 			param.Accuracy = numericFromFloat(*loc.Accuracy)
@@ -967,6 +980,10 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	if activeDeliveryID != nil {
+		server.processDeliveryLocationEvents(ctx, rider, *activeDeliveryID, latestLocation)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{

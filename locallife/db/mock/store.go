@@ -387,6 +387,21 @@ func (mr *MockStoreMockRecorder) BatchCreateRiderLocations(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchCreateRiderLocations", reflect.TypeOf((*MockStore)(nil).BatchCreateRiderLocations), ctx, arg)
 }
 
+// CreateDeliveryLocationEvent mocks base method.
+func (m *MockStore) CreateDeliveryLocationEvent(ctx context.Context, arg db.CreateDeliveryLocationEventParams) (db.DeliveryLocationEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDeliveryLocationEvent", ctx, arg)
+	ret0, _ := ret[0].(db.DeliveryLocationEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDeliveryLocationEvent indicates an expected call of CreateDeliveryLocationEvent.
+func (mr *MockStoreMockRecorder) CreateDeliveryLocationEvent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDeliveryLocationEvent", reflect.TypeOf((*MockStore)(nil).CreateDeliveryLocationEvent), ctx, arg)
+}
+
 // BatchUpdateDishOnlineStatus mocks base method.
 func (m *MockStore) BatchUpdateDishOnlineStatus(ctx context.Context, arg db.BatchUpdateDishOnlineStatusParams) (int64, error) {
 	m.ctrl.T.Helper()

@@ -2479,6 +2479,237 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/billing-groups": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "账单组"
+                ],
+                "summary": "账单组列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用餐会话ID",
+                        "name": "dining_session_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.billingGroupListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "账单组"
+                ],
+                "summary": "创建账单组",
+                "parameters": [
+                    {
+                        "description": "创建账单组请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createBillingGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.billingGroupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/billing-groups/{id}/join": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "账单组"
+                ],
+                "summary": "加入账单组",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "账单组ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.billingGroupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/billing-groups/{id}/orders": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "账单组"
+                ],
+                "summary": "账单组订单列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "账单组ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.billingGroupOrderListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/bind-merchant": {
             "post": {
                 "security": [
@@ -4543,6 +4774,151 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/dining-sessions/open": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "扫码后为桌台/预订创建开放会话；若已存在开放会话则直接返回",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用餐会话"
+                ],
+                "summary": "开启用餐会话（堂食/预订到店）",
+                "parameters": [
+                    {
+                        "description": "开台请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.openDiningSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.openDiningSessionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/dining-sessions/precheck": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "扫码后检查桌台当前时段是否被预订，返回预订及订单信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用餐会话"
+                ],
+                "summary": "用餐会话预检",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "桌台ID",
+                        "name": "table_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.diningSessionPrecheckResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/dishes": {
             "get": {
                 "security": [
@@ -6526,14 +6902,14 @@ const docTemplate = `{
         },
         "/v1/location/direction/bicycling": {
             "get": {
-                "description": "后端请求腾讯 LBS /ws/direction/v1/bicycling 并原样返回 JSON（不暴露 key）。",
+                "description": "调用自建 OSRM /route 获取骑行距离与耗时。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "位置"
                 ],
-                "summary": "腾讯骑行路线（后端代理）",
+                "summary": "自建 OSM 骑行路线",
                 "parameters": [
                     {
                         "type": "string",
@@ -6550,20 +6926,13 @@ const docTemplate = `{
                         "name": "to",
                         "in": "query",
                         "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "example": 0,
-                        "description": "路线策略（腾讯 LBS policy 参数）",
-                        "name": "policy",
-                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api.tencentDirectionAPIResponse"
+                            "$ref": "#/definitions/api.routeAPIResponse"
                         }
                     },
                     "400": {
@@ -6583,7 +6952,7 @@ const docTemplate = `{
         },
         "/v1/location/reverse-geocode": {
             "get": {
-                "description": "使用腾讯 LBS 将经纬度解析为地址（服务端调用腾讯接口，不暴露 key）。",
+                "description": "使用自建 OSM Nominatim 将经纬度解析为地址。",
                 "produces": [
                     "application/json"
                 ],
@@ -9119,7 +9488,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页获取当前商户的订单列表，支持按状态筛选\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待配送/待取餐\n- delivering: 配送中\n- completed: 已完成\n- cancelled: 已取消",
+                "description": "分页获取当前商户的订单列表，支持按状态筛选\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待配送/待取餐\n- courier_accepted: 骑手已接单\n- picked: 已取餐\n- delivering: 配送中\n- rider_delivered: 骑手送达\n- user_delivered: 用户确认送达\n- completed: 已完成\n- cancelled: 已取消",
                 "consumes": [
                     "application/json"
                 ],
@@ -9154,7 +9523,11 @@ const docTemplate = `{
                             "paid",
                             "preparing",
                             "ready",
+                            "courier_accepted",
+                            "picked",
                             "delivering",
+                            "rider_delivered",
+                            "user_delivered",
                             "completed",
                             "cancelled"
                         ],
@@ -14424,7 +14797,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页获取当前用户的订单列表，支持按状态筛选。\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待配送/待取餐\n- delivering: 配送中\n- completed: 已完成\n- cancelled: 已取消",
+                "description": "分页获取当前用户的订单列表，支持按状态筛选。\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待配送/待取餐\n- courier_accepted: 骑手已接单\n- picked: 已取餐\n- delivering: 配送中\n- rider_delivered: 骑手送达\n- user_delivered: 用户确认送达\n- completed: 已完成\n- cancelled: 已取消",
                 "consumes": [
                     "application/json"
                 ],
@@ -14459,13 +14832,36 @@ const docTemplate = `{
                             "paid",
                             "preparing",
                             "ready",
+                            "courier_accepted",
+                            "picked",
                             "delivering",
+                            "rider_delivered",
+                            "user_delivered",
                             "completed",
                             "cancelled"
                         ],
                         "type": "string",
                         "description": "订单状态筛选",
                         "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "takeout",
+                            "dine_in",
+                            "takeaway",
+                            "reservation"
+                        ],
+                        "type": "string",
+                        "description": "订单类型筛选",
+                        "name": "order_type",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "预订ID筛选（仅预定点菜订单）",
+                        "name": "reservation_id",
                         "in": "query"
                     }
                 ],
@@ -14871,6 +15267,88 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/orders/{id}/replace": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "仅限支付模式为全款的预订订单，生成新的堂食订单，旧订单标记为被替换；差额自动生成支付/退款单。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单管理"
+                ],
+                "summary": "全款预订改菜单，生成新订单并作废旧订单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "原订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新的菜品列表",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.replaceOrderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.replaceOrderResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -17385,6 +17863,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/reservations/{id}/modify-dishes": {
+            "post": {
+                "description": "用户修改预订菜品，支持差量补单或退款",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "预定管理"
+                ],
+                "summary": "预订改菜",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "预定ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "改菜请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.modifyDishesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/reservations/{id}/no-show": {
             "post": {
                 "security": [
@@ -19240,7 +19797,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "批量上报骑手GPS位置点，仅在线状态可调用",
+                "description": "批量上报骑手GPS位置点，仅在线状态可调用。可选传 delivery_id（必须为当前进行中配送）与 source 标识上报来源",
                 "consumes": [
                     "application/json"
                 ],
@@ -20062,6 +20619,12 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "最大容纳人数",
                         "name": "max_capacity",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "最小低消（分）",
+                        "name": "min_minimum_spend",
                         "in": "query"
                     },
                     {
@@ -23307,6 +23870,86 @@ const docTemplate = `{
                 }
             }
         },
+        "api.billingGroupListResponse": {
+            "type": "object",
+            "properties": {
+                "billing_groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.billingGroupResponse"
+                    }
+                }
+            }
+        },
+        "api.billingGroupOrderListResponse": {
+            "type": "object",
+            "properties": {
+                "orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.billingGroupOrderResponse"
+                    }
+                }
+            }
+        },
+        "api.billingGroupOrderResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "billing_group_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.billingGroupResponse": {
+            "type": "object",
+            "properties": {
+                "closed_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "dining_session_id": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_default": {
+                    "type": "boolean"
+                },
+                "paid_amount": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_amount": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "api.bindMerchantRequest": {
             "type": "object",
             "required": [
@@ -23481,6 +24124,18 @@ const docTemplate = `{
         "api.calculateCartResponse": {
             "type": "object",
             "properties": {
+                "buffer_minutes": {
+                    "description": "额外缓冲时间（分钟）",
+                    "type": "integer"
+                },
+                "delivery_distance": {
+                    "description": "配送距离（米），仅当成功计算时返回",
+                    "type": "integer"
+                },
+                "delivery_eta_minutes": {
+                    "description": "预计送达总时长（分钟），包含出餐、骑手到店、配送、缓冲",
+                    "type": "integer"
+                },
                 "delivery_fee": {
                     "description": "配送费（分）",
                     "type": "integer"
@@ -23503,6 +24158,18 @@ const docTemplate = `{
                 },
                 "min_order_amount": {
                     "description": "最小起送金额（分），0表示无限制",
+                    "type": "integer"
+                },
+                "prepare_minutes": {
+                    "description": "出餐时间（分钟）",
+                    "type": "integer"
+                },
+                "rider_to_store_minutes": {
+                    "description": "骑手到店时间（分钟）",
+                    "type": "integer"
+                },
+                "store_to_user_minutes": {
+                    "description": "店到用户路网时间（分钟）",
                     "type": "integer"
                 },
                 "subtotal": {
@@ -24038,6 +24705,18 @@ const docTemplate = `{
                 }
             }
         },
+        "api.createBillingGroupRequest": {
+            "type": "object",
+            "required": [
+                "dining_session_id"
+            ],
+            "properties": {
+                "dining_session_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
         "api.createComboSetRequest": {
             "type": "object",
             "required": [
@@ -24414,6 +25093,27 @@ const docTemplate = `{
                     "minimum": 1,
                     "example": 5001
                 },
+                "billing_group_id": {
+                    "description": "账单组ID (堂食可选，用于拼桌/单独结算)",
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 12001
+                },
+                "delivery_distance": {
+                    "description": "前端已计算的配送距离（米）",
+                    "type": "integer",
+                    "example": 2500
+                },
+                "delivery_fee": {
+                    "description": "前端已计算的配送费（分），用于直落且供服务端校验",
+                    "type": "integer",
+                    "example": 500
+                },
+                "delivery_fee_discount": {
+                    "description": "前端已计算的配送费优惠（分）",
+                    "type": "integer",
+                    "example": 200
+                },
                 "items": {
                     "description": "订单商品列表 (必填，至少包含1个商品，最多50个)",
                     "type": "array",
@@ -24788,9 +25488,7 @@ const docTemplate = `{
             "required": [
                 "contact_name",
                 "contact_phone",
-                "detail_address",
-                "latitude",
-                "longitude"
+                "detail_address"
             ],
             "properties": {
                 "contact_name": {
@@ -25070,7 +25768,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "available": {
-                    "description": "计算字段: total - sold",
+                    "description": "计算字段: total - sold - reserved",
                     "type": "integer"
                 },
                 "date": {
@@ -25083,6 +25781,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "merchant_id": {
+                    "type": "integer"
+                },
+                "reserved_quantity": {
                     "type": "integer"
                 },
                 "sold_quantity": {
@@ -25115,6 +25816,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "merchant_id": {
+                    "type": "integer"
+                },
+                "reserved_quantity": {
                     "type": "integer"
                 },
                 "sold_quantity": {
@@ -25397,6 +26101,76 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.diningSessionPrecheckResponse": {
+            "type": "object",
+            "properties": {
+                "is_reservation_owner": {
+                    "type": "boolean"
+                },
+                "order_fulfillment_status": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "order_status": {
+                    "type": "string"
+                },
+                "paid_amount": {
+                    "type": "integer"
+                },
+                "payment_mode": {
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "type": "integer"
+                },
+                "reserved": {
+                    "type": "boolean"
+                },
+                "table_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.diningSessionResponse": {
+            "type": "object",
+            "properties": {
+                "active_order_id": {
+                    "type": "integer"
+                },
+                "closed_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "opened_at": {
+                    "type": "string"
+                },
+                "reservation_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "table_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -26372,6 +27146,10 @@ const docTemplate = `{
                     "maximum": 1000,
                     "minimum": 0
                 },
+                "delivery_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
                 "heading": {
                     "description": "航向角(度)，0-360",
                     "type": "number",
@@ -26389,6 +27167,9 @@ const docTemplate = `{
                     "minimum": -180
                 },
                 "recorded_at": {
+                    "type": "string"
+                },
+                "source": {
                     "type": "string"
                 },
                 "speed": {
@@ -27278,6 +28059,22 @@ const docTemplate = `{
                 }
             }
         },
+        "api.modifyDishesRequest": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/api.addDishItem"
+                    }
+                }
+            }
+        },
         "api.notificationPreferencesResponse": {
             "type": "object",
             "properties": {
@@ -27355,6 +28152,39 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.openDiningSessionRequest": {
+            "type": "object",
+            "required": [
+                "table_id"
+            ],
+            "properties": {
+                "reservation_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "table_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "api.openDiningSessionResponse": {
+            "type": "object",
+            "properties": {
+                "billing_group": {
+                    "$ref": "#/definitions/api.billingGroupResponse"
+                },
+                "cart_id": {
+                    "type": "integer"
+                },
+                "imported_items": {
+                    "type": "integer"
+                },
+                "session": {
+                    "$ref": "#/definitions/api.diningSessionResponse"
                 }
             }
         },
@@ -27696,6 +28526,20 @@ const docTemplate = `{
                 }
             }
         },
+        "api.orderBadge": {
+            "type": "object",
+            "properties": {
+                "locale": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "api.orderCalculationItem": {
             "type": "object",
             "properties": {
@@ -27907,10 +28751,25 @@ const docTemplate = `{
         "api.orderResponse": {
             "type": "object",
             "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "address_id": {
                     "description": "配送地址ID (外卖订单时有值)",
                     "type": "integer",
                     "example": 5001
+                },
+                "auto_user_delivered_at": {
+                    "type": "string"
+                },
+                "badges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderBadge"
+                    }
                 },
                 "cancel_reason": {
                     "description": "取消原因",
@@ -27922,10 +28781,16 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2025-12-01T12:25:00Z"
                 },
+                "claim_channel": {
+                    "type": "string"
+                },
                 "completed_at": {
-                    "description": "完成时间",
+                    "description": "完成时间（历史兼容）",
                     "type": "string",
                     "example": "2025-12-01T13:15:00Z"
+                },
+                "courier_accept_at": {
+                    "type": "string"
                 },
                 "created_at": {
                     "description": "创建时间",
@@ -27952,6 +28817,11 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 2500
                 },
+                "delivery_eta_minutes": {
+                    "description": "预计送达总时长（分钟），用于前端 ETA 展示",
+                    "type": "integer",
+                    "example": 38
+                },
                 "delivery_fee": {
                     "description": "配送费 (单位：分)",
                     "type": "integer",
@@ -27966,6 +28836,35 @@ const docTemplate = `{
                     "description": "优惠金额 (单位：分)",
                     "type": "integer",
                     "example": 500
+                },
+                "dispatch_order_id": {
+                    "description": "三方派单/履约信息",
+                    "type": "integer"
+                },
+                "estimated_delivery_at": {
+                    "description": "预计送达时间（时间戳），用于订单详情展示送达时间段",
+                    "type": "string",
+                    "example": "2025-12-01T12:30:00Z"
+                },
+                "exception_state": {
+                    "description": "异常/投诉通道",
+                    "type": "string"
+                },
+                "flow_id": {
+                    "type": "integer"
+                },
+                "fulfillment_status": {
+                    "description": "履约状态 (枚举: scheduled-已排期, pending_kitchen-待出餐, preparing-制作中, ready-已出餐, completed-履约完成, cancelled-已取消)",
+                    "type": "string",
+                    "enum": [
+                        "scheduled",
+                        "pending_kitchen",
+                        "preparing",
+                        "ready",
+                        "completed",
+                        "cancelled"
+                    ],
+                    "example": "pending_kitchen"
                 },
                 "id": {
                     "description": "订单ID",
@@ -28015,6 +28914,9 @@ const docTemplate = `{
                     ],
                     "example": "takeout"
                 },
+                "overtime": {
+                    "type": "boolean"
+                },
                 "paid_at": {
                     "description": "支付时间",
                     "type": "string",
@@ -28029,24 +28931,56 @@ const docTemplate = `{
                     ],
                     "example": "wechat"
                 },
+                "picked_at": {
+                    "type": "string"
+                },
+                "pickup_code": {
+                    "type": "string"
+                },
+                "pickup_code_masked": {
+                    "type": "string"
+                },
+                "prep_start_at": {
+                    "description": "准备/配送关键时间点",
+                    "type": "string"
+                },
+                "ready_at": {
+                    "type": "string"
+                },
+                "replaced_by_order_id": {
+                    "description": "替换的新订单ID（仅当此订单被更新菜单替换时存在）",
+                    "type": "integer",
+                    "example": 100009
+                },
                 "reservation_id": {
                     "description": "预订ID (预定点菜时有值)",
                     "type": "integer",
                     "example": 8001
                 },
+                "rider_delivered_at": {
+                    "type": "string"
+                },
                 "status": {
-                    "description": "订单状态 (枚举: pending-待支付, paid-已支付, preparing-制作中, ready-待取餐/待配送, delivering-配送中, completed-已完成, cancelled-已取消)",
+                    "description": "订单状态 (枚举: pending-待支付, paid-已支付, preparing-制作中, ready-待取餐/待配送, courier_accepted-骑手已接单, picked-已取餐, delivering-配送中, rider_delivered-骑手送达, user_delivered-用户确认送达, completed-已完成, cancelled-已取消)",
                     "type": "string",
                     "enum": [
                         "pending",
                         "paid",
                         "preparing",
                         "ready",
+                        "courier_accepted",
+                        "picked",
                         "delivering",
+                        "rider_delivered",
+                        "user_delivered",
                         "completed",
                         "cancelled"
                     ],
                     "example": "paid"
+                },
+                "status_hint": {
+                    "description": "状态提示与徽标",
+                    "type": "string"
                 },
                 "subtotal": {
                     "description": "商品小计 (单位：分，不含配送费)",
@@ -28067,6 +29001,9 @@ const docTemplate = `{
                     "description": "更新时间",
                     "type": "string",
                     "example": "2025-12-01T12:30:00Z"
+                },
+                "user_delivered_at": {
+                    "type": "string"
                 },
                 "user_id": {
                     "description": "用户ID",
@@ -29088,6 +30025,43 @@ const docTemplate = `{
                 }
             }
         },
+        "api.replaceOrderRequest": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/api.orderItemRequest"
+                    }
+                },
+                "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                }
+            }
+        },
+        "api.replaceOrderResponse": {
+            "type": "object",
+            "properties": {
+                "delta": {
+                    "type": "integer"
+                },
+                "order": {
+                    "$ref": "#/definitions/api.orderResponse"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "refund_initiated": {
+                    "type": "boolean"
+                }
+            }
+        },
         "api.replyReviewRequest": {
             "type": "object",
             "required": [
@@ -29145,6 +30119,38 @@ const docTemplate = `{
                 }
             }
         },
+        "api.reservationItemResponse": {
+            "type": "object",
+            "properties": {
+                "combo_id": {
+                    "type": "integer"
+                },
+                "dish_id": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "image_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "total_price": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "unit_price": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.reservationResponse": {
             "type": "object",
             "properties": {
@@ -29178,8 +30184,23 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.reservationItemResponse"
+                    }
+                },
+                "merchant_address": {
+                    "type": "string"
+                },
                 "merchant_id": {
                     "type": "integer"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "merchant_phone": {
+                    "type": "string"
                 },
                 "notes": {
                     "type": "string"
@@ -29874,6 +30895,22 @@ const docTemplate = `{
                 }
             }
         },
+        "api.routeAPIResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "data": {
+                    "$ref": "#/definitions/maps.RouteResult"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
         "api.scanTableCategoryInfo": {
             "type": "object",
             "properties": {
@@ -30301,20 +31338,6 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
-                }
-            }
-        },
-        "api.tencentDirectionAPIResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 0
-                },
-                "data": {},
-                "message": {
-                    "type": "string",
-                    "example": "ok"
                 }
             }
         },
@@ -31468,6 +32491,19 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "ready_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "maps.RouteResult": {
+            "type": "object",
+            "properties": {
+                "distance": {
+                    "description": "距离（米）",
+                    "type": "integer"
+                },
+                "duration": {
+                    "description": "时间（秒）",
                     "type": "integer"
                 }
             }

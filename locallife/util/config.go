@@ -58,6 +58,13 @@ type Config struct {
 	// WebSocket reliable push rollout
 	WebSocketReliableEnabled bool `mapstructure:"WS_RELIABLE_ENABLED"`
 	WebSocketReliablePercent int  `mapstructure:"WS_RELIABLE_PERCENT"`
+
+	// Geofence configs for delivery events
+	GeofenceRadiusMeters       int  `mapstructure:"GEOFENCE_RADIUS_M"`
+	GeofenceDwellMinSeconds    int  `mapstructure:"GEOFENCE_DWELL_MIN_SECONDS"`
+	GeofenceDwellMinSamples    int  `mapstructure:"GEOFENCE_DWELL_MIN_SAMPLES"`
+	GeofenceMinAccuracyMeters  int  `mapstructure:"GEOFENCE_MIN_ACCURACY_M"`
+	GeofenceAutoAdvanceEnabled bool `mapstructure:"GEOFENCE_AUTO_ADVANCE_ENABLED"`
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -70,6 +77,12 @@ func LoadConfig(path string) (config Config, err error) {
 	// WebSocket rollout defaults
 	viper.SetDefault("WS_RELIABLE_ENABLED", true)
 	viper.SetDefault("WS_RELIABLE_PERCENT", 100)
+	// Geofence defaults
+	viper.SetDefault("GEOFENCE_RADIUS_M", 80)
+	viper.SetDefault("GEOFENCE_DWELL_MIN_SECONDS", 60)
+	viper.SetDefault("GEOFENCE_DWELL_MIN_SAMPLES", 3)
+	viper.SetDefault("GEOFENCE_MIN_ACCURACY_M", 80)
+	viper.SetDefault("GEOFENCE_AUTO_ADVANCE_ENABLED", false)
 
 	err = viper.ReadInConfig()
 	if err != nil {
