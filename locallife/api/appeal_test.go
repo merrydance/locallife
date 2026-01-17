@@ -1750,8 +1750,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(claim.ID), response["id"])
 				require.Equal(t, claim.ClaimType, response["claim_type"])
 			},
@@ -1895,8 +1894,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(appeal.ID), response["id"])
 				require.Equal(t, "rider", response["appellant_type"])
 			},

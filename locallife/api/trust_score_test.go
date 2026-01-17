@@ -117,8 +117,7 @@ func TestSubmitClaimAPI(t *testing.T) {
 
 				// 验证返回的数据结构
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				// 验证关键字段存在（高信用分用户会触发instant approval）
 				require.Contains(t, response, "status")
@@ -414,13 +413,20 @@ func TestListUserClaimsAPI(t *testing.T) {
 					}).
 					Times(1).
 					Return(claims, nil)
+
+				store.EXPECT().
+					CountUserClaimsInPeriod(gomock.Any(), db.CountUserClaimsInPeriodParams{
+						UserID:    user.ID,
+						CreatedAt: time.Unix(0, 0),
+					}).
+					Times(1).
+					Return(int64(len(claims)), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(1), response["page"])
 				require.Equal(t, float64(20), response["page_size"])
 
@@ -443,6 +449,14 @@ func TestListUserClaimsAPI(t *testing.T) {
 					}).
 					Times(1).
 					Return(claims, nil)
+
+				store.EXPECT().
+					CountUserClaimsInPeriod(gomock.Any(), db.CountUserClaimsInPeriodParams{
+						UserID:    user.ID,
+						CreatedAt: time.Unix(0, 0),
+					}).
+					Times(1).
+					Return(int64(len(claims)), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -459,13 +473,20 @@ func TestListUserClaimsAPI(t *testing.T) {
 					ListUserClaims(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Claim{}, nil)
+
+				store.EXPECT().
+					CountUserClaimsInPeriod(gomock.Any(), db.CountUserClaimsInPeriodParams{
+						UserID:    user.ID,
+						CreatedAt: time.Unix(0, 0),
+					}).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				claimsList := response["claims"].([]interface{})
 				require.Len(t, claimsList, 0)
@@ -554,8 +575,7 @@ func TestGetClaimDetailAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response claimResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, claim.ID, response.ID)
 				require.Equal(t, claim.OrderID, response.OrderID)
 				require.Equal(t, claim.UserID, response.UserID)
@@ -771,8 +791,7 @@ func TestReviewClaimAPI(t *testing.T) {
 
 				// 验证返回的状态
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "rejected", response["status"])
 			},
 		},
@@ -1303,8 +1322,7 @@ func TestSubmitAppealAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "noted", response["status"])
 			},
 		},

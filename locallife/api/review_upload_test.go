@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -48,8 +47,7 @@ func TestUploadReviewImageAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response uploadImageResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotEmpty(t, response.ImageURL)
 				require.Contains(t, response.ImageURL, "uploads")
 				require.Contains(t, response.ImageURL, "reviews")
@@ -129,7 +127,7 @@ func TestUploadReviewImageAPI(t *testing.T) {
 
 			part, err := writer.CreateFormFile("image", "test.jpg")
 			require.NoError(t, err)
-			_, err = part.Write([]byte("fake image data"))
+			_, err = part.Write(testPNGImage)
 			require.NoError(t, err)
 			require.NoError(t, writer.Close())
 

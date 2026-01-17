@@ -246,6 +246,16 @@ func TestGrabOrderAPI(t *testing.T) {
 					Return(order, nil)
 
 				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(merchant.OwnerUserID)).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
+
+				store.EXPECT().
 					UpdateOrderToCourierAccepted(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(db.Order{}, nil)
@@ -395,6 +405,16 @@ func TestConfirmPickupAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 
 				store.EXPECT().
 					UpdateDeliveryToPickedTx(gomock.Any(), gomock.Any()).
@@ -874,6 +894,16 @@ func TestStartPickupAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1039,6 +1069,16 @@ func TestStartDeliveryAPI(t *testing.T) {
 					Return(order, nil)
 
 				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
+
+				store.EXPECT().
 					UpdateDeliveryToDeliveringTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateDeliveryToDeliveringTxResult{Delivery: deliveringDelivery}, nil)
@@ -1179,6 +1219,16 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 					Return(order, nil)
 
 				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
+
+				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.OrderStatusLog{}, nil)
@@ -1274,6 +1324,46 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(lowDepositRider, nil)
+
+				store.EXPECT().
+					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(pool, nil)
+
+				store.EXPECT().
+					GetRiderPremiumScore(gomock.Any(), rider.ID).
+					Times(1).
+					Return(int16(0), nil)
+
+				merchant := db.Merchant{
+					ID:          merchantID,
+					OwnerUserID: util.RandomInt(1, 1000),
+					RegionID:    rider.RegionID.Int64,
+				}
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
+					Times(1).
+					Return(merchant, nil)
+
+				existingDelivery := randomDelivery(orderID, 0)
+				existingDelivery.RiderID = pgtype.Int8{Valid: false}
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(existingDelivery, nil)
+
+				order := db.Order{
+					ID:          orderID,
+					UserID:      util.RandomInt(1, 1000),
+					MerchantID:  merchantID,
+					OrderNo:     util.RandomString(10),
+					Status:      "paid",
+					TotalAmount: 5000,
+				}
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

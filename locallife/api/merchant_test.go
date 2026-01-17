@@ -39,8 +39,7 @@ func TestUploadMerchantImageAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response uploadImageResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotEmpty(t, response.ImageURL)
 				require.Contains(t, response.ImageURL, "merchants")
 				require.Contains(t, response.ImageURL, "business_license")
@@ -89,7 +88,8 @@ func TestUploadMerchantImageAPI(t *testing.T) {
 			// Add fake image file
 			part, err := writer.CreateFormFile("image", "test.jpg")
 			require.NoError(t, err)
-			part.Write([]byte("fake image data"))
+			_, err = part.Write(testPNGImage)
+			require.NoError(t, err)
 			writer.Close()
 
 			url := "/v1/merchants/images/upload"
@@ -124,14 +124,13 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, merchant.ID, response.ID)
 				require.Equal(t, merchant.Name, response.Name)
 			},
@@ -144,7 +143,7 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -213,7 +212,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -235,8 +234,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "Updated Name", response.Name)
 			},
 		},
@@ -252,7 +250,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

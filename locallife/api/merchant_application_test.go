@@ -341,8 +341,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "approved", resp.Status)
 			},
 		},
@@ -390,8 +389,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "rejected", resp.Status)
 				require.NotNil(t, resp.RejectReason)
 			},
@@ -507,8 +505,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "rejected", resp.Status)
 				require.NotNil(t, resp.RejectReason)
 				require.Contains(t, *resp.RejectReason, "地址已有商户入驻")
@@ -578,8 +575,7 @@ func TestResetMerchantApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantApplicationDraftResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "draft", resp.Status)
 			},
 		},

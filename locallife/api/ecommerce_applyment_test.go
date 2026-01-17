@@ -241,8 +241,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantBindBankResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(123456789), response.ApplymentID)
 				require.Equal(t, "submitted", response.Status)
 			},
@@ -456,8 +455,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantApplymentStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "pending", response.Status)
 			},
 		},
@@ -483,8 +481,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantApplymentStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "to_be_signed", response.Status)
 				require.NotNil(t, response.SignURL)
 			},
@@ -511,8 +508,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response merchantApplymentStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "finish", response.Status)
 				require.NotNil(t, response.SubMchID)
 			},
@@ -684,8 +680,7 @@ func TestRiderBindBankAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response riderBindBankResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(123456789), response.ApplymentID)
 			},
 		},
@@ -994,8 +989,7 @@ func TestMerchantBindBankWithoutEcommerceClient(t *testing.T) {
 	// 应该成功但返回降级消息
 	require.Equal(t, http.StatusOK, recorder.Code)
 	var response merchantBindBankResponse
-	err = json.Unmarshal(recorder.Body.Bytes(), &response)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, "submitted", response.Status)
 	require.Contains(t, response.Message, "待人工处理")
 }

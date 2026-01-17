@@ -75,8 +75,7 @@ func TestCreateComboSetAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response comboSetResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, combo.Name, response.Name)
 				require.Equal(t, combo.ComboPrice, response.ComboPrice)
 			},
@@ -222,8 +221,7 @@ func TestGetComboSetAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response comboSetWithDetailsResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, combo.ID, response.ID)
 				require.Equal(t, combo.Name, response.Name)
 				require.Len(t, response.Dishes, 2)
@@ -392,12 +390,19 @@ func TestListComboSetsAPI(t *testing.T) {
 					ListComboSetsByMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(combos, nil)
+
+				store.EXPECT().
+					CountComboSetsByMerchant(gomock.Any(), gomock.Eq(db.CountComboSetsByMerchantParams{
+						MerchantID: merchant.ID,
+						IsOnline:   pgtype.Bool{},
+					})).
+					Times(1).
+					Return(int64(n), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response listComboSetsResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.ComboSets, n)
 			},
 		},
@@ -507,8 +512,7 @@ func TestUpdateComboSetAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response comboSetResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, newName, response.Name)
 				require.Equal(t, newPrice, response.ComboPrice)
 			},

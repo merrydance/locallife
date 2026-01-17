@@ -430,13 +430,8 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 
-	// 检查押金余额
-	minDeposit := int64(5000) // 接单需要 50 元押金
+	// 计算可用押金（后续与订单货值对比）
 	availableDeposit := rider.DepositAmount - rider.FrozenDeposit
-	if availableDeposit < minDeposit {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("押金余额不足，无法接单")))
-		return
-	}
 
 	// 检查订单是否在池中（先获取用于高值单校验）
 	poolItem, err := server.store.GetDeliveryPoolByOrderID(ctx, req.OrderID)
@@ -504,21 +499,19 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 	oldStatus := order.Status
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionStartDelivery) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许开始配送", order.Status)))
-		return
-	}
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmPickup) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许确认取餐", order.Status)))
-		return
-	}
 	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionGrab) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许接单", order.Status)))
 		return
 	}
 
+	// 根据订单货值冻结押金
+	freezeAmount := orderFreezeAmount(order)
+	if freezeAmount > 0 && availableDeposit < freezeAmount {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("押金余额不足，无法接单")))
+		return
+	}
+
 	// 使用事务执行抢单操作：分配骑手 + 移除订单池 + 冻结押金 + 创建流水
-	freezeAmount := int64(5000) // 冻结 50 元
 	result, err := server.store.GrabOrderTx(ctx, db.GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      rider.ID,
@@ -710,6 +703,16 @@ func isOrderStatusAllowedForDeliveryAction(status string, action string) bool {
 	}
 }
 
+func orderFreezeAmount(order db.Order) int64 {
+	if order.FinalAmount.Valid && order.FinalAmount.Int64 > 0 {
+		return order.FinalAmount.Int64
+	}
+	if order.TotalAmount > 0 {
+		return order.TotalAmount
+	}
+	return 0
+}
+
 // startPickup godoc
 // @Summary 开始取餐
 // @Description 骑手开始前往商家取餐。只能在assigned状态下调用
@@ -758,11 +761,6 @@ func (server *Server) startPickup(ctx *gin.Context) {
 	// 检查是否是该骑手的配送单
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权操作此配送单")))
-		return
-	}
-
-	if delivery.Status != "delivering" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许确认送达", delivery.Status)))
 		return
 	}
 
@@ -879,8 +877,8 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		return
 	}
 	oldStatus := order.Status
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmDelivery) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许确认送达", order.Status)))
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmPickup) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许确认取餐", order.Status)))
 		return
 	}
 
@@ -1087,7 +1085,7 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 	oldStatus := order.Status
 
 	// 使用事务执行送达操作：更新状态 + 解冻押金 + 创建流水 + 更新统计
-	unfreezeAmount := int64(5000)
+	unfreezeAmount := orderFreezeAmount(order)
 	result, err := server.store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
 		DeliveryID:     req.ID,
 		RiderID:        rider.ID,

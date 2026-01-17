@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -23,6 +22,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+var testPNGImage = []byte{
+	0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+	0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+	0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+	0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+	0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4,
+	0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
+	0xAE, 0x42, 0x60, 0x82,
+}
 
 func TestUploadDishImageAPI(t *testing.T) {
 	user, _ := randomUser(t)
@@ -55,8 +66,7 @@ func TestUploadDishImageAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response uploadImageResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotEmpty(t, response.ImageURL)
 				require.Contains(t, response.ImageURL, fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID))
 
@@ -160,7 +170,7 @@ func TestUploadDishImageAPI(t *testing.T) {
 			writer := multipart.NewWriter(body)
 			part, err := writer.CreateFormFile("image", "test.jpg")
 			require.NoError(t, err)
-			_, err = part.Write([]byte("fake image data"))
+			_, err = part.Write(testPNGImage)
 			require.NoError(t, err)
 			require.NoError(t, writer.Close())
 

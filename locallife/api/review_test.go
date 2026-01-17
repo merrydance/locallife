@@ -93,8 +93,7 @@ func TestCreateReviewAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response reviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, order.ID, response.OrderID)
 				require.Equal(t, user.ID, response.UserID)
 				require.Equal(t, merchant.ID, response.MerchantID)
@@ -162,8 +161,7 @@ func TestCreateReviewAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response reviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.False(t, response.IsVisible) // Verify review is not visible
 			},
 		},
@@ -388,8 +386,7 @@ func TestListMerchantReviewsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(2), response["total_count"])
 				require.Equal(t, float64(1), response["page_id"])
 
@@ -515,8 +512,7 @@ func TestReplyReviewAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response reviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotNil(t, response.MerchantReply)
 				require.Equal(t, "Thank you for your feedback!", *response.MerchantReply)
 			},

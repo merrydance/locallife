@@ -525,6 +525,11 @@ func TestListUserReservationsAPI(t *testing.T) {
 					Return(reservations, nil)
 
 				store.EXPECT().
+					CountReservationsByUserAndStatus(gomock.Any(), gomock.Any()).
+					Times(8).
+					Return(int64(0), nil)
+
+				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
 					Return(merchant, nil)
@@ -869,6 +874,11 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 					ListReservationsByMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(reservations, nil)
+
+				store.EXPECT().
+					CountReservationsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -907,6 +917,11 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 					ListReservationsByMerchantAndStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.ListReservationsByMerchantAndStatusRow{}, nil)
+
+				store.EXPECT().
+					CountReservationsByMerchantAndStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

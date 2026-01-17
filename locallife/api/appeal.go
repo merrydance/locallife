@@ -364,19 +364,7 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		return
 	}
 	if exists {
-		appeal, err := server.store.GetAppealByClaim(ctx, db.GetAppealByClaimParams{
-			ClaimID:       req.ClaimID,
-			AppellantType: "merchant",
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if appeal.AppellantType != "merchant" || appeal.AppellantID != merchant.ID {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
-			return
-		}
-		ctx.JSON(http.StatusOK, newAppealResponse(appeal))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
 		return
 	}
 

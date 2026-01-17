@@ -110,8 +110,7 @@ func TestCreatePrinterAPI(t *testing.T) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response printerResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "测试打印机", response.PrinterName)
 				require.Equal(t, "SN123456789", response.PrinterSN)
 			},
@@ -155,8 +154,7 @@ func TestCreatePrinterAPI(t *testing.T) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response printerResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "other", response.PrinterType)
 			},
 		},
@@ -372,8 +370,7 @@ func TestListPrintersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(2), response["total"])
 			},
 		},
@@ -398,8 +395,7 @@ func TestListPrintersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, float64(1), response["total"])
 			},
 		},
@@ -494,8 +490,7 @@ func TestGetPrinterAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response printerResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, printer.ID, response.ID)
 			},
 		},
@@ -646,8 +641,7 @@ func TestUpdatePrinterAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response printerResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "更新后的打印机名", response.PrinterName)
 				require.Equal(t, false, response.IsActive)
 			},
@@ -1076,8 +1070,7 @@ func TestGetDisplayConfigAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response getDisplayConfigResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, config.ID, response.ID)
 				require.Equal(t, config.EnablePrint, response.EnablePrint)
 			},
@@ -1102,8 +1095,7 @@ func TestGetDisplayConfigAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response getDisplayConfigResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				// 验证默认值
 				require.Equal(t, true, response.EnablePrint)
 				require.Equal(t, true, response.PrintTakeout)
@@ -1211,8 +1203,7 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response getDisplayConfigResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, false, response.EnablePrint)
 				require.Equal(t, true, response.EnableVoice)
 			},

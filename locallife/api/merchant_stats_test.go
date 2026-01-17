@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +46,7 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -76,8 +75,7 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []dailyStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, int32(50), resp[0].OrderCount)
 				require.Equal(t, int64(500000), resp[0].TotalSales)
@@ -100,7 +98,12 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -111,7 +114,12 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -122,7 +130,12 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -133,7 +146,12 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -144,7 +162,12 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -155,7 +178,12 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -169,11 +197,11 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
@@ -185,7 +213,7 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -252,7 +280,7 @@ func TestGetMerchantOverviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -270,8 +298,7 @@ func TestGetMerchantOverviewAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantOverviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int32(30), resp.TotalDays)
 				require.Equal(t, int32(1000), resp.TotalOrders)
 				require.Equal(t, int64(10000000), resp.TotalSales)
@@ -297,11 +324,11 @@ func TestGetMerchantOverviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}
@@ -359,7 +386,7 @@ func TestGetTopSellingDishesAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -386,8 +413,7 @@ func TestGetTopSellingDishesAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []topSellingDishRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "宫保鸡丁", resp[0].DishName)
 				require.Equal(t, int32(500), resp[0].TotalSold)
@@ -402,7 +428,7 @@ func TestGetTopSellingDishesAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -424,7 +450,7 @@ func TestGetTopSellingDishesAPI(t *testing.T) {
 				// limit=0时会被设为默认值10，所以仍然成功
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -442,7 +468,12 @@ func TestGetTopSellingDishesAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -513,7 +544,7 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -542,8 +573,7 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, float64(1), resp["total_count"])
 				require.Len(t, resp["data"], 1)
 			},
@@ -557,7 +587,7 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -580,7 +610,12 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -591,7 +626,12 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -602,7 +642,12 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -627,11 +672,11 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}
@@ -690,7 +735,7 @@ func TestGetCustomerDetailAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -724,8 +769,7 @@ func TestGetCustomerDetailAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp customerDetailResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, customerID, resp.UserID)
 				require.Equal(t, "张三", resp.FullName)
 				require.Len(t, resp.FavoriteDishes, 1)
@@ -737,7 +781,12 @@ func TestGetCustomerDetailAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -751,7 +800,7 @@ func TestGetCustomerDetailAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -829,7 +878,7 @@ func TestGetMerchantHourlyStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -846,8 +895,7 @@ func TestGetMerchantHourlyStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []merchantHourlyStatsRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 4)
 				// 12点是高峰
 				require.Equal(t, int32(12), resp[1].Hour)
@@ -871,7 +919,12 @@ func TestGetMerchantHourlyStatsAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					MinTimes(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -931,7 +984,7 @@ func TestGetMerchantOrderSourceStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -946,8 +999,7 @@ func TestGetMerchantOrderSourceStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []merchantOrderSourceStatsRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "takeout", resp[0].OrderType)
 				require.Equal(t, int32(600), resp[0].OrderCount)
@@ -1019,7 +1071,7 @@ func TestGetMerchantRepurchaseRateAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -1037,8 +1089,7 @@ func TestGetMerchantRepurchaseRateAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantRepurchaseRateResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int32(100), resp.TotalUsers)
 				require.Equal(t, int32(30), resp.RepeatUsers)
 				require.Equal(t, float64(30.50), resp.RepurchaseRate)
@@ -1065,11 +1116,11 @@ func TestGetMerchantRepurchaseRateAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}
@@ -1127,7 +1178,7 @@ func TestGetMerchantDishCategoryStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -1143,8 +1194,7 @@ func TestGetMerchantDishCategoryStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []dishCategoryStatsRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 3)
 				require.Equal(t, "热菜", resp[0].CategoryName)
 				require.Equal(t, int64(5000000), resp[0].TotalSales)
@@ -1170,11 +1220,11 @@ func TestGetMerchantDishCategoryStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
@@ -1186,7 +1236,7 @@ func TestGetMerchantDishCategoryStatsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					MinTimes(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

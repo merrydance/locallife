@@ -221,12 +221,8 @@ func TestListDishCategoriesAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
-				// Need a new helper for slice of rows
-				data, err := io.ReadAll(recorder.Body)
-				require.NoError(t, err)
 				var gotResponse listDishCategoriesResponse
-				err = json.Unmarshal(data, &gotResponse)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &gotResponse)
 				require.Len(t, gotResponse.Categories, len(categories))
 			},
 		},
@@ -788,8 +784,7 @@ func requireBodyMatchDishCategory(t *testing.T, body *bytes.Buffer, category db.
 	require.NoError(t, err)
 
 	var gotCategory dishCategoryResponse
-	err = json.Unmarshal(data, &gotCategory)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, data, &gotCategory)
 	require.Equal(t, category.ID, gotCategory.ID)
 	require.Equal(t, category.Name, gotCategory.Name)
 }

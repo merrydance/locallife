@@ -1192,6 +1192,11 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					ListOrdersByMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(orders, nil)
+
+				store.EXPECT().
+					CountOrdersByMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(int64(len(orders)), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1240,6 +1245,14 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					ListOrdersByMerchantAndStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(orders, nil)
+
+				store.EXPECT().
+					CountOrdersByMerchantAndStatus(gomock.Any(), db.CountOrdersByMerchantAndStatusParams{
+						MerchantID: merchant.ID,
+						Status:     "paid",
+					}).
+					Times(1).
+					Return(int64(len(orders)), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1287,6 +1300,7 @@ func TestAcceptOrderAPI(t *testing.T) {
 	merchant := randomMerchant(merchantOwner.ID)
 	otherMerchantOwner, _ := randomUser(t)
 	otherMerchant := randomMerchant(otherMerchantOwner.ID)
+	otherMerchant.ID = merchant.ID + 1
 	customer, _ := randomUser(t)
 
 	paidOrder := randomOrder(customer.ID, merchant.ID)
@@ -1325,6 +1339,16 @@ func TestAcceptOrderAPI(t *testing.T) {
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateOrderStatusTxResult{Order: acceptedOrder}, nil)
+
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), acceptedOrder.UserID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1459,6 +1483,16 @@ func TestRejectOrderAPI(t *testing.T) {
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateOrderStatusTxResult{Order: rejectedOrder}, nil)
+
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), rejectedOrder.UserID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 
 				// 退款相关调用
 				store.EXPECT().
@@ -1718,6 +1752,14 @@ func TestUrgeOrderAPI(t *testing.T) {
 					Times(1).
 					Return(paidOrder, nil)
 				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), paidOrder.MerchantID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
+				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.OrderStatusLog{}, nil)
@@ -1739,6 +1781,14 @@ func TestUrgeOrderAPI(t *testing.T) {
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(preparingOrder, nil)
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), preparingOrder.MerchantID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1915,6 +1965,18 @@ func TestConfirmOrderAPI(t *testing.T) {
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.OrderStatusLog{}, nil)
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), order.MerchantID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), order.ID).
+					Times(1).
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2034,6 +2096,7 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 	merchant := randomMerchant(merchantOwner.ID)
 	otherMerchantOwner, _ := randomUser(t)
 	otherMerchant := randomMerchant(otherMerchantOwner.ID)
+	otherMerchant.ID = merchant.ID + 1
 	customer, _ := randomUser(t)
 
 	order := randomOrder(customer.ID, merchant.ID)
@@ -2166,6 +2229,7 @@ func TestMarkOrderReadyAPI(t *testing.T) {
 	merchant := randomMerchant(merchantOwner.ID)
 	otherMerchantOwner, _ := randomUser(t)
 	otherMerchant := randomMerchant(otherMerchantOwner.ID)
+	otherMerchant.ID = merchant.ID + 1
 	customer, _ := randomUser(t)
 
 	preparingOrder := randomOrder(customer.ID, merchant.ID)
@@ -2200,6 +2264,14 @@ func TestMarkOrderReadyAPI(t *testing.T) {
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateOrderStatusTxResult{Order: readyOrder}, nil)
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), readyOrder.UserID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2308,6 +2380,7 @@ func TestCompleteOrderAPI(t *testing.T) {
 	merchant := randomMerchant(merchantOwner.ID)
 	otherMerchantOwner, _ := randomUser(t)
 	otherMerchant := randomMerchant(otherMerchantOwner.ID)
+	otherMerchant.ID = merchant.ID + 1
 	customer, _ := randomUser(t)
 
 	readyOrder := randomOrder(customer.ID, merchant.ID)
@@ -2343,6 +2416,14 @@ func TestCompleteOrderAPI(t *testing.T) {
 					CompleteOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CompleteOrderTxResult{Order: completedOrder}, nil)
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), completedOrder.UserID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2372,6 +2453,14 @@ func TestCompleteOrderAPI(t *testing.T) {
 					CompleteOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CompleteOrderTxResult{Order: completedOrder}, nil)
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), completedOrder.UserID).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -3219,10 +3308,10 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 				// 验证错误信息
-				var response map[string]interface{}
+				var response APIResponse
 				err := json.Unmarshal(recorder.Body.Bytes(), &response)
 				require.NoError(t, err)
-				require.Contains(t, response["error"], "不适用于此订单类型")
+				require.Contains(t, response.Message, "不适用于此订单类型")
 			},
 		},
 		{
@@ -3584,10 +3673,10 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 				// 验证错误信息
-				var response map[string]string
+				var response APIResponse
 				err := json.Unmarshal(recorder.Body.Bytes(), &response)
 				require.NoError(t, err)
-				require.Contains(t, response["error"], "外卖和预定订单暂不支持余额支付")
+				require.Contains(t, response.Message, "外卖和预定订单暂不支持余额支付")
 			},
 		},
 		{

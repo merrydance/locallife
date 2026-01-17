@@ -72,8 +72,7 @@ func TestListNotificationsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response listNotificationsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(1), response.TotalCount)
 				require.Len(t, response.Notifications, 1)
 				require.Equal(t, "order", response.Notifications[0].Type)
@@ -144,8 +143,7 @@ func TestGetUnreadCountAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response unreadCountResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(5), response.Count)
 			},
 		},
@@ -222,8 +220,7 @@ func TestMarkNotificationAsReadAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, notification.ID, response.ID)
 				require.True(t, response.IsRead)
 			},
@@ -294,8 +291,7 @@ func TestMarkAllAsReadAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response markAllAsReadResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.True(t, response.Success)
 			},
 		},
@@ -433,8 +429,7 @@ func TestGetNotificationPreferencesAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationPreferencesResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, user.ID, response.UserID)
 				require.True(t, response.EnableOrderNotifications)
 			},
@@ -509,8 +504,7 @@ func TestUpdateNotificationPreferencesAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationPreferencesResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.False(t, response.EnableOrderNotifications)
 			},
 		},
@@ -842,8 +836,7 @@ func TestUpdateNotificationPreferencesWithDoNotDisturbAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response notificationPreferencesResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotNil(t, response.DoNotDisturbStart)
 				require.NotNil(t, response.DoNotDisturbEnd)
 				require.Equal(t, "22:00:00", *response.DoNotDisturbStart)

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -62,8 +61,7 @@ func TestGetPlatformOverviewAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp platformOverviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int32(1000), resp.TotalOrders)
 				require.Equal(t, int64(5000000), resp.TotalGMV)
 				require.Equal(t, int64(150000), resp.TotalCommission)
@@ -250,8 +248,7 @@ func TestGetPlatformDailyStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []platformDailyStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "2025-01-01", resp[0].Date)
 				require.Equal(t, int32(100), resp[0].OrderCount)
@@ -282,8 +279,7 @@ func TestGetPlatformDailyStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []platformDailyStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 0)
 			},
 		},
@@ -370,8 +366,7 @@ func TestGetRegionComparisonAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []regionComparisonRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "北京", resp[0].RegionName)
 				require.Equal(t, int32(100), resp[0].MerchantCount)
@@ -466,8 +461,7 @@ func TestGetMerchantRankingAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []merchantRankingRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "测试商户1", resp[0].MerchantName)
 				require.Equal(t, int32(500), resp[0].OrderCount)
@@ -595,8 +589,7 @@ func TestGetCategoryStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []categoryStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "快餐", resp[0].CategoryName)
 				require.Equal(t, int32(50), resp[0].MerchantCount)
@@ -673,8 +666,7 @@ func TestGetUserGrowthStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []growthStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "2025-01-01", resp[0].Date)
 				require.Equal(t, int32(50), resp[0].Count)
@@ -751,8 +743,7 @@ func TestGetMerchantGrowthStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []growthStatRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "2025-01-01", resp[0].Date)
 				require.Equal(t, int32(5), resp[0].Count)
@@ -842,8 +833,7 @@ func TestGetRiderRankingAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []riderRankingRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "骑手A", resp[0].RiderName)
 				require.Equal(t, int32(200), resp[0].DeliveryCount)
@@ -918,8 +908,7 @@ func TestGetHourlyDistributionAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []hourlyDistributionRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 4)
 				// 验证午餐高峰时段数据
 				require.Equal(t, int32(12), resp[1].Hour)
@@ -995,8 +984,7 @@ func TestGetRealtimeDashboardAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp realtimeDashboardResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int32(500), resp.Orders24h)
 				require.Equal(t, int64(2500000), resp.GMV24h)
 				require.Equal(t, int32(80), resp.ActiveMerchants24h)

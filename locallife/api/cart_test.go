@@ -106,8 +106,7 @@ func TestGetCartAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response cartResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, cart.ID, response.ID)
 				require.Equal(t, merchant.ID, response.MerchantID)
 				require.Len(t, response.Items, 1)
@@ -121,7 +120,11 @@ func TestGetCartAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+						UserID:     user.ID,
+						MerchantID: merchant.ID,
+						OrderType:  "takeout",
+					})).
 					Times(1).
 					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
@@ -129,8 +132,7 @@ func TestGetCartAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response cartResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Empty(t, response.Items)
 				require.Equal(t, int64(0), response.Subtotal)
 			},
@@ -231,7 +233,11 @@ func TestAddCartItemAPI(t *testing.T) {
 					Return(dish, nil)
 
 				store.EXPECT().
-					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+						UserID:     user.ID,
+						MerchantID: merchant.ID,
+						OrderType:  "takeout",
+					})).
 					Times(1).
 					Return(db.Cart{}, db.ErrRecordNotFound)
 
@@ -1045,8 +1051,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response userCartsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				require.Equal(t, 2, response.Summary.CartCount)
 				require.Equal(t, 5, response.Summary.TotalItems)
@@ -1083,8 +1088,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response userCartsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				require.Equal(t, 0, response.Summary.CartCount)
 				require.Len(t, response.Carts, 0)
@@ -1126,8 +1130,7 @@ func TestGetAllCartsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response userCartsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 
 				require.False(t, response.Carts[0].AllAvailable)
 			},

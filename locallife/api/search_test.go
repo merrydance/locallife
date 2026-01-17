@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -320,8 +319,7 @@ func TestSearchCombosAPI(t *testing.T) {
 					PageID   int32                `json:"page_id"`
 					PageSize int32                `json:"page_size"`
 				}
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.Combos, 1)
 				require.EqualValues(t, 1, response.Total)
 			},

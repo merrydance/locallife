@@ -58,8 +58,8 @@ func createRandomMerchantWithOwner(t *testing.T, ownerID int64) Merchant {
 		LogoUrl:         pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
 		Phone:           "13800138000",
 		Address:         util.RandomString(30),
-		Latitude:        pgtype.Numeric{},
-		Longitude:       pgtype.Numeric{},
+		Latitude:        numericFromFloat64(39.9282),
+		Longitude:       numericFromFloat64(116.4507),
 		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID, // 添加区域ID

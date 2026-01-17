@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -23,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
 
 func TestUploadTableImageAPI(t *testing.T) {
 	user, _ := randomUser(t)
@@ -55,8 +55,7 @@ func TestUploadTableImageAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response uploadImageResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotEmpty(t, response.ImageURL)
 				require.Contains(t, response.ImageURL, fmt.Sprintf("uploads/public/merchants/%d/tables/", merchant.ID))
 
@@ -160,7 +159,7 @@ func TestUploadTableImageAPI(t *testing.T) {
 			writer := multipart.NewWriter(body)
 			part, err := writer.CreateFormFile("image", "test.jpg")
 			require.NoError(t, err)
-			_, err = part.Write([]byte("fake image data"))
+			_, err = part.Write(testPNGImage)
 			require.NoError(t, err)
 			require.NoError(t, writer.Close())
 

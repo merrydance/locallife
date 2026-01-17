@@ -1349,9 +1349,10 @@ func TestGetRoomAvailabilityAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				// 验证返回的时间段数量 (午餐 11:00-13:00 + 晚餐 17:00-20:00, 每30分钟)
-				var resp roomAvailabilityResponse
-				err := json.NewDecoder(recorder.Body).Decode(&resp)
+				data, err := io.ReadAll(recorder.Body)
 				require.NoError(t, err)
+				var resp roomAvailabilityResponse
+				requireUnmarshalAPIResponseData(t, data, &resp)
 				require.Equal(t, 12, len(resp.TimeSlots)) // 11:00-13:00 共5个，17:00-20:00 共7个
 				require.Equal(t, "2025-01-15", resp.Date)
 			},
@@ -1433,8 +1434,7 @@ func requireBodyMatchTable(t *testing.T, body *bytes.Buffer, table db.Table) {
 	require.NoError(t, err)
 
 	var gotTable tableResponse
-	err = json.Unmarshal(data, &gotTable)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, data, &gotTable)
 
 	require.Equal(t, table.ID, gotTable.ID)
 	require.Equal(t, table.MerchantID, gotTable.MerchantID)

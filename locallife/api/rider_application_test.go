@@ -75,8 +75,7 @@ func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var resp riderApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "draft", resp.Status)
 			},
 		},
@@ -97,8 +96,7 @@ func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.NotNil(t, resp.RealName)
 				require.Equal(t, "张三", *resp.RealName)
 			},
@@ -287,8 +285,7 @@ func TestSubmitRiderApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "approved", resp.Status)
 			},
 		},
@@ -327,8 +324,7 @@ func TestSubmitRiderApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "rejected", resp.Status)
 				require.NotNil(t, resp.RejectReason)
 				require.Contains(t, *resp.RejectReason, "身份证已过期")
@@ -368,8 +364,7 @@ func TestSubmitRiderApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "rejected", resp.Status)
 			},
 		},
@@ -444,8 +439,7 @@ func TestSubmitRiderApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "approved", resp.Status)
 			},
 		},
@@ -508,8 +502,7 @@ func TestResetRiderApplication(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderApplicationResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "draft", resp.Status)
 			},
 		},

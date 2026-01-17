@@ -115,8 +115,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, paymentOrder.ID, response.ID)
 				require.Equal(t, "pending", response.Status)
 			},
@@ -214,8 +213,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, paymentOrder.ID, response.ID)
 			},
 		},
@@ -339,8 +337,7 @@ func TestGetPaymentOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, paymentOrder.ID, response.ID)
 			},
 		},
@@ -445,10 +442,9 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response []paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Len(t, response, 1)
+				var response listPaymentOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.PaymentOrders, 1)
 			},
 		},
 		{
@@ -470,10 +466,9 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response []paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Len(t, response, 1)
+				var response listPaymentOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.PaymentOrders, 1)
 			},
 		},
 		{
@@ -495,10 +490,9 @@ func TestListPaymentOrdersAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response []paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Len(t, response, 1)
+				var response listPaymentOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.PaymentOrders, 1)
 			},
 		},
 		{
@@ -586,8 +580,7 @@ func TestClosePaymentOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response paymentOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "closed", response.Status)
 			},
 		},
@@ -739,8 +732,7 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response refundOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, refundOrder.ID, response.ID)
 			},
 		},
@@ -961,8 +953,7 @@ func TestGetRefundOrderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response refundOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, refundOrder.ID, response.ID)
 			},
 		},
@@ -1112,10 +1103,9 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response []refundOrderResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Len(t, response, 1)
+				var response listRefundOrdersByPaymentResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.RefundOrders, 1)
 			},
 		},
 		{

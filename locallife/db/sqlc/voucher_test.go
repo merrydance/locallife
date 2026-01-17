@@ -46,6 +46,9 @@ func createRandomUserVoucher(t *testing.T, voucherID, userID int64) UserVoucher 
 	require.NoError(t, err)
 	require.NotZero(t, uv.ID)
 
+	_, err = testStore.IncrementVoucherClaimedQuantity(context.Background(), voucherID)
+	require.NoError(t, err)
+
 	return uv
 }
 
@@ -515,18 +518,14 @@ func TestGetVoucherUsageStats(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		user := createRandomUser(t)
 		createRandomUserVoucher(t, voucher.ID, user.ID)
-		_, err := testStore.IncrementVoucherClaimedQuantity(context.Background(), voucher.ID)
-		require.NoError(t, err)
 	}
 
 	// 1个用户使用
 	useUser := createRandomUser(t)
 	uv := createRandomUserVoucher(t, voucher.ID, useUser.ID)
-	_, err := testStore.IncrementVoucherClaimedQuantity(context.Background(), voucher.ID)
-	require.NoError(t, err)
 
 	order := createCompletedOrderForStats(t, useUser.ID, merchant.ID, 10000, "takeout", time.Now())
-	_, err = testStore.MarkUserVoucherAsUsed(context.Background(), MarkUserVoucherAsUsedParams{
+	_, err := testStore.MarkUserVoucherAsUsed(context.Background(), MarkUserVoucherAsUsedParams{
 		ID:      uv.ID,
 		OrderID: pgtype.Int8{Int64: order.ID, Valid: true},
 	})

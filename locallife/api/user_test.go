@@ -251,8 +251,7 @@ func requireBodyMatchUser(t *testing.T, body *bytes.Buffer, user db.User) {
 	data := body.Bytes()
 
 	var gotUser userResponse
-	err := json.Unmarshal(data, &gotUser)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, data, &gotUser)
 	require.Equal(t, user.ID, gotUser.ID)
 	require.Equal(t, user.WechatOpenid, gotUser.WechatOpenID)
 }

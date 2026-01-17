@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -60,8 +59,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response kitchenOrdersResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, 5, response.Stats.CompletedTodayCount)
 				require.Equal(t, 12, response.Stats.AvgPrepareTime) // 验证平均出餐时间
 			},
@@ -97,8 +95,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response kitchenOrdersResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, 0, response.Stats.CompletedTodayCount)
 				// 没有历史数据时，使用默认值15分钟
 				require.Equal(t, 15, response.Stats.AvgPrepareTime)
@@ -214,8 +211,7 @@ func TestStartPreparingAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response kitchenOrderResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "preparing", response.Status)
 			},
 		},
@@ -382,8 +378,7 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response kitchenOrderResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "ready", response.Status)
 			},
 		},
@@ -547,8 +542,7 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response kitchenOrderResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, order.ID, response.ID)
 				require.True(t, response.IsUrged)
 				// 验证订单商品包含制作时间
@@ -590,8 +584,7 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response kitchenOrderResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, order.ID, response.ID)
 				require.False(t, response.IsUrged)
 				require.Empty(t, response.Items)

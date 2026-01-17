@@ -63,8 +63,8 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 				// 解析响应
 				var rsp renewAccessTokenResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &rsp)
-				require.NoError(t, err)
+				data := recorder.Body.Bytes()
+				requireUnmarshalAPIResponseData(t, data, &rsp)
 
 				// 验证access_token不为空
 				require.NotEmpty(t, rsp.AccessToken)

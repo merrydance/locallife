@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -79,8 +78,7 @@ func TestGetRegionStatsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp regionStatsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, operator.RegionID, resp.RegionID)
 				require.Equal(t, "测试区域", resp.RegionName)
 				require.Equal(t, int32(10), resp.MerchantCount)
@@ -305,8 +303,7 @@ func TestGetOperatorMerchantRankingAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []operatorMerchantRankingRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 2)
 				require.Equal(t, "商户1", resp[0].MerchantName)
 			},
@@ -413,8 +410,7 @@ func TestGetOperatorRiderRankingAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []operatorRiderRankingRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 1)
 				require.Equal(t, "骑手1", resp[0].RiderName)
 			},
@@ -497,8 +493,7 @@ func TestGetRegionDailyTrendAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp []regionDailyTrendRow
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp, 1)
 				require.Equal(t, "2025-01-01", resp[0].Date)
 			},
@@ -590,8 +585,7 @@ func TestGetOperatorFinanceOverviewAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp operatorFinanceOverviewResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, operator.RegionID, resp.RegionID)
 				require.Equal(t, "测试区域", resp.RegionName)
 			},
@@ -673,8 +667,7 @@ func TestGetOperatorCommissionAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp operatorCommissionResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Items, 1)
 				require.Equal(t, int64(750), resp.Summary.TotalCommission)
 			},

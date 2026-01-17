@@ -485,6 +485,10 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 						UserID:       100,
 						BusinessType: "order",
 					}, nil)
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 
 				// 6. 记录通知ID
 				store.EXPECT().

@@ -138,8 +138,7 @@ func TestScanTableAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response scanTableResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, merchant.ID, response.Merchant.ID)
 				require.Equal(t, merchant.Name, response.Merchant.Name)
 				require.Equal(t, table.ID, response.Table.ID)
@@ -558,8 +557,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response generateTableQRCodeResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotEmpty(t, response.QrCodeUrl)
 				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("uploads/public/merchants/%d/qrcodes/", merchant.ID))
 				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("qrcode_m%d_t%d.png", merchant.ID, table.ID))

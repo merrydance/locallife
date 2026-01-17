@@ -227,16 +227,9 @@ func TestRecommendDishesAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var response struct {
-					Code    int                     `json:"code"`
-					Message string                  `json:"message"`
-					Data    recommendDishesResponse `json:"data"`
-				}
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
-				require.Equal(t, 0, response.Code)
-				require.Equal(t, "ok", response.Message)
-				require.Equal(t, "ee-algorithm", response.Data.Algorithm)
+				var response recommendDishesResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "ee-algorithm", response.Algorithm)
 			},
 		},
 		{
@@ -344,8 +337,7 @@ func TestGetRecommendationConfigAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response getRecommendationConfigResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, regionID, response.RegionID)
 				// pgtype.Numeric转换可能需要更宽松的精度检查
 				require.Greater(t, response.ExploitationRatio, 0.59)
@@ -393,8 +385,7 @@ func TestGetRecommendationConfigAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response getRecommendationConfigResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, regionID, response.RegionID)
 				require.InDelta(t, 0.60, response.ExploitationRatio, 0.01) // default
 			},
@@ -520,8 +511,7 @@ func TestUpdateRecommendationConfigAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response getRecommendationConfigResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Greater(t, response.ExploitationRatio, 0.49)
 				require.Less(t, response.ExploitationRatio, 0.51)
 				require.Greater(t, response.ExplorationRatio, 0.39)

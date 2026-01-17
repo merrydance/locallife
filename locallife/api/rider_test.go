@@ -342,8 +342,7 @@ func TestDepositRiderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				// 验证返回支付订单信息
 				var resp map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Contains(t, resp, "payment_order_id")
 				require.Contains(t, resp, "out_trade_no")
 			},
@@ -462,8 +461,7 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp depositBalanceResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int64(50000), resp.TotalDeposit)
 				require.Equal(t, int64(5000), resp.FrozenDeposit)
 				require.Equal(t, int64(45000), resp.AvailableDeposit)
@@ -581,8 +579,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp depositResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int64(10000), resp.Amount)
 				require.Equal(t, "withdraw", resp.Type)
 			},
@@ -758,10 +755,9 @@ func TestListRiderDepositsAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp []depositResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.Len(t, resp, 2)
+				var resp listRiderDepositsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Deposits, 2)
 			},
 		},
 		{
@@ -808,11 +804,10 @@ func TestListRiderDepositsAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp []depositResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
-				require.NotNil(t, resp) // 确保返回空数组而非 null
-				require.Len(t, resp, 0)
+				var resp listRiderDepositsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.Deposits) // 确保返回空数组而非 null
+				require.Len(t, resp.Deposits, 0)
 			},
 		},
 	}
@@ -875,8 +870,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "active", resp.Status)
 				require.True(t, resp.IsOnline)
 				require.Equal(t, "online", resp.OnlineStatus)
@@ -904,8 +898,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "delivering", resp.OnlineStatus)
 				require.Equal(t, 1, resp.ActiveDeliveries)
 				require.False(t, resp.CanGoOffline) // 有配送中订单不能下线
@@ -932,8 +925,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "offline", resp.OnlineStatus)
 				require.False(t, resp.CanGoOffline) // 已经离线，不能再下线
 			},
@@ -960,8 +952,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.False(t, resp.CanGoOnline)
 				require.Contains(t, resp.OnlineBlockReason, "押金不足")
 			},
@@ -1073,8 +1064,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "位置更新成功", resp["message"])
 				require.Equal(t, float64(1), resp["count"])
 			},
@@ -1127,8 +1117,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp map[string]interface{}
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, float64(3), resp["count"])
 			},
 		},
@@ -1444,8 +1433,7 @@ func TestGetRiderPremiumScoreAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderPremiumScoreResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, rider.ID, resp.RiderID)
 				require.Equal(t, int16(5), resp.PremiumScore)
 				require.True(t, resp.CanAcceptPremiumOrder)
@@ -1475,8 +1463,7 @@ func TestGetRiderPremiumScoreAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderPremiumScoreResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int16(-2), resp.PremiumScore)
 				require.False(t, resp.CanAcceptPremiumOrder)
 			},
@@ -1616,8 +1603,7 @@ func TestListRiderPremiumScoreHistoryAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp listRiderPremiumScoreHistoryResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int16(3), resp.CurrentScore)
 				require.Equal(t, int64(2), resp.Total)
 				require.Len(t, resp.Logs, 2)
@@ -1655,8 +1641,7 @@ func TestListRiderPremiumScoreHistoryAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp listRiderPremiumScoreHistoryResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int16(0), resp.CurrentScore)
 				require.Equal(t, int64(0), resp.Total)
 				require.Len(t, resp.Logs, 0)

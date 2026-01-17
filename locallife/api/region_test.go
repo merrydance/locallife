@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -293,8 +292,7 @@ func TestListRegionChildrenAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var regions []regionResponse
-				err := json.NewDecoder(recorder.Body).Decode(&regions)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &regions)
 				require.Empty(t, regions)
 			},
 		},
@@ -455,8 +453,7 @@ func randomRegion() db.Region {
 
 func requireBodyMatchRegion(t *testing.T, body *bytes.Buffer, region db.Region) {
 	var gotRegion regionResponse
-	err := json.NewDecoder(body).Decode(&gotRegion)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, body.Bytes(), &gotRegion)
 	require.Equal(t, region.ID, gotRegion.ID)
 	require.Equal(t, region.Code, gotRegion.Code)
 	require.Equal(t, region.Name, gotRegion.Name)
@@ -464,8 +461,7 @@ func requireBodyMatchRegion(t *testing.T, body *bytes.Buffer, region db.Region) 
 
 func requireBodyMatchRegions(t *testing.T, body *bytes.Buffer, regions []db.Region) {
 	var gotRegions []regionResponse
-	err := json.NewDecoder(body).Decode(&gotRegions)
-	require.NoError(t, err)
+	requireUnmarshalAPIResponseData(t, body.Bytes(), &gotRegions)
 	require.Equal(t, len(regions), len(gotRegions))
 	for i, region := range regions {
 		require.Equal(t, region.ID, gotRegions[i].ID)
@@ -518,8 +514,7 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response map[string]interface{}
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				regions, ok := response["regions"].([]interface{})
 				require.True(t, ok)
 				require.Equal(t, 3, len(regions))
@@ -573,8 +568,7 @@ func TestListAvailableRegionsAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response map[string]interface{}
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				regions, ok := response["regions"].([]interface{})
 				require.True(t, ok)
 				require.Empty(t, regions)
@@ -684,15 +678,14 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					Times(1).
 					Return(region, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
 					Return(db.Operator{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response regionAvailabilityResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, region.ID, response.RegionID)
 				require.True(t, response.IsAvailable)
 				require.Empty(t, response.Reason)
@@ -707,15 +700,14 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					Times(1).
 					Return(region, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
 					Return(operator, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response regionAvailabilityResponse
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, region.ID, response.RegionID)
 				require.False(t, response.IsAvailable)
 				require.Contains(t, response.Reason, operator.Name)
@@ -755,7 +747,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					GetRegion(gomock.Any(), gomock.Any()).
 					Times(0)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Any()).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -776,7 +768,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "GetOperatorByRegion_InternalError",
+			name: "GetActiveOperatorByRegion_InternalError",
 			url:  fmt.Sprintf("/v1/regions/%d/check", region.ID),
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
@@ -784,7 +776,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 					Times(1).
 					Return(region, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
+					GetActiveOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
 					Return(db.Operator{}, sql.ErrConnDone)
 			},

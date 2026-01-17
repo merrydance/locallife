@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 辅助函数：创建随机商户（依赖merchant相关代码）
+// 创建用于菜品测试的商户
 func createRandomMerchantForDish(t *testing.T) Merchant {
 	user := createRandomUser(t)
 	region := createRandomRegion(t)
@@ -24,16 +24,24 @@ func createRandomMerchantForDish(t *testing.T) Merchant {
 		Address:     util.RandomString(30),
 		Status:      "active",
 		RegionID:    region.ID,
+		Latitude:    numericFromFloat64(39.9282),
+		Longitude:   numericFromFloat64(116.4507),
 	}
 
 	merchant, err := testStore.CreateMerchant(context.Background(), arg)
+	require.NoError(t, err)
+
+	merchant, err = testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
+		ID:     merchant.ID,
+		Status: "active",
+	})
 	require.NoError(t, err)
 	require.NotEmpty(t, merchant)
 
 	return merchant
 }
 
-// 辅助函数：创建随机菜品分类
+// 创建随机菜品分类
 func createRandomDishCategory(t *testing.T) DishCategory {
 	name := util.RandomString(8)
 	category, err := testStore.CreateDishCategory(context.Background(), name)
@@ -599,14 +607,14 @@ func TestGetDishWithDetails(t *testing.T) {
 // ============================================
 
 func TestSearchDishesGlobal(t *testing.T) {
-	// 创建已批准的商户
+	// 创建已激活的商户
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 
-	// 将商户状态改为 approved
+	// 将商户状态改为 active
 	_, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
 		ID:     merchant.ID,
-		Status: "approved",
+		Status: "active",
 	})
 	require.NoError(t, err)
 
@@ -687,12 +695,12 @@ func TestSearchDishesGlobal_OnlyApprovedMerchants(t *testing.T) {
 }
 
 func TestSearchDishesGlobal_Pagination(t *testing.T) {
-	// 创建已批准的商户
+	// 创建已激活的商户
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	_, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
 		ID:     merchant.ID,
-		Status: "approved",
+		Status: "active",
 	})
 	require.NoError(t, err)
 
@@ -739,12 +747,12 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 }
 
 func TestCountSearchDishesGlobal(t *testing.T) {
-	// 创建已批准的商户
+	// 创建已激活的商户
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
 	_, err := testStore.UpdateMerchantStatus(context.Background(), UpdateMerchantStatusParams{
 		ID:     merchant.ID,
-		Status: "approved",
+		Status: "active",
 	})
 	require.NoError(t, err)
 

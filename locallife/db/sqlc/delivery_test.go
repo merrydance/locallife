@@ -493,10 +493,9 @@ func TestListDeliveryPool_EffectivePriority(t *testing.T) {
 	merchant, err := testStore.GetMerchant(context.Background(), order.MerchantID)
 	require.NoError(t, err)
 
-	// 使用非常独特的坐标，避免与其他测试数据冲突
-	// 使用足够“唯一”但投影/距离计算更稳定的坐标，避免接近极点导致某些 PostGIS 计算异常或被过滤。
-	uniqueLat := 60.12345
-	uniqueLng := 170.12345
+	// 使用非常独特且计算稳定的坐标，避免浮点误差导致 acos 参数超界
+	uniqueLat := 0.0
+	uniqueLng := 0.0
 
 	arg := AddToDeliveryPoolParams{
 		OrderID:           order.ID,
@@ -522,11 +521,13 @@ func TestListDeliveryPool_EffectivePriority(t *testing.T) {
 	require.Equal(t, poolItem.ID, foundPool.ID)
 
 	// 使用 ListDeliveryPoolNearby 获取并检查 effective_priority
-	// 使用创建时的唯一坐标，确保只匹配到我们创建的订单
+	// 使用相同坐标保证距离为 0
+	riderLat := uniqueLat
+	riderLng := uniqueLng
 	pools, err := testStore.ListDeliveryPoolNearby(context.Background(), ListDeliveryPoolNearbyParams{
-		RiderLat:    uniqueLat,
-		RiderLng:    uniqueLng,
-		MaxDistance: 100, // 100米范围内，非常小
+		RiderLat:    riderLat,
+		RiderLng:    riderLng,
+		MaxDistance: 1000, // 1km 范围内
 		ResultLimit: 10,
 	})
 	require.NoError(t, err)

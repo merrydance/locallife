@@ -77,8 +77,7 @@ func TestListOperatorMerchantsAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp listOperatorMerchantsResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Merchants, 2)
 				require.Equal(t, int64(2), resp.Total)
 			},
@@ -277,8 +276,7 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp merchantDetailResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, merchant.ID, resp.ID)
 				require.Equal(t, merchant.Name, resp.Name)
 			},
@@ -792,8 +790,7 @@ func TestListOperatorRidersAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp listOperatorRidersResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Riders, 2)
 				require.Equal(t, int64(2), resp.Total)
 			},
@@ -913,8 +910,7 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderDetailResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, rider.ID, resp.ID)
 				require.Equal(t, rider.RealName, resp.RealName)
 			},

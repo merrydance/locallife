@@ -500,8 +500,7 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				// Verify response indicates insufficient inventory
 				var response checkInventoryResponse
-				err := json.Unmarshal(recorder.Body.Bytes(), &response)
-				require.NoError(t, err)
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.False(t, response.Available)
 				require.Equal(t, int32(20), response.CurrentStock) // 50 - 30 = 20
 				require.Equal(t, "insufficient inventory", response.Message)

@@ -147,12 +147,16 @@ func createRandomPaymentOrder(t *testing.T, userID int64) PaymentOrder {
 
 func createRandomPaymentOrderWithOrder(t *testing.T, userID int64, orderID *int64) PaymentOrder {
 	outTradeNo := util.RandomString(32)
+	amount := util.RandomMoney()
+	if amount <= 0 {
+		amount = 1
+	}
 
 	arg := CreatePaymentOrderParams{
 		UserID:       userID,
 		PaymentType:  "miniprogram",
 		BusinessType: "order",
-		Amount:       util.RandomMoney(),
+		Amount:       amount,
 		OutTradeNo:   outTradeNo,
 		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
 	}
