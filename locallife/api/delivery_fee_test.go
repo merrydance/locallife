@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -352,7 +350,7 @@ func TestGetDeliveryFeeConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
 					Times(1).
-					Return(db.DeliveryFeeConfig{}, sql.ErrNoRows)
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -468,7 +466,7 @@ func TestCalculateDeliveryFeeAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
 					Times(1).
-					Return(db.DeliveryFeeConfig{}, sql.ErrNoRows)
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -888,7 +886,7 @@ func TestCreateDeliveryPromotionAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1162,7 +1160,7 @@ func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryPromotion(gomock.Any(), int64(999999)).
 					Times(1).
-					Return(db.MerchantDeliveryPromotion{}, sql.ErrNoRows)
+					Return(db.MerchantDeliveryPromotion{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

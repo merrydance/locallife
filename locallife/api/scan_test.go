@@ -18,7 +18,6 @@ import (
 	"github.com/merrydance/locallife/util"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -158,7 +157,7 @@ func TestScanTableAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(int64(9999))).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -196,7 +195,7 @@ func TestScanTableAPI(t *testing.T) {
 						TableNo:    "T999",
 					})).
 					Times(1).
-					Return(db.Table{}, pgx.ErrNoRows)
+					Return(db.Table{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -597,7 +596,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(int64(9999))).
 					Times(1).
-					Return(db.Table{}, pgx.ErrNoRows)
+					Return(db.Table{}, db.ErrRecordNotFound)
 
 				wechatClient.EXPECT().
 					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
@@ -622,7 +621,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 
 				wechatClient.EXPECT().
 					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).

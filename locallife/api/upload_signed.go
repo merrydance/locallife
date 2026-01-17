@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
 
@@ -195,17 +196,6 @@ func normalizeStoredUploadPath(p string) string {
 	return p
 }
 
-func isUploadPathOwnedByUser(normalized string, uid int64) bool {
-	if normalized == "" {
-		return false
-	}
-	uidStr := fmt.Sprintf("/%d/", uid)
-	return strings.Contains(normalized, "/merchants"+uidStr) ||
-		strings.Contains(normalized, "/riders"+uidStr) ||
-		strings.Contains(normalized, "/operators"+uidStr) ||
-		strings.Contains(normalized, "/reviews"+uidStr)
-}
-
 func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized string) (bool, error) {
 	if normalized == "" {
 		return false, nil
@@ -213,20 +203,61 @@ func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized 
 	if isPubliclyAccessibleUploadPath(normalized) {
 		return true, nil
 	}
-	if isMerchantLicensePath(normalized) {
+
+	entityType, entityID, ok := parseUploadEntity(normalized)
+	if !ok {
+		return false, nil
+	}
+
+	if entityType == "reviews" {
 		return true, nil
 	}
-	if isIDCardPath(normalized) {
-		if isUploadPathOwnedByUser(normalized, uid) {
-			return true, nil
-		}
-		isAdmin, err := server.hasActiveRole(ctx, uid, RoleAdmin)
+
+	isAdmin, err := server.hasActiveRole(ctx, uid, RoleAdmin)
+	if err != nil {
+		return false, err
+	}
+
+	switch entityType {
+	case "merchants":
+		allowed, err := server.canAccessMerchantUpload(ctx, uid, entityID)
 		if err != nil {
 			return false, err
 		}
-		return isAdmin, nil
+		if allowed {
+			return true, nil
+		}
+		if isMerchantLicensePath(normalized) || isIDCardPath(normalized) {
+			return isAdmin, nil
+		}
+		return false, nil
+	case "riders":
+		allowed, err := server.canAccessRiderUpload(ctx, uid, entityID)
+		if err != nil {
+			return false, err
+		}
+		if allowed {
+			return true, nil
+		}
+		if isIDCardPath(normalized) {
+			return isAdmin, nil
+		}
+		return false, nil
+	case "operators":
+		allowed, err := server.canAccessOperatorUpload(ctx, uid, entityID)
+		if err != nil {
+			return false, err
+		}
+		if allowed {
+			return true, nil
+		}
+		if isIDCardPath(normalized) {
+			return isAdmin, nil
+		}
+		return false, nil
+	default:
+		return false, nil
 	}
-	return isUploadPathOwnedByUser(normalized, uid), nil
 }
 
 func (server *Server) hasActiveRole(ctx *gin.Context, uid int64, role string) (bool, error) {
@@ -253,6 +284,71 @@ func isMerchantLicensePath(normalized string) bool {
 		return false
 	}
 	return strings.Contains(normalized, "/business_license/") || strings.Contains(normalized, "/food_permit/")
+}
+
+func parseUploadEntity(normalized string) (string, int64, bool) {
+	parts := strings.Split(normalized, "/")
+	if len(parts) < 3 {
+		return "", 0, false
+	}
+	if parts[0] != "uploads" {
+		return "", 0, false
+	}
+	entity := parts[1]
+	if entity == "public" || entity == "reviews" {
+		return entity, 0, true
+	}
+	entityID, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil || entityID <= 0 {
+		return "", 0, false
+	}
+	return entity, entityID, true
+}
+
+func (server *Server) canAccessMerchantUpload(ctx *gin.Context, uid, merchantID int64) (bool, error) {
+	merchant, err := server.store.GetMerchant(ctx, merchantID)
+	if err != nil {
+		if isNotFoundError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if merchant.OwnerUserID == uid {
+		return true, nil
+	}
+	_, err = server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+		MerchantID: merchantID,
+		UserID:     uid,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (server *Server) canAccessRiderUpload(ctx *gin.Context, uid, riderID int64) (bool, error) {
+	rider, err := server.store.GetRider(ctx, riderID)
+	if err != nil {
+		if isNotFoundError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return rider.UserID == uid, nil
+}
+
+func (server *Server) canAccessOperatorUpload(ctx *gin.Context, uid, operatorID int64) (bool, error) {
+	operator, err := server.store.GetOperator(ctx, operatorID)
+	if err != nil {
+		if isNotFoundError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return operator.UserID == uid, nil
 }
 
 func isIDCardPath(normalized string) bool {

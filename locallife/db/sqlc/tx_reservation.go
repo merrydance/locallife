@@ -2,10 +2,8 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"errors"
-
-	"github.com/jackc/pgx/v5"
+	"fmt"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -315,7 +313,7 @@ func syncReservationInventoryWithQueries(ctx context.Context, q *Queries, reserv
 				ReservedQuantity: delta,
 			})
 			if err != nil {
-				if !errors.Is(err, pgx.ErrNoRows) {
+				if !errors.Is(err, ErrRecordNotFound) {
 					return reservation, fmt.Errorf("reserve inventory: %w", err)
 				}
 				// No inventory record means unlimited; otherwise insufficient stock
@@ -323,7 +321,7 @@ func syncReservationInventoryWithQueries(ctx context.Context, q *Queries, reserv
 					MerchantID: reservation.MerchantID,
 					DishID:     dishID,
 					Date:       reservation.ReservationDate,
-				}); getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
+				}); getErr != nil && !errors.Is(getErr, ErrRecordNotFound) {
 					return reservation, fmt.Errorf("get daily inventory: %w", getErr)
 				}
 				if _, getErr := q.GetDailyInventory(ctx, GetDailyInventoryParams{

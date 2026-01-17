@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -128,7 +127,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -235,7 +234,7 @@ func TestStartPreparingAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.Order{}, sql.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -615,7 +614,7 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.Order{}, sql.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

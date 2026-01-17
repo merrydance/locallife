@@ -8,7 +8,6 @@ import (
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 type createBillingGroupRequest struct {
@@ -82,7 +81,7 @@ func (server *Server) createBillingGroup(ctx *gin.Context) {
 
 	session, err := server.store.GetDiningSession(ctx, req.DiningSessionID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
 			return
 		}
@@ -142,7 +141,7 @@ func (server *Server) joinBillingGroup(ctx *gin.Context) {
 
 	billingGroup, err := server.store.GetBillingGroup(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
 			return
 		}
@@ -156,7 +155,7 @@ func (server *Server) joinBillingGroup(ctx *gin.Context) {
 
 	session, err := server.store.GetDiningSession(ctx, billingGroup.DiningSessionID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
 			return
 		}
@@ -171,7 +170,7 @@ func (server *Server) joinBillingGroup(ctx *gin.Context) {
 	if session.UserID != authPayload.UserID {
 		defaultGroup, err := server.store.GetDefaultBillingGroupBySession(ctx, session.ID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
 				return
 			}
@@ -182,7 +181,7 @@ func (server *Server) joinBillingGroup(ctx *gin.Context) {
 			BillingGroupID: defaultGroup.ID,
 			UserID:         authPayload.UserID,
 		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
 				return
 			}
@@ -225,7 +224,7 @@ func (server *Server) listBillingGroups(ctx *gin.Context) {
 
 	session, err := server.store.GetDiningSession(ctx, req.DiningSessionID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
 			return
 		}
@@ -236,7 +235,7 @@ func (server *Server) listBillingGroups(ctx *gin.Context) {
 	if session.UserID != authPayload.UserID {
 		defaultGroup, err := server.store.GetDefaultBillingGroupBySession(ctx, session.ID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
 				return
 			}
@@ -247,7 +246,7 @@ func (server *Server) listBillingGroups(ctx *gin.Context) {
 			BillingGroupID: defaultGroup.ID,
 			UserID:         authPayload.UserID,
 		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
 				return
 			}
@@ -292,7 +291,7 @@ func (server *Server) listBillingGroupOrders(ctx *gin.Context) {
 
 	billingGroup, err := server.store.GetBillingGroup(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
 			return
 		}
@@ -302,7 +301,7 @@ func (server *Server) listBillingGroupOrders(ctx *gin.Context) {
 
 	session, err := server.store.GetDiningSession(ctx, billingGroup.DiningSessionID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
 			return
 		}
@@ -315,7 +314,7 @@ func (server *Server) listBillingGroupOrders(ctx *gin.Context) {
 			BillingGroupID: billingGroup.ID,
 			UserID:         authPayload.UserID,
 		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
 				return
 			}

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -203,7 +202,7 @@ func TestOperatorMiddleware(t *testing.T) {
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Operator{}, pgx.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -474,7 +473,7 @@ func TestMerchantOwnerMiddleware(t *testing.T) {
 						Role:   RoleMerchantOwner,
 					}).
 					Times(1).
-					Return(db.UserRole{}, pgx.ErrNoRows)
+					Return(db.UserRole{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -617,7 +616,7 @@ func TestRiderMiddleware(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

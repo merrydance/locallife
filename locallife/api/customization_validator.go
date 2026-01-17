@@ -2,12 +2,10 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 type customizationSelection struct {
@@ -82,7 +80,7 @@ func parseInt64Value(raw interface{}) (int64, error) {
 func (server *Server) loadDishCustomizationMeta(ctx *gin.Context, dishID int64) (map[int64]customizationGroupMeta, error) {
 	dish, err := server.store.GetDishWithCustomizations(ctx, dishID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			return nil, fmt.Errorf("dish not found")
 		}
 		return nil, err

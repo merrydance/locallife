@@ -108,29 +108,40 @@ func main() {
 
 	store := db.NewStore(connPool)
 
-	redisOpt := asynq.RedisClientOpt{
-		Addr: config.RedisAddress,
-		// Support authenticated Redis deployments
-		Password: config.RedisPassword,
-	}
-
-	// ✅ P1-1: 验证Redis连接
-	if config.RedisAddress == "" {
-		log.Fatal().Msg("REDIS_ADDRESS is not configured")
-	}
-
-	// 初始化天气缓存（用于测试Redis连接）
 	var weatherCache weather.WeatherCache
-	weatherCache, err = weather.NewWeatherCache(config.RedisAddress, config.RedisPassword)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to connect to Redis - check REDIS_ADDRESS configuration")
+	var taskDistributor worker.TaskDistributor
+	var redisOpt asynq.RedisClientOpt
+
+	if config.RedisAddress == "" {
+		if config.RedisRequired {
+			log.Fatal().Msg("REDIS_ADDRESS is not configured but REDIS_REQUIRED is true")
+		}
+		log.Warn().Msg("REDIS_ADDRESS not configured, redis-dependent features disabled")
+		taskDistributor = worker.NewNoopTaskDistributor()
+	} else {
+		redec := asynq.RedisClientOpt{
+			Addr: config.RedisAddress,
+			// Support authenticated Redis deployments
+			Password: config.RedisPassword,
+		}
+		redisOpt = redec
+
+		// 初始化天气缓存（用于测试Redis连接）
+		weatherCache, err = weather.NewWeatherCache(config.RedisAddress, config.RedisPassword)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to connect to Redis - check REDIS_ADDRESS configuration")
+		}
+		log.Info().Str("redis_address", config.RedisAddress).Msg("✅ Redis connection verified")
 	}
-	log.Info().Str("redis_address", config.RedisAddress).Msg("✅ Redis connection verified")
 
 	waitGroup, ctx := errgroup.WithContext(ctx)
 
-	taskDistributor := runTaskProcessor(ctx, waitGroup, config, redisOpt, store)
-	runWeatherScheduler(ctx, waitGroup, config, store, weatherCache)
+	runDBMetricsCollector(ctx, waitGroup, connPool)
+
+	if config.RedisAddress != "" {
+		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store)
+		runWeatherScheduler(ctx, waitGroup, config, store, weatherCache)
+	}
 	runAutoTagScheduler(ctx, waitGroup, store)
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
 
@@ -239,6 +250,23 @@ func runWeatherScheduler(
 		log.Info().Msg("graceful shutdown weather scheduler")
 		scheduler.Stop()
 		return nil
+	})
+}
+
+func runDBMetricsCollector(ctx context.Context, waitGroup *errgroup.Group, pool *pgxpool.Pool) {
+	waitGroup.Go(func() error {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				stats := pool.Stat()
+				api.UpdateDBMetrics(int(stats.AcquiredConns()), int(stats.IdleConns()))
+			}
+		}
 	})
 }
 

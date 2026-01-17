@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -134,7 +133,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 				// 获取运营商申请信息
 				store.EXPECT().
@@ -204,7 +203,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Operator{}, pgx.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -438,7 +437,7 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -453,7 +452,7 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Operator{}, pgx.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

@@ -15,7 +15,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 )
@@ -140,7 +139,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	// 查询支付订单
 	paymentOrder, err := server.store.GetPaymentOrderByOutTradeNo(ctx, resource.OutTradeNo)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			log.Error().Str("out_trade_no", resource.OutTradeNo).Msg("payment order not found")
 			// 订单不存在，返回成功避免微信重试
 			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
@@ -647,7 +646,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	// 查询分账订单
 	profitSharingOrder, err := server.store.GetProfitSharingOrderByOutOrderNo(ctx, resource.OutOrderNo)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			log.Error().Str("out_order_no", resource.OutOrderNo).Msg("profit sharing order not found")
 			// 订单不存在，返回成功避免微信重试
 			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
@@ -850,7 +849,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 		// 查询支付订单
 		paymentOrder, err := server.store.GetPaymentOrderByOutTradeNo(ctx, subOrder.OutTradeNo)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				log.Error().Str("out_trade_no", subOrder.OutTradeNo).Msg("payment order not found")
 				failedOrders = append(failedOrders, subOrder.OutTradeNo)
 				continue
@@ -1085,7 +1084,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	// 查找进件记录
 	applyment, err := server.store.GetEcommerceApplymentByOutRequestNo(ctx, resource.OutRequestNo)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			log.Warn().Str("out_request_no", resource.OutRequestNo).Msg("applyment record not found")
 			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
 				Code:    "SUCCESS",

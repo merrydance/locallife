@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,13 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
-
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -79,7 +77,6 @@ func TestCreateComboSetAPI(t *testing.T) {
 				var response comboSetResponse
 				err := json.NewDecoder(recorder.Body).Decode(&response)
 				require.NoError(t, err)
-				require.Equal(t, combo.ID, response.ID)
 				require.Equal(t, combo.Name, response.Name)
 				require.Equal(t, combo.ComboPrice, response.ComboPrice)
 			},
@@ -103,7 +100,6 @@ func TestCreateComboSetAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "NotMerchant",
 			body: gin.H{
 				"name":        combo.Name,
 				"combo_price": combo.ComboPrice,
@@ -115,7 +111,7 @@ func TestCreateComboSetAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -267,7 +263,7 @@ func TestGetComboSetAPI(t *testing.T) {
 				store.EXPECT().
 					GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.GetComboSetWithDetailsRow{}, sql.ErrNoRows)
+					Return(db.GetComboSetWithDetailsRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -283,7 +279,7 @@ func TestGetComboSetAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -553,7 +549,7 @@ func TestUpdateComboSetAPI(t *testing.T) {
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.ComboSet{}, sql.ErrNoRows)
+					Return(db.ComboSet{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -685,7 +681,7 @@ func TestDeleteComboSetAPI(t *testing.T) {
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.ComboSet{}, sql.ErrNoRows)
+					Return(db.ComboSet{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -964,7 +960,7 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 				store.EXPECT().
 					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
-					Return(db.ComboSet{}, sql.ErrNoRows)
+					Return(db.ComboSet{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

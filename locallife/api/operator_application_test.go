@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -70,11 +68,11 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 				// 没有现有申请
 				store.EXPECT().
 					GetOperatorApplicationByUserID(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				// 用户不是运营商
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 				// 区域存在
 				store.EXPECT().
 					GetRegion(gomock.Any(), region.ID).
@@ -82,11 +80,11 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 				// 区域没有运营商
 				store.EXPECT().
 					GetOperatorByRegion(gomock.Any(), region.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 				// 区域没有待审核申请
 				store.EXPECT().
 					GetPendingOperatorApplicationByRegion(gomock.Any(), region.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				// 创建草稿
 				store.EXPECT().
 					CreateOperatorApplicationDraft(gomock.Any(), db.CreateOperatorApplicationDraftParams{
@@ -131,7 +129,7 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 				// 没有申请
 				store.EXPECT().
 					GetOperatorApplicationByUserID(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				// 用户已是运营商
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
@@ -169,10 +167,10 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOperatorApplicationByUserID(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetRegion(gomock.Any(), region.ID).
 					Return(region, nil)
@@ -196,16 +194,16 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOperatorApplicationByUserID(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetRegion(gomock.Any(), region.ID).
 					Return(region, nil)
 				store.EXPECT().
 					GetOperatorByRegion(gomock.Any(), region.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 				// 区域有其他人的待审核申请
 				otherApp := randomOperatorApplicationSubmitted(user.ID+1, region.ID)
 				store.EXPECT().
@@ -225,10 +223,10 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOperatorApplicationByUserID(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -314,7 +312,7 @@ func TestGetOperatorApplicationAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOperatorApplicationByUserID(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -437,7 +435,7 @@ func TestUpdateOperatorApplicationBasicInfoAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -505,11 +503,11 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 				// 区域没有运营商
 				store.EXPECT().
 					GetOperatorByRegion(gomock.Any(), region.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 				// 没有其他待审核申请
 				store.EXPECT().
 					GetPendingOperatorApplicationByRegion(gomock.Any(), region.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				// 提交申请
 				submittedApp := completeApp
 				submittedApp.Status = "submitted"
@@ -573,7 +571,7 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -667,7 +665,7 @@ func TestResetOperatorApplicationToDraftAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOperatorApplicationByUserID(gomock.Any(), user.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -730,10 +728,10 @@ func TestUpdateOperatorApplicationRegionAPI(t *testing.T) {
 					Return(newRegion, nil)
 				store.EXPECT().
 					GetOperatorByRegion(gomock.Any(), newRegion.ID).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetPendingOperatorApplicationByRegion(gomock.Any(), newRegion.ID).
-					Return(db.OperatorApplication{}, pgx.ErrNoRows)
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					UpdateOperatorApplicationRegion(gomock.Any(), gomock.Any()).
 					Return(randomOperatorApplicationDraft(user.ID, newRegion.ID), nil)

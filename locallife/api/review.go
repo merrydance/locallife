@@ -11,7 +11,6 @@ import (
 	"github.com/merrydance/locallife/wechat"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -83,7 +82,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 	// 1. 验证订单存在且属于该用户
 	order, err := server.store.GetOrder(ctx, req.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -109,7 +108,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("order already reviewed")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -121,7 +120,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 	})
 	isVisible := true
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !isNotFoundError(err) {
 			// 如果查询失败（非记录不存在），记录错误但不阻塞评价创建
 			isVisible = true // 默认可见
 		}
@@ -167,10 +166,6 @@ func (server *Server) createReview(ctx *gin.Context) {
 			}
 			if !strings.HasPrefix(normalized, prefix) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("images 仅允许使用通过评价图片上传接口生成的路径")))
-				return
-			}
-			if !isUploadPathOwnedByUser(normalized, authPayload.UserID) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权使用该图片")))
 				return
 			}
 			normalizedImages = append(normalizedImages, normalized)
@@ -219,7 +214,7 @@ func (server *Server) getReview(ctx *gin.Context) {
 
 	review, err := server.store.GetReview(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("review not found")))
 			return
 		}
@@ -445,7 +440,7 @@ func (server *Server) replyReview(ctx *gin.Context) {
 	// 1. 查询评价
 	review, err := server.store.GetReview(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("review not found")))
 			return
 		}

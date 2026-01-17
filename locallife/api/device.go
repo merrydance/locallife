@@ -9,7 +9,6 @@ import (
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -67,7 +66,7 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -81,7 +80,7 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("printer serial number already registered")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -153,7 +152,7 @@ func (server *Server) listPrinters(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -218,7 +217,7 @@ func (server *Server) getPrinter(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -229,7 +228,7 @@ func (server *Server) getPrinter(ctx *gin.Context) {
 	// 获取打印机
 	printer, err := server.store.GetCloudPrinter(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -293,7 +292,7 @@ func (server *Server) updatePrinter(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -304,7 +303,7 @@ func (server *Server) updatePrinter(ctx *gin.Context) {
 	// 获取打印机验证归属
 	printer, err := server.store.GetCloudPrinter(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -382,7 +381,7 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -393,7 +392,7 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 	// 获取打印机验证归属
 	printer, err := server.store.GetCloudPrinter(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -453,7 +452,7 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -464,7 +463,7 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 	// 获取打印机验证归属
 	printer, err := server.store.GetCloudPrinter(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
 			return
 		}
@@ -526,7 +525,7 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -537,7 +536,7 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 	// 获取配置
 	config, err := server.store.GetOrderDisplayConfigByMerchant(ctx, merchant.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 返回默认配置
 			ctx.JSON(http.StatusOK, getDisplayConfigResponse{
 				MerchantID:       merchant.ID,
@@ -626,7 +625,7 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -636,7 +635,7 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 
 	// 检查是否已有配置
 	_, err = server.store.GetOrderDisplayConfigByMerchant(ctx, merchant.ID)
-	configNotFound := errors.Is(err, pgx.ErrNoRows)
+	configNotFound := isNotFoundError(err)
 	if err != nil && !configNotFound {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -106,7 +105,7 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -421,7 +420,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -451,7 +450,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	// 检查订单是否在池中（先获取用于高值单校验）
 	poolItem, err := server.store.GetDeliveryPoolByOrderID(ctx, req.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在或已被接走")))
 			return
 		}
@@ -472,7 +471,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	// 获取骑手高值单资格积分
 	premiumScore, err := server.store.GetRiderPremiumScore(ctx, rider.ID)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !isNotFoundError(err) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -506,7 +505,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	// 获取订单用于状态同步与日志记录
 	order, err := server.store.GetOrder(ctx, req.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
 			return
 		}
@@ -529,7 +528,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	}
 
 	// 同步订单状态为骑手已接单（忽略状态不匹配）
-	if _, err := server.store.UpdateOrderToCourierAccepted(ctx, req.OrderID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if _, err := server.store.UpdateOrderToCourierAccepted(ctx, req.OrderID); err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -709,7 +708,7 @@ func (server *Server) startPickup(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -720,7 +719,7 @@ func (server *Server) startPickup(ctx *gin.Context) {
 	// 先获取配送单检查状态和归属
 	delivery, err := server.store.GetDelivery(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
 			return
 		}
@@ -794,7 +793,7 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -805,7 +804,7 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 	// 先获取配送单检查状态和归属
 	delivery, err := server.store.GetDelivery(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
 			return
 		}
@@ -827,7 +826,7 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 
 	order, err := server.store.GetOrder(ctx, delivery.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
 			return
 		}
@@ -903,7 +902,7 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -914,7 +913,7 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 	// 先获取配送单检查状态和归属
 	delivery, err := server.store.GetDelivery(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
 			return
 		}
@@ -936,7 +935,7 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 
 	order, err := server.store.GetOrder(ctx, delivery.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
 			return
 		}
@@ -1029,7 +1028,7 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 
 	order, err := server.store.GetOrder(ctx, delivery.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
 			return
 		}
@@ -1114,7 +1113,7 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 	// 获取订单，验证归属权
 	order, err := server.store.GetOrder(ctx, req.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
 			return
 		}
@@ -1130,7 +1129,7 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 
 	delivery, err := server.store.GetDeliveryByOrderID(ctx, req.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
 			return
 		}
@@ -1182,7 +1181,7 @@ func (server *Server) getDeliveryTrack(ctx *gin.Context) {
 	// 获取配送单信息
 	delivery, err := server.store.GetDelivery(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
 			return
 		}
@@ -1294,7 +1293,7 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 	// 获取配送单信息
 	delivery, err := server.store.GetDelivery(ctx, req.DeliveryID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
 			return
 		}
@@ -1328,7 +1327,7 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 
 	location, err := server.store.GetDeliveryLatestLocation(ctx, pgtype.Int8{Int64: req.DeliveryID, Valid: true})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("暂无位置信息")))
 			return
 		}
@@ -1401,7 +1400,7 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -1456,7 +1455,7 @@ func (server *Server) listMyActiveDeliveries(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}

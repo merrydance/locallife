@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -14,7 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -24,12 +26,16 @@ import (
 const (
 	PaymentTypeNative      = "native"      // 扫码支付
 	PaymentTypeMiniProgram = "miniprogram" // 小程序支付
+	PaymentTypeProfitShare = "profit_sharing"
 )
 
 // 业务类型常量
 const (
-	BusinessTypeOrder       = "order"       // 订单支付
-	BusinessTypeReservation = "reservation" // 预定押金
+	BusinessTypeOrder              = "order"               // 订单支付
+	BusinessTypeReservation        = "reservation"         // 预定押金
+	BusinessTypeReservationAddon   = "reservation_addon"   // 预定加菜补差
+	BusinessTypeMembershipRecharge = "membership_recharge" // 会员充值
+	BusinessTypeRiderDeposit       = "rider_deposit"       // 骑手押金
 )
 
 // 支付状态常量
@@ -110,6 +116,50 @@ func generateOutTradeNo() string {
 	return "P" + dateStr + randomNum[:8]
 }
 
+func generateOutTradeNoWithPrefix(prefix string) string {
+	now := time.Now()
+	dateStr := now.Format("20060102150405")
+
+	b := make([]byte, 4)
+	rand.Read(b)
+	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
+
+	if prefix == "" {
+		prefix = "P"
+	}
+	return prefix + dateStr + randomNum[:8]
+}
+
+const (
+	outTradeNoMaxRetry      = 3
+	outTradeNoRetryBaseBack = 50 * time.Millisecond
+)
+
+func isOutTradeNoConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	if pgErr.Code != "23505" {
+		return false
+	}
+	if strings.Contains(pgErr.ConstraintName, "out_trade_no") {
+		return true
+	}
+	return strings.Contains(pgErr.Detail, "out_trade_no")
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // ==================== 支付订单API ====================
 
 // createPaymentOrder godoc
@@ -158,7 +208,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	if req.BusinessType == BusinessTypeReservation {
 		reservation, err := server.store.GetTableReservation(ctx, req.OrderID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
 				return
 			}
@@ -187,7 +237,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		// 获取订单
 		order, err := server.store.GetOrder(ctx, req.OrderID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 				return
 			}
@@ -220,23 +270,33 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		return
 	}
 
-	// 生成商户订单号
-	outTradeNo := generateOutTradeNo()
-
 	// 设置支付过期时间（30分钟）
 	expiresAt := time.Now().Add(30 * time.Minute)
 
-	// 创建支付订单
-	paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		OrderID:      pgtype.Int8{Int64: req.OrderID, Valid: true},
-		UserID:       authPayload.UserID,
-		PaymentType:  req.PaymentType,
-		BusinessType: req.BusinessType,
-		Amount:       amount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
-	if err != nil {
+	// 创建支付订单（out_trade_no 碰撞重试）
+	var paymentOrder db.PaymentOrder
+	var outTradeNo string
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		outTradeNo = generateOutTradeNo()
+		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+			OrderID:      pgtype.Int8{Int64: req.OrderID, Valid: true},
+			UserID:       authPayload.UserID,
+			PaymentType:  req.PaymentType,
+			BusinessType: req.BusinessType,
+			Amount:       amount,
+			OutTradeNo:   outTradeNo,
+			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+				ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+				return
+			}
+			continue
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -350,7 +410,7 @@ func (server *Server) getPaymentOrder(ctx *gin.Context) {
 
 	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
 			return
 		}
@@ -402,7 +462,7 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 	if req.OrderID != nil {
 		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, pgtype.Int8{Int64: *req.OrderID, Valid: true})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusOK, []paymentOrderResponse{})
 				return
 			}
@@ -478,7 +538,7 @@ func (server *Server) closePaymentOrder(ctx *gin.Context) {
 
 	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
 			return
 		}
@@ -600,7 +660,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -611,7 +671,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 	// 获取支付订单
 	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.PaymentOrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
 			return
 		}
@@ -732,7 +792,7 @@ func (server *Server) getRefundOrder(ctx *gin.Context) {
 
 	refundOrder, err := server.store.GetRefundOrder(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("refund order not found")))
 			return
 		}
@@ -800,7 +860,7 @@ func (server *Server) listRefundOrdersByPayment(ctx *gin.Context) {
 	// 获取支付订单
 	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
 			return
 		}

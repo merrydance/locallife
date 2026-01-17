@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -51,7 +50,7 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 		// Step 2: 创建或更新商户记录
 		existingMerchant, err := q.GetMerchantByOwner(ctx, arg.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, ErrRecordNotFound) {
 				// 创建新商户
 				result.Merchant, err = q.CreateMerchant(ctx, CreateMerchantParams{
 					OwnerUserID:     arg.UserID,
@@ -169,7 +168,7 @@ func (store *SQLStore) ResetMerchantApplicationTx(ctx context.Context, arg Reset
 					return fmt.Errorf("update merchant status: %w", err)
 				}
 			}
-		} else if !errors.Is(err, pgx.ErrNoRows) {
+		} else if !errors.Is(err, ErrRecordNotFound) {
 			return fmt.Errorf("get merchant: %w", err)
 		}
 

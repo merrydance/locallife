@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -114,7 +113,7 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(regularUser.ID)).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateDiscountRule(gomock.Any(), gomock.Any()).
@@ -382,7 +381,7 @@ func TestGetBestDiscountRuleAPI(t *testing.T) {
 				store.EXPECT().
 					GetBestDiscountRule(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DiscountRule{}, pgx.ErrNoRows)
+					Return(db.DiscountRule{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

@@ -16,7 +16,6 @@ import (
 	"github.com/merrydance/locallife/util"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -131,7 +130,7 @@ func TestCreateDishCategoryAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -447,7 +446,7 @@ func TestGetDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDishComplete(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.GetDishCompleteRow{}, pgx.ErrNoRows)
+					Return(db.GetDishCompleteRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -662,7 +661,7 @@ func TestUpdateDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.Dish{}, pgx.ErrNoRows)
+					Return(db.Dish{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -750,7 +749,7 @@ func TestDeleteDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.Dish{}, pgx.ErrNoRows)
+					Return(db.Dish{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -70,7 +69,7 @@ func (store *SQLStore) UpdateDeliveryToPickupTx(ctx context.Context, arg UpdateD
 
 		result.Order, err = q.UpdateOrderToCourierAccepted(ctx, arg.OrderID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, ErrRecordNotFound) {
 				return nil
 			}
 			return fmt.Errorf("update order to courier_accepted: %w", err)
@@ -99,7 +98,7 @@ func (store *SQLStore) UpdateDeliveryToPickedTx(ctx context.Context, arg UpdateD
 
 		result.Order, err = q.UpdateOrderToPicked(ctx, arg.OrderID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, ErrRecordNotFound) {
 				return nil
 			}
 			return fmt.Errorf("update order to picked: %w", err)
@@ -141,7 +140,7 @@ func (store *SQLStore) UpdateDeliveryToDeliveringTx(ctx context.Context, arg Upd
 
 		result.Order, err = q.UpdateOrderToDelivering(ctx, arg.OrderID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, ErrRecordNotFound) {
 				return nil
 			}
 			return fmt.Errorf("update order to delivering: %w", err)
@@ -282,7 +281,7 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 		// 2.1 同步订单状态为 rider_delivered（允许幂等）
 		result.Order, err = q.UpdateOrderToRiderDelivered(ctx, arg.OrderID)
 		if err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) {
+			if !errors.Is(err, ErrRecordNotFound) {
 				return fmt.Errorf("update order to rider_delivered: %w", err)
 			}
 		}

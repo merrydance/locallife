@@ -14,7 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -1307,7 +1306,7 @@ func (server *Server) validateReservationItems(ctx *gin.Context, merchantID int6
 			// 查询菜品
 			dish, err := server.store.GetDish(ctx, *item.DishID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					return nil, 0, fmt.Errorf("菜品 %d 不存在", *item.DishID)
 				}
 				return nil, 0, err
@@ -1325,7 +1324,7 @@ func (server *Server) validateReservationItems(ctx *gin.Context, merchantID int6
 			// 查询套餐
 			combo, err := server.store.GetComboSet(ctx, *item.ComboID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					return nil, 0, fmt.Errorf("套餐 %d 不存在", *item.ComboID)
 				}
 				return nil, 0, err
@@ -1395,7 +1394,7 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	// 获取预定信息
 	reservation, err := server.store.GetTableReservationForUpdate(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
 			return
 		}
@@ -1458,20 +1457,31 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 
 	// 如果是全款预付模式，需要创建补差价支付订单
 	if reservation.PaymentMode == PaymentModeFull {
-		// 生成支付订单号
-		outTradeNo := fmt.Sprintf("RA%d%d", reservation.ID, time.Now().UnixNano())
-
-		// 创建支付订单
-		paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-			UserID:        authPayload.UserID,
-			ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-			PaymentType:   "wechat",
-			BusinessType:  "reservation_addon",
-			Amount:        addedAmount,
-			OutTradeNo:    outTradeNo,
-			ExpiresAt:     pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
-		})
-		if err != nil {
+		// 创建支付订单（out_trade_no 碰撞重试）
+		var paymentOrder db.PaymentOrder
+		var outTradeNo string
+		expiresAt := time.Now().Add(30 * time.Minute)
+		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+			outTradeNo = generateOutTradeNoWithPrefix("RA")
+			paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+				UserID:        authPayload.UserID,
+				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+				PaymentType:   PaymentTypeMiniProgram,
+				BusinessType:  BusinessTypeReservationAddon,
+				Amount:        addedAmount,
+				OutTradeNo:    outTradeNo,
+				ExpiresAt:     pgtype.Timestamptz{Time: expiresAt, Valid: true},
+			})
+			if err == nil {
+				break
+			}
+			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+				if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+					ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+					return
+				}
+				continue
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -1534,7 +1544,7 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 
 	reservation, err := server.store.GetTableReservationForUpdate(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
 			return
 		}
@@ -1609,17 +1619,30 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 
 	if reservation.PaymentMode == PaymentModeFull && delta != 0 {
 		if delta > 0 {
-			outTradeNo := fmt.Sprintf("RA%d%d", reservation.ID, time.Now().UnixNano())
-			paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-				UserID:        authPayload.UserID,
-				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-				PaymentType:   "wechat",
-				BusinessType:  "reservation_addon",
-				Amount:        delta,
-				OutTradeNo:    outTradeNo,
-				ExpiresAt:     pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
-			})
-			if err != nil {
+			var paymentOrder db.PaymentOrder
+			var outTradeNo string
+			expiresAt := time.Now().Add(30 * time.Minute)
+			for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+				outTradeNo = generateOutTradeNoWithPrefix("RA")
+				paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+					UserID:        authPayload.UserID,
+					ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+					PaymentType:   PaymentTypeMiniProgram,
+					BusinessType:  BusinessTypeReservationAddon,
+					Amount:        delta,
+					OutTradeNo:    outTradeNo,
+					ExpiresAt:     pgtype.Timestamptz{Time: expiresAt, Valid: true},
+				})
+				if err == nil {
+					break
+				}
+				if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+					if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+						ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+						return
+					}
+					continue
+				}
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
@@ -1680,9 +1703,9 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 			}
 
 			ctx.JSON(http.StatusOK, gin.H{
-				"message":     "reservation modified, refund initiated",
+				"message":       "reservation modified, refund initiated",
 				"refund_amount": refundAmount,
-				"items_count": len(req.Items),
+				"items_count":   len(req.Items),
 			})
 			return
 		}

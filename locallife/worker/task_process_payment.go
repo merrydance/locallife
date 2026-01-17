@@ -11,7 +11,6 @@ import (
 	"github.com/merrydance/locallife/wechat"
 
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 )
@@ -317,7 +316,7 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 		PaymentOrderID: payload.PaymentOrderID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrRecordNotFound) {
 			log.Error().Int64("payment_order_id", payload.PaymentOrderID).Msg("payment order not found")
 			return fmt.Errorf("payment order not found: %w", asynq.SkipRetry)
 		}
@@ -537,7 +536,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 	// 查询退款订单
 	refundOrder, err := processor.store.GetRefundOrderByOutRefundNo(ctx, payload.OutRefundNo)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrRecordNotFound) {
 			log.Error().Str("out_refund_no", payload.OutRefundNo).Msg("refund order not found")
 			return fmt.Errorf("refund order not found: %w", asynq.SkipRetry)
 		}
@@ -611,7 +610,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	// 获取支付订单
 	paymentOrder, err := processor.store.GetPaymentOrder(ctx, payload.PaymentOrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrRecordNotFound) {
 			return fmt.Errorf("payment order not found: %w", asynq.SkipRetry)
 		}
 		return fmt.Errorf("get payment order: %w", err)
@@ -625,7 +624,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	// 获取订单信息
 	order, err := processor.store.GetOrder(ctx, payload.OrderID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrRecordNotFound) {
 			return fmt.Errorf("order not found: %w", asynq.SkipRetry)
 		}
 		return fmt.Errorf("get order: %w", err)
@@ -640,7 +639,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	// 获取商户支付配置（从新表 merchant_payment_configs）
 	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrRecordNotFound) {
 			log.Warn().Int64("merchant_id", order.MerchantID).Msg("merchant payment config not found, skip profit sharing")
 			return nil // 商户未配置微信支付，跳过分账
 		}
@@ -670,7 +669,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		// 查找运营商
 		if regionID > 0 {
 			op, err := processor.store.GetOperatorByRegion(ctx, regionID)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 				return fmt.Errorf("get operator: %w", err)
 			}
 
@@ -839,7 +838,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	// 获取商户支付配置
 	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrRecordNotFound) {
 			return fmt.Errorf("merchant payment config not found")
 		}
 		return fmt.Errorf("get merchant payment config: %w", err)
@@ -1129,7 +1128,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 	// 获取商户信息
 	merchant, err := processor.store.GetMerchant(ctx, payload.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrRecordNotFound) {
 			log.Error().Int64("merchant_id", payload.MerchantID).Msg("merchant not found")
 			return nil // 不重试
 		}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -48,7 +47,7 @@ func (store *SQLStore) ApproveRiderApplicationTx(ctx context.Context, arg Approv
 			result.Rider = existingRider
 			return nil
 		}
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !errors.Is(err, ErrRecordNotFound) {
 			return fmt.Errorf("get rider by user: %w", err)
 		}
 

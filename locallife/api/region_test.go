@@ -49,7 +49,7 @@ func TestGetRegionAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -75,7 +75,7 @@ func TestGetRegionAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(int64(0))).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -107,7 +107,6 @@ func TestGetRegionAPI(t *testing.T) {
 
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
-
 			request, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			require.NoError(t, err)
 
@@ -687,7 +686,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 				store.EXPECT().
 					GetOperatorByRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
-					Return(db.Operator{}, sql.ErrNoRows)
+					Return(db.Operator{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -729,7 +728,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -742,7 +741,7 @@ func TestCheckRegionAvailabilityAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(int64(0))).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

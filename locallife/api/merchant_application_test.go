@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -115,7 +114,7 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.MerchantApplication{}, pgx.ErrNoRows)
+					Return(db.MerchantApplication{}, db.ErrRecordNotFound)
 
 				// 创建新草稿
 				newApp := randomMerchantAppDraft(user.ID)

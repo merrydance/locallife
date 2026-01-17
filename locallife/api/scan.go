@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -121,7 +120,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	// 1. 获取商户信息
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
 			return
 		}
@@ -141,7 +140,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		TableNo:    req.TableNo,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("桌台不存在")))
 			return
 		}
@@ -282,9 +281,9 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	// 构建响应
 	response := scanTableResponse{
 		Merchant: scanTableMerchantInfo{
-			ID:      merchant.ID,
-			Name:    merchant.Name,
-			Status:  merchant.Status,
+			ID:     merchant.ID,
+			Name:   merchant.Name,
+			Status: merchant.Status,
 		},
 		Table: scanTableTableInfo{
 			ID:        table.ID,
@@ -359,7 +358,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	// 获取桌台
 	table, err := server.store.GetTable(ctx, tableID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("桌台不存在")))
 			return
 		}

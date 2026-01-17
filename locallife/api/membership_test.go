@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -101,7 +100,7 @@ func TestJoinMembershipAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					JoinMembershipTx(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -268,7 +267,7 @@ func TestRechargeMembershipAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantMembership(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.MerchantMembership{}, sql.ErrNoRows)
+					Return(db.MerchantMembership{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -396,7 +395,7 @@ func TestGetMembershipAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantMembership(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.MerchantMembership{}, sql.ErrNoRows)
+					Return(db.MerchantMembership{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -514,7 +513,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					Return(db.UserRole{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -669,7 +668,7 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 				store.EXPECT().
 					GetRechargeRule(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.RechargeRule{}, sql.ErrNoRows)
+					Return(db.RechargeRule{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -691,7 +690,7 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					Return(db.UserRole{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

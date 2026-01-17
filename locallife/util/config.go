@@ -19,6 +19,7 @@ type Config struct {
 	AutoMigrate          bool          `mapstructure:"AUTO_MIGRATE"`
 	RedisAddress         string        `mapstructure:"REDIS_ADDRESS"`
 	RedisPassword        string        `mapstructure:"REDIS_PASSWORD"`
+	RedisRequired        bool          `mapstructure:"REDIS_REQUIRED"`
 	HTTPServerAddress    string        `mapstructure:"HTTP_SERVER_ADDRESS"`
 	GRPCServerAddress    string        `mapstructure:"GRPC_SERVER_ADDRESS"`
 	TokenSymmetricKey    string        `mapstructure:"TOKEN_SYMMETRIC_KEY"`
@@ -78,6 +79,7 @@ func LoadConfig(path string) (config Config, err error) {
 
 	viper.AutomaticEnv()
 	viper.SetDefault("AUTO_MIGRATE", false)
+	viper.SetDefault("REDIS_REQUIRED", false)
 	// WebSocket rollout defaults
 	viper.SetDefault("WS_RELIABLE_ENABLED", true)
 	viper.SetDefault("WS_RELIABLE_PERCENT", 100)

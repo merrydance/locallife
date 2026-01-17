@@ -11,7 +11,6 @@ import (
 	"github.com/merrydance/locallife/util"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -146,7 +145,7 @@ func (server *Server) precheckDiningSession(ctx *gin.Context) {
 
 	table, err := server.store.GetTable(ctx, req.TableID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
 			return
 		}
@@ -191,7 +190,7 @@ func (server *Server) precheckDiningSession(ctx *gin.Context) {
 			fs := order.FulfillmentStatus
 			resp.OrderFulfillmentStatus = &fs
 		}
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+	} else if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -228,7 +227,7 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 	// 基础校验：桌台存在
 	table, err := server.store.GetTable(ctx, req.TableID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
 			return
 		}
@@ -247,7 +246,7 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 	if req.ReservationID != nil {
 		res, err := server.store.GetTableReservation(ctx, *req.ReservationID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
 				return
 			}
@@ -320,7 +319,7 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 				BillingGroup: newBillingGroupResponse(billingGroup),
 			})
 			return
-		} else if !errors.Is(err, pgx.ErrNoRows) {
+		} else if !isNotFoundError(err) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -346,7 +345,7 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 			BillingGroup: newBillingGroupResponse(billingGroup),
 		})
 		return
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+	} else if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -359,7 +358,7 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 	var activateOrder *db.ActivateOrderInput
 	if reservation != nil {
 		order, err := server.store.GetLatestOrderByReservation(ctx, resID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		if err != nil && !isNotFoundError(err) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -411,7 +410,7 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 func (server *Server) getOrCreateDefaultBillingGroup(ctx *gin.Context, session db.DiningSession, userID int64) (db.BillingGroup, error) {
 	billingGroup, err := server.store.GetDefaultBillingGroupBySession(ctx, session.ID)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !isNotFoundError(err) {
 			return db.BillingGroup{}, err
 		}
 
@@ -441,7 +440,7 @@ func (server *Server) getOrCreateDefaultBillingGroup(ctx *gin.Context, session d
 		BillingGroupID: billingGroup.ID,
 		UserID:         userID,
 	}); err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !isNotFoundError(err) {
 			return db.BillingGroup{}, err
 		}
 		if _, err := server.store.CreateBillingGroupMember(ctx, db.CreateBillingGroupMemberParams{

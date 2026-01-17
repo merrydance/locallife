@@ -98,7 +98,7 @@ func TestWechatLoginAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserByWechatOpenID(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.User{}, sql.ErrNoRows)
+					Return(db.User{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateUserTx(gomock.Any(), gomock.Any()).
@@ -247,7 +247,7 @@ func TestBindPhoneAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserByPhone(gomock.Any(), pgtype.Text{String: "13800138000", Valid: true}).
 					Times(1).
-					Return(db.User{}, sql.ErrNoRows)
+					Return(db.User{}, db.ErrRecordNotFound)
 
 				updatedUser := user
 				updatedUser.Phone = pgtype.Text{String: "13800138000", Valid: true}
@@ -298,7 +298,7 @@ func TestBindPhoneAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserByPhone(gomock.Any(), pgtype.Text{String: "invalid", Valid: true}).
 					Times(1).
-					Return(db.User{}, sql.ErrNoRows)
+					Return(db.User{}, db.ErrRecordNotFound)
 
 				// UpdateUser will be called but may fail due to DB constraint
 				store.EXPECT().

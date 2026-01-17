@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -73,7 +72,6 @@ func TestGetRegionStatsAPI(t *testing.T) {
 						RegionName:      "测试区域",
 						MerchantCount:   10,
 						TotalOrders:     100,
-						TotalGmv:        100000,
 						TotalCommission: 3000,
 					}, nil)
 			},
@@ -201,7 +199,7 @@ func TestGetRegionStatsAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetRegionStats(gomock.Any(), gomock.Any()).
-					Return(db.GetRegionStatsRow{}, sql.ErrNoRows)
+					Return(db.GetRegionStatsRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

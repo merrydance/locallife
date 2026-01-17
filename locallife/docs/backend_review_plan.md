@@ -80,6 +80,20 @@
 
 ---
 
+## 3.1 未修复清单（持续更新，修复一个勾选一个）
+
+- [ ] ErrNoRows 统一：全项目统一使用 `db.ErrRecordNotFound`，同步修正测试 stub，避免 404→500 漂移。（进行中：已覆盖多个核心 handler 文件）
+- [ ] 支付单关联字段一致性：查询 pending 支付单需显式纳入 `business_type`，避免不同业务 ID 复用造成串单。
+- [ ] 申诉幂等粒度：将幂等门闩从 `claim_id` 扩展为 `(claim_id, appellant_type)`，避免商户/骑手互相阻塞。
+- [ ] 上传内容校验统一：所有图片上传统一采用 magic number 校验 + 严格白名单，杜绝仅扩展名校验。
+- [ ] 日志脱敏与最小化：OCR/回调/敏感字段日志一律脱敏或摘要化，禁止落明文。
+- [ ] 权限矩阵单一事实来源：路由装配、RBAC、Casbin、role-access 统一生成/对齐，避免多源漂移。
+- [ ] Prometheus 404 label 基数治理：404 使用路由模板或统一 label，避免高基数。
+- [ ] 测试覆盖补齐：补充 searchCombos 与关键攻击面/幂等/竞态分支用例。
+- [ ] 订单金额预览契约一致：`voucher_code` 预览与下单 `user_voucher_id` 口径一致化。
+
+---
+
 ## 4. P0 核实记录（已完成）
 
 > 记录格式：结论 + 证据路径（文件/行）。
@@ -507,6 +521,26 @@
   - [locallife/util/token_hash.go](locallife/util/token_hash.go)
 - 10.40 avatar URL 外链校验：限制非 uploads 外部地址写入。
   - [locallife/api/user.go](locallife/api/user.go#L80-L150)
+- 10.41 支付单类型收敛：payment_type/business_type 与 DB 约束一致，补齐预定加菜/会员/押金类型。
+  - [locallife/api/payment_order.go](locallife/api/payment_order.go#L1-L120)
+  - [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L1440-L1660)
+  - [locallife/api/membership.go](locallife/api/membership.go#L640-L720)
+  - [locallife/api/rider.go](locallife/api/rider.go#L350-L420)
+  - [locallife/db/migration/000091_expand_payment_order_types.up.sql](locallife/db/migration/000091_expand_payment_order_types.up.sql)
+- 10.42 会员充值契约收敛：支付方式仅支持微信且服务可用；充值规则操作收敛到商户 owner/manager。
+  - [locallife/api/membership.go](locallife/api/membership.go#L220-L700)
+  - [locallife/api/server.go](locallife/api/server.go#L1048-L1070)
+- 10.43 Redis 依赖明确化：支持无 Redis 启动并禁用相关能力；提供 REDIS_REQUIRED 开关。
+  - [locallife/main.go](locallife/main.go#L80-L200)
+  - [locallife/util/config.go](locallife/util/config.go#L1-L90)
+  - [locallife/app.env.example](locallife/app.env.example#L1-L60)
+  - [locallife/worker/noop_distributor.go](locallife/worker/noop_distributor.go)
+- 10.44 DB 指标更新：定期上报连接池 active/idle 指标。
+  - [locallife/main.go](locallife/main.go#L120-L240)
+- 10.45 上传归属规则统一：签名访问按商户/骑手/运营商归属校验，敏感证照仅归属者或管理员。
+  - [locallife/api/upload_signed.go](locallife/api/upload_signed.go#L1-L320)
+- 10.46 支付单 out_trade_no 碰撞兜底：创建失败自动重试（含退避）。
+  - [locallife/api/payment_order.go](locallife/api/payment_order.go#L120-L360)
 
 ---
 

@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -73,7 +71,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("商户不存在")))
 			return
 		}
@@ -401,7 +399,7 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("商户不存在")))
 			return
 		}
@@ -415,7 +413,7 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 		SubjectID:   merchant.ID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("未找到开户申请记录")))
 			return
 		}
@@ -850,7 +848,7 @@ func (server *Server) riderBindBank(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("骑手不存在")))
 			return
 		}
@@ -1150,7 +1148,7 @@ func (server *Server) getRiderApplymentStatus(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("骑手不存在")))
 			return
 		}
@@ -1164,7 +1162,7 @@ func (server *Server) getRiderApplymentStatus(ctx *gin.Context) {
 		SubjectID:   rider.ID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("未找到开户申请记录")))
 			return
 		}
@@ -1287,7 +1285,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	// 获取运营商信息
 	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("运营商不存在")))
 			return
 		}
@@ -1644,7 +1642,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	// 获取运营商信息
 	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("运营商不存在")))
 			return
 		}
@@ -1658,7 +1656,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 		SubjectID:   operator.ID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("未找到开户申请记录")))
 			return
 		}

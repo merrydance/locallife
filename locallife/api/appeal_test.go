@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -144,7 +143,7 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -284,7 +283,7 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 				store.EXPECT().
 					GetClaimForAppeal(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.GetClaimForAppealRow{}, pgx.ErrNoRows)
+					Return(db.GetClaimForAppealRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -576,7 +575,7 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -816,7 +815,7 @@ func TestReviewAppealAPI(t *testing.T) {
 				store.EXPECT().
 					GetAppeal(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Appeal{}, pgx.ErrNoRows)
+					Return(db.Appeal{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1242,7 +1241,7 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantClaimDetailForMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetMerchantClaimDetailForMerchantRow{}, pgx.ErrNoRows)
+					Return(db.GetMerchantClaimDetailForMerchantRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1258,7 +1257,7 @@ func TestGetMerchantClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1361,7 +1360,7 @@ func TestGetMerchantAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantAppealDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetMerchantAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.GetMerchantAppealDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1458,7 +1457,7 @@ func TestListRiderClaimsAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1660,7 +1659,7 @@ func TestGetOperatorAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetOperatorAppealDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetOperatorAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.GetOperatorAppealDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1763,7 +1762,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderClaimDetailForRiderRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderClaimDetailForRiderRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1779,7 +1778,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1800,7 +1799,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderClaimDetailForRiderRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderClaimDetailForRiderRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1908,7 +1907,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderAppealDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderAppealDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1924,7 +1923,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1945,7 +1944,7 @@ func TestGetRiderAppealDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderAppealDetail(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GetRiderAppealDetailRow{}, pgx.ErrNoRows)
+					Return(db.GetRiderAppealDetailRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

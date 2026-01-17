@@ -161,12 +161,12 @@ func TestRecommendDishesAPI(t *testing.T) {
 				store.EXPECT().
 					GetSystemTagByName(gomock.Any(), "推荐").
 					Times(1).
-					Return(db.Tag{}, pgx.ErrNoRows)
+					Return(db.Tag{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					GetSystemTagByName(gomock.Any(), "热卖").
 					Times(1).
-					Return(db.Tag{}, pgx.ErrNoRows)
+					Return(db.Tag{}, db.ErrRecordNotFound)
 
 				// Mock algorithm queries
 				store.EXPECT().
@@ -387,7 +387,7 @@ func TestGetRecommendationConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetRecommendationConfig(gomock.Any(), gomock.Eq(regionID)).
 					Times(1).
-					Return(db.RecommendationConfig{}, pgx.ErrNoRows)
+					Return(db.RecommendationConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -501,7 +501,7 @@ func TestUpdateRecommendationConfigAPI(t *testing.T) {
 				store.EXPECT().
 					GetRecommendationConfig(gomock.Any(), gomock.Eq(regionID)).
 					Times(1).
-					Return(db.RecommendationConfig{}, pgx.ErrNoRows)
+					Return(db.RecommendationConfig{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					UpsertRecommendationConfig(gomock.Any(), gomock.Any()).

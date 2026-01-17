@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -306,7 +305,7 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchant(gomock.Any(), int64(9999)).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -942,7 +941,7 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetRider(gomock.Any(), int64(9999)).
-					Return(db.Rider{}, sql.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

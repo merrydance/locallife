@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -104,7 +103,7 @@ func (server *Server) applyRider(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已申请成为骑手")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -142,7 +141,7 @@ func (server *Server) getRiderMe(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -183,7 +182,7 @@ func (server *Server) approveRider(ctx *gin.Context) {
 
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
 			return
 		}
@@ -234,7 +233,7 @@ func (server *Server) rejectRider(ctx *gin.Context) {
 
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
 			return
 		}
@@ -347,7 +346,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -365,15 +364,27 @@ func (server *Server) depositRider(ctx *gin.Context) {
 	outTradeNo := generateOutTradeNo()
 	expiresAt := time.Now().Add(30 * time.Minute)
 
-	paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		UserID:       authPayload.UserID,
-		PaymentType:  PaymentTypeMiniProgram,
-		BusinessType: "rider_deposit", // 骑手押金充值
-		Amount:       req.Amount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
-	if err != nil {
+	var paymentOrder db.PaymentOrder
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		outTradeNo = generateOutTradeNo()
+		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+			UserID:       authPayload.UserID,
+			PaymentType:  PaymentTypeMiniProgram,
+			BusinessType: BusinessTypeRiderDeposit, // 骑手押金充值
+			Amount:       req.Amount,
+			OutTradeNo:   outTradeNo,
+			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+				ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+				return
+			}
+			continue
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -453,7 +464,7 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -563,7 +574,7 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -614,7 +625,7 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -674,7 +685,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -753,7 +764,7 @@ func (server *Server) goOnline(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -807,7 +818,7 @@ func (server *Server) goOffline(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -900,7 +911,7 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -1137,7 +1148,7 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 	// 获取订单的配送信息
 	delivery, err := server.store.GetDeliveryByOrderID(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("配送记录不存在")))
 			return
 		}
@@ -1237,7 +1248,7 @@ func (server *Server) reportException(ctx *gin.Context) {
 	// 获取订单的配送信息
 	delivery, err := server.store.GetDeliveryByOrderID(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("配送记录不存在")))
 			return
 		}
@@ -1446,7 +1457,7 @@ func (server *Server) getRiderPremiumScore(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -1457,7 +1468,7 @@ func (server *Server) getRiderPremiumScore(ctx *gin.Context) {
 	// 获取高值单资格积分信息
 	scoreInfo, err := server.store.GetRiderPremiumScoreWithProfile(ctx, rider.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手档案不存在，请联系管理员")))
 			return
 		}
@@ -1544,7 +1555,7 @@ func (server *Server) listRiderPremiumScoreHistory(ctx *gin.Context) {
 	// 获取骑手信息
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
@@ -1555,7 +1566,7 @@ func (server *Server) listRiderPremiumScoreHistory(ctx *gin.Context) {
 	// 获取当前积分
 	currentScore, err := server.store.GetRiderPremiumScore(ctx, rider.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 如果没有rider_profiles记录，返回默认值0
 			currentScore = 0
 		} else {

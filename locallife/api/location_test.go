@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -102,7 +101,7 @@ func TestMatchRegionID_UsesDistrictFallback(t *testing.T) {
 	store.EXPECT().
 		GetRegionByCode(gomock.Any(), "100000").
 		Times(1).
-		Return(db.Region{}, pgx.ErrNoRows)
+		Return(db.Region{}, db.ErrRecordNotFound)
 	store.EXPECT().
 		GetRegionByNameAndLevel(gomock.Any(), db.GetRegionByNameAndLevelParams{Name: "北京市", Level: 2}).
 		Times(1).

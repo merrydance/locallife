@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -337,7 +336,7 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -450,13 +449,13 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				store.EXPECT().
 					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 
 				// GetDailyInventory也返回ErrNoRows表示无限库存
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -482,7 +481,7 @@ func TestCheckAndDecrementInventoryAPI(t *testing.T) {
 				store.EXPECT().
 					CheckAndDecrementInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 
 				// GetDailyInventory返回库存记录，说明是库存不足而非无限库存
 				existingInventory := db.DailyInventory{
@@ -759,7 +758,7 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 				store.EXPECT().
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.DailyInventory{}, sql.ErrNoRows)
+					Return(db.DailyInventory{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

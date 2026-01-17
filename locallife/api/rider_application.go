@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -194,7 +193,7 @@ func (server *Server) createOrGetRiderApplicationDraft(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, newRiderApplicationResponse(app))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
 		return
 	}
@@ -241,7 +240,7 @@ func (server *Server) updateRiderApplicationBasic(ctx *gin.Context) {
 
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -296,7 +295,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -438,7 +437,7 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -537,7 +536,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -751,7 +750,7 @@ func (server *Server) resetRiderApplication(ctx *gin.Context) {
 
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
 			return
 		}

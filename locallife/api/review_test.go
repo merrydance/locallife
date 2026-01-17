@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -54,7 +52,7 @@ func TestCreateReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetReviewByOrderID(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(db.Review{}, pgx.ErrNoRows)
+					Return(db.Review{}, db.ErrRecordNotFound)
 
 				// Mock GetUserProfile (high trust score)
 				store.EXPECT().
@@ -122,7 +120,7 @@ func TestCreateReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetReviewByOrderID(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(db.Review{}, pgx.ErrNoRows)
+					Return(db.Review{}, db.ErrRecordNotFound)
 
 				// Mock GetUserProfile (low trust score < 600)
 				store.EXPECT().
@@ -182,7 +180,7 @@ func TestCreateReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -542,7 +540,7 @@ func TestReplyReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Review{}, pgx.ErrNoRows)
+					Return(db.Review{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -567,7 +565,7 @@ func TestReplyReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UserRole{}, pgx.ErrNoRows)
+					Return(db.UserRole{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -825,7 +823,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(int64(99999))).
 					Times(1).
-					Return(db.Review{}, sql.ErrNoRows)
+					Return(db.Review{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					DeleteReview(gomock.Any(), gomock.Any()).

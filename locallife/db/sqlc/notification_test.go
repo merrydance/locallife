@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -72,7 +71,7 @@ func TestGetNotification(t *testing.T) {
 func TestGetNotification_NotFound(t *testing.T) {
 	_, err := testStore.GetNotification(context.Background(), 999999)
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestListUserNotifications(t *testing.T) {
@@ -181,7 +180,7 @@ func TestMarkNotificationAsRead(t *testing.T) {
 		UserID: user.ID,
 	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestMarkNotificationAsRead_WrongUser(t *testing.T) {
@@ -195,7 +194,7 @@ func TestMarkNotificationAsRead_WrongUser(t *testing.T) {
 		UserID: user2.ID,
 	})
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestMarkAllNotificationsAsRead(t *testing.T) {
@@ -247,7 +246,7 @@ func TestDeleteNotification(t *testing.T) {
 	// 验证已删除
 	_, err = testStore.GetNotification(context.Background(), notification.ID)
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestDeleteNotification_WrongUser(t *testing.T) {
@@ -318,7 +317,7 @@ func TestDeleteExpiredNotifications(t *testing.T) {
 	// 验证过期通知已删除
 	_, err = testStore.GetNotification(context.Background(), expired.ID)
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestGetNotificationsByRelated(t *testing.T) {
@@ -469,7 +468,7 @@ func TestGetUserNotificationPreferences(t *testing.T) {
 	// 首次查询，应该返回 ErrNoRows
 	_, err := testStore.GetUserNotificationPreferences(context.Background(), user.ID)
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 
 	// 创建偏好设置
 	_, err = testStore.GetOrCreateUserNotificationPreferences(context.Background(), user.ID)
@@ -490,7 +489,7 @@ func TestGetUserNotificationPreferences_NotFound(t *testing.T) {
 	// 查询不存在的用户ID
 	_, err := testStore.GetUserNotificationPreferences(context.Background(), 999999)
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestUpdateUserNotificationPreferences_DisableTypes(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -187,7 +186,7 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 		if result.Order.UserVoucherID.Valid {
 			userVoucher, err := q.GetUserVoucherForUpdate(ctx, result.Order.UserVoucherID.Int64)
 			if err != nil {
-				if !errors.Is(err, pgx.ErrNoRows) {
+				if !errors.Is(err, ErrRecordNotFound) {
 					return fmt.Errorf("get user voucher for rollback: %w", err)
 				}
 			} else if userVoucher.Status == "used" && userVoucher.OrderID.Valid && userVoucher.OrderID.Int64 == result.Order.ID {
@@ -196,14 +195,14 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 					if _, err := q.MarkUserVoucherAsExpiredOnRollback(ctx, MarkUserVoucherAsExpiredOnRollbackParams{
 						ID:      userVoucher.ID,
 						OrderID: orderID,
-					}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					}); err != nil && !errors.Is(err, ErrRecordNotFound) {
 						return fmt.Errorf("mark voucher expired on rollback: %w", err)
 					}
 				} else {
 					if _, err := q.MarkUserVoucherAsUnused(ctx, MarkUserVoucherAsUnusedParams{
 						ID:      userVoucher.ID,
 						OrderID: orderID,
-					}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					}); err != nil && !errors.Is(err, ErrRecordNotFound) {
 						return fmt.Errorf("mark voucher unused on rollback: %w", err)
 					}
 				}
@@ -219,7 +218,7 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 			inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
 			if result.Order.OrderType == OrderTypeReservation && result.Order.ReservationID.Valid {
 				reservation, invErr := q.GetTableReservation(ctx, result.Order.ReservationID.Int64)
-				if invErr != nil && !errors.Is(invErr, pgx.ErrNoRows) {
+				if invErr != nil && !errors.Is(invErr, ErrRecordNotFound) {
 					return fmt.Errorf("get reservation for inventory restore: %w", invErr)
 				}
 				if reservation.ReservationDate.Valid {
@@ -238,7 +237,7 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 					Date:       inventoryDate,
 				})
 				if invErr != nil {
-					if errors.Is(invErr, pgx.ErrNoRows) {
+					if errors.Is(invErr, ErrRecordNotFound) {
 						continue
 					}
 					return fmt.Errorf("get inventory for restore: %w", invErr)

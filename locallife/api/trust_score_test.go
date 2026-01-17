@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -144,7 +143,7 @@ func TestSubmitClaimAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(int64(99999))).
 					Times(1).
-					Return(db.Order{}, sql.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -574,7 +573,7 @@ func TestGetClaimDetailAPI(t *testing.T) {
 				store.EXPECT().
 					GetClaim(gomock.Any(), gomock.Eq(int64(99999))).
 					Times(1).
-					Return(db.Claim{}, sql.ErrNoRows)
+					Return(db.Claim{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -792,7 +791,7 @@ func TestReviewClaimAPI(t *testing.T) {
 				store.EXPECT().
 					GetClaim(gomock.Any(), gomock.Eq(int64(99999))).
 					Times(1).
-					Return(db.Claim{}, sql.ErrNoRows)
+					Return(db.Claim{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1013,7 +1012,7 @@ func TestGetTrustScoreProfileAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserProfile(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UserProfile{}, sql.ErrNoRows)
+					Return(db.UserProfile{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

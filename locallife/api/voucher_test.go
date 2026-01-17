@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -103,7 +102,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					Return(db.UserRole{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateVoucher(gomock.Any(), gomock.Any()).
@@ -237,7 +236,7 @@ func TestClaimVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					ClaimVoucherTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.ClaimVoucherTxResult{}, sql.ErrNoRows)
+					Return(db.ClaimVoucherTxResult{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -424,7 +423,7 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.Voucher{}, sql.ErrNoRows)
+					Return(db.Voucher{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -449,7 +448,7 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					Return(db.UserRole{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -576,7 +575,7 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
-					Return(db.Voucher{}, sql.ErrNoRows)
+					Return(db.Voucher{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -598,7 +597,7 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserRoleByType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UserRole{}, sql.ErrNoRows)
+					Return(db.UserRole{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

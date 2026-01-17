@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -117,7 +116,7 @@ func (server *Server) addMerchantStaff(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("staff already exists")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -203,7 +202,7 @@ func (server *Server) updateMerchantStaffRole(ctx *gin.Context) {
 	// 获取员工信息
 	staff, err := server.store.GetMerchantStaffByID(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("staff not found")))
 			return
 		}
@@ -275,7 +274,7 @@ func (server *Server) deleteMerchantStaff(ctx *gin.Context) {
 	// 获取员工信息
 	staff, err := server.store.GetMerchantStaffByID(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("staff not found")))
 			return
 		}
@@ -401,7 +400,7 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 	// 通过邀请码查找商户
 	merchant, err := server.store.GetMerchantByBindCode(ctx, pgtype.Text{String: req.InviteCode, Valid: true})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid or expired invite code")))
 			return
 		}
@@ -424,7 +423,7 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("you are already a staff of this merchant")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -466,7 +465,7 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 
 // isDuplicateKeyError 检查是否是重复 key 错误
 func isDuplicateKeyError(err error) bool {
-	return err != nil && (errors.Is(err, pgx.ErrNoRows) == false) &&
+	return err != nil && !isNotFoundError(err) &&
 		(err.Error() == "duplicate key value violates unique constraint" ||
 			len(err.Error()) > 0 && err.Error()[0:9] == "duplicate")
 }

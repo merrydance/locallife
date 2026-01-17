@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -113,7 +112,7 @@ func (server *Server) claimBoss(ctx *gin.Context) {
 	// 查找商户
 	merchant, err := server.store.GetMerchantByBossBindCode(ctx, pgtype.Text{String: req.BindCode, Valid: true})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的认领码")))
 			return
 		}
@@ -136,7 +135,7 @@ func (server *Server) claimBoss(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已经认领过该店铺")))
 		return
 	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

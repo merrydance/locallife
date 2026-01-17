@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -86,7 +85,7 @@ func TestGetRecommendedOrdersAPI(t *testing.T) {
 				store.EXPECT().
 					GetActiveRecommendConfig(gomock.Any()).
 					Times(1).
-					Return(db.RecommendConfig{}, pgx.ErrNoRows)
+					Return(db.RecommendConfig{}, db.ErrRecordNotFound)
 
 				// ListDeliveryPoolNearbyByRegion - 按区域过滤
 				store.EXPECT().
@@ -289,7 +288,7 @@ func TestGrabOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(db.DeliveryPool{}, pgx.ErrNoRows)
+					Return(db.DeliveryPool{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -472,7 +471,7 @@ func TestConfirmPickupAPI(t *testing.T) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -543,7 +542,7 @@ func TestListMyActiveDeliveriesAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -646,7 +645,7 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -667,7 +666,7 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -772,7 +771,7 @@ func TestGetDeliveryTrackAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -788,7 +787,7 @@ func TestGetDeliveryTrackAPI(t *testing.T) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -939,7 +938,7 @@ func TestStartPickupAPI(t *testing.T) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows)
+					Return(db.Delivery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -955,7 +954,7 @@ func TestStartPickupAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

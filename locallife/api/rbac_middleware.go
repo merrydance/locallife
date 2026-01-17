@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
@@ -90,7 +89,7 @@ func (server *Server) OperatorMiddleware() gin.HandlerFunc {
 		// 加载 operator 信息
 		operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("operator profile not found"),
 				))
@@ -186,7 +185,7 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 			Role:   RoleMerchantOwner,
 		})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant owner role not found"),
 				))
@@ -206,7 +205,7 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 		// 加载商户信息
 		merchant, err := server.store.GetMerchant(ctx, userRole.RelatedEntityID.Int64)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant not found"),
 				))
@@ -241,7 +240,7 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		// 1. 通过 GetMerchantByOwner 获取商户（已支持 merchant_staff 表）
 		merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("you are not associated with any merchant"),
 				))
@@ -272,7 +271,7 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 				UserID:     authPayload.UserID,
 			})
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 						errors.New("you are not a staff of this merchant"),
 					))
@@ -317,7 +316,7 @@ func (server *Server) RiderMiddleware() gin.HandlerFunc {
 		// 加载骑手信息
 		rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("rider profile not found"),
 				))

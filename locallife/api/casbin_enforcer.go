@@ -11,7 +11,6 @@ import (
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/rs/zerolog/log"
@@ -352,7 +351,7 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 		// 加载 operator 信息
 		operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("operator profile not found"),
 				))
@@ -388,7 +387,7 @@ func (server *Server) LoadMerchantMiddleware() gin.HandlerFunc {
 			Role:   RoleMerchantOwner,
 		})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant owner role not found"),
 				))
@@ -408,7 +407,7 @@ func (server *Server) LoadMerchantMiddleware() gin.HandlerFunc {
 		// 加载商户信息
 		merchant, err := server.store.GetMerchant(ctx, userRole.RelatedEntityID.Int64)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant not found"),
 				))
@@ -442,7 +441,7 @@ func (server *Server) LoadRiderMiddleware() gin.HandlerFunc {
 		// 加载骑手信息
 		rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("rider profile not found"),
 				))

@@ -2,10 +2,8 @@ package api
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -145,7 +143,7 @@ func (server *Server) createDeliveryLocationEvent(ctx context.Context, delivery 
 
 	_, err := server.store.CreateDeliveryLocationEvent(ctx, params)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			return false, nil
 		}
 		return false, err
@@ -225,7 +223,7 @@ func (server *Server) maybeAutoAdvancePickup(ctx context.Context, delivery db.De
 		order = loadedOrder
 		oldStatus = order.Status
 		orderLoaded = true
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+	} else if !isNotFoundError(err) {
 		log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto advance")
 	}
 
@@ -276,7 +274,7 @@ func (server *Server) maybeAutoConfirmPickup(ctx context.Context, delivery db.De
 
 	order, err := server.store.GetOrder(ctx, delivery.OrderID)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !isNotFoundError(err) {
 			log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto pickup")
 		}
 		return
@@ -327,7 +325,7 @@ func (server *Server) maybeAutoConfirmDelivery(ctx context.Context, delivery db.
 
 	order, err := server.store.GetOrder(ctx, delivery.OrderID)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !isNotFoundError(err) {
 			log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto delivery")
 		}
 		return

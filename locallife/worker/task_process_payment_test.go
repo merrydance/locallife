@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -160,7 +159,7 @@ func TestProcessTaskApplymentResult_Success(t *testing.T) {
 				// 2. 商户不存在
 				store.EXPECT().
 					GetMerchant(gomock.Any(), int64(999)).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 
 				// 不发送通知
 			},
@@ -723,7 +722,7 @@ func TestProcessTaskProfitSharingResult_MerchantNotFound(t *testing.T) {
 	// 商户不存在
 	store.EXPECT().
 		GetMerchant(gomock.Any(), int64(999)).
-		Return(db.Merchant{}, pgx.ErrNoRows)
+		Return(db.Merchant{}, db.ErrRecordNotFound)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 

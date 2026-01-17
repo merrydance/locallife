@@ -245,17 +245,14 @@ func (server *Server) createRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
 		return
 	}
 
-	// 验证URL中的商户ID与用户的商户ID一致
-	if merchantID != uriReq.MerchantID {
+	// 验证URL中的商户ID与当前商户一致
+	if merchant.ID != uriReq.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
 		return
 	}
@@ -267,7 +264,7 @@ func (server *Server) createRechargeRule(ctx *gin.Context) {
 	}
 
 	rule, err := server.store.CreateRechargeRule(ctx, db.CreateRechargeRuleParams{
-		MerchantID:     merchantID,
+		MerchantID:     merchant.ID,
 		RechargeAmount: req.RechargeAmount,
 		BonusAmount:    req.BonusAmount,
 		IsActive:       true,
@@ -316,6 +313,16 @@ func (server *Server) listRechargeRules(ctx *gin.Context) {
 		return
 	}
 
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
+		return
+	}
+	if merchant.ID != req.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+		return
+	}
+
 	rules, err := server.store.ListMerchantRechargeRules(ctx, req.MerchantID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -345,6 +352,16 @@ func (server *Server) listActiveRechargeRules(ctx *gin.Context) {
 	var req listActiveRechargeRulesRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context required")))
+		return
+	}
+	if merchant.ID != req.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
 		return
 	}
 
@@ -402,8 +419,6 @@ func (server *Server) updateRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
 	// 获取原规则验证权限
 	rule, err := server.store.GetRechargeRule(ctx, uriReq.RuleID)
 	if err != nil {
@@ -421,9 +436,8 @@ func (server *Server) updateRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != rule.MerchantID {
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok || merchant.ID != rule.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
 		return
 	}
@@ -500,8 +514,6 @@ func (server *Server) deleteRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
 	// 获取规则验证权限
 	rule, err := server.store.GetRechargeRule(ctx, req.RuleID)
 	if err != nil {
@@ -519,9 +531,8 @@ func (server *Server) deleteRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != rule.MerchantID {
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok || merchant.ID != rule.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
 		return
 	}
@@ -541,7 +552,7 @@ func (server *Server) deleteRechargeRule(ctx *gin.Context) {
 type rechargeRequest struct {
 	MembershipID   int64  `json:"membership_id" binding:"required,min=1"`
 	RechargeAmount int64  `json:"recharge_amount" binding:"required,min=1,max=100000000"` // 最大100万元
-	PaymentMethod  string `json:"payment_method" binding:"required,oneof=wechat alipay"`
+	PaymentMethod  string `json:"payment_method" binding:"required,oneof=wechat"`
 }
 
 // transactionResponse 交易流水响应
@@ -618,8 +629,17 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 
 	// 创建支付订单
-	outTradeNo := fmt.Sprintf("MBR%d_%d", membership.ID, time.Now().Unix())
+	outTradeNo := generateOutTradeNoWithPrefix("MBR")
 	expireTime := time.Now().Add(5 * time.Minute) // 5分钟过期
+
+	if req.PaymentMethod != "wechat" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("unsupported payment method")))
+		return
+	}
+	if server.paymentClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not available")))
+		return
+	}
 
 	// 获取用户OpenID（从users表）
 	user, err := server.store.GetUser(ctx, authPayload.UserID)
@@ -635,12 +655,12 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 
 	// 准备attach数据
 	attachPayload := struct {
-		MembershipID  int64  `json:"membership_id"`
-		BonusAmount   int64  `json:"bonus_amount"`
+		MembershipID   int64  `json:"membership_id"`
+		BonusAmount    int64  `json:"bonus_amount"`
 		RechargeRuleID *int64 `json:"recharge_rule_id"`
 	}{
-		MembershipID:  req.MembershipID,
-		BonusAmount:   bonusAmount,
+		MembershipID:   req.MembershipID,
+		BonusAmount:    bonusAmount,
 		RechargeRuleID: ruleID,
 	}
 	attachBytes, err := json.Marshal(attachPayload)
@@ -650,17 +670,29 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 	attachStr := string(attachBytes)
 
-	// 创建支付订单记录
-	paymentOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-		UserID:       authPayload.UserID,
-		PaymentType:  "jsapi",
-		BusinessType: "membership_recharge",
-		Amount:       req.RechargeAmount,
-		OutTradeNo:   outTradeNo,
-		ExpiresAt:    pgtype.Timestamptz{Time: expireTime, Valid: true},
-		Attach:       pgtype.Text{String: attachStr, Valid: true},
-	})
-	if err != nil {
+	// 创建支付订单记录（out_trade_no 碰撞重试）
+	var paymentOrder db.PaymentOrder
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		outTradeNo = generateOutTradeNoWithPrefix("MBR")
+		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+			UserID:       authPayload.UserID,
+			PaymentType:  PaymentTypeMiniProgram,
+			BusinessType: BusinessTypeMembershipRecharge,
+			Amount:       req.RechargeAmount,
+			OutTradeNo:   outTradeNo,
+			ExpiresAt:    pgtype.Timestamptz{Time: expireTime, Valid: true},
+			Attach:       pgtype.Text{String: attachStr, Valid: true},
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+				ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+				return
+			}
+			continue
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create payment order: %w", err)))
 		return
 	}

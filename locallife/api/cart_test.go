@@ -123,7 +123,7 @@ func TestGetCartAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, sql.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -233,7 +233,7 @@ func TestAddCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, sql.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateCart(gomock.Any(), gomock.Any()).
@@ -243,7 +243,7 @@ func TestAddCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartItemByDishAndCustomizations(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.CartItem{}, sql.ErrNoRows)
+					Return(db.CartItem{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					AddCartItem(gomock.Any(), gomock.Any()).
@@ -278,7 +278,7 @@ func TestAddCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -298,7 +298,7 @@ func TestAddCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetDishWithCustomizations(gomock.Any(), dish.ID).
 					Times(1).
-					Return(db.GetDishWithCustomizationsRow{}, sql.ErrNoRows)
+					Return(db.GetDishWithCustomizationsRow{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Any()).
@@ -506,7 +506,7 @@ func TestUpdateCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartItem(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.GetCartItemRow{}, sql.ErrNoRows)
+					Return(db.GetCartItemRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -663,7 +663,7 @@ func TestDeleteCartItemAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartItem(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.GetCartItemRow{}, sql.ErrNoRows)
+					Return(db.GetCartItemRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -779,7 +779,7 @@ func TestClearCartAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, sql.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				// 购物车不存在时返回成功，表示购物车已清空
@@ -904,7 +904,7 @@ func TestCalculateCartAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, sql.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1287,7 +1287,7 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), gomock.Any()).
 					AnyTimes().
-					Return(db.DeliveryFeeConfig{}, sql.ErrNoRows)
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				// 接受成功或尚未完全实现的响应

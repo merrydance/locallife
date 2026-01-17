@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -781,7 +780,7 @@ func (server *Server) getRecommendationConfig(ctx *gin.Context) {
 	// 查询配置（如果不存在则返回默认值）
 	config, err := server.store.GetRecommendationConfig(ctx, uri.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 返回默认配置
 			ctx.JSON(http.StatusOK, getRecommendationConfigResponse{
 				RegionID:          uri.ID,
@@ -848,7 +847,7 @@ func (server *Server) updateRecommendationConfig(ctx *gin.Context) {
 
 	// 获取现有配置或使用默认值
 	existingConfig, err := server.store.GetRecommendationConfig(ctx, uri.ID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

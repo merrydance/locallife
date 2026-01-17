@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -195,7 +194,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 				// 获取商户申请信息 - 使用带测试服务器 URL 的版本
 				store.EXPECT().
@@ -265,7 +264,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -532,7 +531,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -547,7 +546,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -641,7 +640,7 @@ func TestRiderBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 				// 使用带测试服务器 URL 的版本
 				store.EXPECT().
@@ -707,7 +706,7 @@ func TestRiderBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.Rider{}, pgx.ErrNoRows)
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -837,7 +836,7 @@ func TestGetRiderApplymentStatusAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -948,7 +947,7 @@ func TestMerchantBindBankWithoutEcommerceClient(t *testing.T) {
 	store.EXPECT().
 		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+			Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 	// 获取商户申请信息
 	store.EXPECT().
@@ -1052,7 +1051,7 @@ func TestMerchantBindBankUploadImageFailed(t *testing.T) {
 	store.EXPECT().
 		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+			Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 	// 获取商户申请信息
 	store.EXPECT().
@@ -1149,7 +1148,7 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 	store.EXPECT().
 		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.EcommerceApplyment{}, pgx.ErrNoRows)
+			Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 	// 获取商户申请信息
 	store.EXPECT().

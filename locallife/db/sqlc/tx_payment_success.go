@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -45,7 +44,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 		case "rider_deposit":
 			if _, err := q.GetRiderDepositByPaymentOrderID(ctx, pgtype.Int8{Int64: paymentOrder.ID, Valid: true}); err == nil {
 				break
-			} else if !errors.Is(err, pgx.ErrNoRows) {
+			} else if !errors.Is(err, ErrRecordNotFound) {
 				return fmt.Errorf("get rider deposit by payment order: %w", err)
 			}
 
@@ -92,7 +91,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 				Amount:        paymentOrder.Amount,
 				Type:          "reservation",
 			}); err != nil {
-				if !errors.Is(err, pgx.ErrNoRows) {
+				if !errors.Is(err, ErrRecordNotFound) {
 					return fmt.Errorf("create reservation payment: %w", err)
 				}
 				break
@@ -119,7 +118,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 				Amount:        paymentOrder.Amount,
 				Type:          "addon",
 			}); err != nil {
-				if !errors.Is(err, pgx.ErrNoRows) {
+				if !errors.Is(err, ErrRecordNotFound) {
 					return fmt.Errorf("create reservation addon payment: %w", err)
 				}
 				break
@@ -151,7 +150,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 
 			if _, err := q.GetMembershipTransactionByPaymentOrderID(ctx, pgtype.Int8{Int64: paymentOrder.ID, Valid: true}); err == nil {
 				break
-			} else if !errors.Is(err, pgx.ErrNoRows) {
+			} else if !errors.Is(err, ErrRecordNotFound) {
 				return fmt.Errorf("get membership transaction by payment order: %w", err)
 			}
 

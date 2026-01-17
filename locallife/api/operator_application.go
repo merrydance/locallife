@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -180,7 +179,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, newOperatorApplicationResponse(existingApp, regionName))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -231,7 +230,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请选择其他区域")))
 		return
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -265,7 +264,7 @@ func (server *Server) getOperatorApplication(ctx *gin.Context) {
 
 	app, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还没有申请记录")))
 			return
 		}
@@ -310,7 +309,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -358,7 +357,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请选择其他区域")))
 		return
 	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -411,7 +410,7 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -473,7 +472,7 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -600,7 +599,7 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -743,7 +742,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -779,7 +778,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请修改申请区域")))
 		return
 	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -837,7 +836,7 @@ func (server *Server) resetOperatorApplicationToDraft(ctx *gin.Context) {
 
 	app, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("没有申请记录")))
 			return
 		}

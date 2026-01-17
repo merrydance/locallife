@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -289,7 +288,7 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 	// 尝试获取草稿、待审核、被拒绝或已通过的申请（以便随时编辑）
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			// 创建新草稿
 			newApp, err := server.store.CreateMerchantApplicationDraft(ctx, authPayload.UserID)
 			if err != nil {
@@ -350,7 +349,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -497,7 +496,7 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -584,7 +583,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	log.Info().Str("request_id", requestID).Dur("duration", time.Since(t1)).Msg("merchant OCR: GetMerchantApplicationDraft done")
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -783,7 +782,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -940,7 +939,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -1141,7 +1140,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
 			return
 		}
@@ -1951,7 +1950,7 @@ func (server *Server) resetMerchantApplication(ctx *gin.Context) {
 	// 获取申请
 	app, err := server.store.GetUserMerchantApplication(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
 			return
 		}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,7 @@ func TestRegionQueries_CreateAndGet(t *testing.T) {
 func TestRegionQueries_GetRegion_NotFound(t *testing.T) {
 	got, err := testStore.GetRegion(context.Background(), -1)
 	require.Error(t, err)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 	require.Empty(t, got)
 }
 

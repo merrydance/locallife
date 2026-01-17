@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -249,7 +248,7 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, orderID int
 	inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
 	if order.OrderType == OrderTypeReservation && order.ReservationID.Valid {
 		reservation, err := q.GetTableReservation(ctx, order.ReservationID.Int64)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		if err != nil && !errors.Is(err, ErrRecordNotFound) {
 			return result, fmt.Errorf("get reservation for inventory date: %w", err)
 		}
 		if reservation.ReservationDate.Valid {
@@ -270,7 +269,7 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, orderID int
 			Date:       inventoryDate,
 		})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, ErrRecordNotFound) {
 				// No inventory configured means unlimited stock
 				continue
 			}

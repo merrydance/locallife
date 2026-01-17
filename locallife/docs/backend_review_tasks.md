@@ -48,7 +48,7 @@
 - 风险：
   - 设计自相矛盾：
     - Redis 依赖：`main.go` 强制要求 `REDIS_ADDRESS`，但 `api/server.go` 在 WebSocket 队列/推送上实现了无 Redis 的内存降级路径；需要明确“Redis 是否为强依赖”，避免文档/实现互相打架。
-    - 统一响应封装：路由注释写“统一 {code,message,data}”，但 `ResponseEnvelopeMiddleware` 实际是通过 `X-Response-Envelope: 1` 才启用；且 CORS 允许头里目前不包含该 header，浏览器环境可能无法发起该约定。
+    - 统一响应封装：路由注释写“统一 {code,message,data}”，现已调整为 **默认启用**，可通过 `X-Response-Envelope: 0` 显式关闭；同时 CORS 已允许/暴露该 header。
   - 生命周期/资源释放不完整：
     - WebSocket `Hub` 支持 `Shutdown()`、`PubSubManager` 支持 `Stop()`，但当前启动路径里未看到在进程退出时调用；存在 goroutine/Redis 连接泄露风险。
     - `RateLimiter` 启动了后台清理协程且有 `Stop()`，但未在退出时调用；另外 `SensitiveAPIMiddleware` 的 map 没有清理机制，长期运行可能增长。
@@ -86,7 +86,7 @@
 - 风险：
   - 鉴权降级风险（高优先级）：Casbin 中间件在 `globalCasbinEnforcer == nil` 时会“跳过权限检查并放行”。如果生产环境 Casbin 初始化失败，部分路由组可能直接变成无授权保护（取决于是否依赖 CasbinRoleMiddleware）。建议至少“fail closed”。
   - 权限矩阵可能与实现漂移：`/v1/role-access` 是手写维护，Casbin policy 也是手写维护；两者与 `api/server.go` 路由装配存在重复来源，后续很容易不一致。
-  - 统一响应封装存在协议不一致：路由注释强调统一 `{code,message,data}`，但 `ResponseEnvelopeMiddleware` 实际是通过 `X-Response-Envelope: 1` 才启用；同时 CORS 允许头列表未包含 `X-Response-Envelope`，浏览器端可能无法按约定开启。
+  - 统一响应封装存在协议不一致：路由注释强调统一 `{code,message,data}`，现已调整为 **默认启用**，可通过 `X-Response-Envelope: 0` 显式关闭。
   - 上传“归属校验”疑似与目录约定不一致：`isUploadPathOwnedByUser()` 用 `uid` 在路径里匹配（如 `/merchants/{uid}/`），但实际上传目录更像是 `uploads/merchants/{merchant_id}/...`；这会导致“合法用户被拒”或“越权放开（靠特殊 case）”的混乱。
   - 速率限制存在内存增长点：`RateLimiter` 有清理协程与 `Stop()`，但 `SensitiveAPIMiddleware` 的 map 无清理策略，长期运行可能无限增长。
   - 幂等建模风险：支付订单 `OrderID` 字段同时承载 order 与 reservation（从 `createPaymentOrder` 逻辑可见），但“查已存在 pending 支付单”的查询仅按 `OrderID` 查，未纳入 `BusinessType`；如果不同业务表 ID 可能碰撞，会出现错复用/串单风险。
@@ -94,7 +94,7 @@
 - 建议：
   - 权限“单一事实来源”：建议把路由权限定义集中化（例如以路由组生成 policy/metadata），避免 Casbin policy 与 role-access 双维护。
   - Casbin 初始化失败改为拒绝启动或拒绝请求（fail closed），并在健康检查/ready 里反映依赖状态。
-  - 响应封装协议定稿：要么全局强制 envelope；要么明确 opt-in 并补齐 CORS `Access-Control-Allow-Headers`（包含 `X-Response-Envelope`），同时在 Swagger/前端契约里写清楚。
+  - 响应封装协议定稿：统一为默认 envelope + `X-Response-Envelope: 0` opt-out，并在 Swagger/前端契约里写清楚。
   - 上传归属规则定稿并代码对齐：统一“uploads 路径的主键到底是 user_id 还是 merchant_id/rider_id”，把 `isUploadPathOwnedByUser` 与各模块上传路径约定统一。
   - 支付订单关联字段建议拆分：将 `PaymentOrder` 与 `order_id/reservation_id` 做结构化区分（或把查询显式加上 `business_type`），并补充相关约束/索引。
 
@@ -1117,7 +1117,7 @@
 
 1) 路由装配与中间件链（`api/server.go`）
 - 全局 middleware 顺序：CORS → 安全头 →（生产）HSTS → Request-ID/Tracing → 请求日志 → Prometheus → 全局限流 → 全局 Timeout(30s)。
-- `v1.Use(ResponseEnvelopeMiddleware())` 但实现为 **header opt-in**：仅当请求头带 `X-Response-Envelope: 1` 才包裹 `{code,message,data}`；同时对 `/v1/webhooks/*` 与 websocket upgrade 自动跳过。
+- `v1.Use(ResponseEnvelopeMiddleware())` 默认包裹 `{code,message,data}`，客户端可用 `X-Response-Envelope: 0` 显式关闭；同时对 `/v1/webhooks/*` 与 websocket upgrade 自动跳过。
 - `authGroup := v1.Group("")` 只挂 `authMiddleware`（认证），**未全局启用 CasbinMiddleware**；Casbin 仅在少数 operator/admin 路由组通过 `CasbinRoleMiddleware` 局部使用。
 
 2) 认证/授权链路
@@ -1132,7 +1132,7 @@
 - RequestLogging 记录 `path` + **RawQuery** + `user_agent` + `client_ip` + `user_id`（若已认证）。
 - Prometheus 指标：对 404 使用实际 path（非路由模板），可能产生更高 label cardinality。
 - RateLimiter：全局 visitors 有定期清理；但 `SensitiveAPIMiddleware` 采用独立 map 且**没有清理机制**。
-- CORS allow headers 未包含 `X-Response-Envelope`，与“响应 envelope 需要请求头 opt-in”的机制存在浏览器侧可用性/契约一致性风险。
+- CORS allow headers 已包含 `X-Response-Envelope`，确保浏览器侧可显式 opt-out。
 
 #### 3.13 风险分级与建议
 

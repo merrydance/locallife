@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -63,7 +62,7 @@ func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.RiderApplication{}, pgx.ErrNoRows)
+					Return(db.RiderApplication{}, db.ErrRecordNotFound)
 
 				// 创建新草稿
 				app := randomRiderApplication(user.ID)

@@ -17,7 +17,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 )
@@ -785,7 +784,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	// 验证商户存在且正常营业
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			log.Warn().Msg("[DEBUG] createOrder: merchant not found")
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
@@ -810,7 +809,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	if req.OrderType == OrderTypeDineIn && req.TableID != nil {
 		table, err := server.store.GetTable(ctx, *req.TableID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
 				return
 			}
@@ -835,7 +834,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 		res, err := server.store.GetTableReservation(ctx, *req.ReservationID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
 				return
 			}
@@ -864,7 +863,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 		session, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: res.ID, Valid: true})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for reservation")))
 				return
 			}
@@ -892,7 +891,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 		session, err := server.store.GetActiveDiningSessionByTable(ctx, *req.TableID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for table")))
 				return
 			}
@@ -911,7 +910,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 			res, err := server.store.GetTableReservation(ctx, *req.ReservationID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
 					return
 				}
@@ -961,7 +960,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			var err error
 			bg, err = server.store.GetBillingGroup(ctx, *req.BillingGroupID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
 					return
 				}
@@ -972,7 +971,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			var err error
 			bg, err = server.store.GetDefaultBillingGroupBySession(ctx, diningSession.ID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					ctx.JSON(http.StatusConflict, errorResponse(errors.New("default billing group not found")))
 					return
 				}
@@ -993,7 +992,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			BillingGroupID: bg.ID,
 			UserID:         authPayload.UserID,
 		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a member of the billing group")))
 				return
 			}
@@ -1015,7 +1014,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation already has an active order")))
 				return
 			}
-		} else if !errors.Is(err, pgx.ErrNoRows) {
+		} else if !isNotFoundError(err) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -1042,7 +1041,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		// 获取用户地址
 		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("address not found")))
 				return
 			}
@@ -1168,7 +1167,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		// 获取用户优惠券信息（包含优惠券模板信息）
 		uv, err := server.store.GetUserVoucher(ctx, *req.UserVoucherID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("优惠券不存在")))
 				return
 			}
@@ -1247,7 +1246,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			UserID:     authPayload.UserID,
 		})
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是该商户的会员，请先加入会员")))
 				return
 			}
@@ -1472,7 +1471,7 @@ func (server *Server) calculateOrderItems(ctx *gin.Context, merchantID int64, it
 			// 查询菜品
 			dish, err := server.store.GetDish(ctx, *item.DishID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					return 0, nil, fmt.Errorf("dish %d not found", *item.DishID)
 				}
 				return 0, nil, err
@@ -1496,7 +1495,7 @@ func (server *Server) calculateOrderItems(ctx *gin.Context, merchantID int64, it
 			// 查询套餐
 			combo, err := server.store.GetComboSet(ctx, *item.ComboID)
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
+				if isNotFoundError(err) {
 					return 0, nil, fmt.Errorf("combo %d not found", *item.ComboID)
 				}
 				return 0, nil, err
@@ -1595,7 +1594,7 @@ func (server *Server) getOrder(ctx *gin.Context) {
 	// 使用 JOIN 查询，一次获取订单 + 商户信息 + 配送地址
 	order, err := server.store.GetOrderWithDetails(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -1670,8 +1669,8 @@ func (server *Server) getOrder(ctx *gin.Context) {
 				est := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
 				resp.EstimatedDeliveryAt = &est
 			}
-			// err 在此分支恒为非 nil，记录非 pgx.ErrNoRows 的情况
-			if !errors.Is(err, pgx.ErrNoRows) {
+			// err 在此分支恒为非 nil，记录非 NotFound 的情况
+			if !isNotFoundError(err) {
 				log.Warn().Err(err).Int64("order_id", order.ID).Msg("get delivery by order failed")
 			}
 		}
@@ -1860,7 +1859,7 @@ func (server *Server) cancelOrder(ctx *gin.Context) {
 	// 获取订单（加锁）
 	order, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -1991,7 +1990,7 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 	// 获取订单
 	order, err := server.store.GetOrder(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -2105,7 +2104,7 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 
 	oldOrder, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -2136,7 +2135,7 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 
 	reservation, err := server.store.GetTableReservation(ctx, oldOrder.ReservationID.Int64)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
 			return
 		}
@@ -2159,7 +2158,7 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 	// 需要有开放的用餐会话确保桌台占用
 	session, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for reservation")))
 			return
 		}
@@ -2258,17 +2257,29 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 		// 生成补差支付单
 		outTradeNo := generateOutTradeNo()
 		expiresAt := time.Now().Add(30 * time.Minute)
-		payOrder, err := server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-			OrderID:      pgtype.Int8{Int64: newOrder.ID, Valid: true},
-			UserID:       authPayload.UserID,
-			PaymentType:  PaymentTypeMiniProgram,
-			BusinessType: BusinessTypeOrder,
-			Amount:       delta,
-			OutTradeNo:   outTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		})
-		if err == nil {
-			paymentOrderID = &payOrder.ID
+		var payOrder db.PaymentOrder
+		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+			outTradeNo = generateOutTradeNo()
+			payOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+				OrderID:      pgtype.Int8{Int64: newOrder.ID, Valid: true},
+				UserID:       authPayload.UserID,
+				PaymentType:  PaymentTypeMiniProgram,
+				BusinessType: BusinessTypeOrder,
+				Amount:       delta,
+				OutTradeNo:   outTradeNo,
+				ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+			})
+			if err == nil {
+				paymentOrderID = &payOrder.ID
+				break
+			}
+			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+				if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+					break
+				}
+				continue
+			}
+			break
 		}
 	} else if delta < 0 {
 		// 发起差额退款（基于旧订单支付单）
@@ -2340,7 +2351,7 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 	// 获取订单（加锁）
 	order, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -2466,7 +2477,7 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -2539,7 +2550,7 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -2549,7 +2560,7 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 
 	order, err := server.store.GetOrder(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -2631,7 +2642,7 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -2642,7 +2653,7 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 	// 获取订单（加锁）
 	order, err := server.store.GetOrderForUpdate(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -2747,7 +2758,7 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -2758,7 +2769,7 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	// 获取订单（加锁）
 	order, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -2897,7 +2908,7 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -2908,7 +2919,7 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 	// 获取订单（加锁）
 	order, err := server.store.GetOrderForUpdate(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -3001,7 +3012,7 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -3012,7 +3023,7 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 	// 获取订单（加锁）
 	order, err := server.store.GetOrderForUpdate(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
 			return
 		}
@@ -3110,7 +3121,7 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 	// 获取当前用户的商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 			return
 		}
@@ -3243,7 +3254,7 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 		MerchantID: req.MerchantID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("cart is empty")))
 			return
 		}

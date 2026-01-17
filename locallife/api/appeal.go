@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -28,7 +27,7 @@ const penaltyAppealUpheld = int16(10)
 func (server *Server) getMerchantFromUserID(ctx *gin.Context, userID int64) (db.Merchant, error) {
 	merchant, err := server.store.GetMerchantByOwner(ctx, userID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
 		} else {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -42,7 +41,7 @@ func (server *Server) getMerchantFromUserID(ctx *gin.Context, userID int64) (db.
 func (server *Server) getRiderFromUserID(ctx *gin.Context, userID int64) (db.Rider, error) {
 	rider, err := server.store.GetRiderByUserID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a rider")))
 		} else {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -56,7 +55,7 @@ func (server *Server) getRiderFromUserID(ctx *gin.Context, userID int64) (db.Rid
 func (server *Server) getOperatorFromUserID(ctx *gin.Context, userID int64) (db.Operator, error) {
 	operator, err := server.store.GetOperatorByUser(ctx, userID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not an operator")))
 		} else {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -261,7 +260,7 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 		MerchantID: merchant.ID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found")))
 			return
 		}
@@ -341,7 +340,7 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 	// 检查索赔是否存在且属于该商户
 	claimInfo, err := server.store.GetClaimForAppeal(ctx, req.ClaimID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for appeal")))
 			return
 		}
@@ -517,7 +516,7 @@ func (server *Server) getMerchantAppealDetail(ctx *gin.Context) {
 		AppellantID: merchant.ID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
 			return
 		}
@@ -683,7 +682,7 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found")))
 			return
 		}
@@ -763,7 +762,7 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 	// 检查索赔是否存在且关联到该骑手的配送单
 	claimInfo, err := server.store.GetClaimForAppeal(ctx, req.ClaimID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for appeal")))
 			return
 		}
@@ -935,7 +934,7 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 		AppellantID: rider.ID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
 			return
 		}
@@ -1111,7 +1110,7 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 		RegionID: operator.RegionID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
 			return
 		}
@@ -1218,7 +1217,7 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 	// 验证申诉属于该运营商的区域
 	appeal, err := server.store.GetAppeal(ctx, appealID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
 			return
 		}
@@ -1281,10 +1280,17 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 		OrderNo:            appealInfo.OrderNo,
 	}
 
-	if err := server.taskDistributor.DistributeTaskProcessAppealResult(ctx, taskPayload); err != nil {
+	if server.taskDistributor == nil {
 		if inlineErr := server.processAppealResultInline(ctx, taskPayload); inlineErr != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
 			return
+		}
+	} else {
+		if err := server.taskDistributor.DistributeTaskProcessAppealResult(ctx, taskPayload); err != nil {
+			if inlineErr := server.processAppealResultInline(ctx, taskPayload); inlineErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
+				return
+			}
 		}
 	}
 

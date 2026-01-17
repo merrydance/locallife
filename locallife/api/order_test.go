@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -186,7 +185,7 @@ func TestCreateOrderAPI(t *testing.T) {
 						UserID:         user.ID,
 					}).
 					Times(1).
-					Return(db.BillingGroupMember{}, pgx.ErrNoRows)
+					Return(db.BillingGroupMember{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -308,7 +307,7 @@ func TestCreateOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, pgx.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -402,7 +401,7 @@ func TestCreateOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -501,7 +500,7 @@ func TestCreateOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserAddress(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.UserAddress{}, pgx.ErrNoRows)
+					Return(db.UserAddress{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -573,7 +572,7 @@ func TestCreateOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetTable(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Table{}, pgx.ErrNoRows)
+					Return(db.Table{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -958,7 +957,7 @@ func TestGetOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrderWithDetails(gomock.Any(), order.ID).
 					Times(1).
-					Return(db.GetOrderWithDetailsRow{}, pgx.ErrNoRows)
+					Return(db.GetOrderWithDetailsRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1208,7 +1207,7 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1388,7 +1387,7 @@ func TestAcceptOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrderForUpdate(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1465,7 +1464,7 @@ func TestRejectOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows) // 模拟无支付订单
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound) // 模拟无支付订单
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1577,7 +1576,7 @@ func TestGetOrderStatsAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1765,7 +1764,7 @@ func TestUrgeOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryByOrderID(gomock.Any(), order.ID).
 					Times(1).
-					Return(db.Delivery{}, pgx.ErrNoRows) // 无骑手信息
+					Return(db.Delivery{}, db.ErrRecordNotFound) // 无骑手信息
 				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1785,7 +1784,7 @@ func TestUrgeOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1931,7 +1930,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrderForUpdate(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -2084,7 +2083,7 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -2120,7 +2119,7 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), customer.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -2262,7 +2261,7 @@ func TestMarkOrderReadyAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrderForUpdate(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -2456,7 +2455,7 @@ func TestCompleteOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrderForUpdate(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -2833,7 +2832,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserVoucher(gomock.Any(), int64(9999)).
 					Times(1).
-					Return(db.GetUserVoucherRow{}, pgx.ErrNoRows)
+					Return(db.GetUserVoucherRow{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -3525,7 +3524,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Cart{}, pgx.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -3580,7 +3579,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), region.ID).
 					Times(1).
-					Return(db.DeliveryFeeConfig{}, pgx.ErrNoRows)
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -3634,7 +3633,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 						UserID:         user.ID,
 					}).
 					Times(1).
-					Return(db.BillingGroupMember{}, pgx.ErrNoRows)
+					Return(db.BillingGroupMember{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -3901,7 +3900,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					store.EXPECT().
 						GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 						Times(1).
-						Return(db.Cart{}, pgx.ErrNoRows)
+						Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -4101,7 +4100,7 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 		store.EXPECT().
 			GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 			Times(1).
-			Return(db.Cart{}, pgx.ErrNoRows)
+					Return(db.Cart{}, db.ErrRecordNotFound)
 
 		server := newTestServer(t, store)
 		recorder := httptest.NewRecorder()

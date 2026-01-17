@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -86,7 +85,7 @@ func TestAddFavoriteMerchantAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(db.Merchant{}, sql.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -416,7 +415,7 @@ func TestAddFavoriteDishAPI(t *testing.T) {
 				store.EXPECT().
 					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
-					Return(db.Dish{}, sql.ErrNoRows)
+					Return(db.Dish{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

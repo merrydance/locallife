@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -105,7 +104,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreatePaymentOrder(gomock.Any(), gomock.Any()).
@@ -136,7 +135,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
-					Return(db.Order{}, pgx.ErrNoRows)
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -355,7 +354,7 @@ func TestGetPaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -602,7 +601,7 @@ func TestClosePaymentOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -759,7 +758,7 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -784,7 +783,7 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -999,7 +998,7 @@ func TestGetRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetRefundOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.RefundOrder{}, pgx.ErrNoRows)
+					Return(db.RefundOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1031,7 +1030,7 @@ func TestGetRefundOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1129,7 +1128,7 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrder(gomock.Any(), int64(99999)).
 					Times(1).
-					Return(db.PaymentOrder{}, pgx.ErrNoRows)
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -1156,7 +1155,7 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), otherUser.ID).
 					Times(1).
-					Return(db.Merchant{}, pgx.ErrNoRows)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -78,7 +77,7 @@ func TestCreateUserAddressAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegion(gomock.Any(), gomock.Eq(region.ID)).
 					Times(1).
-					Return(db.Region{}, sql.ErrNoRows)
+					Return(db.Region{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateUserAddressTx(gomock.Any(), gomock.Any()).
@@ -206,7 +205,7 @@ func TestGetUserAddressAPI(t *testing.T) {
 				store.EXPECT().
 					GetUserAddress(gomock.Any(), gomock.Eq(address.ID)).
 					Times(1).
-					Return(db.UserAddress{}, sql.ErrNoRows)
+					Return(db.UserAddress{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

@@ -462,7 +462,7 @@ func (server *Server) setupRouter() {
 	// M4: 标签管理路由
 	tagsGroup := authGroup.Group("/tags")
 	{
-		tagsGroup.GET("", server.listTags)   // 获取标签列表（按类型）
+		tagsGroup.GET("", server.listTags)                                           // 获取标签列表（按类型）
 		tagsGroup.POST("", server.CasbinRoleMiddleware(RoleAdmin), server.createTag) // 创建标签
 	}
 
@@ -1049,6 +1049,7 @@ func (server *Server) setupRouter() {
 
 	// 充值规则管理（商户）
 	rechargeRuleGroup := authGroup.Group("/merchants/:id/recharge-rules")
+	rechargeRuleGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		// 创建充值规则
 		rechargeRuleGroup.POST("", server.createRechargeRule)

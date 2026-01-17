@@ -238,7 +238,7 @@ func TestMarkNotificationAsReadAPI(t *testing.T) {
 				store.EXPECT().
 					MarkNotificationAsRead(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.Notification{}, sql.ErrNoRows)
+					Return(db.Notification{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -366,7 +366,7 @@ func TestDeleteNotificationAPI(t *testing.T) {
 				store.EXPECT().
 					DeleteNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(sql.ErrNoRows)
+					Return(db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

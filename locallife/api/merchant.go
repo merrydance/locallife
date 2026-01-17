@@ -16,7 +16,6 @@ import (
 	"github.com/merrydance/locallife/wechat"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -257,7 +256,7 @@ func (server *Server) createMerchantApplication(ctx *gin.Context) {
 
 	// 检查用户是否已有待审核或已通过的申请
 	existingApp, err := server.store.GetUserMerchantApplication(ctx, authPayload.UserID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -346,7 +345,7 @@ func (server *Server) getUserMerchantApplication(ctx *gin.Context) {
 
 	application, err := server.store.GetUserMerchantApplication(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("no application found")))
 			return
 		}
@@ -474,7 +473,7 @@ func (server *Server) reviewMerchantApplication(ctx *gin.Context) {
 	// 获取申请详情
 	application, err := server.store.GetMerchantApplication(ctx, req.ApplicationID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("application not found")))
 			return
 		}
@@ -654,7 +653,7 @@ func (server *Server) getCurrentMerchant(ctx *gin.Context) {
 
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -734,7 +733,7 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 	// 获取商户ID
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -805,7 +804,7 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 	updatedMerchant, err := server.store.UpdateMerchant(ctx, arg)
 	if err != nil {
 		// 检查是否是乐观锁冲突（没有返回结果 = version不匹配）
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusConflict, gin.H{
 				"error": "merchant has been modified, please refresh and try again",
 			})
@@ -858,7 +857,7 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -941,7 +940,7 @@ func (server *Server) getMerchantOpenStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1063,7 +1062,7 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1146,7 +1145,7 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1229,7 +1228,7 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 	// 检查商户是否存在
 	_, err = server.store.GetMerchant(ctx, merchantID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
@@ -1377,7 +1376,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	// 获取商户基本信息
 	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
