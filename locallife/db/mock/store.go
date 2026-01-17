@@ -492,18 +492,18 @@ func (mr *MockStoreMockRecorder) CheckAndDecrementInventory(ctx, arg any) *gomoc
 }
 
 // CheckAppealExists mocks base method.
-func (m *MockStore) CheckAppealExists(ctx context.Context, claimID int64) (bool, error) {
+func (m *MockStore) CheckAppealExists(ctx context.Context, arg db.CheckAppealExistsParams) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckAppealExists", ctx, claimID)
+	ret := m.ctrl.Call(m, "CheckAppealExists", ctx, arg)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckAppealExists indicates an expected call of CheckAppealExists.
-func (mr *MockStoreMockRecorder) CheckAppealExists(ctx, claimID any) *gomock.Call {
+func (mr *MockStoreMockRecorder) CheckAppealExists(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAppealExists", reflect.TypeOf((*MockStore)(nil).CheckAppealExists), ctx, claimID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAppealExists", reflect.TypeOf((*MockStore)(nil).CheckAppealExists), ctx, arg)
 }
 
 // CheckMerchantAddressExists mocks base method.
@@ -4173,18 +4173,18 @@ func (mr *MockStoreMockRecorder) GetAppeal(ctx, id any) *gomock.Call {
 }
 
 // GetAppealByClaim mocks base method.
-func (m *MockStore) GetAppealByClaim(ctx context.Context, claimID int64) (db.Appeal, error) {
+func (m *MockStore) GetAppealByClaim(ctx context.Context, arg db.GetAppealByClaimParams) (db.Appeal, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAppealByClaim", ctx, claimID)
+	ret := m.ctrl.Call(m, "GetAppealByClaim", ctx, arg)
 	ret0, _ := ret[0].(db.Appeal)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetAppealByClaim indicates an expected call of GetAppealByClaim.
-func (mr *MockStoreMockRecorder) GetAppealByClaim(ctx, claimID any) *gomock.Call {
+func (mr *MockStoreMockRecorder) GetAppealByClaim(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAppealByClaim", reflect.TypeOf((*MockStore)(nil).GetAppealByClaim), ctx, claimID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAppealByClaim", reflect.TypeOf((*MockStore)(nil).GetAppealByClaim), ctx, arg)
 }
 
 // GetAppealForPostProcess mocks base method.
@@ -5463,33 +5463,33 @@ func (mr *MockStoreMockRecorder) GetLatestOrderByReservation(ctx, reservationID 
 }
 
 // GetLatestPaymentOrderByOrder mocks base method.
-func (m *MockStore) GetLatestPaymentOrderByOrder(ctx context.Context, orderID pgtype.Int8) (db.PaymentOrder, error) {
+func (m *MockStore) GetLatestPaymentOrderByOrder(ctx context.Context, arg db.GetLatestPaymentOrderByOrderParams) (db.PaymentOrder, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLatestPaymentOrderByOrder", ctx, orderID)
+	ret := m.ctrl.Call(m, "GetLatestPaymentOrderByOrder", ctx, arg)
 	ret0, _ := ret[0].(db.PaymentOrder)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLatestPaymentOrderByOrder indicates an expected call of GetLatestPaymentOrderByOrder.
-func (mr *MockStoreMockRecorder) GetLatestPaymentOrderByOrder(ctx, orderID any) *gomock.Call {
+func (mr *MockStoreMockRecorder) GetLatestPaymentOrderByOrder(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestPaymentOrderByOrder", reflect.TypeOf((*MockStore)(nil).GetLatestPaymentOrderByOrder), ctx, orderID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestPaymentOrderByOrder", reflect.TypeOf((*MockStore)(nil).GetLatestPaymentOrderByOrder), ctx, arg)
 }
 
 // GetLatestPaymentOrderByReservation mocks base method.
-func (m *MockStore) GetLatestPaymentOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (db.PaymentOrder, error) {
+func (m *MockStore) GetLatestPaymentOrderByReservation(ctx context.Context, arg db.GetLatestPaymentOrderByReservationParams) (db.PaymentOrder, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLatestPaymentOrderByReservation", ctx, reservationID)
+	ret := m.ctrl.Call(m, "GetLatestPaymentOrderByReservation", ctx, arg)
 	ret0, _ := ret[0].(db.PaymentOrder)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLatestPaymentOrderByReservation indicates an expected call of GetLatestPaymentOrderByReservation.
-func (mr *MockStoreMockRecorder) GetLatestPaymentOrderByReservation(ctx, reservationID any) *gomock.Call {
+func (mr *MockStoreMockRecorder) GetLatestPaymentOrderByReservation(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestPaymentOrderByReservation", reflect.TypeOf((*MockStore)(nil).GetLatestPaymentOrderByReservation), ctx, reservationID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestPaymentOrderByReservation", reflect.TypeOf((*MockStore)(nil).GetLatestPaymentOrderByReservation), ctx, arg)
 }
 
 // GetLatestRecommendations mocks base method.

@@ -262,8 +262,20 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		attach = fmt.Sprintf("order_id:%d", order.ID)
 	}
 
+	var err error
 	// 检查是否已存在待支付的支付订单
-	existingPayment, err := server.store.GetLatestPaymentOrderByOrder(ctx, pgtype.Int8{Int64: req.OrderID, Valid: true})
+	var existingPayment db.PaymentOrder
+	if req.BusinessType == BusinessTypeReservation {
+		existingPayment, err = server.store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
+			ReservationID: pgtype.Int8{Int64: req.OrderID, Valid: true},
+			BusinessType:  req.BusinessType,
+		})
+	} else {
+		existingPayment, err = server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:       pgtype.Int8{Int64: req.OrderID, Valid: true},
+			BusinessType:  req.BusinessType,
+		})
+	}
 	if err == nil && existingPayment.Status == PaymentStatusPending {
 		// 已存在待支付订单，直接返回
 		ctx.JSON(http.StatusOK, newPaymentOrderResponse(existingPayment))
@@ -278,15 +290,20 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	var outTradeNo string
 	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
 		outTradeNo = generateOutTradeNo()
-		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-			OrderID:      pgtype.Int8{Int64: req.OrderID, Valid: true},
+		createParams := db.CreatePaymentOrderParams{
 			UserID:       authPayload.UserID,
 			PaymentType:  req.PaymentType,
 			BusinessType: req.BusinessType,
 			Amount:       amount,
 			OutTradeNo:   outTradeNo,
 			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		})
+		}
+		if req.BusinessType == BusinessTypeReservation {
+			createParams.ReservationID = pgtype.Int8{Int64: req.OrderID, Valid: true}
+		} else {
+			createParams.OrderID = pgtype.Int8{Int64: req.OrderID, Valid: true}
+		}
+		paymentOrder, err = server.store.CreatePaymentOrder(ctx, createParams)
 		if err == nil {
 			break
 		}
@@ -460,7 +477,10 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 
 	// 如果指定了 order_id，直接查询该订单的支付记录
 	if req.OrderID != nil {
-		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, pgtype.Int8{Int64: *req.OrderID, Valid: true})
+		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: *req.OrderID, Valid: true},
+			BusinessType: BusinessTypeOrder,
+		})
 		if err != nil {
 			if isNotFoundError(err) {
 				ctx.JSON(http.StatusOK, []paymentOrderResponse{})

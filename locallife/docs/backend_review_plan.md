@@ -82,15 +82,15 @@
 
 ## 3.1 未修复清单（持续更新，修复一个勾选一个）
 
-- [ ] ErrNoRows 统一：全项目统一使用 `db.ErrRecordNotFound`，同步修正测试 stub，避免 404→500 漂移。（进行中：已覆盖多个核心 handler 文件）
-- [ ] 支付单关联字段一致性：查询 pending 支付单需显式纳入 `business_type`，避免不同业务 ID 复用造成串单。
-- [ ] 申诉幂等粒度：将幂等门闩从 `claim_id` 扩展为 `(claim_id, appellant_type)`，避免商户/骑手互相阻塞。
-- [ ] 上传内容校验统一：所有图片上传统一采用 magic number 校验 + 严格白名单，杜绝仅扩展名校验。
-- [ ] 日志脱敏与最小化：OCR/回调/敏感字段日志一律脱敏或摘要化，禁止落明文。
-- [ ] 权限矩阵单一事实来源：路由装配、RBAC、Casbin、role-access 统一生成/对齐，避免多源漂移。
-- [ ] Prometheus 404 label 基数治理：404 使用路由模板或统一 label，避免高基数。
-- [ ] 测试覆盖补齐：补充 searchCombos 与关键攻击面/幂等/竞态分支用例。
-- [ ] 订单金额预览契约一致：`voucher_code` 预览与下单 `user_voucher_id` 口径一致化。
+- [x] ErrNoRows 统一：全项目统一使用 `db.ErrRecordNotFound`，同步修正测试 stub，避免 404→500 漂移。
+- [x] 支付单关联字段一致性：查询 pending 支付单需显式纳入 `business_type`，避免不同业务 ID 复用造成串单。
+- [x] 申诉幂等粒度：将幂等门闩从 `claim_id` 扩展为 `(claim_id, appellant_type)`，避免商户/骑手互相阻塞。
+- [x] 上传内容校验统一：所有图片上传统一采用 magic number 校验 + 严格白名单，杜绝仅扩展名校验。
+- [x] 日志脱敏与最小化：OCR/回调/敏感字段日志一律脱敏或摘要化，禁止落明文。
+- [x] 权限矩阵单一事实来源：路由装配、RBAC、Casbin、role-access 统一生成/对齐，避免多源漂移。
+- [x] Prometheus 404 label 基数治理：404 使用路由模板或统一 label，避免高基数。
+- [x] 测试覆盖补齐：补充 searchCombos 与关键攻击面/幂等/竞态分支用例。
+- [x] 订单金额预览契约一致：`voucher_code` 预览与下单 `user_voucher_id` 口径一致化。
 
 ---
 

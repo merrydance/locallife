@@ -2829,7 +2829,10 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	}
 
 	// 自动退款：获取支付订单并发起退款
-	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, pgtype.Int8{Int64: updatedOrder.ID, Valid: true})
+	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: updatedOrder.ID, Valid: true},
+		BusinessType: BusinessTypeOrder,
+	})
 	if err == nil && paymentOrder.Status == PaymentStatusPaid {
 		// 生成退款单号
 		outRefundNo := generateOutRefundNo()
@@ -3223,7 +3226,7 @@ type orderCalculationItem struct {
 // @Param latitude query number false "用户实时纬度（浏览阶段使用）"
 // @Param longitude query number false "用户实时经度（浏览阶段使用）"
 // @Param address_id query int64 false "配送地址ID（下单阶段使用）"
-// @Param voucher_code query string false "优惠券码"
+// @Param user_voucher_id query int64 false "用户优惠券ID"
 // @Success 200 {object} orderCalculationResponse "计算结果"
 // @Failure 400 {object} ErrorResponse "参数错误/购物车为空"
 // @Failure 401 {object} ErrorResponse "未授权"
@@ -3237,7 +3240,8 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 		Latitude    *float64 `form:"latitude"`
 		Longitude   *float64 `form:"longitude"`
 		AddressID   *int64   `form:"address_id"`
-		VoucherCode string   `form:"voucher_code"`
+		UserVoucherID *int64 `form:"user_voucher_id"`
+		VoucherCode   string `form:"voucher_code"`
 	}
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -3430,24 +3434,63 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 
 	// 计算优惠券
 	if req.VoucherCode != "" {
-		voucher, err := server.store.GetVoucherByCode(ctx, req.VoucherCode)
-		if err == nil && voucher.MerchantID == req.MerchantID {
-			if subtotal >= voucher.MinOrderAmount {
-				// 检查是否过期、是否还有余量
-				now := time.Now()
-				if now.After(voucher.ValidFrom) && now.Before(voucher.ValidUntil) {
-					remaining := voucher.TotalQuantity - voucher.ClaimedQuantity
-					if remaining > 0 {
-						response.DiscountAmount += voucher.Amount
-						response.Promotions = append(response.Promotions, orderPromotion{
-							Type:   "voucher",
-							Title:  voucher.Name,
-							Amount: voucher.Amount,
-						})
-					}
-				}
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请使用 user_voucher_id 进行金额预览")))
+		return
+	}
+	if req.UserVoucherID != nil {
+		uv, err := server.store.GetUserVoucher(ctx, *req.UserVoucherID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("优惠券不存在")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if uv.UserID != userID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("优惠券不属于您")))
+			return
+		}
+
+		if uv.Status != "unused" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已使用或已过期")))
+			return
+		}
+
+		if time.Now().After(uv.ExpiresAt) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已过期")))
+			return
+		}
+
+		if uv.MerchantID != req.MerchantID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该优惠券不能在此商户使用")))
+			return
+		}
+
+		if subtotal < uv.MinOrderAmount {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("未达到最低消费 %d 元", uv.MinOrderAmount/100)))
+			return
+		}
+
+		orderTypeAllowed := false
+		for _, allowedType := range uv.AllowedOrderTypes {
+			if allowedType == req.OrderType {
+				orderTypeAllowed = true
+				break
 			}
 		}
+		if !orderTypeAllowed {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该代金券不适用于此订单类型")))
+			return
+		}
+
+		response.DiscountAmount += uv.Amount
+		response.Promotions = append(response.Promotions, orderPromotion{
+			Type:   "voucher",
+			Title:  uv.Name,
+			Amount: uv.Amount,
+		})
 	}
 
 	// 计算最终金额

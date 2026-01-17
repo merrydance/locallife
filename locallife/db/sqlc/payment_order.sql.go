@@ -77,12 +77,18 @@ func (q *Queries) CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrder
 const getLatestPaymentOrderByOrder = `-- name: GetLatestPaymentOrderByOrder :one
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE order_id = $1
+    AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLatestPaymentOrderByOrder(ctx context.Context, orderID pgtype.Int8) (PaymentOrder, error) {
-	row := q.db.QueryRow(ctx, getLatestPaymentOrderByOrder, orderID)
+type GetLatestPaymentOrderByOrderParams struct {
+	OrderID      pgtype.Int8 `json:"order_id"`
+	BusinessType string      `json:"business_type"`
+}
+
+func (q *Queries) GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLatestPaymentOrderByOrderParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getLatestPaymentOrderByOrder, arg.OrderID, arg.BusinessType)
 	var i PaymentOrder
 	err := row.Scan(
 		&i.ID,
@@ -109,12 +115,18 @@ func (q *Queries) GetLatestPaymentOrderByOrder(ctx context.Context, orderID pgty
 const getLatestPaymentOrderByReservation = `-- name: GetLatestPaymentOrderByReservation :one
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE reservation_id = $1
+    AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLatestPaymentOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (PaymentOrder, error) {
-	row := q.db.QueryRow(ctx, getLatestPaymentOrderByReservation, reservationID)
+type GetLatestPaymentOrderByReservationParams struct {
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+	BusinessType  string      `json:"business_type"`
+}
+
+func (q *Queries) GetLatestPaymentOrderByReservation(ctx context.Context, arg GetLatestPaymentOrderByReservationParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getLatestPaymentOrderByReservation, arg.ReservationID, arg.BusinessType)
 	var i PaymentOrder
 	err := row.Scan(
 		&i.ID,

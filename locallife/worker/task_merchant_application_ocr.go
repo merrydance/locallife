@@ -365,7 +365,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationIDCardOCR(ctx
 	if wasCompressed {
 		log.Info().
 			Int64("application_id", payload.ApplicationID).
-			Str("image_path", payload.ImagePath).
+			Str("image_path_sha256", hashString(payload.ImagePath)).
 			Str("side", payload.Side).
 			Int("compressed_size", len(imgData)).
 			Msg("id card image compressed for OCR")

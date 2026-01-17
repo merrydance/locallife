@@ -138,9 +138,9 @@ func PrometheusMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 如果路径为空（404），使用实际路径
+		// 如果路径为空（404），使用统一标签以避免高基数
 		if path == "" {
-			path = ctx.Request.URL.Path
+			path = "not_found"
 		}
 
 		httpRequestsInFlight.Inc()

@@ -63,8 +63,8 @@ type Querier interface {
 	CancelMerchantFutureReservations(ctx context.Context, arg CancelMerchantFutureReservationsParams) (int64, error)
 	CheckAndDecrementInventory(ctx context.Context, arg CheckAndDecrementInventoryParams) (DailyInventory, error)
 	// =========================== 通用查询 ===========================
-	// 检查索赔是否已有申诉
-	CheckAppealExists(ctx context.Context, claimID int64) (bool, error)
+	// 检查索赔是否已有指定申诉方类型的申诉
+	CheckAppealExists(ctx context.Context, arg CheckAppealExistsParams) (bool, error)
 	// 检查地址是否已被其他商户占用（排除指定用户自己的商户）
 	CheckMerchantAddressExists(ctx context.Context, arg CheckMerchantAddressExistsParams) (bool, error)
 	CheckNotificationExists(ctx context.Context, id string) (bool, error)
@@ -432,8 +432,8 @@ type Querier interface {
 	GetAllRecommendationConfigs(ctx context.Context) ([]RecommendationConfig, error)
 	// 获取申诉详情
 	GetAppeal(ctx context.Context, id int64) (Appeal, error)
-	// 根据索赔ID获取申诉
-	GetAppealByClaim(ctx context.Context, claimID int64) (Appeal, error)
+	// 根据索赔ID与申诉方类型获取申诉
+	GetAppealByClaim(ctx context.Context, arg GetAppealByClaimParams) (Appeal, error)
 	// 获取申诉审核后处理所需信息
 	GetAppealForPostProcess(ctx context.Context, id int64) (GetAppealForPostProcessRow, error)
 	// 获取申诉详情（包含索赔和订单信息）
@@ -557,8 +557,8 @@ type Querier interface {
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
 	GetLatestEcommerceApplymentBySubject(ctx context.Context, arg GetLatestEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
 	GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (Order, error)
-	GetLatestPaymentOrderByOrder(ctx context.Context, orderID pgtype.Int8) (PaymentOrder, error)
-	GetLatestPaymentOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (PaymentOrder, error)
+	GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLatestPaymentOrderByOrderParams) (PaymentOrder, error)
+	GetLatestPaymentOrderByReservation(ctx context.Context, arg GetLatestPaymentOrderByReservationParams) (PaymentOrder, error)
 	GetLatestRecommendations(ctx context.Context, userID int64) (Recommendation, error)
 	GetLatestWeatherCoefficient(ctx context.Context, regionID int64) (WeatherCoefficient, error)
 	GetMaliciousClaims(ctx context.Context, createdAt time.Time) ([]Claim, error)

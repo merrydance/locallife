@@ -354,13 +354,19 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 	}
 
 	// 检查是否已有申诉
-	exists, err := server.store.CheckAppealExists(ctx, req.ClaimID)
+	exists, err := server.store.CheckAppealExists(ctx, db.CheckAppealExistsParams{
+		ClaimID:       req.ClaimID,
+		AppellantType: "merchant",
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if exists {
-		appeal, err := server.store.GetAppealByClaim(ctx, req.ClaimID)
+		appeal, err := server.store.GetAppealByClaim(ctx, db.GetAppealByClaimParams{
+			ClaimID:       req.ClaimID,
+			AppellantType: "merchant",
+		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -777,13 +783,19 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 	}
 
 	// 检查是否已有申诉
-	exists, err := server.store.CheckAppealExists(ctx, req.ClaimID)
+	exists, err := server.store.CheckAppealExists(ctx, db.CheckAppealExistsParams{
+		ClaimID:       req.ClaimID,
+		AppellantType: "rider",
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if exists {
-		appeal, err := server.store.GetAppealByClaim(ctx, req.ClaimID)
+		appeal, err := server.store.GetAppealByClaim(ctx, db.GetAppealByClaimParams{
+			ClaimID:       req.ClaimID,
+			AppellantType: "rider",
+		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return

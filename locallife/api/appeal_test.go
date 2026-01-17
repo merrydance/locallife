@@ -246,7 +246,10 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(claim, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), claim.ID).
+					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+						ClaimID:       claim.ID,
+						AppellantType: "merchant",
+					}).
 					Times(1).
 					Return(false, nil)
 
@@ -311,7 +314,10 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					Return(claim, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), claim.ID).
+					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+						ClaimID:       claim.ID,
+						AppellantType: "merchant",
+					}).
 					Times(1).
 					Return(true, nil)
 			},
@@ -548,7 +554,10 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					Return(claim, nil)
 
 				store.EXPECT().
-					CheckAppealExists(gomock.Any(), claim.ID).
+					CheckAppealExists(gomock.Any(), db.CheckAppealExistsParams{
+						ClaimID:       claim.ID,
+						AppellantType: "rider",
+					}).
 					Times(1).
 					Return(false, nil)
 

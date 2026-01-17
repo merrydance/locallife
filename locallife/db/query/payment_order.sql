@@ -43,12 +43,14 @@ ORDER BY created_at DESC;
 -- name: GetLatestPaymentOrderByReservation :one
 SELECT * FROM payment_orders
 WHERE reservation_id = $1
+    AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetLatestPaymentOrderByOrder :one
 SELECT * FROM payment_orders
 WHERE order_id = $1
+    AND business_type = $2
 ORDER BY created_at DESC
 LIMIT 1;
 

@@ -24,9 +24,10 @@ WHERE id = $1
 LIMIT 1;
 
 -- name: GetAppealByClaim :one
--- 根据索赔ID获取申诉
+-- 根据索赔ID与申诉方类型获取申诉
 SELECT * FROM appeals
 WHERE claim_id = $1
+  AND appellant_type = $2
 LIMIT 1;
 
 -- name: GetAppealWithDetails :one
@@ -324,9 +325,9 @@ RETURNING *;
 -- =========================== 通用查询 ===========================
 
 -- name: CheckAppealExists :one
--- 检查索赔是否已有申诉
+-- 检查索赔是否已有指定申诉方类型的申诉
 SELECT EXISTS (
-    SELECT 1 FROM appeals WHERE claim_id = $1
+  SELECT 1 FROM appeals WHERE claim_id = $1 AND appellant_type = $2
 ) AS exists;
 
 -- name: GetAppealForPostProcess :one

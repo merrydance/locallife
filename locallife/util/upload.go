@@ -97,10 +97,10 @@ func (u *FileUploader) UploadMerchantImage(userID int64, category string, file m
 		return "", fmt.Errorf("file size exceeds limit: %d bytes (max: %d)", header.Size, u.config.MaxSize)
 	}
 
-	// 验证文件格式
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if !strings.Contains(u.config.AllowedExt, ext) {
-		return "", fmt.Errorf("invalid file extension: %s (allowed: %s)", ext, u.config.AllowedExt)
+	// 验证文件真实格式（magic number）
+	ext, err := ValidateImageMagic(file)
+	if err != nil {
+		return "", err
 	}
 
 	// 生成文件路径
@@ -196,10 +196,10 @@ func (u *FileUploader) UploadRiderImage(userID int64, category string, file mult
 		return "", fmt.Errorf("file size exceeds limit: %d bytes (max: %d)", header.Size, u.config.MaxSize)
 	}
 
-	// 验证文件格式
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if !strings.Contains(u.config.AllowedExt, ext) {
-		return "", fmt.Errorf("invalid file extension: %s (allowed: %s)", ext, u.config.AllowedExt)
+	// 验证文件真实格式（magic number）
+	ext, err := ValidateImageMagic(file)
+	if err != nil {
+		return "", err
 	}
 
 	// 生成文件路径: uploads/riders/{user_id}/{category}/{uuid}{ext}
@@ -240,10 +240,10 @@ func (u *FileUploader) UploadOperatorImage(userID int64, category string, file m
 		return "", fmt.Errorf("file size exceeds limit: %d bytes (max: %d)", header.Size, u.config.MaxSize)
 	}
 
-	// 验证文件格式
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if !strings.Contains(u.config.AllowedExt, ext) {
-		return "", fmt.Errorf("invalid file extension: %s (allowed: %s)", ext, u.config.AllowedExt)
+	// 验证文件真实格式（magic number）
+	ext, err := ValidateImageMagic(file)
+	if err != nil {
+		return "", err
 	}
 
 	// 生成文件路径: uploads/operators/{user_id}/{category}/{uuid}{ext}
@@ -285,10 +285,10 @@ func (u *FileUploader) UploadReviewImage(userID int64, file multipart.File, head
 		return "", fmt.Errorf("file size exceeds limit: %d bytes (max: %d)", header.Size, u.config.MaxSize)
 	}
 
-	// 验证文件格式
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if !strings.Contains(u.config.AllowedExt, ext) {
-		return "", fmt.Errorf("invalid file extension: %s (allowed: %s)", ext, u.config.AllowedExt)
+	// 验证文件真实格式（magic number）
+	ext, err := ValidateImageMagic(file)
+	if err != nil {
+		return "", err
 	}
 
 	// 生成文件路径: uploads/reviews/{user_id}/{uuid}{ext}
@@ -339,9 +339,9 @@ func (u *FileUploader) UploadPublicMerchantAssetImage(merchantID int64, category
 		return "", fmt.Errorf("file size exceeds limit: %d bytes (max: %d)", header.Size, u.config.MaxSize)
 	}
 
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if !strings.Contains(u.config.AllowedExt, ext) {
-		return "", fmt.Errorf("invalid file extension: %s (allowed: %s)", ext, u.config.AllowedExt)
+	ext, err := ValidateImageMagic(file)
+	if err != nil {
+		return "", err
 	}
 
 	dir := filepath.Join(u.config.BaseDir, "public", "merchants", fmt.Sprintf("%d", merchantID), category)

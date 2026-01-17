@@ -15,14 +15,19 @@ import (
 const checkAppealExists = `-- name: CheckAppealExists :one
 
 SELECT EXISTS (
-    SELECT 1 FROM appeals WHERE claim_id = $1
+  SELECT 1 FROM appeals WHERE claim_id = $1 AND appellant_type = $2
 ) AS exists
 `
 
+type CheckAppealExistsParams struct {
+	ClaimID       int64  `json:"claim_id"`
+	AppellantType string `json:"appellant_type"`
+}
+
 // =========================== 通用查询 ===========================
-// 检查索赔是否已有申诉
-func (q *Queries) CheckAppealExists(ctx context.Context, claimID int64) (bool, error) {
-	row := q.db.QueryRow(ctx, checkAppealExists, claimID)
+// 检查索赔是否已有指定申诉方类型的申诉
+func (q *Queries) CheckAppealExists(ctx context.Context, arg CheckAppealExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkAppealExists, arg.ClaimID, arg.AppellantType)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -198,12 +203,18 @@ func (q *Queries) GetAppeal(ctx context.Context, id int64) (Appeal, error) {
 const getAppealByClaim = `-- name: GetAppealByClaim :one
 SELECT id, claim_id, appellant_type, appellant_id, reason, evidence_urls, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
 WHERE claim_id = $1
+  AND appellant_type = $2
 LIMIT 1
 `
 
-// 根据索赔ID获取申诉
-func (q *Queries) GetAppealByClaim(ctx context.Context, claimID int64) (Appeal, error) {
-	row := q.db.QueryRow(ctx, getAppealByClaim, claimID)
+type GetAppealByClaimParams struct {
+	ClaimID       int64  `json:"claim_id"`
+	AppellantType string `json:"appellant_type"`
+}
+
+// 根据索赔ID与申诉方类型获取申诉
+func (q *Queries) GetAppealByClaim(ctx context.Context, arg GetAppealByClaimParams) (Appeal, error) {
+	row := q.db.QueryRow(ctx, getAppealByClaim, arg.ClaimID, arg.AppellantType)
 	var i Appeal
 	err := row.Scan(
 		&i.ID,

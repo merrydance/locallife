@@ -1072,7 +1072,10 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 	// 3. 状态为 paid/confirmed 且在 refund_deadline 之后：根据商户政策处理（可能部分退款或不退）
 	if reservation.Status == ReservationStatusPaid || reservation.Status == ReservationStatusConfirmed {
 		// 查找该预定的支付订单
-		paymentOrder, err := server.store.GetLatestPaymentOrderByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
+		paymentOrder, err := server.store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
+			ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+			BusinessType:  BusinessTypeReservation,
+		})
 		if err == nil && paymentOrder.Status == PaymentStatusPaid {
 			// 计算退款金额
 			var refundAmount int64
@@ -1661,7 +1664,10 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 			refundAmount = reservation.PrepaidAmount
 		}
 		if refundAmount > 0 && server.paymentClient != nil {
-			paymentOrder, err := server.store.GetLatestPaymentOrderByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
+			paymentOrder, err := server.store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
+				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+				BusinessType:  BusinessTypeReservation,
+			})
 			if err != nil {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return

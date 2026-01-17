@@ -313,7 +313,10 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // 确保时间不同
 	}
 
-	latestPayment, err := testStore.GetLatestPaymentOrderByOrder(context.Background(), pgtype.Int8{Int64: order.ID, Valid: true})
+	latestPayment, err := testStore.GetLatestPaymentOrderByOrder(context.Background(), GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: "order",
+	})
 	require.NoError(t, err)
 	require.NotEmpty(t, latestPayment)
 

@@ -127,7 +127,10 @@ func TestGetAppealByClaim(t *testing.T) {
 	claim := createRandomClaim(t, user.ID, order.ID)
 	created := createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	got, err := testStore.GetAppealByClaim(context.Background(), claim.ID)
+	got, err := testStore.GetAppealByClaim(context.Background(), GetAppealByClaimParams{
+		ClaimID:       claim.ID,
+		AppellantType: "merchant",
+	})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, got.ID)
 }
@@ -143,14 +146,20 @@ func TestCheckAppealExists(t *testing.T) {
 	claim := createRandomClaim(t, user.ID, order.ID)
 
 	// 未申诉前
-	exists, err := testStore.CheckAppealExists(context.Background(), claim.ID)
+	exists, err := testStore.CheckAppealExists(context.Background(), CheckAppealExistsParams{
+		ClaimID:       claim.ID,
+		AppellantType: "merchant",
+	})
 	require.NoError(t, err)
 	require.False(t, exists)
 
 	// 申诉后
 	createRandomAppeal(t, claim.ID, merchant.ID, "merchant", merchant.RegionID)
 
-	exists, err = testStore.CheckAppealExists(context.Background(), claim.ID)
+	exists, err = testStore.CheckAppealExists(context.Background(), CheckAppealExistsParams{
+		ClaimID:       claim.ID,
+		AppellantType: "merchant",
+	})
 	require.NoError(t, err)
 	require.True(t, exists)
 }

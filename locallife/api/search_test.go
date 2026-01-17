@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -257,6 +258,115 @@ func TestSearchMerchantsAPI(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			url := "/v1/search/merchants" + tc.query
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+// ==================== 套餐搜索测试 ====================
+
+func TestSearchCombosAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(util.RandomInt(1, 100))
+
+	testCases := []struct {
+		name          string
+		query         string
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK_GlobalSearch",
+			query: "?keyword=套餐&page_id=1&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				combos := []db.SearchCombosGlobalRow{
+					{
+						ID:               util.RandomInt(1, 1000),
+						MerchantID:       merchant.ID,
+						Name:             "超值套餐",
+						OriginalPrice:    5000,
+						ComboPrice:       4000,
+						IsOnline:         true,
+						MerchantName:     merchant.Name,
+						MerchantRegionID: merchant.RegionID,
+						MerchantIsOpen:   true,
+						MonthlySales:     10,
+						Distance:         0,
+					},
+				}
+
+				store.EXPECT().
+					SearchCombosGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(combos, nil)
+
+				store.EXPECT().
+					CountSearchCombosGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(len(combos)), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response struct {
+					Combos   []searchComboResponse `json:"combos"`
+					Total    int64                `json:"total"`
+					PageID   int32                `json:"page_id"`
+					PageSize int32                `json:"page_size"`
+				}
+				err := json.NewDecoder(recorder.Body).Decode(&response)
+				require.NoError(t, err)
+				require.Len(t, response.Combos, 1)
+				require.EqualValues(t, 1, response.Total)
+			},
+		},
+		{
+			name:  "BadRequest_InvalidPageID",
+			query: "?keyword=套餐&page_id=0&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					SearchCombosGlobal(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "InternalError",
+			query: "?keyword=套餐&page_id=1&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					SearchCombosGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.SearchCombosGlobalRow{}, sql.ErrConnDone)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := "/v1/search/combos" + tc.query
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
