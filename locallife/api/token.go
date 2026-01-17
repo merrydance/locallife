@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 )
 
 type renewAccessTokenRequest struct {
@@ -16,8 +17,10 @@ type renewAccessTokenRequest struct {
 }
 
 type renewAccessTokenResponse struct {
-	AccessToken          string    `json:"access_token"`
-	AccessTokenExpiresAt time.Time `json:"access_token_expires_at"`
+	AccessToken           string    `json:"access_token"`
+	AccessTokenExpiresAt  time.Time `json:"access_token_expires_at"`
+	RefreshToken          string    `json:"refresh_token"`
+	RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at"`
 }
 
 // renewAccessToken godoc
@@ -46,7 +49,20 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 		return
 	}
 
-	session, err := server.store.GetSessionByRefreshToken(ctx, req.RefreshToken)
+	if err := server.store.DeleteExpiredSessions(ctx); err != nil {
+		_ = err
+	}
+
+	refreshTokenHash, err := util.HashToken(req.RefreshToken, server.config.TokenSymmetricKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	session, err := server.store.GetSessionByRefreshToken(ctx, db.GetSessionByRefreshTokenParams{
+		RefreshToken:   refreshTokenHash,
+		RefreshToken_2: req.RefreshToken,
+	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
@@ -84,9 +100,44 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 		return
 	}
 
+	newRefreshToken, newRefreshPayload, err := server.tokenMaker.CreateToken(
+		refreshPayload.UserID,
+		server.config.RefreshTokenDuration,
+		token.TokenTypeRefreshToken,
+	)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	accessTokenHash, err := util.HashToken(accessToken, server.config.TokenSymmetricKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	newRefreshTokenHash, err := util.HashToken(newRefreshToken, server.config.TokenSymmetricKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	_, err = server.store.UpdateSessionTokens(ctx, db.UpdateSessionTokensParams{
+		ID:                    session.ID,
+		AccessToken:           accessTokenHash,
+		RefreshToken:          newRefreshTokenHash,
+		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
+		RefreshTokenExpiresAt: newRefreshPayload.ExpiredAt,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	rsp := renewAccessTokenResponse{
-		AccessToken:          accessToken,
-		AccessTokenExpiresAt: accessPayload.ExpiredAt,
+		AccessToken:           accessToken,
+		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
+		RefreshToken:          newRefreshToken,
+		RefreshTokenExpiresAt: newRefreshPayload.ExpiredAt,
 	}
 	ctx.JSON(http.StatusOK, rsp)
 }

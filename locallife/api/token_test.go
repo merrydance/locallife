@@ -22,7 +22,7 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 	testCases := []struct {
 		name          string
 		setupBody     func(t *testing.T, tokenMaker token.Maker) (map[string]interface{}, string)
-		buildStubs    func(store *mockdb.MockStore, refreshToken string, userID int64)
+		buildStubs    func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder, tokenMaker token.Maker, userID int64)
 	}{
 		{
@@ -34,19 +34,34 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 					"refresh_token": refreshToken,
 				}, refreshToken
 			},
-			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64) {
+			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
+				refreshTokenHash, err := util.HashToken(refreshToken, tokenSecret)
+				require.NoError(t, err)
+
 				session := db.Session{
 					ID:                    util.RandomInt(1, 1000),
 					UserID:                userID,
-					RefreshToken:          refreshToken,
+					RefreshToken:          refreshTokenHash,
 					RefreshTokenExpiresAt: time.Now().Add(24 * time.Hour),
 					IsRevoked:             false,
 				}
 
 				store.EXPECT().
-					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(refreshToken)).
+					DeleteExpiredSessions(gomock.Any()).
+					Times(1).
+					Return(nil)
+
+				store.EXPECT().
+					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
+						RefreshToken:   refreshTokenHash,
+						RefreshToken_2: refreshToken,
+					})).
 					Times(1).
 					Return(session, nil)
+
+				store.EXPECT().
+					UpdateSessionTokens(gomock.Any(), gomock.Any()).
+					Times(1)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, tokenMaker token.Maker, userID int64) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -58,6 +73,8 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 				// 验证access_token不为空
 				require.NotEmpty(t, rsp.AccessToken)
+
+				require.NotEmpty(t, rsp.RefreshToken)
 
 				// 验证过期时间合理（应该在未来1分钟内，允许2秒误差）
 				require.WithinDuration(t, time.Now().Add(time.Minute), rsp.AccessTokenExpiresAt, 2*time.Second)
@@ -80,7 +97,7 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 					"refresh_token": "invalid.token.string",
 				}, "invalid.token.string"
 			},
-			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64) {
+			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
 				// VerifyToken会失败,不会调用store方法
 				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Any()).
@@ -100,7 +117,7 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 					"refresh_token": refreshToken,
 				}, refreshToken
 			},
-			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64) {
+			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
 				// token验证会失败，因为已过期
 				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Any()).
@@ -119,18 +136,29 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 					"refresh_token": refreshToken,
 				}, refreshToken
 			},
-			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64) {
+			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
+				refreshTokenHash, err := util.HashToken(refreshToken, tokenSecret)
+				require.NoError(t, err)
+
 				// Session在数据库中已过期
 				session := db.Session{
 					ID:                    util.RandomInt(1, 1000),
 					UserID:                userID,
-					RefreshToken:          refreshToken,
+					RefreshToken:          refreshTokenHash,
 					RefreshTokenExpiresAt: time.Now().Add(-1 * time.Hour), // 已过期
 					IsRevoked:             false,
 				}
 
 				store.EXPECT().
-					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(refreshToken)).
+					DeleteExpiredSessions(gomock.Any()).
+					Times(1).
+					Return(nil)
+
+				store.EXPECT().
+					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
+						RefreshToken:   refreshTokenHash,
+						RefreshToken_2: refreshToken,
+					})).
 					Times(1).
 					Return(session, nil)
 			},
@@ -147,17 +175,28 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 					"refresh_token": refreshToken,
 				}, refreshToken
 			},
-			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64) {
+			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
+				refreshTokenHash, err := util.HashToken(refreshToken, tokenSecret)
+				require.NoError(t, err)
+
 				session := db.Session{
 					ID:                    util.RandomInt(1, 1000),
 					UserID:                userID,
-					RefreshToken:          refreshToken,
+					RefreshToken:          refreshTokenHash,
 					RefreshTokenExpiresAt: time.Now().Add(24 * time.Hour),
 					IsRevoked:             true, // 已撤销
 				}
 
 				store.EXPECT().
-					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(refreshToken)).
+					DeleteExpiredSessions(gomock.Any()).
+					Times(1).
+					Return(nil)
+
+				store.EXPECT().
+					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
+						RefreshToken:   refreshTokenHash,
+						RefreshToken_2: refreshToken,
+					})).
 					Times(1).
 					Return(session, nil)
 			},
@@ -170,7 +209,7 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 			setupBody: func(t *testing.T, tokenMaker token.Maker) (map[string]interface{}, string) {
 				return map[string]interface{}{}, ""
 			},
-			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64) {
+			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
 				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -200,7 +239,7 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 			// 设置请求body并获取refreshToken
 			body, refreshToken := tc.setupBody(t, tokenMaker)
-			tc.buildStubs(store, refreshToken, user.ID)
+			tc.buildStubs(store, refreshToken, user.ID, config.TokenSymmetricKey)
 
 			// 创建服务器（使用真实tokenMaker）
 			server := &Server{

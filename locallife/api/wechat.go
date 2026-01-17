@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 )
 
@@ -115,11 +116,28 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		return
 	}
 
+	if err := server.store.DeleteExpiredSessions(ctx); err != nil {
+		// 忽略清理失败，避免影响登录流程
+		_ = err
+	}
+
+	accessTokenHash, err := util.HashToken(accessToken, server.config.TokenSymmetricKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("hash access token: %w", err)))
+		return
+	}
+
+	refreshTokenHash, err := util.HashToken(refreshToken, server.config.TokenSymmetricKey)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("hash refresh token: %w", err)))
+		return
+	}
+
 	// 创建会话
 	session, err := server.store.CreateSession(ctx, db.CreateSessionParams{
 		UserID:                user.ID,
-		AccessToken:           accessToken,
-		RefreshToken:          refreshToken,
+		AccessToken:           accessTokenHash,
+		RefreshToken:          refreshTokenHash,
 		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
 		RefreshTokenExpiresAt: refreshPayload.ExpiredAt,
 		UserAgent:             ctx.Request.UserAgent(),

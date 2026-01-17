@@ -7713,18 +7713,33 @@ func (mr *MockStoreMockRecorder) GetSessionByAccessToken(ctx, accessToken any) *
 }
 
 // GetSessionByRefreshToken mocks base method.
-func (m *MockStore) GetSessionByRefreshToken(ctx context.Context, refreshToken string) (db.Session, error) {
+func (m *MockStore) GetSessionByRefreshToken(ctx context.Context, arg db.GetSessionByRefreshTokenParams) (db.Session, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSessionByRefreshToken", ctx, refreshToken)
+	ret := m.ctrl.Call(m, "GetSessionByRefreshToken", ctx, arg)
 	ret0, _ := ret[0].(db.Session)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSessionByRefreshToken indicates an expected call of GetSessionByRefreshToken.
-func (mr *MockStoreMockRecorder) GetSessionByRefreshToken(ctx, refreshToken any) *gomock.Call {
+func (mr *MockStoreMockRecorder) GetSessionByRefreshToken(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSessionByRefreshToken", reflect.TypeOf((*MockStore)(nil).GetSessionByRefreshToken), ctx, refreshToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSessionByRefreshToken", reflect.TypeOf((*MockStore)(nil).GetSessionByRefreshToken), ctx, arg)
+}
+
+// UpdateSessionTokens mocks base method.
+func (m *MockStore) UpdateSessionTokens(ctx context.Context, arg db.UpdateSessionTokensParams) (db.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateSessionTokens", ctx, arg)
+	ret0, _ := ret[0].(db.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateSessionTokens indicates an expected call of UpdateSessionTokens.
+func (mr *MockStoreMockRecorder) UpdateSessionTokens(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSessionTokens", reflect.TypeOf((*MockStore)(nil).UpdateSessionTokens), ctx, arg)
 }
 
 // GetSystemTagByName mocks base method.

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,6 +11,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
+
+var errInvalidExternalAvatarURL = errors.New("avatar_url must be a valid uploads URL")
 
 type userResponse struct {
 	ID           int64     `json:"id"`
@@ -121,6 +125,13 @@ func (server *Server) updateCurrentUser(ctx *gin.Context) {
 	}
 
 	if req.AvatarURL != nil {
+		avatarURL := strings.TrimSpace(*req.AvatarURL)
+		if strings.HasPrefix(avatarURL, "http://") || strings.HasPrefix(avatarURL, "https://") {
+			if !strings.Contains(avatarURL, "/uploads/") {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errInvalidExternalAvatarURL))
+				return
+			}
+		}
 		arg.AvatarUrl = pgtype.Text{String: normalizeImageURLForStorage(*req.AvatarURL), Valid: true}
 	}
 

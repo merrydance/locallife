@@ -129,7 +129,7 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 			name: "OK",
 			body: map[string]interface{}{
 				"full_name":  "New Name",
-				"avatar_url": "https://example.com/new-avatar.jpg",
+				"avatar_url": "/uploads/avatars/new-avatar.jpg",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -137,7 +137,7 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				updatedUser := user
 				updatedUser.FullName = "Updated Name"
-				updatedUser.AvatarUrl = pgtype.Text{String: "https://example.com/new-avatar.jpg", Valid: true}
+				updatedUser.AvatarUrl = pgtype.Text{String: "uploads/avatars/new-avatar.jpg", Valid: true}
 
 				store.EXPECT().
 					UpdateUser(gomock.Any(), gomock.Any()).

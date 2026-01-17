@@ -21,7 +21,17 @@ WHERE access_token = $1 LIMIT 1;
 
 -- name: GetSessionByRefreshToken :one
 SELECT * FROM sessions
-WHERE refresh_token = $1 LIMIT 1;
+WHERE refresh_token = $1 OR refresh_token = $2
+LIMIT 1;
+
+-- name: UpdateSessionTokens :one
+UPDATE sessions
+SET access_token = $2,
+    refresh_token = $3,
+    access_token_expires_at = $4,
+    refresh_token_expires_at = $5
+WHERE id = $1
+RETURNING *;
 
 -- name: RevokeSession :one
 UPDATE sessions

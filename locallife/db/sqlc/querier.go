@@ -808,7 +808,7 @@ type Querier interface {
 	GetRoomDetailForCustomer(ctx context.Context, id int64) (GetRoomDetailForCustomerRow, error)
 	GetSession(ctx context.Context, id int64) (Session, error)
 	GetSessionByAccessToken(ctx context.Context, accessToken string) (Session, error)
-	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (Session, error)
+	GetSessionByRefreshToken(ctx context.Context, arg GetSessionByRefreshTokenParams) (Session, error)
 	// 根据名称获取系统标签
 	GetSystemTagByName(ctx context.Context, name string) (Tag, error)
 	GetTable(ctx context.Context, id int64) (Table, error)
@@ -1427,6 +1427,7 @@ type Querier interface {
 	// 更新骑手的微信二级商户号
 	UpdateRiderSubMchID(ctx context.Context, arg UpdateRiderSubMchIDParams) (Rider, error)
 	UpdateRiderTrustScore(ctx context.Context, arg UpdateRiderTrustScoreParams) error
+	UpdateSessionTokens(ctx context.Context, arg UpdateSessionTokensParams) (Session, error)
 	UpdateSubOrderProfitSharingStatus(ctx context.Context, arg UpdateSubOrderProfitSharingStatusParams) (CombinedPaymentSubOrder, error)
 	UpdateTable(ctx context.Context, arg UpdateTableParams) (Table, error)
 	UpdateTableImage(ctx context.Context, arg UpdateTableImageParams) (TableImage, error)

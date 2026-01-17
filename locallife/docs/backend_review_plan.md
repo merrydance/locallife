@@ -498,6 +498,15 @@
   - [locallife/db/query/table.sql](locallife/db/query/table.sql)
 - 10.37 申诉幂等与审核后处理可靠性：重复提交返回既有申诉；异步投递失败走同步兜底。
   - [locallife/api/appeal.go](locallife/api/appeal.go#L320-L1260)
+- 10.38 refresh token 轮换与会话清理：刷新时旋转 refresh token 并清理过期会话。
+  - [locallife/api/token.go](locallife/api/token.go#L1-L200)
+  - [locallife/db/query/session.sql](locallife/db/query/session.sql)
+- 10.39 token 哈希存储：会话仅存储 access/refresh token 哈希。
+  - [locallife/api/wechat.go](locallife/api/wechat.go#L80-L180)
+  - [locallife/api/token.go](locallife/api/token.go#L1-L200)
+  - [locallife/util/token_hash.go](locallife/util/token_hash.go)
+- 10.40 avatar URL 外链校验：限制非 uploads 外部地址写入。
+  - [locallife/api/user.go](locallife/api/user.go#L80-L150)
 
 ---
 
