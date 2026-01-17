@@ -466,6 +466,8 @@
 - 10.28 public 搜索/扫码脱敏：不返回商户电话/地址/精确经纬度。
   - [locallife/api/search.go](locallife/api/search.go#L63-L520)
   - [locallife/api/scan.go](locallife/api/scan.go#L28-L315)
+- 10.29 public 搜索/扫码限流：对搜索与扫码接口增加更严格限流。
+  - [locallife/api/server.go](locallife/api/server.go#L304-L322)
 
 ---
 

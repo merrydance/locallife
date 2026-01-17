@@ -303,6 +303,7 @@ func (server *Server) setupRouter() {
 
 	// 搜索路由
 	searchGroup := authGroup.Group("/search")
+	searchGroup.Use(rateLimiter.SensitiveAPIMiddleware(60)) // 搜索接口限流：每分钟 60 次/客户端
 	{
 		searchGroup.GET("/dishes", server.searchDishes)
 		searchGroup.GET("/merchants", server.searchMerchants)
@@ -314,7 +315,11 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/merchants/:id/promotions", server.getMerchantPromotions)
 
 	// 扫码点餐路由
-	authGroup.GET("/scan/table", server.scanTable)
+	scanGroup := authGroup.Group("/scan")
+	scanGroup.Use(rateLimiter.SensitiveAPIMiddleware(60)) // 扫码接口限流：每分钟 60 次/客户端
+	{
+		scanGroup.GET("/table", server.scanTable)
+	}
 
 	// 消费者菜品详情（需认证，但不需要商户权限）
 	authGroup.GET("/public/dishes/:id", server.getPublicDishDetail)
