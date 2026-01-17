@@ -109,6 +109,12 @@ WHERE status = 'pending' AND expires_at < now()
 ORDER BY created_at
 LIMIT $1;
 
+-- name: ListPaidUnprocessedPaymentOrders :many
+SELECT * FROM payment_orders
+WHERE status = 'paid' AND processed_at IS NULL AND paid_at <= $1
+ORDER BY paid_at
+LIMIT $2;
+
 -- name: UpdatePaymentOrderProcessedAt :one
 UPDATE payment_orders
 SET

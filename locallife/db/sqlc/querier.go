@@ -1069,6 +1069,7 @@ type Querier interface {
 	ListOrdersByUser(ctx context.Context, arg ListOrdersByUserParams) ([]ListOrdersByUserRow, error)
 	ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersByUserAndStatusParams) ([]ListOrdersByUserAndStatusRow, error)
 	ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error)
+	ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error)
 	ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOrdersByUserParams) ([]PaymentOrder, error)
 	ListPaymentOrdersByUserAndStatus(ctx context.Context, arg ListPaymentOrdersByUserAndStatusParams) ([]PaymentOrder, error)
 	ListPeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)

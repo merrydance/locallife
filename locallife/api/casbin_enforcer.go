@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -483,23 +484,18 @@ func (server *Server) ValidateOperatorRegionMiddleware(regionParamName string) g
 		}
 
 		// 从 URL 获取区域 ID
-		var uri struct {
-			RegionID int64 `uri:"region_id"`
-			ID       int64 `uri:"id"`
-		}
-		if err := ctx.ShouldBindUri(&uri); err != nil {
-			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+		regionParam := ctx.Param(regionParamName)
+		if regionParam == "" {
+			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(
+				fmt.Errorf("%s is required", regionParamName),
+			))
 			return
 		}
 
-		regionID := uri.RegionID
-		if regionParamName == "id" {
-			regionID = uri.ID
-		}
-
-		if regionID == 0 {
+		regionID, err := strconv.ParseInt(regionParam, 10, 64)
+		if err != nil || regionID <= 0 {
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(
-				errors.New("region_id is required"),
+				fmt.Errorf("invalid %s", regionParamName),
 			))
 			return
 		}

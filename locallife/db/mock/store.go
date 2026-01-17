@@ -9597,6 +9597,21 @@ func (mr *MockStoreMockRecorder) ListExpiredPaymentOrders(ctx, limit any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExpiredPaymentOrders", reflect.TypeOf((*MockStore)(nil).ListExpiredPaymentOrders), ctx, limit)
 }
 
+// ListPaidUnprocessedPaymentOrders mocks base method.
+func (m *MockStore) ListPaidUnprocessedPaymentOrders(ctx context.Context, arg db.ListPaidUnprocessedPaymentOrdersParams) ([]db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPaidUnprocessedPaymentOrders", ctx, arg)
+	ret0, _ := ret[0].([]db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPaidUnprocessedPaymentOrders indicates an expected call of ListPaidUnprocessedPaymentOrders.
+func (mr *MockStoreMockRecorder) ListPaidUnprocessedPaymentOrders(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaidUnprocessedPaymentOrders", reflect.TypeOf((*MockStore)(nil).ListPaidUnprocessedPaymentOrders), ctx, arg)
+}
+
 // ListExpiredPendingReservations mocks base method.
 func (m *MockStore) ListExpiredPendingReservations(ctx context.Context) ([]db.TableReservation, error) {
 	m.ctrl.T.Helper()

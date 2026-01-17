@@ -17,6 +17,8 @@ import (
 	"github.com/merrydance/locallife/autotag"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
+	"github.com/merrydance/locallife/scheduler"
+	"github.com/merrydance/locallife/session"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/weather"
 	"github.com/merrydance/locallife/wechat"
@@ -140,9 +142,23 @@ func main() {
 
 	if config.RedisAddress != "" {
 		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store)
-		runWeatherScheduler(ctx, waitGroup, config, store, weatherCache)
 	}
-	runAutoTagScheduler(ctx, waitGroup, store)
+
+	schedulerManager := scheduler.NewManager()
+	if config.RedisAddress != "" {
+		if config.QweatherAPIKey == "" || config.QweatherAPIHost == "" {
+			log.Warn().Msg("qweather API not configured, weather scheduler disabled")
+		} else {
+			weatherClient := weather.NewQweatherClient(config.QweatherAPIKey, config.QweatherAPIHost)
+			schedulerManager.Register("weather", weather.NewScheduler(store, weatherClient, weatherCache))
+		}
+	}
+
+	schedulerManager.Register("auto-tag", autotag.NewScheduler(store))
+	schedulerManager.Register("session-cleanup", session.NewScheduler(store))
+	schedulerManager.Register("payment-recovery", worker.NewPaymentRecoveryScheduler(store, taskDistributor))
+	schedulerManager.StartAll(ctx, waitGroup)
+
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
 
 	err = waitGroup.Wait()
@@ -219,38 +235,6 @@ func runTaskProcessor(
 	})
 
 	return taskDistributor
-} // runWeatherScheduler starts the weather data fetching scheduler
-func runWeatherScheduler(
-	ctx context.Context,
-	waitGroup *errgroup.Group,
-	config util.Config,
-	store db.Store,
-	weatherCache weather.WeatherCache,
-) {
-	// 如果没有配置和风天气 API，跳过
-	if config.QweatherAPIKey == "" || config.QweatherAPIHost == "" {
-		log.Warn().Msg("qweather API not configured, weather scheduler disabled")
-		return
-	}
-
-	// 创建天气客户端
-	weatherClient := weather.NewQweatherClient(config.QweatherAPIKey, config.QweatherAPIHost)
-
-	// 创建调度器
-	scheduler := weather.NewScheduler(store, weatherClient, weatherCache)
-
-	// 启动调度器
-	if err := scheduler.Start(); err != nil {
-		log.Error().Err(err).Msg("failed to start weather scheduler")
-		return
-	}
-
-	waitGroup.Go(func() error {
-		<-ctx.Done()
-		log.Info().Msg("graceful shutdown weather scheduler")
-		scheduler.Stop()
-		return nil
-	})
 }
 
 func runDBMetricsCollector(ctx context.Context, waitGroup *errgroup.Group, pool *pgxpool.Pool) {
@@ -267,29 +251,6 @@ func runDBMetricsCollector(ctx context.Context, waitGroup *errgroup.Group, pool 
 				api.UpdateDBMetrics(int(stats.AcquiredConns()), int(stats.IdleConns()))
 			}
 		}
-	})
-}
-
-// runAutoTagScheduler starts the auto-tagging scheduler
-func runAutoTagScheduler(
-	ctx context.Context,
-	waitGroup *errgroup.Group,
-	store db.Store,
-) {
-	// 创建自动标签调度器
-	scheduler := autotag.NewScheduler(store)
-
-	// 启动调度器
-	if err := scheduler.Start(); err != nil {
-		log.Error().Err(err).Msg("failed to start auto-tag scheduler")
-		return
-	}
-
-	waitGroup.Go(func() error {
-		<-ctx.Done()
-		log.Info().Msg("graceful shutdown auto-tag scheduler")
-		scheduler.Stop()
-		return nil
 	})
 }
 

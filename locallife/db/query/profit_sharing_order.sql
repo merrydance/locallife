@@ -81,7 +81,7 @@ UPDATE profit_sharing_orders
 SET
     status = 'processing',
     sharing_order_id = $2
-WHERE id = $1 AND status = 'pending'
+WHERE id = $1 AND status IN ('pending', 'failed')
 RETURNING *;
 
 -- name: UpdateProfitSharingOrderToFinished :one

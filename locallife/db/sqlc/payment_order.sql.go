@@ -404,6 +404,56 @@ func (q *Queries) ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]
 	return items, nil
 }
 
+const listPaidUnprocessedPaymentOrders = `-- name: ListPaidUnprocessedPaymentOrders :many
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+WHERE status = 'paid' AND processed_at IS NULL AND paid_at <= $1
+ORDER BY paid_at
+LIMIT $2
+`
+
+type ListPaidUnprocessedPaymentOrdersParams struct {
+	PaidAt pgtype.Timestamptz `json:"paid_at"`
+	Limit  int32              `json:"limit"`
+}
+
+func (q *Queries) ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error) {
+	rows, err := q.db.Query(ctx, listPaidUnprocessedPaymentOrders, arg.PaidAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentOrder{}
+	for rows.Next() {
+		var i PaymentOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.PaymentType,
+			&i.BusinessType,
+			&i.Amount,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.PrepayID,
+			&i.Status,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Attach,
+			&i.CombinedPaymentID,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentOrdersByUser = `-- name: ListPaymentOrdersByUser :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE user_id = $1

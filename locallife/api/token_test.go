@@ -47,11 +47,6 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 				}
 
 				store.EXPECT().
-					DeleteExpiredSessions(gomock.Any()).
-					Times(1).
-					Return(nil)
-
-				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
 						RefreshToken:   refreshTokenHash,
 						RefreshToken_2: refreshToken,
@@ -150,11 +145,6 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 				}
 
 				store.EXPECT().
-					DeleteExpiredSessions(gomock.Any()).
-					Times(1).
-					Return(nil)
-
-				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
 						RefreshToken:   refreshTokenHash,
 						RefreshToken_2: refreshToken,
@@ -186,11 +176,6 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 					RefreshTokenExpiresAt: time.Now().Add(24 * time.Hour),
 					IsRevoked:             true, // 已撤销
 				}
-
-				store.EXPECT().
-					DeleteExpiredSessions(gomock.Any()).
-					Times(1).
-					Return(nil)
 
 				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{

@@ -116,11 +116,6 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		return
 	}
 
-	if err := server.store.DeleteExpiredSessions(ctx); err != nil {
-		// 忽略清理失败，避免影响登录流程
-		_ = err
-	}
-
 	accessTokenHash, err := util.HashToken(accessToken, server.config.TokenSymmetricKey)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("hash access token: %w", err)))

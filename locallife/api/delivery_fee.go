@@ -169,7 +169,7 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 		return
 	}
 
-	// 权限验证由中间件处理（RoleMiddleware + OperatorMiddleware + OperatorRegionMiddleware）
+	// 权限验证由中间件处理（CasbinRoleMiddleware + LoadOperatorMiddleware + ValidateOperatorRegionMiddleware）
 
 	arg := db.CreateDeliveryFeeConfigParams{
 		RegionID:      req.RegionID,
@@ -284,7 +284,7 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		return
 	}
 
-	// 权限验证由中间件处理（RoleMiddleware + OperatorMiddleware + OperatorRegionMiddleware）
+	// 权限验证由中间件处理（CasbinRoleMiddleware + LoadOperatorMiddleware + ValidateOperatorRegionMiddleware）
 
 	// 获取现有配置
 	existingConfig, err := server.store.GetDeliveryFeeConfigByRegion(ctx, uri.RegionID)

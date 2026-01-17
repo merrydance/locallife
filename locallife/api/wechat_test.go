@@ -55,11 +55,6 @@ func TestWechatLoginAPI(t *testing.T) {
 					Times(1)
 
 				store.EXPECT().
-					DeleteExpiredSessions(gomock.Any()).
-					Times(1).
-					Return(nil)
-
-				store.EXPECT().
 					CreateSession(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Session{
@@ -111,11 +106,6 @@ func TestWechatLoginAPI(t *testing.T) {
 				store.EXPECT().
 					UpsertUserDevice(gomock.Any(), gomock.Any()).
 					Times(1)
-
-				store.EXPECT().
-					DeleteExpiredSessions(gomock.Any()).
-					Times(1).
-					Return(nil)
 
 				store.EXPECT().
 					CreateSession(gomock.Any(), gomock.Any()).

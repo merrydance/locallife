@@ -9,6 +9,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/merrydance/locallife/websocket"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -494,12 +495,16 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 	// 通过 Redis Pub/Sub 推送给骑手
 	notifiedCount := 0
 	for _, riderID := range ridersToNotify {
-		wsMessage := map[string]any{
-			"type":      "delivery_pool_update",
-			"data":      json.RawMessage(msgData),
-			"timestamp": time.Now(),
+		pushMsg := websocket.NotificationPushMessage{
+			EntityType: "rider",
+			EntityID:   riderID,
+			Message: websocket.Message{
+				Type:      "delivery_pool_update",
+				Data:      json.RawMessage(msgData),
+				Timestamp: time.Now(),
+			},
 		}
-		wsMessageJSON, _ := json.Marshal(wsMessage)
+		wsMessageJSON, _ := json.Marshal(pushMsg)
 
 		channel := fmt.Sprintf("notification:rider:%d", riderID)
 		if err := processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err(); err != nil {
@@ -562,12 +567,27 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 			Int64("payment_order_id", refundOrder.PaymentOrderID).
 			Msg("refund success and payment order status synced")
 
-		// 🔔 需发送退款通知（待实现）
-		log.Info().
-			Str("out_refund_no", payload.OutRefundNo).
-			Str("refund_id", payload.RefundID).
-			Str("action", "send_refund_notification").
-			Msg("[NOTIFICATION] refund success - user notification pending")
+		// 🔔 发送退款成功通知
+		if processor.distributor != nil {
+			paymentOrder, err := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+			if err == nil {
+				expiresAt := time.Now().Add(7 * 24 * time.Hour)
+				_ = processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
+					UserID:      paymentOrder.UserID,
+					Type:        "refund",
+					Title:       "退款成功",
+					Content:     fmt.Sprintf("您的订单退款已完成，退款金额%.2f元", float64(refundOrder.RefundAmount)/100),
+					RelatedType: "refund",
+					RelatedID:   refundOrder.ID,
+					ExtraData: map[string]any{
+						"out_refund_no": payload.OutRefundNo,
+						"refund_id":     payload.RefundID,
+						"amount":        refundOrder.RefundAmount,
+					},
+					ExpiresAt: &expiresAt,
+				}, asynq.Queue(QueueDefault))
+			}
+		}
 
 	case "ABNORMAL":
 		_, err = processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
@@ -685,26 +705,58 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		}
 	}
 
-	// 创建分账订单记录
-	outOrderNo := fmt.Sprintf("PS%d%d", payload.PaymentOrderID, payload.OrderID)
-	var operatorID pgtype.Int8
-	if hasOperator {
-		operatorID = pgtype.Int8{Int64: operator.ID, Valid: true}
+	// 若已有分账记录，复用并尝试重试
+	existingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, payload.PaymentOrderID)
+	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return fmt.Errorf("get profit sharing order by payment order: %w", err)
 	}
 
-	profitSharingOrder, err := processor.store.CreateProfitSharingOrder(ctx, db.CreateProfitSharingOrderParams{
-		PaymentOrderID:     payload.PaymentOrderID,
-		MerchantID:         order.MerchantID,
-		OperatorID:         operatorID,
-		OrderSource:        order.OrderType,
-		TotalAmount:        order.TotalAmount,
-		PlatformCommission: platformCommission,
-		OperatorCommission: operatorCommission,
-		MerchantAmount:     merchantAmount,
-		OutOrderNo:         outOrderNo,
-	})
-	if err != nil {
-		return fmt.Errorf("create profit sharing order: %w", err)
+	var profitSharingOrder db.ProfitSharingOrder
+	var outOrderNo string
+	if err == nil {
+		if existingOrder.Status == "finished" || existingOrder.Status == "processing" {
+			log.Info().
+				Int64("profit_sharing_order_id", existingOrder.ID).
+				Str("status", existingOrder.Status).
+				Msg("profit sharing already processed, skip")
+			return nil
+		}
+
+		profitSharingOrder = existingOrder
+		outOrderNo = existingOrder.OutOrderNo
+		platformCommission = existingOrder.PlatformCommission
+		operatorCommission = existingOrder.OperatorCommission
+		merchantAmount = existingOrder.MerchantAmount
+
+		if existingOrder.OperatorID.Valid {
+			op, err := processor.store.GetOperator(ctx, existingOrder.OperatorID.Int64)
+			if err == nil {
+				operator = op
+				hasOperator = true
+			}
+		}
+	} else {
+		// 创建分账订单记录
+		outOrderNo = fmt.Sprintf("PS%d%d", payload.PaymentOrderID, payload.OrderID)
+		var operatorID pgtype.Int8
+		if hasOperator {
+			operatorID = pgtype.Int8{Int64: operator.ID, Valid: true}
+		}
+
+		profitSharingOrder, err = processor.store.CreateProfitSharingOrder(ctx, db.CreateProfitSharingOrderParams{
+			PaymentOrderID:     payload.PaymentOrderID,
+			MerchantID:         order.MerchantID,
+			OperatorID:         operatorID,
+			OrderSource:        order.OrderType,
+			TotalAmount:        order.TotalAmount,
+			PlatformCommission: platformCommission,
+			OperatorCommission: operatorCommission,
+			MerchantAmount:     merchantAmount,
+			OutOrderNo:         outOrderNo,
+		})
+		if err != nil {
+			return fmt.Errorf("create profit sharing order: %w", err)
+		}
 	}
 
 	log.Info().
@@ -1187,6 +1239,24 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 				"fail_reason":  payload.FailReason,
 			},
 		})
+
+		// 自动重试队列（延迟执行，避免微信端短暂异常导致永久失败）
+		if processor.distributor != nil {
+			paymentOrder, err := processor.store.GetPaymentOrder(ctx, profitSharingOrder.PaymentOrderID)
+			if err == nil && paymentOrder.OrderID.Valid {
+				_ = processor.distributor.DistributeTaskProcessProfitSharing(
+					ctx,
+					&ProfitSharingPayload{
+						PaymentOrderID: profitSharingOrder.PaymentOrderID,
+						OrderID:        paymentOrder.OrderID.Int64,
+					},
+					asynq.Queue(QueueCritical),
+					asynq.ProcessIn(30*time.Minute),
+					asynq.MaxRetry(5),
+					asynq.Unique(6*time.Hour),
+				)
+			}
+		}
 	}
 
 	return nil

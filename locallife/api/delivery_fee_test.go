@@ -143,7 +143,7 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
-				// OperatorRegionMiddleware 调用
+				// ValidateOperatorRegionMiddleware 调用
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
 						OperatorID: operator.ID,
@@ -225,7 +225,7 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
-				// OperatorRegionMiddleware 调用
+				// ValidateOperatorRegionMiddleware 调用
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
 						OperatorID: operator.ID,
@@ -263,7 +263,7 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 					Times(1).
 					Return(operator, nil)
 
-				// OperatorRegionMiddleware 调用
+				// ValidateOperatorRegionMiddleware 调用
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
 						OperatorID: operator.ID,

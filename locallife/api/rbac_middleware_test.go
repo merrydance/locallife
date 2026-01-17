@@ -149,7 +149,7 @@ func TestRoleMiddleware(t *testing.T) {
 	}
 }
 
-func TestOperatorMiddleware(t *testing.T) {
+func TestLoadOperatorMiddleware(t *testing.T) {
 	user, _ := randomUser(t)
 	operator := db.Operator{
 		ID:       util.RandomInt(1, 100),
@@ -250,7 +250,7 @@ func TestOperatorMiddleware(t *testing.T) {
 			server.router.GET("/test-operator",
 				authMiddleware(server.tokenMaker),
 				server.RoleMiddleware(RoleOperator),
-				server.OperatorMiddleware(),
+				server.LoadOperatorMiddleware(),
 				func(ctx *gin.Context) {
 					// 验证 operator 已加载到 context
 					op, exists := GetOperatorFromContext(ctx)
@@ -273,7 +273,7 @@ func TestOperatorMiddleware(t *testing.T) {
 	}
 }
 
-func TestOperatorRegionMiddleware(t *testing.T) {
+func TestValidateOperatorRegionMiddleware(t *testing.T) {
 	user, _ := randomUser(t)
 	regionID := int64(1)
 	operator := db.Operator{
@@ -370,8 +370,8 @@ func TestOperatorRegionMiddleware(t *testing.T) {
 			server.router.GET("/test-region/:region_id",
 				authMiddleware(server.tokenMaker),
 				server.RoleMiddleware(RoleOperator),
-				server.OperatorMiddleware(),
-				server.OperatorRegionMiddleware("region_id"),
+				server.LoadOperatorMiddleware(),
+				server.ValidateOperatorRegionMiddleware("region_id"),
 				func(ctx *gin.Context) {
 					ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 				},

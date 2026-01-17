@@ -49,10 +49,6 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 		return
 	}
 
-	if err := server.store.DeleteExpiredSessions(ctx); err != nil {
-		_ = err
-	}
-
 	refreshTokenHash, err := util.HashToken(req.RefreshToken, server.config.TokenSymmetricKey)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
