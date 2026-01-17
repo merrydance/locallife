@@ -37,6 +37,9 @@ p, admin, /v1/admin/riders, GET
 p, admin, /v1/admin/riders/:rider_id/approve, POST
 p, admin, /v1/admin/riders/:rider_id/reject, POST
 
+# Tag Management
+p, admin, /v1/tags, POST
+
 # Trust Score Management (admin-only actions)
 p, admin, /v1/trust-score/claims/:id/review, PATCH
 p, admin, /v1/trust-score/merchants/:id/suspend, PATCH
@@ -73,6 +76,11 @@ p, operator, /v1/operator/riders, GET
 p, operator, /v1/operator/riders/:id, GET
 p, operator, /v1/operator/riders/:id/suspend, POST
 p, operator, /v1/operator/riders/:id/resume, POST
+
+# Rider Review (Operator)
+p, operator, /v1/admin/riders, GET
+p, operator, /v1/admin/riders/:rider_id/approve, POST
+p, operator, /v1/admin/riders/:rider_id/reject, POST
 
 # Appeals Management
 p, operator, /v1/operator/appeals, GET

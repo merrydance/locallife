@@ -456,6 +456,9 @@
   - [locallife/api/location_test.go](locallife/api/location_test.go)
 - 10.25 财务/统计权限收敛：商户财务与统计接口仅限 owner/manager。
   - [locallife/api/server.go](locallife/api/server.go#L760-L792)
+- 10.26 权限矩阵收敛：角色鉴权统一走 Casbin（标签创建与运营商骑手审核）。
+  - [locallife/api/server.go](locallife/api/server.go#L439-L745)
+  - [locallife/casbin/policy.csv](locallife/casbin/policy.csv#L35-L83)
 
 ---
 

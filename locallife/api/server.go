@@ -440,7 +440,7 @@ func (server *Server) setupRouter() {
 	tagsGroup := authGroup.Group("/tags")
 	{
 		tagsGroup.GET("", server.listTags)   // 获取标签列表（按类型）
-		tagsGroup.POST("", server.RoleMiddleware(RoleAdmin), server.createTag) // 创建标签
+		tagsGroup.POST("", server.CasbinRoleMiddleware(RoleAdmin), server.createTag) // 创建标签
 	}
 
 	// M4: 菜品管理路由
@@ -737,7 +737,7 @@ func (server *Server) setupRouter() {
 
 	// M8: 运营商骑手审核路由（需要运营商或管理员角色）
 	adminRiderGroup := authGroup.Group("/admin/riders")
-	adminRiderGroup.Use(server.RoleMiddleware(RoleOperator, RoleAdmin))
+	adminRiderGroup.Use(server.CasbinMiddleware())
 	{
 		adminRiderGroup.GET("", server.listRiders)
 		adminRiderGroup.POST("/:rider_id/approve", server.approveRider)
