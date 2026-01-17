@@ -798,8 +798,9 @@ func (server *Server) getDish(ctx *gin.Context) {
 
 // getPublicDishDetail godoc
 // @Summary 获取菜品详情（消费者端）
-// @Description 公开接口，获取菜品详细信息，无需认证
+// @Description 需登录访问（消费者端），获取菜品详细信息
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "菜品ID"

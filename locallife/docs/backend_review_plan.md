@@ -398,8 +398,9 @@
   - [locallife/api/payment_callback.go](locallife/api/payment_callback.go#L26-L110)
 - 10.3 标签创建权限：创建标签需管理员角色。
   - [locallife/api/server.go](locallife/api/server.go#L439-L444)
-- 10.4 折扣规则归属权限：折扣路由加商户 staff 角色。
+- 10.4 折扣规则归属权限：折扣路由加商户 staff 角色，handler 校验商户归属。
   - [locallife/api/server.go](locallife/api/server.go#L1092-L1100)
+  - [locallife/api/discount.go](locallife/api/discount.go#L40-L220)
 - 10.5 Redis 推送协议统一：worker 发布 `NotificationPushMessage` 结构。
   - [locallife/worker/task_send_notification.go](locallife/worker/task_send_notification.go#L134-L186)
 - 10.6 WebSocket 安全加固：移除 query token；升级时校验 Origin 白名单。
@@ -459,6 +460,9 @@
 - 10.26 权限矩阵收敛：角色鉴权统一走 Casbin（标签创建与运营商骑手审核）。
   - [locallife/api/server.go](locallife/api/server.go#L439-L745)
   - [locallife/casbin/policy.csv](locallife/casbin/policy.csv#L35-L83)
+- 10.27 public 路由契约对齐：Swagger 标注为需登录访问。
+  - [locallife/api/dish.go](locallife/api/dish.go#L800-L812)
+  - [locallife/api/merchant.go](locallife/api/merchant.go#L1357-L1774)
 
 ---
 

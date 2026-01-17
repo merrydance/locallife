@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -51,16 +50,6 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 					Times(1).
 					Return(merchant, nil)
 
-				// Mock GetUserRoleByType
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
-
 				// Mock CreateDiscountRule
 				store.EXPECT().
 					CreateDiscountRule(gomock.Any(), gomock.Any()).
@@ -99,10 +88,6 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
 					Times(1).
 					Return(merchant, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(0)
 				store.EXPECT().
 					CreateDiscountRule(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -157,10 +142,6 @@ func TestCreateDiscountRuleAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
 					Times(1).
 					Return(merchant, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

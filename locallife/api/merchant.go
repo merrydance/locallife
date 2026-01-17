@@ -1356,8 +1356,9 @@ type publicDeliveryPromotion struct {
 
 // getPublicMerchantDetail godoc
 // @Summary 获取商户详情（消费者端）
-// @Description 公开接口，获取商户详细信息，无需商户权限
+// @Description 需登录访问（消费者端），获取商户详细信息
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
@@ -1564,8 +1565,9 @@ type publicMerchantDishesResponse struct {
 
 // getPublicMerchantDishes godoc
 // @Summary 获取商户菜品列表（消费者端）
-// @Description 公开接口，获取商户所有在线菜品及分类
+// @Description 需登录访问（消费者端），获取商户所有在线菜品及分类
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
@@ -1684,8 +1686,9 @@ type publicMerchantCombosResponse struct {
 
 // getPublicMerchantCombos godoc
 // @Summary 获取商户套餐列表（消费者端）
-// @Description 公开接口，获取商户所有在线套餐
+// @Description 需登录访问（消费者端），获取商户所有在线套餐
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"
@@ -1759,8 +1762,9 @@ type publicMerchantRoomsResponse struct {
 
 // getPublicMerchantRooms godoc
 // @Summary 获取商户包间列表（消费者端）
-// @Description 公开接口，获取商户所有包间信息，帮助消费者决策
+// @Description 需登录访问（消费者端），获取商户所有包间信息，帮助消费者决策
 // @Tags 公开接口
+// @Security BearerAuth
 // @Accept json
 // @Produce json
 // @Param id path int true "商户ID"

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -62,17 +61,15 @@ func (server *Server) createDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
+	merchant := merchantVal.(db.Merchant)
 
 	rule, err := server.store.CreateDiscountRule(ctx, db.CreateDiscountRuleParams{
-		MerchantID:             merchantID,
+		MerchantID:             merchant.ID,
 		Name:                   req.Name,
 		Description:            pgtype.Text{String: req.Description, Valid: req.Description != ""},
 		MinOrderAmount:         req.MinOrderAmount,
@@ -231,6 +228,17 @@ func (server *Server) getApplicableDiscountRules(ctx *gin.Context) {
 		return
 	}
 
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
+		return
+	}
+	merchant := merchantVal.(db.Merchant)
+	if uriReq.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
+		return
+	}
+
 	var queryReq struct {
 		OrderAmount int64 `form:"order_amount" binding:"required,min=1"`
 	}
@@ -263,6 +271,17 @@ func (server *Server) getBestDiscountRule(ctx *gin.Context) {
 	}
 	if err := ctx.ShouldBindUri(&uriReq); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
+		return
+	}
+	merchant := merchantVal.(db.Merchant)
+	if uriReq.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
 		return
 	}
 
@@ -313,8 +332,6 @@ func (server *Server) updateDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
 	// 获取原规则验证权限
 	rule, err := server.store.GetDiscountRule(ctx, req.ID)
 	if err != nil {
@@ -326,9 +343,13 @@ func (server *Server) updateDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != rule.MerchantID {
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
+		return
+	}
+	merchant := merchantVal.(db.Merchant)
+	if merchant.ID != rule.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
 		return
 	}
@@ -389,8 +410,6 @@ func (server *Server) deleteDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
 	// 获取规则验证权限
 	rule, err := server.store.GetDiscountRule(ctx, req.ID)
 	if err != nil {
@@ -402,9 +421,13 @@ func (server *Server) deleteDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil || merchantID != rule.MerchantID {
+	merchantVal, exists := ctx.Get(merchantKey)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
+		return
+	}
+	merchant := merchantVal.(db.Merchant)
+	if merchant.ID != rule.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
 		return
 	}
