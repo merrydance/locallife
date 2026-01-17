@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -252,6 +254,68 @@ func TestCancelOrderTx(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "cancelled", dbOrder.Status)
 	require.True(t, dbOrder.CancelledAt.Valid)
+}
+
+func TestCancelOrderTx_RollbackVoucher(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	voucher := createRandomVoucher(t, merchant.ID)
+	userVoucher := createRandomUserVoucher(t, voucher.ID, user.ID)
+
+	order, err := testStore.CreateOrder(context.Background(), CreateOrderParams{
+		OrderNo:             util.RandomString(20),
+		UserID:              user.ID,
+		MerchantID:          merchant.ID,
+		OrderType:           "takeaway",
+		AddressID:           pgtype.Int8{},
+		DeliveryFee:         0,
+		DeliveryDistance:    pgtype.Int4{},
+		TableID:             pgtype.Int8{},
+		ReservationID:       pgtype.Int8{},
+		Subtotal:            10000,
+		DiscountAmount:      0,
+		DeliveryFeeDiscount: 0,
+		TotalAmount:         9000,
+		Status:              "pending",
+		FulfillmentStatus:   "",
+		Notes:               pgtype.Text{String: "test voucher order", Valid: true},
+		UserVoucherID:       pgtype.Int8{Int64: userVoucher.ID, Valid: true},
+		VoucherAmount:       1000,
+		BalancePaid:         0,
+		MembershipID:        pgtype.Int8{},
+		ReplacedByOrderID:   pgtype.Int8{},
+		PickupCode:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.NotZero(t, order.ID)
+
+	_, err = testStore.MarkUserVoucherAsUsed(context.Background(), MarkUserVoucherAsUsedParams{
+		ID:      userVoucher.ID,
+		OrderID: pgtype.Int8{Int64: order.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.IncrementVoucherUsedQuantity(context.Background(), voucher.ID)
+	require.NoError(t, err)
+
+	_, err = testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      order.ID,
+		OldStatus:    "pending",
+		CancelReason: "用户取消",
+		OperatorID:   user.ID,
+		OperatorType: "user",
+	})
+	require.NoError(t, err)
+
+	updatedUserVoucher, err := testStore.GetUserVoucherForUpdate(context.Background(), userVoucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, "unused", updatedUserVoucher.Status)
+	require.False(t, updatedUserVoucher.OrderID.Valid)
+	require.False(t, updatedUserVoucher.UsedAt.Valid)
+
+	updatedVoucher, err := testStore.GetVoucher(context.Background(), voucher.ID)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), updatedVoucher.UsedQuantity)
 }
 
 func TestCancelOrderTx_PaidOrder(t *testing.T) {

@@ -355,6 +355,7 @@ type Querier interface {
 	CreateWeatherCoefficient(ctx context.Context, arg CreateWeatherCoefficientParams) (WeatherCoefficient, error)
 	CreateWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (WechatNotification, error)
 	DecrementMembershipBalance(ctx context.Context, arg DecrementMembershipBalanceParams) (MerchantMembership, error)
+	DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
 	// 从骑手押金扣款（原子操作：检查余额 + 扣款）
 	DeductRiderDeposit(ctx context.Context, arg DeductRiderDepositParams) (Rider, error)
 	// 扣减用户余额（出账，余额不足会报错）
@@ -737,6 +738,8 @@ type Querier interface {
 	GetRefundOrderForUpdate(ctx context.Context, id int64) (RefundOrder, error)
 	GetRegion(ctx context.Context, id int64) (Region, error)
 	GetRegionByCode(ctx context.Context, code string) (Region, error)
+	GetRegionByNameAndLevel(ctx context.Context, arg GetRegionByNameAndLevelParams) (Region, error)
+	GetRegionByNameAndParent(ctx context.Context, arg GetRegionByNameAndParentParams) (Region, error)
 	// 区域对比分析
 	GetRegionComparison(ctx context.Context, arg GetRegionComparisonParams) ([]GetRegionComparisonRow, error)
 	// 区域日趋势（基于实际分账数据）
@@ -1163,6 +1166,8 @@ type Querier interface {
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
+	MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error)
+	MarkUserVoucherAsUnused(ctx context.Context, arg MarkUserVoucherAsUnusedParams) (UserVoucher, error)
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)

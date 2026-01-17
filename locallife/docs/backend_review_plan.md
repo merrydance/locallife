@@ -443,6 +443,19 @@
   - [locallife/db/query/membership.sql](locallife/db/query/membership.sql#L139-L173)
   - [locallife/db/query/reservation_payment.sql](locallife/db/query/reservation_payment.sql)
   - [locallife/db/sqlc/tx_create_order.go](locallife/db/sqlc/tx_create_order.go#L200-L470)
+- 10.21 订单取消回滚优惠券：取消订单恢复 user_voucher 状态并回退 used 计数。
+  - [locallife/db/sqlc/tx_order_status.go](locallife/db/sqlc/tx_order_status.go#L126-L219)
+  - [locallife/db/query/voucher.sql](locallife/db/query/voucher.sql#L54-L123)
+- 10.22 地图编码兜底：adcode 匹配失败时按城市/区县名称回退匹配。
+  - [locallife/api/location.go](locallife/api/location.go#L192-L240)
+  - [locallife/db/query/region.sql](locallife/db/query/region.sql#L9-L28)
+- 10.23 regions 后备接口对齐多区域模型：区域占用检查改为 operator_regions。
+  - [locallife/api/region.go](locallife/api/region.go#L330-L379)
+  - [locallife/db/query/operator_region.sql](locallife/db/query/operator_region.sql#L37-L52)
+- 10.24 location 回归测试补齐：覆盖 adcode 与名称回退匹配。
+  - [locallife/api/location_test.go](locallife/api/location_test.go)
+- 10.25 财务/统计权限收敛：商户财务与统计接口仅限 owner/manager。
+  - [locallife/api/server.go](locallife/api/server.go#L760-L792)
 
 ---
 

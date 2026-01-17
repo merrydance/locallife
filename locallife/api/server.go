@@ -764,6 +764,7 @@ func (server *Server) setupRouter() {
 
 	// M12: 商户统计BI路由
 	merchantStatsGroup := authGroup.Group("/merchant/stats")
+	merchantStatsGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		merchantStatsGroup.GET("/daily", server.getMerchantDailyStats)
 		merchantStatsGroup.GET("/overview", server.getMerchantOverview)
@@ -779,6 +780,7 @@ func (server *Server) setupRouter() {
 
 	// 商户财务路由
 	merchantFinanceGroup := authGroup.Group("/merchant/finance")
+	merchantFinanceGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		merchantFinanceGroup.GET("/overview", server.getMerchantFinanceOverview)
 		merchantFinanceGroup.GET("/orders", server.listMerchantFinanceOrders)

@@ -183,6 +183,37 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 			return fmt.Errorf("create order status log: %w", err)
 		}
 
+		// 2.1 取消订单时回滚优惠券使用状态（幂等）
+		if result.Order.UserVoucherID.Valid {
+			userVoucher, err := q.GetUserVoucherForUpdate(ctx, result.Order.UserVoucherID.Int64)
+			if err != nil {
+				if !errors.Is(err, pgx.ErrNoRows) {
+					return fmt.Errorf("get user voucher for rollback: %w", err)
+				}
+			} else if userVoucher.Status == "used" && userVoucher.OrderID.Valid && userVoucher.OrderID.Int64 == result.Order.ID {
+				orderID := pgtype.Int8{Int64: result.Order.ID, Valid: true}
+				if time.Now().After(userVoucher.ExpiresAt) {
+					if _, err := q.MarkUserVoucherAsExpiredOnRollback(ctx, MarkUserVoucherAsExpiredOnRollbackParams{
+						ID:      userVoucher.ID,
+						OrderID: orderID,
+					}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+						return fmt.Errorf("mark voucher expired on rollback: %w", err)
+					}
+				} else {
+					if _, err := q.MarkUserVoucherAsUnused(ctx, MarkUserVoucherAsUnusedParams{
+						ID:      userVoucher.ID,
+						OrderID: orderID,
+					}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+						return fmt.Errorf("mark voucher unused on rollback: %w", err)
+					}
+				}
+
+				if _, err := q.DecrementVoucherUsedQuantity(ctx, userVoucher.VoucherID); err != nil {
+					return fmt.Errorf("decrement voucher used quantity: %w", err)
+				}
+			}
+		}
+
 		// 3. 若订单之前处于已支付状态，恢复已售库存
 		if arg.OldStatus == OrderStatusPaid {
 			inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}

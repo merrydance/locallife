@@ -3245,6 +3245,21 @@ func (mr *MockStoreMockRecorder) DecrementMembershipBalance(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecrementMembershipBalance", reflect.TypeOf((*MockStore)(nil).DecrementMembershipBalance), ctx, arg)
 }
 
+// DecrementVoucherUsedQuantity mocks base method.
+func (m *MockStore) DecrementVoucherUsedQuantity(ctx context.Context, id int64) (db.Voucher, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecrementVoucherUsedQuantity", ctx, id)
+	ret0, _ := ret[0].(db.Voucher)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DecrementVoucherUsedQuantity indicates an expected call of DecrementVoucherUsedQuantity.
+func (mr *MockStoreMockRecorder) DecrementVoucherUsedQuantity(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecrementVoucherUsedQuantity", reflect.TypeOf((*MockStore)(nil).DecrementVoucherUsedQuantity), ctx, id)
+}
+
 // DeductRiderDeposit mocks base method.
 func (m *MockStore) DeductRiderDeposit(ctx context.Context, arg db.DeductRiderDepositParams) (db.Rider, error) {
 	m.ctrl.T.Helper()
@@ -7110,6 +7125,36 @@ func (m *MockStore) GetRegionByCode(ctx context.Context, code string) (db.Region
 func (mr *MockStoreMockRecorder) GetRegionByCode(ctx, code any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegionByCode", reflect.TypeOf((*MockStore)(nil).GetRegionByCode), ctx, code)
+}
+
+// GetRegionByNameAndLevel mocks base method.
+func (m *MockStore) GetRegionByNameAndLevel(ctx context.Context, arg db.GetRegionByNameAndLevelParams) (db.Region, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRegionByNameAndLevel", ctx, arg)
+	ret0, _ := ret[0].(db.Region)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRegionByNameAndLevel indicates an expected call of GetRegionByNameAndLevel.
+func (mr *MockStoreMockRecorder) GetRegionByNameAndLevel(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegionByNameAndLevel", reflect.TypeOf((*MockStore)(nil).GetRegionByNameAndLevel), ctx, arg)
+}
+
+// GetRegionByNameAndParent mocks base method.
+func (m *MockStore) GetRegionByNameAndParent(ctx context.Context, arg db.GetRegionByNameAndParentParams) (db.Region, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRegionByNameAndParent", ctx, arg)
+	ret0, _ := ret[0].(db.Region)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRegionByNameAndParent indicates an expected call of GetRegionByNameAndParent.
+func (mr *MockStoreMockRecorder) GetRegionByNameAndParent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegionByNameAndParent", reflect.TypeOf((*MockStore)(nil).GetRegionByNameAndParent), ctx, arg)
 }
 
 // GetRegionComparison mocks base method.
@@ -11572,6 +11617,36 @@ func (m *MockStore) MarkOrderReplaced(ctx context.Context, arg db.MarkOrderRepla
 func (mr *MockStoreMockRecorder) MarkOrderReplaced(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOrderReplaced", reflect.TypeOf((*MockStore)(nil).MarkOrderReplaced), ctx, arg)
+}
+
+// MarkUserVoucherAsExpiredOnRollback mocks base method.
+func (m *MockStore) MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg db.MarkUserVoucherAsExpiredOnRollbackParams) (db.UserVoucher, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkUserVoucherAsExpiredOnRollback", ctx, arg)
+	ret0, _ := ret[0].(db.UserVoucher)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkUserVoucherAsExpiredOnRollback indicates an expected call of MarkUserVoucherAsExpiredOnRollback.
+func (mr *MockStoreMockRecorder) MarkUserVoucherAsExpiredOnRollback(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkUserVoucherAsExpiredOnRollback", reflect.TypeOf((*MockStore)(nil).MarkUserVoucherAsExpiredOnRollback), ctx, arg)
+}
+
+// MarkUserVoucherAsUnused mocks base method.
+func (m *MockStore) MarkUserVoucherAsUnused(ctx context.Context, arg db.MarkUserVoucherAsUnusedParams) (db.UserVoucher, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkUserVoucherAsUnused", ctx, arg)
+	ret0, _ := ret[0].(db.UserVoucher)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkUserVoucherAsUnused indicates an expected call of MarkUserVoucherAsUnused.
+func (mr *MockStoreMockRecorder) MarkUserVoucherAsUnused(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkUserVoucherAsUnused", reflect.TypeOf((*MockStore)(nil).MarkUserVoucherAsUnused), ctx, arg)
 }
 
 // MarkUserVoucherAsUsed mocks base method.

@@ -18,6 +18,14 @@ WHERE id = $1 LIMIT 1;
 SELECT * FROM regions
 WHERE code = $1 LIMIT 1;
 
+-- name: GetRegionByNameAndLevel :one
+SELECT * FROM regions
+WHERE name = $1 AND level = $2 LIMIT 1;
+
+-- name: GetRegionByNameAndParent :one
+SELECT * FROM regions
+WHERE name = $1 AND parent_id = $2 LIMIT 1;
+
 -- name: ListRegions :many
 SELECT * FROM regions
 WHERE 

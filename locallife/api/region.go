@@ -350,7 +350,7 @@ func (server *Server) checkRegionAvailability(ctx *gin.Context) {
 	}
 
 	// 检查是否已有运营商绑定
-	operator, err := server.store.GetOperatorByRegion(ctx, id)
+	operator, err := server.store.GetActiveOperatorByRegion(ctx, id)
 	if err != nil {
 		if isNotFoundError(err) {
 			// 没有运营商，可用

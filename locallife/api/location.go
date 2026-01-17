@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 )
@@ -190,11 +191,42 @@ func (server *Server) matchRegionID(ctx context.Context, lat, lon float64) (int6
 	// 1. 尝试通过地图 API 获取 adcode
 	if server.mapClient != nil {
 		res, err := server.mapClient.ReverseGeocode(ctx, maps.Location{Lat: lat, Lng: lon})
-		if err == nil && res.Adcode != "" {
-			// OSM 端返回的编码若存在则直接匹配
-			region, err := server.store.GetRegionByCode(ctx, res.Adcode)
-			if err == nil {
-				return region.ID, nil
+		if err == nil {
+			if res.Adcode != "" {
+				// 先尝试 adcode 精确匹配（部分地图服务可返回行政区划码）
+				region, err := server.store.GetRegionByCode(ctx, res.Adcode)
+				if err == nil {
+					return region.ID, nil
+				}
+			}
+
+			// OSM 逆地理编码的 adcode 可能是邮编，改用名称匹配作为兜底
+			var cityRegion *db.Region
+			if res.City != "" {
+				if city, err := server.store.GetRegionByNameAndLevel(ctx, db.GetRegionByNameAndLevelParams{
+					Name:  res.City,
+					Level: 2,
+				}); err == nil {
+					cityRegion = &city
+				}
+			}
+
+			if res.District != "" {
+				if cityRegion != nil {
+					if district, err := server.store.GetRegionByNameAndParent(ctx, db.GetRegionByNameAndParentParams{
+						Name:     res.District,
+						ParentID: pgtype.Int8{Int64: cityRegion.ID, Valid: true},
+					}); err == nil {
+						return district.ID, nil
+					}
+				}
+
+				if district, err := server.store.GetRegionByNameAndLevel(ctx, db.GetRegionByNameAndLevelParams{
+					Name:  res.District,
+					Level: 3,
+				}); err == nil {
+					return district.ID, nil
+				}
 			}
 		}
 	}

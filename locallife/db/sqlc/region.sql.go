@@ -148,6 +148,60 @@ func (q *Queries) GetRegionByCode(ctx context.Context, code string) (Region, err
 	return i, err
 }
 
+const getRegionByNameAndLevel = `-- name: GetRegionByNameAndLevel :one
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+WHERE name = $1 AND level = $2 LIMIT 1
+`
+
+type GetRegionByNameAndLevelParams struct {
+	Name  string `json:"name"`
+	Level int16  `json:"level"`
+}
+
+func (q *Queries) GetRegionByNameAndLevel(ctx context.Context, arg GetRegionByNameAndLevelParams) (Region, error) {
+	row := q.db.QueryRow(ctx, getRegionByNameAndLevel, arg.Name, arg.Level)
+	var i Region
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Level,
+		&i.ParentID,
+		&i.Longitude,
+		&i.Latitude,
+		&i.CreatedAt,
+		&i.QweatherLocationID,
+	)
+	return i, err
+}
+
+const getRegionByNameAndParent = `-- name: GetRegionByNameAndParent :one
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+WHERE name = $1 AND parent_id = $2 LIMIT 1
+`
+
+type GetRegionByNameAndParentParams struct {
+	Name     string      `json:"name"`
+	ParentID pgtype.Int8 `json:"parent_id"`
+}
+
+func (q *Queries) GetRegionByNameAndParent(ctx context.Context, arg GetRegionByNameAndParentParams) (Region, error) {
+	row := q.db.QueryRow(ctx, getRegionByNameAndParent, arg.Name, arg.ParentID)
+	var i Region
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Level,
+		&i.ParentID,
+		&i.Longitude,
+		&i.Latitude,
+		&i.CreatedAt,
+		&i.QweatherLocationID,
+	)
+	return i, err
+}
+
 const getRegionsWithDeliveryFeeConfig = `-- name: GetRegionsWithDeliveryFeeConfig :many
 SELECT 
   r.id,
