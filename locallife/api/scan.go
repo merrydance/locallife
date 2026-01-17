@@ -31,8 +31,8 @@ type scanTableMerchantInfo struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
 	LogoUrl     *string `json:"logo_url,omitempty"`
-	Phone       string  `json:"phone"`
-	Address     string  `json:"address"`
+	Phone       string  `json:"phone,omitempty"`
+	Address     string  `json:"address,omitempty"`
 	Status      string  `json:"status"`
 }
 
@@ -283,8 +283,6 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		Merchant: scanTableMerchantInfo{
 			ID:      merchant.ID,
 			Name:    merchant.Name,
-			Phone:   merchant.Phone,
-			Address: merchant.Address,
 			Status:  merchant.Status,
 		},
 		Table: scanTableTableInfo{
@@ -307,8 +305,6 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
 		response.Merchant.LogoUrl = &logo
 	}
-	response.Merchant.Address = merchant.Address
-
 	if table.Description.Valid {
 		response.Table.Description = &table.Description.String
 	}

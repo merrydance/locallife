@@ -64,10 +64,10 @@ type searchMerchantResponse struct {
 	ID                   int64   `json:"id"`
 	Name                 string  `json:"name"`
 	Description          string  `json:"description"`
-	Address              string  `json:"address"`
-	Latitude             float64 `json:"latitude"`
-	Longitude            float64 `json:"longitude"`
-	Phone                string  `json:"phone"`
+	Address              string  `json:"address,omitempty"`
+	Latitude             float64 `json:"-"`
+	Longitude            float64 `json:"-"`
+	Phone                string  `json:"phone,omitempty"`
 	LogoURL              string  `json:"logo_url"`
 	Status               string  `json:"status"`
 	RegionID             int64   `json:"region_id"`                        // 区域ID，用于运费计算
@@ -503,8 +503,6 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 		ID:          merchant.ID,
 		Name:        merchant.Name,
 		Description: merchant.Description.String,
-		Address:     merchant.Address,
-		Phone:       merchant.Phone,
 		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
 		Status:      merchant.Status,
 		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算

@@ -463,6 +463,9 @@
 - 10.27 public 路由契约对齐：Swagger 标注为需登录访问。
   - [locallife/api/dish.go](locallife/api/dish.go#L800-L812)
   - [locallife/api/merchant.go](locallife/api/merchant.go#L1357-L1774)
+- 10.28 public 搜索/扫码脱敏：不返回商户电话/地址/精确经纬度。
+  - [locallife/api/search.go](locallife/api/search.go#L63-L520)
+  - [locallife/api/scan.go](locallife/api/scan.go#L28-L315)
 
 ---
 
