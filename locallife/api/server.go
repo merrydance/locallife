@@ -43,6 +43,7 @@ type Server struct {
 	taskDistributor worker.TaskDistributor
 	wsHub           *websocket.Hub           // WebSocket连接管理（骑手和商户）
 	wsPubSub        *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	rateLimiter     *RateLimiter
 	router          *gin.Engine
 }
 
@@ -117,6 +118,9 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		}
 		log.Info().Msg("✅ Data encryptor initialized for sensitive data storage")
 	} else {
+		if config.Environment == "production" {
+			return nil, fmt.Errorf("DATA_ENCRYPTION_KEY is required in production")
+		}
 		log.Warn().Msg("⚠️ DATA_ENCRYPTION_KEY not configured, sensitive data will be stored in plaintext")
 	}
 
@@ -202,6 +206,19 @@ func (server *Server) GetWebSocketHub() *websocket.Hub {
 	return server.wsHub
 }
 
+// Shutdown releases server-side resources created outside the HTTP server.
+func (server *Server) Shutdown() {
+	if server.wsPubSub != nil {
+		server.wsPubSub.Stop()
+	}
+	if server.wsHub != nil {
+		server.wsHub.Shutdown()
+	}
+	if server.rateLimiter != nil {
+		server.rateLimiter.Stop()
+	}
+}
+
 func (server *Server) setupRouter() {
 	// 🚀 生产环境设置 Release 模式
 	if server.config.Environment == "production" {
@@ -241,6 +258,7 @@ func (server *Server) setupRouter() {
 
 	// 🛡️ 速率限制中间件（防止 DDoS）
 	rateLimiter := NewRateLimiter(DefaultRateLimiterConfig())
+	server.rateLimiter = rateLimiter
 	router.Use(rateLimiter.Middleware())
 
 	// 🕐 全局超时中间件：防止慢查询、外部API卡死导致goroutine泄漏

@@ -1318,6 +1318,7 @@ type Table struct {
 	CurrentReservationID pgtype.Int8        `json:"current_reservation_id"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	AccessCodeHash       pgtype.Text        `json:"access_code_hash"`
 }
 
 // 桌台/包间图片表

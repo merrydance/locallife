@@ -286,6 +286,9 @@
 - T0.5 默认地址原子性：新增事务或局部唯一索引。
 - T0.6 rider/merchant 关键写入原子性：`rider_application.go`、`tx_create_order.go`/`tx_order_status.go`。
 - T0.7 Casbin fail-open：初始化失败直接拒绝或启动失败。
+- T0.8 用餐会话 open 参与者证明：桌台口令/参与者校验（防止越权开桌）。
+- T0.9 申诉幂等与审核可靠性：幂等粒度统一、重复提交防重、审核后状态变更的可靠投递。
+- T0.10 认证/会话治理：refresh token 轮换、会话清理、token 哈希存储。
 
 ### 8.2 P1 修复任务
 - T1.1 统一 NotFound 映射：`db/sqlc/error.go` + handler 判定修正 + 测试 stub 修正。
@@ -298,12 +301,17 @@
 - T1.8 public 搜索/扫码脱敏与限流：`search.go`/`scan.go`。
 - T1.9 折扣规则归属校验：`discount.go` + 路由加 merchant staff 校验。
 - T1.10 收藏幂等：`favorite.sql` + handler 对冲突返回 200。
+- T1.11 上传归属规则统一：上传/签名下载按资源归属与角色校验一致化。
+- T1.12 支付单 business_type 维度：明确定义并统一使用，防止错配导致越权或错账。
+- T1.13 会员链路治理：支付方式枚举、交易类型约束、out_trade_no 碰撞风险、充值规则权限/契约一致。
+- T1.14 openid/avatar URL 风险治理：外部 URL 拉取白名单/校验与存储策略。
 
 ### 8.3 P2 修复任务
 - T2.1 public/需登录契约对齐：/public 路由与 swagger 统一。
 - T2.2 regions 后备接口对齐多区域模型：改用 `GetActiveOperatorByRegion`。
 - T2.3 BI 字段语义修正：`order_count` 与 `dish_count` 口径对齐。
 - T2.4 补齐 location 回归测试：参数校验、mapClient nil、错误/成功路径。
+- T2.5 架构/运行期治理闭环：Redis 依赖明确化、响应封装策略落地、DB 指标更新。
 
 ### 8.4 任务清单（文件级落地）
 - T0.1 支付入账幂等：
@@ -468,6 +476,28 @@
   - [locallife/api/scan.go](locallife/api/scan.go#L28-L315)
 - 10.29 public 搜索/扫码限流：对搜索与扫码接口增加更严格限流。
   - [locallife/api/server.go](locallife/api/server.go#L304-L322)
+- 10.30 搜索/扫码契约对齐：Swagger 标注为需登录访问。
+  - [locallife/api/search.go](locallife/api/search.go#L97-L580)
+  - [locallife/api/scan.go](locallife/api/scan.go#L100-L113)
+- 10.31 CORS 响应封装头补齐：允许并暴露 X-Response-Envelope。
+  - [locallife/api/middleware_security.go](locallife/api/middleware_security.go#L1-L120)
+- 10.32 RateLimiter 内存增长修复：敏感接口复用主限流访客表，统一清理。
+  - [locallife/api/middleware_ratelimit.go](locallife/api/middleware_ratelimit.go#L1-L220)
+- 10.33 退出清理完善：关闭 WebSocket Hub/PubSub/RateLimiter。
+  - [locallife/api/server.go](locallife/api/server.go#L1-L220)
+  - [locallife/main.go](locallife/main.go#L1-L220)
+- 10.34 自动迁移开关：生产环境需显式开启 AUTO_MIGRATE。
+  - [locallife/util/config.go](locallife/util/config.go#L1-L220)
+  - [locallife/main.go](locallife/main.go#L1-L220)
+  - [locallife/app.env.example](locallife/app.env.example#L1-L120)
+- 10.35 加密 key 强制：生产环境缺少 DATA_ENCRYPTION_KEY 阻断启动。
+  - [locallife/api/server.go](locallife/api/server.go#L1-L220)
+- 10.36 用餐会话参与者证明：桌台口令校验 + 口令哈希存储。
+  - [locallife/api/dining_session.go](locallife/api/dining_session.go#L140-L340)
+  - [locallife/api/table.go](locallife/api/table.go#L1-L620)
+  - [locallife/db/query/table.sql](locallife/db/query/table.sql)
+- 10.37 申诉幂等与审核后处理可靠性：重复提交返回既有申诉；异步投递失败走同步兜底。
+  - [locallife/api/appeal.go](locallife/api/appeal.go#L320-L1260)
 
 ---
 

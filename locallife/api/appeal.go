@@ -9,10 +9,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
 )
+
+const penaltyAppealUpheld = int16(10)
 
 // =============================================================================
 // Appeal API Handlers
@@ -358,7 +361,16 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		return
 	}
 	if exists {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
+		appeal, err := server.store.GetAppealByClaim(ctx, req.ClaimID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if appeal.AppellantType != "merchant" || appeal.AppellantID != merchant.ID {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
+			return
+		}
+		ctx.JSON(http.StatusOK, newAppealResponse(appeal))
 		return
 	}
 
@@ -772,7 +784,16 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 		return
 	}
 	if exists {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
+		appeal, err := server.store.GetAppealByClaim(ctx, req.ClaimID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if appeal.AppellantType != "rider" || appeal.AppellantID != rider.ID {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
+			return
+		}
+		ctx.JSON(http.StatusOK, newAppealResponse(appeal))
 		return
 	}
 
@@ -1261,9 +1282,122 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 	}
 
 	if err := server.taskDistributor.DistributeTaskProcessAppealResult(ctx, taskPayload); err != nil {
-		// 记录错误但不阻塞响应
-		// 申诉已成功审核，异步任务可以手动重试
+		if inlineErr := server.processAppealResultInline(ctx, taskPayload); inlineErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, inlineErr))
+			return
+		}
 	}
 
 	ctx.JSON(http.StatusOK, newAppealResponse(updatedAppeal))
+}
+
+func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+	if payload.Status == "approved" {
+		relatedType := "appeal"
+		relatedID := payload.AppealID
+		calculator := algorithm.NewTrustScoreCalculator(server.store, server.wsHub)
+		if err := calculator.UpdateTrustScore(
+			ctx,
+			algorithm.EntityTypeCustomer,
+			payload.ClaimantUserID,
+			-penaltyAppealUpheld,
+			"appeal_upheld",
+			"申诉成功: 订单"+payload.OrderNo+"的"+getClaimTypeLabel(payload.ClaimType)+"索赔被确认为不当",
+			&relatedType,
+			&relatedID,
+		); err != nil {
+			return err
+		}
+	}
+
+	appellantUserID, err := server.getAppellantUserID(ctx, payload.AppellantType, payload.AppellantID)
+	if err != nil {
+		return err
+	}
+
+	appellantTitle, appellantContent := buildAppealNotificationContent(payload, true)
+	if err := server.SendNotification(ctx, SendNotificationParams{
+		UserID:      appellantUserID,
+		Type:        "appeal",
+		Title:       appellantTitle,
+		Content:     appellantContent,
+		RelatedType: "appeal",
+		RelatedID:   payload.AppealID,
+		ExtraData: map[string]any{
+			"appeal_id":      payload.AppealID,
+			"status":         payload.Status,
+			"appellant_type": payload.AppellantType,
+		},
+	}); err != nil {
+		return err
+	}
+
+	claimantTitle, claimantContent := buildAppealNotificationContent(payload, false)
+	if err := server.SendNotification(ctx, SendNotificationParams{
+		UserID:      payload.ClaimantUserID,
+		Type:        "appeal",
+		Title:       claimantTitle,
+		Content:     claimantContent,
+		RelatedType: "appeal",
+		RelatedID:   payload.AppealID,
+		ExtraData: map[string]any{
+			"appeal_id": payload.AppealID,
+			"status":    payload.Status,
+		},
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (server *Server) getAppellantUserID(ctx *gin.Context, appellantType string, appellantID int64) (int64, error) {
+	if appellantType == "merchant" {
+		merchant, err := server.store.GetMerchant(ctx, appellantID)
+		if err != nil {
+			return 0, err
+		}
+		return merchant.OwnerUserID, nil
+	}
+
+	rider, err := server.store.GetRider(ctx, appellantID)
+	if err != nil {
+		return 0, err
+	}
+	return rider.UserID, nil
+}
+
+func buildAppealNotificationContent(payload *worker.ProcessAppealResultPayload, isAppellant bool) (string, string) {
+	if isAppellant {
+		if payload.Status == "approved" {
+			return "申诉成功通知", "您针对订单" + payload.OrderNo + "的申诉已通过审核，补偿金额" + formatMoney(payload.CompensationAmount) + "将在1-3个工作日内到账。"
+		}
+		return "申诉结果通知", "您针对订单" + payload.OrderNo + "的申诉未通过审核，如有疑问请联系客服。"
+	}
+
+	if payload.Status == "approved" {
+		return "索赔申诉结果通知", "您在订单" + payload.OrderNo + "中的" + getClaimTypeLabel(payload.ClaimType) + "索赔经审核认定为不当，相关赔付将被撤回。请合理使用售后服务。"
+	}
+	return "索赔申诉结果通知", "商家/骑手针对您订单" + payload.OrderNo + "的申诉未通过审核，原索赔有效。"
+}
+
+func formatMoney(amount int64) string {
+	return strconv.FormatFloat(float64(amount)/100, 'f', 2, 64) + "元"
+}
+
+func getClaimTypeLabel(claimType string) string {
+	switch claimType {
+	case "foreign-object":
+		return "异物"
+	case "damage":
+		return "餐损"
+	case "delay":
+		return "延迟"
+	case "quality":
+		return "质量问题"
+	case "missing-item":
+		return "缺漏"
+	default:
+		return "其他"
+	}
 }

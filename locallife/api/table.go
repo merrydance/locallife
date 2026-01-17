@@ -10,6 +10,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,7 @@ type createTableRequest struct {
 	Description  *string `json:"description" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
 	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
+	AccessCode   *string `json:"access_code,omitempty" binding:"omitempty,min=4,max=32"`
 	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
 }
 
@@ -157,6 +159,14 @@ func (server *Server) createTable(ctx *gin.Context) {
 	}
 	if req.QrCodeUrl != nil {
 		arg.QrCodeUrl = pgtype.Text{String: *req.QrCodeUrl, Valid: true}
+	}
+	if req.AccessCode != nil {
+		hashedCode, err := util.HashPassword(*req.AccessCode)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		arg.AccessCodeHash = pgtype.Text{String: hashedCode, Valid: true}
 	}
 
 	table, err := server.store.CreateTable(ctx, arg)
@@ -477,6 +487,7 @@ type updateTableRequest struct {
 	Description  *string `json:"description,omitempty" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
 	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
+	AccessCode   *string `json:"access_code,omitempty" binding:"omitempty,min=4,max=32"`
 	Status       *string `json:"status,omitempty" binding:"omitempty,oneof=available occupied disabled"`
 	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
 }
@@ -558,6 +569,14 @@ func (server *Server) updateTable(ctx *gin.Context) {
 	}
 	if req.QrCodeUrl != nil {
 		arg.QrCodeUrl = pgtype.Text{String: *req.QrCodeUrl, Valid: true}
+	}
+	if req.AccessCode != nil {
+		hashedCode, err := util.HashPassword(*req.AccessCode)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		arg.AccessCodeHash = pgtype.Text{String: hashedCode, Valid: true}
 	}
 	if req.Status != nil {
 		arg.Status = pgtype.Text{String: *req.Status, Valid: true}

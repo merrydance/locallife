@@ -109,6 +109,7 @@ type scanTableResponse struct {
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 404 {object} ErrorResponse "商户或桌台不存在"
 // @Failure 503 {object} ErrorResponse "商户未营业或桌台已停用"
+// @Security BearerAuth
 // @Router /v1/scan/table [get]
 func (server *Server) scanTable(ctx *gin.Context) {
 	var req scanTableRequest

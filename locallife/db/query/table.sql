@@ -7,9 +7,10 @@ INSERT INTO tables (
     description,
     minimum_spend,
     qr_code_url,
-    status
+  status,
+  access_code_hash
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 ) RETURNING *;
 
 -- name: GetTable :one
@@ -50,6 +51,7 @@ SET table_no = COALESCE(sqlc.narg(table_no), table_no),
     description = COALESCE(sqlc.narg(description), description),
     minimum_spend = COALESCE(sqlc.narg(minimum_spend), minimum_spend),
     qr_code_url = COALESCE(sqlc.narg(qr_code_url), qr_code_url),
+  access_code_hash = COALESCE(sqlc.narg(access_code_hash), access_code_hash),
     status = COALESCE(sqlc.narg(status), status),
     updated_at = now()
 WHERE id = sqlc.arg(id)

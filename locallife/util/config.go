@@ -16,6 +16,7 @@ type Config struct {
 	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"` // OSM 反向代理基地址，如 https://lbs.merrydance.cn
 	DBSource             string        `mapstructure:"DB_SOURCE"`
 	MigrationURL         string        `mapstructure:"MIGRATION_URL"`
+	AutoMigrate          bool          `mapstructure:"AUTO_MIGRATE"`
 	RedisAddress         string        `mapstructure:"REDIS_ADDRESS"`
 	RedisPassword        string        `mapstructure:"REDIS_PASSWORD"`
 	HTTPServerAddress    string        `mapstructure:"HTTP_SERVER_ADDRESS"`
@@ -76,6 +77,7 @@ func LoadConfig(path string) (config Config, err error) {
 	viper.SetConfigType("env")
 
 	viper.AutomaticEnv()
+	viper.SetDefault("AUTO_MIGRATE", false)
 	// WebSocket rollout defaults
 	viper.SetDefault("WS_RELIABLE_ENABLED", true)
 	viper.SetDefault("WS_RELIABLE_PERCENT", 100)

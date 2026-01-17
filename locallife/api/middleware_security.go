@@ -70,8 +70,8 @@ func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 			ctx.Header("Access-Control-Allow-Origin", origin)
 			ctx.Header("Access-Control-Allow-Credentials", "true")
 			ctx.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			ctx.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Request-ID")
-			ctx.Header("Access-Control-Expose-Headers", "X-Request-ID")
+			ctx.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Response-Envelope")
+			ctx.Header("Access-Control-Expose-Headers", "X-Request-ID, X-Response-Envelope")
 			ctx.Header("Access-Control-Max-Age", "86400") // 预检请求缓存 24 小时
 		}
 

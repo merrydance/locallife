@@ -96,6 +96,7 @@ type searchComboResponse struct {
 
 // searchDishes godoc
 // ... (comments remain same)
+// @Security BearerAuth
 func (server *Server) searchDishes(ctx *gin.Context) {
 	var req searchDishesRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -233,6 +234,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 // @Success 200 {object} map[string]interface{} "搜索结果"
 // @Failure 400 {object} map[string]string "请求参数错误"
 // @Failure 500 {object} map[string]string "服务器内部错误"
+// @Security BearerAuth
 // @Router /v1/search/merchants [get]
 func (server *Server) searchMerchants(ctx *gin.Context) {
 	var req searchMerchantsRequest
@@ -300,6 +302,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 // @Success 200 {object} map[string]interface{} "搜索结果"
 // @Failure 400 {object} map[string]string "请求参数错误"
 // @Failure 500 {object} map[string]string "服务器内部错误"
+// @Security BearerAuth
 // @Router /v1/search/combos [get]
 func (server *Server) searchCombos(ctx *gin.Context) {
 	var req searchDishesRequest // Reuse same request struct as params are identical
@@ -573,6 +576,7 @@ type searchRoomResponse struct {
 // @Success 200 {object} map[string]interface{} "搜索结果"
 // @Failure 400 {object} map[string]string "请求参数错误"
 // @Failure 500 {object} map[string]string "服务器内部错误"
+// @Security BearerAuth
 // @Router /v1/search/rooms [get]
 func (server *Server) searchRooms(ctx *gin.Context) {
 	var req searchRoomsRequest

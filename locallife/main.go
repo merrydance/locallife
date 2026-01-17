@@ -96,7 +96,15 @@ func main() {
 		Int32("min_conns", poolConfig.MinConns).
 		Msg("✅ database connection pool configured")
 
-	runDBMigration(config.MigrationURL, config.DBSource)
+	if config.Environment == "production" {
+		if config.AutoMigrate {
+			runDBMigration(config.MigrationURL, config.DBSource)
+		} else {
+			log.Warn().Msg("AUTO_MIGRATE disabled in production, skipping migrations")
+		}
+	} else {
+		runDBMigration(config.MigrationURL, config.DBSource)
+	}
 
 	store := db.NewStore(connPool)
 
@@ -312,6 +320,8 @@ func runGinServer(
 			log.Error().Err(err).Msg("HTTP server forced to shutdown")
 			return err
 		}
+
+		server.Shutdown()
 
 		log.Info().Msg("HTTP server is stopped")
 		return nil

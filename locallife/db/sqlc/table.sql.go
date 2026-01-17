@@ -191,21 +191,23 @@ INSERT INTO tables (
     description,
     minimum_spend,
     qr_code_url,
-    status
+  status,
+  access_code_hash
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash
 `
 
 type CreateTableParams struct {
-	MerchantID   int64       `json:"merchant_id"`
-	TableNo      string      `json:"table_no"`
-	TableType    string      `json:"table_type"`
-	Capacity     int16       `json:"capacity"`
-	Description  pgtype.Text `json:"description"`
-	MinimumSpend pgtype.Int8 `json:"minimum_spend"`
-	QrCodeUrl    pgtype.Text `json:"qr_code_url"`
-	Status       string      `json:"status"`
+	MerchantID     int64       `json:"merchant_id"`
+	TableNo        string      `json:"table_no"`
+	TableType      string      `json:"table_type"`
+	Capacity       int16       `json:"capacity"`
+	Description    pgtype.Text `json:"description"`
+	MinimumSpend   pgtype.Int8 `json:"minimum_spend"`
+	QrCodeUrl      pgtype.Text `json:"qr_code_url"`
+	Status         string      `json:"status"`
+	AccessCodeHash pgtype.Text `json:"access_code_hash"`
 }
 
 func (q *Queries) CreateTable(ctx context.Context, arg CreateTableParams) (Table, error) {
@@ -218,6 +220,7 @@ func (q *Queries) CreateTable(ctx context.Context, arg CreateTableParams) (Table
 		arg.MinimumSpend,
 		arg.QrCodeUrl,
 		arg.Status,
+		arg.AccessCodeHash,
 	)
 	var i Table
 	err := row.Scan(
@@ -233,6 +236,7 @@ func (q *Queries) CreateTable(ctx context.Context, arg CreateTableParams) (Table
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
@@ -484,7 +488,7 @@ func (q *Queries) GetRoomDetailForCustomer(ctx context.Context, id int64) (GetRo
 }
 
 const getTable = `-- name: GetTable :one
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE id = $1 LIMIT 1
 `
 
@@ -504,12 +508,13 @@ func (q *Queries) GetTable(ctx context.Context, id int64) (Table, error) {
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
 
 const getTableByMerchantAndNo = `-- name: GetTableByMerchantAndNo :one
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1 AND table_no = $2 LIMIT 1
 `
 
@@ -534,12 +539,13 @@ func (q *Queries) GetTableByMerchantAndNo(ctx context.Context, arg GetTableByMer
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
 
 const getTableForUpdate = `-- name: GetTableForUpdate :one
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -560,12 +566,13 @@ func (q *Queries) GetTableForUpdate(ctx context.Context, id int64) (Table, error
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
 
 const listAvailableRooms = `-- name: ListAvailableRooms :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1 
   AND table_type = 'room' 
   AND status = 'available'
@@ -594,6 +601,7 @@ func (q *Queries) ListAvailableRooms(ctx context.Context, merchantID int64) ([]T
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -817,7 +825,7 @@ func (q *Queries) ListTableTags(ctx context.Context, tableID int64) ([]ListTable
 }
 
 const listTablesByMerchant = `-- name: ListTablesByMerchant :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1
 ORDER BY table_type, table_no
 `
@@ -844,6 +852,7 @@ func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -856,7 +865,7 @@ func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([
 }
 
 const listTablesByMerchantAndType = `-- name: ListTablesByMerchantAndType :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at FROM tables
+SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
 WHERE merchant_id = $1 
   AND table_type = $2
 ORDER BY table_no
@@ -889,6 +898,7 @@ func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTable
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -901,7 +911,7 @@ func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTable
 }
 
 const listTablesByTag = `-- name: ListTablesByTag :many
-SELECT tb.id, tb.merchant_id, tb.table_no, tb.table_type, tb.capacity, tb.description, tb.minimum_spend, tb.qr_code_url, tb.status, tb.current_reservation_id, tb.created_at, tb.updated_at FROM tables tb
+SELECT tb.id, tb.merchant_id, tb.table_no, tb.table_type, tb.capacity, tb.description, tb.minimum_spend, tb.qr_code_url, tb.status, tb.current_reservation_id, tb.created_at, tb.updated_at, tb.access_code_hash FROM tables tb
 INNER JOIN table_tags tt ON tb.id = tt.table_id
 WHERE tt.tag_id = $1
 ORDER BY tb.table_no
@@ -929,6 +939,7 @@ func (q *Queries) ListTablesByTag(ctx context.Context, tagID int64) ([]Table, er
 			&i.CurrentReservationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AccessCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -1373,20 +1384,22 @@ SET table_no = COALESCE($1, table_no),
     description = COALESCE($3, description),
     minimum_spend = COALESCE($4, minimum_spend),
     qr_code_url = COALESCE($5, qr_code_url),
-    status = COALESCE($6, status),
+  access_code_hash = COALESCE($6, access_code_hash),
+    status = COALESCE($7, status),
     updated_at = now()
-WHERE id = $7
-RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at
+WHERE id = $8
+RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash
 `
 
 type UpdateTableParams struct {
-	TableNo      pgtype.Text `json:"table_no"`
-	Capacity     pgtype.Int2 `json:"capacity"`
-	Description  pgtype.Text `json:"description"`
-	MinimumSpend pgtype.Int8 `json:"minimum_spend"`
-	QrCodeUrl    pgtype.Text `json:"qr_code_url"`
-	Status       pgtype.Text `json:"status"`
-	ID           int64       `json:"id"`
+	TableNo        pgtype.Text `json:"table_no"`
+	Capacity       pgtype.Int2 `json:"capacity"`
+	Description    pgtype.Text `json:"description"`
+	MinimumSpend   pgtype.Int8 `json:"minimum_spend"`
+	QrCodeUrl      pgtype.Text `json:"qr_code_url"`
+	AccessCodeHash pgtype.Text `json:"access_code_hash"`
+	Status         pgtype.Text `json:"status"`
+	ID             int64       `json:"id"`
 }
 
 func (q *Queries) UpdateTable(ctx context.Context, arg UpdateTableParams) (Table, error) {
@@ -1396,6 +1409,7 @@ func (q *Queries) UpdateTable(ctx context.Context, arg UpdateTableParams) (Table
 		arg.Description,
 		arg.MinimumSpend,
 		arg.QrCodeUrl,
+		arg.AccessCodeHash,
 		arg.Status,
 		arg.ID,
 	)
@@ -1413,6 +1427,7 @@ func (q *Queries) UpdateTable(ctx context.Context, arg UpdateTableParams) (Table
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }
@@ -1451,7 +1466,7 @@ SET status = $2,
     current_reservation_id = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at
+RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash
 `
 
 type UpdateTableStatusParams struct {
@@ -1476,6 +1491,7 @@ func (q *Queries) UpdateTableStatus(ctx context.Context, arg UpdateTableStatusPa
 		&i.CurrentReservationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AccessCodeHash,
 	)
 	return i, err
 }

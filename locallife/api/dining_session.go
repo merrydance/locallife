@@ -3,10 +3,12 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -30,8 +32,9 @@ type diningSessionResponse struct {
 }
 
 type openDiningSessionRequest struct {
-	TableID       int64  `json:"table_id" binding:"required,min=1"`
-	ReservationID *int64 `json:"reservation_id,omitempty" binding:"omitempty,min=1"`
+	TableID       int64   `json:"table_id" binding:"required,min=1"`
+	ReservationID *int64  `json:"reservation_id,omitempty" binding:"omitempty,min=1"`
+	TableCode     *string `json:"table_code,omitempty" binding:"omitempty,min=4,max=32"`
 }
 
 type openDiningSessionResponse struct {
@@ -285,6 +288,21 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 		}
 		if now.After(scheduledAt.Add(30 * time.Minute)) {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation check-in window has passed")))
+			return
+		}
+	}
+
+	if reservation == nil {
+		if !table.AccessCodeHash.Valid || strings.TrimSpace(table.AccessCodeHash.String) == "" {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("table access code is not configured")))
+			return
+		}
+		if req.TableCode == nil || strings.TrimSpace(*req.TableCode) == "" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table access code is required")))
+			return
+		}
+		if err := util.CheckPassword(*req.TableCode, table.AccessCodeHash.String); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("invalid table access code")))
 			return
 		}
 	}
