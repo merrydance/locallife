@@ -451,6 +451,14 @@ type listPaymentOrdersRequest struct {
 	OrderID  *int64 `form:"order_id" binding:"omitempty,min=1"` // 可选：按订单ID筛选
 }
 
+type listPaymentOrdersResponse struct {
+	PaymentOrders []paymentOrderResponse `json:"payment_orders"`
+	TotalCount    int64                  `json:"total_count"`
+	Total         int64                  `json:"total"`
+	PageID        int32                  `json:"page_id"`
+	PageSize      int32                  `json:"page_size"`
+}
+
 // listPaymentOrders godoc
 // @Summary 获取支付订单列表
 // @Description 分页获取当前用户的支付订单列表，或按订单ID查询
@@ -460,7 +468,7 @@ type listPaymentOrdersRequest struct {
 // @Param page_id query int false "页码" minimum(1)
 // @Param page_size query int false "每页条数" minimum(1) maximum(20)
 // @Param order_id query int false "订单ID（按订单查询时使用）"
-// @Success 200 {array} paymentOrderResponse "支付订单列表"
+// @Success 200 {object} listPaymentOrdersResponse "支付订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
@@ -475,30 +483,6 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 如果指定了 order_id，直接查询该订单的支付记录
-	if req.OrderID != nil {
-		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:      pgtype.Int8{Int64: *req.OrderID, Valid: true},
-			BusinessType: BusinessTypeOrder,
-		})
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusOK, []paymentOrderResponse{})
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		// 验证支付订单属于当前用户
-		if payment.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusOK, []paymentOrderResponse{})
-			return
-		}
-		ctx.JSON(http.StatusOK, []paymentOrderResponse{newPaymentOrderResponse(payment)})
-		return
-	}
-
-	// 默认分页查询
 	pageID := req.PageID
 	pageSize := req.PageSize
 	if pageID == 0 {
@@ -507,7 +491,50 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 	if pageSize == 0 {
 		pageSize = 10
 	}
-	offset := (pageID - 1) * pageSize
+
+	// 如果指定了 order_id，直接查询该订单的支付记录
+	if req.OrderID != nil {
+		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: *req.OrderID, Valid: true},
+			BusinessType: BusinessTypeOrder,
+		})
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
+					PaymentOrders: []paymentOrderResponse{},
+					TotalCount:    0,
+					Total:         0,
+					PageID:        pageID,
+					PageSize:      pageSize,
+				})
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		// 验证支付订单属于当前用户
+		if payment.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
+				PaymentOrders: []paymentOrderResponse{},
+				TotalCount:    0,
+				Total:         0,
+				PageID:        pageID,
+				PageSize:      pageSize,
+			})
+			return
+		}
+		ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
+			PaymentOrders: []paymentOrderResponse{newPaymentOrderResponse(payment)},
+			TotalCount:    1,
+			Total:         1,
+			PageID:        pageID,
+			PageSize:      pageSize,
+		})
+		return
+	}
+
+	// 默认分页查询
+	offset := pageOffset(pageID, pageSize)
 
 	paymentOrders, err := server.store.ListPaymentOrdersByUser(ctx, db.ListPaymentOrdersByUserParams{
 		UserID: authPayload.UserID,
@@ -524,7 +551,13 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 		resp[i] = newPaymentOrderResponse(p)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
+		PaymentOrders: resp,
+		TotalCount:    int64(len(resp)),
+		Total:         int64(len(resp)),
+		PageID:        pageID,
+		PageSize:      pageSize,
+	})
 }
 
 // closePaymentOrder 关闭支付订单
@@ -853,6 +886,12 @@ type listRefundOrdersByPaymentRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1"`
 }
 
+type listRefundOrdersByPaymentResponse struct {
+	RefundOrders []refundOrderResponse `json:"refund_orders"`
+	TotalCount   int64                 `json:"total_count"`
+	Total        int64                 `json:"total"`
+}
+
 // listRefundOrdersByPayment godoc
 // @Summary 获取支付订单的退款列表
 // @Description 获取指定支付订单的所有退款记录
@@ -860,7 +899,7 @@ type listRefundOrdersByPaymentRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path int true "支付订单ID"
-// @Success 200 {array} refundOrderResponse "退款订单列表"
+// @Success 200 {object} listRefundOrdersByPaymentResponse "退款订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "无访问权限"
@@ -918,5 +957,9 @@ func (server *Server) listRefundOrdersByPayment(ctx *gin.Context) {
 		resp[i] = newRefundOrderResponse(r)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, listRefundOrdersByPaymentResponse{
+		RefundOrders: resp,
+		TotalCount:   int64(len(resp)),
+		Total:        int64(len(resp)),
+	})
 }

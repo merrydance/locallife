@@ -97,7 +97,7 @@ func parseChineseYMD(dateStr string) (time.Time, error) {
 	if len(day) == 1 {
 		day = "0" + day
 	}
-	return time.Parse("2006-01-02", year+"-"+month+"-"+day)
+	return parseISODate(year+"-"+month+"-"+day, "")
 }
 
 // riderApplicationResponse 骑手申请响应

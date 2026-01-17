@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/url"
 	"time"
 
@@ -30,6 +31,7 @@ func RequestTracingMiddleware() gin.HandlerFunc {
 
 		// 存储到 Context 中供后续使用
 		ctx.Set(RequestIDKey, requestID)
+		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), RequestIDKey, requestID))
 
 		// 设置响应头
 		ctx.Header(RequestIDHeader, requestID)

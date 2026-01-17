@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -66,9 +65,9 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := parseISODate(req.Date, "invalid date format, expected YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format, expected YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -153,9 +152,9 @@ func (server *Server) listDailyInventory(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := parseISODate(req.Date, "invalid date format")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -234,9 +233,9 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := parseISODate(req.Date, "invalid date format")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -350,9 +349,9 @@ func (server *Server) checkAndDecrementInventory(ctx *gin.Context) {
 		return
 	}
 
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := parseISODate(req.Date, "invalid date format")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -444,9 +443,9 @@ func (server *Server) getInventoryStats(ctx *gin.Context) {
 		return
 	}
 
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := parseISODate(req.Date, "invalid date format")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -521,9 +520,9 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := parseISODate(req.Date, "invalid date format, expected YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format, expected YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 

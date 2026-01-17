@@ -17,12 +17,6 @@ import (
 
 // ==================== 骑手申请 ====================
 
-type applyRiderRequest struct {
-	RealName string `json:"real_name" binding:"required,min=2,max=50"`
-	IDCardNo string `json:"id_card_no" binding:"required,len=18,validIDCard"`
-	Phone    string `json:"phone" binding:"required,validPhone"`
-}
-
 type riderResponse struct {
 	ID                int64      `json:"id"`
 	UserID            int64      `json:"user_id"`
@@ -72,56 +66,6 @@ func newRiderResponse(rider db.Rider) riderResponse {
 	}
 
 	return resp
-}
-
-// applyRider godoc
-// @Summary 骑手入驻申请
-// @Description 用户提交骑手入驻申请，需要提供真实姓名、身份证号和手机号。申请后状态为pending，等待管理员审核。
-// @Tags 骑手
-// @Accept json
-// @Produce json
-// @Param request body applyRiderRequest true "骑手申请信息"
-// @Success 201 {object} riderResponse "申请成功"
-// @Failure 400 {object} ErrorResponse "参数错误"
-// @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 409 {object} ErrorResponse "重复申请"
-// @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/rider/apply [post]
-// @Security BearerAuth
-func (server *Server) applyRider(ctx *gin.Context) {
-	var req applyRiderRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 检查是否已申请
-	_, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已申请成为骑手")))
-		return
-	}
-	if !isNotFoundError(err) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	arg := db.CreateRiderParams{
-		UserID:   authPayload.UserID,
-		RealName: req.RealName,
-		IDCardNo: req.IDCardNo,
-		Phone:    req.Phone,
-	}
-
-	rider, err := server.store.CreateRider(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusCreated, newRiderResponse(rider))
 }
 
 // getRiderMe godoc
@@ -591,6 +535,14 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
+type listRiderDepositsResponse struct {
+	Deposits   []depositResponse `json:"deposits"`
+	TotalCount int64             `json:"total_count"`
+	Total      int64             `json:"total"`
+	PageID     int32             `json:"page_id"`
+	PageSize   int32             `json:"page_size"`
+}
+
 // listRiderDeposits godoc
 // @Summary 查询押金流水
 // @Description 分页查询当前骑手的押金变动流水记录，包括充值、提现、冻结、解冻、扣款等
@@ -599,7 +551,7 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 // @Produce json
 // @Param page query int false "页码" minimum(1) default(1)
 // @Param limit query int false "每页数量" minimum(1) maximum(100) default(20)
-// @Success 200 {array} depositResponse "押金流水列表"
+// @Success 200 {object} listRiderDepositsResponse "押金流水列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未登录"
 // @Failure 404 {object} ErrorResponse "未注册骑手"
@@ -636,7 +588,7 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 	deposits, err := server.store.ListRiderDeposits(ctx, db.ListRiderDepositsParams{
 		RiderID: rider.ID,
 		Limit:   req.Limit,
-		Offset:  (req.Page - 1) * req.Limit,
+		Offset:  pageOffset(req.Page, req.Limit),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -649,7 +601,13 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 		response = append(response, newDepositResponse(d))
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, listRiderDepositsResponse{
+		Deposits:   response,
+		TotalCount: int64(len(response)),
+		Total:      int64(len(response)),
+		PageID:     req.Page,
+		PageSize:   req.Limit,
+	})
 }
 
 // ==================== 上下线管理 ====================
@@ -1013,6 +971,14 @@ type listRidersRequest struct {
 	Limit  int32  `form:"limit" binding:"min=1,max=100"`
 }
 
+type listRidersResponse struct {
+	Riders     []riderResponse `json:"riders"`
+	TotalCount int64           `json:"total_count"`
+	Total      int64           `json:"total"`
+	PageID     int32           `json:"page_id"`
+	PageSize   int32           `json:"page_size"`
+}
+
 // listRiders godoc
 // @Summary 获取骑手列表（管理员）
 // @Description 管理员或运营商分页获取骑手列表，支持状态筛选
@@ -1022,7 +988,7 @@ type listRidersRequest struct {
 // @Param status query string false "筛选状态" Enums(pending, approved, active, suspended, rejected)
 // @Param page query int false "页码" minimum(1) default(1)
 // @Param limit query int false "每页数量" minimum(1) maximum(100) default(20)
-// @Success 200 {array} riderResponse "骑手列表"
+// @Success 200 {object} listRidersResponse "骑手列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未登录"
 // @Failure 403 {object} ErrorResponse "无权限"
@@ -1050,8 +1016,14 @@ func (server *Server) listRiders(ctx *gin.Context) {
 	riders, err := server.store.ListRidersByStatus(ctx, db.ListRidersByStatusParams{
 		Status: req.Status,
 		Limit:  req.Limit,
-		Offset: (req.Page - 1) * req.Limit,
+		Offset: pageOffset(req.Page, req.Limit),
 	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	totalCount, err := server.store.CountRidersByStatus(ctx, req.Status)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -1062,7 +1034,13 @@ func (server *Server) listRiders(ctx *gin.Context) {
 		response = append(response, newRiderResponse(r))
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, listRidersResponse{
+		Riders:     response,
+		TotalCount: totalCount,
+		Total:      totalCount,
+		PageID:     req.Page,
+		PageSize:   req.Limit,
+	})
 }
 
 // ==================== 辅助函数 ====================
@@ -1507,6 +1485,9 @@ type premiumScoreLogItem struct {
 type listRiderPremiumScoreHistoryResponse struct {
 	CurrentScore int16                 `json:"current_score"` // 当前积分
 	Total        int64                 `json:"total"`         // 总记录数
+	TotalCount   int64                 `json:"total_count"`
+	PageID       int32                 `json:"page_id"`
+	PageSize     int32                 `json:"page_size"`
 	Logs         []premiumScoreLogItem `json:"logs"`          // 历史记录
 }
 
@@ -1586,7 +1567,7 @@ func (server *Server) listRiderPremiumScoreHistory(ctx *gin.Context) {
 	logs, err := server.store.ListRiderPremiumScoreLogs(ctx, db.ListRiderPremiumScoreLogsParams{
 		RiderID: rider.ID,
 		Limit:   req.PageSize,
-		Offset:  (req.PageID - 1) * req.PageSize,
+		Offset:  pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1620,6 +1601,9 @@ func (server *Server) listRiderPremiumScoreHistory(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listRiderPremiumScoreHistoryResponse{
 		CurrentScore: currentScore,
 		Total:        total,
+		TotalCount:   total,
+		PageID:       req.PageID,
+		PageSize:     req.PageSize,
 		Logs:         items,
 	})
 }

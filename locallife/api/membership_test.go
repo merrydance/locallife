@@ -480,13 +480,9 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
 					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
+					Return(merchant, nil)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -511,9 +507,9 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(otherUser.ID)).
 					Times(1).
-					Return(db.UserRole{}, db.ErrRecordNotFound)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -537,13 +533,9 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
 					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true}, // 关联的是 merchant.ID，不是999
-					}, nil)
+					Return(merchant, nil)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -567,13 +559,9 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
 					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
+					Return(merchant, nil)
 
 				store.EXPECT().
 					CreateRechargeRule(gomock.Any(), gomock.Any()).
@@ -635,18 +623,14 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
 					GetRechargeRule(gomock.Any(), gomock.Eq(rule.ID)).
 					Times(1).
 					Return(rule, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						UserID:          merchantOwner.ID,
-						Role:            "merchant",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
 
 				store.EXPECT().
 					DeleteRechargeRule(gomock.Any(), gomock.Eq(rule.ID)).
@@ -666,6 +650,11 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
 					GetRechargeRule(gomock.Any(), gomock.Eq(int64(999))).
 					Times(1).
 					Return(db.RechargeRule{}, db.ErrRecordNotFound)
@@ -683,14 +672,13 @@ func TestDeleteRechargeRuleAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetRechargeRule(gomock.Any(), gomock.Eq(rule.ID)).
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(otherUser.ID)).
 					Times(1).
-					Return(rule, nil)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, db.ErrRecordNotFound)
+					GetRechargeRule(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

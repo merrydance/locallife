@@ -54,20 +54,8 @@ func (server *Server) getMerchantDailyStats(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -153,20 +141,8 @@ func (server *Server) getMerchantOverview(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -252,20 +228,8 @@ func (server *Server) getTopSellingDishes(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -367,7 +331,7 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 		req.OrderBy = "last_order_at"
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
@@ -431,6 +395,9 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"data":        result,
 		"total_count": totalCount,
+		"total":       totalCount,
+		"page_id":     req.Page,
+		"page_size":   req.Limit,
 		"page":        req.Page,
 		"limit":       req.Limit,
 	})
@@ -606,21 +573,8 @@ func (server *Server) getMerchantHourlyStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -693,21 +647,8 @@ func (server *Server) getMerchantOrderSourceStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -781,21 +722,8 @@ func (server *Server) getMerchantRepurchaseRate(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -865,21 +793,8 @@ func (server *Server) getMerchantDishCategoryStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}

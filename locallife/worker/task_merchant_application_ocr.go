@@ -134,7 +134,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskMerchantApplicationIDCard
 
 func (distributor *RedisTaskDistributor) enqueue(ctx context.Context, taskType string, payload []byte, opts ...asynq.Option) error {
 	task := asynq.NewTask(taskType, payload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}

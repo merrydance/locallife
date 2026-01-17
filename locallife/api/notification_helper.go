@@ -8,7 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/websocket"
+	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
+	"github.com/hibiken/asynq"
 )
 
 // NotificationHelper 通知发送辅助函数集合
@@ -82,6 +84,26 @@ func (server *Server) isInDoNotDisturbPeriod(prefs db.UserNotificationPreference
 
 // SendNotification 创建通知并根据需要通过WebSocket推送
 func (server *Server) SendNotification(ctx context.Context, params SendNotificationParams) error {
+	if server.taskDistributor != nil {
+		payload := &worker.SendNotificationPayload{
+			UserID:             params.UserID,
+			Type:               params.Type,
+			Title:              params.Title,
+			Content:            params.Content,
+			RelatedType:        params.RelatedType,
+			RelatedID:          params.RelatedID,
+			ExtraData:          params.ExtraData,
+			ExpiresAt:          params.ExpiresAt,
+			IgnorePreferences:  params.IgnorePreferences,
+		}
+		return server.taskDistributor.DistributeTaskSendNotification(
+			ctx,
+			payload,
+			asynq.Queue(worker.QueueDefault),
+			asynq.MaxRetry(3),
+		)
+	}
+
 	// 测试环境跳过WebSocket推送，但仍创建通知记录（如果store不为nil）
 	skipWebSocket := server.wsHub == nil
 

@@ -176,7 +176,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskCheckMerchantForeignObjec
 		return fmt.Errorf("create task: %w", err)
 	}
 
-	_, err = distributor.client.EnqueueContext(ctx, task, opts...)
+	_, err = distributor.enqueueTask(ctx, task, opts...)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}
@@ -195,7 +195,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskCheckRiderDamage(
 		return fmt.Errorf("create task: %w", err)
 	}
 
-	_, err = distributor.client.EnqueueContext(ctx, task, opts...)
+	_, err = distributor.enqueueTask(ctx, task, opts...)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}

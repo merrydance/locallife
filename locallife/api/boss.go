@@ -195,7 +195,7 @@ func (server *Server) listBossMerchants(ctx *gin.Context) {
 	for _, m := range merchants {
 		logoURL := ""
 		if m.LogoUrl.Valid {
-			logoURL = m.LogoUrl.String
+			logoURL = normalizeUploadURLForClient(m.LogoUrl.String)
 		}
 		result = append(result, bossMerchantResponse{
 			ID:      m.ID,
@@ -246,7 +246,7 @@ func (server *Server) listMerchantBosses(ctx *gin.Context) {
 	for _, b := range bosses {
 		avatarURL := ""
 		if b.AvatarUrl.Valid {
-			avatarURL = b.AvatarUrl.String
+			avatarURL = normalizeUploadURLForClient(b.AvatarUrl.String)
 		}
 		phone := ""
 		if b.Phone.Valid {

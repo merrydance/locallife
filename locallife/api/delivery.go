@@ -8,13 +8,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,27 +26,20 @@ func (server *Server) sendDeliveryStatusNotification(
 	title string,
 	message string,
 ) {
-	if server.taskDistributor == nil {
-		return
-	}
 	expiresAt := time.Now().Add(1 * time.Hour)
-	_ = server.taskDistributor.DistributeTaskSendNotification(
-		ctx,
-		&worker.SendNotificationPayload{
-			UserID:      userID,
-			Type:        "delivery",
-			Title:       title,
-			Content:     message,
-			RelatedType: "delivery",
-			RelatedID:   deliveryID,
-			ExtraData: map[string]any{
-				"order_id": orderID,
-				"status":   status,
-			},
-			ExpiresAt: &expiresAt,
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      userID,
+		Type:        "delivery",
+		Title:       title,
+		Content:     message,
+		RelatedType: "delivery",
+		RelatedID:   deliveryID,
+		ExtraData: map[string]any{
+			"order_id": orderID,
+			"status":   status,
 		},
-		asynq.Queue(worker.QueueDefault),
-	)
+		ExpiresAt: &expiresAt,
+	})
 }
 
 // ==================== 推荐订单 ====================
@@ -513,6 +504,18 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 	oldStatus := order.Status
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionStartDelivery) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许开始配送", order.Status)))
+		return
+	}
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmPickup) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许确认取餐", order.Status)))
+		return
+	}
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionGrab) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许接单", order.Status)))
+		return
+	}
 
 	// 使用事务执行抢单操作：分配骑手 + 移除订单池 + 冻结押金 + 创建流水
 	freezeAmount := int64(5000) // 冻结 50 元
@@ -682,6 +685,31 @@ type updateDeliveryRequest struct {
 	ID int64 `uri:"delivery_id" binding:"required,min=1"`
 }
 
+const (
+	deliveryActionGrab            = "grab"
+	deliveryActionStartPickup     = "start_pickup"
+	deliveryActionConfirmPickup   = "confirm_pickup"
+	deliveryActionStartDelivery   = "start_delivery"
+	deliveryActionConfirmDelivery = "confirm_delivery"
+)
+
+func isOrderStatusAllowedForDeliveryAction(status string, action string) bool {
+	switch action {
+	case deliveryActionGrab:
+		return status == OrderStatusPaid || status == OrderStatusPreparing || status == OrderStatusReady
+	case deliveryActionStartPickup:
+		return status == OrderStatusCourierAccepted
+	case deliveryActionConfirmPickup:
+		return status == OrderStatusCourierAccepted
+	case deliveryActionStartDelivery:
+		return status == OrderStatusPicked
+	case deliveryActionConfirmDelivery:
+		return status == OrderStatusDelivering
+	default:
+		return false
+	}
+}
+
 // startPickup godoc
 // @Summary 开始取餐
 // @Description 骑手开始前往商家取餐。只能在assigned状态下调用
@@ -733,9 +761,28 @@ func (server *Server) startPickup(ctx *gin.Context) {
 		return
 	}
 
+	if delivery.Status != "delivering" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许确认送达", delivery.Status)))
+		return
+	}
+
 	// 检查状态是否允许开始取餐（只有assigned状态可以）
 	if delivery.Status != "assigned" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许开始取餐", delivery.Status)))
+		return
+	}
+
+	order, err := server.store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionStartPickup) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许开始取餐", order.Status)))
 		return
 	}
 
@@ -752,17 +799,15 @@ func (server *Server) startPickup(ctx *gin.Context) {
 	updated := result.Delivery
 
 	// 📢 P1: 异步发送骑手开始取餐通知给用户
-	if order, err := server.store.GetOrder(ctx, updated.OrderID); err == nil {
-		server.sendDeliveryStatusNotification(
-			ctx,
-			order.UserID,
-			updated.OrderID,
-			updated.ID,
-			"picking",
-			"骑手正在取餐",
-			fmt.Sprintf("订单%s骑手正在前往商家取餐", order.OrderNo),
-		)
-	}
+	server.sendDeliveryStatusNotification(
+		ctx,
+		order.UserID,
+		updated.OrderID,
+		updated.ID,
+		"picking",
+		"骑手正在取餐",
+		fmt.Sprintf("订单%s骑手正在前往商家取餐", order.OrderNo),
+	)
 
 	ctx.JSON(http.StatusOK, newDeliveryResponse(updated))
 }
@@ -834,6 +879,10 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		return
 	}
 	oldStatus := order.Status
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmDelivery) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许确认送达", order.Status)))
+		return
+	}
 
 	result, err := server.store.UpdateDeliveryToPickedTx(ctx, db.UpdateDeliveryToPickedTxParams{
 		DeliveryID: req.ID,
@@ -1362,6 +1411,14 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 
 // ==================== 骑手查询自己的配送单 ====================
 
+type listMyDeliveriesResponse struct {
+	Deliveries []deliveryResponse `json:"deliveries"`
+	TotalCount int64              `json:"total_count"`
+	Total      int64              `json:"total"`
+	PageID     int32              `json:"page_id"`
+	PageSize   int32              `json:"page_size"`
+}
+
 // listMyDeliveries godoc
 // @Summary 查询配送历史
 // @Description 获取骑手的配送历史列表，支持状态过滤和分页
@@ -1371,7 +1428,7 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 // @Param status query string false "状态过滤" Enums(assigned, picking, picked, delivering, delivered, completed, cancelled)
 // @Param page query int false "页码" default(1) minimum(1)
 // @Param limit query int false "每页数量" default(20) minimum(1) maximum(100)
-// @Success 200 {array} deliveryResponse "配送单列表"
+// @Success 200 {object} listMyDeliveriesResponse "配送单列表"
 // @Failure 400 {object} ErrorResponse "参数校验失败"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 404 {object} ErrorResponse "非骑手用户"
@@ -1415,13 +1472,13 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 			RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
 			Status:  req.Status,
 			Limit:   req.Limit,
-			Offset:  (req.Page - 1) * req.Limit,
+			Offset:  pageOffset(req.Page, req.Limit),
 		})
 	} else {
 		deliveries, err = server.store.ListDeliveriesByRider(ctx, db.ListDeliveriesByRiderParams{
 			RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
 			Limit:   req.Limit,
-			Offset:  (req.Page - 1) * req.Limit,
+			Offset:  pageOffset(req.Page, req.Limit),
 		})
 	}
 
@@ -1435,7 +1492,13 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 		response = append(response, newDeliveryResponse(d))
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, listMyDeliveriesResponse{
+		Deliveries: response,
+		TotalCount: int64(len(response)),
+		Total:      int64(len(response)),
+		PageID:     req.Page,
+		PageSize:   req.Limit,
+	})
 }
 
 // listMyActiveDeliveries godoc

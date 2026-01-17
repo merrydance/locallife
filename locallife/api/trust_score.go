@@ -1154,7 +1154,7 @@ func (server *Server) ListUserClaims(ctx *gin.Context) {
 		pageSize = 20
 	}
 
-	offset := int32((page - 1) * pageSize)
+	offset := pageOffset(int32(page), int32(pageSize))
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
@@ -1168,6 +1168,15 @@ func (server *Server) ListUserClaims(ctx *gin.Context) {
 		return
 	}
 
+	totalCount, err := server.store.CountUserClaimsInPeriod(ctx, db.CountUserClaimsInPeriodParams{
+		UserID:    authPayload.UserID,
+		CreatedAt: time.Unix(0, 0),
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("count claims for user %d: %w", authPayload.UserID, err)))
+		return
+	}
+
 	var response []claimResponse
 	for _, c := range claims {
 		response = append(response, newClaimResponse(c))
@@ -1178,9 +1187,12 @@ func (server *Server) ListUserClaims(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"claims":    response,
-		"page":      page,
-		"page_size": pageSize,
+		"claims":      response,
+		"total":       totalCount,
+		"total_count": totalCount,
+		"page_id":     page,
+		"page_size":   pageSize,
+		"page":        page,
 	})
 }
 

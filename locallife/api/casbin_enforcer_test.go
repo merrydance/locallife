@@ -33,7 +33,6 @@ g, rider, customer
 
 # Admin policies
 p, admin, /v1/platform/stats/*, GET
-p, admin, /v1/admin/merchants/applications, GET
 
 # Operator policies
 p, operator, /v1/operator/*, GET
@@ -75,13 +74,6 @@ func TestCasbinEnforce(t *testing.T) {
 			name:     "admin can access platform stats",
 			sub:      "admin",
 			obj:      "/v1/platform/stats/overview",
-			act:      "GET",
-			expected: true,
-		},
-		{
-			name:     "admin can list merchant applications",
-			sub:      "admin",
-			obj:      "/v1/admin/merchants/applications",
 			act:      "GET",
 			expected: true,
 		},

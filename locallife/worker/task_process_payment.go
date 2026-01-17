@@ -151,7 +151,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessPaymentSuccess(
 	}
 
 	task := asynq.NewTask(TaskProcessPaymentSuccess, jsonPayload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}
@@ -178,7 +178,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessRefund(
 	}
 
 	task := asynq.NewTask(TaskProcessRefund, jsonPayload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}
@@ -206,7 +206,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessRefundResult(
 	}
 
 	task := asynq.NewTask(TaskProcessRefundResult, jsonPayload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}
@@ -232,7 +232,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharing(
 	}
 
 	task := asynq.NewTask(TaskProcessProfitSharing, jsonPayload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}
@@ -259,7 +259,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessApplymentResult(
 	}
 
 	task := asynq.NewTask(TaskProcessApplymentResult, jsonPayload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}
@@ -286,7 +286,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharingResul
 	}
 
 	task := asynq.NewTask(TaskProcessProfitSharingResult, jsonPayload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}

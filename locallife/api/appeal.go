@@ -170,7 +170,7 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	claims, err := server.store.ListMerchantClaimsForMerchant(ctx, db.ListMerchantClaimsForMerchantParams{
 		MerchantID: merchant.ID,
@@ -222,6 +222,7 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"claims":    response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -434,7 +435,7 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	appeals, err := server.store.ListMerchantAppealsForMerchant(ctx, db.ListMerchantAppealsForMerchantParams{
 		AppellantID: merchant.ID,
@@ -484,6 +485,7 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":   response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -598,7 +600,7 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	claims, err := server.store.ListRiderClaimsForRider(ctx, db.ListRiderClaimsForRiderParams{
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
@@ -650,6 +652,7 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"claims":    response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -858,7 +861,7 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	appeals, err := server.store.ListRiderAppeals(ctx, db.ListRiderAppealsParams{
 		AppellantID: rider.ID,
@@ -908,6 +911,7 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":   response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -1029,7 +1033,7 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	var status string
 	if req.Status != nil {
@@ -1084,6 +1088,7 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":   response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})

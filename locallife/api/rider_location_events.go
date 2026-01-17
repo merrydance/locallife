@@ -226,6 +226,9 @@ func (server *Server) maybeAutoAdvancePickup(ctx context.Context, delivery db.De
 	} else if !isNotFoundError(err) {
 		log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto advance")
 	}
+	if orderLoaded && !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionStartPickup) {
+		return
+	}
 
 	result, err := server.store.UpdateDeliveryToPickupTx(ctx, db.UpdateDeliveryToPickupTxParams{
 		DeliveryID: delivery.ID,
@@ -280,6 +283,9 @@ func (server *Server) maybeAutoConfirmPickup(ctx context.Context, delivery db.De
 		return
 	}
 	oldStatus := order.Status
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmPickup) {
+		return
+	}
 
 	result, err := server.store.UpdateDeliveryToPickedTx(ctx, db.UpdateDeliveryToPickedTxParams{
 		DeliveryID: delivery.ID,
@@ -331,6 +337,9 @@ func (server *Server) maybeAutoConfirmDelivery(ctx context.Context, delivery db.
 		return
 	}
 	oldStatus := order.Status
+	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmDelivery) {
+		return
+	}
 
 	result, err := server.store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
 		DeliveryID:     delivery.ID,

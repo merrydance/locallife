@@ -45,7 +45,7 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessAppealResult(
 	}
 
 	task := asynq.NewTask(TaskProcessAppealResult, jsonPayload, opts...)
-	info, err := distributor.client.EnqueueContext(ctx, task)
+	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}

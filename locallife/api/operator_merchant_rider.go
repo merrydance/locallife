@@ -50,6 +50,9 @@ type merchantListItem struct {
 type listOperatorMerchantsResponse struct {
 	Merchants []merchantListItem `json:"merchants"`
 	Total     int64              `json:"total"`
+	TotalCount int64             `json:"total_count"`
+	PageID     int32             `json:"page_id"`
+	PageSize   int32             `json:"page_size"`
 	Page      int32              `json:"page"`
 	Limit     int32              `json:"limit"`
 }
@@ -98,7 +101,7 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
 	// 查询商户列表
 	var merchants []db.Merchant
@@ -161,6 +164,9 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listOperatorMerchantsResponse{
 		Merchants: result,
 		Total:     total,
+		TotalCount: total,
+		PageID:     req.Page,
+		PageSize:   req.Limit,
 		Page:      req.Page,
 		Limit:     req.Limit,
 	})
@@ -434,6 +440,9 @@ type riderListItem struct {
 type listOperatorRidersResponse struct {
 	Riders []riderListItem `json:"riders"`
 	Total  int64           `json:"total"`
+	TotalCount int64       `json:"total_count"`
+	PageID     int32       `json:"page_id"`
+	PageSize   int32       `json:"page_size"`
 	Page   int32           `json:"page"`
 	Limit  int32           `json:"limit"`
 }
@@ -482,7 +491,7 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 	regionID := pgtype.Int8{Int64: operator.RegionID, Valid: true}
 
 	// 查询骑手列表
@@ -551,6 +560,9 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listOperatorRidersResponse{
 		Riders: result,
 		Total:  total,
+		TotalCount: total,
+		PageID:     req.Page,
+		PageSize:   req.Limit,
 		Page:   req.Page,
 		Limit:  req.Limit,
 	})

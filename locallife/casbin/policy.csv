@@ -28,10 +28,6 @@ g, rider, customer
 # Platform Statistics
 p, admin, /v1/platform/stats/*, GET
 
-# Merchant Application Review
-p, admin, /v1/admin/merchants/applications, GET
-p, admin, /v1/admin/merchants/applications/review, POST
-
 # Rider Management
 p, admin, /v1/admin/riders, GET
 p, admin, /v1/admin/riders/:rider_id/approve, POST
@@ -110,8 +106,14 @@ p, operator, /v1/reviews/:id, DELETE
 # Merchant Owner Policies - Store management
 # =============================================================================
 # Merchant Profile
-p, merchant_owner, /v1/merchants/applications, POST
-p, merchant_owner, /v1/merchants/applications/me, GET
+p, merchant_owner, /v1/merchant/application, GET
+p, merchant_owner, /v1/merchant/application/basic, PUT
+p, merchant_owner, /v1/merchant/application/images, PUT
+p, merchant_owner, /v1/merchant/application/license/ocr, POST
+p, merchant_owner, /v1/merchant/application/foodpermit/ocr, POST
+p, merchant_owner, /v1/merchant/application/idcard/ocr, POST
+p, merchant_owner, /v1/merchant/application/submit, POST
+p, merchant_owner, /v1/merchant/application/reset, POST
 p, merchant_owner, /v1/merchants/me, GET
 p, merchant_owner, /v1/merchants/me, PATCH
 p, merchant_owner, /v1/merchants/me/status, GET
@@ -303,7 +305,12 @@ p, merchant_staff, /v1/tables/:id, GET
 # Rider Policies - Delivery management
 # =============================================================================
 # Rider Registration & Profile
-p, rider, /v1/rider/apply, POST
+p, rider, /v1/rider/application, GET
+p, rider, /v1/rider/application/basic, PUT
+p, rider, /v1/rider/application/idcard/ocr, POST
+p, rider, /v1/rider/application/healthcert, POST
+p, rider, /v1/rider/application/submit, POST
+p, rider, /v1/rider/application/reset, POST
 p, rider, /v1/rider/me, GET
 
 # Deposit Management

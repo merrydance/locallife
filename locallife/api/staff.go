@@ -62,7 +62,7 @@ func (server *Server) listMerchantStaff(ctx *gin.Context) {
 			CreatedAt:  s.CreatedAt,
 		}
 		if s.AvatarUrl.Valid {
-			resp[i].AvatarURL = s.AvatarUrl.String
+			resp[i].AvatarURL = normalizeUploadURLForClient(s.AvatarUrl.String)
 		}
 	}
 

@@ -32,7 +32,7 @@ func (d *RedisTaskDistributor) DistributeTaskPaymentOrderTimeout(
 	}
 
 	task := asynq.NewTask(TaskPaymentOrderTimeout, jsonPayload, opts...)
-	info, err := d.client.EnqueueContext(ctx, task)
+	info, err := d.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
 	}

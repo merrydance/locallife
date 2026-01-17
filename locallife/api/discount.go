@@ -138,6 +138,14 @@ type listMerchantDiscountRulesQueryRequest struct {
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listMerchantDiscountRulesResponse struct {
+	Rules      []discountRuleResponse `json:"rules"`
+	TotalCount int64                  `json:"total_count"`
+	Total      int64                  `json:"total"`
+	PageID     int32                  `json:"page_id"`
+	PageSize   int32                  `json:"page_size"`
+}
+
 // listMerchantDiscountRules 获取商户满减规则列表
 func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 	var uriReq listMerchantDiscountRulesURIRequest
@@ -165,7 +173,7 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 	rules, err := server.store.ListMerchantDiscountRules(ctx, db.ListMerchantDiscountRulesParams{
 		MerchantID: uriReq.MerchantID,
 		Limit:      queryReq.PageSize,
-		Offset:     (queryReq.PageID - 1) * queryReq.PageSize,
+		Offset:     pageOffset(queryReq.PageID, queryReq.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -177,7 +185,13 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 		rsp[i] = convertDiscountRuleResponse(rule)
 	}
 
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, listMerchantDiscountRulesResponse{
+		Rules:      rsp,
+		TotalCount: int64(len(rsp)),
+		Total:      int64(len(rsp)),
+		PageID:     queryReq.PageID,
+		PageSize:   queryReq.PageSize,
+	})
 }
 
 // listActiveDiscountRulesRequest 获取有效满减规则请求

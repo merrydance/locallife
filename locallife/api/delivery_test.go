@@ -238,6 +238,7 @@ func TestGrabOrderAPI(t *testing.T) {
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: merchantID,
 					OrderNo:    util.RandomString(10),
+					Status:     "paid",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
@@ -388,6 +389,7 @@ func TestConfirmPickupAPI(t *testing.T) {
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "courier_accepted",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
@@ -866,6 +868,7 @@ func TestStartPickupAPI(t *testing.T) {
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "courier_accepted",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
@@ -1028,6 +1031,7 @@ func TestStartDeliveryAPI(t *testing.T) {
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "picked",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
@@ -1167,6 +1171,7 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 					UserID:     util.RandomInt(1, 1000),
 					MerchantID: util.RandomInt(1, 1000),
 					OrderNo:    util.RandomString(10),
+					Status:     "delivering",
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).

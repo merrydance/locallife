@@ -82,7 +82,8 @@ func newTableResponse(t db.Table) tableResponse {
 		resp.MinimumSpend = &t.MinimumSpend.Int64
 	}
 	if t.QrCodeUrl.Valid {
-		resp.QrCodeUrl = &t.QrCodeUrl.String
+		qrCodeURL := normalizeUploadURLForClient(t.QrCodeUrl.String)
+		resp.QrCodeUrl = &qrCodeURL
 	}
 	if t.CurrentReservationID.Valid {
 		resp.CurrentReservationID = &t.CurrentReservationID.Int64
@@ -274,6 +275,8 @@ type listTablesRequest struct {
 type listTablesResponse struct {
 	Tables []tableResponse `json:"tables"`
 	Count  int64           `json:"count"`
+	Total  int64           `json:"total"`
+	TotalCount int64       `json:"total_count"`
 }
 
 // listTables godoc
@@ -327,6 +330,8 @@ func (server *Server) listTables(ctx *gin.Context) {
 	resp := listTablesResponse{
 		Tables: make([]tableResponse, len(tables)),
 		Count:  int64(len(tables)),
+		Total:  int64(len(tables)),
+		TotalCount: int64(len(tables)),
 	}
 	for i, t := range tables {
 		resp.Tables[i] = newTableResponse(t)
@@ -1466,9 +1471,9 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	date, err := time.Parse("2006-01-02", queryReq.Date)
+	date, err := parseISODate(queryReq.Date, "invalid date format, expected YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format, expected YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 

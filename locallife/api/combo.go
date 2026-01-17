@@ -307,6 +307,10 @@ type listComboSetsRequest struct {
 
 type listComboSetsResponse struct {
 	ComboSets []comboSetResponse `json:"combo_sets"`
+	TotalCount int64            `json:"total_count"`
+	Total      int64            `json:"total"`
+	PageID     int32            `json:"page_id"`
+	PageSize   int32            `json:"page_size"`
 }
 
 // listComboSets godoc
@@ -356,7 +360,16 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 		MerchantID: merchant.ID,
 		IsOnline:   isOnline,
 		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		Offset:     pageOffset(req.PageID, req.PageSize),
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	count, err := server.store.CountComboSetsByMerchant(ctx, db.CountComboSetsByMerchantParams{
+		MerchantID: merchant.ID,
+		IsOnline:   isOnline,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -377,6 +390,10 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listComboSetsResponse{
 		ComboSets: result,
+		TotalCount: count,
+		Total:      count,
+		PageID:     req.PageID,
+		PageSize:   req.PageSize,
 	})
 }
 

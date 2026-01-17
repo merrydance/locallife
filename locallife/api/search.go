@@ -104,7 +104,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 如果指定了商户ID，在特定商户内搜索 (This part uses old query structure, keeping simple response or need upgrade too?
 	// The requirement is mostly for Global Search (Home Feed). Keeping Merchant Search as is for now but we need to match response type.)
@@ -138,6 +138,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{
 			"dishes":    response,
 			"total":     total,
+			"total_count": total,
 			"page_id":   req.PageID,
 			"page_size": req.PageSize,
 		})
@@ -215,6 +216,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"dishes":    response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -243,7 +245,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 准备位置参数（用于排序）
 	var userLat, userLng float64
@@ -283,6 +285,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"merchants": response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -311,7 +314,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 准备位置参数
 	var userLat, userLng float64
@@ -417,6 +420,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"combos":    response,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -597,7 +601,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 构建查询参数
 	var regionID pgtype.Int8
@@ -689,6 +693,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"rooms":     rooms,
 		"total":     total,
+		"total_count": total,
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})
@@ -766,7 +771,7 @@ func newSearchRoomResponseWithImage(r db.SearchRoomsWithImageRow) searchRoomResp
 
 // parseDate 解析日期字符串 (YYYY-MM-DD)
 func parseDate(dateStr string) (pgtype.Date, error) {
-	t, err := time.Parse("2006-01-02", dateStr)
+	t, err := parseISODate(dateStr, "")
 	if err != nil {
 		return pgtype.Date{}, err
 	}

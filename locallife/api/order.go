@@ -16,7 +16,6 @@ import (
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 )
@@ -1741,6 +1740,14 @@ type listOrdersRequest struct {
 	ReservationID *int64 `form:"reservation_id" binding:"omitempty,min=1" example:"8001"`
 }
 
+type listOrdersResponse struct {
+	Orders     []orderResponse `json:"orders"`
+	TotalCount int64           `json:"total_count"`
+	Total      int64           `json:"total"`
+	PageID     int32           `json:"page_id"`
+	PageSize   int32           `json:"page_size"`
+}
+
 // listOrders godoc
 // @Summary 获取订单列表
 // @Description 分页获取当前用户的订单列表，支持按状态筛选。
@@ -1765,7 +1772,7 @@ type listOrdersRequest struct {
 // @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
 // @Param order_type query string false "订单类型筛选" Enums(takeout,dine_in,takeaway,reservation)
 // @Param reservation_id query int false "预订ID筛选（仅预定点菜订单）" minimum(1)
-// @Success 200 {array} orderResponse "订单列表"
+// @Success 200 {object} listOrdersResponse "订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
@@ -1780,7 +1787,7 @@ func (server *Server) listOrders(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	status := pgtype.Text{}
 	if req.Status != "" {
@@ -1813,7 +1820,13 @@ func (server *Server) listOrders(ctx *gin.Context) {
 		resp[i] = newOrderWithMerchantFromFilterResponse(o)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, listOrdersResponse{
+		Orders:     resp,
+		TotalCount: int64(len(resp)),
+		Total:      int64(len(resp)),
+		PageID:     req.PageID,
+		PageSize:   req.PageSize,
+	})
 }
 
 // cancelOrder godoc
@@ -2022,16 +2035,14 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 	// 发送催单通知
 	// 1. 发送给商户
 	if order.Status == OrderStatusPaid || order.Status == OrderStatusPreparing {
-		if server.taskDistributor != nil {
-			_ = server.taskDistributor.DistributeTaskSendNotification(ctx, &worker.SendNotificationPayload{
-				UserID:      order.MerchantID, // 商户ID
-				Title:       "用户催单提醒",
-				Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快处理", order.OrderNo),
-				Type:        "order_urge",
-				RelatedType: "order",
-				RelatedID:   order.ID,
-			}, asynq.MaxRetry(2))
-		}
+		_ = server.SendNotification(ctx, SendNotificationParams{
+			UserID:      order.MerchantID,
+			Title:       "用户催单提醒",
+			Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快处理", order.OrderNo),
+			Type:        "order_urge",
+			RelatedType: "order",
+			RelatedID:   order.ID,
+		})
 	}
 
 	// 2. 配送中的订单发送给骑手
@@ -2039,16 +2050,14 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 		// 查询配送信息获取骑手ID
 		delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
 		if err == nil && delivery.RiderID.Valid {
-			if server.taskDistributor != nil {
-				_ = server.taskDistributor.DistributeTaskSendNotification(ctx, &worker.SendNotificationPayload{
-					UserID:      delivery.RiderID.Int64,
-					Title:       "用户催单提醒",
-					Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快送达", order.OrderNo),
-					Type:        "order_urge",
-					RelatedType: "order",
-					RelatedID:   order.ID,
-				}, asynq.MaxRetry(2))
-			}
+			_ = server.SendNotification(ctx, SendNotificationParams{
+				UserID:      delivery.RiderID.Int64,
+				Title:       "用户催单提醒",
+				Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快送达", order.OrderNo),
+				Type:        "order_urge",
+				RelatedType: "order",
+				RelatedID:   order.ID,
+			})
 		}
 	}
 
@@ -2371,8 +2380,8 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 		return
 	}
 
-	if order.Status != OrderStatusDelivering && order.Status != OrderStatusRiderDelivered {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not deliverable")))
+	if order.Status != OrderStatusRiderDelivered {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not ready for confirmation")))
 		return
 	}
 
@@ -2394,29 +2403,26 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 	})
 
 	// 发送通知给商户和骑手
-	if server.taskDistributor != nil {
-		// 通知商户
-		_ = server.taskDistributor.DistributeTaskSendNotification(ctx, &worker.SendNotificationPayload{
-			UserID:      order.MerchantID,
-			Title:       "订单已完成",
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      order.MerchantID,
+		Title:       "订单已完成",
+		Content:     fmt.Sprintf("订单 %s 用户已确认收货", order.OrderNo),
+		Type:        "order_completed",
+		RelatedType: "order",
+		RelatedID:   order.ID,
+	})
+
+	// 通知骑手
+	delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
+	if err == nil && delivery.RiderID.Valid {
+		_ = server.SendNotification(ctx, SendNotificationParams{
+			UserID:      delivery.RiderID.Int64,
+			Title:       "配送已完成",
 			Content:     fmt.Sprintf("订单 %s 用户已确认收货", order.OrderNo),
-			Type:        "order_completed",
+			Type:        "delivery_completed",
 			RelatedType: "order",
 			RelatedID:   order.ID,
-		}, asynq.MaxRetry(2))
-
-		// 通知骑手
-		delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
-		if err == nil && delivery.RiderID.Valid {
-			_ = server.taskDistributor.DistributeTaskSendNotification(ctx, &worker.SendNotificationPayload{
-				UserID:      delivery.RiderID.Int64,
-				Title:       "配送已完成",
-				Content:     fmt.Sprintf("订单 %s 用户已确认收货", order.OrderNo),
-				Type:        "delivery_completed",
-				RelatedType: "order",
-				RelatedID:   order.ID,
-			}, asynq.MaxRetry(2))
-		}
+		})
 	}
 
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
@@ -2434,6 +2440,14 @@ type listMerchantOrdersRequest struct {
 
 	// 订单状态筛选 (选填，枚举值: pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
 	Status string `form:"status" binding:"omitempty,oneof=pending paid preparing ready courier_accepted picked delivering rider_delivered user_delivered completed cancelled" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
+}
+
+type listMerchantOrdersResponse struct {
+	Orders     []orderResponse `json:"orders"`
+	TotalCount int64           `json:"total_count"`
+	Total      int64           `json:"total"`
+	PageID     int32           `json:"page_id"`
+	PageSize   int32           `json:"page_size"`
 }
 
 // listMerchantOrders godoc
@@ -2458,7 +2472,7 @@ type listMerchantOrdersRequest struct {
 // @Param page_id query int true "页码(从1开始)" minimum(1)
 // @Param page_size query int true "每页条数" minimum(5) maximum(50)
 // @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
-// @Success 200 {array} orderResponse "订单列表"
+// @Success 200 {object} listMerchantOrdersResponse "订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非商户用户"
@@ -2485,9 +2499,10 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	var orders []db.Order
+	var totalCount int64
 
 	if req.Status != "" {
 		orders, err = server.store.ListOrdersByMerchantAndStatus(ctx, db.ListOrdersByMerchantAndStatusParams{
@@ -2496,12 +2511,21 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 			Limit:      req.PageSize,
 			Offset:     offset,
 		})
+		if err == nil {
+			totalCount, err = server.store.CountOrdersByMerchantAndStatus(ctx, db.CountOrdersByMerchantAndStatusParams{
+				MerchantID: merchant.ID,
+				Status:     req.Status,
+			})
+		}
 	} else {
 		orders, err = server.store.ListOrdersByMerchant(ctx, db.ListOrdersByMerchantParams{
 			MerchantID: merchant.ID,
 			Limit:      req.PageSize,
 			Offset:     offset,
 		})
+		if err == nil {
+			totalCount, err = server.store.CountOrdersByMerchant(ctx, merchant.ID)
+		}
 	}
 
 	if err != nil {
@@ -2514,7 +2538,13 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 		resp[i] = newOrderResponse(o)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
+		Orders:     resp,
+		TotalCount: totalCount,
+		Total:      totalCount,
+		PageID:     req.PageID,
+		PageSize:   req.PageSize,
+	})
 }
 
 // getMerchantOrder 获取商户单个订单详情
@@ -2689,26 +2719,20 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 	updatedOrder := result.Order
 
 	// 📢 M14: 异步发送订单接单通知
-	if server.taskDistributor != nil {
-		expiresAt := time.Now().Add(24 * time.Hour)
-		_ = server.taskDistributor.DistributeTaskSendNotification(
-			ctx,
-			&worker.SendNotificationPayload{
-				UserID:      updatedOrder.UserID,
-				Type:        "order",
-				Title:       "商家已接单",
-				Content:     fmt.Sprintf("您的订单%s已被商家接单，正在准备中", updatedOrder.OrderNo),
-				RelatedType: "order",
-				RelatedID:   updatedOrder.ID,
-				ExtraData: map[string]any{
-					"order_no": updatedOrder.OrderNo,
-					"status":   OrderStatusPreparing,
-				},
-				ExpiresAt: &expiresAt,
-			},
-			asynq.Queue(worker.QueueDefault),
-		)
-	}
+	expiresAt := time.Now().Add(24 * time.Hour)
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      updatedOrder.UserID,
+		Type:        "order",
+		Title:       "商家已接单",
+		Content:     fmt.Sprintf("您的订单%s已被商家接单，正在准备中", updatedOrder.OrderNo),
+		RelatedType: "order",
+		RelatedID:   updatedOrder.ID,
+		ExtraData: map[string]any{
+			"order_no": updatedOrder.OrderNo,
+			"status":   OrderStatusPreparing,
+		},
+		ExpiresAt: &expiresAt,
+	})
 
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
 }
@@ -2806,27 +2830,21 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	updatedOrder := result.Order
 
 	// 📢 M14: 异步发送拒单通知
-	if server.taskDistributor != nil {
-		expiresAt := time.Now().Add(24 * time.Hour)
-		_ = server.taskDistributor.DistributeTaskSendNotification(
-			ctx,
-			&worker.SendNotificationPayload{
-				UserID:      updatedOrder.UserID,
-				Type:        "order",
-				Title:       "订单被商家取消",
-				Content:     fmt.Sprintf("您的订单%s已被商家取消，原因：%s。支付金额将原路退回", updatedOrder.OrderNo, bodyReq.Reason),
-				RelatedType: "order",
-				RelatedID:   updatedOrder.ID,
-				ExtraData: map[string]any{
-					"order_no": updatedOrder.OrderNo,
-					"status":   OrderStatusCancelled,
-					"reason":   bodyReq.Reason,
-				},
-				ExpiresAt: &expiresAt,
-			},
-			asynq.Queue(worker.QueueDefault),
-		)
-	}
+	expiresAt := time.Now().Add(24 * time.Hour)
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      updatedOrder.UserID,
+		Type:        "order",
+		Title:       "订单被商家取消",
+		Content:     fmt.Sprintf("您的订单%s已被商家取消，原因：%s。支付金额将原路退回", updatedOrder.OrderNo, bodyReq.Reason),
+		RelatedType: "order",
+		RelatedID:   updatedOrder.ID,
+		ExtraData: map[string]any{
+			"order_no": updatedOrder.OrderNo,
+			"status":   OrderStatusCancelled,
+			"reason":   bodyReq.Reason,
+		},
+		ExpiresAt: &expiresAt,
+	})
 
 	// 自动退款：获取支付订单并发起退款
 	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
@@ -2958,26 +2976,20 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 	updatedOrder := result.Order
 
 	// 📢 P1: 异步发送出餐完成通知
-	if server.taskDistributor != nil {
-		expiresAt := time.Now().Add(24 * time.Hour)
-		_ = server.taskDistributor.DistributeTaskSendNotification(
-			ctx,
-			&worker.SendNotificationPayload{
-				UserID:      updatedOrder.UserID,
-				Type:        "order",
-				Title:       "订单已出餐",
-				Content:     fmt.Sprintf("您的订单%s已出餐，请及时取餐", updatedOrder.OrderNo),
-				RelatedType: "order",
-				RelatedID:   updatedOrder.ID,
-				ExtraData: map[string]any{
-					"order_no": updatedOrder.OrderNo,
-					"status":   OrderStatusReady,
-				},
-				ExpiresAt: &expiresAt,
-			},
-			asynq.Queue(worker.QueueDefault),
-		)
-	}
+	expiresAt := time.Now().Add(24 * time.Hour)
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      updatedOrder.UserID,
+		Type:        "order",
+		Title:       "订单已出餐",
+		Content:     fmt.Sprintf("您的订单%s已出餐，请及时取餐", updatedOrder.OrderNo),
+		RelatedType: "order",
+		RelatedID:   updatedOrder.ID,
+		ExtraData: map[string]any{
+			"order_no": updatedOrder.OrderNo,
+			"status":   OrderStatusReady,
+		},
+		ExpiresAt: &expiresAt,
+	})
 
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
 }
@@ -3064,26 +3076,20 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 	completedOrder := result.Order
 
 	// 📢 P1: 异步发送订单完成通知
-	if server.taskDistributor != nil {
-		expiresAt := time.Now().Add(24 * time.Hour)
-		_ = server.taskDistributor.DistributeTaskSendNotification(
-			ctx,
-			&worker.SendNotificationPayload{
-				UserID:      completedOrder.UserID,
-				Type:        "order",
-				Title:       "订单已完成",
-				Content:     fmt.Sprintf("您的订单%s已完成，欢迎再次光临", completedOrder.OrderNo),
-				RelatedType: "order",
-				RelatedID:   completedOrder.ID,
-				ExtraData: map[string]any{
-					"order_no": completedOrder.OrderNo,
-					"status":   OrderStatusCompleted,
-				},
-				ExpiresAt: &expiresAt,
-			},
-			asynq.Queue(worker.QueueDefault),
-		)
-	}
+	expiresAt := time.Now().Add(24 * time.Hour)
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      completedOrder.UserID,
+		Type:        "order",
+		Title:       "订单已完成",
+		Content:     fmt.Sprintf("您的订单%s已完成，欢迎再次光临", completedOrder.OrderNo),
+		RelatedType: "order",
+		RelatedID:   completedOrder.ID,
+		ExtraData: map[string]any{
+			"order_no": completedOrder.OrderNo,
+			"status":   OrderStatusCompleted,
+		},
+		ExpiresAt: &expiresAt,
+	})
 
 	ctx.JSON(http.StatusOK, newOrderResponse(completedOrder))
 }
@@ -3097,6 +3103,16 @@ type getOrderStatsRequest struct {
 	EndDate string `form:"end_date" binding:"required" example:"2025-12-31"`
 }
 
+type orderStatsResponse struct {
+	PendingCount    int64 `json:"pending_count"`
+	PaidCount       int64 `json:"paid_count"`
+	PreparingCount  int64 `json:"preparing_count"`
+	ReadyCount      int64 `json:"ready_count"`
+	DeliveringCount int64 `json:"delivering_count"`
+	CompletedCount  int64 `json:"completed_count"`
+	CancelledCount  int64 `json:"cancelled_count"`
+}
+
 // getOrderStats godoc
 // @Summary 获取订单统计
 // @Description 获取商户在指定日期范围内的订单统计数据
@@ -3105,7 +3121,7 @@ type getOrderStatsRequest struct {
 // @Produce json
 // @Param start_date query string true "开始日期(YYYY-MM-DD)"
 // @Param end_date query string true "结束日期(YYYY-MM-DD)"
-// @Success 200 {object} db.GetOrderStatsRow "订单统计数据"
+// @Success 200 {object} orderStatsResponse "订单统计数据"
 // @Failure 400 {object} ErrorResponse "日期格式错误/范围超限"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非商户用户"
@@ -3133,14 +3149,14 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 	}
 
 	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, err := parseISODate(req.StartDate, "invalid start_date format, use YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, use YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
+	endDate, err := parseISODate(req.EndDate, "invalid end_date format, use YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, use YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -3167,7 +3183,15 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, stats)
+	ctx.JSON(http.StatusOK, orderStatsResponse{
+		PendingCount:    stats.PendingCount,
+		PaidCount:       stats.PaidCount,
+		PreparingCount:  stats.PreparingCount,
+		ReadyCount:      stats.ReadyCount,
+		DeliveringCount: stats.DeliveringCount,
+		CompletedCount:  stats.CompletedCount,
+		CancelledCount:  stats.CancelledCount,
+	})
 }
 
 // orderCalculationResponse 订单金额计算响应

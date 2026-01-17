@@ -31,6 +31,34 @@ const (
 	ReservationStatusNoShow    = "no_show"
 )
 
+const (
+	reservationActionConfirm      = "confirm"
+	reservationActionComplete     = "complete"
+	reservationActionCancel       = "cancel"
+	reservationActionNoShow       = "no_show"
+	reservationActionCheckIn      = "check_in"
+	reservationActionStartCooking = "start_cooking"
+)
+
+func isReservationStatusAllowed(status string, action string) bool {
+	switch action {
+	case reservationActionConfirm:
+		return status == ReservationStatusPaid
+	case reservationActionComplete:
+		return status == ReservationStatusConfirmed
+	case reservationActionCancel:
+		return status == ReservationStatusPending || status == ReservationStatusPaid || status == ReservationStatusConfirmed
+	case reservationActionNoShow:
+		return status == ReservationStatusPaid || status == ReservationStatusConfirmed
+	case reservationActionCheckIn:
+		return status == ReservationStatusPaid || status == ReservationStatusConfirmed
+	case reservationActionStartCooking:
+		return status == ReservationStatusConfirmed || status == ReservationStatusCheckedIn
+	default:
+		return false
+	}
+}
+
 // 支付模式常量
 const (
 	PaymentModeDeposit = "deposit" // 定金模式，到店点菜
@@ -233,7 +261,7 @@ func mapOrderItemsToReservationItems(items []db.ListOrderItemsWithDishByOrderRow
 			mapped.Type = "combo"
 		}
 		if item.DishImageUrl.Valid {
-			mapped.ImageURL = item.DishImageUrl.String
+			mapped.ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
 		}
 
 		resp = append(resp, mapped)
@@ -267,9 +295,9 @@ func (server *Server) createReservation(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 解析日期和时间
-	reservationDate, err := time.Parse("2006-01-02", req.Date)
+	reservationDate, err := parseISODate(req.Date, "invalid date format, use YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format, use YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -582,7 +610,7 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 		UserID: authPayload.UserID,
 		Status: status,
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -633,7 +661,39 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"reservations": resp})
+	var totalCount int64
+	if status.Valid {
+		count, err := server.store.CountReservationsByUserAndStatus(ctx, db.CountReservationsByUserAndStatusParams{
+			UserID: authPayload.UserID,
+			Status: status.String,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		totalCount = count
+	} else {
+		statuses := []string{"pending", "paid", "confirmed", "checked_in", "completed", "cancelled", "expired", "no_show"}
+		for _, s := range statuses {
+			count, err := server.store.CountReservationsByUserAndStatus(ctx, db.CountReservationsByUserAndStatusParams{
+				UserID: authPayload.UserID,
+				Status: s,
+			})
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			totalCount += count
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"reservations": resp,
+		"total":        totalCount,
+		"total_count":  totalCount,
+		"page_id":      req.PageID,
+		"page_size":    req.PageSize,
+	})
 }
 
 type listMerchantReservationsRequest struct {
@@ -683,9 +743,9 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 
 	if req.Date != "" {
 		// 按日期查询
-		date, err := time.Parse("2006-01-02", req.Date)
+		date, err := parseISODate(req.Date, "invalid date format")
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
 			return
 		}
 		dateReservations, err := server.store.ListReservationsByMerchantAndDate(ctx, db.ListReservationsByMerchantAndDateParams{
@@ -732,7 +792,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 			MerchantID: merchant.ID,
 			Status:     req.Status,
 			Limit:      req.PageSize,
-			Offset:     (req.PageID - 1) * req.PageSize,
+			Offset:     pageOffset(req.PageID, req.PageSize),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -773,7 +833,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 		reservations, err = server.store.ListReservationsByMerchant(ctx, db.ListReservationsByMerchantParams{
 			MerchantID: merchant.ID,
 			Limit:      req.PageSize,
-			Offset:     (req.PageID - 1) * req.PageSize,
+			Offset:     pageOffset(req.PageID, req.PageSize),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -809,7 +869,48 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"reservations": resp})
+	var totalCount int64
+	if req.Date != "" {
+		date, err := parseISODate(req.Date, "invalid date format")
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		count, err := server.store.CountReservationsByMerchantAndDate(ctx, db.CountReservationsByMerchantAndDateParams{
+			MerchantID:      merchant.ID,
+			ReservationDate: pgtype.Date{Time: date, Valid: true},
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		totalCount = count
+	} else if req.Status != "" {
+		count, err := server.store.CountReservationsByMerchantAndStatus(ctx, db.CountReservationsByMerchantAndStatusParams{
+			MerchantID: merchant.ID,
+			Status:     req.Status,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		totalCount = count
+	} else {
+		count, err := server.store.CountReservationsByMerchant(ctx, merchant.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		totalCount = count
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"reservations": resp,
+		"total":        totalCount,
+		"total_count":  totalCount,
+		"page_id":      req.PageID,
+		"page_size":    req.PageSize,
+	})
 }
 
 // ==================== 预定状态变更 ====================
@@ -867,7 +968,7 @@ func (server *Server) confirmReservation(ctx *gin.Context) {
 	}
 
 	// 检查状态
-	if reservation.Status != ReservationStatusPaid {
+	if !isReservationStatusAllowed(reservation.Status, reservationActionConfirm) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not paid")))
 		return
 	}
@@ -938,7 +1039,7 @@ func (server *Server) completeReservation(ctx *gin.Context) {
 	}
 
 	// 检查状态
-	if reservation.Status != ReservationStatusConfirmed {
+	if !isReservationStatusAllowed(reservation.Status, reservationActionComplete) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not confirmed")))
 		return
 	}
@@ -1029,9 +1130,7 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 	}
 
 	// 检查状态：只有 pending, paid, confirmed 可以取消
-	if reservation.Status != ReservationStatusPending &&
-		reservation.Status != ReservationStatusPaid &&
-		reservation.Status != ReservationStatusConfirmed {
+	if !isReservationStatusAllowed(reservation.Status, reservationActionCancel) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation cannot be cancelled")))
 		return
 	}
@@ -1188,7 +1287,7 @@ func (server *Server) markNoShow(ctx *gin.Context) {
 	}
 
 	// 检查状态：只有 paid 或 confirmed 可以标记为未到店
-	if reservation.Status != ReservationStatusPaid && reservation.Status != ReservationStatusConfirmed {
+	if !isReservationStatusAllowed(reservation.Status, reservationActionNoShow) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("only paid or confirmed reservations can be marked as no-show")))
 		return
 	}
@@ -1795,9 +1894,9 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 	}
 
 	// 解析日期和时间
-	reservationDate, err := time.Parse("2006-01-02", req.Date)
+	reservationDate, err := parseISODate(req.Date, "invalid date format, use YYYY-MM-DD")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format, use YYYY-MM-DD")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -1941,7 +2040,7 @@ func (server *Server) checkInReservation(ctx *gin.Context) {
 	}
 
 	// 检查状态：只有已支付或已确认的预定可以签到
-	if reservation.Status != ReservationStatusPaid && reservation.Status != ReservationStatusConfirmed {
+	if !isReservationStatusAllowed(reservation.Status, reservationActionCheckIn) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("only paid or confirmed reservations can be checked in")))
 		return
 	}
@@ -2017,7 +2116,7 @@ func (server *Server) startCookingReservation(ctx *gin.Context) {
 	}
 
 	// 检查状态：只有已确认或已签到的预定可以起菜
-	if reservation.Status != ReservationStatusConfirmed && reservation.Status != ReservationStatusCheckedIn {
+	if !isReservationStatusAllowed(reservation.Status, reservationActionStartCooking) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("only confirmed or checked-in reservations can start cooking")))
 		return
 	}
@@ -2131,9 +2230,9 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 		updateParams.TableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
 	}
 	if req.Date != nil {
-		date, err := time.Parse("2006-01-02", *req.Date)
+		date, err := parseISODate(*req.Date, "invalid date format")
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid date format")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
 			return
 		}
 		updateParams.ReservationDate = pgtype.Date{Time: date, Valid: true}
@@ -2171,7 +2270,7 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 
 		checkDate := reservation.ReservationDate
 		if req.Date != nil {
-			date, _ := time.Parse("2006-01-02", *req.Date)
+			date, _ := parseISODate(*req.Date, "invalid date format")
 			checkDate = pgtype.Date{Time: date, Valid: true}
 		}
 

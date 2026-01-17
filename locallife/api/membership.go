@@ -27,11 +27,13 @@ type membershipResponse struct {
 	ID             int64     `json:"id"`
 	MerchantID     int64     `json:"merchant_id"`
 	MerchantName   string    `json:"merchant_name,omitempty"`
+	LogoURL        string    `json:"logo_url,omitempty"`
 	UserID         int64     `json:"user_id"`
 	Balance        int64     `json:"balance"`
 	TotalRecharged int64     `json:"total_recharged"`
 	TotalConsumed  int64     `json:"total_consumed"`
 	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
 // joinMembership godoc
@@ -88,6 +90,9 @@ func (server *Server) joinMembership(ctx *gin.Context) {
 		TotalConsumed:  result.Membership.TotalConsumed,
 		CreatedAt:      result.Membership.CreatedAt,
 	}
+	if merchant.LogoUrl.Valid {
+		rsp.LogoURL = normalizeUploadURLForClient(merchant.LogoUrl.String)
+	}
 
 	ctx.JSON(http.StatusOK, rsp)
 }
@@ -98,6 +103,14 @@ type listUserMembershipsRequest struct {
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listUserMembershipsResponse struct {
+	Memberships []membershipResponse `json:"memberships"`
+	TotalCount  int64                `json:"total_count"`
+	Total       int64                `json:"total"`
+	PageID      int32                `json:"page_id"`
+	PageSize    int32                `json:"page_size"`
+}
+
 // listUserMemberships godoc
 // @Summary 获取用户会员列表
 // @Description 获取当前用户的所有会员卡
@@ -105,7 +118,7 @@ type listUserMembershipsRequest struct {
 // @Produce json
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} membershipResponse "会员列表"
+// @Success 200 {object} listUserMembershipsResponse "会员列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -123,14 +136,25 @@ func (server *Server) listUserMemberships(ctx *gin.Context) {
 	memberships, err := server.store.ListUserMemberships(ctx, db.ListUserMembershipsParams{
 		UserID: authPayload.UserID,
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, memberships)
+	rsp := make([]membershipResponse, len(memberships))
+	for i, m := range memberships {
+		rsp[i] = convertUserMembershipResponse(m)
+	}
+
+	ctx.JSON(http.StatusOK, listUserMembershipsResponse{
+		Memberships: rsp,
+		TotalCount:  int64(len(rsp)),
+		Total:       int64(len(rsp)),
+		PageID:      req.PageID,
+		PageSize:    req.PageSize,
+	})
 }
 
 // getMembershipRequest 获取会员详情请求
@@ -215,6 +239,7 @@ type rechargeRuleResponse struct {
 	ValidFrom      time.Time `json:"valid_from"`
 	ValidUntil     time.Time `json:"valid_until"`
 	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
 // createRechargeRule godoc
@@ -276,18 +301,7 @@ func (server *Server) createRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	rsp := rechargeRuleResponse{
-		ID:             rule.ID,
-		MerchantID:     rule.MerchantID,
-		RechargeAmount: rule.RechargeAmount,
-		BonusAmount:    rule.BonusAmount,
-		IsActive:       rule.IsActive,
-		ValidFrom:      rule.ValidFrom,
-		ValidUntil:     rule.ValidUntil,
-		CreatedAt:      rule.CreatedAt,
-	}
-
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, convertRechargeRuleResponse(rule))
 }
 
 // listRechargeRulesRequest 获取充值规则列表请求
@@ -329,7 +343,12 @@ func (server *Server) listRechargeRules(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, rules)
+	rsp := make([]rechargeRuleResponse, len(rules))
+	for i, rule := range rules {
+		rsp[i] = convertRechargeRuleResponse(rule)
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
 }
 
 // listActiveRechargeRulesRequest 获取有效充值规则请求
@@ -371,7 +390,12 @@ func (server *Server) listActiveRechargeRules(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, rules)
+	rsp := make([]rechargeRuleResponse, len(rules))
+	for i, rule := range rules {
+		rsp[i] = convertRechargeRuleResponse(rule)
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
 }
 
 // updateRechargeRuleURIRequest 更新充值规则路径参数
@@ -483,7 +507,39 @@ func (server *Server) updateRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, updatedRule)
+	ctx.JSON(http.StatusOK, convertRechargeRuleResponse(updatedRule))
+}
+
+func convertUserMembershipResponse(m db.ListUserMembershipsRow) membershipResponse {
+	rsp := membershipResponse{
+		ID:             m.ID,
+		MerchantID:     m.MerchantID,
+		MerchantName:   m.MerchantName,
+		UserID:         m.UserID,
+		Balance:        m.Balance,
+		TotalRecharged: m.TotalRecharged,
+		TotalConsumed:  m.TotalConsumed,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      optionalTime(m.UpdatedAt),
+	}
+	if m.LogoUrl.Valid {
+		rsp.LogoURL = normalizeUploadURLForClient(m.LogoUrl.String)
+	}
+	return rsp
+}
+
+func convertRechargeRuleResponse(rule db.RechargeRule) rechargeRuleResponse {
+	return rechargeRuleResponse{
+		ID:             rule.ID,
+		MerchantID:     rule.MerchantID,
+		RechargeAmount: rule.RechargeAmount,
+		BonusAmount:    rule.BonusAmount,
+		IsActive:       rule.IsActive,
+		ValidFrom:      rule.ValidFrom,
+		ValidUntil:     rule.ValidUntil,
+		CreatedAt:      rule.CreatedAt,
+		UpdatedAt:      optionalTime(rule.UpdatedAt),
+	}
 }
 
 // deleteRechargeRuleURIRequest 删除充值规则路径参数
@@ -732,6 +788,14 @@ type listTransactionsRequest struct {
 	PageSize     int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listMembershipTransactionsResponse struct {
+	Transactions []transactionResponse `json:"transactions"`
+	TotalCount   int64                 `json:"total_count"`
+	Total        int64                 `json:"total"`
+	PageID       int32                 `json:"page_id"`
+	PageSize     int32                 `json:"page_size"`
+}
+
 // listMembershipTransactions godoc
 // @Summary 获取会员交易流水
 // @Description 获取会员卡的交易历史记录（充值、消费等）
@@ -740,7 +804,7 @@ type listTransactionsRequest struct {
 // @Param id path int true "会员ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} transactionResponse "交易流水列表"
+// @Success 200 {object} listMembershipTransactionsResponse "交易流水列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非会员卡所有者"
@@ -780,7 +844,7 @@ func (server *Server) listMembershipTransactions(ctx *gin.Context) {
 	transactions, err := server.store.ListMembershipTransactions(ctx, db.ListMembershipTransactionsParams{
 		MembershipID: req.MembershipID,
 		Limit:        req.PageSize,
-		Offset:       (req.PageID - 1) * req.PageSize,
+		Offset:       pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -793,28 +857,16 @@ func (server *Server) listMembershipTransactions(ctx *gin.Context) {
 		rsp[i] = convertTransaction(tx)
 	}
 
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, listMembershipTransactionsResponse{
+		Transactions: rsp,
+		TotalCount:   int64(len(rsp)),
+		Total:        int64(len(rsp)),
+		PageID:       req.PageID,
+		PageSize:     req.PageSize,
+	})
 }
 
 // ==================== 辅助函数 ====================
-
-// getMerchantIDByUser 根据用户ID获取商户ID
-func (server *Server) getMerchantIDByUser(ctx *gin.Context, userID int64) (int64, error) {
-	// 查询用户的商户角色
-	role, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: userID,
-		Role:   "merchant",
-	})
-	if err != nil {
-		return 0, err
-	}
-
-	if !role.RelatedEntityID.Valid {
-		return 0, errors.New("merchant entity not found")
-	}
-
-	return role.RelatedEntityID.Int64, nil
-}
 
 // convertTransaction 转换交易记录为响应格式
 func convertTransaction(tx db.MembershipTransaction) transactionResponse {
@@ -1007,6 +1059,14 @@ type listMerchantMembersQueryRequest struct {
 	PageSize int32 `form:"page_size" binding:"required,min=5,max=50"`
 }
 
+type listMerchantMembersResponse struct {
+	Members    []merchantMemberResponse `json:"members"`
+	TotalCount int64                    `json:"total_count"`
+	Total      int64                    `json:"total"`
+	PageID     int32                    `json:"page_id"`
+	PageSize   int32                    `json:"page_size"`
+}
+
 // merchantMemberResponse 商户会员响应
 type merchantMemberResponse struct {
 	UserID         int64     `json:"user_id"`
@@ -1028,7 +1088,7 @@ type merchantMemberResponse struct {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {array} merchantMemberResponse "会员列表"
+// @Success 200 {object} listMerchantMembersResponse "会员列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非商户用户"
@@ -1047,23 +1107,16 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
+	merchant, err := requireMerchantMatch(ctx, uriReq.MerchantID, "merchant context not found", "not authorized for this merchant")
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
-		return
-	}
-	if merchantID != uriReq.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 
 	members, err := server.store.ListMerchantMembers(ctx, db.ListMerchantMembersParams{
-		MerchantID: merchantID,
+		MerchantID: merchant.ID,
 		Limit:      queryReq.PageSize,
-		Offset:     (queryReq.PageID - 1) * queryReq.PageSize,
+		Offset:     pageOffset(queryReq.PageID, queryReq.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1078,7 +1131,7 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		}
 		avatarURL := ""
 		if m.AvatarUrl.Valid {
-			avatarURL = m.AvatarUrl.String
+			avatarURL = normalizeUploadURLForClient(m.AvatarUrl.String)
 		}
 		rsp[i] = merchantMemberResponse{
 			UserID:         m.UserID,
@@ -1093,7 +1146,13 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusOK, listMerchantMembersResponse{
+		Members:    rsp,
+		TotalCount: int64(len(rsp)),
+		Total:      int64(len(rsp)),
+		PageID:     queryReq.PageID,
+		PageSize:   queryReq.PageSize,
+	})
 }
 
 // getMerchantMemberDetailRequest 获取商户会员详情请求
@@ -1138,22 +1197,19 @@ func (server *Server) getMerchantMemberDetail(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
-	if merchantID != req.MerchantID {
+	if merchant.ID != req.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
 		return
 	}
 
 	// 获取会员信息
 	membership, err := server.store.GetMembershipByMerchantAndUser(ctx, db.GetMembershipByMerchantAndUserParams{
-		MerchantID: merchantID,
+		MerchantID: merchant.ID,
 		UserID:     req.UserID,
 	})
 	if err != nil {
@@ -1194,7 +1250,7 @@ func (server *Server) getMerchantMemberDetail(ctx *gin.Context) {
 	}
 	avatarURL := ""
 	if user.AvatarUrl.Valid {
-		avatarURL = user.AvatarUrl.String
+		avatarURL = normalizeUploadURLForClient(user.AvatarUrl.String)
 	}
 
 	ctx.JSON(http.StatusOK, merchantMemberDetailResponse{
@@ -1258,22 +1314,19 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 验证商户权限
-	merchantID, err := server.getMerchantIDByUser(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant role required")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
-	if merchantID != uriReq.MerchantID {
+	if merchant.ID != uriReq.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
 		return
 	}
 
 	// 获取会员信息
 	membership, err := server.store.GetMembershipByMerchantAndUserForUpdate(ctx, db.GetMembershipByMerchantAndUserForUpdateParams{
-		MerchantID: merchantID,
+		MerchantID: merchant.ID,
 		UserID:     uriReq.UserID,
 	})
 	if err != nil {
@@ -1336,7 +1389,7 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 	}
 	avatarURL := ""
 	if user.AvatarUrl.Valid {
-		avatarURL = user.AvatarUrl.String
+		avatarURL = normalizeUploadURLForClient(user.AvatarUrl.String)
 	}
 
 	ctx.JSON(http.StatusOK, merchantMemberResponse{

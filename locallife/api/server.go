@@ -385,8 +385,6 @@ func (server *Server) setupRouter() {
 
 	// M3: 商户管理路由
 	authGroup.POST("/merchants/images/upload", server.uploadMerchantImage)
-	authGroup.POST("/merchants/applications", server.createMerchantApplication)
-	authGroup.GET("/merchants/applications/me", server.getUserMerchantApplication)
 	authGroup.GET("/merchants/me", server.getCurrentMerchant)
 	authGroup.GET("/merchants/my", server.listMyMerchants) // 获取用户所有商户（多店铺切换）
 	authGroup.PATCH("/merchants/me", server.updateCurrentMerchant)
@@ -436,10 +434,6 @@ func (server *Server) setupRouter() {
 		merchantStaffOwnerGroup.PATCH("/:id/role", server.updateMerchantStaffRole)
 		merchantStaffOwnerGroup.DELETE("/:id", server.deleteMerchantStaff)
 	}
-
-	// M3: 商户审核路由（管理员）
-	authGroup.GET("/admin/merchants/applications", server.listMerchantApplications)
-	authGroup.POST("/admin/merchants/applications/review", server.reviewMerchantApplication)
 
 	// M3.6: Boss 认领店铺（任意登录用户）
 	authGroup.POST("/claim-boss", server.claimBoss)
@@ -698,9 +692,6 @@ func (server *Server) setupRouter() {
 		// 骑手开户（微信支付二级商户进件）
 		riderGroup.POST("/applyment/bindbank", server.riderBindBank)        // 绑定银行卡开户
 		riderGroup.GET("/applyment/status", server.getRiderApplymentStatus) // 获取开户状态
-
-		// 骑手入驻（旧版，保留兼容）
-		riderGroup.POST("/apply", server.applyRider)
 		riderGroup.GET("/me", server.getRiderMe)
 
 		// 押金管理
@@ -1002,10 +993,16 @@ func (server *Server) setupRouter() {
 		reviewsGroup.GET("/merchants/:id", server.listMerchantReviews)
 
 		// 商户查看所有评价（包含不可见的）
-		reviewsGroup.GET("/merchants/:id/all", server.listMerchantAllReviews)
-
 		// 商户回复评价
-		reviewsGroup.POST("/:id/reply", server.replyReview)
+		// 见 merchantReviewsGroup
+	}
+
+	// 商户评价管理（仅店主）
+	merchantReviewsGroup := authGroup.Group("/reviews")
+	merchantReviewsGroup.Use(server.MerchantStaffMiddleware("owner"))
+	{
+		merchantReviewsGroup.GET("/merchants/:id/all", server.listMerchantAllReviews)
+		merchantReviewsGroup.POST("/:id/reply", server.replyReview)
 	}
 
 	// 删除评价（运营商权限）
@@ -1069,6 +1066,7 @@ func (server *Server) setupRouter() {
 
 	// 优惠券管理（商户创建和管理）
 	voucherGroup := authGroup.Group("/merchants/:id/vouchers")
+	voucherGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		// 创建优惠券
 		voucherGroup.POST("", server.createVoucher)
@@ -1088,6 +1086,7 @@ func (server *Server) setupRouter() {
 
 	// 商户会员管理（查看会员列表、详情、调整余额）
 	merchantMembersGroup := authGroup.Group("/merchants/:id/members")
+	merchantMembersGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		// 查询商户的会员列表
 		merchantMembersGroup.GET("", server.listMerchantMembers)

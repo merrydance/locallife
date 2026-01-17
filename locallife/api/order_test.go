@@ -1899,7 +1899,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				deliveringOrder := order
-				deliveringOrder.Status = "delivering"
+				deliveringOrder.Status = "rider_delivered"
 				store.EXPECT().
 					GetOrderForUpdate(gomock.Any(), order.ID).
 					Times(1).
@@ -1944,7 +1944,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				deliveringOrder := order
-				deliveringOrder.Status = "delivering"
+				deliveringOrder.Status = "rider_delivered"
 				store.EXPECT().
 					GetOrderForUpdate(gomock.Any(), order.ID).
 					Times(1).
@@ -1963,7 +1963,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				dineInOrder := order
 				dineInOrder.OrderType = "dine_in"
-				dineInOrder.Status = "delivering"
+				dineInOrder.Status = "rider_delivered"
 				store.EXPECT().
 					GetOrderForUpdate(gomock.Any(), order.ID).
 					Times(1).

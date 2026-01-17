@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hibiken/asynq"
+	"github.com/rs/zerolog/log"
 )
 
 // TaskDistributor 任务分发接口
@@ -122,6 +123,38 @@ type TaskDistributor interface {
 
 type RedisTaskDistributor struct {
 	client *asynq.Client
+}
+
+func requestIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if value := ctx.Value("request_id"); value != nil {
+		if requestID, ok := value.(string); ok {
+			return requestID
+		}
+	}
+	return ""
+}
+
+func (distributor *RedisTaskDistributor) enqueueTask(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+	info, err := distributor.client.EnqueueContext(ctx, task, opts...)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("task_type", task.Type()).
+			Str("request_id", requestIDFromContext(ctx)).
+			Msg("enqueue task failed")
+		return nil, err
+	}
+
+	log.Info().
+		Str("task_type", task.Type()).
+		Str("queue", info.Queue).
+		Str("request_id", requestIDFromContext(ctx)).
+		Msg("task enqueued")
+
+	return info, nil
 }
 
 func NewRedisTaskDistributor(redisOpt asynq.RedisClientOpt) TaskDistributor {

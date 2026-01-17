@@ -61,21 +61,8 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -194,21 +181,8 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -229,7 +203,7 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
 	// 查询订单列表
 	orders, err := server.store.ListMerchantFinanceOrders(ctx, db.ListMerchantFinanceOrdersParams{
@@ -286,6 +260,9 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"orders":      result,
 		"total":       totalCount,
+		"total_count": totalCount,
+		"page_id":     req.Page,
+		"page_size":   req.Limit,
 		"page":        req.Page,
 		"limit":       req.Limit,
 		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
@@ -331,21 +308,8 @@ func (server *Server) listMerchantServiceFees(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -457,21 +421,8 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -492,7 +443,7 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
 	// 查询满返支出订单列表
 	orders, err := server.store.ListMerchantPromotionOrders(ctx, db.ListMerchantPromotionOrdersParams{
@@ -553,6 +504,9 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"orders":             result,
 		"total":              totalCount,
+		"total_count":        totalCount,
+		"page_id":            req.Page,
+		"page_size":          req.Limit,
 		"page":               req.Page,
 		"limit":              req.Limit,
 		"total_pages":        (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
@@ -598,21 +552,8 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -719,21 +660,8 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format")))
-		return
-	}
-
-	// 验证日期范围
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -754,7 +682,7 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
 	// 根据是否有状态筛选选择不同的查询
 	var orders []db.ProfitSharingOrder
@@ -848,6 +776,9 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"settlements":           result,
 		"total":                 totalCount,
+		"total_count":           totalCount,
+		"page_id":               req.Page,
+		"page_size":             req.Limit,
 		"page":                  req.Page,
 		"limit":                 req.Limit,
 		"total_pages":           (totalCount + int64(req.Limit) - 1) / int64(req.Limit),

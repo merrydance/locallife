@@ -196,28 +196,23 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	}
 
 	// 📢 M14: 异步发送支付成功通知（避免阻塞微信回调响应）
-	if server.taskDistributor != nil {
-		expiresAt := time.Now().Add(7 * 24 * time.Hour)
-		_ = server.taskDistributor.DistributeTaskSendNotification(
-			ctx,
-			&worker.SendNotificationPayload{
-				UserID:      updatedPaymentOrder.UserID,
-				Type:        "payment",
-				Title:       "支付成功",
-				Content:     fmt.Sprintf("您的订单支付已完成，支付金额%.2f元", float64(updatedPaymentOrder.Amount)/100),
-				RelatedType: "payment",
-				RelatedID:   updatedPaymentOrder.ID,
-				ExtraData: map[string]any{
-					"out_trade_no":   updatedPaymentOrder.OutTradeNo,
-					"transaction_id": resource.TransactionID,
-					"amount":         updatedPaymentOrder.Amount,
-					"business_type":  updatedPaymentOrder.BusinessType,
-				},
-				ExpiresAt: &expiresAt,
-			},
-			asynq.Queue(worker.QueueDefault),
-		)
-	}
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      updatedPaymentOrder.UserID,
+		Type:        "payment",
+		Title:       "支付成功",
+		Content:     fmt.Sprintf("您的订单支付已完成，支付金额%.2f元", float64(updatedPaymentOrder.Amount)/100),
+		RelatedType: "payment",
+		RelatedID:   updatedPaymentOrder.ID,
+		ExtraData: map[string]any{
+			"out_trade_no":   updatedPaymentOrder.OutTradeNo,
+			"transaction_id": resource.TransactionID,
+			"amount":         updatedPaymentOrder.Amount,
+			"business_type":  updatedPaymentOrder.BusinessType,
+		},
+		ExpiresAt:         &expiresAt,
+		IgnorePreferences: true,
+	})
 
 	// 🔐 P0-2: 记录通知ID，防止重复处理
 	_, err = server.store.CreateWechatNotification(ctx, db.CreateWechatNotificationParams{

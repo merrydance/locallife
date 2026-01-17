@@ -478,22 +478,16 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				// Mock GetReview
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(review.ID)).
 					Times(1).
 					Return(review, nil)
-
-				// Mock GetUserRoleByType (merchant owner)
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						ID:              1,
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-					}, nil)
 
 					// Mock GetUser (for wechat openid)
 					store.EXPECT().
@@ -538,6 +532,11 @@ func TestReplyReviewAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Review{}, db.ErrRecordNotFound)
@@ -557,15 +556,13 @@ func TestReplyReviewAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetReview(gomock.Any(), gomock.Eq(review.ID)).
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
-					Return(review, nil)
+					Return(db.Merchant{}, db.ErrRecordNotFound)
 
-				// No merchant_owner role
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{}, db.ErrRecordNotFound)
+					GetReview(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -581,21 +578,17 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				otherMerchant := merchant
+				otherMerchant.ID = merchant.ID + 999
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(otherMerchant, nil)
+
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(review.ID)).
 					Times(1).
 					Return(review, nil)
-
-				// Different merchant
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.UserRole{
-						ID:              1,
-						UserID:          user.ID,
-						Role:            "merchant_owner",
-						RelatedEntityID: pgtype.Int8{Int64: merchant.ID + 999, Valid: true},
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

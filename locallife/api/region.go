@@ -112,7 +112,7 @@ func (server *Server) listRegions(ctx *gin.Context) {
 
 	arg := db.ListRegionsParams{
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	}
 
 	if req.Level != nil {
@@ -259,7 +259,7 @@ func (server *Server) listAvailableRegions(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 使用优化的 SQL 查询，一次性获取未被运营商占用的区域
 	var parentID pgtype.Int8
@@ -306,6 +306,7 @@ func (server *Server) listAvailableRegions(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"regions":   availableRegions,
 		"total":     len(availableRegions),
+		"total_count": len(availableRegions),
 		"page_id":   req.PageID,
 		"page_size": req.PageSize,
 	})

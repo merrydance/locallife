@@ -1432,7 +1432,7 @@ func isChineseDateAtLeastDaysAfterNow(dateStr string, days int) bool {
 	if len(day) == 1 {
 		day = "0" + day
 	}
-	parsed, err := time.Parse("2006-01-02", year+"-"+month+"-"+day)
+	parsed, err := parseISODate(year+"-"+month+"-"+day, "")
 	if err != nil {
 		return false
 	}
@@ -1481,7 +1481,7 @@ func isValidPeriodValid(validPeriod string) bool {
 
 	// 解析日期
 	dateStr := year + "-" + month + "-" + day
-	expDate, err := time.Parse("2006-01-02", dateStr)
+	expDate, err := parseISODate(dateStr, "")
 	if err != nil {
 		return false
 	}
@@ -1806,7 +1806,7 @@ func isFoodPermitValid(validTo string) bool {
 	}
 
 	dateStr := year + "-" + month + "-" + day
-	expDate, err := time.Parse("2006-01-02", dateStr)
+	expDate, err := parseISODate(dateStr, "")
 	if err != nil {
 		return false
 	}
@@ -1921,7 +1921,7 @@ func parseFlexibleDate(dateStr string) (time.Time, bool) {
 
 	// 构建日期字符串
 	dateFormatted := fmt.Sprintf("%s-%02s-%02s", year, month, day)
-	t, err := time.Parse("2006-01-02", dateFormatted)
+	t, err := parseISODate(dateFormatted, "")
 	if err != nil {
 		return time.Time{}, false
 	}

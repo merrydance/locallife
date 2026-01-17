@@ -126,7 +126,7 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 		req.PageSize = 20
 	}
 
-	offset := (req.Page - 1) * req.PageSize
+	offset := pageOffset(req.Page, req.PageSize)
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
@@ -166,8 +166,11 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"merchants":  response,
 		"total":      count,
+		"total_count": count,
+		"page_id":    req.Page,
 		"page":       req.Page,
 		"page_size":  req.PageSize,
+		"total_pages": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
 		"total_page": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
 	})
 }
@@ -292,7 +295,7 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 		req.PageSize = 20
 	}
 
-	offset := (req.Page - 1) * req.PageSize
+	offset := pageOffset(req.Page, req.PageSize)
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
@@ -339,8 +342,11 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"dishes":     response,
 		"total":      count,
+		"total_count": count,
+		"page_id":    req.Page,
 		"page":       req.Page,
 		"page_size":  req.PageSize,
+		"total_pages": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
 		"total_page": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
 	})
 }

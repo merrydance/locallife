@@ -970,7 +970,7 @@ func (server *Server) exploreRooms(ctx *gin.Context) {
 		return
 	}
 
-	offset := (req.PageID - 1) * req.PageSize
+	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 构建查询参数
 	var regionID pgtype.Int8

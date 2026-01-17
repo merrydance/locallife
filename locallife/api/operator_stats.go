@@ -59,21 +59,8 @@ func (server *Server) getRegionStats(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", query.StartDate)
+	startDate, endDate, err := parseDateRange(query.StartDate, query.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", query.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -164,23 +151,10 @@ func (server *Server) getOperatorMerchantRanking(ctx *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 20
 	}
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -260,23 +234,10 @@ func (server *Server) getOperatorRiderRanking(ctx *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 20
 	}
-	offset := (req.Page - 1) * req.Limit
+	offset := pageOffset(req.Page, req.Limit)
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -352,21 +313,8 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -512,6 +460,8 @@ type operatorCommissionResponse struct {
 	Items      []operatorCommissionItem `json:"items"`
 	Total      int64                    `json:"total"`
 	TotalCount int64                    `json:"total_count"`
+	PageID     int32                    `json:"page_id"`
+	PageSize   int32                    `json:"page_size"`
 	Page       int32                    `json:"page"`
 	Limit      int32                    `json:"limit"`
 	Summary    struct {
@@ -551,21 +501,8 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 		return
 	}
 
-	// 解析日期
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_date format, expected YYYY-MM-DD")))
-		return
-	}
-
-	// 验证日期范围 (最长365天)
-	if err := validateDateRange(startDate, endDate, 365); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -594,6 +531,8 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	response := operatorCommissionResponse{
 		Items:      []operatorCommissionItem{},
 		TotalCount: int64(len(trends)),
+		PageID:     page,
+		PageSize:   limit,
 		Page:       page,
 		Limit:      limit,
 	}
@@ -612,7 +551,7 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	response.Total = totalCommission
 
 	// 分页处理
-	startIdx := int((page - 1) * limit)
+	startIdx := int(pageOffset(page, limit))
 	endIdx := startIdx + int(limit)
 	if startIdx >= len(trends) {
 		ctx.JSON(http.StatusOK, response)
@@ -652,14 +591,3 @@ func formatCommissionRate(rate float64) string {
 	return fmt.Sprintf("%.1f%%", rate)
 }
 
-// validateDateRange 验证日期范围
-// 返回错误如果：startDate > endDate 或者日期范围超过 maxDays 天
-func validateDateRange(startDate, endDate time.Time, maxDays int) error {
-	if startDate.After(endDate) {
-		return errors.New("start_date must be before or equal to end_date")
-	}
-	if maxDays > 0 && endDate.Sub(startDate).Hours()/24 > float64(maxDays) {
-		return fmt.Errorf("date range cannot exceed %d days", maxDays)
-	}
-	return nil
-}

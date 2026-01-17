@@ -258,7 +258,7 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 	reviews, err := server.store.ListReviewsByMerchant(ctx, db.ListReviewsByMerchantParams{
 		MerchantID: uri.MerchantID,
 		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		Offset:     pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -312,19 +312,14 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 		return
 	}
 
-	// 验证商户权限
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchantRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "merchant_owner",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to access this merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant not loaded, ensure MerchantStaffMiddleware is applied")))
 		return
 	}
 
 	// 验证请求的商户ID是否匹配
-	if !merchantRole.RelatedEntityID.Valid || merchantRole.RelatedEntityID.Int64 != uri.MerchantID {
+	if merchant.ID != uri.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to access this merchant")))
 		return
 	}
@@ -333,7 +328,7 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 	reviews, err := server.store.ListAllReviewsByMerchant(ctx, db.ListAllReviewsByMerchantParams{
 		MerchantID: uri.MerchantID,
 		Limit:      req.PageSize,
-		Offset:     (req.PageID - 1) * req.PageSize,
+		Offset:     pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -383,7 +378,7 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 	reviews, err := server.store.ListReviewsByUser(ctx, db.ListReviewsByUserParams{
 		UserID: authPayload.UserID,
 		Limit:  req.PageSize,
-		Offset: (req.PageID - 1) * req.PageSize,
+		Offset: pageOffset(req.PageID, req.PageSize),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -448,24 +443,20 @@ func (server *Server) replyReview(ctx *gin.Context) {
 		return
 	}
 
-	// 2. 验证商户权限
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchantRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "merchant_owner",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to reply this review")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant not loaded, ensure MerchantStaffMiddleware is applied")))
 		return
 	}
 
 	// 验证评价属于该商户
-	if !merchantRole.RelatedEntityID.Valid || merchantRole.RelatedEntityID.Int64 != review.MerchantID {
+	if merchant.ID != review.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("review does not belong to your merchant")))
 		return
 	}
 
 	// 2.1 回复文本内容安全检测：先审后存
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	merchantUser, err := server.store.GetUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {

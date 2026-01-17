@@ -1188,6 +1188,9 @@ type listBrowseHistoryResponse struct {
 	Items []browseHistoryItem `json:"items"`
 	// 总数
 	Total int64 `json:"total"`
+	TotalCount int64 `json:"total_count"`
+	PageID     int   `json:"page_id"`
+	PageSize   int   `json:"page_size"`
 }
 
 // listBrowseHistory godoc
@@ -1233,7 +1236,7 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 			UserID:     authPayload.UserID,
 			TargetType: targetType,
 			Limit:      int32(pageSize),
-			Offset:     int32((page - 1) * pageSize),
+			Offset:     pageOffset(int32(page), int32(pageSize)),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list browse history by type: %w", err)))
@@ -1247,7 +1250,7 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 		items, err = server.store.ListBrowseHistory(ctx, db.ListBrowseHistoryParams{
 			UserID: authPayload.UserID,
 			Limit:  int32(pageSize),
-			Offset: int32((page - 1) * pageSize),
+			Offset: pageOffset(int32(page), int32(pageSize)),
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list browse history: %w", err)))
@@ -1293,6 +1296,9 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listBrowseHistoryResponse{
 		Items: result,
 		Total: total,
+		TotalCount: total,
+		PageID:     page,
+		PageSize:   pageSize,
 	})
 }
 
