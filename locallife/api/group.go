@@ -172,7 +172,7 @@ func newGroupJoinRequestResponse(req db.MerchantGroupJoinRequest) groupJoinReque
 	return resp
 }
 
-func newGroupPoliciesResponse(policy db.GroupPolicies) groupPoliciesResponse {
+func newGroupPoliciesResponse(policy db.GroupPolicy) groupPoliciesResponse {
 	return groupPoliciesResponse{
 		GroupID:       policy.GroupID,
 		PricingMode:   policy.PricingMode,
@@ -363,10 +363,19 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 		}
 	}
 
+	groupName := app.GroupName
+	if req.GroupName != nil {
+		groupName = *req.GroupName
+	}
+	contactPhone := app.ContactPhone
+	if req.ContactPhone != nil {
+		contactPhone = *req.ContactPhone
+	}
+
 	update := db.UpdateGroupApplicationBasicParams{
 		ID:              app.ID,
-		GroupName:       toPgText(req.GroupName),
-		ContactPhone:    toPgText(req.ContactPhone),
+		GroupName:       groupName,
+		ContactPhone:    contactPhone,
 		LicenseNumber:   toPgText(req.LicenseNumber),
 		LicenseImageUrl: toPgText(req.LicenseImageURL),
 		Address:         toPgText(req.Address),
@@ -727,11 +736,9 @@ func (server *Server) searchGroups(ctx *gin.Context) {
 	}
 
 	params := db.ListMerchantGroupsParams{
-		Limit:  limit,
-		Offset: offset,
-	}
-	if keyword != "" {
-		params.Keyword = pgtype.Text{String: keyword, Valid: true}
+		Column1: keyword,
+		Limit:   limit,
+		Offset:  offset,
 	}
 
 	groups, err := server.store.ListMerchantGroups(ctx, params)
@@ -831,15 +838,34 @@ func (server *Server) updateGroup(ctx *gin.Context) {
 		return
 	}
 
+	current, err := server.store.GetMerchantGroup(ctx, groupID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("group not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	name := current.Name
+	if req.Name != nil {
+		name = *req.Name
+	}
+	status := current.Status
+	if req.Status != nil {
+		status = *req.Status
+	}
+
 	updated, err := server.store.UpdateMerchantGroup(ctx, db.UpdateMerchantGroupParams{
 		ID:              groupID,
-		Name:            toPgText(req.Name),
+		Name:            name,
 		ContactPhone:    toPgText(req.ContactPhone),
 		LicenseNumber:   toPgText(req.LicenseNumber),
 		LicenseImageUrl: toPgText(req.LicenseImageURL),
 		Address:         toPgText(req.Address),
 		RegionID:        toPgInt8(req.RegionID),
-		Status:          toPgText(req.Status),
+		Status:          status,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -872,7 +898,7 @@ func (server *Server) listGroupMerchants(ctx *gin.Context) {
 		return
 	}
 
-	merchants, err := server.store.ListGroupMerchants(ctx, groupID)
+	merchants, err := server.store.ListGroupMerchants(ctx, pgtype.Int8{Int64: groupID, Valid: true})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

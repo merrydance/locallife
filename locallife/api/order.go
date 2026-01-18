@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 
@@ -1304,6 +1305,22 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		}
 	}
 
+	// 外卖拒绝服务检查（仅外卖，不影响预订/堂食）
+	if req.OrderType == OrderTypeTakeout {
+		blocked, err := server.checkTakeoutBlocklist(ctx, authPayload.UserID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if blocked {
+			ctx.JSON(http.StatusForbidden, gin.H{
+				"error":   "外卖服务已被限制",
+				"message": "该账号存在异常索赔记录，外卖下单已被限制",
+			})
+			return
+		}
+	}
+
 	// 生成订单号
 	orderNo := generateOrderNo()
 
@@ -1385,6 +1402,28 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	resp := newOrderResponse(txResult.Order)
 
+	// 堂食扫码点餐：若用户在外卖拒绝服务名单中，实时提醒商户后台
+	if req.OrderType == OrderTypeDineIn && server.wsHub != nil {
+		block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   authPayload.UserID,
+		})
+		if err == nil {
+			alertPayload, _ := json.Marshal(map[string]any{
+				"user_id":     authPayload.UserID,
+				"order_id":    txResult.Order.ID,
+				"order_no":    txResult.Order.OrderNo,
+				"reason_code": block.ReasonCode,
+				"message":     "该顾客有多次恶意索赔记录，谨慎服务",
+			})
+			server.wsHub.SendToMerchant(req.MerchantID, websocket.Message{
+				Type:      "merchant_user_risk_alert",
+				Data:      alertPayload,
+				Timestamp: time.Now(),
+			})
+		}
+	}
+
 	// 绑定用餐会话的活跃订单（失败不影响下单返回，但记录日志）
 	if diningSession != nil {
 		_, err := server.store.UpdateDiningSessionActiveOrder(ctx, db.UpdateDiningSessionActiveOrderParams{
@@ -1422,6 +1461,29 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		}
 	}
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func (server *Server) checkTakeoutBlocklist(ctx *gin.Context, userID int64) (bool, error) {
+	block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   userID,
+	})
+	if err != nil {
+		if isNotFoundError(err) || errors.Is(err, db.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if block.BlockUntil.Valid && time.Now().After(block.BlockUntil.Time) {
+		_ = server.store.UpdateBehaviorBlocklistStatus(ctx, db.UpdateBehaviorBlocklistStatusParams{
+			ID:     block.ID,
+			Status: "expired",
+		})
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // validateOrderTypeFields 验证订单类型与关联字段

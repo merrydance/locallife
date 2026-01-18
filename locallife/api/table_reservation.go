@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -453,6 +454,28 @@ func (server *Server) createReservation(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 预订成功提醒：若用户在外卖拒绝服务名单中，通知商户后台
+	if server.wsHub != nil {
+		block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   authPayload.UserID,
+		})
+		if err == nil {
+			alertPayload, _ := json.Marshal(map[string]any{
+				"user_id":        authPayload.UserID,
+				"reservation_id": result.Reservation.ID,
+				"merchant_id":    result.Reservation.MerchantID,
+				"reason_code":    block.ReasonCode,
+				"message":        "该顾客有多次恶意索赔记录，谨慎服务",
+			})
+			server.wsHub.SendToMerchant(result.Reservation.MerchantID, websocket.Message{
+				Type:      "merchant_user_risk_alert",
+				Data:      alertPayload,
+				Timestamp: time.Now(),
+			})
+		}
 	}
 
 	// 创建支付超时任务

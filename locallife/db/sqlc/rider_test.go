@@ -63,10 +63,7 @@ func createActiveRider(t *testing.T) Rider {
 	require.Equal(t, int64(30000), updated.DepositAmount)
 
 	// 创建骑手profile（高值单资格积分需要）
-	_, err = testStore.CreateRiderProfile(context.Background(), CreateRiderProfileParams{
-		RiderID:    rider.ID,
-		TrustScore: 850, // 默认信任分
-	})
+	_, err = testStore.CreateRiderProfile(context.Background(), rider.ID)
 	require.NoError(t, err)
 
 	return updated

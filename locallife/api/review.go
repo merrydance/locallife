@@ -16,11 +16,6 @@ import (
 
 // ==================== 评价管理 ====================
 
-// 信用分阈值常量
-const (
-	TrustScoreVisibilityThreshold = 600 // 低于600分的用户评价不展示
-)
-
 // ==================== 请求/响应结构体 ====================
 
 type createReviewRequest struct {
@@ -55,7 +50,7 @@ type listReviewsRequest struct {
 
 // createReview 创建评价
 // @Summary 创建评价
-// @Description 用户为已完成的订单创建评价。低信用用户（<600分）的评价将被标记为不可见。
+// @Description 用户为已完成的订单创建评价。
 // @Tags 评价管理
 // @Accept json
 // @Produce json
@@ -113,23 +108,8 @@ func (server *Server) createReview(ctx *gin.Context) {
 		return
 	}
 
-	// 4. 检查用户信用分决定评价是否可见
-	userProfile, err := server.store.GetUserProfile(ctx, db.GetUserProfileParams{
-		UserID: authPayload.UserID,
-		Role:   "customer",
-	})
+	// 4. 默认可见
 	isVisible := true
-	if err != nil {
-		if !isNotFoundError(err) {
-			// 如果查询失败（非记录不存在），记录错误但不阻塞评价创建
-			isVisible = true // 默认可见
-		}
-	} else {
-		// 根据信用分决定可见性
-		if userProfile.TrustScore < TrustScoreVisibilityThreshold {
-			isVisible = false
-		}
-	}
 
 	// 4.1 评价文本内容安全检测：先审后存
 	user, err := server.store.GetUser(ctx, authPayload.UserID)

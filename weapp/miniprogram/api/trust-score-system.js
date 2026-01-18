@@ -37,10 +37,7 @@ class TrustScoreSystemService {
      */
     getTrustScoreProfile(role, userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/trust-score/profiles/${role}/${userId}`,
-                method: 'GET'
-            });
+            return Promise.reject(new Error('trust-score profile is deprecated'));
         });
     }
     /**
@@ -52,11 +49,7 @@ class TrustScoreSystemService {
      */
     getTrustScoreHistory(role_1, userId_1) {
         return __awaiter(this, arguments, void 0, function* (role, userId, page = 1, limit = 20) {
-            return (0, request_1.request)({
-                url: `/v1/trust-score/history/${role}/${userId}`,
-                method: 'GET',
-                data: { page, limit }
-            });
+            return Promise.reject(new Error('trust-score history is deprecated'));
         });
     }
     /**
@@ -65,11 +58,7 @@ class TrustScoreSystemService {
      */
     submitTrustScoreAppeal(appealData) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/trust-score/appeals',
-                method: 'POST',
-                data: appealData
-            });
+            return Promise.reject(new Error('trust-score appeal is deprecated'));
         });
     }
     /**
@@ -79,7 +68,7 @@ class TrustScoreSystemService {
     submitClaim(claimData) {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
-                url: '/v1/trust-score/claims',
+                url: '/v1/claims',
                 method: 'POST',
                 data: claimData
             });
@@ -93,7 +82,7 @@ class TrustScoreSystemService {
     reviewClaim(claimId, reviewData) {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
-                url: `/v1/trust-score/claims/${claimId}/review`,
+                url: `/v1/claims/${claimId}/review`,
                 method: 'PATCH',
                 data: reviewData
             });
@@ -105,11 +94,7 @@ class TrustScoreSystemService {
      */
     requestTrustScoreRecovery(recoveryData) {
         return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/trust-score/recovery',
-                method: 'POST',
-                data: recoveryData
-            });
+            return Promise.reject(new Error('trust-score recovery is deprecated'));
         });
     }
 }
@@ -127,7 +112,7 @@ class FraudDetectionService {
     detectFraud(detectionData) {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
-                url: '/v1/trust-score/fraud/detect',
+                url: '/v1/fraud/detect',
                 method: 'POST',
                 data: detectionData
             });
@@ -141,7 +126,7 @@ class FraudDetectionService {
     suspendMerchant(merchantId, suspendData) {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
-                url: `/v1/trust-score/merchants/${merchantId}/suspend`,
+                url: `/v1/food-safety/merchants/${merchantId}/suspend`,
                 method: 'PATCH',
                 data: suspendData
             });
@@ -162,7 +147,7 @@ class FoodSafetyService {
     submitFoodSafetyReport(reportData) {
         return __awaiter(this, void 0, void 0, function* () {
             return (0, request_1.request)({
-                url: '/v1/trust-score/food-safety/report',
+                url: '/v1/food-safety/report',
                 method: 'POST',
                 data: reportData
             });

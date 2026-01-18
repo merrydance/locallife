@@ -284,10 +284,7 @@ export class TrustScoreSystemService {
      * @param userId 用户ID
      */
     async getTrustScoreProfile(role: UserRole, userId: number): Promise<TrustScoreProfileResponse> {
-        return request({
-            url: `/v1/trust-score/profiles/${role}/${userId}`,
-            method: 'GET'
-        })
+        return Promise.reject(new Error('trust-score profile is deprecated'))
     }
 
     /**
@@ -303,11 +300,7 @@ export class TrustScoreSystemService {
         page: number = 1,
         limit: number = 20
     ): Promise<TrustScoreHistoryResponse> {
-        return request({
-            url: `/v1/trust-score/history/${role}/${userId}`,
-            method: 'GET',
-            data: { page, limit }
-        })
+        return Promise.reject(new Error('trust-score history is deprecated'))
     }
 
     /**
@@ -315,11 +308,7 @@ export class TrustScoreSystemService {
      * @param appealData 申诉数据
      */
     async submitTrustScoreAppeal(appealData: TrustScoreAppealRequest): Promise<TrustScoreAppealResponse> {
-        return request({
-            url: '/v1/trust-score/appeals',
-            method: 'POST',
-            data: appealData
-        })
+        return Promise.reject(new Error('trust-score appeal is deprecated'))
     }
 
     /**
@@ -328,7 +317,7 @@ export class TrustScoreSystemService {
      */
     async submitClaim(claimData: any): Promise<any> {
         return request({
-            url: '/v1/trust-score/claims',
+            url: '/v1/claims',
             method: 'POST',
             data: claimData
         })
@@ -341,7 +330,7 @@ export class TrustScoreSystemService {
      */
     async reviewClaim(claimId: number, reviewData: ReviewClaimRequest): Promise<any> {
         return request({
-            url: `/v1/trust-score/claims/${claimId}/review`,
+            url: `/v1/claims/${claimId}/review`,
             method: 'PATCH',
             data: reviewData
         })
@@ -352,11 +341,7 @@ export class TrustScoreSystemService {
      * @param recoveryData 恢复数据
      */
     async requestTrustScoreRecovery(recoveryData: TrustScoreRecoveryRequest): Promise<any> {
-        return request({
-            url: '/v1/trust-score/recovery',
-            method: 'POST',
-            data: recoveryData
-        })
+        return Promise.reject(new Error('trust-score recovery is deprecated'))
     }
 }
 
@@ -373,7 +358,7 @@ export class FraudDetectionService {
      */
     async detectFraud(detectionData: FraudDetectionRequest): Promise<FraudDetectionResponse> {
         return request({
-            url: '/v1/trust-score/fraud/detect',
+            url: '/v1/fraud/detect',
             method: 'POST',
             data: detectionData
         })
@@ -386,7 +371,7 @@ export class FraudDetectionService {
      */
     async suspendMerchant(merchantId: number, suspendData: SuspendMerchantRequest): Promise<any> {
         return request({
-            url: `/v1/trust-score/merchants/${merchantId}/suspend`,
+            url: `/v1/food-safety/merchants/${merchantId}/suspend`,
             method: 'PATCH',
             data: suspendData
         })
@@ -406,7 +391,7 @@ export class FoodSafetyService {
      */
     async submitFoodSafetyReport(reportData: FoodSafetyReportRequest): Promise<FoodSafetyReportResponse> {
         return request({
-            url: '/v1/trust-score/food-safety/report',
+            url: '/v1/food-safety/report',
             method: 'POST',
             data: reportData
         })

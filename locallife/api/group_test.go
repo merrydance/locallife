@@ -444,7 +444,7 @@ func TestCreateGroupJoinRequestAPI(t *testing.T) {
 	store.EXPECT().
 		GetMerchantGroupBinding(gomock.Any(), merchant.ID).
 		Times(1).
-		Return(db.MerchantGroupBinding{GroupID: pgtype.Int8{Valid: false}, BrandID: pgtype.Int8{Valid: false}}, nil)
+		Return(db.GetMerchantGroupBindingRow{GroupID: pgtype.Int8{Valid: false}, BrandID: pgtype.Int8{Valid: false}}, nil)
 
 	store.EXPECT().
 		GetMerchantGroup(gomock.Any(), groupID).

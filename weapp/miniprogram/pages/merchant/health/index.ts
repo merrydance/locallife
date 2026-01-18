@@ -1,5 +1,4 @@
 import { isLargeScreen } from '../../../utils/responsive'
-import { trustScoreSystemService } from '../../../api/trust-score-system'
 
 const app = getApp<IAppOption>()
 
@@ -43,78 +42,15 @@ Page({
   },
 
   async loadHealthInfo() {
-    this.setData({ loading: true })
-    try {
-      const merchantId = app.globalData.merchantId
-      if (!merchantId) {
-        wx.showToast({ title: '请先登录商户', icon: 'none' })
-        this.setData({ loading: false })
-        return
-      }
-
-      // 获取商户信任分档案和历史
-      const merchantIdNum = Number(merchantId)
-      const [profile, historyResponse] = await Promise.all([
-        trustScoreSystemService.getTrustScoreProfile('merchant', merchantIdNum),
-        trustScoreSystemService.getTrustScoreHistory('merchant', merchantIdNum, 1, 20)
-      ])
-
-      // 计算等级信息
-      const { level, levelDesc } = this.calculateLevelInfo(profile.current_score)
-
-      // 计算违规和警告次数
-      const negativeChanges = historyResponse.history.filter(h => h.change_amount < 0)
-      const violationCount = negativeChanges.filter(h => Math.abs(h.change_amount) >= 10).length
-      const warningCount = negativeChanges.filter(h => Math.abs(h.change_amount) < 10).length
-
-      // 构建指标数据
-      const metrics: MetricItem[] = [
-        {
-          label: '信任分',
-          value: profile.current_score.toString(),
-          status: profile.current_score >= 80 ? 'GOOD' : profile.current_score >= 60 ? 'WARNING' : 'BAD'
-        },
-        {
-          label: '行为分',
-          value: profile.score_breakdown.behavior_score.toString(),
-          status: profile.score_breakdown.behavior_score >= 80 ? 'GOOD' : profile.score_breakdown.behavior_score >= 60 ? 'WARNING' : 'BAD'
-        },
-        {
-          label: '违规次数',
-          value: violationCount.toString(),
-          status: violationCount === 0 ? 'GOOD' : violationCount <= 2 ? 'WARNING' : 'BAD'
-        },
-        {
-          label: '警告次数',
-          value: warningCount.toString(),
-          status: warningCount === 0 ? 'GOOD' : warningCount <= 3 ? 'WARNING' : 'BAD'
-        }
-      ]
-
-      // 转换违规记录
-      const violations: ViolationItem[] = negativeChanges
-        .slice(0, 5)
-        .map(h => ({
-          id: h.id,
-          type: Math.abs(h.change_amount) >= 10 ? 'VIOLATION' as const : 'WARNING' as const,
-          title: h.change_reason,
-          desc: `扣除${Math.abs(h.change_amount)}分`,
-          created_at: h.created_at
-        }))
-
-      this.setData({
-        score: profile.current_score,
-        level,
-        levelDesc,
-        metrics,
-        violations,
-        loading: false
-      })
-    } catch (error) {
-      console.error('加载健康信息失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
-    }
+    this.setData({
+      score: 0,
+      level: '已下线',
+      levelDesc: '信用分功能已下线',
+      metrics: [],
+      violations: [],
+      loading: false
+    })
+    wx.showToast({ title: '信用分功能已下线', icon: 'none' })
   },
 
   calculateLevelInfo(score: number): { level: string; levelDesc: string } {

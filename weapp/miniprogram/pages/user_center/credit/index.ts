@@ -1,7 +1,3 @@
-import { trustScoreSystemService, TrustScoreProfileResponse, TrustScoreHistoryResponse } from '../../../api/trust-score-system'
-
-const app = getApp<IAppOption>()
-
 interface CreditHistoryItem {
   id: number
   type: 'REWARD' | 'PENALTY'
@@ -35,47 +31,15 @@ Page({
   },
 
   async loadCreditInfo() {
-    this.setData({ loading: true })
-    try {
-      const userId = app.globalData.userInfo?.id
-      if (!userId) {
-        wx.showToast({ title: '请先登录', icon: 'none' })
-        this.setData({ loading: false })
-        return
-      }
-
-      // 获取信任分档案和历史
-      const [profile, historyResponse] = await Promise.all([
-        trustScoreSystemService.getTrustScoreProfile('customer', userId),
-        trustScoreSystemService.getTrustScoreHistory('customer', userId, 1, 20)
-      ])
-
-      // 转换历史记录格式
-      const history: CreditHistoryItem[] = historyResponse.history.map(h => ({
-        id: h.id,
-        type: h.change_amount >= 0 ? 'REWARD' : 'PENALTY',
-        amount: h.change_amount,
-        reason: h.reason,
-        related_id: h.related_order_id?.toString(),
-        created_at: h.created_at
-      }))
-
-      // 根据分数计算等级和描述
-      const { level, levelDesc, privileges } = this.calculateLevelInfo(profile.current_score)
-
-      this.setData({
-        score: profile.current_score,
-        level,
-        levelDesc,
-        privileges,
-        history,
-        loading: false
-      })
-    } catch (error) {
-      console.error('加载信用信息失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
-    }
+    this.setData({
+      score: 0,
+      level: '已下线',
+      levelDesc: '信用分功能已下线',
+      privileges: [],
+      history: [],
+      loading: false
+    })
+    wx.showToast({ title: '信用分功能已下线', icon: 'none' })
   },
 
   calculateLevelInfo(score: number): { level: string; levelDesc: string; privileges: string[] } {

@@ -39,7 +39,7 @@ func TestDetectDeviceReuse(t *testing.T) {
 			deviceFingerprint: "device-12345",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUsersByDeviceID(gomock.Any(), gomock.Eq("device-12345")).
+					GetUsersByDeviceFingerprint(gomock.Any(), gomock.Eq(pgtype.Text{String: "device-12345", Valid: true})).
 					Times(1).
 					Return([]int64{1, 2}, nil)
 			},
@@ -56,7 +56,7 @@ func TestDetectDeviceReuse(t *testing.T) {
 				userIDs := []int64{1, 2, 3}
 
 				store.EXPECT().
-					GetUsersByDeviceID(gomock.Any(), gomock.Eq("device-fraud")).
+					GetUsersByDeviceFingerprint(gomock.Any(), gomock.Eq(pgtype.Text{String: "device-fraud", Valid: true})).
 					Times(1).
 					Return(userIDs, nil)
 
@@ -78,7 +78,7 @@ func TestDetectDeviceReuse(t *testing.T) {
 				userIDs := []int64{1, 2, 3}
 
 				store.EXPECT().
-					GetUsersByDeviceID(gomock.Any(), gomock.Eq("device-fraud-confirmed")).
+					GetUsersByDeviceFingerprint(gomock.Any(), gomock.Eq(pgtype.Text{String: "device-fraud-confirmed", Valid: true})).
 					Times(1).
 					Return(userIDs, nil)
 
@@ -121,28 +121,16 @@ func TestDetectDeviceReuse(t *testing.T) {
 						RelatedUserIds: userIDs,
 					}, nil)
 
-				// Mock BlacklistUser: 3 times in HandleConfirmedFraud + 3 times in checkThresholds
+				// Mock behavior blocklist creation
 				store.EXPECT().
-					BlacklistUser(gomock.Any(), gomock.Any()).
-					Times(6).
-					Return(nil)
-
-				// Mock UpdateTrustScore calls (GetUserProfileForUpdate + UpdateUserTrustScore + CreateTrustScoreChange for each user)
-				// 新的 100 分制，扣 100 分后变成 0 分，会触发 blacklist
-				store.EXPECT().
-					GetUserProfileForUpdate(gomock.Any(), gomock.Any()).
+					GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
 					Times(3).
-					Return(db.UserProfile{TrustScore: 100}, nil)
+					Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					UpdateUserTrustScore(gomock.Any(), gomock.Any()).
+					CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
 					Times(3).
-					Return(nil)
-
-				store.EXPECT().
-					CreateTrustScoreChange(gomock.Any(), gomock.Any()).
-					Times(3).
-					Return(db.TrustScoreChange{}, nil)
+					Return(db.BehaviorBlocklist{}, nil)
 
 				// Mock 欺诈处理相关调用
 				store.EXPECT().
@@ -180,7 +168,7 @@ func TestDetectDeviceReuse(t *testing.T) {
 			deviceFingerprint: "device-error",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetUsersByDeviceID(gomock.Any(), gomock.Eq("device-error")).
+					GetUsersByDeviceFingerprint(gomock.Any(), gomock.Eq(pgtype.Text{String: "device-error", Valid: true})).
 					Times(1).
 					Return(nil, sql.ErrConnDone)
 			},
@@ -300,27 +288,16 @@ func TestDetectAddressCluster(t *testing.T) {
 						RelatedUserIds: userIDs,
 					}, nil)
 
-				// Mock BlacklistUser: 3 times in HandleConfirmedFraud + 3 times in checkThresholds
+				// Mock behavior blocklist creation
 				store.EXPECT().
-					BlacklistUser(gomock.Any(), gomock.Any()).
-					Times(6).
-					Return(nil)
-
-				// Mock UpdateTrustScore calls
-				store.EXPECT().
-					GetUserProfileForUpdate(gomock.Any(), gomock.Any()).
+					GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
 					Times(3).
-					Return(db.UserProfile{TrustScore: 100}, nil)
+					Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					UpdateUserTrustScore(gomock.Any(), gomock.Any()).
+					CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
 					Times(3).
-					Return(nil)
-
-				store.EXPECT().
-					CreateTrustScoreChange(gomock.Any(), gomock.Any()).
-					Times(3).
-					Return(db.TrustScoreChange{}, nil)
+					Return(db.BehaviorBlocklist{}, nil)
 
 				// Mock 欺诈处理相关调用
 				store.EXPECT().
@@ -387,7 +364,7 @@ func TestCheckUserForFraud(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				// Device check - no fraud
 				store.EXPECT().
-					GetUsersByDeviceID(gomock.Any(), gomock.Eq("device-clean")).
+					GetUsersByDeviceFingerprint(gomock.Any(), gomock.Eq(pgtype.Text{String: "device-clean", Valid: true})).
 					Times(1).
 					Return([]int64{1}, nil)
 
@@ -415,7 +392,7 @@ func TestCheckUserForFraud(t *testing.T) {
 
 				// Device check - fraud detected
 				store.EXPECT().
-					GetUsersByDeviceID(gomock.Any(), gomock.Eq("device-fraud")).
+					GetUsersByDeviceFingerprint(gomock.Any(), gomock.Eq(pgtype.Text{String: "device-fraud", Valid: true})).
 					Times(1).
 					Return(userIDs, nil)
 
@@ -457,24 +434,14 @@ func TestCheckUserForFraud(t *testing.T) {
 					}, nil)
 
 				store.EXPECT().
-					BlacklistUser(gomock.Any(), gomock.Any()).
-					Times(6).
-					Return(nil)
+					GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
+					Times(3).
+					Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					GetUserProfileForUpdate(gomock.Any(), gomock.Any()).
+					CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
 					Times(3).
-					Return(db.UserProfile{TrustScore: 100}, nil)
-
-				store.EXPECT().
-					UpdateUserTrustScore(gomock.Any(), gomock.Any()).
-					Times(3).
-					Return(nil)
-
-				store.EXPECT().
-					CreateTrustScoreChange(gomock.Any(), gomock.Any()).
-					Times(3).
-					Return(db.TrustScoreChange{}, nil)
+					Return(db.BehaviorBlocklist{}, nil)
 
 				// Mock 欺诈处理相关调用
 				store.EXPECT().
@@ -549,31 +516,16 @@ func TestCreateFraudPattern(t *testing.T) {
 				RelatedUserIds: []int64{1, 2, 3},
 			}, nil)
 
-		// Mock BlacklistUser: 3 in HandleConfirmedFraud + 3 in checkThresholds (score drops from 100 to 0)
+		// Mock behavior blocklist creation
 		store.EXPECT().
-			BlacklistUser(gomock.Any(), gomock.Any()).
-			Times(6).
-			Return(nil)
-
-		// Mock GetUserProfileForUpdate and UpdateUserTrustScore for UpdateTrustScore calls
-		store.EXPECT().
-			GetUserProfileForUpdate(gomock.Any(), gomock.Any()).
+			GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
 			Times(3).
-			Return(db.UserProfile{
-				UserID:     1,
-				Role:       EntityTypeCustomer,
-				TrustScore: 100,
-			}, nil)
+			Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 
 		store.EXPECT().
-			UpdateUserTrustScore(gomock.Any(), gomock.Any()).
+			CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
 			Times(3).
-			Return(nil)
-
-		store.EXPECT().
-			CreateTrustScoreChange(gomock.Any(), gomock.Any()).
-			Times(3).
-			Return(db.TrustScoreChange{}, nil)
+			Return(db.BehaviorBlocklist{}, nil)
 
 		// Mock 欺诈处理相关调用
 		store.EXPECT().
@@ -804,9 +756,9 @@ func TestDetectCoordinatedClaims(t *testing.T) {
 
 				// 检查4: 不全是新用户首单 (有订单历史)
 				store.EXPECT().
-					GetUserProfile(gomock.Any(), gomock.Any()).
-					Times(1). // 只要有一个用户TotalOrders > 1就返回
-					Return(db.UserProfile{TotalOrders: 10}, nil)
+					CountUserOrders(gomock.Any(), gomock.Any()).
+					Times(1). // 只要有一个用户订单数 > 1 即可
+					Return(int32(10), nil)
 			},
 			checkResult: func(t *testing.T, result *FraudDetectionResult, err error) {
 				require.NoError(t, err)
@@ -889,27 +841,16 @@ func TestDetectCoordinatedClaims(t *testing.T) {
 					Times(1).
 					Return(db.FraudPattern{ID: 1, IsConfirmed: true, RelatedUserIds: []int64{1, 2, 3}}, nil)
 
-				// 拉黑用户
+				// 行为黑名单
 				store.EXPECT().
-					BlacklistUser(gomock.Any(), gomock.Any()).
-					Times(6). // 3 in HandleConfirmedFraud + 3 in checkThresholds
-					Return(nil)
-
-				// 更新信用分
-				store.EXPECT().
-					GetUserProfileForUpdate(gomock.Any(), gomock.Any()).
+					GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
 					Times(3).
-					Return(db.UserProfile{TrustScore: 100}, nil)
+					Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					UpdateUserTrustScore(gomock.Any(), gomock.Any()).
+					CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
 					Times(3).
-					Return(nil)
-
-				store.EXPECT().
-					CreateTrustScoreChange(gomock.Any(), gomock.Any()).
-					Times(3).
-					Return(db.TrustScoreChange{}, nil)
+					Return(db.BehaviorBlocklist{}, nil)
 
 				// 欺诈处理相关
 				store.EXPECT().

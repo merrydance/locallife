@@ -775,31 +775,9 @@ func TestGetMerchantsWithStatsByIDs(t *testing.T) {
 		require.NotEmpty(t, r.Address)
 		require.NotZero(t, r.RegionID)
 		require.Equal(t, "active", r.Status)
-		// TrustScore 默认是500
-		require.GreaterOrEqual(t, r.TrustScore, int16(0))
 		// MonthlyOrders 新商户应该是0
 		require.GreaterOrEqual(t, r.MonthlyOrders, int32(0))
 	}
-}
-
-func TestGetMerchantsWithStatsByIDs_WithTrustScore(t *testing.T) {
-	merchant := createRandomMerchantForTest(t)
-
-	// 创建商户档案（包含信任分）
-	trustScore := int16(800)
-	_, err := testStore.CreateMerchantProfile(context.Background(), CreateMerchantProfileParams{
-		MerchantID: merchant.ID,
-		TrustScore: trustScore,
-	})
-	require.NoError(t, err)
-
-	// 查询
-	results, err := testStore.GetMerchantsWithStatsByIDs(context.Background(), []int64{merchant.ID})
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-
-	// 验证信任分
-	require.Equal(t, trustScore, results[0].TrustScore)
 }
 
 func TestGetMerchantsWithStatsByIDs_EmptyIDs(t *testing.T) {

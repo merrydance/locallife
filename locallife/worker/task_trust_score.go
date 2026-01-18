@@ -49,44 +49,7 @@ func (processor *RedisTaskProcessor) HandleSuspiciousPattern(ctx context.Context
 		return fmt.Errorf("json.Unmarshal failed: %w", asynq.SkipRetry)
 	}
 
-	// Worker后台任务不需要WebSocket实时通知，传nil
-	calculator := algorithm.NewTrustScoreCalculator(processor.store, nil)
-
-	// 根据索赔频率和模式扣分
-	var scoreChange int16
-	var reason string
-
-	lookback := payload.LookbackData
-	if lookback != nil && lookback.ClaimsFound >= 5 {
-		// 高频索赔（5次以上）
-		scoreChange = algorithm.ScoreThirdMaliciousClaim // -50
-		reason = "高频索赔处罚"
-	} else if lookback != nil && lookback.ClaimsFound >= 3 {
-		// 频繁索赔（3次以上）
-		scoreChange = algorithm.ScoreFirstMaliciousClaim // -30
-		reason = "频繁索赔警告"
-	} else {
-		// 可疑但次数不多，轻微扣分
-		scoreChange = -15
-		reason = "可疑模式提醒"
-	}
-
-	relatedType := "claim"
-	err := calculator.UpdateTrustScore(
-		ctx,
-		algorithm.EntityTypeCustomer,
-		payload.UserID,
-		scoreChange,
-		reason,
-		fmt.Sprintf("%s索赔模式异常（索赔ID: %d）", payload.ClaimType, payload.ClaimID),
-		&relatedType,
-		&payload.ClaimID,
-	)
-
-	if err != nil {
-		return fmt.Errorf("failed to update trust score: %w", err)
-	}
-
+	_ = payload
 	return nil
 }
 

@@ -390,7 +390,7 @@ func (q *Queries) GetAppealWithDetails(ctx context.Context, id int64) (GetAppeal
 
 const getClaimForAppeal = `-- name: GetClaimForAppeal :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
     o.merchant_id,
     m.region_id,
     d.rider_id
@@ -414,7 +414,6 @@ type GetClaimForAppealRow struct {
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -444,7 +443,6 @@ func (q *Queries) GetClaimForAppeal(ctx context.Context, id int64) (GetClaimForA
 		&i.ApprovedAmount,
 		&i.Status,
 		&i.ApprovalType,
-		&i.TrustScoreSnapshot,
 		&i.IsMalicious,
 		&i.LookbackResult,
 		&i.AutoApprovalReason,
@@ -545,7 +543,7 @@ func (q *Queries) GetMerchantAppealDetail(ctx context.Context, arg GetMerchantAp
 
 const getMerchantClaimDetailForMerchant = `-- name: GetMerchantClaimDetailForMerchant :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -580,7 +578,6 @@ type GetMerchantClaimDetailForMerchantRow struct {
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -616,7 +613,6 @@ func (q *Queries) GetMerchantClaimDetailForMerchant(ctx context.Context, arg Get
 		&i.ApprovedAmount,
 		&i.Status,
 		&i.ApprovalType,
-		&i.TrustScoreSnapshot,
 		&i.IsMalicious,
 		&i.LookbackResult,
 		&i.AutoApprovalReason,
@@ -648,7 +644,6 @@ SELECT
     c.description AS claim_description,
     c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
-    c.trust_score_snapshot AS user_trust_score,
     c.lookback_result,
     c.created_at AS claim_created_at,
     o.order_no,
@@ -698,7 +693,6 @@ type GetOperatorAppealDetailRow struct {
 	ClaimDescription    string             `json:"claim_description"`
 	ClaimEvidenceUrls   []string           `json:"claim_evidence_urls"`
 	ClaimStatus         string             `json:"claim_status"`
-	UserTrustScore      pgtype.Int2        `json:"user_trust_score"`
 	LookbackResult      []byte             `json:"lookback_result"`
 	ClaimCreatedAt      time.Time          `json:"claim_created_at"`
 	OrderNo             string             `json:"order_no"`
@@ -738,7 +732,6 @@ func (q *Queries) GetOperatorAppealDetail(ctx context.Context, arg GetOperatorAp
 		&i.ClaimDescription,
 		&i.ClaimEvidenceUrls,
 		&i.ClaimStatus,
-		&i.UserTrustScore,
 		&i.LookbackResult,
 		&i.ClaimCreatedAt,
 		&i.OrderNo,
@@ -839,7 +832,7 @@ func (q *Queries) GetRiderAppealDetail(ctx context.Context, arg GetRiderAppealDe
 
 const getRiderClaimDetailForRider = `-- name: GetRiderClaimDetailForRider :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -875,7 +868,6 @@ type GetRiderClaimDetailForRiderRow struct {
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -911,7 +903,6 @@ func (q *Queries) GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderC
 		&i.ApprovedAmount,
 		&i.Status,
 		&i.ApprovalType,
-		&i.TrustScoreSnapshot,
 		&i.IsMalicious,
 		&i.LookbackResult,
 		&i.AutoApprovalReason,
@@ -1021,7 +1012,7 @@ func (q *Queries) ListMerchantAppealsForMerchant(ctx context.Context, arg ListMe
 
 const listMerchantClaimsForMerchant = `-- name: ListMerchantClaimsForMerchant :many
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -1055,7 +1046,6 @@ type ListMerchantClaimsForMerchantRow struct {
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -1094,7 +1084,6 @@ func (q *Queries) ListMerchantClaimsForMerchant(ctx context.Context, arg ListMer
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,
@@ -1314,7 +1303,7 @@ func (q *Queries) ListRiderAppeals(ctx context.Context, arg ListRiderAppealsPara
 
 const listRiderClaimsForRider = `-- name: ListRiderClaimsForRider :many
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.trust_score_snapshot, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -1349,7 +1338,6 @@ type ListRiderClaimsForRiderRow struct {
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
 	ApprovalType       pgtype.Text        `json:"approval_type"`
-	TrustScoreSnapshot pgtype.Int2        `json:"trust_score_snapshot"`
 	IsMalicious        bool               `json:"is_malicious"`
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -1388,7 +1376,6 @@ func (q *Queries) ListRiderClaimsForRider(ctx context.Context, arg ListRiderClai
 			&i.ApprovedAmount,
 			&i.Status,
 			&i.ApprovalType,
-			&i.TrustScoreSnapshot,
 			&i.IsMalicious,
 			&i.LookbackResult,
 			&i.AutoApprovalReason,

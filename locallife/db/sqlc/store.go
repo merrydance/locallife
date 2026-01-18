@@ -70,6 +70,8 @@ type Store interface {
 	// Claim refund transactions（索赔退款）
 	ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParams) (ClaimRefundTxResult, error)
 	DeductRiderDepositAndRefundTx(ctx context.Context, arg DeductRiderDepositAndRefundTxParams) (DeductRiderDepositAndRefundTxResult, error)
+	// Behavior trace transactions
+	CreateClaimWithBehaviorTx(ctx context.Context, arg CreateClaimWithBehaviorTxParams) (CreateClaimWithBehaviorTxResult, error)
 	// Group multi-store transactions
 	ApproveGroupApplicationTx(ctx context.Context, arg ApproveGroupApplicationTxParams) (ApproveGroupApplicationTxResult, error)
 	ApproveGroupJoinRequestTx(ctx context.Context, arg ApproveGroupJoinRequestTxParams) (ApproveGroupJoinRequestTxResult, error)

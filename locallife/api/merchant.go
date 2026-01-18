@@ -887,7 +887,6 @@ type publicMerchantDetailResponse struct {
 	IsOpen                  bool                      `json:"is_open"`
 	Tags                    []string                  `json:"tags"`                                 // 商户标签（如：快餐、川菜）
 	MonthlySales            int32                     `json:"monthly_sales"`                        // 近30天订单量
-	TrustScore              int16                     `json:"trust_score"`                          // 信誉分
 	AvgPrepMinutes          int32                     `json:"avg_prep_minutes"`                     // 平均出餐时间（分钟）
 	BusinessLicenseImageURL *string                   `json:"business_license_image_url,omitempty"` // 营业执照
 	FoodPermitURL           *string                   `json:"food_permit_url,omitempty"`            // 食品经营许可证
@@ -1016,14 +1015,12 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		}
 	}
 
-	// 获取商户 profile（订单量、信誉分）
+	// 获取商户 profile（订单量）
 	profile, err := server.store.GetMerchantProfile(ctx, merchant.ID)
 	if err == nil {
 		resp.MonthlySales = profile.CompletedOrders // 使用已完成订单数
-		resp.TrustScore = profile.TrustScore
 	} else {
 		resp.MonthlySales = 0
-		resp.TrustScore = 850 // 默认信誉分
 	}
 
 	// 获取平均出餐时间

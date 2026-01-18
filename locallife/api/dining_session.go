@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/websocket"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -397,6 +399,36 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 	session := txResult.Session
 	if txResult.ActivatedOrder != nil {
 		session.ActiveOrderID = pgtype.Int8{Int64: txResult.ActivatedOrder.ID, Valid: true}
+	}
+
+	// 到店扫码开台提醒：若用户在外卖拒绝服务名单中，通知商户后台
+	if server.wsHub != nil {
+		block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   authPayload.UserID,
+		})
+		if err == nil {
+			alertPayload, _ := json.Marshal(map[string]any{
+				"user_id":      authPayload.UserID,
+				"session_id":   session.ID,
+				"reservation_id": func() *int64 {
+					if session.ReservationID.Valid {
+						id := session.ReservationID.Int64
+						return &id
+					}
+					return nil
+				}(),
+				"table_id":     session.TableID,
+				"merchant_id":  session.MerchantID,
+				"reason_code":  block.ReasonCode,
+				"message":      "该顾客有多次恶意索赔记录，谨慎服务",
+			})
+			server.wsHub.SendToMerchant(session.MerchantID, websocket.Message{
+				Type:      "merchant_user_risk_alert",
+				Data:      alertPayload,
+				Timestamp: time.Now(),
+			})
+		}
 	}
 
 	ctx.JSON(http.StatusOK, openDiningSessionResponse{

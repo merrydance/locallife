@@ -36,10 +36,10 @@ p, admin, /v1/admin/riders/:rider_id/reject, POST
 # Tag Management
 p, admin, /v1/tags, POST
 
-# Trust Score Management (admin-only actions)
-p, admin, /v1/trust-score/claims/:id/review, PATCH
-p, admin, /v1/trust-score/merchants/:id/suspend, PATCH
-p, admin, /v1/trust-score/fraud/detect, POST
+# Claims & Risk Management (admin-only actions)
+p, admin, /v1/claims/:id/review, PATCH
+p, admin, /v1/food-safety/merchants/:id/suspend, PATCH
+p, admin, /v1/fraud/detect, POST
 
 # Group Management
 p, admin, /v1/groups, POST
@@ -272,8 +272,6 @@ p, merchant_owner, /v1/merchants/:id/recharge-rules/:id, PATCH
 p, merchant_owner, /v1/merchants/:id/recharge-rules/:id, DELETE
 
 # Trust Score (Merchant Recovery)
-p, merchant_owner, /v1/trust-score/recovery, POST
-p, merchant_owner, /v1/trust-score/appeals, POST
 
 # =============================================================================
 # Merchant Staff Policies - Limited store access
@@ -360,8 +358,6 @@ p, rider, /v1/delivery/:delivery_id/track, GET
 p, rider, /v1/delivery/:delivery_id/rider-location, GET
 
 # Trust Score (Rider Recovery)
-p, rider, /v1/trust-score/recovery, POST
-p, rider, /v1/trust-score/appeals, POST
 
 # =============================================================================
 # Customer Policies - Basic user access
@@ -433,10 +429,8 @@ p, customer, /v1/notifications/preferences, PUT
 p, customer, /v1/ws, GET
 
 # Trust Score (View)
-p, customer, /v1/trust-score/profiles/:role/:id, GET
-p, customer, /v1/trust-score/history/:role/:id, GET
-p, customer, /v1/trust-score/claims, POST
-p, customer, /v1/trust-score/food-safety/report, POST
+p, customer, /v1/claims, POST
+p, customer, /v1/food-safety/report, POST
 
 # Claims (User)
 p, customer, /v1/claims, GET

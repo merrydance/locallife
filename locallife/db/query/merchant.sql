@@ -359,7 +359,6 @@ SELECT
     m.region_id,
     m.status,
     m.is_open,
-    COALESCE(mp.trust_score, 500) AS trust_score,
     COALESCE(
         (SELECT COUNT(*)
          FROM orders o 
@@ -369,7 +368,6 @@ SELECT
         ), 0
     )::int AS monthly_orders
 FROM merchants m
-LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE m.id = ANY($1::bigint[])
   AND m.status = 'active';
 

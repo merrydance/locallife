@@ -367,10 +367,6 @@ func TestEvaluateClaim_RejectService(t *testing.T) {
 		PlatformPayCount: 2,     // 已有2次平台垫付 → RejectService
 	}, nil)
 
-	// 触发拒绝服务流程
-	store.EXPECT().UpdateUserTrustScore(gomock.Any(), gomock.Any()).Return(nil)
-	store.EXPECT().CreateTrustScoreChange(gomock.Any(), gomock.Any()).Return(db.TrustScoreChange{}, nil)
-
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
 		1,    // userID
@@ -517,13 +513,7 @@ func TestCheckRiderDamageHistory_AtThreshold_TriggerPenalty(t *testing.T) {
 		{ClaimType: ClaimTypeDamage},
 	}, nil)
 
-	// 获取骑手信息并扣分
-	store.EXPECT().GetRiderProfileForUpdate(gomock.Any(), int64(1)).Return(db.RiderProfile{
-		RiderID:    1,
-		TrustScore: 100,
-	}, nil)
-	store.EXPECT().UpdateRiderTrustScore(gomock.Any(), gomock.Any()).Return(nil)
-	store.EXPECT().CreateTrustScoreChange(gomock.Any(), gomock.Any()).Return(db.TrustScoreChange{}, nil)
+	// 记录餐损统计
 	store.EXPECT().IncrementRiderDamageIncident(gomock.Any(), int64(1)).Return(nil)
 
 	err := caa.CheckRiderDamageHistory(context.Background(), 1)
@@ -578,22 +568,16 @@ func TestCreateClaimWithDecision_InstantApproval(t *testing.T) {
 		CompensationSource: CompensationSourceMerchant,
 	}
 
-	// 获取用户信用分
-	store.EXPECT().GetUserProfile(gomock.Any(), gomock.Any()).Return(db.UserProfile{
-		TrustScore: 100,
+	// 创建索赔记录（含行为追溯）
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{
+		Claim: db.Claim{
+			ID:          1,
+			OrderID:     100,
+			ClaimType:   ClaimTypeForeignObject,
+			ClaimAmount: 5000,
+			Status:      ClaimStatusAutoApproved,
+		},
 	}, nil)
-
-	// 创建索赔记录
-	store.EXPECT().CreateClaim(gomock.Any(), gomock.Any()).Return(db.Claim{
-		ID:          1,
-		OrderID:     100,
-		ClaimType:   ClaimTypeForeignObject,
-		ClaimAmount: 5000,
-		Status:      ClaimStatusAutoApproved,
-	}, nil)
-
-	// 更新用户索赔统计
-	store.EXPECT().IncrementUserClaimCount(gomock.Any(), gomock.Any()).Return(nil)
 
 	claim, err := caa.CreateClaimWithDecision(
 		context.Background(),
@@ -631,22 +615,16 @@ func TestCreateClaimWithDecision_RiderDeposit_DeductAndRefund(t *testing.T) {
 		CompensationSource: CompensationSourceRider, // 骑手押金
 	}
 
-	// 获取用户信用分
-	store.EXPECT().GetUserProfile(gomock.Any(), gomock.Any()).Return(db.UserProfile{
-		TrustScore: 100,
+	// 创建索赔记录（含行为追溯）
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{
+		Claim: db.Claim{
+			ID:          1,
+			OrderID:     100,
+			ClaimType:   ClaimTypeDamage,
+			ClaimAmount: 5000,
+			Status:      ClaimStatusAutoApproved,
+		},
 	}, nil)
-
-	// 创建索赔记录
-	store.EXPECT().CreateClaim(gomock.Any(), gomock.Any()).Return(db.Claim{
-		ID:          1,
-		OrderID:     100,
-		ClaimType:   ClaimTypeDamage,
-		ClaimAmount: 5000,
-		Status:      ClaimStatusAutoApproved,
-	}, nil)
-
-	// 更新用户索赔统计
-	store.EXPECT().IncrementUserClaimCount(gomock.Any(), gomock.Any()).Return(nil)
 
 	// 获取订单信息
 	store.EXPECT().GetOrder(gomock.Any(), int64(100)).Return(db.Order{
@@ -715,21 +693,17 @@ func TestCreateClaimWithDecision_ManualReview(t *testing.T) {
 		NeedsReview:        false, // 设为false避免触发handleSuspiciousPattern
 	}
 
-	store.EXPECT().GetUserProfile(gomock.Any(), gomock.Any()).Return(db.UserProfile{
-		TrustScore: 100,
-	}, nil)
-
-	store.EXPECT().CreateClaim(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, params db.CreateClaimParams) (db.Claim, error) {
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, params db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
 			require.Equal(t, ClaimStatusManualReview, params.Status)
-			return db.Claim{
-				ID:        1,
-				Status:    params.Status,
-				ClaimType: ClaimTypeFoodSafety,
+			return db.CreateClaimWithBehaviorTxResult{
+				Claim: db.Claim{
+					ID:        1,
+					Status:    params.Status,
+					ClaimType: ClaimTypeFoodSafety,
+				},
 			}, nil
 		})
-
-	store.EXPECT().IncrementUserClaimCount(gomock.Any(), gomock.Any()).Return(nil)
 
 	claim, err := caa.CreateClaimWithDecision(
 		context.Background(),
@@ -763,20 +737,16 @@ func TestCreateClaimWithDecision_EvidenceRequired(t *testing.T) {
 		NeedsEvidence: true,
 	}
 
-	store.EXPECT().GetUserProfile(gomock.Any(), gomock.Any()).Return(db.UserProfile{
-		TrustScore: 80,
-	}, nil)
-
-	store.EXPECT().CreateClaim(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, params db.CreateClaimParams) (db.Claim, error) {
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, params db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
 			require.Equal(t, ClaimStatusPending, params.Status)
-			return db.Claim{
-				ID:     1,
-				Status: params.Status,
+			return db.CreateClaimWithBehaviorTxResult{
+				Claim: db.Claim{
+					ID:     1,
+					Status: params.Status,
+				},
 			}, nil
 		})
-
-	store.EXPECT().IncrementUserClaimCount(gomock.Any(), gomock.Any()).Return(nil)
 
 	claim, err := caa.CreateClaimWithDecision(
 		context.Background(),
@@ -813,9 +783,9 @@ func TestCreateClaimWithDecision_RiderDeposit_InsufficientBalance(t *testing.T) 
 		CompensationSource: CompensationSourceRider,
 	}
 
-	store.EXPECT().GetUserProfile(gomock.Any(), gomock.Any()).Return(db.UserProfile{TrustScore: 100}, nil)
-	store.EXPECT().CreateClaim(gomock.Any(), gomock.Any()).Return(db.Claim{ID: 1, Status: ClaimStatusAutoApproved}, nil)
-	store.EXPECT().IncrementUserClaimCount(gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{
+		Claim: db.Claim{ID: 1, Status: ClaimStatusAutoApproved},
+	}, nil)
 	store.EXPECT().GetOrder(gomock.Any(), int64(100)).Return(db.Order{OrderType: "takeout"}, nil)
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), int64(100)).Return(db.Delivery{
 		RiderID: pgtype.Int8{Int64: 10, Valid: true},
@@ -857,9 +827,9 @@ func TestCreateClaimWithDecision_NonTakeoutOrder_SkipDeposit(t *testing.T) {
 		CompensationSource: CompensationSourceRider,
 	}
 
-	store.EXPECT().GetUserProfile(gomock.Any(), gomock.Any()).Return(db.UserProfile{TrustScore: 100}, nil)
-	store.EXPECT().CreateClaim(gomock.Any(), gomock.Any()).Return(db.Claim{ID: 1}, nil)
-	store.EXPECT().IncrementUserClaimCount(gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{
+		Claim: db.Claim{ID: 1},
+	}, nil)
 
 	// 非外卖订单
 	store.EXPECT().GetOrder(gomock.Any(), int64(100)).Return(db.Order{OrderType: "dine-in"}, nil)

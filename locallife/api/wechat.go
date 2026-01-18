@@ -18,6 +18,7 @@ type wechatLoginRequest struct {
 	Code       string `json:"code" binding:"required,min=1,max=256"`
 	DeviceID   string `json:"device_id" binding:"required,min=1,max=128"`
 	DeviceType string `json:"device_type" binding:"required,oneof=ios android miniprogram h5"`
+	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
 }
 
 type wechatLoginResponse struct {
@@ -86,6 +87,7 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 	deviceArg := db.UpsertUserDeviceParams{
 		UserID:     user.ID,
 		DeviceID:   req.DeviceID,
+		DeviceFingerprint: pgtype.Text{String: req.DeviceFingerprint, Valid: req.DeviceFingerprint != ""},
 		DeviceType: req.DeviceType,
 	}
 	_, err = server.store.UpsertUserDevice(ctx, deviceArg)

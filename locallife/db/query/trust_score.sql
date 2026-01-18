@@ -2,111 +2,14 @@
 -- 设计理念：信用驱动，非证据驱动
 
 -- ==========================================
--- user_profiles（顾客信任画像）
--- ==========================================
-
--- name: CreateUserProfile :one
-INSERT INTO user_profiles (
-    user_id,
-    role,
-    trust_score,
-    total_orders,
-    completed_orders,
-    cancelled_orders,
-    total_claims,
-    malicious_claims,
-    food_safety_reports,
-    verified_violations,
-    recent_7d_claims,
-    recent_7d_orders,
-    recent_30d_claims,
-    recent_30d_orders,
-    recent_30d_cancels,
-    recent_90d_claims,
-    recent_90d_orders,
-    is_blacklisted,
-    blacklist_reason,
-    blacklisted_at,
-    updated_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
-) RETURNING *;
-
--- name: GetUserProfile :one
-SELECT * FROM user_profiles
-WHERE user_id = $1 AND role = $2
-LIMIT 1;
-
--- name: GetUserProfileForUpdate :one
-SELECT * FROM user_profiles
-WHERE user_id = $1 AND role = $2
-LIMIT 1
-FOR UPDATE;
-
--- name: UpdateUserTrustScore :exec
-UPDATE user_profiles
-SET trust_score = $3,
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2;
-
--- name: UpdateUserProfile :exec
-UPDATE user_profiles
-SET trust_score = COALESCE(sqlc.narg('trust_score'), trust_score),
-    total_orders = COALESCE(sqlc.narg('total_orders'), total_orders),
-    completed_orders = COALESCE(sqlc.narg('completed_orders'), completed_orders),
-    cancelled_orders = COALESCE(sqlc.narg('cancelled_orders'), cancelled_orders),
-    total_claims = COALESCE(sqlc.narg('total_claims'), total_claims),
-    malicious_claims = COALESCE(sqlc.narg('malicious_claims'), malicious_claims),
-    food_safety_reports = COALESCE(sqlc.narg('food_safety_reports'), food_safety_reports),
-    verified_violations = COALESCE(sqlc.narg('verified_violations'), verified_violations),
-    recent_7d_claims = COALESCE(sqlc.narg('recent_7d_claims'), recent_7d_claims),
-    recent_7d_orders = COALESCE(sqlc.narg('recent_7d_orders'), recent_7d_orders),
-    recent_30d_claims = COALESCE(sqlc.narg('recent_30d_claims'), recent_30d_claims),
-    recent_30d_orders = COALESCE(sqlc.narg('recent_30d_orders'), recent_30d_orders),
-    recent_30d_cancels = COALESCE(sqlc.narg('recent_30d_cancels'), recent_30d_cancels),
-    recent_90d_claims = COALESCE(sqlc.narg('recent_90d_claims'), recent_90d_claims),
-    recent_90d_orders = COALESCE(sqlc.narg('recent_90d_orders'), recent_90d_orders),
-    is_blacklisted = COALESCE(sqlc.narg('is_blacklisted'), is_blacklisted),
-    blacklist_reason = COALESCE(sqlc.narg('blacklist_reason'), blacklist_reason),
-    blacklisted_at = COALESCE(sqlc.narg('blacklisted_at'), blacklisted_at),
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2;
-
--- name: IncrementUserClaimCount :exec
-UPDATE user_profiles
-SET total_claims = total_claims + 1,
-    recent_7d_claims = recent_7d_claims + 1,
-    recent_30d_claims = recent_30d_claims + 1,
-    recent_90d_claims = recent_90d_claims + 1,
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2;
-
--- name: BlacklistUser :exec
-UPDATE user_profiles
-SET is_blacklisted = true,
-    blacklist_reason = $3,
-    blacklisted_at = NOW(),
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2;
-
--- name: UnblacklistUser :exec
-UPDATE user_profiles
-SET is_blacklisted = false,
-    blacklist_reason = NULL,
-    blacklisted_at = NULL,
-    updated_at = NOW()
-WHERE user_id = $1 AND role = $2;
-
--- ==========================================
 -- merchant_profiles（商户信任画像）
 -- ==========================================
 
 -- name: CreateMerchantProfile :one
 INSERT INTO merchant_profiles (
-    merchant_id,
-    trust_score
+  merchant_id
 ) VALUES (
-    $1, $2
+  $1
 ) RETURNING *;
 
 -- name: GetMerchantProfile :one
@@ -120,16 +23,9 @@ WHERE merchant_id = $1
 LIMIT 1
 FOR UPDATE;
 
--- name: UpdateMerchantTrustScore :exec
-UPDATE merchant_profiles
-SET trust_score = $2,
-    updated_at = NOW()
-WHERE merchant_id = $1;
-
 -- name: UpdateMerchantProfile :exec
 UPDATE merchant_profiles
-SET trust_score = COALESCE(sqlc.narg('trust_score'), trust_score),
-    total_orders = COALESCE(sqlc.narg('total_orders'), total_orders),
+SET total_orders = COALESCE(sqlc.narg('total_orders'), total_orders),
     total_sales = COALESCE(sqlc.narg('total_sales'), total_sales),
     completed_orders = COALESCE(sqlc.narg('completed_orders'), completed_orders),
     total_claims = COALESCE(sqlc.narg('total_claims'), total_claims),
@@ -185,10 +81,9 @@ WHERE merchant_id = $1;
 
 -- name: CreateRiderProfile :one
 INSERT INTO rider_profiles (
-    rider_id,
-    trust_score
+  rider_id
 ) VALUES (
-    $1, $2
+  $1
 ) RETURNING *;
 
 -- name: GetRiderProfile :one
@@ -202,16 +97,9 @@ WHERE rider_id = $1
 LIMIT 1
 FOR UPDATE;
 
--- name: UpdateRiderTrustScore :exec
-UPDATE rider_profiles
-SET trust_score = $2,
-    updated_at = NOW()
-WHERE rider_id = $1;
-
 -- name: UpdateRiderProfile :exec
 UPDATE rider_profiles
-SET trust_score = COALESCE(sqlc.narg('trust_score'), trust_score),
-    total_deliveries = COALESCE(sqlc.narg('total_deliveries'), total_deliveries),
+SET total_deliveries = COALESCE(sqlc.narg('total_deliveries'), total_deliveries),
     completed_deliveries = COALESCE(sqlc.narg('completed_deliveries'), completed_deliveries),
     on_time_deliveries = COALESCE(sqlc.narg('on_time_deliveries'), on_time_deliveries),
     delayed_deliveries = COALESCE(sqlc.narg('delayed_deliveries'), delayed_deliveries),
@@ -276,7 +164,6 @@ INSERT INTO claims (
     approved_amount,
     status,
     approval_type,
-    trust_score_snapshot,
     is_malicious,
     lookback_result,
     auto_approval_reason,
@@ -287,7 +174,7 @@ INSERT INTO claims (
     reviewed_at,
     paid_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
 ) RETURNING *;
 
 -- name: GetClaim :one
@@ -496,58 +383,6 @@ WHERE device_fingerprints && $1::text[]
 ORDER BY detected_at DESC;
 
 -- ==========================================
--- trust_score_changes（信任分变更日志）
--- ==========================================
-
--- name: CreateTrustScoreChange :one
-INSERT INTO trust_score_changes (
-    entity_type,
-    entity_id,
-    old_score,
-    new_score,
-    score_change,
-    reason_type,
-    reason_description,
-    related_type,
-    related_id,
-    is_auto,
-    operator_id,
-    created_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-) RETURNING *;
-
--- name: GetTrustScoreChange :one
-SELECT * FROM trust_score_changes
-WHERE id = $1
-LIMIT 1;
-
--- name: ListEntityTrustScoreChanges :many
-SELECT * FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-ORDER BY created_at DESC
-LIMIT $3 OFFSET $4;
-
--- name: GetRecentTrustScoreChanges :many
-SELECT * FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-  AND created_at >= $3
-ORDER BY created_at DESC;
-
--- name: GetTrustScoreChangesByReason :many
-SELECT * FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-  AND reason_type = $3
-ORDER BY created_at DESC
-LIMIT $4;
-
--- name: GetTotalScoreChangeByReason :one
-SELECT COALESCE(SUM(score_change), 0) as total_change
-FROM trust_score_changes
-WHERE entity_type = $1 AND entity_id = $2
-  AND reason_type = $3;
-
--- ==========================================
 -- 回溯检查专用查询
 -- ==========================================
 
@@ -565,13 +400,15 @@ WHERE o.id = ANY($1::bigint[]);
 INSERT INTO user_devices (
     user_id,
     device_id,
+  device_fingerprint,
     device_type,
     first_seen,
     last_seen
 ) VALUES (
-    $1, $2, $3, NOW(), NOW()
+  $1, $2, $3, $4, NOW(), NOW()
 ) ON CONFLICT (user_id, device_id)
 DO UPDATE SET
+  device_fingerprint = COALESCE(EXCLUDED.device_fingerprint, user_devices.device_fingerprint),
     last_seen = NOW(),
     updated_at = NOW()
 RETURNING *;
@@ -580,6 +417,12 @@ RETURNING *;
 SELECT DISTINCT user_id
 FROM user_devices
 WHERE device_id = $1
+ORDER BY last_seen DESC;
+
+-- name: GetUsersByDeviceFingerprint :many
+SELECT DISTINCT user_id
+FROM user_devices
+WHERE device_fingerprint = $1
 ORDER BY last_seen DESC;
 
 -- name: GetDevicesByUserID :many

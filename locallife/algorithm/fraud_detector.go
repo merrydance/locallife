@@ -2,6 +2,7 @@ package algorithm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -37,10 +38,10 @@ func (fd *FraudDetector) DetectDeviceReuse(
 		}, nil
 	}
 
-	// 1. 查询使用该设备的所有用户
-	userIDs, err := fd.store.GetUsersByDeviceID(ctx, deviceFingerprint)
+	// 1. 查询使用该设备指纹的所有用户
+	userIDs, err := fd.store.GetUsersByDeviceFingerprint(ctx, pgtype.Text{String: deviceFingerprint, Valid: true})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get users by device: %w", err)
+		return nil, fmt.Errorf("failed to get users by device fingerprint: %w", err)
 	}
 
 	// 需要至少3个不同用户
@@ -430,7 +431,7 @@ func (fd *FraudDetector) checkUserAssociation(
 	}
 
 	// 检查2: 共享设备
-	// 查询每个用户的设备指纹
+	// 查询每个用户的设备指纹/设备ID
 	deviceMap := make(map[string][]int64) // device -> user_ids
 	for _, uid := range userIDs {
 		devices, err := fd.store.GetDevicesByUserID(ctx, uid)
@@ -438,7 +439,11 @@ func (fd *FraudDetector) checkUserAssociation(
 			continue
 		}
 		for _, device := range devices {
-			deviceMap[device.DeviceID] = append(deviceMap[device.DeviceID], uid)
+			key := device.DeviceID
+			if device.DeviceFingerprint.Valid && device.DeviceFingerprint.String != "" {
+				key = device.DeviceFingerprint.String
+			}
+			deviceMap[key] = append(deviceMap[key], uid)
 		}
 	}
 	// 检查是否有设备被多个用户共享
@@ -475,14 +480,11 @@ func (fd *FraudDetector) checkUserAssociation(
 	// 检查4: 都是新用户且首单（可疑的批量注册）
 	allNewUsersFirstOrder := true
 	for _, uid := range userIDs {
-		profile, err := fd.store.GetUserProfile(ctx, db.GetUserProfileParams{
-			UserID: uid,
-			Role:   EntityTypeCustomer,
-		})
+		totalOrders, err := fd.store.CountUserOrders(ctx, uid)
 		if err != nil {
 			continue
 		}
-		if profile.TotalOrders > 1 {
+		if totalOrders > 1 {
 			allNewUsersFirstOrder = false
 			break
 		}
@@ -551,37 +553,27 @@ func (fd *FraudDetector) HandleConfirmedFraud(
 		return fmt.Errorf("fraud pattern %d is not confirmed", fraudPatternID)
 	}
 
-	// Step 1: 拉黑所有涉及的用户
+	// Step 1: 拉黑所有涉及的用户（行为黑名单）
 	for _, userID := range pattern.RelatedUserIds {
-		err := fd.store.BlacklistUser(ctx, db.BlacklistUserParams{
-			UserID: userID,
-			Role:   EntityTypeCustomer,
-			BlacklistReason: pgtype.Text{
-				String: fmt.Sprintf("确认为欺诈团伙成员（模式ID: %d）", fraudPatternID),
-				Valid:  true,
-			},
+		_, err := fd.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   userID,
 		})
-		if err != nil {
-			// 继续处理其他用户
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, db.ErrRecordNotFound) {
 			continue
 		}
 
-		// 扣除信用分
-		calculator := NewTrustScoreCalculator(fd.store, fd.wsHub)
-		relatedType := "fraud-pattern"
-		err = calculator.UpdateTrustScore(
-			ctx,
-			EntityTypeCustomer,
-			userID,
-			ScoreMaliciousClaim, // -100分
-			"confirmed-fraud-pattern",
-			fmt.Sprintf("确认为欺诈团伙成员（模式ID: %d）", fraudPatternID),
-			&relatedType,
-			&fraudPatternID,
-		)
-		if err != nil {
-			continue
-		}
+		_, _ = fd.store.CreateBehaviorBlocklist(ctx, db.CreateBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   userID,
+			ReasonCode: "fraud-pattern",
+			BlockUntil: pgtype.Timestamptz{Valid: false},
+			Status:     "active",
+		})
+
 	}
 
 	// Step 2: 查找受损商户和骑手，返还损失

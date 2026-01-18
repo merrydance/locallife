@@ -54,20 +54,6 @@ func TestCreateReviewAPI(t *testing.T) {
 					Times(1).
 					Return(db.Review{}, db.ErrRecordNotFound)
 
-				// Mock GetUserProfile (high trust score)
-				store.EXPECT().
-					GetUserProfile(gomock.Any(), db.GetUserProfileParams{
-						UserID: user.ID,
-						Role:   "customer",
-					}).
-					Times(1).
-					Return(db.UserProfile{
-						ID:         1,
-						UserID:     user.ID,
-						Role:       "customer",
-						TrustScore: 850,
-					}, nil)
-
 				// Mock GetUser (for wechat openid)
 				store.EXPECT().
 					GetUser(gomock.Any(), gomock.Eq(user.ID)).
@@ -99,70 +85,6 @@ func TestCreateReviewAPI(t *testing.T) {
 				require.Equal(t, merchant.ID, response.MerchantID)
 				require.Equal(t, "Great food and service!", response.Content)
 				require.True(t, response.IsVisible)
-			},
-		},
-		{
-			name: "LowTrustScore_NotVisible",
-			body: map[string]interface{}{
-				"order_id": order.ID,
-				"content":  "Bad review from low trust user",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
-					Times(1).
-					Return(order, nil)
-
-				store.EXPECT().
-					GetReviewByOrderID(gomock.Any(), gomock.Eq(order.ID)).
-					Times(1).
-					Return(db.Review{}, db.ErrRecordNotFound)
-
-				// Mock GetUserProfile (low trust score < 600)
-				store.EXPECT().
-					GetUserProfile(gomock.Any(), db.GetUserProfileParams{
-						UserID: user.ID,
-						Role:   "customer",
-					}).
-					Times(1).
-					Return(db.UserProfile{
-						ID:         1,
-						UserID:     user.ID,
-						Role:       "customer",
-						TrustScore: 500, // Low trust score
-					}, nil)
-
-				store.EXPECT().
-					GetUser(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(user, nil)
-
-				// Mock CreateReview with is_visible=false
-				store.EXPECT().
-					CreateReview(gomock.Any(), gomock.Any()).
-					Times(1).
-					DoAndReturn(func(ctx interface{}, arg db.CreateReviewParams) (db.Review, error) {
-						require.False(t, arg.IsVisible) // Verify is_visible is false
-						return db.Review{
-							ID:         1,
-							OrderID:    order.ID,
-							UserID:     user.ID,
-							MerchantID: merchant.ID,
-							Content:    "Bad review from low trust user",
-							IsVisible:  false,
-							CreatedAt:  time.Now(),
-						}, nil
-					})
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response reviewResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.False(t, response.IsVisible) // Verify review is not visible
 			},
 		},
 		{
@@ -305,11 +227,6 @@ func TestCreateReviewAPI(t *testing.T) {
 			case "OK":
 				wechatClient.EXPECT().
 					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Great food and service!")).
-					Times(1).
-					Return(nil)
-			case "LowTrustScore_NotVisible":
-				wechatClient.EXPECT().
-					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Bad review from low trust user")).
 					Times(1).
 					Return(nil)
 			}

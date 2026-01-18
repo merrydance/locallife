@@ -9,48 +9,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const trust_score_system_1 = require("../../../api/trust-score-system");
-const app = getApp();
 Page({
     data: {
-        score: 0,
-        level: '普通会员',
-        levelDesc: '信用良好',
-        history: [],
-        privileges: [],
-        loading: false,
-        navBarHeight: 88
-    },
-    onLoad() {
-        this.loadCreditInfo();
-    },
-    onShow() {
-        this.loadCreditInfo();
-    },
-    onNavHeight(e) {
-        this.setData({ navBarHeight: e.detail.navBarHeight });
-    },
-    loadCreditInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            this.setData({ loading: true });
-            try {
-                const userId = (_a = app.globalData.userInfo) === null || _a === void 0 ? void 0 : _a.id;
-                if (!userId) {
-                    wx.showToast({ title: '请先登录', icon: 'none' });
-                    this.setData({ loading: false });
-                    return;
-                }
-                // 获取信任分档案和历史
-                const [profile, historyResponse] = yield Promise.all([
-                    trust_score_system_1.trustScoreSystemService.getTrustScoreProfile('customer', userId),
-                    trust_score_system_1.trustScoreSystemService.getTrustScoreHistory('customer', userId, 1, 20)
-                ]);
-                // 转换历史记录格式
-                const history = historyResponse.history.map(h => {
-                    var _a;
-                    return ({
-                        id: h.id,
+            this.setData({
+                score: 0,
+                level: '已下线',
+                levelDesc: '信用分功能已下线',
+                privileges: [],
+                history: [],
+                loading: false
+            });
+            wx.showToast({ title: '信用分功能已下线', icon: 'none' });
                         type: h.change_amount >= 0 ? 'REWARD' : 'PENALTY',
                         amount: h.change_amount,
                         reason: h.reason,

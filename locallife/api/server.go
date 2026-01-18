@@ -678,6 +678,11 @@ func (server *Server) setupRouter() {
 		merchantClaimsGroup.GET("/appeals/:id", server.getMerchantAppealDetail)
 	}
 
+	merchantRiskGroup := authGroup.Group("/merchant/risk")
+	{
+		merchantRiskGroup.GET("/users/:id", server.getMerchantUserRisk)
+	}
+
 	// M7.5: 支付订单路由
 	paymentGroup := authGroup.Group("/payments")
 	{
@@ -900,42 +905,26 @@ func (server *Server) setupRouter() {
 		platformStatsGroup.GET("/realtime", server.getRealtimeDashboard)
 	}
 
-	// M9: TrustScore信任分系统路由
-	trustScoreGroup := authGroup.Group("/trust-score")
-	{
-		// 查询信用分画像
-		trustScoreGroup.GET("/profiles/:role/:id", server.GetTrustScoreProfile)
-
-		// 查询信用分变更历史
-		trustScoreGroup.GET("/history/:role/:id", server.GetTrustScoreHistory)
-
-		// 提交索赔
-		trustScoreGroup.POST("/claims", server.SubmitClaim)
-
-		// 审核索赔（管理员/客服）
-		trustScoreGroup.PATCH("/claims/:id/review", server.ReviewClaim)
-
-		// 上报食安问题
-		trustScoreGroup.POST("/food-safety/report", server.ReportFoodSafety)
-
-		// 熔断商户（管理员）
-		trustScoreGroup.PATCH("/merchants/:id/suspend", server.SuspendMerchant)
-
-		// 触发欺诈检测（管理员/自动触发）
-		trustScoreGroup.POST("/fraud/detect", server.TriggerFraudDetection)
-
-		// 提交恢复申请（商户/骑手）
-		trustScoreGroup.POST("/recovery", server.SubmitRecoveryRequest)
-
-		// 提交申诉
-		trustScoreGroup.POST("/appeals", server.SubmitAppeal)
-	}
-
 	// 用户索赔路由
 	claimsGroup := authGroup.Group("/claims")
 	{
+		claimsGroup.POST("", server.SubmitClaim)
 		claimsGroup.GET("", server.ListUserClaims)
 		claimsGroup.GET("/:id", server.GetClaimDetail)
+		claimsGroup.PATCH("/:id/review", server.ReviewClaim)
+	}
+
+	// 食安上报路由
+	foodSafetyGroup := authGroup.Group("/food-safety")
+	{
+		foodSafetyGroup.POST("/report", server.ReportFoodSafety)
+		foodSafetyGroup.PATCH("/merchants/:id/suspend", server.SuspendMerchant)
+	}
+
+	// 欺诈检测路由
+	fraudGroup := authGroup.Group("/fraud")
+	{
+		fraudGroup.POST("/detect", server.TriggerFraudDetection)
 	}
 
 	// 购物车路由

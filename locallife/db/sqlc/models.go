@@ -32,6 +32,75 @@ type Appeal struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type BehaviorAction struct {
+	ID           int64              `json:"id"`
+	DecisionID   int64              `json:"decision_id"`
+	ActionType   string             `json:"action_type"`
+	TargetEntity string             `json:"target_entity"`
+	Status       string             `json:"status"`
+	Detail       []byte             `json:"detail"`
+	ExecutedAt   pgtype.Timestamptz `json:"executed_at"`
+	CreatedAt    time.Time          `json:"created_at"`
+}
+
+type BehaviorAppeal struct {
+	ID         int64              `json:"id"`
+	EntityType string             `json:"entity_type"`
+	EntityID   int64              `json:"entity_id"`
+	DecisionID pgtype.Int8        `json:"decision_id"`
+	Reason     string             `json:"reason"`
+	Evidence   pgtype.Text        `json:"evidence"`
+	Status     string             `json:"status"`
+	CreatedAt  time.Time          `json:"created_at"`
+	ReevalAt   pgtype.Timestamptz `json:"reeval_at"`
+}
+
+type BehaviorBlocklist struct {
+	ID         int64              `json:"id"`
+	EntityType string             `json:"entity_type"`
+	EntityID   int64              `json:"entity_id"`
+	ReasonCode string             `json:"reason_code"`
+	BlockUntil pgtype.Timestamptz `json:"block_until"`
+	Status     string             `json:"status"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
+type BehaviorDecision struct {
+	ID                 int64       `json:"id"`
+	OrderID            int64       `json:"order_id"`
+	UserID             pgtype.Int8 `json:"user_id"`
+	MerchantID         pgtype.Int8 `json:"merchant_id"`
+	RiderID            pgtype.Int8 `json:"rider_id"`
+	DecisionVersion    string      `json:"decision_version"`
+	ReasonCodes        []string    `json:"reason_codes"`
+	ResponsibleParty   string      `json:"responsible_party"`
+	CompensationSource string      `json:"compensation_source"`
+	DecisionStatus     string      `json:"decision_status"`
+	TraceSummary       pgtype.Text `json:"trace_summary"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
+}
+
+type BehaviorEvidence struct {
+	ID           int64     `json:"id"`
+	DecisionID   int64     `json:"decision_id"`
+	EvidenceType string    `json:"evidence_type"`
+	Payload      []byte    `json:"payload"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type BehaviorTraceSnapshot struct {
+	ID              int64          `json:"id"`
+	DecisionID      int64          `json:"decision_id"`
+	WindowDays      int32          `json:"window_days"`
+	AbnormalCount   int32          `json:"abnormal_count"`
+	TotalCount      int32          `json:"total_count"`
+	AbnormalRate    pgtype.Numeric `json:"abnormal_rate"`
+	AssociationHits []string       `json:"association_hits"`
+	CreatedAt       time.Time      `json:"created_at"`
+}
+
 type BillingGroup struct {
 	ID              int64              `json:"id"`
 	DiningSessionID int64              `json:"dining_session_id"`
@@ -132,9 +201,7 @@ type Claim struct {
 	Status         string      `json:"status"`
 	// instant=秒赔(>=750分+<=50元), auto=回溯通过, manual=人工审核
 	ApprovalType pgtype.Text `json:"approval_type"`
-	// 用户提交索赔时的信用分快照（决策依据）
-	TrustScoreSnapshot pgtype.Int2 `json:"trust_score_snapshot"`
-	IsMalicious        bool        `json:"is_malicious"`
+	IsMalicious  bool        `json:"is_malicious"`
 	// 回溯检查：最近5笔订单（30天→90天→1年）的索赔历史
 	LookbackResult     []byte             `json:"lookback_result"`
 	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
@@ -818,10 +885,8 @@ type MerchantPaymentConfig struct {
 
 // 商户信任画像表 - 信用分驱动食安熔断
 type MerchantProfile struct {
-	ID         int64 `json:"id"`
-	MerchantID int64 `json:"merchant_id"`
-	// 商户信任分，400以下停业整顿
-	TrustScore      int16 `json:"trust_score"`
+	ID              int64 `json:"id"`
+	MerchantID      int64 `json:"merchant_id"`
 	TotalOrders     int32 `json:"total_orders"`
 	TotalSales      int64 `json:"total_sales"`
 	CompletedOrders int32 `json:"completed_orders"`
@@ -1085,6 +1150,16 @@ type PeakHourConfig struct {
 	IsActive   bool               `json:"is_active"`
 	CreatedAt  time.Time          `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PlatformConfig struct {
+	ID          int64       `json:"id"`
+	ConfigKey   string      `json:"config_key"`
+	ConfigValue []byte      `json:"config_value"`
+	ScopeType   string      `json:"scope_type"`
+	ScopeID     pgtype.Int8 `json:"scope_id"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
 type PrintLog struct {
@@ -1368,10 +1443,8 @@ type RiderPremiumScoreLog struct {
 
 // 骑手信任画像表 - 餐损索赔由押金扣除
 type RiderProfile struct {
-	ID      int64 `json:"id"`
-	RiderID int64 `json:"rider_id"`
-	// 骑手信任分，350以下暂停接单
-	TrustScore          int16 `json:"trust_score"`
+	ID                  int64 `json:"id"`
+	RiderID             int64 `json:"rider_id"`
 	TotalDeliveries     int32 `json:"total_deliveries"`
 	CompletedDeliveries int32 `json:"completed_deliveries"`
 	OnTimeDeliveries    int32 `json:"on_time_deliveries"`
@@ -1491,26 +1564,6 @@ type Tag struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// TrustScore变更记录表（审计日志）- 所有信用分变更可追溯
-type TrustScoreChange struct {
-	ID         int64  `json:"id"`
-	EntityType string `json:"entity_type"`
-	EntityID   int64  `json:"entity_id"`
-	OldScore   int16  `json:"old_score"`
-	NewScore   int16  `json:"new_score"`
-	// 变化值：负数=扣分，正数=加分（第一版不实现加分）
-	ScoreChange int16 `json:"score_change"`
-	// 变更原因类型：用于统计分析
-	ReasonType        string      `json:"reason_type"`
-	ReasonDescription string      `json:"reason_description"`
-	RelatedType       pgtype.Text `json:"related_type"`
-	RelatedID         pgtype.Int8 `json:"related_id"`
-	// 系统自动变更 vs 人工调整
-	IsAuto     bool        `json:"is_auto"`
-	OperatorID pgtype.Int8 `json:"operator_id"`
-	CreatedAt  time.Time   `json:"created_at"`
-}
-
 type User struct {
 	ID int64 `json:"id"`
 	// 微信小程序唯一标识
@@ -1608,17 +1661,18 @@ type UserDevice struct {
 	// 设备指纹，可以是设备IMEI、UUID或浏览器指纹（TEXT类型，遵循PostgreSQL最佳实践）
 	DeviceID string `json:"device_id"`
 	// 设备类型：ios/android/web等
-	DeviceType  string      `json:"device_type"`
-	DeviceModel pgtype.Text `json:"device_model"`
-	OsVersion   pgtype.Text `json:"os_version"`
-	AppVersion  pgtype.Text `json:"app_version"`
-	UserAgent   pgtype.Text `json:"user_agent"`
-	IpAddress   pgtype.Text `json:"ip_address"`
-	LastLoginAt time.Time   `json:"last_login_at"`
-	CreatedAt   time.Time   `json:"created_at"`
-	FirstSeen   time.Time   `json:"first_seen"`
-	LastSeen    time.Time   `json:"last_seen"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	DeviceType        string      `json:"device_type"`
+	DeviceModel       pgtype.Text `json:"device_model"`
+	OsVersion         pgtype.Text `json:"os_version"`
+	AppVersion        pgtype.Text `json:"app_version"`
+	UserAgent         pgtype.Text `json:"user_agent"`
+	IpAddress         pgtype.Text `json:"ip_address"`
+	LastLoginAt       time.Time   `json:"last_login_at"`
+	CreatedAt         time.Time   `json:"created_at"`
+	FirstSeen         time.Time   `json:"first_seen"`
+	LastSeen          time.Time   `json:"last_seen"`
+	UpdatedAt         time.Time   `json:"updated_at"`
+	DeviceFingerprint pgtype.Text `json:"device_fingerprint"`
 }
 
 // 用户通知偏好设置
@@ -1654,36 +1708,6 @@ type UserPreference struct {
 	// JSON格式：{"川菜": 15, "粤菜": 8} - 购买次数统计
 	TopCuisines []byte    `json:"top_cuisines"`
 	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-// 用户信任画像表（顾客）- 信用驱动异常处理
-type UserProfile struct {
-	ID     int64  `json:"id"`
-	UserID int64  `json:"user_id"`
-	Role   string `json:"role"`
-	// 信任分，初始850（高信任），只有负面行为才扣分
-	TrustScore         int16 `json:"trust_score"`
-	TotalOrders        int32 `json:"total_orders"`
-	CompletedOrders    int32 `json:"completed_orders"`
-	CancelledOrders    int32 `json:"cancelled_orders"`
-	TotalClaims        int32 `json:"total_claims"`
-	MaliciousClaims    int32 `json:"malicious_claims"`
-	FoodSafetyReports  int32 `json:"food_safety_reports"`
-	VerifiedViolations int32 `json:"verified_violations"`
-	// 近7天索赔次数（快速识别异常）
-	Recent7dClaims int32 `json:"recent_7d_claims"`
-	Recent7dOrders int32 `json:"recent_7d_orders"`
-	// 近30天索赔次数（回溯检查）
-	Recent30dClaims  int32 `json:"recent_30d_claims"`
-	Recent30dOrders  int32 `json:"recent_30d_orders"`
-	Recent30dCancels int32 `json:"recent_30d_cancels"`
-	// 近90天索赔次数（长期趋势）
-	Recent90dClaims int32              `json:"recent_90d_claims"`
-	Recent90dOrders int32              `json:"recent_90d_orders"`
-	IsBlacklisted   bool               `json:"is_blacklisted"`
-	BlacklistReason pgtype.Text        `json:"blacklist_reason"`
-	BlacklistedAt   pgtype.Timestamptz `json:"blacklisted_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
 type UserRole struct {

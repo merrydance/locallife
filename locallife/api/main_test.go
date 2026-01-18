@@ -145,9 +145,9 @@ p, customer, /v1/reservations/*, GET
 p, customer, /v1/reservations/*, POST
 p, customer, /v1/history/*, GET
 p, customer, /v1/rooms/*, GET
-p, customer, /v1/trust-score/*, GET
-p, customer, /v1/trust-score/*, POST
 p, customer, /v1/claims/*, GET
+p, customer, /v1/claims/*, POST
+p, customer, /v1/food-safety/*, POST
 p, customer, /v1/ws, GET
 p, customer, /v1/delivery-fee/*, GET
 p, customer, /v1/delivery-fee/calculate, POST

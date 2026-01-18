@@ -6,18 +6,11 @@ import (
 	"fmt"
 
 	"github.com/hibiken/asynq"
-	"github.com/merrydance/locallife/algorithm"
 	"github.com/rs/zerolog/log"
 )
 
 const (
 	TaskProcessAppealResult = "appeal:process_result"
-
-	// 申诉成功惩罚（简化设计）
-	// 设计理念：申诉成功 = 人工审核确认恶意 = 比系统自动检测更可靠 = 相当于发现两次
-	// 与 algorithm.ScoreEvidenceRequired (-10) 对齐，不区分金额和类型
-	// 恶意就是恶意，不因金额大小而区别对待
-	PenaltyAppealUpheld = int16(10)
 )
 
 // ProcessAppealResultPayload 处理申诉审核结果的任务载荷
@@ -103,30 +96,8 @@ func (processor *RedisTaskProcessor) ProcessTaskProcessAppealResult(ctx context.
 // penalizeClaimant 惩罚恶意索赔用户的信用分
 // 设计：申诉成功 = 确认恶意 = 固定扣10分（相当于系统发现两次）
 func (processor *RedisTaskProcessor) penalizeClaimant(ctx context.Context, payload ProcessAppealResultPayload) error {
-	relatedType := "appeal"
-	relatedID := payload.AppealID
-
-	// 创建信用分计算器并扣分
-	tsc := algorithm.NewTrustScoreCalculator(processor.store, nil) // WebSocket推送由通知任务处理
-	err := tsc.UpdateTrustScore(
-		ctx,
-		algorithm.EntityTypeCustomer,
-		payload.ClaimantUserID,
-		-PenaltyAppealUpheld, // 固定扣10分
-		"appeal_upheld",
-		fmt.Sprintf("申诉成功: 订单%s的%s索赔被确认为不当", payload.OrderNo, getClaimTypeLabel(payload.ClaimType)),
-		&relatedType,
-		&relatedID,
-	)
-	if err != nil {
-		return fmt.Errorf("update trust score: %w", err)
-	}
-
-	log.Info().
-		Int64("user_id", payload.ClaimantUserID).
-		Int16("score_deduction", PenaltyAppealUpheld).
-		Msg("penalized claimant trust score")
-
+	_ = ctx
+	_ = payload
 	return nil
 }
 

@@ -8,14 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
 )
-
-const penaltyAppealUpheld = int16(10)
-
 // =============================================================================
 // Appeal API Handlers
 // 申诉功能 - 商户/骑手对索赔的申诉
@@ -1131,7 +1127,6 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 		"claim_description":   appeal.ClaimDescription,
 		"claim_evidence_urls": appeal.ClaimEvidenceUrls,
 		"claim_status":        appeal.ClaimStatus,
-		"user_trust_score":    appeal.UserTrustScore,
 		"claim_created_at":    appeal.ClaimCreatedAt,
 		"order_no":            appeal.OrderNo,
 		"order_amount":        appeal.OrderAmount,
@@ -1303,24 +1298,6 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 }
 
 func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
-	if payload.Status == "approved" {
-		relatedType := "appeal"
-		relatedID := payload.AppealID
-		calculator := algorithm.NewTrustScoreCalculator(server.store, server.wsHub)
-		if err := calculator.UpdateTrustScore(
-			ctx,
-			algorithm.EntityTypeCustomer,
-			payload.ClaimantUserID,
-			-penaltyAppealUpheld,
-			"appeal_upheld",
-			"申诉成功: 订单"+payload.OrderNo+"的"+getClaimTypeLabel(payload.ClaimType)+"索赔被确认为不当",
-			&relatedType,
-			&relatedID,
-		); err != nil {
-			return err
-		}
-	}
-
 	appellantUserID, err := server.getAppellantUserID(ctx, payload.AppellantType, payload.AppellantID)
 	if err != nil {
 		return err

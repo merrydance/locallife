@@ -286,7 +286,6 @@ SELECT
     c.description AS claim_description,
     c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
-    c.trust_score_snapshot AS user_trust_score,
     c.lookback_result,
     c.created_at AS claim_created_at,
     o.order_no,

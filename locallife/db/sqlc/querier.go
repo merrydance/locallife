@@ -58,7 +58,6 @@ type Querier interface {
 	BatchCreateRiderLocations(ctx context.Context, arg []BatchCreateRiderLocationsParams) (int64, error)
 	// 批量更新菜品上下架状态（只更新属于指定商户的菜品）
 	BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) (int64, error)
-	BlacklistUser(ctx context.Context, arg BlacklistUserParams) error
 	// 商户熔断时自动取消所有未来的预订
 	CancelMerchantFutureReservations(ctx context.Context, arg CancelMerchantFutureReservationsParams) (int64, error)
 	CheckAndDecrementInventory(ctx context.Context, arg CheckAndDecrementInventoryParams) (DailyInventory, error)
@@ -194,6 +193,10 @@ type Querier interface {
 	CountUserBalanceLogs(ctx context.Context, userID int64) (int64, error)
 	CountUserClaimsInPeriod(ctx context.Context, arg CountUserClaimsInPeriodParams) (int64, error)
 	CountUserNotifications(ctx context.Context, arg CountUserNotificationsParams) (int64, error)
+	// ==============================
+	// behavior_trace_snapshots
+	// ==============================
+	CountUserOrders(ctx context.Context, userID int64) (int32, error)
 	// 统计用户近N天的索赔次数（用于行为回溯）
 	CountUserRecentClaims(ctx context.Context, arg CountUserRecentClaimsParams) (int64, error)
 	// ==========================================
@@ -208,6 +211,27 @@ type Querier interface {
 	// =========================== 商户申诉 ===========================
 	// 创建申诉
 	CreateAppeal(ctx context.Context, arg CreateAppealParams) (Appeal, error)
+	// ==============================
+	// behavior_actions
+	// ==============================
+	CreateBehaviorAction(ctx context.Context, arg CreateBehaviorActionParams) (BehaviorAction, error)
+	// ==============================
+	// behavior_appeals
+	// ==============================
+	CreateBehaviorAppeal(ctx context.Context, arg CreateBehaviorAppealParams) (BehaviorAppeal, error)
+	// ==============================
+	// behavior_blocklist
+	// ==============================
+	CreateBehaviorBlocklist(ctx context.Context, arg CreateBehaviorBlocklistParams) (BehaviorBlocklist, error)
+	// ==============================
+	// behavior_decisions
+	// ==============================
+	CreateBehaviorDecision(ctx context.Context, arg CreateBehaviorDecisionParams) (BehaviorDecision, error)
+	// ==============================
+	// behavior_evidence
+	// ==============================
+	CreateBehaviorEvidence(ctx context.Context, arg CreateBehaviorEvidenceParams) (BehaviorEvidence, error)
+	CreateBehaviorTraceSnapshot(ctx context.Context, arg CreateBehaviorTraceSnapshotParams) (BehaviorTraceSnapshot, error)
 	// Billing groups
 	CreateBillingGroup(ctx context.Context, arg CreateBillingGroupParams) (BillingGroup, error)
 	// Billing group members
@@ -293,10 +317,12 @@ type Querier interface {
 	CreateMerchantMembership(ctx context.Context, arg CreateMerchantMembershipParams) (MerchantMembership, error)
 	CreateMerchantMembershipSettings(ctx context.Context, arg CreateMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	CreateMerchantPaymentConfig(ctx context.Context, arg CreateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
+	// M9: TrustScore信任分系统查询
+	// 设计理念：信用驱动，非证据驱动
 	// ==========================================
 	// merchant_profiles（商户信任画像）
 	// ==========================================
-	CreateMerchantProfile(ctx context.Context, arg CreateMerchantProfileParams) (MerchantProfile, error)
+	CreateMerchantProfile(ctx context.Context, merchantID int64) (MerchantProfile, error)
 	// 商户员工管理查询
 	CreateMerchantStaff(ctx context.Context, arg CreateMerchantStaffParams) (MerchantStaff, error)
 	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
@@ -310,6 +336,11 @@ type Querier interface {
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
 	CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrderParams) (PaymentOrder, error)
 	CreatePeakHourConfig(ctx context.Context, arg CreatePeakHourConfigParams) (PeakHourConfig, error)
+	// Behavior trace system queries
+	// ==============================
+	// platform_configs
+	// ==============================
+	CreatePlatformConfig(ctx context.Context, arg CreatePlatformConfigParams) (PlatformConfig, error)
 	CreatePrintLog(ctx context.Context, arg CreatePrintLogParams) (PrintLog, error)
 	CreateProfitSharingOrder(ctx context.Context, arg CreateProfitSharingOrderParams) (ProfitSharingOrder, error)
 	// 简化版创建（不含骑手分账，用于堂食/自提订单）
@@ -332,17 +363,13 @@ type Querier interface {
 	// ==========================================
 	// rider_profiles（骑手信任画像）
 	// ==========================================
-	CreateRiderProfile(ctx context.Context, arg CreateRiderProfileParams) (RiderProfile, error)
+	CreateRiderProfile(ctx context.Context, riderID int64) (RiderProfile, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateTable(ctx context.Context, arg CreateTableParams) (Table, error)
 	CreateTableReservation(ctx context.Context, arg CreateTableReservationParams) (TableReservation, error)
 	// 商户代客创建预订（无需支付，直接 confirmed 状态）
 	CreateTableReservationByMerchant(ctx context.Context, arg CreateTableReservationByMerchantParams) (TableReservation, error)
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
-	// ==========================================
-	// trust_score_changes（信任分变更日志）
-	// ==========================================
-	CreateTrustScoreChange(ctx context.Context, arg CreateTrustScoreChangeParams) (TrustScoreChange, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateUserAddress(ctx context.Context, arg CreateUserAddressParams) (UserAddress, error)
 	// 创建用户余额账户
@@ -355,12 +382,6 @@ type Querier interface {
 	// 创建用户索赔警告记录
 	CreateUserClaimWarning(ctx context.Context, arg CreateUserClaimWarningParams) (UserClaimWarning, error)
 	CreateUserNotificationPreferences(ctx context.Context, arg CreateUserNotificationPreferencesParams) (UserNotificationPreference, error)
-	// M9: TrustScore信任分系统查询
-	// 设计理念：信用驱动，非证据驱动
-	// ==========================================
-	// user_profiles（顾客信任画像）
-	// ==========================================
-	CreateUserProfile(ctx context.Context, arg CreateUserProfileParams) (UserProfile, error)
 	CreateUserRole(ctx context.Context, arg CreateUserRoleParams) (UserRole, error)
 	// User Vouchers (用户已领取的代金券)
 	CreateUserVoucher(ctx context.Context, arg CreateUserVoucherParams) (UserVoucher, error)
@@ -435,6 +456,7 @@ type Querier interface {
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
 	// 冻结用户余额（提现申请时）
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
+	GetActiveBehaviorBlocklist(ctx context.Context, arg GetActiveBehaviorBlocklistParams) (BehaviorBlocklist, error)
 	GetActiveBillingGroupMember(ctx context.Context, arg GetActiveBillingGroupMemberParams) (BillingGroupMember, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
 	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
@@ -455,6 +477,7 @@ type Querier interface {
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
 	// 获取用户审核通过的运营商申请（用于绑卡开户）
 	GetApprovedOperatorApplicationByUserID(ctx context.Context, userID int64) (OperatorApplication, error)
+	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	// 获取满足订单金额条件的最优促销（减免金额最大的那条）
 	GetBestDeliveryPromotion(ctx context.Context, arg GetBestDeliveryPromotionParams) (MerchantDeliveryPromotion, error)
 	GetBestDiscountRule(ctx context.Context, arg GetBestDiscountRuleParams) (DiscountRule, error)
@@ -712,6 +735,7 @@ type Querier interface {
 	GetPendingClaims(ctx context.Context, limit int32) ([]Claim, error)
 	// 检查区域是否有待审核或已通过的申请（用于区域独占检查）
 	GetPendingOperatorApplicationByRegion(ctx context.Context, regionID int64) (OperatorApplication, error)
+	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	// 平台日统计
 	GetPlatformDailyStats(ctx context.Context, arg GetPlatformDailyStatsParams) ([]GetPlatformDailyStatsRow, error)
 	// M12: 平台端统计查询
@@ -746,7 +770,6 @@ type Querier interface {
 	GetRandomDishes(ctx context.Context, limit int32) ([]int64, error)
 	// 实时大盘数据(最近24小时)
 	GetRealtimeDashboard(ctx context.Context) (GetRealtimeDashboardRow, error)
-	GetRecentTrustScoreChanges(ctx context.Context, arg GetRecentTrustScoreChangesParams) ([]TrustScoreChange, error)
 	GetRechargeRule(ctx context.Context, id int64) (RechargeRule, error)
 	GetRecommendConfig(ctx context.Context, name string) (RecommendConfig, error)
 	// ============================================================================
@@ -842,9 +865,6 @@ type Querier interface {
 	// 菜品销量排行: 从order_items实时聚合
 	GetTopSellingDishes(ctx context.Context, arg GetTopSellingDishesParams) ([]GetTopSellingDishesRow, error)
 	GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error)
-	GetTotalScoreChangeByReason(ctx context.Context, arg GetTotalScoreChangeByReasonParams) (interface{}, error)
-	GetTrustScoreChange(ctx context.Context, id int64) (TrustScoreChange, error)
-	GetTrustScoreChangesByReason(ctx context.Context, arg GetTrustScoreChangesByReasonParams) ([]TrustScoreChange, error)
 	GetUnconfirmedFraudPatterns(ctx context.Context, limit int32) ([]FraudPattern, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserAddress(ctx context.Context, id int64) (UserAddress, error)
@@ -874,6 +894,7 @@ type Querier interface {
 	GetUserCartsWithDetails(ctx context.Context, arg GetUserCartsWithDetailsParams) ([]GetUserCartsWithDetailsRow, error)
 	// 获取用户索赔警告状态
 	GetUserClaimWarningStatus(ctx context.Context, userID int64) (UserClaimWarning, error)
+	GetUserClaimWindowStats(ctx context.Context, userID int64) (GetUserClaimWindowStatsRow, error)
 	GetUserDefaultAddress(ctx context.Context, userID int64) (UserAddress, error)
 	// 用户增长统计
 	GetUserGrowthStats(ctx context.Context, arg GetUserGrowthStatsParams) ([]GetUserGrowthStatsRow, error)
@@ -885,8 +906,6 @@ type Querier interface {
 	// 用户偏好管理
 	// ============================================================================
 	GetUserPreferences(ctx context.Context, userID int64) (UserPreference, error)
-	GetUserProfile(ctx context.Context, arg GetUserProfileParams) (UserProfile, error)
-	GetUserProfileForUpdate(ctx context.Context, arg GetUserProfileForUpdateParams) (UserProfile, error)
 	// 获取用户购买过的菜品ID（用于排除已购买）
 	GetUserPurchasedDishIDs(ctx context.Context, arg GetUserPurchasedDishIDsParams) ([]pgtype.Int8, error)
 	GetUserRecentBehaviors(ctx context.Context, arg GetUserRecentBehaviorsParams) ([]UserBehavior, error)
@@ -900,6 +919,7 @@ type Querier interface {
 	// ==========================================
 	// 查询使用相同地址ID的用户
 	GetUsersByAddressID(ctx context.Context, id int64) ([]GetUsersByAddressIDRow, error)
+	GetUsersByDeviceFingerprint(ctx context.Context, deviceFingerprint pgtype.Text) ([]int64, error)
 	GetUsersByDeviceID(ctx context.Context, deviceID string) ([]int64, error)
 	// 查询地址高度相似的用户（基于region_id和详细地址模糊匹配）
 	GetUsersBySimilarAddress(ctx context.Context, arg GetUsersBySimilarAddressParams) ([]GetUsersBySimilarAddressRow, error)
@@ -917,7 +937,6 @@ type Querier interface {
 	IncrementMerchantForeignObjectClaim(ctx context.Context, merchantID int64) error
 	IncrementRiderDamageIncident(ctx context.Context, riderID int64) error
 	IncrementSoldQuantity(ctx context.Context, arg IncrementSoldQuantityParams) (DailyInventory, error)
-	IncrementUserClaimCount(ctx context.Context, arg IncrementUserClaimCountParams) error
 	// 增加用户警告次数
 	IncrementUserClaimWarning(ctx context.Context, arg IncrementUserClaimWarningParams) error
 	// 增加平台垫付次数
@@ -927,6 +946,7 @@ type Querier interface {
 	IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error)
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
+	ListActiveBehaviorBlocklists(ctx context.Context) ([]BehaviorBlocklist, error)
 	ListActiveCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]CloudPrinter, error)
 	ListActiveDeliveryFeeConfigs(ctx context.Context) ([]DeliveryFeeConfig, error)
 	ListActiveDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
@@ -947,6 +967,11 @@ type Querier interface {
 	ListAvailableRooms(ctx context.Context, merchantID int64) ([]Table, error)
 	// 获取商户的可用包间列表（含主图）供顾客查看
 	ListAvailableRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListAvailableRoomsForCustomerRow, error)
+	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
+	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)
+	ListBehaviorDecisionsByOrder(ctx context.Context, orderID int64) ([]BehaviorDecision, error)
+	ListBehaviorEvidenceByDecision(ctx context.Context, decisionID int64) ([]BehaviorEvidence, error)
+	ListBehaviorTraceSnapshotsByDecision(ctx context.Context, decisionID int64) ([]BehaviorTraceSnapshot, error)
 	ListBillingGroupOrdersByGroup(ctx context.Context, billingGroupID int64) ([]BillingGroupOrder, error)
 	ListBillingGroupsBySession(ctx context.Context, diningSessionID int64) ([]BillingGroup, error)
 	// 获取店铺的所有 Boss
@@ -997,7 +1022,6 @@ type Querier interface {
 	ListDishesForMenu(ctx context.Context, merchantID int64) ([]ListDishesForMenuRow, error)
 	ListEcommerceApplymentsByStatus(ctx context.Context, arg ListEcommerceApplymentsByStatusParams) ([]EcommerceApplyment, error)
 	ListEcommerceApplymentsBySubject(ctx context.Context, arg ListEcommerceApplymentsBySubjectParams) ([]EcommerceApplyment, error)
-	ListEntityTrustScoreChanges(ctx context.Context, arg ListEntityTrustScoreChangesParams) ([]TrustScoreChange, error)
 	// 列出已过期的运营商
 	ListExpiredOperators(ctx context.Context) ([]ListExpiredOperatorsRow, error)
 	ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
@@ -1106,6 +1130,7 @@ type Querier interface {
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
 	// Find pending reservations within N minutes of payment deadline (for reminder notifications)
 	ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]TableReservation, error)
+	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)
 	ListProfitSharingOrdersByMerchant(ctx context.Context, arg ListProfitSharingOrdersByMerchantParams) ([]ProfitSharingOrder, error)
@@ -1297,12 +1322,15 @@ type Querier interface {
 	// 用户行为埋点
 	// ============================================================================
 	TrackBehavior(ctx context.Context, arg TrackBehaviorParams) (UserBehavior, error)
-	UnblacklistUser(ctx context.Context, arg UnblacklistUserParams) error
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
 	UnlinkMerchantDishCategory(ctx context.Context, arg UnlinkMerchantDishCategoryParams) error
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
+	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
+	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error
+	UpdateBehaviorBlocklistStatus(ctx context.Context, arg UpdateBehaviorBlocklistStatusParams) error
+	UpdateBehaviorDecisionStatus(ctx context.Context, arg UpdateBehaviorDecisionStatusParams) error
 	UpdateBusinessHour(ctx context.Context, arg UpdateBusinessHourParams) (MerchantBusinessHour, error)
 	UpdateCartItem(ctx context.Context, arg UpdateCartItemParams) (CartItem, error)
 	UpdateClaimLookbackResult(ctx context.Context, arg UpdateClaimLookbackResultParams) error
@@ -1379,7 +1407,6 @@ type Querier interface {
 	UpdateMerchantStaffRole(ctx context.Context, arg UpdateMerchantStaffRoleParams) (MerchantStaff, error)
 	UpdateMerchantStaffStatus(ctx context.Context, arg UpdateMerchantStaffStatusParams) (MerchantStaff, error)
 	UpdateMerchantStatus(ctx context.Context, arg UpdateMerchantStatusParams) (Merchant, error)
-	UpdateMerchantTrustScore(ctx context.Context, arg UpdateMerchantTrustScoreParams) error
 	UpdateOperator(ctx context.Context, arg UpdateOperatorParams) (Operator, error)
 	// 更新基础信息（名称、联系人、联系电话、合同年限）
 	UpdateOperatorApplicationBasicInfo(ctx context.Context, arg UpdateOperatorApplicationBasicInfoParams) (OperatorApplication, error)
@@ -1461,7 +1488,6 @@ type Querier interface {
 	UpdateRiderStatus(ctx context.Context, arg UpdateRiderStatusParams) (Rider, error)
 	// 更新骑手的微信二级商户号
 	UpdateRiderSubMchID(ctx context.Context, arg UpdateRiderSubMchIDParams) (Rider, error)
-	UpdateRiderTrustScore(ctx context.Context, arg UpdateRiderTrustScoreParams) error
 	UpdateSessionTokens(ctx context.Context, arg UpdateSessionTokensParams) (Session, error)
 	UpdateSubOrderProfitSharingStatus(ctx context.Context, arg UpdateSubOrderProfitSharingStatusParams) (CombinedPaymentSubOrder, error)
 	UpdateTable(ctx context.Context, arg UpdateTableParams) (Table, error)
@@ -1471,9 +1497,7 @@ type Querier interface {
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserAddress(ctx context.Context, arg UpdateUserAddressParams) (UserAddress, error)
 	UpdateUserNotificationPreferences(ctx context.Context, arg UpdateUserNotificationPreferencesParams) (UserNotificationPreference, error)
-	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	UpdateUserRoleStatus(ctx context.Context, arg UpdateUserRoleStatusParams) (UserRole, error)
-	UpdateUserTrustScore(ctx context.Context, arg UpdateUserTrustScoreParams) error
 	UpdateVoucher(ctx context.Context, arg UpdateVoucherParams) (Voucher, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
@@ -1481,6 +1505,7 @@ type Querier interface {
 	UpsertGroupPolicies(ctx context.Context, arg UpsertGroupPoliciesParams) (GroupPolicy, error)
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
+	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
 	UpsertRecommendationConfig(ctx context.Context, arg UpsertRecommendationConfigParams) (RecommendationConfig, error)
 	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)
 	// ==========================================

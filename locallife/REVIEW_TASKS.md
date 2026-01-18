@@ -66,7 +66,7 @@
 - [x] 商户统计/财务/设备/展示（/v1/merchant/*）
 - [x] 运营商统计与财务（/v1/operator、/v1/operators/me）
 - [x] 平台统计（/v1/platform/stats）
-- [x] 信任分与风控（/v1/trust-score）
+- [x] 行为追溯风控（/v1/claims、/v1/food-safety、/v1/fraud）
 
 ## 11. 汇总审查文档
 - [ ] 产出总体审查报告（用途、状态机、健壮性、完成度、矛盾/冗余/缺失）

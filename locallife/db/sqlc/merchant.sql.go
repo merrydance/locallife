@@ -857,7 +857,6 @@ SELECT
     m.region_id,
     m.status,
     m.is_open,
-    COALESCE(mp.trust_score, 500) AS trust_score,
     COALESCE(
         (SELECT COUNT(*)
          FROM orders o 
@@ -867,7 +866,6 @@ SELECT
         ), 0
     )::int AS monthly_orders
 FROM merchants m
-LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE m.id = ANY($1::bigint[])
   AND m.status = 'active'
 `
@@ -883,7 +881,6 @@ type GetMerchantsWithStatsByIDsRow struct {
 	RegionID      int64          `json:"region_id"`
 	Status        string         `json:"status"`
 	IsOpen        bool           `json:"is_open"`
-	TrustScore    int16          `json:"trust_score"`
 	MonthlyOrders int32          `json:"monthly_orders"`
 }
 
@@ -908,7 +905,6 @@ func (q *Queries) GetMerchantsWithStatsByIDs(ctx context.Context, dollar_1 []int
 			&i.RegionID,
 			&i.Status,
 			&i.IsOpen,
-			&i.TrustScore,
 			&i.MonthlyOrders,
 		); err != nil {
 			return nil, err

@@ -16,168 +16,6 @@ import (
 	"github.com/merrydance/locallife/worker"
 )
 
-// UserProfileDTO 用户信用画像
-type UserProfileDTO struct {
-	ID              int64  `json:"id"`
-	UserID          int64  `json:"user_id"`
-	Role            string `json:"role"`
-	TrustScore      int16  `json:"trust_score"`
-	TotalOrders     int32  `json:"total_orders"`
-	CompletedOrders int32  `json:"completed_orders"`
-	TotalClaims     int32  `json:"total_claims"`
-	ViolationCount  int32  `json:"violation_count"`
-}
-
-// MerchantProfileDTO 商户信用画像
-type MerchantProfileDTO struct {
-	ID                  int64 `json:"id"`
-	MerchantID          int64 `json:"merchant_id"`
-	TrustScore          int16 `json:"trust_score"`
-	TotalOrders         int32 `json:"total_orders"`
-	TotalSales          int64 `json:"total_sales"`
-	CompletedOrders     int32 `json:"completed_orders"`
-	TotalClaims         int32 `json:"total_claims"`
-	ForeignObjectClaims int32 `json:"foreign_object_claims"`
-	FoodSafetyIncidents int32 `json:"food_safety_incidents"`
-}
-
-// RiderProfileDTO 骑手信用画像
-type RiderProfileDTO struct {
-	ID                   int64 `json:"id"`
-	RiderID              int64 `json:"rider_id"`
-	TrustScore           int16 `json:"trust_score"`
-	TotalDeliveries      int32 `json:"total_deliveries"`
-	CompletedDeliveries  int32 `json:"completed_deliveries"`
-	OnTimeDeliveries     int32 `json:"on_time_deliveries"`
-	TotalDamageIncidents int32 `json:"total_damage_incidents"`
-}
-
-// TrustScoreProfileResponse 信用分画像响应（包含三种角色）
-type TrustScoreProfileResponse struct {
-	Customer *UserProfileDTO     `json:"customer,omitempty"`
-	Merchant *MerchantProfileDTO `json:"merchant,omitempty"`
-	Rider    *RiderProfileDTO    `json:"rider,omitempty"`
-}
-
-// TrustScoreChangeResponse 信用分变更记录响应
-type TrustScoreChangeResponse struct {
-	ID                int64     `json:"id"`
-	EntityType        string    `json:"entity_type"`
-	EntityID          int64     `json:"entity_id"`
-	OldScore          int16     `json:"old_score"`
-	NewScore          int16     `json:"new_score"`
-	ScoreChange       int16     `json:"score_change"`
-	ReasonType        string    `json:"reason_type"`
-	ReasonDescription string    `json:"reason_description"`
-	IsAuto            bool      `json:"is_auto"`
-	CreatedAt         time.Time `json:"created_at"`
-}
-
-// GetTrustScoreProfile 查询信用分画像
-// @Summary 查询信用分画像
-// @Description 根据角色（customer/merchant/rider）和ID查询信用分画像信息，包含信用分、历史订单统计、违规记录等
-// @Tags 信用分管理
-// @Accept json
-// @Produce json
-// @Param role path string true "角色类型" Enums(customer, merchant, rider)
-// @Param id path int true "实体ID（用户ID/商户ID/骑手ID）"
-// @Success 200 {object} TrustScoreProfileResponse "信用分画像（根据角色返回对应字段）"
-// @Failure 400 {object} ErrorResponse "无效的角色类型或ID"
-// @Failure 404 {object} ErrorResponse "画像不存在"
-// @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/profiles/{role}/{id} [get]
-// @Security BearerAuth
-func (server *Server) GetTrustScoreProfile(ctx *gin.Context) {
-	role := ctx.Param("role")
-	idStr := ctx.Param("id")
-
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 验证角色
-	if role != algorithm.EntityTypeCustomer &&
-		role != algorithm.EntityTypeMerchant &&
-		role != algorithm.EntityTypeRider {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
-		return
-	}
-
-	var resp TrustScoreProfileResponse
-
-	switch role {
-	case algorithm.EntityTypeCustomer:
-		p, err := server.store.GetUserProfile(ctx, db.GetUserProfileParams{
-			UserID: id,
-			Role:   role,
-		})
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
-			} else {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user profile: %w", err)))
-			}
-			return
-		}
-		resp.Customer = &UserProfileDTO{
-			ID:              p.ID,
-			UserID:          p.UserID,
-			Role:            p.Role,
-			TrustScore:      p.TrustScore,
-			TotalOrders:     p.TotalOrders,
-			CompletedOrders: p.CompletedOrders,
-			TotalClaims:     p.TotalClaims,
-			ViolationCount:  p.VerifiedViolations,
-		}
-
-	case algorithm.EntityTypeMerchant:
-		p, err := server.store.GetMerchantProfile(ctx, id)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
-			} else {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant profile: %w", err)))
-			}
-			return
-		}
-		resp.Merchant = &MerchantProfileDTO{
-			ID:                  p.ID,
-			MerchantID:          p.MerchantID,
-			TrustScore:          p.TrustScore,
-			TotalOrders:         p.TotalOrders,
-			TotalSales:          p.TotalSales,
-			CompletedOrders:     p.CompletedOrders,
-			TotalClaims:         p.TotalClaims,
-			ForeignObjectClaims: p.ForeignObjectClaims,
-			FoodSafetyIncidents: p.FoodSafetyIncidents,
-		}
-
-	case algorithm.EntityTypeRider:
-		p, err := server.store.GetRiderProfile(ctx, id)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
-			} else {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider profile: %w", err)))
-			}
-			return
-		}
-		resp.Rider = &RiderProfileDTO{
-			ID:                   p.ID,
-			RiderID:              p.RiderID,
-			TrustScore:           p.TrustScore,
-			TotalDeliveries:      p.TotalDeliveries,
-			CompletedDeliveries:  p.CompletedDeliveries,
-			OnTimeDeliveries:     p.OnTimeDeliveries,
-			TotalDamageIncidents: p.TotalDamageIncidents,
-		}
-	}
-
-	ctx.JSON(http.StatusOK, resp)
-}
-
 // SubmitClaimRequest 提交索赔请求
 type SubmitClaimRequest struct {
 	OrderID        int64    `json:"order_id" binding:"required,min=1"`
@@ -185,6 +23,7 @@ type SubmitClaimRequest struct {
 	ClaimAmount    int64    `json:"claim_amount" binding:"required,min=1,max=100000000"` // 最高100万分(1万元)
 	ClaimReason    string   `json:"claim_reason" binding:"required,min=5,max=1000"`
 	EvidencePhotos []string `json:"evidence_photos,omitempty" binding:"omitempty,max=10,dive,url,max=500"`
+	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
 }
 
 // SubmitClaimResponse 索赔响应
@@ -201,7 +40,7 @@ type SubmitClaimResponse struct {
 
 // SubmitClaim 提交索赔
 // @Summary 提交索赔
-// @Description 用户为已完成的订单提交索赔申请。系统会根据用户信用分自动评估，高信用用户可获得秒赔或自动审核，低信用用户需人工审核。
+// @Description 用户为已完成的订单提交索赔申请。系统基于行为追溯规则进行评估，决定秒赔、需证据或平台垫付。
 // @Tags 索赔管理
 // @Accept json
 // @Produce json
@@ -213,7 +52,7 @@ type SubmitClaimResponse struct {
 // @Failure 404 {object} ErrorResponse "订单不存在"
 // @Failure 409 {object} ErrorResponse "该订单已有索赔记录"
 // @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/claims [post]
+// @Router /v1/claims [post]
 // @Security BearerAuth
 func (server *Server) SubmitClaim(ctx *gin.Context) {
 	var req SubmitClaimRequest
@@ -310,8 +149,30 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
+	// 采集证据信息（事务内落库）
+	deviceID := ""
+	deviceType := ""
+	if devices, err := server.store.GetDevicesByUserID(ctx, authPayload.UserID); err == nil && len(devices) > 0 {
+		deviceID = devices[0].DeviceID
+		deviceType = devices[0].DeviceType
+	}
+	var addressID *int64
+	if order.AddressID.Valid {
+		addr := order.AddressID.Int64
+		addressID = &addr
+	}
+	
+	evidenceContext := &algorithm.ClaimEvidenceContext{
+		DeviceID:          deviceID,
+		DeviceFingerprint: req.DeviceFingerprint,
+		DeviceType:        deviceType,
+		IPAddress:         ctx.ClientIP(),
+		UserAgent:         ctx.Request.UserAgent(),
+		AddressID:         addressID,
+	}
+
 	// 创建索赔记录
-	claim, err := approver.CreateClaimWithDecision(
+	claim, err := approver.CreateClaimWithDecisionAndEvidence(
 		ctx,
 		req.OrderID,
 		authPayload.UserID,
@@ -320,6 +181,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		req.EvidencePhotos,
 		decision.Amount, // 使用决策后的金额（超时可能只赔运费）
 		decision,
+		evidenceContext,
 	)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create claim with decision: %w", err)))
@@ -403,7 +265,7 @@ type ReviewClaimRequest struct {
 // @Failure 403 {object} ErrorResponse "无权限审核此索赔"
 // @Failure 404 {object} ErrorResponse "索赔不存在"
 // @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/claims/{id}/review [patch]
+// @Router /v1/claims/{id}/review [patch]
 // @Security BearerAuth
 func (server *Server) ReviewClaim(ctx *gin.Context) {
 	claimIDStr := ctx.Param("id")
@@ -493,16 +355,6 @@ func (server *Server) ReviewClaim(ctx *gin.Context) {
 		return
 	}
 
-	// 如果拒绝且判定为恶意索赔，扣除信用分
-	if !*req.Approved {
-		calculator := algorithm.NewTrustScoreCalculator(server.store, server.wsHub)
-		err = calculator.DecrementMaliciousClaim(ctx, claim.UserID, claimID)
-		if err != nil {
-			// 记录错误但不影响返回
-			fmt.Printf("Failed to decrement trust score: %v\n", err)
-		}
-	}
-
 	// 重新获取更新后的索赔记录
 	updatedClaim, err := server.store.GetClaim(ctx, claimID)
 	if err != nil {
@@ -534,7 +386,7 @@ type ReportFoodSafetyResponse struct {
 
 // ReportFoodSafety 上报食安问题
 // @Summary 上报食品安全问题
-// @Description 用户上报商户食品安全问题，系统将根据举报频率和用户信用分决定是否熔断商户
+// @Description 用户上报商户食品安全问题，系统将根据举报频率与协同模式决定是否熔断商户
 // @Tags 食品安全
 // @Accept json
 // @Produce json
@@ -542,7 +394,7 @@ type ReportFoodSafetyResponse struct {
 // @Success 200 {object} ReportFoodSafetyResponse "上报成功"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/food-safety/report [post]
+// @Router /v1/food-safety/report [post]
 // @Security BearerAuth
 func (server *Server) ReportFoodSafety(ctx *gin.Context) {
 	var req ReportFoodSafetyRequest
@@ -619,68 +471,6 @@ func (server *Server) ReportFoodSafety(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// GetTrustScoreHistory 查询信用分变更历史
-// @Summary 查询信用分变更历史
-// @Description 查询指定角色实体的信用分变更历史记录，包括扣分原因、扣分金额、变更时间等
-// @Tags 信用分管理
-// @Accept json
-// @Produce json
-// @Param role path string true "角色类型" Enums(customer, merchant, rider)
-// @Param id path int true "实体ID"
-// @Success 200 {array} TrustScoreChangeResponse "变更历史列表"
-// @Failure 400 {object} ErrorResponse "无效的角色类型或ID"
-// @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/history/{role}/{id} [get]
-// @Security BearerAuth
-func (server *Server) GetTrustScoreHistory(ctx *gin.Context) {
-	role := ctx.Param("role")
-	idStr := ctx.Param("id")
-
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 验证角色
-	if role != algorithm.EntityTypeCustomer &&
-		role != algorithm.EntityTypeMerchant &&
-		role != algorithm.EntityTypeRider {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
-		return
-	}
-
-	// 查询变更历史（20条记录）
-	changes, err := server.store.ListEntityTrustScoreChanges(ctx, db.ListEntityTrustScoreChangesParams{
-		EntityType: role,
-		EntityID:   id,
-		Limit:      20,
-		Offset:     0,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list trust score changes for %s %d: %w", role, id, err)))
-		return
-	}
-
-	resp := make([]TrustScoreChangeResponse, len(changes))
-	for i, c := range changes {
-		resp[i] = TrustScoreChangeResponse{
-			ID:                c.ID,
-			EntityType:        c.EntityType,
-			EntityID:          c.EntityID,
-			OldScore:          c.OldScore,
-			NewScore:          c.NewScore,
-			ScoreChange:       c.ScoreChange,
-			ReasonType:        c.ReasonType,
-			ReasonDescription: c.ReasonDescription,
-			IsAuto:            c.IsAuto,
-			CreatedAt:         c.CreatedAt,
-		}
-	}
-
-	ctx.JSON(http.StatusOK, resp)
-}
-
 // TriggerFraudDetectionRequest 触发欺诈检测请求
 type TriggerFraudDetectionRequest struct {
 	ClaimID           *int64  `json:"claim_id,omitempty"`
@@ -698,7 +488,7 @@ type TriggerFraudDetectionRequest struct {
 // @Success 200 {object} algorithm.FraudDetectionResult "检测结果"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/fraud/detect [post]
+// @Router /v1/fraud/detect [post]
 // @Security BearerAuth
 func (server *Server) TriggerFraudDetection(ctx *gin.Context) {
 	var req TriggerFraudDetectionRequest
@@ -745,114 +535,6 @@ func (server *Server) TriggerFraudDetection(ctx *gin.Context) {
 	ctx.JSON(http.StatusBadRequest, gin.H{"error": "must provide claim_id, device_fingerprint, or address_id"})
 }
 
-// SubmitRecoveryRequest 提交恢复申请请求
-type SubmitRecoveryRequest struct {
-	EntityType        string `json:"entity_type" binding:"required,oneof=merchant rider"` // merchant/rider
-	EntityID          int64  `json:"entity_id" binding:"required,min=1"`
-	CommitmentMessage string `json:"commitment_message" binding:"required,min=10,max=500"` // 改善承诺
-}
-
-// SubmitRecoveryRequest 提交恢复申请（商户/骑手）
-// @Summary 提交恢复申请
-// @Description 商户或骑手因信用分过低被封禁后，可提交恢复申请。系统自动给一次机会，第二次再犯永久封禁
-// @Tags 信用分管理
-// @Accept json
-// @Produce json
-// @Param request body SubmitRecoveryRequest true "恢复申请信息"
-// @Success 200 {object} MessageResponse "恢复成功"
-// @Failure 400 {object} ErrorResponse "参数错误"
-// @Failure 403 {object} ErrorResponse "已超过最大恢复次数"
-// @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/recovery [post]
-// @Security BearerAuth
-func (server *Server) SubmitRecoveryRequest(ctx *gin.Context) {
-	var req SubmitRecoveryRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 验证实体类型（只支持商户和骑手）
-	if req.EntityType != algorithm.EntityTypeMerchant &&
-		req.EntityType != algorithm.EntityTypeRider {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "只支持商户和骑手申请恢复"})
-		return
-	}
-
-	calculator := algorithm.NewTrustScoreCalculator(server.store, server.wsHub)
-	err := calculator.ProcessRecoveryRequest(
-		ctx,
-		req.EntityType,
-		req.EntityID,
-		req.CommitmentMessage,
-	)
-
-	if err != nil {
-		// 检查是否超过最大恢复次数
-		if err.Error() == fmt.Sprintf("已超过最大恢复次数（%d次），永久封禁", algorithm.MaxRecoveryAttempts) {
-			ctx.JSON(http.StatusForbidden, gin.H{
-				"error":   "已超过最大恢复次数",
-				"message": "您已用完所有恢复机会，账号永久封禁",
-			})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("process recovery request for %s %d: %w", req.EntityType, req.EntityID, err)))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "恢复申请已批准，信用分已恢复，这是您的机会，请遵守规则",
-		"status":  "approved",
-	})
-}
-
-// SubmitAppealRequest 提交申诉请求
-type SubmitAppealRequest struct {
-	EntityType   string `json:"entity_type" binding:"required,oneof=customer merchant rider"`
-	EntityID     int64  `json:"entity_id" binding:"required,min=1"`
-	AppealReason string `json:"appeal_reason" binding:"required,min=10,max=1000"`
-	Evidence     string `json:"evidence,omitempty" binding:"omitempty,url,max=500"`
-}
-
-// SubmitAppeal 提交申诉
-// @Summary 提交申诉
-// @Description 提交信用分申诉，系统采用信用驱动的自动化处理，不设人工申诉通道。信用分将根据后续正常行为自动恢复
-// @Tags 信用分管理
-// @Accept json
-// @Produce json
-// @Param request body SubmitAppealRequest true "申诉信息"
-// @Success 200 {object} MessageResponse "申诉已记录"
-// @Failure 400 {object} ErrorResponse "参数错误"
-// @Router /v1/trust-score/appeals [post]
-// @Security BearerAuth
-func (server *Server) SubmitAppeal(ctx *gin.Context) {
-	var req SubmitAppealRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 验证实体类型
-	if req.EntityType != algorithm.EntityTypeCustomer &&
-		req.EntityType != algorithm.EntityTypeMerchant &&
-		req.EntityType != algorithm.EntityTypeRider {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_type"})
-		return
-	}
-
-	// 本系统采用算法驱动的信用体系，不设人工申诉通道
-	// 信用分会根据后续正常行为自动恢复
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "感谢您的反馈。本平台采用智能信用系统，信用分将根据您后续的正常经营/消费行为自动恢复。建议：1）保持良好的订单完成率；2）减少索赔纠纷；3）获取正面评价。",
-		"status":  "noted",
-		"tips": []string{
-			"连续7天无负面行为可恢复10分",
-			"每完成10笔正常订单可恢复5分",
-			"获得5星好评可恢复2分",
-		},
-	})
-}
-
 // SuspendMerchantRequest 熔断商户请求（管理员使用）
 type SuspendMerchantRequest struct {
 	MerchantID    int64  `json:"merchant_id" binding:"required,min=1"`
@@ -872,7 +554,7 @@ type SuspendMerchantRequest struct {
 // @Success 200 {object} MessageResponse "熔断成功"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/trust-score/merchants/{id}/suspend [patch]
+// @Router /v1/food-safety/merchants/{id}/suspend [patch]
 // @Security BearerAuth
 func (server *Server) SuspendMerchant(ctx *gin.Context) {
 	merchantIDStr := ctx.Param("id")

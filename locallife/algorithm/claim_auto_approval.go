@@ -3,6 +3,7 @@ package algorithm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,6 +31,16 @@ type ClaimAutoApproval struct {
 	lookbackChecker         *LookbackChecker
 	notificationDistributor NotificationDistributor // 通知分发器（可选，用于发送用户通知）
 	wsHub                   WebSocketHub            // WebSocket通知（必需，用于商户/骑手实时推送）
+}
+
+// ClaimEvidenceContext 索赔证据上下文（行为追溯）
+type ClaimEvidenceContext struct {
+	DeviceID          string
+	DeviceFingerprint string
+	DeviceType        string
+	IPAddress         string
+	UserAgent         string
+	AddressID         *int64
 }
 
 // WebSocketHub WebSocket通知接口
@@ -280,23 +291,30 @@ func (caa *ClaimAutoApproval) recordPlatformPay(ctx context.Context, userID int6
 
 // triggerRejectService 触发拒绝服务
 func (caa *ClaimAutoApproval) triggerRejectService(ctx context.Context, userID int64) {
-	// 更新用户信任分到70以下
-	_ = caa.store.UpdateUserTrustScore(ctx, db.UpdateUserTrustScoreParams{
-		UserID:     userID,
-		Role:       EntityTypeCustomer,
-		TrustScore: TrustScoreRejectService - 1, // 69分，低于70
+	// 外卖拒绝服务：写入行为追溯黑名单
+	_, err := caa.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   userID,
 	})
-	
-	// 记录信用分变更
-	_, _ = caa.store.CreateTrustScoreChange(ctx, db.CreateTrustScoreChangeParams{
-		EntityType:        EntityTypeCustomer,
-		EntityID:          userID,
-		OldScore:          TrustScoreMax, // 假设原来是满分
-		NewScore:          TrustScoreRejectService - 1,
-		ScoreChange:       int16(TrustScoreRejectService - 1 - TrustScoreMax),
-		ReasonType:        "reject-service",
-		ReasonDescription: "索赔行为异常，拒绝服务",
-		IsAuto:            true,
+	if err == nil {
+		return
+	}
+	if !errors.Is(err, db.ErrRecordNotFound) {
+		return
+	}
+
+	blockDays := int64(14)
+	if days := caa.getRejectServiceCooldownDays(ctx); days > 0 {
+		blockDays = days
+	}
+	blockUntil := time.Now().AddDate(0, 0, int(blockDays))
+
+	_, _ = caa.store.CreateBehaviorBlocklist(ctx, db.CreateBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   userID,
+		ReasonCode: "malicious-claims",
+		BlockUntil: pgtype.Timestamptz{Time: blockUntil, Valid: true},
+		Status:     "active",
 	})
 	
 	// 发送通知给用户（站内通知）
@@ -315,10 +333,35 @@ func (caa *ClaimAutoApproval) triggerRejectService(ctx context.Context, userID i
 	}
 }
 
+func (caa *ClaimAutoApproval) getRejectServiceCooldownDays(ctx context.Context) int64 {
+	config, err := caa.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: "behavior_trace.reject_service_cooldown_days",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil {
+		return 0
+	}
+
+	var payload struct {
+		Days int64 `json:"days"`
+	}
+	if jsonErr := json.Unmarshal(config.ConfigValue, &payload); jsonErr == nil && payload.Days > 0 {
+		return payload.Days
+	}
+
+	var direct int64
+	if jsonErr := json.Unmarshal(config.ConfigValue, &direct); jsonErr == nil && direct > 0 {
+		return direct
+	}
+
+	return 0
+}
+
 // CheckRiderDamageHistory 检查骑手餐损历史（异步）
 // 触发条件：骑手被索赔餐损时异步调用
-// 功能：检查7天内餐损次数，达到阈值则扣信用分并通知
-// 注意：押金扣款已在 CreateClaimWithDecision 中即时执行，此处只处理信用分
+// 功能：检查7天内餐损次数，达到阈值则记录并通知
+// 注意：押金扣款已在 CreateClaimWithDecision 中即时执行，此处只处理风险记录
 func (caa *ClaimAutoApproval) CheckRiderDamageHistory(
 	ctx context.Context,
 	riderID int64,
@@ -341,52 +384,17 @@ func (caa *ClaimAutoApproval) CheckRiderDamageHistory(
 		}
 	}
 
-	// 达到3次：触发信用分扣分和警告通知
+	// 达到3次：记录并警告
 	if damageCount >= DamageIncidentsIn7Days {
-		// 1. 扣骑手信用分
-		riderProfile, err := caa.store.GetRiderProfileForUpdate(ctx, riderID)
-		if err != nil {
-			return err
-		}
-
-		newScore := ClampInt16(
-			riderProfile.TrustScore+ScoreDamage3Times,
-			TrustScoreMin,
-			TrustScoreMax,
-		)
-
-		err = caa.store.UpdateRiderTrustScore(ctx, db.UpdateRiderTrustScoreParams{
-			RiderID:    riderID,
-			TrustScore: newScore,
-		})
-		if err != nil {
-			return err
-		}
-
-		// 2. 记录信用分变更
-		_, err = caa.store.CreateTrustScoreChange(ctx, db.CreateTrustScoreChangeParams{
-			EntityType:        EntityTypeRider,
-			EntityID:          riderID,
-			OldScore:          riderProfile.TrustScore,
-			NewScore:          newScore,
-			ScoreChange:       ScoreDamage3Times,
-			ReasonType:        "damage-3-times-in-7d",
-			ReasonDescription: fmt.Sprintf("一周内发生%d次餐损", damageCount),
-			IsAuto:            true,
-		})
-		if err != nil {
-			return err
-		}
-
-		// 3. 更新骑手profile统计
+		// 1. 更新骑手profile统计
 		err = caa.store.IncrementRiderDamageIncident(ctx, riderID)
 		if err != nil {
 			return err
 		}
 
-		// 4. 发送通知给骑手（信用分扣分警告）
+		// 2. 发送通知给骑手（风险警告）
 		go caa.sendNotification("rider", "餐损索赔警告",
-			fmt.Sprintf("您近7天内发生%d次餐损索赔，信用分-%d，请注意配送安全", damageCount, -ScoreDamage3Times), riderID)
+			fmt.Sprintf("您近7天内发生%d次餐损索赔，请注意配送安全", damageCount), riderID)
 		
 		// 注意：押金扣款已在 CreateClaimWithDecision 中即时执行，此处不重复扣款
 	}
@@ -405,6 +413,21 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecision(
 	claimAmount int64,
 	decision *Decision,
 ) (*db.Claim, error) {
+	return caa.CreateClaimWithDecisionAndEvidence(ctx, orderID, userID, claimType, description, evidenceURLs, claimAmount, decision, nil)
+}
+
+// CreateClaimWithDecisionAndEvidence 根据决策创建索赔记录（含行为追溯证据）
+func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
+	ctx context.Context,
+	orderID int64,
+	userID int64,
+	claimType string,
+	description string,
+	evidenceURLs []string,
+	claimAmount int64,
+	decision *Decision,
+	evidenceContext *ClaimEvidenceContext,
+) (*db.Claim, error) {
 	// 序列化回溯结果
 	var lookbackJSON []byte
 	if decision.LookbackData != nil {
@@ -413,16 +436,6 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecision(
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal lookback result: %w", err)
 		}
-	}
-
-	// 获取用户当前信用分作为快照
-	profile, err := caa.store.GetUserProfile(ctx, db.GetUserProfileParams{
-		UserID: userID,
-		Role:   EntityTypeCustomer,
-	})
-	if err != nil {
-		// 如果获取失败，使用默认值
-		profile = db.UserProfile{TrustScore: int16(TrustScoreMax)}
 	}
 
 	// 确定状态（新设计）
@@ -447,41 +460,45 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecision(
 		}
 	}
 
-	// 创建索赔记录
-	params := db.CreateClaimParams{
-		OrderID:        orderID,
-		UserID:         userID,
-		ClaimType:      claimType,
-		Description:    description,
-		EvidenceUrls:   evidenceURLs,
-		ClaimAmount:    claimAmount,
-		Status:         status,
-		IsMalicious:    false,
-		LookbackResult: lookbackJSON,
-		CreatedAt:      time.Now(),
+	reasonCodes := []string{decision.Type}
+	if decision.BehaviorStatus != "" {
+		reasonCodes = append(reasonCodes, decision.BehaviorStatus)
 	}
 
-	if approvedAmount != nil {
-		params.ApprovedAmount = pgtype.Int8{Int64: *approvedAmount, Valid: true}
-	}
-	params.ApprovalType = pgtype.Text{String: decision.Type, Valid: true}
-	params.TrustScoreSnapshot = pgtype.Int2{Int16: profile.TrustScore, Valid: true}
-	params.AutoApprovalReason = pgtype.Text{String: decision.Reason, Valid: true}
-
-	claim, err := caa.store.CreateClaim(ctx, params)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create claim: %w", err)
+	var evidenceArg ClaimEvidenceContext
+	if evidenceContext != nil {
+		evidenceArg = *evidenceContext
 	}
 
-	// 更新用户profile的索赔统计
-	err = caa.store.IncrementUserClaimCount(ctx, db.IncrementUserClaimCountParams{
-		UserID: userID,
-		Role:   EntityTypeCustomer,
+	result, err := caa.store.CreateClaimWithBehaviorTx(ctx, db.CreateClaimWithBehaviorTxParams{
+		OrderID:            orderID,
+		UserID:             userID,
+		ClaimType:          claimType,
+		Description:        description,
+		EvidenceURLs:       evidenceURLs,
+		ClaimAmount:        claimAmount,
+		Status:             status,
+		ApprovalType:       decision.Type,
+		ApprovedAmount:     approvedAmount,
+		AutoApprovalReason: decision.Reason,
+		LookbackResult:     lookbackJSON,
+		DecisionVersion:    "v1",
+		ReasonCodes:        reasonCodes,
+		ResponsibleParty:   "unknown",
+		CompensationSource: decision.CompensationSource,
+		TraceSummary:       decision.Reason,
+		DeviceID:           evidenceArg.DeviceID,
+		DeviceFingerprint:  evidenceArg.DeviceFingerprint,
+		DeviceType:         evidenceArg.DeviceType,
+		IPAddress:          evidenceArg.IPAddress,
+		UserAgent:          evidenceArg.UserAgent,
+		AddressID:          evidenceArg.AddressID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create claim with behavior: %w", err)
 	}
+
+	claim := result.Claim
 
 	// ========================================
 	// 骑手押金扣款（餐损/超时）
@@ -556,48 +573,25 @@ func (caa *ClaimAutoApproval) handleSuspiciousPattern(
 	claimType string,
 	lookback *LookbackResult,
 ) {
-	calculator := NewTrustScoreCalculator(caa.store, caa.wsHub)
-
-	// 根据索赔频率和模式扣分
-	var scoreChange int16
+	_ = claimType
+	// 根据索赔频率和模式发出警告
 	var reason string
 	var warningMessage string
 
 	if lookback != nil && lookback.ClaimsFound >= 5 {
 		// 高频索赔（5次以上）
-		scoreChange = ScoreThirdMaliciousClaim // -50
 		reason = "高频索赔处罚"
-		warningMessage = fmt.Sprintf("您最近%s内已索赔%d次，被系统判定为恶意索赔风险，信用分-50",
+		warningMessage = fmt.Sprintf("您最近%s内已索赔%d次，被系统判定为恶意索赔风险",
 			lookback.Period, lookback.ClaimsFound)
 	} else if lookback != nil && lookback.ClaimsFound >= 3 {
 		// 频繁索赔（3次以上）
-		scoreChange = ScoreFirstMaliciousClaim // -30
 		reason = "频繁索赔警告"
-		warningMessage = fmt.Sprintf("您最近%s内5笔订单中已索赔%d次，系统判定有恶意索赔风险，信用分-30。继续索赔将影响您的账号使用。",
+		warningMessage = fmt.Sprintf("您最近%s内5笔订单中已索赔%d次，系统判定有恶意索赔风险。继续索赔将影响您的账号使用。",
 			lookback.Period, lookback.ClaimsFound)
 	} else {
 		// 可疑但次数不多，轻微扣分
-		scoreChange = -15
 		reason = "可疑模式提醒"
-		warningMessage = "系统检测到可疑索赔模式，信用分-15，请注意"
-	}
-
-	relatedType := "claim"
-	err := calculator.UpdateTrustScore(
-		ctx,
-		EntityTypeCustomer,
-		userID,
-		scoreChange,
-		reason,
-		fmt.Sprintf("%s索赔模式异常（索赔ID: %d）", claimType, claimID),
-		&relatedType,
-		&claimID,
-	)
-
-	if err != nil {
-		// 记录错误但不影响业务
-		fmt.Printf("Failed to update trust score for suspicious pattern: %v\n", err)
-		return
+		warningMessage = "系统检测到可疑索赔模式，请注意"
 	}
 
 	// 发送用户通知
@@ -611,17 +605,14 @@ func (caa *ClaimAutoApproval) handleSuspiciousPattern(
 			ctx,
 			userID,
 			"system",       // notificationType
-			"信用分变动提醒",    // title
+			"索赔风险提醒",      // title
 			warningMessage, // content
 			"claim",        // relatedType
 			claimID,        // relatedID
 		)
 	}
 
-	// 如果信用分降到阈值以下，触发措施
-	// ≤600: 禁止发布评价
-	// ≤450: 提醒商家（到店消费时）
-	// ≤300: 完全拉黑（已在trust_score_calculator.go中自动触发）
+	_ = reason
 }
 
 // sendNotification 发送WebSocket通知
@@ -642,7 +633,7 @@ func (caa *ClaimAutoApproval) sendNotification(entityType, title, message string
 	}
 
 	msg := websocket.Message{
-		Type:      "trust_score_alert",
+		Type:      "behavior_alert",
 		Data:      dataBytes,
 		Timestamp: time.Now(),
 	}

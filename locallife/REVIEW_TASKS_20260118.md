@@ -438,15 +438,11 @@
 - [x] GET /v1/platform/stats/realtime
 
 ## 15. 风控与信任分
-- [x] GET /v1/trust-score/profiles/:role/:id
-- [x] GET /v1/trust-score/history/:role/:id
-- [x] POST /v1/trust-score/claims
-- [x] PATCH /v1/trust-score/claims/:id/review
-- [x] POST /v1/trust-score/food-safety/report
-- [x] PATCH /v1/trust-score/merchants/:id/suspend
-- [x] POST /v1/trust-score/fraud/detect
-- [x] POST /v1/trust-score/recovery
-- [x] POST /v1/trust-score/appeals
+- [x] POST /v1/claims
+- [x] PATCH /v1/claims/:id/review
+- [x] POST /v1/food-safety/report
+- [x] PATCH /v1/food-safety/merchants/:id/suspend
+- [x] POST /v1/fraud/detect
 
 ## 16. 运营商入驻申请
 - [x] POST /v1/operator/application
