@@ -435,22 +435,39 @@ func (server *Server) setupRouter() {
 		merchantStaffOwnerGroup.DELETE("/:id", server.deleteMerchantStaff)
 	}
 
-	// M3.6: Boss 认领店铺（任意登录用户）
-	authGroup.POST("/claim-boss", server.claimBoss)
-
-	// M3.7: Boss 店铺列表
-	bossGroup := authGroup.Group("/boss")
+	// M3.6: 集团入驻申请
+	groupAppGroup := authGroup.Group("/groups/applications")
 	{
-		bossGroup.GET("/merchants", server.listBossMerchants)
+		groupAppGroup.POST("", server.createGroupApplicationDraft)
+		groupAppGroup.GET("/me", server.getOrCreateGroupApplicationDraft)
+		groupAppGroup.PUT("/basic", server.updateGroupApplicationBasic)
+		groupAppGroup.POST("/license/ocr", server.uploadGroupBusinessLicenseOCR)
+		groupAppGroup.POST("/submit", server.submitGroupApplication)
+		groupAppGroup.POST("/:id/review", server.CasbinRoleMiddleware(RoleAdmin), server.reviewGroupApplication)
 	}
 
-	// M3.8: Boss 管理（仅店主可操作）
-	merchantBossGroup := authGroup.Group("/merchant")
-	merchantBossGroup.Use(server.MerchantStaffMiddleware("owner"))
+	// M3.7: 集团/品牌管理
+	groupsGroup := authGroup.Group("/groups")
 	{
-		merchantBossGroup.POST("/boss-bind-code", server.generateBossBindCode)
-		merchantBossGroup.GET("/bosses", server.listMerchantBosses)
-		merchantBossGroup.DELETE("/bosses/:id", server.removeBoss)
+		groupsGroup.GET("", server.searchGroups)
+		groupsGroup.POST("", server.CasbinRoleMiddleware(RoleAdmin), server.createGroup)
+		groupsGroup.GET("/:id", server.getGroup)
+		groupsGroup.PATCH("/:id", server.updateGroup)
+		groupsGroup.GET("/:id/merchants", server.listGroupMerchants)
+		groupsGroup.POST("/:id/brands", server.createGroupBrand)
+		groupsGroup.POST("/:id/join-requests", server.MerchantStaffMiddleware("owner"), server.createGroupJoinRequest)
+		groupsGroup.GET("/:id/join-requests", server.listGroupJoinRequests)
+		groupsGroup.POST("/:id/join-requests/:request_id/approve", server.approveGroupJoinRequest)
+		groupsGroup.POST("/:id/join-requests/:request_id/reject", server.rejectGroupJoinRequest)
+		groupsGroup.POST("/:id/join-requests/:request_id/cancel", server.cancelGroupJoinRequest)
+		groupsGroup.PUT("/:id/policies", server.upsertGroupPolicies)
+		groupsGroup.POST("/:id/menu-templates", server.createGroupMenuTemplate)
+	}
+
+	brandsGroup := authGroup.Group("/brands")
+	{
+		brandsGroup.GET("/:id", server.getBrand)
+		brandsGroup.POST("/:id/menu-templates", server.createBrandMenuTemplate)
 	}
 
 	// M4: 标签管理路由

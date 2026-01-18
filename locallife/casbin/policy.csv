@@ -41,6 +41,10 @@ p, admin, /v1/trust-score/claims/:id/review, PATCH
 p, admin, /v1/trust-score/merchants/:id/suspend, PATCH
 p, admin, /v1/trust-score/fraud/detect, POST
 
+# Group Management
+p, admin, /v1/groups, POST
+p, admin, /v1/groups/applications/:id/review, POST
+
 # =============================================================================
 # Operator Policies - Regional management
 # =============================================================================

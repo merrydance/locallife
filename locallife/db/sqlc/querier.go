@@ -214,6 +214,7 @@ type Querier interface {
 	CreateBillingGroupMember(ctx context.Context, arg CreateBillingGroupMemberParams) (BillingGroupMember, error)
 	// Billing group orders
 	CreateBillingGroupOrder(ctx context.Context, arg CreateBillingGroupOrderParams) (BillingGroupOrder, error)
+	CreateBrandMenuTemplate(ctx context.Context, arg CreateBrandMenuTemplateParams) (BrandMenuTemplate, error)
 	// ==================== 商户营业时间 ====================
 	CreateBusinessHour(ctx context.Context, arg CreateBusinessHourParams) (MerchantBusinessHour, error)
 	CreateCart(ctx context.Context, arg CreateCartParams) (Cart, error)
@@ -260,6 +261,16 @@ type Querier interface {
 	// fraud_patterns（欺诈模式检测）
 	// ==========================================
 	CreateFraudPattern(ctx context.Context, arg CreateFraudPatternParams) (FraudPattern, error)
+	// Group applications
+	CreateGroupApplicationDraft(ctx context.Context, applicantUserID int64) (MerchantGroupApplication, error)
+	// Audit logs
+	CreateGroupAuditLog(ctx context.Context, arg CreateGroupAuditLogParams) (MerchantGroupAuditLog, error)
+	// Join requests
+	CreateGroupJoinRequest(ctx context.Context, arg CreateGroupJoinRequestParams) (MerchantGroupJoinRequest, error)
+	// Group members
+	CreateGroupMember(ctx context.Context, arg CreateGroupMemberParams) (MerchantGroupMember, error)
+	// Templates
+	CreateGroupMenuTemplate(ctx context.Context, arg CreateGroupMenuTemplateParams) (GroupMenuTemplate, error)
 	// ============================================
 	// 食材管理查询 (Ingredient Queries)
 	// ============================================
@@ -276,6 +287,9 @@ type Querier interface {
 	CreateMerchantApplicationDraft(ctx context.Context, userID int64) (MerchantApplication, error)
 	// Boss 店铺认领查询
 	CreateMerchantBoss(ctx context.Context, arg CreateMerchantBossParams) (MerchantBoss, error)
+	CreateMerchantBrand(ctx context.Context, arg CreateMerchantBrandParams) (MerchantBrand, error)
+	// Groups
+	CreateMerchantGroup(ctx context.Context, arg CreateMerchantGroupParams) (MerchantGroup, error)
 	CreateMerchantMembership(ctx context.Context, arg CreateMerchantMembershipParams) (MerchantMembership, error)
 	CreateMerchantMembershipSettings(ctx context.Context, arg CreateMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	CreateMerchantPaymentConfig(ctx context.Context, arg CreateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
@@ -549,6 +563,9 @@ type Querier interface {
 	GetFraudPattern(ctx context.Context, id int64) (FraudPattern, error)
 	GetFraudPatternsByDevice(ctx context.Context, arg GetFraudPatternsByDeviceParams) ([]FraudPattern, error)
 	GetFraudPatternsByUsers(ctx context.Context, dollar_1 []int64) ([]FraudPattern, error)
+	GetGroupApplication(ctx context.Context, id int64) (MerchantGroupApplication, error)
+	GetGroupJoinRequest(ctx context.Context, id int64) (MerchantGroupJoinRequest, error)
+	GetGroupMemberRole(ctx context.Context, arg GetGroupMemberRoleParams) (string, error)
 	// 获取热卖菜品ID列表（近7天销量 >= 指定阈值）
 	GetHotSellingDishIDs(ctx context.Context, quantity int16) ([]int64, error)
 	// 订单时段分布
@@ -556,6 +573,7 @@ type Querier interface {
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
 	GetLatestEcommerceApplymentBySubject(ctx context.Context, arg GetLatestEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
+	GetLatestGroupApplicationByApplicant(ctx context.Context, applicantUserID int64) (MerchantGroupApplication, error)
 	GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (Order, error)
 	GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLatestPaymentOrderByOrderParams) (PaymentOrder, error)
 	GetLatestPaymentOrderByReservation(ctx context.Context, arg GetLatestPaymentOrderByReservationParams) (PaymentOrder, error)
@@ -584,6 +602,7 @@ type Querier interface {
 	// 通过订单支付时间到状态变为ready的时间差计算
 	GetMerchantAvgPrepareTime(ctx context.Context, arg GetMerchantAvgPrepareTimeParams) (int64, error)
 	GetMerchantBoss(ctx context.Context, arg GetMerchantBossParams) (MerchantBoss, error)
+	GetMerchantBrand(ctx context.Context, id int64) (MerchantBrand, error)
 	// 通过邀请码获取商户
 	GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Text) (Merchant, error)
 	// 通过 Boss 认领码获取商户
@@ -607,6 +626,8 @@ type Querier interface {
 	GetMerchantDishesWithCategory(ctx context.Context, merchantID int64) ([]GetMerchantDishesWithCategoryRow, error)
 	// 商户财务概览：统计收入、服务费、净收入
 	GetMerchantFinanceOverview(ctx context.Context, arg GetMerchantFinanceOverviewParams) (GetMerchantFinanceOverviewRow, error)
+	GetMerchantGroup(ctx context.Context, id int64) (MerchantGroup, error)
+	GetMerchantGroupBinding(ctx context.Context, id int64) (GetMerchantGroupBindingRow, error)
 	// 商户增长统计
 	GetMerchantGrowthStats(ctx context.Context, arg GetMerchantGrowthStatsParams) ([]GetMerchantGrowthStatsRow, error)
 	// 商户时段分析: 按小时统计订单分布
@@ -987,6 +1008,9 @@ type Querier interface {
 	ListFavoriteDishes(ctx context.Context, arg ListFavoriteDishesParams) ([]ListFavoriteDishesRow, error)
 	ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMerchantsParams) ([]ListFavoriteMerchantsRow, error)
 	ListFraudPatterns(ctx context.Context, arg ListFraudPatternsParams) ([]FraudPattern, error)
+	ListGroupJoinRequestsByGroup(ctx context.Context, groupID int64) ([]MerchantGroupJoinRequest, error)
+	// Group merchants
+	ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) ([]ListGroupMerchantsRow, error)
 	ListIngredients(ctx context.Context, arg ListIngredientsParams) ([]Ingredient, error)
 	ListMembershipTransactions(ctx context.Context, arg ListMembershipTransactionsParams) ([]MembershipTransaction, error)
 	ListMembershipTransactionsByType(ctx context.Context, arg ListMembershipTransactionsByTypeParams) ([]MembershipTransaction, error)
@@ -1012,6 +1036,7 @@ type Querier interface {
 	ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListMerchantFoodSafetyIncidentsParams) ([]FoodSafetyIncident, error)
 	// 获取商户未来预订列表（用于熔断后退款处理）
 	ListMerchantFutureReservationsForRefund(ctx context.Context, merchantID int64) ([]TableReservation, error)
+	ListMerchantGroups(ctx context.Context, arg ListMerchantGroupsParams) ([]MerchantGroup, error)
 	ListMerchantMembers(ctx context.Context, arg ListMerchantMembersParams) ([]ListMerchantMembersRow, error)
 	// ==================== KDS 厨房显示系统查询 ====================
 	// 根据商户ID和状态查询订单（用于厨房显示）
@@ -1200,6 +1225,7 @@ type Querier interface {
 	// 续约运营商合同
 	RenewOperatorContract(ctx context.Context, arg RenewOperatorContractParams) (Operator, error)
 	ReserveInventory(ctx context.Context, arg ReserveInventoryParams) (DailyInventory, error)
+	ResetGroupApplicationToDraft(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	// 重置申请为草稿状态（允许用户重新编辑，支持从待审核、被拒绝或已通过状态重置）
 	ResetMerchantApplicationToDraft(ctx context.Context, id int64) (MerchantApplication, error)
 	// 重置被拒绝的申请为草稿（允许重新编辑提交）
@@ -1210,6 +1236,7 @@ type Querier interface {
 	ReviewAppeal(ctx context.Context, arg ReviewAppealParams) (Appeal, error)
 	// 运营商审核索赔
 	ReviewClaim(ctx context.Context, arg ReviewClaimParams) error
+	ReviewGroupApplication(ctx context.Context, arg ReviewGroupApplicationParams) (MerchantGroupApplication, error)
 	RevokeSession(ctx context.Context, id int64) (Session, error)
 	RevokeUserSessions(ctx context.Context, userID int64) error
 	// ============================================================================
@@ -1251,6 +1278,7 @@ type Querier interface {
 	SetUserRequiresEvidence(ctx context.Context, arg SetUserRequiresEvidenceParams) error
 	// 软删除员工（设置 status='disabled'），保留历史记录
 	SoftDeleteMerchantStaff(ctx context.Context, id int64) (MerchantStaff, error)
+	SubmitGroupApplication(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	// 提交商户申请（从草稿、被拒绝或已通过状态变为已提交）
 	SubmitMerchantApplication(ctx context.Context, id int64) (MerchantApplication, error)
 	// 提交运营商申请（从草稿变为已提交待审核）
@@ -1311,6 +1339,9 @@ type Querier interface {
 	UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg UpdateEcommerceApplymentToSubmittedParams) (EcommerceApplyment, error)
 	UpdateFoodSafetyIncidentStatus(ctx context.Context, arg UpdateFoodSafetyIncidentStatusParams) error
 	UpdateFraudPatternReview(ctx context.Context, arg UpdateFraudPatternReviewParams) error
+	UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGroupApplicationBasicParams) (MerchantGroupApplication, error)
+	UpdateGroupApplicationLicense(ctx context.Context, arg UpdateGroupApplicationLicenseParams) (MerchantGroupApplication, error)
+	UpdateGroupJoinRequestStatus(ctx context.Context, arg UpdateGroupJoinRequestStatusParams) (MerchantGroupJoinRequest, error)
 	UpdateIngredient(ctx context.Context, arg UpdateIngredientParams) (Ingredient, error)
 	UpdateMembershipBalance(ctx context.Context, arg UpdateMembershipBalanceParams) (MerchantMembership, error)
 	// ✅ P1-2: 使用乐观锁(version)防止并发更新丢失
@@ -1334,6 +1365,9 @@ type Querier interface {
 	UpdateMerchantBossBindCode(ctx context.Context, arg UpdateMerchantBossBindCodeParams) (Merchant, error)
 	UpdateMerchantBossStatus(ctx context.Context, arg UpdateMerchantBossStatusParams) (MerchantBoss, error)
 	UpdateMerchantDishCategoryOrder(ctx context.Context, arg UpdateMerchantDishCategoryOrderParams) (MerchantDishCategory, error)
+	UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGroupParams) (MerchantGroup, error)
+	// Merchant binding
+	UpdateMerchantGroupBinding(ctx context.Context, arg UpdateMerchantGroupBindingParams) error
 	// ==================== 商户营业状态管理 ====================
 	// 更新商户营业状态（手动开店/打烊）
 	UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIsOpenParams) (Merchant, error)
@@ -1443,6 +1477,8 @@ type Querier interface {
 	UpdateVoucher(ctx context.Context, arg UpdateVoucherParams) (Voucher, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
+	// Group policies
+	UpsertGroupPolicies(ctx context.Context, arg UpsertGroupPoliciesParams) (GroupPolicy, error)
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertRecommendationConfig(ctx context.Context, arg UpsertRecommendationConfigParams) (RecommendationConfig, error)

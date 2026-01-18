@@ -44,6 +44,8 @@ g, rider, customer
 p, admin, /v1/platform/stats/*, GET
 p, admin, /v1/admin/*, GET
 p, admin, /v1/admin/*, POST
+p, admin, /v1/groups, POST
+p, admin, /v1/groups/applications/:id/review, POST
 
 # Operator policies
 p, operator, /v1/operator/*, GET

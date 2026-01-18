@@ -202,7 +202,7 @@ INSERT INTO merchants (
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at
+RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id
 `
 
 type CreateMerchantParams struct {
@@ -259,6 +259,8 @@ func (q *Queries) CreateMerchant(ctx context.Context, arg CreateMerchantParams) 
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
@@ -467,7 +469,7 @@ func (q *Queries) GetBusinessHourByDayOfWeek(ctx context.Context, arg GetBusines
 }
 
 const getMerchant = `-- name: GetMerchant :one
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -498,6 +500,8 @@ func (q *Queries) GetMerchant(ctx context.Context, id int64) (Merchant, error) {
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
@@ -586,7 +590,7 @@ func (q *Queries) GetMerchantApplicationByLicenseNumber(ctx context.Context, bus
 }
 
 const getMerchantByBindCode = `-- name: GetMerchantByBindCode :one
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE bind_code = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -619,12 +623,14 @@ func (q *Queries) GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Tex
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
 
 const getMerchantByBossBindCode = `-- name: GetMerchantByBossBindCode :one
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE boss_bind_code = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -657,12 +663,14 @@ func (q *Queries) GetMerchantByBossBindCode(ctx context.Context, bossBindCode pg
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
 
 const getMerchantByOwner = `-- name: GetMerchantByOwner :one
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at, m.group_id, m.brand_id FROM merchants m
 LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active'
 WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
 ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
@@ -698,6 +706,8 @@ func (q *Queries) GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Me
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
@@ -724,7 +734,7 @@ func (q *Queries) GetMerchantIsOpen(ctx context.Context, id int64) (GetMerchantI
 const getMerchantWithTags = `-- name: GetMerchantWithTags :one
 
 SELECT 
-  merchants.id, merchants.owner_user_id, merchants.name, merchants.description, merchants.logo_url, merchants.phone, merchants.address, merchants.latitude, merchants.longitude, merchants.status, merchants.application_data, merchants.created_at, merchants.updated_at, merchants.version, merchants.region_id, merchants.is_open, merchants.auto_close_at, merchants.deleted_at, merchants.pending_owner_bind, merchants.bind_code, merchants.bind_code_expires_at, merchants.boss_bind_code, merchants.boss_bind_code_expires_at,
+  merchants.id, merchants.owner_user_id, merchants.name, merchants.description, merchants.logo_url, merchants.phone, merchants.address, merchants.latitude, merchants.longitude, merchants.status, merchants.application_data, merchants.created_at, merchants.updated_at, merchants.version, merchants.region_id, merchants.is_open, merchants.auto_close_at, merchants.deleted_at, merchants.pending_owner_bind, merchants.bind_code, merchants.bind_code_expires_at, merchants.boss_bind_code, merchants.boss_bind_code_expires_at, merchants.group_id, merchants.brand_id,
   COALESCE(
     (
       SELECT json_agg(tags.*)
@@ -772,6 +782,8 @@ func (q *Queries) GetMerchantWithTags(ctx context.Context, id int64) (GetMerchan
 		&i.Merchant.BindCodeExpiresAt,
 		&i.Merchant.BossBindCode,
 		&i.Merchant.BossBindCodeExpiresAt,
+		&i.Merchant.GroupID,
+		&i.Merchant.BrandID,
 		&i.Tags,
 	)
 	return i, err
@@ -1092,7 +1104,7 @@ func (q *Queries) ListAllMerchantApplications(ctx context.Context, arg ListAllMe
 }
 
 const listAllMerchants = `-- name: ListAllMerchants :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -1136,6 +1148,8 @@ func (q *Queries) ListAllMerchants(ctx context.Context, arg ListAllMerchantsPara
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 		); err != nil {
 			return nil, err
 		}
@@ -1318,7 +1332,7 @@ func (q *Queries) ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag
 }
 
 const listMerchants = `-- name: ListMerchants :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE status = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -1363,6 +1377,8 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 		); err != nil {
 			return nil, err
 		}
@@ -1375,7 +1391,7 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 }
 
 const listMerchantsByOwner = `-- name: ListMerchantsByOwner :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC
 `
@@ -1414,6 +1430,8 @@ func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) (
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 		); err != nil {
 			return nil, err
 		}
@@ -1427,7 +1445,7 @@ func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) (
 
 const listMerchantsByRegion = `-- name: ListMerchantsByRegion :many
 
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE region_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -1475,6 +1493,8 @@ func (q *Queries) ListMerchantsByRegion(ctx context.Context, arg ListMerchantsBy
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 		); err != nil {
 			return nil, err
 		}
@@ -1487,7 +1507,7 @@ func (q *Queries) ListMerchantsByRegion(ctx context.Context, arg ListMerchantsBy
 }
 
 const listMerchantsByRegionWithStatus = `-- name: ListMerchantsByRegionWithStatus :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL
@@ -1541,6 +1561,8 @@ func (q *Queries) ListMerchantsByRegionWithStatus(ctx context.Context, arg ListM
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 		); err != nil {
 			return nil, err
 		}
@@ -1553,7 +1575,7 @@ func (q *Queries) ListMerchantsByRegionWithStatus(ctx context.Context, arg ListM
 }
 
 const listMerchantsByTag = `-- name: ListMerchantsByTag :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at, m.group_id, m.brand_id FROM merchants m
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE mt.tag_id = $1
   AND m.status = 'active'
@@ -1600,6 +1622,8 @@ func (q *Queries) ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTag
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 		); err != nil {
 			return nil, err
 		}
@@ -1613,7 +1637,7 @@ func (q *Queries) ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTag
 
 const listMerchantsWithTagCount = `-- name: ListMerchantsWithTagCount :many
 SELECT 
-  m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at,
+  m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at, m.group_id, m.brand_id,
   COUNT(mt.tag_id) as tag_count
 FROM merchants m
 LEFT JOIN merchant_tags mt ON m.id = mt.merchant_id
@@ -1653,6 +1677,8 @@ type ListMerchantsWithTagCountRow struct {
 	BindCodeExpiresAt     pgtype.Timestamptz `json:"bind_code_expires_at"`
 	BossBindCode          pgtype.Text        `json:"boss_bind_code"`
 	BossBindCodeExpiresAt pgtype.Timestamptz `json:"boss_bind_code_expires_at"`
+	GroupID               pgtype.Int8        `json:"group_id"`
+	BrandID               pgtype.Int8        `json:"brand_id"`
 	TagCount              int64              `json:"tag_count"`
 }
 
@@ -1689,6 +1715,8 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 			&i.TagCount,
 		); err != nil {
 			return nil, err
@@ -1702,7 +1730,7 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 }
 
 const listOpenMerchants = `-- name: ListOpenMerchants :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at FROM merchants
+SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id FROM merchants
 WHERE status = 'active'
   AND is_open = true
 ORDER BY created_at DESC
@@ -1748,6 +1776,8 @@ func (q *Queries) ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsPa
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 		); err != nil {
 			return nil, err
 		}
@@ -1775,7 +1805,7 @@ func (q *Queries) RemoveMerchantTag(ctx context.Context, arg RemoveMerchantTagPa
 }
 
 const searchMerchants = `-- name: SearchMerchants :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at, COALESCE(mp.total_orders, 0)::int AS total_orders FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.boss_bind_code, m.boss_bind_code_expires_at, m.group_id, m.brand_id, COALESCE(mp.total_orders, 0)::int AS total_orders FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
@@ -1823,6 +1853,8 @@ type SearchMerchantsRow struct {
 	BindCodeExpiresAt     pgtype.Timestamptz `json:"bind_code_expires_at"`
 	BossBindCode          pgtype.Text        `json:"boss_bind_code"`
 	BossBindCodeExpiresAt pgtype.Timestamptz `json:"boss_bind_code_expires_at"`
+	GroupID               pgtype.Int8        `json:"group_id"`
+	BrandID               pgtype.Int8        `json:"brand_id"`
 	TotalOrders           int32              `json:"total_orders"`
 }
 
@@ -1865,6 +1897,8 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.BindCodeExpiresAt,
 			&i.BossBindCode,
 			&i.BossBindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
 			&i.TotalOrders,
 		); err != nil {
 			return nil, err
@@ -1933,7 +1967,7 @@ SET
 WHERE id = $9
   AND version = $10
   AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at
+RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id
 `
 
 type UpdateMerchantParams struct {
@@ -1988,6 +2022,8 @@ func (q *Queries) UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) 
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
@@ -2061,7 +2097,7 @@ SET
   bind_code_expires_at = $3,
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at
+RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id
 `
 
 type UpdateMerchantBindCodeParams struct {
@@ -2098,6 +2134,8 @@ func (q *Queries) UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchant
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
@@ -2106,7 +2144,7 @@ const updateMerchantBossBindCode = `-- name: UpdateMerchantBossBindCode :one
 UPDATE merchants
 SET boss_bind_code = $2, boss_bind_code_expires_at = $3, updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at
+RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id
 `
 
 type UpdateMerchantBossBindCodeParams struct {
@@ -2143,6 +2181,8 @@ func (q *Queries) UpdateMerchantBossBindCode(ctx context.Context, arg UpdateMerc
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
@@ -2155,7 +2195,7 @@ SET
   auto_close_at = $3,
   updated_at = now()
 WHERE id = $1
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at
+RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id
 `
 
 type UpdateMerchantIsOpenParams struct {
@@ -2193,6 +2233,8 @@ func (q *Queries) UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIs
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }
@@ -2203,7 +2245,7 @@ SET
   status = $2,
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at
+RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, boss_bind_code, boss_bind_code_expires_at, group_id, brand_id
 `
 
 type UpdateMerchantStatusParams struct {
@@ -2238,6 +2280,8 @@ func (q *Queries) UpdateMerchantStatus(ctx context.Context, arg UpdateMerchantSt
 		&i.BindCodeExpiresAt,
 		&i.BossBindCode,
 		&i.BossBindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
 	)
 	return i, err
 }

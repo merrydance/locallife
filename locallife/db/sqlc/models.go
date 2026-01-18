@@ -63,6 +63,16 @@ type BillingGroupOrder struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type BrandMenuTemplate struct {
+	ID        int64     `json:"id"`
+	BrandID   int64     `json:"brand_id"`
+	Payload   []byte    `json:"payload"`
+	Version   int32     `json:"version"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // 用户浏览历史
 type BrowseHistory struct {
 	ID     int64 `json:"id"`
@@ -516,6 +526,24 @@ type FraudPattern struct {
 	ConfirmedAt pgtype.Timestamptz `json:"confirmed_at"`
 }
 
+type GroupMenuTemplate struct {
+	ID        int64     `json:"id"`
+	GroupID   int64     `json:"group_id"`
+	Payload   []byte    `json:"payload"`
+	Version   int32     `json:"version"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type GroupPolicy struct {
+	GroupID       int64  `json:"group_id"`
+	PricingMode   string `json:"pricing_mode"`
+	MenuMode      string `json:"menu_mode"`
+	InventoryMode string `json:"inventory_mode"`
+	PromotionMode string `json:"promotion_mode"`
+}
+
 type Ingredient struct {
 	ID         int64       `json:"id"`
 	Name       string      `json:"name"`
@@ -575,6 +603,8 @@ type Merchant struct {
 	BossBindCode pgtype.Text `json:"boss_bind_code"`
 	// Boss 认领码过期时间
 	BossBindCodeExpiresAt pgtype.Timestamptz `json:"boss_bind_code_expires_at"`
+	GroupID               pgtype.Int8        `json:"group_id"`
+	BrandID               pgtype.Int8        `json:"brand_id"`
 }
 
 type MerchantApplication struct {
@@ -630,6 +660,17 @@ type MerchantBoss struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type MerchantBrand struct {
+	ID          int64       `json:"id"`
+	GroupID     int64       `json:"group_id"`
+	Name        string      `json:"name"`
+	LogoUrl     pgtype.Text `json:"logo_url"`
+	Description pgtype.Text `json:"description"`
+	Status      string      `json:"status"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
 type MerchantBusinessHour struct {
 	ID         int64 `json:"id"`
 	MerchantID int64 `json:"merchant_id"`
@@ -665,6 +706,72 @@ type MerchantDishCategory struct {
 	CategoryID int64     `json:"category_id"`
 	SortOrder  int16     `json:"sort_order"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+type MerchantGroup struct {
+	ID              int64       `json:"id"`
+	Name            string      `json:"name"`
+	OwnerUserID     int64       `json:"owner_user_id"`
+	Status          string      `json:"status"`
+	ContactPhone    pgtype.Text `json:"contact_phone"`
+	LicenseNumber   pgtype.Text `json:"license_number"`
+	LicenseImageUrl pgtype.Text `json:"license_image_url"`
+	Address         pgtype.Text `json:"address"`
+	RegionID        pgtype.Int8 `json:"region_id"`
+	ApplicationData []byte      `json:"application_data"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+type MerchantGroupApplication struct {
+	ID              int64              `json:"id"`
+	ApplicantUserID int64              `json:"applicant_user_id"`
+	GroupName       string             `json:"group_name"`
+	ContactPhone    string             `json:"contact_phone"`
+	LicenseNumber   pgtype.Text        `json:"license_number"`
+	LicenseImageUrl pgtype.Text        `json:"license_image_url"`
+	Address         pgtype.Text        `json:"address"`
+	RegionID        pgtype.Int8        `json:"region_id"`
+	Status          string             `json:"status"`
+	RejectReason    pgtype.Text        `json:"reject_reason"`
+	ReviewedBy      pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt      pgtype.Timestamptz `json:"reviewed_at"`
+	ApplicationData []byte             `json:"application_data"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
+type MerchantGroupAuditLog struct {
+	ID          int64       `json:"id"`
+	GroupID     pgtype.Int8 `json:"group_id"`
+	ActorUserID pgtype.Int8 `json:"actor_user_id"`
+	Action      string      `json:"action"`
+	TargetType  string      `json:"target_type"`
+	TargetID    pgtype.Int8 `json:"target_id"`
+	Metadata    []byte      `json:"metadata"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
+type MerchantGroupJoinRequest struct {
+	ID              int64              `json:"id"`
+	GroupID         int64              `json:"group_id"`
+	MerchantID      int64              `json:"merchant_id"`
+	ApplicantUserID int64              `json:"applicant_user_id"`
+	Status          string             `json:"status"`
+	Reason          pgtype.Text        `json:"reason"`
+	ReviewedBy      pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt      pgtype.Timestamptz `json:"reviewed_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+}
+
+type MerchantGroupMember struct {
+	ID        int64       `json:"id"`
+	GroupID   int64       `json:"group_id"`
+	UserID    int64       `json:"user_id"`
+	Role      string      `json:"role"`
+	Status    string      `json:"status"`
+	JoinedAt  time.Time   `json:"joined_at"`
+	InvitedBy pgtype.Int8 `json:"invited_by"`
 }
 
 // M10: 商户会员账户表
