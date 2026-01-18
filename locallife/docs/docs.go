@@ -1996,10 +1996,7 @@ const docTemplate = `{
                     "200": {
                         "description": "骑手列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.riderResponse"
-                            }
+                            "$ref": "#/definitions/api.listRidersResponse"
                         }
                     },
                     "400": {
@@ -2620,24 +2617,135 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/boss/merchants": {
+        "/v1/brands/{id}": {
             "get": {
-                "description": "获取当前 Boss 认领的所有店铺",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取品牌详情（需为集团成员）",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Boss管理"
+                    "品牌管理"
                 ],
-                "summary": "Boss 获取关联店铺",
+                "summary": "获取品牌详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "品牌ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.bossMerchantResponse"
-                            }
+                            "$ref": "#/definitions/api.brandResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/brands/{id}/menu-templates": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建品牌菜单模板（owner/admin/ops）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "品牌管理"
+                ],
+                "summary": "创建品牌菜单模板",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "品牌ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "模板信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createBrandMenuTemplateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.brandTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -3122,40 +3230,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/claim-boss": {
-            "post": {
-                "description": "Boss 扫码或输入认领码认领店铺",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Boss管理"
-                ],
-                "summary": "Boss 认领店铺",
-                "parameters": [
-                    {
-                        "description": "认领请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.claimBossRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimBossResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/claims": {
             "get": {
                 "security": [
@@ -3203,6 +3277,79 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "用户为已完成的订单提交索赔申请。系统基于行为追溯规则进行评估，决定秒赔、需证据或平台垫付。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "索赔管理"
+                ],
+                "summary": "提交索赔",
+                "parameters": [
+                    {
+                        "description": "索赔信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SubmitClaimRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "索赔提交成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.SubmitClaimResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或订单状态不允许索赔",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "订单不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "该订单已有索赔记录",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -3264,6 +3411,82 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "该索赔不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "索赔不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/claims/{id}/review": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商/客服人工审核索赔申请。仅限低信用用户提交的需要人工审核的索赔。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "索赔管理"
+                ],
+                "summary": "审核索赔",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "索赔ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "审核信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ReviewClaimRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "审核成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或索赔状态不允许审核",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限审核此索赔",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -4444,10 +4667,7 @@ const docTemplate = `{
                     "200": {
                         "description": "配送单列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.deliveryResponse"
-                            }
+                            "$ref": "#/definitions/api.listMyDeliveriesResponse"
                         }
                     },
                     "400": {
@@ -6066,6 +6286,1365 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/food-safety/merchants/{id}/suspend": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员手动熔断（停业）商户，指定停业时长和原因",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户管理"
+                ],
+                "summary": "熔断商户",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "熔断信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SuspendMerchantRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "熔断成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/food-safety/report": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "用户上报商户食品安全问题，系统将根据举报频率与协同模式决定是否熔断商户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "食品安全"
+                ],
+                "summary": "上报食品安全问题",
+                "parameters": [
+                    {
+                        "description": "食安上报信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ReportFoodSafetyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "上报成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.ReportFoodSafetyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/fraud/detect": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员手动触发欺诈检测，支持三种检测模式：协同索赔检测、设备复用检测、地址聚类检测",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "欺诈检测"
+                ],
+                "summary": "触发欺诈检测",
+                "parameters": [
+                    {
+                        "description": "检测请求（三选一）",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.TriggerFraudDetectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "检测结果",
+                        "schema": {
+                            "$ref": "#/definitions/algorithm.FraudDetectionResult"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "按关键字搜索集团（仅返回 active）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "搜索集团",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "关键词",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页大小",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "偏移",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.groupResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员创建集团（手动）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "创建集团",
+                "parameters": [
+                    {
+                        "description": "集团信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/applications": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建集团入驻申请草稿（已有草稿则返回）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团申请"
+                ],
+                "summary": "创建集团入驻草稿",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupApplicationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/applications/basic": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新集团入驻申请基础信息（可编辑状态）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团申请"
+                ],
+                "summary": "更新集团入驻基础信息",
+                "parameters": [
+                    {
+                        "description": "更新内容",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateGroupApplicationBasicRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/applications/license/ocr": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "上传集团营业执照图片，调用微信OCR识别并保存结果",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团申请"
+                ],
+                "summary": "上传集团营业执照并 OCR",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "营业执照图片",
+                        "name": "image",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/applications/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前用户的集团入驻草稿，不存在则创建",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团申请"
+                ],
+                "summary": "获取集团入驻草稿",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupApplicationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/applications/submit": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "提交集团入驻申请进入审核流程",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团申请"
+                ],
+                "summary": "提交集团入驻申请",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/applications/{id}/review": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员审核集团入驻申请（通过/拒绝）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团申请"
+                ],
+                "summary": "审核集团入驻申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "审核信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.reviewGroupApplicationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取集团详情（需为集团成员）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "获取集团详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新集团信息（owner/admin）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "更新集团信息",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新内容",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/brands": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "在集团下创建品牌（owner/admin）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "品牌管理"
+                ],
+                "summary": "创建品牌",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "品牌信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createGroupBrandRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.brandResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/join-requests": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取集团的门店加入申请列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "获取集团加入申请列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.groupJoinRequestResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "门店发起加入集团申请（需店主）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "申请加入集团",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "申请原因",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.createGroupJoinRequestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupJoinRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/join-requests/{request_id}/approve": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "集团审核通过门店加入申请（owner/admin）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "审核通过加入申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "申请ID",
+                        "name": "request_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "品牌归属",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.approveGroupJoinRequestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupJoinRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/join-requests/{request_id}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "申请人撤回门店加入申请",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "撤回加入申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "申请ID",
+                        "name": "request_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupJoinRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/join-requests/{request_id}/reject": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "集团驳回门店加入申请（owner/admin）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "驳回加入申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "申请ID",
+                        "name": "request_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "驳回原因",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.rejectGroupJoinRequestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupJoinRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/menu-templates": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建集团菜单模板（owner/admin/ops）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "创建集团菜单模板",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "模板信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createGroupMenuTemplateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/merchants": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取集团下所有门店（需为集团成员）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "获取集团门店列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.groupMerchantResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/groups/{id}/policies": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新集团策略（owner/admin/ops）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团管理"
+                ],
+                "summary": "更新集团策略",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "集团ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "策略配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.upsertGroupPoliciesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupPoliciesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/history/browse": {
             "get": {
                 "security": [
@@ -6884,10 +8463,7 @@ const docTemplate = `{
                     "200": {
                         "description": "会员列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.membershipResponse"
-                            }
+                            "$ref": "#/definitions/api.listUserMembershipsResponse"
                         }
                     },
                     "400": {
@@ -7150,10 +8726,7 @@ const docTemplate = `{
                     "200": {
                         "description": "交易流水列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.transactionResponse"
-                            }
+                            "$ref": "#/definitions/api.listMembershipTransactionsResponse"
                         }
                     },
                     "400": {
@@ -7992,79 +9565,6 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/boss-bind-code": {
-            "post": {
-                "description": "商户老板生成认领码，让 Boss 扫码认领店铺",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Boss管理"
-                ],
-                "summary": "生成 Boss 认领码",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.generateBossBindCodeResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/bosses": {
-            "get": {
-                "description": "商户老板查看认领该店铺的所有 Boss",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Boss管理"
-                ],
-                "summary": "获取店铺的 Boss 列表",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.merchantBossResponse"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/bosses/{id}": {
-            "delete": {
-                "description": "商户老板移除已认领的 Boss",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Boss管理"
-                ],
-                "summary": "移除 Boss",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Boss ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     }
                 }
@@ -9387,10 +10887,7 @@ const docTemplate = `{
                     "200": {
                         "description": "订单列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.orderResponse"
-                            }
+                            "$ref": "#/definitions/api.listMerchantOrdersResponse"
                         }
                     },
                     "400": {
@@ -9458,7 +10955,7 @@ const docTemplate = `{
                     "200": {
                         "description": "订单统计数据",
                         "schema": {
-                            "$ref": "#/definitions/db.GetOrderStatsRow"
+                            "$ref": "#/definitions/api.orderStatsResponse"
                         }
                     },
                     "400": {
@@ -9830,6 +11327,67 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/risk/users/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户查看顾客是否存在异常索赔记录，返回提示信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户风控"
+                ],
+                "summary": "查询顾客风险提示",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantUserRiskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -10724,115 +12282,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/merchants/applications": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "提交商户入驻申请，包括营业执照、法人身份证等信息",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户"
-                ],
-                "summary": "提交商户入驻申请",
-                "parameters": [
-                    {
-                        "description": "商户入驻申请信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createMerchantApplicationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "申请提交成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.merchantApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "已存在待审核或已通过的申请",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchants/applications/me": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取当前用户提交的商户入驻申请状态和详情",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户"
-                ],
-                "summary": "获取当前用户的商户入驻申请",
-                "responses": {
-                    "200": {
-                        "description": "申请详情",
-                        "schema": {
-                            "$ref": "#/definitions/api.merchantApplicationResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "未找到申请记录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/merchants/images/upload": {
             "post": {
                 "security": [
@@ -11416,10 +12865,7 @@ const docTemplate = `{
                     "200": {
                         "description": "会员列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.merchantMemberResponse"
-                            }
+                            "$ref": "#/definitions/api.listMerchantMembersResponse"
                         }
                     },
                     "400": {
@@ -12104,10 +13550,7 @@ const docTemplate = `{
                     "200": {
                         "description": "代金券列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.voucherResponse"
-                            }
+                            "$ref": "#/definitions/api.listMerchantVouchersResponse"
                         }
                     },
                     "400": {
@@ -12247,10 +13690,7 @@ const docTemplate = `{
                     "200": {
                         "description": "可领取代金券列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.voucherResponse"
-                            }
+                            "$ref": "#/definitions/api.listActiveVouchersResponse"
                         }
                     },
                     "400": {
@@ -14715,10 +16155,7 @@ const docTemplate = `{
                     "200": {
                         "description": "订单列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.orderResponse"
-                            }
+                            "$ref": "#/definitions/api.listOrdersResponse"
                         }
                     },
                     "400": {
@@ -14869,9 +16306,10 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "string",
-                        "description": "优惠券码",
-                        "name": "voucher_code",
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "用户优惠券ID",
+                        "name": "user_voucher_id",
                         "in": "query"
                     }
                 ],
@@ -15315,10 +16753,7 @@ const docTemplate = `{
                     "200": {
                         "description": "支付订单列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.paymentOrderResponse"
-                            }
+                            "$ref": "#/definitions/api.listPaymentOrdersResponse"
                         }
                     },
                     "400": {
@@ -15574,10 +17009,7 @@ const docTemplate = `{
                     "200": {
                         "description": "退款订单列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.refundOrderResponse"
-                            }
+                            "$ref": "#/definitions/api.listRefundOrdersByPaymentResponse"
                         }
                     },
                     "400": {
@@ -15666,7 +17098,12 @@ const docTemplate = `{
         },
         "/v1/public/dishes/{id}": {
             "get": {
-                "description": "公开接口，获取菜品详细信息，无需认证",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "需登录访问（消费者端），获取菜品详细信息",
                 "consumes": [
                     "application/json"
                 ],
@@ -15716,7 +17153,12 @@ const docTemplate = `{
         },
         "/v1/public/merchants/{id}": {
             "get": {
-                "description": "公开接口，获取商户详细信息，无需商户权限",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "需登录访问（消费者端），获取商户详细信息",
                 "consumes": [
                     "application/json"
                 ],
@@ -15766,7 +17208,12 @@ const docTemplate = `{
         },
         "/v1/public/merchants/{id}/combos": {
             "get": {
-                "description": "公开接口，获取商户所有在线套餐",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "需登录访问（消费者端），获取商户所有在线套餐",
                 "consumes": [
                     "application/json"
                 ],
@@ -15810,7 +17257,12 @@ const docTemplate = `{
         },
         "/v1/public/merchants/{id}/dishes": {
             "get": {
-                "description": "公开接口，获取商户所有在线菜品及分类",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "需登录访问（消费者端），获取商户所有在线菜品及分类",
                 "consumes": [
                     "application/json"
                 ],
@@ -15854,7 +17306,12 @@ const docTemplate = `{
         },
         "/v1/public/merchants/{id}/rooms": {
             "get": {
-                "description": "公开接口，获取商户所有包间信息，帮助消费者决策",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "需登录访问（消费者端），获取商户所有包间信息，帮助消费者决策",
                 "consumes": [
                     "application/json"
                 ],
@@ -18026,7 +19483,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "用户为已完成的订单创建评价。低信用用户（\u003c600分）的评价将被标记为不可见。",
+                "description": "用户为已完成的订单创建评价。",
                 "consumes": [
                     "application/json"
                 ],
@@ -19134,69 +20591,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/rider/apply": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "用户提交骑手入驻申请，需要提供真实姓名、身份证号和手机号。申请后状态为pending，等待管理员审核。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手"
-                ],
-                "summary": "骑手入驻申请",
-                "parameters": [
-                    {
-                        "description": "骑手申请信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.applyRiderRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "申请成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.riderResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "重复申请",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/rider/applyment/bindbank": {
             "post": {
                 "security": [
@@ -19603,10 +20997,7 @@ const docTemplate = `{
                     "200": {
                         "description": "押金流水列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.depositResponse"
-                            }
+                            "$ref": "#/definitions/api.listRiderDepositsResponse"
                         }
                     },
                     "400": {
@@ -20219,6 +21610,11 @@ const docTemplate = `{
         },
         "/v1/scan/table": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "扫描桌台二维码获取商户信息、桌台信息、菜单和优惠活动。用于堂食场景，顾客扫码后可查看菜单并下单。",
                 "consumes": [
                     "application/json"
@@ -20278,6 +21674,11 @@ const docTemplate = `{
         },
         "/v1/search/combos": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "搜索套餐，消费者端使用，只返回上架且商户状态正常的套餐",
                 "consumes": [
                     "application/json"
@@ -20357,6 +21758,11 @@ const docTemplate = `{
         },
         "/v1/search/merchants": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "根据关键词搜索商户，可传入用户位置计算距离和预估运费",
                 "consumes": [
                     "application/json"
@@ -20437,6 +21843,11 @@ const docTemplate = `{
         },
         "/v1/search/rooms": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "根据日期、时段、人数、菜系等条件搜索可用包间",
                 "consumes": [
                     "application/json"
@@ -21630,550 +23041,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/trust-score/appeals": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "提交信用分申诉，系统采用信用驱动的自动化处理，不设人工申诉通道。信用分将根据后续正常行为自动恢复",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "信用分管理"
-                ],
-                "summary": "提交申诉",
-                "parameters": [
-                    {
-                        "description": "申诉信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.SubmitAppealRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "申诉已记录",
-                        "schema": {
-                            "$ref": "#/definitions/api.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/claims": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "用户为已完成的订单提交索赔申请。系统会根据用户信用分自动评估，高信用用户可获得秒赔或自动审核，低信用用户需人工审核。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "索赔管理"
-                ],
-                "summary": "提交索赔",
-                "parameters": [
-                    {
-                        "description": "索赔信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.SubmitClaimRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "索赔提交成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.SubmitClaimResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或订单状态不允许索赔",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "订单不属于当前用户",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "订单不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "该订单已有索赔记录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/claims/{id}/review": {
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商/客服人工审核索赔申请。仅限低信用用户提交的需要人工审核的索赔。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "索赔管理"
-                ],
-                "summary": "审核索赔",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "审核信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.ReviewClaimRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "审核成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或索赔状态不允许审核",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限审核此索赔",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "索赔不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/food-safety/report": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "用户上报商户食品安全问题，系统将根据举报频率和用户信用分决定是否熔断商户",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "食品安全"
-                ],
-                "summary": "上报食品安全问题",
-                "parameters": [
-                    {
-                        "description": "食安上报信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.ReportFoodSafetyRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "上报成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.ReportFoodSafetyResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/fraud/detect": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "管理员手动触发欺诈检测，支持三种检测模式：协同索赔检测、设备复用检测、地址聚类检测",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "欺诈检测"
-                ],
-                "summary": "触发欺诈检测",
-                "parameters": [
-                    {
-                        "description": "检测请求（三选一）",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.TriggerFraudDetectionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "检测结果",
-                        "schema": {
-                            "$ref": "#/definitions/algorithm.FraudDetectionResult"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/history/{role}/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "查询指定角色实体的信用分变更历史记录，包括扣分原因、扣分金额、变更时间等",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "信用分管理"
-                ],
-                "summary": "查询信用分变更历史",
-                "parameters": [
-                    {
-                        "enum": [
-                            "customer",
-                            "merchant",
-                            "rider"
-                        ],
-                        "type": "string",
-                        "description": "角色类型",
-                        "name": "role",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "实体ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "变更历史列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.TrustScoreChangeResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "无效的角色类型或ID",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/merchants/{id}/suspend": {
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "管理员手动熔断（停业）商户，指定停业时长和原因",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户管理"
-                ],
-                "summary": "熔断商户",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "商户ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "熔断信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.SuspendMerchantRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "熔断成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/profiles/{role}/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "根据角色（customer/merchant/rider）和ID查询信用分画像信息，包含信用分、历史订单统计、违规记录等",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "信用分管理"
-                ],
-                "summary": "查询信用分画像",
-                "parameters": [
-                    {
-                        "enum": [
-                            "customer",
-                            "merchant",
-                            "rider"
-                        ],
-                        "type": "string",
-                        "description": "角色类型",
-                        "name": "role",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "实体ID（用户ID/商户ID/骑手ID）",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "信用分画像（根据角色返回对应字段）",
-                        "schema": {
-                            "$ref": "#/definitions/api.TrustScoreProfileResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "无效的角色类型或ID",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "画像不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/trust-score/recovery": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "商户或骑手因信用分过低被封禁后，可提交恢复申请。系统自动给一次机会，第二次再犯永久封禁",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "信用分管理"
-                ],
-                "summary": "提交恢复申请",
-                "parameters": [
-                    {
-                        "description": "恢复申请信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.SubmitRecoveryRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "恢复成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "已超过最大恢复次数",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/users/me": {
             "get": {
                 "security": [
@@ -22388,10 +23255,7 @@ const docTemplate = `{
                     "200": {
                         "description": "代金券列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.userVoucherResponse"
-                            }
+                            "$ref": "#/definitions/api.listUserVouchersResponse"
                         }
                     },
                     "400": {
@@ -22456,10 +23320,7 @@ const docTemplate = `{
                     "200": {
                         "description": "可用代金券列表",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.userVoucherResponse"
-                            }
+                            "$ref": "#/definitions/api.listUserAvailableVouchersResponse"
                         }
                     },
                     "400": {
@@ -22562,14 +23423,6 @@ const docTemplate = `{
                     "通知管理"
                 ],
                 "summary": "WebSocket连接端点",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Authentication token (required if Authorization header is missing)",
-                        "name": "token",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "101": {
                         "description": "协议升级成功"
@@ -22601,45 +23454,37 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "confidence": {
-                    "description": "匹配规则数量",
                     "type": "integer"
                 },
                 "description": {
                     "type": "string"
                 },
-                "isFraud": {
+                "is_fraud": {
                     "type": "boolean"
                 },
-                "merchantSuspect": {
-                    "description": "是否商户可疑（多个独立用户投诉同一商户）",
+                "merchant_suspect": {
                     "type": "boolean"
                 },
-                "patternType": {
-                    "description": "device-reuse, address-cluster, coordinated-claims",
+                "pattern_type": {
                     "type": "string"
                 },
-                "relatedClaimIDs": {
+                "related_claim_ids": {
                     "type": "array",
                     "items": {
-                        "type": "integer",
-                        "format": "int64"
+                        "type": "integer"
                     }
                 },
-                "relatedUserIDs": {
+                "related_user_ids": {
                     "type": "array",
                     "items": {
-                        "type": "integer",
-                        "format": "int64"
+                        "type": "integer"
                     }
                 },
-                "shouldBlock": {
-                    "description": "是否应该立即拉黑",
+                "should_block": {
                     "type": "boolean"
                 },
-                "suspectMerchantID": {
-                    "description": "可疑商户ID",
-                    "type": "integer",
-                    "format": "int64"
+                "suspect_merchant_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -22916,38 +23761,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.MerchantProfileDTO": {
-            "type": "object",
-            "properties": {
-                "completed_orders": {
-                    "type": "integer"
-                },
-                "food_safety_incidents": {
-                    "type": "integer"
-                },
-                "foreign_object_claims": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "merchant_id": {
-                    "type": "integer"
-                },
-                "total_claims": {
-                    "type": "integer"
-                },
-                "total_orders": {
-                    "type": "integer"
-                },
-                "total_sales": {
-                    "type": "integer"
-                },
-                "trust_score": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.MessageResponse": {
             "type": "object",
             "properties": {
@@ -23085,32 +23898,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.RiderProfileDTO": {
-            "type": "object",
-            "properties": {
-                "completed_deliveries": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "on_time_deliveries": {
-                    "type": "integer"
-                },
-                "rider_id": {
-                    "type": "integer"
-                },
-                "total_damage_incidents": {
-                    "type": "integer"
-                },
-                "total_deliveries": {
-                    "type": "integer"
-                },
-                "trust_score": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.RoleAccessEntry": {
             "type": "object",
             "properties": {
@@ -23152,37 +23939,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.SubmitAppealRequest": {
-            "type": "object",
-            "required": [
-                "appeal_reason",
-                "entity_id",
-                "entity_type"
-            ],
-            "properties": {
-                "appeal_reason": {
-                    "type": "string",
-                    "maxLength": 1000,
-                    "minLength": 10
-                },
-                "entity_id": {
-                    "type": "integer",
-                    "minimum": 1
-                },
-                "entity_type": {
-                    "type": "string",
-                    "enum": [
-                        "customer",
-                        "merchant",
-                        "rider"
-                    ]
-                },
-                "evidence": {
-                    "type": "string",
-                    "maxLength": 500
-                }
-            }
-        },
         "api.SubmitClaimRequest": {
             "type": "object",
             "required": [
@@ -23211,6 +23967,10 @@ const docTemplate = `{
                         "timeout",
                         "food-safety"
                     ]
+                },
+                "device_fingerprint": {
+                    "type": "string",
+                    "maxLength": 256
                 },
                 "evidence_photos": {
                     "type": "array",
@@ -23259,34 +24019,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.SubmitRecoveryRequest": {
-            "type": "object",
-            "required": [
-                "commitment_message",
-                "entity_id",
-                "entity_type"
-            ],
-            "properties": {
-                "commitment_message": {
-                    "description": "改善承诺",
-                    "type": "string",
-                    "maxLength": 500,
-                    "minLength": 10
-                },
-                "entity_id": {
-                    "type": "integer",
-                    "minimum": 1
-                },
-                "entity_type": {
-                    "description": "merchant/rider",
-                    "type": "string",
-                    "enum": [
-                        "merchant",
-                        "rider"
-                    ]
-                }
-            }
-        },
         "api.SuspendMerchantRequest": {
             "type": "object",
             "required": [
@@ -23328,84 +24060,6 @@ const docTemplate = `{
                 },
                 "device_fingerprint": {
                     "type": "string"
-                }
-            }
-        },
-        "api.TrustScoreChangeResponse": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "entity_id": {
-                    "type": "integer"
-                },
-                "entity_type": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "is_auto": {
-                    "type": "boolean"
-                },
-                "new_score": {
-                    "type": "integer"
-                },
-                "old_score": {
-                    "type": "integer"
-                },
-                "reason_description": {
-                    "type": "string"
-                },
-                "reason_type": {
-                    "type": "string"
-                },
-                "score_change": {
-                    "type": "integer"
-                }
-            }
-        },
-        "api.TrustScoreProfileResponse": {
-            "type": "object",
-            "properties": {
-                "customer": {
-                    "$ref": "#/definitions/api.UserProfileDTO"
-                },
-                "merchant": {
-                    "$ref": "#/definitions/api.MerchantProfileDTO"
-                },
-                "rider": {
-                    "$ref": "#/definitions/api.RiderProfileDTO"
-                }
-            }
-        },
-        "api.UserProfileDTO": {
-            "type": "object",
-            "properties": {
-                "completed_orders": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "total_claims": {
-                    "type": "integer"
-                },
-                "total_orders": {
-                    "type": "integer"
-                },
-                "trust_score": {
-                    "type": "integer"
-                },
-                "user_id": {
-                    "type": "integer"
-                },
-                "violation_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -23651,24 +24305,11 @@ const docTemplate = `{
                 }
             }
         },
-        "api.applyRiderRequest": {
+        "api.approveGroupJoinRequestRequest": {
             "type": "object",
-            "required": [
-                "id_card_no",
-                "phone",
-                "real_name"
-            ],
             "properties": {
-                "id_card_no": {
-                    "type": "string"
-                },
-                "phone": {
-                    "type": "string"
-                },
-                "real_name": {
-                    "type": "string",
-                    "maxLength": 50,
-                    "minLength": 2
+                "brand_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -23724,6 +24365,12 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.billingGroupResponse"
                     }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -23735,6 +24382,12 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.billingGroupOrderResponse"
                     }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -23807,11 +24460,17 @@ const docTemplate = `{
                 }
             }
         },
-        "api.bossMerchantResponse": {
+        "api.brandResponse": {
             "type": "object",
             "properties": {
-                "address": {
+                "created_at": {
                     "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "integer"
@@ -23822,11 +24481,34 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "phone": {
+                "status": {
                     "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.brandTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "brand_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
                 },
                 "status": {
                     "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -24212,31 +24894,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.claimBossRequest": {
-            "type": "object",
-            "required": [
-                "bind_code"
-            ],
-            "properties": {
-                "bind_code": {
-                    "type": "string"
-                }
-            }
-        },
-        "api.claimBossResponse": {
-            "type": "object",
-            "properties": {
-                "merchant_id": {
-                    "type": "integer"
-                },
-                "merchant_name": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
         "api.claimResponse": {
             "type": "object",
             "properties": {
@@ -24563,6 +25220,26 @@ const docTemplate = `{
                 }
             }
         },
+        "api.createBrandMenuTemplateRequest": {
+            "type": "object",
+            "required": [
+                "payload"
+            ],
+            "properties": {
+                "payload": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.createComboSetRequest": {
             "type": "object",
             "required": [
@@ -24809,6 +25486,87 @@ const docTemplate = `{
                 }
             }
         },
+        "api.createGroupBrandRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.createGroupJoinRequestRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.createGroupMenuTemplateRequest": {
+            "type": "object",
+            "required": [
+                "payload"
+            ],
+            "properties": {
+                "payload": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.createGroupRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "owner_user_id"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "application_data": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "license_image_url": {
+                    "type": "string"
+                },
+                "license_number": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.createMerchantAppealRequest": {
             "type": "object",
             "required": [
@@ -24831,86 +25589,6 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 1000,
                     "minLength": 10
-                }
-            }
-        },
-        "api.createMerchantApplicationRequest": {
-            "type": "object",
-            "required": [
-                "business_address",
-                "business_license_image_url",
-                "business_license_number",
-                "contact_phone",
-                "latitude",
-                "legal_person_id_back_url",
-                "legal_person_id_front_url",
-                "legal_person_id_number",
-                "legal_person_name",
-                "longitude",
-                "merchant_name",
-                "region_id"
-            ],
-            "properties": {
-                "business_address": {
-                    "type": "string",
-                    "maxLength": 200,
-                    "minLength": 5
-                },
-                "business_license_image_url": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "business_license_number": {
-                    "description": "统一社会信用代码或注册号",
-                    "type": "string",
-                    "maxLength": 30,
-                    "minLength": 8
-                },
-                "business_scope": {
-                    "type": "string",
-                    "maxLength": 200
-                },
-                "contact_phone": {
-                    "type": "string",
-                    "maxLength": 11,
-                    "minLength": 11
-                },
-                "latitude": {
-                    "description": "纬度，前端地图选点",
-                    "type": "string"
-                },
-                "legal_person_id_back_url": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "legal_person_id_front_url": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "legal_person_id_number": {
-                    "description": "身份证15或18位",
-                    "type": "string",
-                    "maxLength": 18,
-                    "minLength": 15
-                },
-                "legal_person_name": {
-                    "type": "string",
-                    "maxLength": 30,
-                    "minLength": 2
-                },
-                "longitude": {
-                    "description": "经度，前端地图选点",
-                    "type": "string"
-                },
-                "merchant_name": {
-                    "type": "string",
-                    "maxLength": 50,
-                    "minLength": 2
-                },
-                "region_id": {
-                    "description": "区域ID，前端上报",
-                    "type": "integer",
-                    "minimum": 1
                 }
             }
         },
@@ -25291,6 +25969,11 @@ const docTemplate = `{
                 "table_type"
             ],
             "properties": {
+                "access_code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 4
+                },
                 "capacity": {
                     "type": "integer",
                     "maximum": 100,
@@ -26470,17 +27153,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.generateBossBindCodeResponse": {
-            "type": "object",
-            "properties": {
-                "bind_code": {
-                    "type": "string"
-                },
-                "expires_at": {
-                    "type": "string"
-                }
-            }
-        },
         "api.generateInviteCodeResponse": {
             "type": "object",
             "properties": {
@@ -26573,6 +27245,189 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "api.groupApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "applicant_user_id": {
+                    "type": "integer"
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "license_image_url": {
+                    "type": "string"
+                },
+                "license_number": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "reject_reason": {
+                    "type": "string"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.groupJoinRequestResponse": {
+            "type": "object",
+            "properties": {
+                "applicant_user_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.groupMerchantResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.groupPoliciesResponse": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "type": "integer"
+                },
+                "inventory_mode": {
+                    "type": "string"
+                },
+                "menu_mode": {
+                    "type": "string"
+                },
+                "pricing_mode": {
+                    "type": "string"
+                },
+                "promotion_mode": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.groupResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "license_image_url": {
+                    "type": "string"
+                },
+                "license_number": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.groupTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -26802,6 +27657,29 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listActiveVouchersResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "vouchers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.voucherResponse"
+                    }
+                }
+            }
+        },
         "api.listBrowseHistoryResponse": {
             "type": "object",
             "properties": {
@@ -26812,8 +27690,17 @@ const docTemplate = `{
                         "$ref": "#/definitions/api.browseHistoryItem"
                     }
                 },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
                 "total": {
                     "description": "总数",
+                    "type": "integer"
+                },
+                "total_count": {
                     "type": "integer"
                 }
             }
@@ -26826,6 +27713,18 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.comboSetResponse"
                     }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -26860,6 +27759,130 @@ const docTemplate = `{
                         "$ref": "#/definitions/api.dishResponse"
                     }
                 },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listMembershipTransactionsResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.transactionResponse"
+                    }
+                }
+            }
+        },
+        "api.listMerchantMembersResponse": {
+            "type": "object",
+            "properties": {
+                "members": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantMemberResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listMerchantOrdersResponse": {
+            "type": "object",
+            "properties": {
+                "orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listMerchantVouchersResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "vouchers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.voucherResponse"
+                    }
+                }
+            }
+        },
+        "api.listMyDeliveriesResponse": {
+            "type": "object",
+            "properties": {
+                "deliveries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.deliveryResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
                 "total_count": {
                     "type": "integer"
                 }
@@ -26873,6 +27896,15 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.notificationResponse"
                     }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 },
                 "total_count": {
                     "type": "integer"
@@ -26894,7 +27926,16 @@ const docTemplate = `{
                 "page": {
                     "type": "integer"
                 },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
                 "total": {
+                    "type": "integer"
+                },
+                "total_count": {
                     "type": "integer"
                 }
             }
@@ -26908,6 +27949,12 @@ const docTemplate = `{
                 "page": {
                     "type": "integer"
                 },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
                 "riders": {
                     "type": "array",
                     "items": {
@@ -26915,6 +27962,95 @@ const docTemplate = `{
                     }
                 },
                 "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listOrdersResponse": {
+            "type": "object",
+            "properties": {
+                "orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.orderResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listPaymentOrdersResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "payment_orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.paymentOrderResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listRefundOrdersByPaymentResponse": {
+            "type": "object",
+            "properties": {
+                "refund_orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.refundOrderResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listRiderDepositsResponse": {
+            "type": "object",
+            "properties": {
+                "deposits": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.depositResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
                     "type": "integer"
                 }
             }
@@ -26933,8 +28069,40 @@ const docTemplate = `{
                         "$ref": "#/definitions/api.premiumScoreLogItem"
                     }
                 },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
                 "total": {
                     "description": "总记录数",
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listRidersResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "riders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
                     "type": "integer"
                 }
             }
@@ -26964,6 +28132,12 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.tableResponse"
                     }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -26974,6 +28148,75 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.tagDetailResponse"
+                    }
+                }
+            }
+        },
+        "api.listUserAvailableVouchersResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "vouchers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.userVoucherResponse"
+                    }
+                }
+            }
+        },
+        "api.listUserMembershipsResponse": {
+            "type": "object",
+            "properties": {
+                "memberships": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.membershipResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listUserVouchersResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "vouchers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.userVoucherResponse"
                     }
                 }
             }
@@ -27069,6 +28312,9 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "logo_url": {
+                    "type": "string"
+                },
                 "merchant_id": {
                     "type": "integer"
                 },
@@ -27080,6 +28326,9 @@ const docTemplate = `{
                 },
                 "total_recharged": {
                     "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
                 },
                 "user_id": {
                     "type": "integer"
@@ -27204,65 +28453,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.merchantApplicationResponse": {
-            "type": "object",
-            "properties": {
-                "business_address": {
-                    "type": "string"
-                },
-                "business_license_image_url": {
-                    "type": "string"
-                },
-                "business_license_number": {
-                    "type": "string"
-                },
-                "business_scope": {
-                    "type": "string"
-                },
-                "contact_phone": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "legal_person_id_back_url": {
-                    "type": "string"
-                },
-                "legal_person_id_front_url": {
-                    "type": "string"
-                },
-                "legal_person_id_number": {
-                    "type": "string"
-                },
-                "legal_person_name": {
-                    "type": "string"
-                },
-                "merchant_name": {
-                    "type": "string"
-                },
-                "reject_reason": {
-                    "type": "string"
-                },
-                "reviewed_at": {
-                    "type": "string"
-                },
-                "reviewed_by": {
-                    "type": "integer"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.merchantApplymentStatusResponse": {
             "type": "object",
             "properties": {
@@ -27353,32 +28543,6 @@ const docTemplate = `{
                 "status": {
                     "description": "状态",
                     "type": "string"
-                }
-            }
-        },
-        "api.merchantBossResponse": {
-            "type": "object",
-            "properties": {
-                "avatar_url": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "full_name": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "phone": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -27885,6 +29049,26 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantUserRiskResponse": {
+            "type": "object",
+            "properties": {
+                "block_until": {
+                    "type": "string"
+                },
+                "has_block": {
+                    "type": "boolean"
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "reminder_text": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.miniProgramPayParams": {
             "type": "object",
             "properties": {
@@ -28010,6 +29194,11 @@ const docTemplate = `{
                 "reservation_id": {
                     "type": "integer",
                     "minimum": 1
+                },
+                "table_code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 4
                 },
                 "table_id": {
                     "type": "integer",
@@ -28248,6 +29437,12 @@ const docTemplate = `{
                 "page": {
                     "type": "integer"
                 },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
                 "summary": {
                     "type": "object",
                     "properties": {
@@ -28473,11 +29668,23 @@ const docTemplate = `{
                     "minimum": 0,
                     "example": 0
                 },
+                "group_id": {
+                    "description": "分组ID",
+                    "type": "integer"
+                },
                 "name": {
                     "description": "定制项名称 (如: \"辣度\", \"甜度\", \"规格\"，最多50字符)",
                     "type": "string",
                     "maxLength": 50,
                     "example": "辣度"
+                },
+                "option_id": {
+                    "description": "选项ID",
+                    "type": "integer"
+                },
+                "tag_id": {
+                    "description": "标签ID",
+                    "type": "integer"
                 },
                 "value": {
                     "description": "定制项取值 (如: \"微辣\", \"中辣\", \"特辣\"，最多50字符)",
@@ -28500,12 +29707,9 @@ const docTemplate = `{
                     "example": 2001
                 },
                 "customizations": {
-                    "description": "定制化选项列表 (选填，如规格、口味等，最多10个)",
-                    "type": "array",
-                    "maxItems": 10,
-                    "items": {
-                        "$ref": "#/definitions/api.orderCustomizationItem"
-                    }
+                    "description": "定制化选项（选填，格式：{group_id: option_id}）",
+                    "type": "object",
+                    "additionalProperties": true
                 },
                 "dish_id": {
                     "description": "菜品ID (dish_id和combo_id二选一，不能同时为空)",
@@ -28855,6 +30059,32 @@ const docTemplate = `{
                     "description": "用户ID",
                     "type": "integer",
                     "example": 10001
+                }
+            }
+        },
+        "api.orderStatsResponse": {
+            "type": "object",
+            "properties": {
+                "cancelled_count": {
+                    "type": "integer"
+                },
+                "completed_count": {
+                    "type": "integer"
+                },
+                "delivering_count": {
+                    "type": "integer"
+                },
+                "paid_count": {
+                    "type": "integer"
+                },
+                "pending_count": {
+                    "type": "integer"
+                },
+                "preparing_count": {
+                    "type": "integer"
+                },
+                "ready_count": {
+                    "type": "integer"
                 }
             }
         },
@@ -29322,10 +30552,6 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "trust_score": {
-                    "description": "信誉分",
-                    "type": "integer"
-                },
                 "vouchers": {
                     "description": "代金券",
                     "type": "array",
@@ -29468,8 +30694,7 @@ const docTemplate = `{
                 "payment_method": {
                     "type": "string",
                     "enum": [
-                        "wechat",
-                        "alipay"
+                        "wechat"
                     ]
                 },
                 "recharge_amount": {
@@ -29500,6 +30725,9 @@ const docTemplate = `{
                 },
                 "recharge_amount": {
                     "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
                 },
                 "valid_from": {
                     "type": "string"
@@ -29832,6 +31060,14 @@ const docTemplate = `{
                 }
             }
         },
+        "api.rejectGroupJoinRequestRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
         "api.rejectOrderBody": {
             "type": "object",
             "required": [
@@ -29867,6 +31103,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "access_token_expires_at": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "refresh_token_expires_at": {
                     "type": "string"
                 }
             }
@@ -30184,6 +31426,20 @@ const docTemplate = `{
                         "approved",
                         "rejected"
                     ]
+                }
+            }
+        },
+        "api.reviewGroupApplicationRequest": {
+            "type": "object",
+            "required": [
+                "status"
+            ],
+            "properties": {
+                "reject_reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -31511,6 +32767,55 @@ const docTemplate = `{
                 }
             }
         },
+        "api.updateGroupApplicationBasicRequest": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "license_image_url": {
+                    "type": "string"
+                },
+                "license_number": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.updateGroupRequest": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "license_image_url": {
+                    "type": "string"
+                },
+                "license_number": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "api.updateLocationRequest": {
             "type": "object",
             "required": [
@@ -31875,6 +33180,11 @@ const docTemplate = `{
         "api.updateTableRequest": {
             "type": "object",
             "properties": {
+                "access_code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 4
+                },
                 "capacity": {
                     "type": "integer",
                     "maximum": 100,
@@ -32034,6 +33344,29 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "image_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.upsertGroupPoliciesRequest": {
+            "type": "object",
+            "required": [
+                "inventory_mode",
+                "menu_mode",
+                "pricing_mode",
+                "promotion_mode"
+            ],
+            "properties": {
+                "inventory_mode": {
+                    "type": "string"
+                },
+                "menu_mode": {
+                    "type": "string"
+                },
+                "pricing_mode": {
+                    "type": "string"
+                },
+                "promotion_mode": {
                     "type": "string"
                 }
             }
@@ -32239,6 +33572,10 @@ const docTemplate = `{
                     "maxLength": 256,
                     "minLength": 1
                 },
+                "device_fingerprint": {
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "device_id": {
                     "type": "string",
                     "maxLength": 128,
@@ -32292,32 +33629,6 @@ const docTemplate = `{
                 "remark": {
                     "type": "string",
                     "maxLength": 200
-                }
-            }
-        },
-        "db.GetOrderStatsRow": {
-            "type": "object",
-            "properties": {
-                "cancelled_count": {
-                    "type": "integer"
-                },
-                "completed_count": {
-                    "type": "integer"
-                },
-                "delivering_count": {
-                    "type": "integer"
-                },
-                "paid_count": {
-                    "type": "integer"
-                },
-                "pending_count": {
-                    "type": "integer"
-                },
-                "preparing_count": {
-                    "type": "integer"
-                },
-                "ready_count": {
-                    "type": "integer"
                 }
             }
         },

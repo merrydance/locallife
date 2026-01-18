@@ -3,34 +3,26 @@ definitions:
   algorithm.FraudDetectionResult:
     properties:
       confidence:
-        description: 匹配规则数量
         type: integer
       description:
         type: string
-      isFraud:
+      is_fraud:
         type: boolean
-      merchantSuspect:
-        description: 是否商户可疑（多个独立用户投诉同一商户）
+      merchant_suspect:
         type: boolean
-      patternType:
-        description: device-reuse, address-cluster, coordinated-claims
+      pattern_type:
         type: string
-      relatedClaimIDs:
+      related_claim_ids:
         items:
-          format: int64
           type: integer
         type: array
-      relatedUserIDs:
+      related_user_ids:
         items:
-          format: int64
           type: integer
         type: array
-      shouldBlock:
-        description: 是否应该立即拉黑
+      should_block:
         type: boolean
-      suspectMerchantID:
-        description: 可疑商户ID
-        format: int64
+      suspect_merchant_id:
         type: integer
     type: object
   api.BusinessLicenseOCRData:
@@ -232,27 +224,6 @@ definitions:
         description: 有效期（背面）
         type: string
     type: object
-  api.MerchantProfileDTO:
-    properties:
-      completed_orders:
-        type: integer
-      food_safety_incidents:
-        type: integer
-      foreign_object_claims:
-        type: integer
-      id:
-        type: integer
-      merchant_id:
-        type: integer
-      total_claims:
-        type: integer
-      total_orders:
-        type: integer
-      total_sales:
-        type: integer
-      trust_score:
-        type: integer
-    type: object
   api.MessageResponse:
     properties:
       message:
@@ -351,23 +322,6 @@ definitions:
     - approved
     - review_note
     type: object
-  api.RiderProfileDTO:
-    properties:
-      completed_deliveries:
-        type: integer
-      id:
-        type: integer
-      on_time_deliveries:
-        type: integer
-      rider_id:
-        type: integer
-      total_damage_incidents:
-        type: integer
-      total_deliveries:
-        type: integer
-      trust_score:
-        type: integer
-    type: object
   api.RoleAccessEntry:
     properties:
       auth_required:
@@ -396,29 +350,6 @@ definitions:
         example: "2024-12-31T23:59:59Z"
         type: string
     type: object
-  api.SubmitAppealRequest:
-    properties:
-      appeal_reason:
-        maxLength: 1000
-        minLength: 10
-        type: string
-      entity_id:
-        minimum: 1
-        type: integer
-      entity_type:
-        enum:
-        - customer
-        - merchant
-        - rider
-        type: string
-      evidence:
-        maxLength: 500
-        type: string
-    required:
-    - appeal_reason
-    - entity_id
-    - entity_type
-    type: object
   api.SubmitClaimRequest:
     properties:
       claim_amount:
@@ -436,6 +367,9 @@ definitions:
         - damage
         - timeout
         - food-safety
+        type: string
+      device_fingerprint:
+        maxLength: 256
         type: string
       evidence_photos:
         items:
@@ -475,27 +409,6 @@ definitions:
         description: 警告信息
         type: string
     type: object
-  api.SubmitRecoveryRequest:
-    properties:
-      commitment_message:
-        description: 改善承诺
-        maxLength: 500
-        minLength: 10
-        type: string
-      entity_id:
-        minimum: 1
-        type: integer
-      entity_type:
-        description: merchant/rider
-        enum:
-        - merchant
-        - rider
-        type: string
-    required:
-    - commitment_message
-    - entity_id
-    - entity_type
-    type: object
   api.SuspendMerchantRequest:
     properties:
       admin_id:
@@ -527,57 +440,6 @@ definitions:
         type: integer
       device_fingerprint:
         type: string
-    type: object
-  api.TrustScoreChangeResponse:
-    properties:
-      created_at:
-        type: string
-      entity_id:
-        type: integer
-      entity_type:
-        type: string
-      id:
-        type: integer
-      is_auto:
-        type: boolean
-      new_score:
-        type: integer
-      old_score:
-        type: integer
-      reason_description:
-        type: string
-      reason_type:
-        type: string
-      score_change:
-        type: integer
-    type: object
-  api.TrustScoreProfileResponse:
-    properties:
-      customer:
-        $ref: '#/definitions/api.UserProfileDTO'
-      merchant:
-        $ref: '#/definitions/api.MerchantProfileDTO'
-      rider:
-        $ref: '#/definitions/api.RiderProfileDTO'
-    type: object
-  api.UserProfileDTO:
-    properties:
-      completed_orders:
-        type: integer
-      id:
-        type: integer
-      role:
-        type: string
-      total_claims:
-        type: integer
-      total_orders:
-        type: integer
-      trust_score:
-        type: integer
-      user_id:
-        type: integer
-      violation_count:
-        type: integer
     type: object
   api.addCartItemRequest:
     properties:
@@ -749,20 +611,10 @@ definitions:
       status:
         type: string
     type: object
-  api.applyRiderRequest:
+  api.approveGroupJoinRequestRequest:
     properties:
-      id_card_no:
-        type: string
-      phone:
-        type: string
-      real_name:
-        maxLength: 50
-        minLength: 2
-        type: string
-    required:
-    - id_card_no
-    - phone
-    - real_name
+      brand_id:
+        type: integer
     type: object
   api.batchDishStatusResponse:
     properties:
@@ -801,6 +653,10 @@ definitions:
         items:
           $ref: '#/definitions/api.billingGroupResponse'
         type: array
+      total:
+        type: integer
+      total_count:
+        type: integer
     type: object
   api.billingGroupOrderListResponse:
     properties:
@@ -808,6 +664,10 @@ definitions:
         items:
           $ref: '#/definitions/api.billingGroupOrderResponse'
         type: array
+      total:
+        type: integer
+      total_count:
+        type: integer
     type: object
   api.billingGroupOrderResponse:
     properties:
@@ -854,20 +714,39 @@ definitions:
     required:
     - invite_code
     type: object
-  api.bossMerchantResponse:
+  api.brandResponse:
     properties:
-      address:
+      created_at:
         type: string
+      description:
+        type: string
+      group_id:
+        type: integer
       id:
         type: integer
       logo_url:
         type: string
       name:
         type: string
-      phone:
-        type: string
       status:
         type: string
+      updated_at:
+        type: string
+    type: object
+  api.brandTemplateResponse:
+    properties:
+      brand_id:
+        type: integer
+      created_at:
+        type: string
+      id:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
     type: object
   api.browseHistoryItem:
     properties:
@@ -1138,22 +1017,6 @@ definitions:
       message:
         type: string
     type: object
-  api.claimBossRequest:
-    properties:
-      bind_code:
-        type: string
-    required:
-    - bind_code
-    type: object
-  api.claimBossResponse:
-    properties:
-      merchant_id:
-        type: integer
-      merchant_name:
-        type: string
-      message:
-        type: string
-    type: object
   api.claimResponse:
     properties:
       approval_type:
@@ -1380,6 +1243,19 @@ definitions:
     required:
     - dining_session_id
     type: object
+  api.createBrandMenuTemplateRequest:
+    properties:
+      payload:
+        items:
+          type: integer
+        type: array
+      status:
+        type: string
+      version:
+        type: integer
+    required:
+    - payload
+    type: object
   api.createComboSetRequest:
     properties:
       combo_price:
@@ -1564,6 +1440,59 @@ definitions:
     - name
     - price
     type: object
+  api.createGroupBrandRequest:
+    properties:
+      description:
+        type: string
+      logo_url:
+        type: string
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  api.createGroupJoinRequestRequest:
+    properties:
+      reason:
+        type: string
+    type: object
+  api.createGroupMenuTemplateRequest:
+    properties:
+      payload:
+        items:
+          type: integer
+        type: array
+      status:
+        type: string
+      version:
+        type: integer
+    required:
+    - payload
+    type: object
+  api.createGroupRequest:
+    properties:
+      address:
+        type: string
+      application_data:
+        items:
+          type: integer
+        type: array
+      contact_phone:
+        type: string
+      license_image_url:
+        type: string
+      license_number:
+        type: string
+      name:
+        type: string
+      owner_user_id:
+        type: integer
+      region_id:
+        type: integer
+    required:
+    - name
+    - owner_user_id
+    type: object
   api.createMerchantAppealRequest:
     properties:
       claim_id:
@@ -1581,70 +1510,6 @@ definitions:
     required:
     - claim_id
     - reason
-    type: object
-  api.createMerchantApplicationRequest:
-    properties:
-      business_address:
-        maxLength: 200
-        minLength: 5
-        type: string
-      business_license_image_url:
-        maxLength: 500
-        type: string
-      business_license_number:
-        description: 统一社会信用代码或注册号
-        maxLength: 30
-        minLength: 8
-        type: string
-      business_scope:
-        maxLength: 200
-        type: string
-      contact_phone:
-        maxLength: 11
-        minLength: 11
-        type: string
-      latitude:
-        description: 纬度，前端地图选点
-        type: string
-      legal_person_id_back_url:
-        maxLength: 500
-        type: string
-      legal_person_id_front_url:
-        maxLength: 500
-        type: string
-      legal_person_id_number:
-        description: 身份证15或18位
-        maxLength: 18
-        minLength: 15
-        type: string
-      legal_person_name:
-        maxLength: 30
-        minLength: 2
-        type: string
-      longitude:
-        description: 经度，前端地图选点
-        type: string
-      merchant_name:
-        maxLength: 50
-        minLength: 2
-        type: string
-      region_id:
-        description: 区域ID，前端上报
-        minimum: 1
-        type: integer
-    required:
-    - business_address
-    - business_license_image_url
-    - business_license_number
-    - contact_phone
-    - latitude
-    - legal_person_id_back_url
-    - legal_person_id_front_url
-    - legal_person_id_number
-    - legal_person_name
-    - longitude
-    - merchant_name
-    - region_id
     type: object
   api.createOperatorApplicationRequest:
     properties:
@@ -1924,6 +1789,10 @@ definitions:
     type: object
   api.createTableRequest:
     properties:
+      access_code:
+        maxLength: 32
+        minLength: 4
+        type: string
       capacity:
         maximum: 100
         minimum: 1
@@ -2739,13 +2608,6 @@ definitions:
         description: 总服务费（平台+运营商）
         type: integer
     type: object
-  api.generateBossBindCodeResponse:
-    properties:
-      bind_code:
-        type: string
-      expires_at:
-        type: string
-    type: object
   api.generateInviteCodeResponse:
     properties:
       expires_at:
@@ -2808,6 +2670,126 @@ definitions:
         type: integer
       updated_at:
         type: string
+    type: object
+  api.groupApplicationResponse:
+    properties:
+      address:
+        type: string
+      applicant_user_id:
+        type: integer
+      contact_phone:
+        type: string
+      created_at:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: integer
+      license_image_url:
+        type: string
+      license_number:
+        type: string
+      region_id:
+        type: integer
+      reject_reason:
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.groupJoinRequestResponse:
+    properties:
+      applicant_user_id:
+        type: integer
+      created_at:
+        type: string
+      group_id:
+        type: integer
+      id:
+        type: integer
+      merchant_id:
+        type: integer
+      reason:
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        type: integer
+      status:
+        type: string
+    type: object
+  api.groupMerchantResponse:
+    properties:
+      address:
+        type: string
+      id:
+        type: integer
+      logo_url:
+        type: string
+      name:
+        type: string
+      phone:
+        type: string
+      status:
+        type: string
+    type: object
+  api.groupPoliciesResponse:
+    properties:
+      group_id:
+        type: integer
+      inventory_mode:
+        type: string
+      menu_mode:
+        type: string
+      pricing_mode:
+        type: string
+      promotion_mode:
+        type: string
+    type: object
+  api.groupResponse:
+    properties:
+      address:
+        type: string
+      contact_phone:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      license_image_url:
+        type: string
+      license_number:
+        type: string
+      name:
+        type: string
+      owner_user_id:
+        type: integer
+      region_id:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.groupTemplateResponse:
+    properties:
+      created_at:
+        type: string
+      group_id:
+        type: integer
+      id:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
     type: object
   api.growthStatRow:
     properties:
@@ -2966,6 +2948,21 @@ definitions:
         description: 待取餐数
         type: integer
     type: object
+  api.listActiveVouchersResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+      vouchers:
+        items:
+          $ref: '#/definitions/api.voucherResponse'
+        type: array
+    type: object
   api.listBrowseHistoryResponse:
     properties:
       items:
@@ -2973,8 +2970,14 @@ definitions:
         items:
           $ref: '#/definitions/api.browseHistoryItem'
         type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
       total:
         description: 总数
+        type: integer
+      total_count:
         type: integer
     type: object
   api.listComboSetsResponse:
@@ -2983,6 +2986,14 @@ definitions:
         items:
           $ref: '#/definitions/api.comboSetResponse'
         type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
     type: object
   api.listDailyInventoryResponse:
     properties:
@@ -3004,6 +3015,87 @@ definitions:
         items:
           $ref: '#/definitions/api.dishResponse'
         type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listMembershipTransactionsResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+      transactions:
+        items:
+          $ref: '#/definitions/api.transactionResponse'
+        type: array
+    type: object
+  api.listMerchantMembersResponse:
+    properties:
+      members:
+        items:
+          $ref: '#/definitions/api.merchantMemberResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listMerchantOrdersResponse:
+    properties:
+      orders:
+        items:
+          $ref: '#/definitions/api.orderResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listMerchantVouchersResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+      vouchers:
+        items:
+          $ref: '#/definitions/api.voucherResponse'
+        type: array
+    type: object
+  api.listMyDeliveriesResponse:
+    properties:
+      deliveries:
+        items:
+          $ref: '#/definitions/api.deliveryResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
       total_count:
         type: integer
     type: object
@@ -3013,6 +3105,12 @@ definitions:
         items:
           $ref: '#/definitions/api.notificationResponse'
         type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
       total_count:
         type: integer
     type: object
@@ -3026,7 +3124,13 @@ definitions:
         type: array
       page:
         type: integer
+      page_id:
+        type: integer
+      page_size:
+        type: integer
       total:
+        type: integer
+      total_count:
         type: integer
     type: object
   api.listOperatorRidersResponse:
@@ -3035,11 +3139,73 @@ definitions:
         type: integer
       page:
         type: integer
+      page_id:
+        type: integer
+      page_size:
+        type: integer
       riders:
         items:
           $ref: '#/definitions/api.riderListItem'
         type: array
       total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listOrdersResponse:
+    properties:
+      orders:
+        items:
+          $ref: '#/definitions/api.orderResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listPaymentOrdersResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      payment_orders:
+        items:
+          $ref: '#/definitions/api.paymentOrderResponse'
+        type: array
+      total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listRefundOrdersByPaymentResponse:
+    properties:
+      refund_orders:
+        items:
+          $ref: '#/definitions/api.refundOrderResponse'
+        type: array
+      total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listRiderDepositsResponse:
+    properties:
+      deposits:
+        items:
+          $ref: '#/definitions/api.depositResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
         type: integer
     type: object
   api.listRiderPremiumScoreHistoryResponse:
@@ -3052,8 +3218,29 @@ definitions:
         items:
           $ref: '#/definitions/api.premiumScoreLogItem'
         type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
       total:
         description: 总记录数
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listRidersResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      riders:
+        items:
+          $ref: '#/definitions/api.riderResponse'
+        type: array
+      total:
+        type: integer
+      total_count:
         type: integer
     type: object
   api.listRoomsForCustomerResponse:
@@ -3073,12 +3260,61 @@ definitions:
         items:
           $ref: '#/definitions/api.tableResponse'
         type: array
+      total:
+        type: integer
+      total_count:
+        type: integer
     type: object
   api.listTagsResponse:
     properties:
       tags:
         items:
           $ref: '#/definitions/api.tagDetailResponse'
+        type: array
+    type: object
+  api.listUserAvailableVouchersResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+      vouchers:
+        items:
+          $ref: '#/definitions/api.userVoucherResponse'
+        type: array
+    type: object
+  api.listUserMembershipsResponse:
+    properties:
+      memberships:
+        items:
+          $ref: '#/definitions/api.membershipResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+    type: object
+  api.listUserVouchersResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_count:
+        type: integer
+      vouchers:
+        items:
+          $ref: '#/definitions/api.userVoucherResponse'
         type: array
     type: object
   api.locationPoint:
@@ -3146,6 +3382,8 @@ definitions:
         type: string
       id:
         type: integer
+      logo_url:
+        type: string
       merchant_id:
         type: integer
       merchant_name:
@@ -3154,6 +3392,8 @@ definitions:
         type: integer
       total_recharged:
         type: integer
+      updated_at:
+        type: string
       user_id:
         type: integer
     type: object
@@ -3235,45 +3475,6 @@ definitions:
       user_id:
         type: integer
     type: object
-  api.merchantApplicationResponse:
-    properties:
-      business_address:
-        type: string
-      business_license_image_url:
-        type: string
-      business_license_number:
-        type: string
-      business_scope:
-        type: string
-      contact_phone:
-        type: string
-      created_at:
-        type: string
-      id:
-        type: integer
-      legal_person_id_back_url:
-        type: string
-      legal_person_id_front_url:
-        type: string
-      legal_person_id_number:
-        type: string
-      legal_person_name:
-        type: string
-      merchant_name:
-        type: string
-      reject_reason:
-        type: string
-      reviewed_at:
-        type: string
-      reviewed_by:
-        type: integer
-      status:
-        type: string
-      updated_at:
-        type: string
-      user_id:
-        type: integer
-    type: object
   api.merchantApplymentStatusResponse:
     properties:
       reject_reason:
@@ -3342,23 +3543,6 @@ definitions:
       status:
         description: 状态
         type: string
-    type: object
-  api.merchantBossResponse:
-    properties:
-      avatar_url:
-        type: string
-      created_at:
-        type: string
-      full_name:
-        type: string
-      id:
-        type: integer
-      phone:
-        type: string
-      status:
-        type: string
-      user_id:
-        type: integer
     type: object
   api.merchantCartResponse:
     properties:
@@ -3705,6 +3889,19 @@ definitions:
           type: string
         type: array
     type: object
+  api.merchantUserRiskResponse:
+    properties:
+      block_until:
+        type: string
+      has_block:
+        type: boolean
+      reason_code:
+        type: string
+      reminder_text:
+        type: string
+      user_id:
+        type: integer
+    type: object
   api.miniProgramPayParams:
     properties:
       nonceStr:
@@ -3787,6 +3984,10 @@ definitions:
       reservation_id:
         minimum: 1
         type: integer
+      table_code:
+        maxLength: 32
+        minLength: 4
+        type: string
       table_id:
         minimum: 1
         type: integer
@@ -3954,6 +4155,10 @@ definitions:
         type: integer
       page:
         type: integer
+      page_id:
+        type: integer
+      page_size:
+        type: integer
       summary:
         properties:
           total_commission:
@@ -4109,11 +4314,20 @@ definitions:
         maximum: 10000
         minimum: 0
         type: integer
+      group_id:
+        description: 分组ID
+        type: integer
       name:
         description: '定制项名称 (如: "辣度", "甜度", "规格"，最多50字符)'
         example: 辣度
         maxLength: 50
         type: string
+      option_id:
+        description: 选项ID
+        type: integer
+      tag_id:
+        description: 标签ID
+        type: integer
       value:
         description: '定制项取值 (如: "微辣", "中辣", "特辣"，最多50字符)'
         example: 中辣
@@ -4131,11 +4345,9 @@ definitions:
         minimum: 1
         type: integer
       customizations:
-        description: 定制化选项列表 (选填，如规格、口味等，最多10个)
-        items:
-          $ref: '#/definitions/api.orderCustomizationItem'
-        maxItems: 10
-        type: array
+        additionalProperties: true
+        description: '定制化选项（选填，格式：{group_id: option_id}）'
+        type: object
       dish_id:
         description: 菜品ID (dish_id和combo_id二选一，不能同时为空)
         example: 1001
@@ -4411,6 +4623,23 @@ definitions:
       user_id:
         description: 用户ID
         example: 10001
+        type: integer
+    type: object
+  api.orderStatsResponse:
+    properties:
+      cancelled_count:
+        type: integer
+      completed_count:
+        type: integer
+      delivering_count:
+        type: integer
+      paid_count:
+        type: integer
+      pending_count:
+        type: integer
+      preparing_count:
+        type: integer
+      ready_count:
         type: integer
     type: object
   api.paymentOrderResponse:
@@ -4729,9 +4958,6 @@ definitions:
         items:
           type: string
         type: array
-      trust_score:
-        description: 信誉分
-        type: integer
       vouchers:
         description: 代金券
         items:
@@ -4826,7 +5052,6 @@ definitions:
       payment_method:
         enum:
         - wechat
-        - alipay
         type: string
       recharge_amount:
         description: 最大100万元
@@ -4852,6 +5077,8 @@ definitions:
         type: integer
       recharge_amount:
         type: integer
+      updated_at:
+        type: string
       valid_from:
         type: string
       valid_until:
@@ -5075,6 +5302,11 @@ definitions:
       total_orders:
         type: integer
     type: object
+  api.rejectGroupJoinRequestRequest:
+    properties:
+      reason:
+        type: string
+    type: object
   api.rejectOrderBody:
     properties:
       reason:
@@ -5100,6 +5332,10 @@ definitions:
       access_token:
         type: string
       access_token_expires_at:
+        type: string
+      refresh_token:
+        type: string
+      refresh_token_expires_at:
         type: string
     type: object
   api.replaceOrderRequest:
@@ -5316,19 +5552,14 @@ definitions:
     - review_notes
     - status
     type: object
-  api.reviewMerchantApplicationRequest:
+  api.reviewGroupApplicationRequest:
     properties:
-      application_id:
-        minimum: 1
-        type: integer
-      approve:
-        type: boolean
       reject_reason:
-        maxLength: 500
+        type: string
+      status:
         type: string
     required:
-    - application_id
-    - approve
+    - status
     type: object
   api.reviewResponse:
     properties:
@@ -6233,6 +6464,38 @@ definitions:
       voice_takeout:
         type: boolean
     type: object
+  api.updateGroupApplicationBasicRequest:
+    properties:
+      address:
+        type: string
+      contact_phone:
+        type: string
+      group_name:
+        type: string
+      license_image_url:
+        type: string
+      license_number:
+        type: string
+      region_id:
+        type: integer
+    type: object
+  api.updateGroupRequest:
+    properties:
+      address:
+        type: string
+      contact_phone:
+        type: string
+      license_image_url:
+        type: string
+      license_number:
+        type: string
+      name:
+        type: string
+      region_id:
+        type: integer
+      status:
+        type: string
+    type: object
   api.updateLocationRequest:
     properties:
       locations:
@@ -6489,6 +6752,10 @@ definitions:
     type: object
   api.updateTableRequest:
     properties:
+      access_code:
+        maxLength: 32
+        minLength: 4
+        type: string
       capacity:
         maximum: 100
         minimum: 1
@@ -6608,6 +6875,22 @@ definitions:
     properties:
       image_url:
         type: string
+    type: object
+  api.upsertGroupPoliciesRequest:
+    properties:
+      inventory_mode:
+        type: string
+      menu_mode:
+        type: string
+      pricing_mode:
+        type: string
+      promotion_mode:
+        type: string
+    required:
+    - inventory_mode
+    - menu_mode
+    - pricing_mode
+    - promotion_mode
     type: object
   api.userAddressResponse:
     properties:
@@ -6738,6 +7021,9 @@ definitions:
         maxLength: 256
         minLength: 1
         type: string
+      device_fingerprint:
+        maxLength: 256
+        type: string
       device_id:
         maxLength: 128
         minLength: 1
@@ -6780,23 +7066,6 @@ definitions:
         type: string
     required:
     - amount
-    type: object
-  db.GetOrderStatsRow:
-    properties:
-      cancelled_count:
-        type: integer
-      completed_count:
-        type: integer
-      delivering_count:
-        type: integer
-      paid_count:
-        type: integer
-      pending_count:
-        type: integer
-      preparing_count:
-        type: integer
-      ready_count:
-        type: integer
     type: object
   maps.RouteResult:
     properties:
@@ -8076,107 +8345,6 @@ paths:
       summary: 设置默认地址
       tags:
       - 用户地址
-  /v1/admin/merchants/applications:
-    get:
-      consumes:
-      - application/json
-      description: 分页获取商户入驻申请列表，仅管理员可用
-      parameters:
-      - description: 按状态筛选
-        enum:
-        - pending
-        - approved
-        - rejected
-        in: query
-        name: status
-        type: string
-      - description: 页码
-        in: query
-        minimum: 1
-        name: page_id
-        required: true
-        type: integer
-      - description: 每页数量
-        in: query
-        maximum: 50
-        minimum: 5
-        name: page_size
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 申请列表
-          schema:
-            items:
-              $ref: '#/definitions/api.merchantApplicationResponse'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无管理员权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取商户入驻申请列表（管理员）
-      tags:
-      - 商户管理
-  /v1/admin/merchants/applications/review:
-    post:
-      consumes:
-      - application/json
-      description: 通过或拒绝商户入驻申请，仅管理员可用
-      parameters:
-      - description: 审核决定
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.reviewMerchantApplicationRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 审核结果
-          schema:
-            $ref: '#/definitions/api.merchantApplicationResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无管理员权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 审核商户入驻申请（管理员）
-      tags:
-      - 商户管理
   /v1/admin/riders:
     get:
       consumes:
@@ -8212,9 +8380,7 @@ paths:
         "200":
           description: 骑手列表
           schema:
-            items:
-              $ref: '#/definitions/api.riderResponse'
-            type: array
+            $ref: '#/definitions/api.listRidersResponse'
         "400":
           description: 参数错误
           schema:
@@ -8614,21 +8780,92 @@ paths:
       summary: 员工绑定商户
       tags:
       - 员工管理
-  /v1/boss/merchants:
+  /v1/brands/{id}:
     get:
-      description: 获取当前 Boss 认领的所有店铺
+      description: 获取品牌详情（需为集团成员）
+      parameters:
+      - description: 品牌ID
+        in: path
+        name: id
+        required: true
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/api.bossMerchantResponse'
-            type: array
-      summary: Boss 获取关联店铺
+            $ref: '#/definitions/api.brandResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取品牌详情
       tags:
-      - Boss管理
+      - 品牌管理
+  /v1/brands/{id}/menu-templates:
+    post:
+      consumes:
+      - application/json
+      description: 创建品牌菜单模板（owner/admin/ops）
+      parameters:
+      - description: 品牌ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 模板信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createBrandMenuTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.brandTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建品牌菜单模板
+      tags:
+      - 品牌管理
   /v1/cart:
     get:
       consumes:
@@ -8935,28 +9172,6 @@ paths:
       summary: 获取用户所有购物车汇总
       tags:
       - 购物车
-  /v1/claim-boss:
-    post:
-      consumes:
-      - application/json
-      description: Boss 扫码或输入认领码认领店铺
-      parameters:
-      - description: 认领请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.claimBossRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.claimBossResponse'
-      summary: Boss 认领店铺
-      tags:
-      - Boss管理
   /v1/claims:
     get:
       consumes:
@@ -8995,6 +9210,53 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取我的索赔列表
+      tags:
+      - 索赔管理
+    post:
+      consumes:
+      - application/json
+      description: 用户为已完成的订单提交索赔申请。系统基于行为追溯规则进行评估，决定秒赔、需证据或平台垫付。
+      parameters:
+      - description: 索赔信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.SubmitClaimRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 索赔提交成功
+          schema:
+            $ref: '#/definitions/api.SubmitClaimResponse'
+        "400":
+          description: 参数错误或订单状态不允许索赔
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 订单不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 该订单已有索赔记录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 提交索赔
       tags:
       - 索赔管理
   /v1/claims/{id}:
@@ -9038,6 +9300,55 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取索赔详情
+      tags:
+      - 索赔管理
+  /v1/claims/{id}/review:
+    patch:
+      consumes:
+      - application/json
+      description: 运营商/客服人工审核索赔申请。仅限低信用用户提交的需要人工审核的索赔。
+      parameters:
+      - description: 索赔ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 审核信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.ReviewClaimRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 审核成功
+          schema:
+            $ref: '#/definitions/api.claimResponse'
+        "400":
+          description: 参数错误或索赔状态不允许审核
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限审核此索赔
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 索赔不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 审核索赔
       tags:
       - 索赔管理
   /v1/combos:
@@ -9792,9 +10103,7 @@ paths:
         "200":
           description: 配送单列表
           schema:
-            items:
-              $ref: '#/definitions/api.deliveryResponse'
-            type: array
+            $ref: '#/definitions/api.listMyDeliveriesResponse'
         "400":
           description: 参数校验失败
           schema:
@@ -10846,6 +11155,875 @@ paths:
       summary: 取消收藏商户
       tags:
       - 收藏管理
+  /v1/food-safety/merchants/{id}/suspend:
+    patch:
+      consumes:
+      - application/json
+      description: 管理员手动熔断（停业）商户，指定停业时长和原因
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 熔断信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.SuspendMerchantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 熔断成功
+          schema:
+            $ref: '#/definitions/api.MessageResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 熔断商户
+      tags:
+      - 商户管理
+  /v1/food-safety/report:
+    post:
+      consumes:
+      - application/json
+      description: 用户上报商户食品安全问题，系统将根据举报频率与协同模式决定是否熔断商户
+      parameters:
+      - description: 食安上报信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.ReportFoodSafetyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 上报成功
+          schema:
+            $ref: '#/definitions/api.ReportFoodSafetyResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 上报食品安全问题
+      tags:
+      - 食品安全
+  /v1/fraud/detect:
+    post:
+      consumes:
+      - application/json
+      description: 管理员手动触发欺诈检测，支持三种检测模式：协同索赔检测、设备复用检测、地址聚类检测
+      parameters:
+      - description: 检测请求（三选一）
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.TriggerFraudDetectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 检测结果
+          schema:
+            $ref: '#/definitions/algorithm.FraudDetectionResult'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 触发欺诈检测
+      tags:
+      - 欺诈检测
+  /v1/groups:
+    get:
+      description: 按关键字搜索集团（仅返回 active）
+      parameters:
+      - description: 关键词
+        in: query
+        name: keyword
+        type: string
+      - description: 分页大小
+        in: query
+        name: limit
+        type: integer
+      - description: 偏移
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.groupResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 搜索集团
+      tags:
+      - 集团管理
+    post:
+      consumes:
+      - application/json
+      description: 管理员创建集团（手动）
+      parameters:
+      - description: 集团信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建集团
+      tags:
+      - 集团管理
+  /v1/groups/{id}:
+    get:
+      description: 获取集团详情（需为集团成员）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取集团详情
+      tags:
+      - 集团管理
+    patch:
+      consumes:
+      - application/json
+      description: 更新集团信息（owner/admin）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新集团信息
+      tags:
+      - 集团管理
+  /v1/groups/{id}/brands:
+    post:
+      consumes:
+      - application/json
+      description: 在集团下创建品牌（owner/admin）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 品牌信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createGroupBrandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.brandResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建品牌
+      tags:
+      - 品牌管理
+  /v1/groups/{id}/join-requests:
+    get:
+      description: 获取集团的门店加入申请列表
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.groupJoinRequestResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取集团加入申请列表
+      tags:
+      - 集团管理
+    post:
+      consumes:
+      - application/json
+      description: 门店发起加入集团申请（需店主）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 申请原因
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/api.createGroupJoinRequestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupJoinRequestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 申请加入集团
+      tags:
+      - 集团管理
+  /v1/groups/{id}/join-requests/{request_id}/approve:
+    post:
+      consumes:
+      - application/json
+      description: 集团审核通过门店加入申请（owner/admin）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 申请ID
+        in: path
+        name: request_id
+        required: true
+        type: integer
+      - description: 品牌归属
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/api.approveGroupJoinRequestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupJoinRequestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 审核通过加入申请
+      tags:
+      - 集团管理
+  /v1/groups/{id}/join-requests/{request_id}/cancel:
+    post:
+      description: 申请人撤回门店加入申请
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 申请ID
+        in: path
+        name: request_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupJoinRequestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 撤回加入申请
+      tags:
+      - 集团管理
+  /v1/groups/{id}/join-requests/{request_id}/reject:
+    post:
+      consumes:
+      - application/json
+      description: 集团驳回门店加入申请（owner/admin）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 申请ID
+        in: path
+        name: request_id
+        required: true
+        type: integer
+      - description: 驳回原因
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/api.rejectGroupJoinRequestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupJoinRequestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 驳回加入申请
+      tags:
+      - 集团管理
+  /v1/groups/{id}/menu-templates:
+    post:
+      consumes:
+      - application/json
+      description: 创建集团菜单模板（owner/admin/ops）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 模板信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createGroupMenuTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建集团菜单模板
+      tags:
+      - 集团管理
+  /v1/groups/{id}/merchants:
+    get:
+      description: 获取集团下所有门店（需为集团成员）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.groupMerchantResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取集团门店列表
+      tags:
+      - 集团管理
+  /v1/groups/{id}/policies:
+    put:
+      consumes:
+      - application/json
+      description: 更新集团策略（owner/admin/ops）
+      parameters:
+      - description: 集团ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 策略配置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.upsertGroupPoliciesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupPoliciesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新集团策略
+      tags:
+      - 集团管理
+  /v1/groups/applications:
+    post:
+      description: 创建集团入驻申请草稿（已有草稿则返回）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupApplicationResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建集团入驻草稿
+      tags:
+      - 集团申请
+  /v1/groups/applications/{id}/review:
+    post:
+      consumes:
+      - application/json
+      description: 管理员审核集团入驻申请（通过/拒绝）
+      parameters:
+      - description: 申请ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 审核信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.reviewGroupApplicationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 审核集团入驻申请
+      tags:
+      - 集团申请
+  /v1/groups/applications/basic:
+    put:
+      consumes:
+      - application/json
+      description: 更新集团入驻申请基础信息（可编辑状态）
+      parameters:
+      - description: 更新内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateGroupApplicationBasicRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupApplicationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新集团入驻基础信息
+      tags:
+      - 集团申请
+  /v1/groups/applications/license/ocr:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传集团营业执照图片，调用微信OCR识别并保存结果
+      parameters:
+      - description: 营业执照图片
+        in: formData
+        name: image
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupApplicationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 上传集团营业执照并 OCR
+      tags:
+      - 集团申请
+  /v1/groups/applications/me:
+    get:
+      description: 获取当前用户的集团入驻草稿，不存在则创建
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupApplicationResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取集团入驻草稿
+      tags:
+      - 集团申请
+  /v1/groups/applications/submit:
+    post:
+      description: 提交集团入驻申请进入审核流程
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.groupApplicationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 提交集团入驻申请
+      tags:
+      - 集团申请
   /v1/history/browse:
     get:
       consumes:
@@ -11373,9 +12551,7 @@ paths:
         "200":
           description: 会员列表
           schema:
-            items:
-              $ref: '#/definitions/api.membershipResponse'
-            type: array
+            $ref: '#/definitions/api.listUserMembershipsResponse'
         "400":
           description: 参数错误
           schema:
@@ -11501,9 +12677,7 @@ paths:
         "200":
           description: 交易流水列表
           schema:
-            items:
-              $ref: '#/definitions/api.transactionResponse'
-            type: array
+            $ref: '#/definitions/api.listMembershipTransactionsResponse'
         "400":
           description: 参数错误
           schema:
@@ -11727,6 +12901,308 @@ paths:
       summary: 获取申诉详情
       tags:
       - 商户申诉管理
+  /v1/merchant/application:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的商户入驻申请草稿，如果没有则创建一个空草稿。已通过的申请不会返回。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 获取成功
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "201":
+          description: 创建成功
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 已有通过或待审核的申请
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取或创建商户入驻申请草稿
+      tags:
+      - 商户申请
+  /v1/merchant/application/basic:
+    put:
+      consumes:
+      - application/json
+      description: 更新商户名称、联系电话、地址、经纬度等基础信息。若提供经纬度但未提供 region_id，后端将自动匹配最近区域。支持在 approved/rejected
+        状态下直接编辑（会自动重置为 draft）。
+      parameters:
+      - description: 基础信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateMerchantBasicInfoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "400":
+          description: 参数错误或非草稿状态
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户申请基础信息
+      tags:
+      - 商户申请
+  /v1/merchant/application/foodpermit/ocr:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传食品经营许可证图片，使用通用印刷体OCR识别并解析有效期等信息
+      parameters:
+      - description: 食品经营许可证图片
+        in: formData
+        name: image
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 识别结果
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 上传食品经营许可证并OCR识别
+      tags:
+      - 商户申请
+  /v1/merchant/application/idcard/ocr:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传法人身份证照片（正面或背面），调用微信OCR识别并保存结果
+      parameters:
+      - description: 身份证图片
+        in: formData
+        name: image
+        required: true
+        type: file
+      - description: 正面Front/背面Back
+        in: formData
+        name: side
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 识别结果
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 上传法人身份证并OCR识别
+      tags:
+      - 商户申请
+  /v1/merchant/application/images:
+    put:
+      consumes:
+      - application/json
+      description: 保存商户门头照和店内环境照URL数组到草稿
+      parameters:
+      - description: 图片URL数组
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateMerchantImagesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "400":
+          description: 参数错误或非草稿状态
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新门头照和环境照
+      tags:
+      - 商户申请
+  /v1/merchant/application/license/ocr:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传营业执照图片，调用微信OCR识别并保存结果，自动填充企业名称、信用代码、经营范围等
+      parameters:
+      - description: 营业执照图片（可选；不传则使用已上传的营业执照图片）
+        in: formData
+        name: image
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 识别结果
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 上传营业执照并OCR识别
+      tags:
+      - 商户申请
+  /v1/merchant/application/reset:
+    post:
+      consumes:
+      - application/json
+      description: 将被拒绝的申请重置为草稿状态，可重新编辑提交
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重置成功
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "400":
+          description: 非拒绝状态无法重置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 重置被拒绝的商户申请
+      tags:
+      - 商户申请
+  /v1/merchant/application/submit:
+    post:
+      consumes:
+      - application/json
+      description: 提交商户入驻申请，系统自动审核。提交前必须确保所有必填项（包括 region_id）已填充。支持从 draft/rejected/approved
+        状态提交。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 申请结果（approved/rejected）
+          schema:
+            $ref: '#/definitions/api.merchantApplicationDraftResponse'
+        "400":
+          description: 参数不完整或非草稿状态
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 提交商户入驻申请
+      tags:
+      - 商户申请
   /v1/merchant/applyment/status:
     get:
       consumes:
@@ -11796,54 +13272,6 @@ paths:
       summary: 商户绑定银行卡并提交微信开户
       tags:
       - 商户
-  /v1/merchant/boss-bind-code:
-    post:
-      description: 商户老板生成认领码，让 Boss 扫码认领店铺
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.generateBossBindCodeResponse'
-      summary: 生成 Boss 认领码
-      tags:
-      - Boss管理
-  /v1/merchant/bosses:
-    get:
-      description: 商户老板查看认领该店铺的所有 Boss
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/api.merchantBossResponse'
-            type: array
-      summary: 获取店铺的 Boss 列表
-      tags:
-      - Boss管理
-  /v1/merchant/bosses/{id}:
-    delete:
-      description: 商户老板移除已认领的 Boss
-      parameters:
-      - description: Boss ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 移除 Boss
-      tags:
-      - Boss管理
   /v1/merchant/claims:
     get:
       consumes:
@@ -12749,9 +14177,7 @@ paths:
         "200":
           description: 订单列表
           schema:
-            items:
-              $ref: '#/definitions/api.orderResponse'
-            type: array
+            $ref: '#/definitions/api.listMerchantOrdersResponse'
         "400":
           description: 请求参数错误
           schema:
@@ -13021,7 +14447,7 @@ paths:
         "200":
           description: 订单统计数据
           schema:
-            $ref: '#/definitions/db.GetOrderStatsRow'
+            $ref: '#/definitions/api.orderStatsResponse'
         "400":
           description: 日期格式错误/范围超限
           schema:
@@ -13043,6 +14469,45 @@ paths:
       summary: 获取订单统计
       tags:
       - 商户订单管理
+  /v1/merchant/risk/users/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 商户查看顾客是否存在异常索赔记录，返回提示信息
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.merchantUserRiskResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询顾客风险提示
+      tags:
+      - 商户风控
   /v1/merchant/staff:
     get:
       description: 商户老板或店长列出所有员工
@@ -13643,9 +15108,7 @@ paths:
         "200":
           description: 会员列表
           schema:
-            items:
-              $ref: '#/definitions/api.merchantMemberResponse'
-            type: array
+            $ref: '#/definitions/api.listMerchantMembersResponse'
         "400":
           description: 参数错误
           schema:
@@ -14091,9 +15554,7 @@ paths:
         "200":
           description: 代金券列表
           schema:
-            items:
-              $ref: '#/definitions/api.voucherResponse'
-            type: array
+            $ref: '#/definitions/api.listMerchantVouchersResponse'
         "400":
           description: 参数错误
           schema:
@@ -14292,9 +15753,7 @@ paths:
         "200":
           description: 可领取代金券列表
           schema:
-            items:
-              $ref: '#/definitions/api.voucherResponse'
-            type: array
+            $ref: '#/definitions/api.listActiveVouchersResponse'
         "400":
           description: 参数错误
           schema:
@@ -16145,9 +17604,7 @@ paths:
         "200":
           description: 订单列表
           schema:
-            items:
-              $ref: '#/definitions/api.orderResponse'
-            type: array
+            $ref: '#/definitions/api.listOrdersResponse'
         "400":
           description: 请求参数错误
           schema:
@@ -16512,10 +17969,11 @@ paths:
         in: query
         name: address_id
         type: integer
-      - description: 优惠券码
+      - description: 用户优惠券ID
+        format: int64
         in: query
-        name: voucher_code
-        type: string
+        name: user_voucher_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -16567,9 +18025,7 @@ paths:
         "200":
           description: 支付订单列表
           schema:
-            items:
-              $ref: '#/definitions/api.paymentOrderResponse'
-            type: array
+            $ref: '#/definitions/api.listPaymentOrdersResponse'
         "400":
           description: 请求参数错误
           schema:
@@ -16748,9 +18204,7 @@ paths:
         "200":
           description: 退款订单列表
           schema:
-            items:
-              $ref: '#/definitions/api.refundOrderResponse'
-            type: array
+            $ref: '#/definitions/api.listRefundOrdersByPaymentResponse'
         "400":
           description: 请求参数错误
           schema:
@@ -16812,7 +18266,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 公开接口，获取菜品详细信息，无需认证
+      description: 需登录访问（消费者端），获取菜品详细信息
       parameters:
       - description: 菜品ID
         in: path
@@ -16838,6 +18292,8 @@ paths:
           description: 服务器错误
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 获取菜品详情（消费者端）
       tags:
       - 公开接口
@@ -16845,7 +18301,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 公开接口，获取商户详细信息，无需商户权限
+      description: 需登录访问（消费者端），获取商户详细信息
       parameters:
       - description: 商户ID
         in: path
@@ -16871,6 +18327,8 @@ paths:
           description: 服务器错误
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 获取商户详情（消费者端）
       tags:
       - 公开接口
@@ -16878,7 +18336,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 公开接口，获取商户所有在线套餐
+      description: 需登录访问（消费者端），获取商户所有在线套餐
       parameters:
       - description: 商户ID
         in: path
@@ -16900,6 +18358,8 @@ paths:
           description: 服务器错误
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 获取商户套餐列表（消费者端）
       tags:
       - 公开接口
@@ -16907,7 +18367,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 公开接口，获取商户所有在线菜品及分类
+      description: 需登录访问（消费者端），获取商户所有在线菜品及分类
       parameters:
       - description: 商户ID
         in: path
@@ -16929,6 +18389,8 @@ paths:
           description: 服务器错误
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 获取商户菜品列表（消费者端）
       tags:
       - 公开接口
@@ -16936,7 +18398,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 公开接口，获取商户所有包间信息，帮助消费者决策
+      description: 需登录访问（消费者端），获取商户所有包间信息，帮助消费者决策
       parameters:
       - description: 商户ID
         in: path
@@ -16958,6 +18420,8 @@ paths:
           description: 服务器错误
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 获取商户包间列表（消费者端）
       tags:
       - 公开接口
@@ -18356,7 +19820,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 用户为已完成的订单创建评价。低信用用户（<600分）的评价将被标记为不可见。
+      description: 用户为已完成的订单创建评价。
       parameters:
       - description: 评价信息
         in: body
@@ -18862,6 +20326,224 @@ paths:
       summary: 获取申诉详情
       tags:
       - 骑手申诉管理
+  /v1/rider/application:
+    get:
+      consumes:
+      - application/json
+      description: 如果用户已有申请则返回现有申请，否则创建新的草稿
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 申请信息
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "201":
+          description: 新建草稿
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建或获取骑手申请草稿
+      tags:
+      - 骑手申请
+  /v1/rider/application/basic:
+    put:
+      consumes:
+      - application/json
+      description: 更新姓名、手机号等基础信息，仅草稿状态可修改
+      parameters:
+      - description: 基础信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateRiderApplicationBasicRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新后的申请信息
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "400":
+          description: 参数错误或状态不允许修改
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新骑手申请基础信息
+      tags:
+      - 骑手申请
+  /v1/rider/application/healthcert:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传健康证照片
+      parameters:
+      - description: 健康证图片
+        in: formData
+        name: image
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 上传结果
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 上传健康证
+      tags:
+      - 骑手申请
+  /v1/rider/application/idcard/ocr:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传身份证照片，调用微信OCR识别并保存结果
+      parameters:
+      - description: 身份证图片
+        in: formData
+        name: image
+        required: true
+        type: file
+      - description: 正面Front/背面Back
+        in: formData
+        name: side
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 识别结果
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 上传身份证并OCR识别
+      tags:
+      - 骑手申请
+  /v1/rider/application/reset:
+    post:
+      consumes:
+      - application/json
+      description: 申请被拒绝后，重置为草稿状态以便重新编辑
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重置后的申请
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "400":
+          description: 状态不允许重置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 重置骑手申请
+      tags:
+      - 骑手申请
+  /v1/rider/application/submit:
+    post:
+      consumes:
+      - application/json
+      description: 提交申请进行自动审核。条件：身份证在有效期内且健康证已上传则通过，否则直接拒绝
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 审核结果（approved或rejected）
+          schema:
+            $ref: '#/definitions/api.riderApplicationResponse'
+        "400":
+          description: 信息不完整
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 提交骑手申请
+      tags:
+      - 骑手申请
   /v1/rider/applyment/bindbank:
     post:
       consumes:
@@ -19125,9 +20807,7 @@ paths:
         "200":
           description: 押金流水列表
           schema:
-            items:
-              $ref: '#/definitions/api.depositResponse'
-            type: array
+            $ref: '#/definitions/api.listRiderDepositsResponse'
         "400":
           description: 参数错误
           schema:
@@ -19560,6 +21240,8 @@ paths:
           description: 商户未营业或桌台已停用
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: 扫码点餐
       tags:
       - 扫码点餐
@@ -19614,6 +21296,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: 搜索套餐
       tags:
       - Search
@@ -19669,6 +21353,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: 搜索商户
       tags:
       - Search
@@ -19745,6 +21431,8 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: 搜索包间
       tags:
       - Search
@@ -20448,354 +22136,6 @@ paths:
       summary: 获取标签列表
       tags:
       - 标签管理
-  /v1/trust-score/appeals:
-    post:
-      consumes:
-      - application/json
-      description: 提交信用分申诉，系统采用信用驱动的自动化处理，不设人工申诉通道。信用分将根据后续正常行为自动恢复
-      parameters:
-      - description: 申诉信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.SubmitAppealRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 申诉已记录
-          schema:
-            $ref: '#/definitions/api.MessageResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 提交申诉
-      tags:
-      - 信用分管理
-  /v1/trust-score/claims:
-    post:
-      consumes:
-      - application/json
-      description: 用户为已完成的订单提交索赔申请。系统会根据用户信用分自动评估，高信用用户可获得秒赔或自动审核，低信用用户需人工审核。
-      parameters:
-      - description: 索赔信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.SubmitClaimRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 索赔提交成功
-          schema:
-            $ref: '#/definitions/api.SubmitClaimResponse'
-        "400":
-          description: 参数错误或订单状态不允许索赔
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 订单不属于当前用户
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 订单不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "409":
-          description: 该订单已有索赔记录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 提交索赔
-      tags:
-      - 索赔管理
-  /v1/trust-score/claims/{id}/review:
-    patch:
-      consumes:
-      - application/json
-      description: 运营商/客服人工审核索赔申请。仅限低信用用户提交的需要人工审核的索赔。
-      parameters:
-      - description: 索赔ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 审核信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.ReviewClaimRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 审核成功
-          schema:
-            $ref: '#/definitions/api.claimResponse'
-        "400":
-          description: 参数错误或索赔状态不允许审核
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限审核此索赔
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 索赔不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 审核索赔
-      tags:
-      - 索赔管理
-  /v1/trust-score/food-safety/report:
-    post:
-      consumes:
-      - application/json
-      description: 用户上报商户食品安全问题，系统将根据举报频率和用户信用分决定是否熔断商户
-      parameters:
-      - description: 食安上报信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.ReportFoodSafetyRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 上报成功
-          schema:
-            $ref: '#/definitions/api.ReportFoodSafetyResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上报食品安全问题
-      tags:
-      - 食品安全
-  /v1/trust-score/fraud/detect:
-    post:
-      consumes:
-      - application/json
-      description: 管理员手动触发欺诈检测，支持三种检测模式：协同索赔检测、设备复用检测、地址聚类检测
-      parameters:
-      - description: 检测请求（三选一）
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.TriggerFraudDetectionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 检测结果
-          schema:
-            $ref: '#/definitions/algorithm.FraudDetectionResult'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 触发欺诈检测
-      tags:
-      - 欺诈检测
-  /v1/trust-score/history/{role}/{id}:
-    get:
-      consumes:
-      - application/json
-      description: 查询指定角色实体的信用分变更历史记录，包括扣分原因、扣分金额、变更时间等
-      parameters:
-      - description: 角色类型
-        enum:
-        - customer
-        - merchant
-        - rider
-        in: path
-        name: role
-        required: true
-        type: string
-      - description: 实体ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 变更历史列表
-          schema:
-            items:
-              $ref: '#/definitions/api.TrustScoreChangeResponse'
-            type: array
-        "400":
-          description: 无效的角色类型或ID
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询信用分变更历史
-      tags:
-      - 信用分管理
-  /v1/trust-score/merchants/{id}/suspend:
-    patch:
-      consumes:
-      - application/json
-      description: 管理员手动熔断（停业）商户，指定停业时长和原因
-      parameters:
-      - description: 商户ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 熔断信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.SuspendMerchantRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 熔断成功
-          schema:
-            $ref: '#/definitions/api.MessageResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 熔断商户
-      tags:
-      - 商户管理
-  /v1/trust-score/profiles/{role}/{id}:
-    get:
-      consumes:
-      - application/json
-      description: 根据角色（customer/merchant/rider）和ID查询信用分画像信息，包含信用分、历史订单统计、违规记录等
-      parameters:
-      - description: 角色类型
-        enum:
-        - customer
-        - merchant
-        - rider
-        in: path
-        name: role
-        required: true
-        type: string
-      - description: 实体ID（用户ID/商户ID/骑手ID）
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 信用分画像（根据角色返回对应字段）
-          schema:
-            $ref: '#/definitions/api.TrustScoreProfileResponse'
-        "400":
-          description: 无效的角色类型或ID
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 画像不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询信用分画像
-      tags:
-      - 信用分管理
-  /v1/trust-score/recovery:
-    post:
-      consumes:
-      - application/json
-      description: 商户或骑手因信用分过低被封禁后，可提交恢复申请。系统自动给一次机会，第二次再犯永久封禁
-      parameters:
-      - description: 恢复申请信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.SubmitRecoveryRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 恢复成功
-          schema:
-            $ref: '#/definitions/api.MessageResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 已超过最大恢复次数
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 提交恢复申请
-      tags:
-      - 信用分管理
   /v1/users/me:
     get:
       consumes:
@@ -20971,9 +22311,7 @@ paths:
         "200":
           description: 代金券列表
           schema:
-            items:
-              $ref: '#/definitions/api.userVoucherResponse'
-            type: array
+            $ref: '#/definitions/api.listUserVouchersResponse'
         "400":
           description: 参数错误
           schema:
@@ -21016,9 +22354,7 @@ paths:
         "200":
           description: 可用代金券列表
           schema:
-            items:
-              $ref: '#/definitions/api.userVoucherResponse'
-            type: array
+            $ref: '#/definitions/api.listUserAvailableVouchersResponse'
         "400":
           description: 参数错误
           schema:
@@ -21041,11 +22377,6 @@ paths:
       consumes:
       - application/json
       description: 将HTTP连接升级为WebSocket，用于实时通知推送，仅骑手和商户可用
-      parameters:
-      - description: Authentication token (required if Authorization header is missing)
-        in: query
-        name: token
-        type: string
       produces:
       - application/json
       responses:

@@ -11,13 +11,13 @@ import (
 
 const (
 	// TypeHandleSuspiciousPattern 处理可疑索赔模式任务
-	TypeHandleSuspiciousPattern = "trust:handle_suspicious_pattern"
+	TypeHandleSuspiciousPattern = "risk:handle_suspicious_pattern"
 
 	// TypeCheckMerchantForeignObject 检查商户异物索赔历史任务
-	TypeCheckMerchantForeignObject = "trust:check_merchant_foreign_object"
+	TypeCheckMerchantForeignObject = "risk:check_merchant_foreign_object"
 
 	// TypeCheckRiderDamage 检查骑手餐损历史任务
-	TypeCheckRiderDamage = "trust:check_rider_damage"
+	TypeCheckRiderDamage = "risk:check_rider_damage"
 )
 
 // HandleSuspiciousPatternPayload 可疑模式处理任务载荷
