@@ -180,6 +180,11 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	return server, nil
 }
 
+// Handler exposes the HTTP handler for integration tests.
+func (server *Server) Handler() http.Handler {
+	return server.router
+}
+
 func wsReliableGate(enabled bool, percent int) func(websocket.ClientInfo) bool {
 	if !enabled {
 		return func(websocket.ClientInfo) bool { return false }
