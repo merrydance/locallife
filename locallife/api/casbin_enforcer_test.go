@@ -39,8 +39,6 @@ p, operator, /v1/operator/*, GET
 p, operator, /v1/operator/*, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
-p, operator, /v1/regions/:id/recommendation-config, GET
-p, operator, /v1/regions/:id/recommendation-config, PATCH
 
 # Merchant policies
 p, merchant_owner, /v1/merchant/orders, GET
@@ -98,13 +96,6 @@ func TestCasbinEnforce(t *testing.T) {
 			sub:      "operator",
 			obj:      "/v1/delivery-fee/regions/123/config",
 			act:      "POST",
-			expected: true,
-		},
-		{
-			name:     "operator can update recommendation config",
-			sub:      "operator",
-			obj:      "/v1/regions/456/recommendation-config",
-			act:      "PATCH",
 			expected: true,
 		},
 		{
@@ -310,13 +301,6 @@ func TestCasbinPathPatternMatching(t *testing.T) {
 			name:     "wildcard match for platform stats regions",
 			sub:      "admin",
 			obj:      "/v1/platform/stats/regions/compare",
-			act:      "GET",
-			expected: true,
-		},
-		{
-			name:     "parameter match for regions",
-			sub:      "operator",
-			obj:      "/v1/regions/123/recommendation-config",
 			act:      "GET",
 			expected: true,
 		},

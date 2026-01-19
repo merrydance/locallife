@@ -22,6 +22,7 @@ import (
 type searchDishesRequest struct {
 	Keyword       string   `form:"keyword" binding:"omitempty,max=100"`   // 可选：为空时返回全部
 	MerchantID    *int64   `form:"merchant_id" binding:"omitempty,min=1"` // 可选：在特定商户内搜索
+	RegionID      *int64   `form:"region_id" binding:"omitempty,min=1"`   // 可选：区域过滤
 	PageID        int32    `form:"page_id" binding:"required,min=1"`
 	PageSize      int32    `form:"page_size" binding:"required,min=1,max=50"`
 	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
@@ -31,6 +32,7 @@ type searchDishesRequest struct {
 
 type searchMerchantsRequest struct {
 	Keyword       string   `form:"keyword" binding:"omitempty,max=100"` // 可选：为空时返回全部
+	RegionID      *int64   `form:"region_id" binding:"omitempty,min=1"` // 可选：区域过滤
 	PageID        int32    `form:"page_id" binding:"required,min=1"`
 	PageSize      int32    `form:"page_size" binding:"required,min=1,max=50"`
 	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
@@ -158,6 +160,12 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		tagIDVal = *req.TagID
 	}
 
+	// 准备RegionID
+	var regionID pgtype.Int8
+	if req.RegionID != nil {
+		regionID = pgtype.Int8{Int64: *req.RegionID, Valid: true}
+	}
+
 	// 全局搜索 - 使用高效的单次数据库查询（仅搜索已批准商户的上架菜品）
 	dishes, err := server.store.SearchDishesGlobal(ctx, db.SearchDishesGlobalParams{
 		Column1: pgtype.Text{String: req.Keyword, Valid: true},
@@ -166,6 +174,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		Column4: userLat,
 		Column5: userLng,
 		TagID:   pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
+		RegionID: regionID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -176,6 +185,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	total, err := server.store.CountSearchDishesGlobal(ctx, db.CountSearchDishesGlobalParams{
 		Column1: pgtype.Text{String: req.Keyword, Valid: true},
 		TagID:   pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
+		RegionID: regionID,
 	})
 	if err != nil {
 		total = int64(len(dishes))
@@ -229,6 +239,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param keyword query string true "搜索关键词"
+// @Param region_id query int false "区域ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
 // @Param user_latitude query number false "用户当前纬度（用于计算距离和运费）"
@@ -254,12 +265,18 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		userLng = *req.UserLongitude
 	}
 
+	var merchantRegionID pgtype.Int8
+	if req.RegionID != nil {
+		merchantRegionID = pgtype.Int8{Int64: *req.RegionID, Valid: true}
+	}
+
 	merchants, err := server.store.SearchMerchants(ctx, db.SearchMerchantsParams{
 		Offset:  int32(offset),
 		Limit:   req.PageSize,
 		Column3: req.Keyword,
 		Column4: userLat,
 		Column5: userLng,
+		RegionID: merchantRegionID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -267,7 +284,10 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	}
 
 	// 获取总数用于分页
-	total, err := server.store.CountSearchMerchants(ctx, pgtype.Text{String: req.Keyword, Valid: true})
+	total, err := server.store.CountSearchMerchants(ctx, db.CountSearchMerchantsParams{
+		Column1: pgtype.Text{String: req.Keyword, Valid: true},
+		RegionID: merchantRegionID,
+	})
 	if err != nil {
 		total = int64(len(merchants))
 	}
@@ -298,6 +318,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param keyword query string false "搜索关键词"
+// @Param region_id query int false "区域ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
 // @Param user_latitude query number false "用户当前纬度"
@@ -323,6 +344,12 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		userLng = *req.UserLongitude
 	}
 
+	// 准备RegionID
+	var comboRegionID pgtype.Int8
+	if req.RegionID != nil {
+		comboRegionID = pgtype.Int8{Int64: *req.RegionID, Valid: true}
+	}
+
 	// 执行搜索
 	combos, err := server.store.SearchCombosGlobal(ctx, db.SearchCombosGlobalParams{
 		Column1: req.Keyword,
@@ -330,6 +357,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		Offset:  offset,
 		Column4: userLat,
 		Column5: userLng,
+		RegionID: comboRegionID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -337,7 +365,10 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 	}
 
 	// 获取总数
-	total, err := server.store.CountSearchCombosGlobal(ctx, req.Keyword)
+	total, err := server.store.CountSearchCombosGlobal(ctx, db.CountSearchCombosGlobalParams{
+		Column1: req.Keyword,
+		RegionID: comboRegionID,
+	})
 	if err != nil {
 		total = int64(len(combos))
 	}
@@ -373,7 +404,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 			travelTime := int(float64(distanceMeters) / 3.33)
 			deliveryTime = 900 + travelTime
 
-			// Fee: Use standard internal calculator logic from recommendation.go
+			// Fee: Use standard internal calculator logic
 			feeResult, err := server.calculateDeliveryFeeInternal(ctx, row.MerchantRegionID, row.MerchantID, int32(distanceMeters), 0)
 			if err != nil {
 				// Log error but don't fail the request. Return nil fee.

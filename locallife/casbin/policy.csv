@@ -99,10 +99,6 @@ p, operator, /v1/operator/applyment/status, GET
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
 
-# Region Recommendation Config
-p, operator, /v1/regions/:id/recommendation-config, GET
-p, operator, /v1/regions/:id/recommendation-config, PATCH
-
 # Review Moderation
 p, operator, /v1/reviews/:id, DELETE
 
@@ -467,14 +463,6 @@ p, customer, /v1/reviews, POST
 p, customer, /v1/reviews/:id, GET
 p, customer, /v1/reviews/me, GET
 p, customer, /v1/reviews/merchants/:id, GET
-
-# User Behaviors
-p, customer, /v1/behaviors/track, POST
-
-# Recommendations
-p, customer, /v1/recommendations/dishes, GET
-p, customer, /v1/recommendations/combos, GET
-p, customer, /v1/recommendations/merchants, GET
 
 # Vouchers (User)
 p, customer, /v1/vouchers/:voucher_id/claim, POST

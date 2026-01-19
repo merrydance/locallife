@@ -1019,36 +1019,7 @@ func (server *Server) setupRouter() {
 		reviewsOperatorGroup.DELETE("/:id", server.deleteReview)
 	}
 
-	// M11: 千人千面推荐引擎路由
-	behaviorsGroup := authGroup.Group("/behaviors")
-	{
-		// 用户行为埋点
-		behaviorsGroup.POST("/track", server.trackBehavior)
-	}
-
-	recommendationsGroup := authGroup.Group("/recommendations")
-	{
-		// 推荐菜品
-		recommendationsGroup.GET("/dishes", server.recommendDishes)
-
-		// 推荐套餐
-		recommendationsGroup.GET("/combos", server.recommendCombos)
-
-		// 推荐商户
-		recommendationsGroup.GET("/merchants", server.recommendMerchants)
-
-		// 探索包间
-		recommendationsGroup.GET("/rooms", server.exploreRooms)
-	}
-
-	// 推荐配置管理（运营商）
-	// 使用 Casbin 中间件验证 operator 角色、加载 operator 信息，并验证管理该区域
-	regionConfigGroup := authGroup.Group("/regions")
-	regionConfigGroup.Use(server.CasbinRoleMiddleware(RoleOperator), server.LoadOperatorMiddleware(), server.ValidateOperatorRegionMiddleware("id"))
-	{
-		regionConfigGroup.PATCH("/:id/recommendation-config", server.updateRecommendationConfig)
-		regionConfigGroup.GET("/:id/recommendation-config", server.getRecommendationConfig)
-	}
+	// M11: 千人千面推荐引擎路由已下线
 
 	// 充值规则管理（商户）
 	rechargeRuleGroup := authGroup.Group("/merchants/:id/recharge-rules")

@@ -1231,36 +1231,6 @@ type RecommendConfig struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
-// 推荐结果表：缓存生成的推荐结果
-type Recommendation struct {
-	ID          int64   `json:"id"`
-	UserID      int64   `json:"user_id"`
-	DishIds     []int64 `json:"dish_ids"`
-	ComboIds    []int64 `json:"combo_ids"`
-	MerchantIds []int64 `json:"merchant_ids"`
-	// 使用的算法：collaborative/content-based/hybrid/ee-algorithm
-	Algorithm   string         `json:"algorithm"`
-	Score       pgtype.Numeric `json:"score"`
-	GeneratedAt time.Time      `json:"generated_at"`
-	// 推荐过期时间（通常5分钟后）
-	ExpiredAt time.Time `json:"expired_at"`
-}
-
-// 推荐配置表：区域级别EE算法配置
-type RecommendationConfig struct {
-	ID       int64 `json:"id"`
-	RegionID int64 `json:"region_id"`
-	// 喜好推荐比例 0.00-1.00，默认60%
-	ExploitationRatio pgtype.Numeric `json:"exploitation_ratio"`
-	// 探索推荐比例 0.00-1.00，默认30%
-	ExplorationRatio pgtype.Numeric `json:"exploration_ratio"`
-	// 随机推荐比例 0.00-1.00，默认10%
-	RandomRatio pgtype.Numeric `json:"random_ratio"`
-	// 是否启用自动调整比例（基于成交转化率，M12功能）
-	AutoAdjust bool      `json:"auto_adjust"`
-	UpdatedAt  time.Time `json:"updated_at"`
-}
-
 type RefundOrder struct {
 	ID             int64              `json:"id"`
 	PaymentOrderID int64              `json:"payment_order_id"`
@@ -1624,20 +1594,6 @@ type UserBalanceLog struct {
 	CreatedAt  time.Time   `json:"created_at"`
 }
 
-// 用户行为埋点表：浏览、详情、加购、购买
-type UserBehavior struct {
-	ID     int64 `json:"id"`
-	UserID int64 `json:"user_id"`
-	// view/detail/cart/purchase - 浏览列表/查看详情/加购/购买
-	BehaviorType string      `json:"behavior_type"`
-	DishID       pgtype.Int8 `json:"dish_id"`
-	ComboID      pgtype.Int8 `json:"combo_id"`
-	MerchantID   pgtype.Int8 `json:"merchant_id"`
-	// 停留时长(秒)，仅view/detail行为有值
-	Duration  pgtype.Int4 `json:"duration"`
-	CreatedAt time.Time   `json:"created_at"`
-}
-
 // 用户索赔警告状态表，记录用户的索赔行为模式
 type UserClaimWarning struct {
 	ID     int64 `json:"id"`
@@ -1690,24 +1646,6 @@ type UserNotificationPreference struct {
 	DoNotDisturbEnd pgtype.Time        `json:"do_not_disturb_end"`
 	CreatedAt       time.Time          `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
-// 用户偏好表：基于行为和消费分析
-type UserPreference struct {
-	ID     int64 `json:"id"`
-	UserID int64 `json:"user_id"`
-	// JSON格式：{"川菜": 0.8, "粤菜": 0.6} - 菜系偏好得分
-	CuisinePreferences []byte      `json:"cuisine_preferences"`
-	PriceRangeMin      pgtype.Int8 `json:"price_range_min"`
-	PriceRangeMax      pgtype.Int8 `json:"price_range_max"`
-	AvgOrderAmount     pgtype.Int8 `json:"avg_order_amount"`
-	// PostgreSQL数组：[11,12,18,19] - 常下单时段(小时)
-	FavoriteTimeSlots []int32     `json:"favorite_time_slots"`
-	PurchaseFrequency int16       `json:"purchase_frequency"`
-	LastOrderDate     pgtype.Date `json:"last_order_date"`
-	// JSON格式：{"川菜": 15, "粤菜": 8} - 购买次数统计
-	TopCuisines []byte    `json:"top_cuisines"`
-	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type UserRole struct {

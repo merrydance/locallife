@@ -13,6 +13,7 @@ import type { MerchantSummary } from './merchant'
 /** 搜索商户参数 */
 export interface SearchMerchantsParams extends Record<string, unknown> {
     keyword: string
+    region_id?: number
     user_latitude?: number
     user_longitude?: number
     page_id: number
@@ -21,6 +22,7 @@ export interface SearchMerchantsParams extends Record<string, unknown> {
 
 /** 推荐商户参数 */
 export interface RecommendMerchantsParams extends Record<string, unknown> {
+    region_id?: number
     user_latitude?: number
     user_longitude?: number
     limit?: number
@@ -44,6 +46,8 @@ export interface SearchRoomsParams extends Record<string, unknown> {
 
 /** 推荐包间参数 - 对齐后端 exploreRoomsRequest */
 export interface RecommendRoomsParams extends Record<string, unknown> {
+    reservation_date?: string         // 预订日期 YYYY-MM-DD（用于探索列表兜底）
+    reservation_time?: string         // 预订时段 HH:MM（用于探索列表兜底）
     region_id?: number                 // 区域ID
     min_capacity?: number              // 最小容纳人数
     max_capacity?: number              // 最大容纳人数
@@ -148,12 +152,16 @@ export async function searchMerchants(params: SearchMerchantsParams): Promise<Me
  * @param params 推荐参数
  */
 export async function getRecommendedMerchants(params: RecommendMerchantsParams = {}): Promise<MerchantSummary[]> {
-    const res = await request<any>({
-        url: '/v1/recommendations/merchants',
-        method: 'GET',
-        data: cleanParams(params)
+    const pageSize = params.limit || 20
+    const res = await searchMerchants({
+        keyword: '',
+        region_id: params.region_id,
+        user_latitude: params.user_latitude,
+        user_longitude: params.user_longitude,
+        page_id: 1,
+        page_size: pageSize
     })
-    return res.merchants || res
+    return res
 }
 
 /**
@@ -163,12 +171,26 @@ export async function getRecommendedMerchants(params: RecommendMerchantsParams =
 export async function getRecommendedRooms(params: RecommendRoomsParams): Promise<RoomSearchResult[]> {
     logger.debug('Fetching Recommended Rooms', params, 'API')
 
-    const res = await request<any>({
-        url: '/v1/recommendations/rooms',
-        method: 'GET',
-        data: cleanParams(params)
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const defaultDate = `${yyyy}-${mm}-${dd}`
+    const defaultTime = '12:00'
+
+    const res = await searchRooms({
+        reservation_date: params.reservation_date || defaultDate,
+        reservation_time: params.reservation_time || defaultTime,
+        region_id: params.region_id,
+        min_capacity: params.min_capacity,
+        max_capacity: params.max_capacity,
+        max_minimum_spend: params.max_minimum_spend,
+        user_latitude: params.user_latitude,
+        user_longitude: params.user_longitude,
+        page_id: params.page_id,
+        page_size: params.page_size
     })
-    return res.rooms || res
+    return res
 }
 
 /**

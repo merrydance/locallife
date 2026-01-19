@@ -518,24 +518,34 @@ function searchDishes(params) {
     });
 }
 /**
- * 获取推荐套餐 - 基于 /v1/recommendations/combos
+ * 获取推荐套餐 - 基于 /v1/search/combos
  * 支持分页，返回包含 has_more 的完整响应
  */
 function getRecommendedCombos(params) {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
+        const page = (_a = params === null || params === void 0 ? void 0 : params.page) !== null && _a !== void 0 ? _a : 1;
+        const pageSize = (_b = params === null || params === void 0 ? void 0 : params.limit) !== null && _b !== void 0 ? _b : 20;
         const response = yield (0, request_1.request)({
-            url: '/v1/recommendations/combos',
+            url: '/v1/search/combos',
             method: 'GET',
-            data: params,
-            useCache: (params === null || params === void 0 ? void 0 : params.page) === 1 || !(params === null || params === void 0 ? void 0 : params.page),
+            data: {
+                keyword: (params === null || params === void 0 ? void 0 : params.keyword) || '',
+                region_id: params === null || params === void 0 ? void 0 : params.region_id,
+                user_latitude: params === null || params === void 0 ? void 0 : params.user_latitude,
+                user_longitude: params === null || params === void 0 ? void 0 : params.user_longitude,
+                page_id: page,
+                page_size: pageSize
+            },
+            useCache: page === 1,
             cacheTTL: 3 * 60 * 1000 // 3分钟缓存
         });
+        const total = (_c = response.total_count) !== null && _c !== void 0 ? _c : ((_d = response.total) !== null && _d !== void 0 ? _d : ((response.combos || []).length));
         return {
             combos: response.combos || [],
-            has_more: (_a = response.has_more) !== null && _a !== void 0 ? _a : false,
-            page: (_b = response.page) !== null && _b !== void 0 ? _b : 1,
-            total_count: (_c = response.total_count) !== null && _c !== void 0 ? _c : 0
+            has_more: page * pageSize < total,
+            page,
+            total_count: total
         };
     });
 }

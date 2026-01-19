@@ -126,11 +126,17 @@ const countSearchMerchants = `-- name: CountSearchMerchants :one
 SELECT COUNT(*) FROM merchants
 WHERE status = 'active'
   AND deleted_at IS NULL
+  AND ($2::BIGINT IS NULL OR region_id = $2)
   AND name ILIKE '%' || $1 || '%'
 `
 
-func (q *Queries) CountSearchMerchants(ctx context.Context, dollar_1 pgtype.Text) (int64, error) {
-	row := q.db.QueryRow(ctx, countSearchMerchants, dollar_1)
+type CountSearchMerchantsParams struct {
+	Column1  pgtype.Text `json:"column_1"`
+	RegionID pgtype.Int8 `json:"region_id"`
+}
+
+func (q *Queries) CountSearchMerchants(ctx context.Context, arg CountSearchMerchantsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchMerchants, arg.Column1, arg.RegionID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1805,6 +1811,7 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.addr
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
+  AND ($6::BIGINT IS NULL OR m.region_id = $6)
   AND (
     $3::text IS NULL
     OR m.name ILIKE '%' || $3 || '%'
@@ -1818,11 +1825,12 @@ OFFSET $1
 `
 
 type SearchMerchantsParams struct {
-	Offset  int32   `json:"offset"`
-	Limit   int32   `json:"limit"`
-	Column3 string  `json:"column_3"`
-	Column4 float64 `json:"column_4"`
-	Column5 float64 `json:"column_5"`
+	Offset   int32       `json:"offset"`
+	Limit    int32       `json:"limit"`
+	Column3  string      `json:"column_3"`
+	Column4  float64     `json:"column_4"`
+	Column5  float64     `json:"column_5"`
+	RegionID pgtype.Int8 `json:"region_id"`
 }
 
 type SearchMerchantsRow struct {
@@ -1861,6 +1869,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 		arg.Column3,
 		arg.Column4,
 		arg.Column5,
+		arg.RegionID,
 	)
 	if err != nil {
 		return nil, err

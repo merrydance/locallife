@@ -146,23 +146,25 @@ WHERE
   AND m.deleted_at IS NULL
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
+  AND ($2::bigint IS NULL OR m.region_id = $2)
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
-  AND ($2::bigint IS NULL OR EXISTS (
-    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $2
+  AND ($3::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $3
   ))
 `
 
 type CountSearchDishesGlobalParams struct {
-	Column1 pgtype.Text `json:"column_1"`
-	TagID   pgtype.Int8 `json:"tag_id"`
+	Column1  pgtype.Text `json:"column_1"`
+	RegionID pgtype.Int8 `json:"region_id"`
+	TagID    pgtype.Int8 `json:"tag_id"`
 }
 
 // 统计全局菜品搜索结果总数
 func (q *Queries) CountSearchDishesGlobal(ctx context.Context, arg CountSearchDishesGlobalParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countSearchDishesGlobal, arg.Column1, arg.TagID)
+	row := q.db.QueryRow(ctx, countSearchDishesGlobal, arg.Column1, arg.RegionID, arg.TagID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1759,12 +1761,13 @@ WHERE
   AND m.deleted_at IS NULL
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
+  AND ($6::bigint IS NULL OR m.region_id = $6)
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true
   AND d.name ILIKE '%' || $1 || '%'
-  AND ($6::bigint IS NULL OR EXISTS (
-    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $6
+  AND ($7::bigint IS NULL OR EXISTS (
+    SELECT 1 FROM dish_tags dt WHERE dt.dish_id = d.id AND dt.tag_id = $7
   ))
 ORDER BY 
     m.is_open DESC,
@@ -1776,12 +1779,13 @@ LIMIT $2 OFFSET $3
 `
 
 type SearchDishesGlobalParams struct {
-	Column1 pgtype.Text `json:"column_1"`
-	Limit   int32       `json:"limit"`
-	Offset  int32       `json:"offset"`
-	Column4 float64     `json:"column_4"`
-	Column5 float64     `json:"column_5"`
-	TagID   pgtype.Int8 `json:"tag_id"`
+	Column1  pgtype.Text `json:"column_1"`
+	Limit    int32       `json:"limit"`
+	Offset   int32       `json:"offset"`
+	Column4  float64     `json:"column_4"`
+	Column5  float64     `json:"column_5"`
+	RegionID pgtype.Int8 `json:"region_id"`
+	TagID    pgtype.Int8 `json:"tag_id"`
 }
 
 type SearchDishesGlobalRow struct {
@@ -1819,6 +1823,7 @@ func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobal
 		arg.Offset,
 		arg.Column4,
 		arg.Column5,
+		arg.RegionID,
 		arg.TagID,
 	)
 	if err != nil {

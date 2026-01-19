@@ -1187,54 +1187,6 @@ definitions:
           $ref: '#/definitions/api.tagResponse'
         type: array
     type: object
-  api.comboSummary:
-    properties:
-      combo_price:
-        description: 套餐价（分）
-        type: integer
-      distance:
-        description: 距离与运费（需要用户位置）
-        type: integer
-      estimated_delivery_fee:
-        description: 预估配送费（分）
-        type: integer
-      id:
-        type: integer
-      image_url:
-        type: string
-      merchant_id:
-        type: integer
-      merchant_is_open:
-        description: 商户是否营业
-        type: boolean
-      merchant_latitude:
-        type: number
-      merchant_logo:
-        type: string
-      merchant_longitude:
-        type: number
-      merchant_name:
-        description: 商户信息
-        type: string
-      merchant_region_id:
-        type: integer
-      monthly_sales:
-        description: 销量与标签
-        type: integer
-      name:
-        type: string
-      original_price:
-        description: 原价（分）
-        type: integer
-      savings_percent:
-        description: 优惠百分比
-        type: number
-      tags:
-        description: 套餐标签
-        items:
-          type: string
-        type: array
-    type: object
   api.createBillingGroupRequest:
     properties:
       dining_session_id:
@@ -2395,57 +2347,6 @@ definitions:
       name:
         type: string
     type: object
-  api.dishSummary:
-    properties:
-      distance:
-        description: 距离与运费（需要用户位置）
-        type: integer
-      estimated_delivery_fee:
-        description: 预估配送费（分）
-        type: integer
-      estimated_delivery_time:
-        description: 预估配送时间（秒）
-        type: integer
-      id:
-        type: integer
-      image_url:
-        type: string
-      is_available:
-        type: boolean
-      member_price:
-        description: 会员价（分），null表示无会员价
-        type: integer
-      merchant_id:
-        type: integer
-      merchant_is_open:
-        description: 商户是否营业
-        type: boolean
-      merchant_latitude:
-        type: number
-      merchant_logo:
-        type: string
-      merchant_longitude:
-        type: number
-      merchant_name:
-        description: 商户信息
-        type: string
-      merchant_region_id:
-        description: 用于运费计算
-        type: integer
-      monthly_sales:
-        description: 销量与标签
-        type: integer
-      name:
-        type: string
-      price:
-        description: 原价（分）
-        type: integer
-      tags:
-        description: 菜品标签
-        items:
-          type: string
-        type: array
-    type: object
   api.errorMessage:
     properties:
       error:
@@ -2502,65 +2403,6 @@ definitions:
       status:
         description: pending, resolved, dismissed
         type: string
-    type: object
-  api.exploreRoomItem:
-    properties:
-      capacity:
-        type: integer
-      description:
-        type: string
-      distance:
-        description: 距离（米），需要传入用户位置
-        type: integer
-      estimated_delivery_fee:
-        description: 预估配送费（分），需要传入用户位置
-        type: integer
-      id:
-        type: integer
-      merchant_address:
-        type: string
-      merchant_id:
-        type: integer
-      merchant_latitude:
-        type: number
-      merchant_logo:
-        type: string
-      merchant_longitude:
-        type: number
-      merchant_name:
-        type: string
-      merchant_phone:
-        type: string
-      minimum_spend:
-        description: 分
-        type: integer
-      monthly_reservations:
-        description: 近30天预订量
-        type: integer
-      primary_image:
-        type: string
-      status:
-        type: string
-      table_no:
-        type: string
-      tags:
-        description: 包间标签
-        items:
-          type: string
-        type: array
-    type: object
-  api.exploreRoomsResponse:
-    properties:
-      page_id:
-        type: integer
-      page_size:
-        type: integer
-      rooms:
-        items:
-          $ref: '#/definitions/api.exploreRoomItem'
-        type: array
-      total:
-        type: integer
     type: object
   api.favoriteDishRow:
     properties:
@@ -2655,21 +2497,6 @@ definitions:
         type: boolean
       voice_takeout:
         type: boolean
-    type: object
-  api.getRecommendationConfigResponse:
-    properties:
-      auto_adjust:
-        type: boolean
-      exploitation_ratio:
-        type: number
-      exploration_ratio:
-        type: number
-      random_ratio:
-        type: number
-      region_id:
-        type: integer
-      updated_at:
-        type: string
     type: object
   api.groupApplicationResponse:
     properties:
@@ -3851,43 +3678,6 @@ definitions:
         type: boolean
       message:
         type: string
-    type: object
-  api.merchantSummary:
-    properties:
-      address:
-        type: string
-      description:
-        type: string
-      distance:
-        description: 距离（米），需要传入用户位置
-        type: integer
-      estimated_delivery_fee:
-        description: 预估配送费（分），需要传入用户位置
-        type: integer
-      id:
-        type: integer
-      is_open:
-        description: 是否营业
-        type: boolean
-      latitude:
-        type: number
-      logo_url:
-        type: string
-      longitude:
-        type: number
-      monthly_sales:
-        description: 近30天订单量
-        type: integer
-      name:
-        type: string
-      region_id:
-        description: 区域ID，用于运费计算
-        type: integer
-      tags:
-        description: 商户标签
-        items:
-          type: string
-        type: array
     type: object
   api.merchantUserRiskResponse:
     properties:
@@ -5084,71 +4874,6 @@ definitions:
       valid_until:
         type: string
     type: object
-  api.recommendCombosResponse:
-    properties:
-      algorithm:
-        type: string
-      combos:
-        items:
-          $ref: '#/definitions/api.comboSummary'
-        type: array
-      expired_at:
-        type: string
-      has_more:
-        type: boolean
-      page:
-        type: integer
-      total_count:
-        type: integer
-    type: object
-  api.recommendDishesAPIResponse:
-    properties:
-      code:
-        example: 0
-        type: integer
-      data:
-        $ref: '#/definitions/api.recommendDishesResponse'
-      message:
-        example: ok
-        type: string
-    type: object
-  api.recommendDishesResponse:
-    properties:
-      algorithm:
-        type: string
-      dishes:
-        items:
-          $ref: '#/definitions/api.dishSummary'
-        type: array
-      expired_at:
-        type: string
-      has_more:
-        description: 是否有更多数据
-        type: boolean
-      page:
-        description: 当前页码
-        type: integer
-      total_count:
-        description: 本次返回的数量
-        type: integer
-    type: object
-  api.recommendMerchantsResponse:
-    properties:
-      algorithm:
-        type: string
-      expired_at:
-        type: string
-      has_more:
-        type: boolean
-      merchants:
-        items:
-          $ref: '#/definitions/api.merchantSummary'
-        type: array
-      page:
-        type: integer
-      total_count:
-        type: integer
-    type: object
   api.recommendedOrderResponse:
     properties:
       delivery_fee:
@@ -6250,32 +5975,6 @@ definitions:
       total_sold:
         type: integer
     type: object
-  api.trackBehaviorRequest:
-    properties:
-      behavior_type:
-        enum:
-        - view
-        - detail
-        - cart
-        - purchase
-        type: string
-      combo_id:
-        minimum: 1
-        type: integer
-      dish_id:
-        minimum: 1
-        type: integer
-      duration:
-        description: 停留时长（秒），最大24小时
-        maximum: 86400
-        minimum: 0
-        type: integer
-      merchant_id:
-        minimum: 1
-        type: integer
-    required:
-    - behavior_type
-    type: object
   api.transactionResponse:
     properties:
       amount:
@@ -6674,23 +6373,6 @@ definitions:
         type: string
       valid_until:
         type: string
-    type: object
-  api.updateRecommendationConfigRequest:
-    properties:
-      auto_adjust:
-        type: boolean
-      exploitation_ratio:
-        maximum: 1
-        minimum: 0
-        type: number
-      exploration_ratio:
-        maximum: 1
-        minimum: 0
-        type: number
-      random_ratio:
-        maximum: 1
-        minimum: 0
-        type: number
     type: object
   api.updateReservationRequest:
     properties:
@@ -8556,43 +8238,6 @@ paths:
       summary: WeChat mini-program login
       tags:
       - auth
-  /v1/behaviors/track:
-    post:
-      consumes:
-      - application/json
-      description: 记录用户浏览、详情、加购、购买等行为数据，用于个性化推荐
-      parameters:
-      - description: 行为数据
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.trackBehaviorRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 记录成功
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上报用户行为埋点
-      tags:
-      - 推荐引擎
   /v1/billing-groups:
     get:
       parameters:
@@ -18425,208 +18070,6 @@ paths:
       summary: 获取商户包间列表（消费者端）
       tags:
       - 公开接口
-  /v1/recommendations/combos:
-    get:
-      consumes:
-      - application/json
-      description: 基于用户行为和偏好，使用EE算法推荐个性化套餐列表。返回完整的套餐信息包括月销量、优惠百分比、标签、商户信息、距离和运费估算。
-      parameters:
-      - default: 10
-        description: 返回数量
-        in: query
-        maximum: 50
-        minimum: 1
-        name: limit
-        type: integer
-      - description: 用户当前纬度（用于计算距离和运费）
-        in: query
-        name: user_latitude
-        type: number
-      - description: 用户当前经度（用于计算距离和运费）
-        in: query
-        name: user_longitude
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 推荐套餐列表
-          schema:
-            $ref: '#/definitions/api.recommendCombosResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 推荐套餐
-      tags:
-      - 推荐引擎
-  /v1/recommendations/dishes:
-    get:
-      consumes:
-      - application/json
-      description: 基于用户行为和偏好，使用EE算法推荐个性化菜品列表。返回完整的菜品信息包括月销量、会员价、标签、商户信息、距离和运费估算。
-      parameters:
-      - default: 20
-        description: 返回数量
-        in: query
-        maximum: 50
-        minimum: 1
-        name: limit
-        type: integer
-      - description: 用户当前纬度（用于计算距离和运费）
-        in: query
-        name: user_latitude
-        type: number
-      - description: 用户当前经度（用于计算距离和运费）
-        in: query
-        name: user_longitude
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 推荐菜品列表
-          schema:
-            $ref: '#/definitions/api.recommendDishesAPIResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 推荐菜品
-      tags:
-      - 推荐引擎
-  /v1/recommendations/merchants:
-    get:
-      consumes:
-      - application/json
-      description: 基于用户行为和偏好，使用EE算法推荐个性化商户列表。返回完整的商户信息包括月订单量、标签、距离和运费估算。
-      parameters:
-      - default: 10
-        description: 返回数量
-        in: query
-        maximum: 50
-        minimum: 1
-        name: limit
-        type: integer
-      - description: 用户当前纬度（用于计算距离和运费）
-        in: query
-        name: user_latitude
-        type: number
-      - description: 用户当前经度（用于计算距离和运费）
-        in: query
-        name: user_longitude
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 推荐商户列表
-          schema:
-            $ref: '#/definitions/api.recommendMerchantsResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 推荐商户
-      tags:
-      - 推荐引擎
-  /v1/recommendations/rooms:
-    get:
-      consumes:
-      - application/json
-      description: 浏览本地区域的可用包间，无需指定预订日期时段。支持按区域、人数、低消等筛选。返回包间主图和近30天预订量。
-      parameters:
-      - description: 区域ID
-        in: query
-        name: region_id
-        type: integer
-      - description: 最小容纳人数
-        in: query
-        name: min_capacity
-        type: integer
-      - description: 最大容纳人数
-        in: query
-        name: max_capacity
-        type: integer
-      - description: 最大低消（分）
-        in: query
-        name: max_minimum_spend
-        type: integer
-      - description: 页码
-        in: query
-        minimum: 1
-        name: page_id
-        required: true
-        type: integer
-      - description: 每页数量
-        in: query
-        maximum: 50
-        minimum: 1
-        name: page_size
-        required: true
-        type: integer
-      - description: 用户当前纬度（用于计算距离）
-        in: query
-        name: user_latitude
-        type: number
-      - description: 用户当前经度（用于计算距离）
-        in: query
-        name: user_longitude
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 包间列表
-          schema:
-            $ref: '#/definitions/api.exploreRoomsResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 探索附近包间
-      tags:
-      - 推荐引擎
   /v1/refunds:
     post:
       consumes:
@@ -18863,89 +18306,6 @@ paths:
       summary: 获取下级区域列表
       tags:
       - 区域管理
-  /v1/regions/{id}/recommendation-config:
-    get:
-      consumes:
-      - application/json
-      description: 获取指定区域的EE算法推荐配置，如果不存在则返回默认配置
-      parameters:
-      - description: 区域ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 推荐配置
-          schema:
-            $ref: '#/definitions/api.getRecommendationConfigResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限（非该区域运营商）
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取区域推荐配置
-      tags:
-      - 推荐配置管理
-    patch:
-      consumes:
-      - application/json
-      description: 更新指定区域的EE算法推荐配置，比例之和必须等于1.0
-      parameters:
-      - description: 区域ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 配置更新
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.updateRecommendationConfigRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 更新后的配置
-          schema:
-            $ref: '#/definitions/api.getRecommendationConfigResponse'
-        "400":
-          description: 参数错误（如比例之和不为1）
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限（非该区域运营商）
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 更新区域推荐配置
-      tags:
-      - 推荐配置管理
   /v1/regions/available:
     get:
       consumes:
@@ -21255,6 +20615,10 @@ paths:
         in: query
         name: keyword
         type: string
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
       - description: 页码
         in: query
         minimum: 1
@@ -21312,6 +20676,10 @@ paths:
         name: keyword
         required: true
         type: string
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
       - description: 页码
         in: query
         minimum: 1

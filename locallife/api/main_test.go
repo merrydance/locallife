@@ -55,8 +55,6 @@ p, operator, /v1/operator/*, DELETE
 p, operator, /v1/operators/me/*, GET
 p, operator, /v1/delivery-fee/regions/:region_id/config, POST
 p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
-p, operator, /v1/regions/:id/recommendation-config, GET
-p, operator, /v1/regions/:id/recommendation-config, PATCH
 p, operator, /v1/reviews/:id, DELETE
 
 # Merchant owner policies
@@ -127,7 +125,6 @@ p, customer, /v1/notifications/*, GET
 p, customer, /v1/notifications/*, PUT
 p, customer, /v1/notifications/*, DELETE
 p, customer, /v1/cart/*, GET
-p, customer, /v1/cart/*, POST
 p, customer, /v1/cart/*, PATCH
 p, customer, /v1/cart/*, DELETE
 p, customer, /v1/favorites/*, GET
@@ -137,8 +134,6 @@ p, customer, /v1/memberships/*, GET
 p, customer, /v1/memberships/*, POST
 p, customer, /v1/reviews/*, GET
 p, customer, /v1/reviews/*, POST
-p, customer, /v1/recommendations/*, GET
-p, customer, /v1/behaviors/*, POST
 p, customer, /v1/vouchers/*, GET
 p, customer, /v1/vouchers/*, POST
 p, customer, /v1/reservations/*, GET

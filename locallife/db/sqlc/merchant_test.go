@@ -58,8 +58,8 @@ func createRandomMerchantWithOwner(t *testing.T, ownerID int64) Merchant {
 		LogoUrl:         pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
 		Phone:           "13800138000",
 		Address:         util.RandomString(30),
-		Latitude:        numericFromFloat64(39.9282),
-		Longitude:       numericFromFloat64(116.4507),
+		Latitude:        numericFromFloat(39.9282),
+		Longitude:       numericFromFloat(116.4507),
 		Status:          "active",
 		ApplicationData: appData,
 		RegionID:        region.ID, // 添加区域ID
@@ -284,13 +284,19 @@ func TestCountSearchMerchants(t *testing.T) {
 	}
 
 	// 计数
-	count, err := testStore.CountSearchMerchants(context.Background(), pgtype.Text{String: prefix, Valid: true})
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: prefix, Valid: true},
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)
 }
 
 func TestCountSearchMerchants_EmptyResult(t *testing.T) {
-	count, err := testStore.CountSearchMerchants(context.Background(), pgtype.Text{String: "NonExistentMerchantName99999", Valid: true})
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: "NonExistentMerchantName99999", Valid: true},
+		RegionID: pgtype.Int8{Valid: false},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), count)
 }
@@ -315,7 +321,10 @@ func TestCountSearchMerchants_PartialMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	// 部分匹配应该能找到
-	count, err := testStore.CountSearchMerchants(context.Background(), pgtype.Text{String: prefix, Valid: true})
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: prefix, Valid: true},
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 }

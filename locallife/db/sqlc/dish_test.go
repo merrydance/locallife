@@ -24,8 +24,8 @@ func createRandomMerchantForDish(t *testing.T) Merchant {
 		Address:     util.RandomString(30),
 		Status:      "active",
 		RegionID:    region.ID,
-		Latitude:    numericFromFloat64(39.9282),
-		Longitude:   numericFromFloat64(116.4507),
+		Latitude:    numericFromFloat(39.9282),
+		Longitude:   numericFromFloat(116.4507),
 	}
 
 	merchant, err := testStore.CreateMerchant(context.Background(), arg)

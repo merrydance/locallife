@@ -77,12 +77,7 @@ interface MerchantSummary {
 }
 ```
 
-#### 4. 行为追踪接口 (`miniprogram/api/behavior.ts`)
-- ✅ 新增用户行为埋点功能
-- ✅ 基于`/v1/behaviors/track`接口
-- ✅ 支持浏览、详情、加购、购买等行为类型
-
-#### 5. 数据模型重构 (`miniprogram/models/dish.ts`)
+#### 4. 数据模型重构 (`miniprogram/models/dish.ts`)
 - ✅ 菜品模型完全对齐swagger定义
 - ✅ 新增定制化选项支持
 - ✅ 支持会员价、制作时间等新字段
@@ -123,11 +118,10 @@ export type LoginRequest = WechatLoginRequest
 export type DishDTO = DishResponse
 ```
 
-#### 7. 菜品接口重构 (`miniprogram/api/dish.ts`)
+#### 6. 菜品接口重构 (`miniprogram/api/dish.ts`)
 - ✅ 重构菜品详情：`/v1/dishes/{id}`
 - ✅ 重构菜品定制化：`/v1/dishes/{id}/customizations`
 - ✅ 重构菜品搜索：`/v1/search/dishes`
-- ✅ 重构菜品推荐：`/v1/recommendations/dishes`
 - ✅ 重构菜品分类：`/v1/dishes/categories`
 - ✅ 新增商户端菜品管理功能
 
@@ -136,8 +130,7 @@ export type DishDTO = DishResponse
 // 新增完整的菜品管理功能
 getDishDetail(id)              // 获取菜品详情
 getDishCustomizations(id)      // 获取定制化选项
-searchDishes(params)           // 搜索菜品
-getRecommendedDishes(params)   // 获取推荐菜品
+searchDishes(params)           // 搜索菜品（默认列表可用空关键词）
 getDishCategories()            // 获取分类列表
 // 商户端管理功能
 createDish(data)               // 创建菜品
@@ -146,9 +139,8 @@ updateDishStatus(id, status)   // 更新状态
 batchUpdateDishStatus(updates) // 批量更新状态
 ```
 
-#### 8. 搜索接口重构 (`miniprogram/api/search.ts`)
+#### 7. 搜索接口重构 (`miniprogram/api/search.ts`)
 - ✅ 重构商户搜索：`/v1/search/merchants`
-- ✅ 重构商户推荐：`/v1/recommendations/merchants`
 - ✅ 重构包间搜索：`/v1/search/rooms`
 - ✅ 新增搜索建议和历史功能
 - ✅ 新增综合搜索功能
@@ -164,10 +156,10 @@ getSearchHistory()             // 获取搜索历史
 unifiedSearch(keyword)         // 综合搜索（菜品+商户）
 ```
 
-#### 9. 套餐接口重构 (`miniprogram/api/combo.ts`)
+#### 8. 套餐接口重构 (`miniprogram/api/combo.ts`)
 - ✅ 重构套餐列表：`/v1/combos`
 - ✅ 重构套餐详情：`/v1/combos/{id}`
-- ✅ 重构套餐推荐：`/v1/recommendations/combos`
+- ✅ 重构套餐搜索排序列表：`/v1/search/combos`
 - ✅ 新增商户端套餐管理功能
 
 **关键变更**:

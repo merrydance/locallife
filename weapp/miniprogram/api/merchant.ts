@@ -440,6 +440,7 @@ export interface RecommendMerchantsResponse {
  * 推荐商户请求参数
  */
 export interface RecommendMerchantsParams {
+  region_id?: number
   user_latitude?: number
   user_longitude?: number
   limit?: number
@@ -457,22 +458,32 @@ export interface RecommendMerchantsResult {
 }
 
 /**
- * 获取推荐商户 - 基于 /v1/recommendations/merchants
+ * 获取推荐商户 - 基于 /v1/search/merchants
  * 支持分页，返回包含 has_more 的完整响应
  */
 export async function getRecommendedMerchants(params?: RecommendMerchantsParams): Promise<RecommendMerchantsResult> {
-  const response = await request<RecommendMerchantsResponse & { has_more?: boolean; page?: number; total_count?: number }>({
-    url: '/v1/recommendations/merchants',
+  const page = params?.page ?? 1
+  const pageSize = params?.limit ?? 20
+  const response = await request<{ merchants: MerchantSummary[]; total?: number; total_count?: number; page_id?: number; page_size?: number }>({
+    url: '/v1/search/merchants',
     method: 'GET',
-    data: params,
-    useCache: params?.page === 1 || !params?.page,
+    data: {
+      keyword: '',
+      region_id: params?.region_id,
+      user_latitude: params?.user_latitude,
+      user_longitude: params?.user_longitude,
+      page_id: page,
+      page_size: pageSize
+    },
+    useCache: page === 1,
     cacheTTL: 3 * 60 * 1000 // 3分钟缓存
   })
+  const total = response.total_count ?? response.total ?? response.merchants?.length ?? 0
   return {
     merchants: response.merchants || [],
-    has_more: response.has_more ?? false,
-    page: response.page ?? 1,
-    total_count: response.total_count ?? 0
+    has_more: page * pageSize < total,
+    page,
+    total_count: total
   }
 }
 

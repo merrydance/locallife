@@ -177,12 +177,12 @@ type Querier interface {
 	CountRidersByRegionWithStatus(ctx context.Context, arg CountRidersByRegionWithStatusParams) (int64, error)
 	CountRidersByStatus(ctx context.Context, status string) (int64, error)
 	// Count for pagination
-	CountSearchCombosGlobal(ctx context.Context, dollar_1 string) (int64, error)
+	CountSearchCombosGlobal(ctx context.Context, arg CountSearchCombosGlobalParams) (int64, error)
 	// 统计商户内菜品搜索结果总数
 	CountSearchDishesByName(ctx context.Context, arg CountSearchDishesByNameParams) (int64, error)
 	// 统计全局菜品搜索结果总数
 	CountSearchDishesGlobal(ctx context.Context, arg CountSearchDishesGlobalParams) (int64, error)
-	CountSearchMerchants(ctx context.Context, dollar_1 pgtype.Text) (int64, error)
+	CountSearchMerchants(ctx context.Context, arg CountSearchMerchantsParams) (int64, error)
 	// 统计搜索包间结果数量
 	CountSearchRooms(ctx context.Context, arg CountSearchRoomsParams) (int64, error)
 	CountTablesByMerchant(ctx context.Context, merchantID int64) (int64, error)
@@ -417,7 +417,6 @@ type Querier interface {
 	// 删除指定标签的所有菜品关联（用于清理过期的自动标签）
 	DeleteDishTagByTagID(ctx context.Context, tagID int64) error
 	DeleteExpiredNotifications(ctx context.Context) error
-	DeleteExpiredRecommendations(ctx context.Context) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteIngredient(ctx context.Context, id int64) error
 	// 软删除商户
@@ -465,7 +464,6 @@ type Querier interface {
 	// 根据区域获取运营商（通过operator_regions表，支持多区域）
 	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
 	GetActiveRecommendConfig(ctx context.Context) (RecommendConfig, error)
-	GetAllRecommendationConfigs(ctx context.Context) ([]RecommendationConfig, error)
 	// 获取申诉详情
 	GetAppeal(ctx context.Context, id int64) (Appeal, error)
 	// 根据索赔ID与申诉方类型获取申诉
@@ -600,7 +598,6 @@ type Querier interface {
 	GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (Order, error)
 	GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLatestPaymentOrderByOrderParams) (PaymentOrder, error)
 	GetLatestPaymentOrderByReservation(ctx context.Context, arg GetLatestPaymentOrderByReservationParams) (PaymentOrder, error)
-	GetLatestRecommendations(ctx context.Context, userID int64) (Recommendation, error)
 	GetLatestWeatherCoefficient(ctx context.Context, regionID int64) (WeatherCoefficient, error)
 	GetMaliciousClaims(ctx context.Context, createdAt time.Time) ([]Claim, error)
 	GetMatchingRechargeRule(ctx context.Context, arg GetMatchingRechargeRuleParams) (RechargeRule, error)
@@ -772,10 +769,6 @@ type Querier interface {
 	GetRealtimeDashboard(ctx context.Context) (GetRealtimeDashboardRow, error)
 	GetRechargeRule(ctx context.Context, id int64) (RechargeRule, error)
 	GetRecommendConfig(ctx context.Context, name string) (RecommendConfig, error)
-	// ============================================================================
-	// 推荐配置管理（运营商）
-	// ============================================================================
-	GetRecommendationConfig(ctx context.Context, regionID int64) (RecommendationConfig, error)
 	GetRefundOrder(ctx context.Context, id int64) (RefundOrder, error)
 	GetRefundOrderByOutRefundNo(ctx context.Context, outRefundNo string) (RefundOrder, error)
 	GetRefundOrderByRefundId(ctx context.Context, refundID pgtype.Text) (RefundOrder, error)
@@ -879,7 +872,6 @@ type Querier interface {
 	GetUserBalanceLogByRelated(ctx context.Context, arg GetUserBalanceLogByRelatedParams) (UserBalanceLog, error)
 	// 获取用户行为统计（用于索赔判定）
 	GetUserBehaviorStats(ctx context.Context, userID int64) (GetUserBehaviorStatsRow, error)
-	GetUserBehaviorsByType(ctx context.Context, arg GetUserBehaviorsByTypeParams) ([]UserBehavior, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
 	GetUserByWechatOpenID(ctx context.Context, wechatOpenid string) (User, error)
 	GetUserCarts(ctx context.Context, userID int64) ([]GetUserCartsRow, error)
@@ -902,13 +894,8 @@ type Querier interface {
 	GetUserMerchantRole(ctx context.Context, arg GetUserMerchantRoleParams) (string, error)
 	// ==================== 用户通知偏好设置 ====================
 	GetUserNotificationPreferences(ctx context.Context, userID int64) (UserNotificationPreference, error)
-	// ============================================================================
-	// 用户偏好管理
-	// ============================================================================
-	GetUserPreferences(ctx context.Context, userID int64) (UserPreference, error)
 	// 获取用户购买过的菜品ID（用于排除已购买）
 	GetUserPurchasedDishIDs(ctx context.Context, arg GetUserPurchasedDishIDsParams) ([]pgtype.Int8, error)
-	GetUserRecentBehaviors(ctx context.Context, arg GetUserRecentBehaviorsParams) ([]UserBehavior, error)
 	GetUserRecentClaims(ctx context.Context, userID int64) ([]Claim, error)
 	GetUserRole(ctx context.Context, id int64) (UserRole, error)
 	GetUserRoleByType(ctx context.Context, arg GetUserRoleByTypeParams) (UserRole, error)
@@ -1264,10 +1251,6 @@ type Querier interface {
 	ReviewGroupApplication(ctx context.Context, arg ReviewGroupApplicationParams) (MerchantGroupApplication, error)
 	RevokeSession(ctx context.Context, id int64) (Session, error)
 	RevokeUserSessions(ctx context.Context, userID int64) error
-	// ============================================================================
-	// 推荐结果管理
-	// ============================================================================
-	SaveRecommendations(ctx context.Context, arg SaveRecommendationsParams) (Recommendation, error)
 	// 全局套餐搜索，只返回套餐ID（用于推荐接口的关键词过滤）
 	SearchComboIDsGlobal(ctx context.Context, dollar_1 pgtype.Text) ([]int64, error)
 	// Consumer-Facing Global Combo Search
@@ -1317,11 +1300,6 @@ type Querier interface {
 	SumReservationItemsTotal(ctx context.Context, reservationID int64) (int64, error)
 	SuspendMerchant(ctx context.Context, arg SuspendMerchantParams) error
 	SuspendRider(ctx context.Context, arg SuspendRiderParams) error
-	// M11: 千人千面推荐引擎 - SQLC查询
-	// ============================================================================
-	// 用户行为埋点
-	// ============================================================================
-	TrackBehavior(ctx context.Context, arg TrackBehaviorParams) (UserBehavior, error)
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
 	UnlinkMerchantDishCategory(ctx context.Context, arg UnlinkMerchantDishCategoryParams) error
@@ -1506,13 +1484,11 @@ type Querier interface {
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
-	UpsertRecommendationConfig(ctx context.Context, arg UpsertRecommendationConfigParams) (RecommendationConfig, error)
 	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)
 	// ==========================================
 	// 设备指纹查询（M9欺诈检测）
 	// ==========================================
 	UpsertUserDevice(ctx context.Context, arg UpsertUserDeviceParams) (UserDevice, error)
-	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UserPreference, error)
 	UpsertWechatAccessToken(ctx context.Context, arg UpsertWechatAccessTokenParams) (WechatAccessToken, error)
 }
 

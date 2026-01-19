@@ -87,12 +87,16 @@ function searchMerchants(params) {
  */
 function getRecommendedMerchants() {
     return __awaiter(this, arguments, void 0, function* (params = {}) {
-        const res = yield (0, request_1.request)({
-            url: '/v1/recommendations/merchants',
-            method: 'GET',
-            data: cleanParams(params)
+        const pageSize = params.limit || 20;
+        const res = yield searchMerchants({
+            keyword: '',
+            region_id: params.region_id,
+            user_latitude: params.user_latitude,
+            user_longitude: params.user_longitude,
+            page_id: 1,
+            page_size: pageSize
         });
-        return res.merchants || res;
+        return res;
     });
 }
 /**
@@ -102,12 +106,25 @@ function getRecommendedMerchants() {
 function getRecommendedRooms(params) {
     return __awaiter(this, void 0, void 0, function* () {
         logger_1.logger.debug('Fetching Recommended Rooms', params, 'API');
-        const res = yield (0, request_1.request)({
-            url: '/v1/recommendations/rooms',
-            method: 'GET',
-            data: cleanParams(params)
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const defaultDate = `${yyyy}-${mm}-${dd}`;
+        const defaultTime = '12:00';
+        const res = yield searchRooms({
+            reservation_date: params.reservation_date || defaultDate,
+            reservation_time: params.reservation_time || defaultTime,
+            region_id: params.region_id,
+            min_capacity: params.min_capacity,
+            max_capacity: params.max_capacity,
+            max_minimum_spend: params.max_minimum_spend,
+            user_latitude: params.user_latitude,
+            user_longitude: params.user_longitude,
+            page_id: params.page_id,
+            page_size: params.page_size
         });
-        return res.rooms || res;
+        return res;
     });
 }
 /**

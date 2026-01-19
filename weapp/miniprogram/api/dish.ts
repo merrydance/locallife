@@ -1125,6 +1125,7 @@ export interface RecommendedCombosResponse {
  */
 export interface RecommendCombosParams {
     merchant_id?: number
+    region_id?: number
     limit?: number
     page?: number
     keyword?: string              // 搜索关键词
@@ -1143,22 +1144,32 @@ export interface RecommendCombosResult {
 }
 
 /**
- * 获取推荐套餐 - 基于 /v1/recommendations/combos
+ * 获取推荐套餐 - 基于 /v1/search/combos
  * 支持分页，返回包含 has_more 的完整响应
  */
 export async function getRecommendedCombos(params?: RecommendCombosParams): Promise<RecommendCombosResult> {
-    const response = await request<RecommendedCombosResponse & { has_more?: boolean; page?: number; total_count?: number }>({
-        url: '/v1/recommendations/combos',
+    const page = params?.page ?? 1
+    const pageSize = params?.limit ?? 20
+    const response = await request<{ combos: ComboSummary[]; total?: number; total_count?: number; page_id?: number; page_size?: number }>({
+        url: '/v1/search/combos',
         method: 'GET',
-        data: params,
-        useCache: params?.page === 1 || !params?.page,
+        data: {
+            keyword: params?.keyword ?? '',
+            region_id: params?.region_id,
+            user_latitude: params?.user_latitude,
+            user_longitude: params?.user_longitude,
+            page_id: page,
+            page_size: pageSize
+        },
+        useCache: page === 1,
         cacheTTL: 3 * 60 * 1000 // 3分钟缓存
     })
+    const total = response.total_count ?? response.total ?? response.combos?.length ?? 0
     return {
         combos: response.combos || [],
-        has_more: response.has_more ?? false,
-        page: response.page ?? 1,
-        total_count: response.total_count ?? 0
+        has_more: page * pageSize < total,
+        page,
+        total_count: total
     }
 }
 

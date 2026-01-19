@@ -1046,8 +1046,8 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
 			return
 		}
-		fromLoc := maps.Location{Lat: numericToFloat64(merchant.Latitude), Lng: numericToFloat64(merchant.Longitude)}
-		toLoc := maps.Location{Lat: numericToFloat64(address.Latitude), Lng: numericToFloat64(address.Longitude)}
+		fromLoc := maps.Location{Lat: pgNumericToFloat64(merchant.Latitude), Lng: pgNumericToFloat64(merchant.Longitude)}
+		toLoc := maps.Location{Lat: pgNumericToFloat64(address.Latitude), Lng: pgNumericToFloat64(address.Longitude)}
 		routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
 		if err != nil || routeResult == nil {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))
@@ -1076,7 +1076,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
 			return
 		}
-		fromLoc := maps.Location{Lat: numericToFloat64(merchant.Latitude), Lng: numericToFloat64(merchant.Longitude)}
+		fromLoc := maps.Location{Lat: pgNumericToFloat64(merchant.Latitude), Lng: pgNumericToFloat64(merchant.Longitude)}
 		toLoc := maps.Location{Lat: *req.Latitude, Lng: *req.Longitude}
 		routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
 		if err != nil || routeResult == nil {
@@ -1567,8 +1567,8 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
 				return
 			}
-			fromLoc := maps.Location{Lat: numericToFloat64(cart.MerchantLatitude), Lng: numericToFloat64(cart.MerchantLongitude)}
-			toLoc := maps.Location{Lat: numericToFloat64(address.Latitude), Lng: numericToFloat64(address.Longitude)}
+			fromLoc := maps.Location{Lat: pgNumericToFloat64(cart.MerchantLatitude), Lng: pgNumericToFloat64(cart.MerchantLongitude)}
+			toLoc := maps.Location{Lat: pgNumericToFloat64(address.Latitude), Lng: pgNumericToFloat64(address.Longitude)}
 			routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
 			if err != nil || routeResult == nil {
 				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))

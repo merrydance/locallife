@@ -161,6 +161,7 @@ WHERE
   AND m.deleted_at IS NULL
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
+  AND (sqlc.narg('region_id')::bigint IS NULL OR m.region_id = sqlc.narg('region_id'))
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true
@@ -196,6 +197,7 @@ WHERE
   AND m.deleted_at IS NULL
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
+  AND (sqlc.narg('region_id')::bigint IS NULL OR m.region_id = sqlc.narg('region_id'))
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true

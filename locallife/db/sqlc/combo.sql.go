@@ -101,6 +101,7 @@ JOIN merchants m ON cs.merchant_id = m.id
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
+  AND ($2::BIGINT IS NULL OR m.region_id = $2)
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND (
@@ -110,9 +111,14 @@ WHERE
     )
 `
 
+type CountSearchCombosGlobalParams struct {
+	Column1  string      `json:"column_1"`
+	RegionID pgtype.Int8 `json:"region_id"`
+}
+
 // Count for pagination
-func (q *Queries) CountSearchCombosGlobal(ctx context.Context, dollar_1 string) (int64, error) {
-	row := q.db.QueryRow(ctx, countSearchCombosGlobal, dollar_1)
+func (q *Queries) CountSearchCombosGlobal(ctx context.Context, arg CountSearchCombosGlobalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchCombosGlobal, arg.Column1, arg.RegionID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -858,6 +864,7 @@ LEFT JOIN LATERAL (
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
+  AND ($6::BIGINT IS NULL OR m.region_id = $6)
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND (
@@ -873,11 +880,12 @@ LIMIT $2 OFFSET $3
 `
 
 type SearchCombosGlobalParams struct {
-	Column1 string  `json:"column_1"`
-	Limit   int32   `json:"limit"`
-	Offset  int32   `json:"offset"`
-	Column4 float64 `json:"column_4"`
-	Column5 float64 `json:"column_5"`
+	Column1  string      `json:"column_1"`
+	Limit    int32       `json:"limit"`
+	Offset   int32       `json:"offset"`
+	Column4  float64     `json:"column_4"`
+	Column5  float64     `json:"column_5"`
+	RegionID pgtype.Int8 `json:"region_id"`
 }
 
 type SearchCombosGlobalRow struct {
@@ -911,6 +919,7 @@ func (q *Queries) SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobal
 		arg.Offset,
 		arg.Column4,
 		arg.Column5,
+		arg.RegionID,
 	)
 	if err != nil {
 		return nil, err
