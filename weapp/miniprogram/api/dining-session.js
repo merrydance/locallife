@@ -15,6 +15,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.precheckDiningSession = precheckDiningSession;
 exports.openDiningSession = openDiningSession;
+exports.transferDiningSessionTable = transferDiningSessionTable;
 exports.createDiningOrder = createDiningOrder;
 const request_1 = require("../utils/request");
 /** 预检桌台预订占用 */
@@ -32,6 +33,17 @@ function openDiningSession(data) {
     return __awaiter(this, void 0, void 0, function* () {
         return (0, request_1.request)({
             url: '/v1/dining-sessions/open',
+            method: 'POST',
+            data
+        });
+    });
+}
+
+/** 转台（换桌） */
+function transferDiningSessionTable(sessionId, data) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return (0, request_1.request)({
+            url: `/v1/dining-sessions/${sessionId}/transfer-table`,
             method: 'POST',
             data
         });
@@ -59,5 +71,6 @@ function createDiningOrder(payload) {
 exports.default = {
     precheckDiningSession,
     openDiningSession,
+    transferDiningSessionTable,
     createDiningOrder
 };

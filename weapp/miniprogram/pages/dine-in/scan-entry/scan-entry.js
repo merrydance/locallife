@@ -13,14 +13,18 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const customer_basic_1 = require("../../../api/customer-basic");
-const customer_reservation_1 = require("../../../api/customer-reservation");
+const table_1 = require("../../../api/table");
+const dining_session_1 = require("../../../api/dining-session");
 Page({
     data: {
         loading: true,
         tableInfo: null,
         error: null,
-        merchantInfo: null
+        merchantInfo: null,
+        showTransferDialog: false,
+        transferCode: '',
+        transferSubmitting: false,
+        activeSession: null
     },
     onLoad(options) {
         console.log('扫码点餐页面加载，参数:', options);
@@ -53,14 +57,27 @@ Page({
      */
     handleSceneParam(scene) {
         try {
-            // scene格式: table_123 或 t123
-            const tableId = scene.replace(/^(table_|t)/, '');
+            const decoded = decodeURIComponent(scene);
+            const mMatch = decoded.match(/m_(\d+)/);
+            const tMatch = decoded.match(/t_([^-]+)/);
+            const tidMatch = decoded.match(/tid_(\d+)/);
+            if (mMatch && tMatch) {
+                const merchantId = parseInt(mMatch[1]);
+                const tableNo = tMatch[1];
+                this.loadTableInfoByNo(merchantId, tableNo);
+                return;
+            }
+            if (tidMatch) {
+                this.loadTableInfo(parseInt(tidMatch[1]));
+                return;
+            }
+            // 兼容旧格式: table_123 或 t123
+            const tableId = decoded.replace(/^(table_|t)/, '');
             if (tableId && !isNaN(parseInt(tableId))) {
                 this.loadTableInfo(parseInt(tableId));
+                return;
             }
-            else {
-                throw new Error('无效的桌台ID');
-            }
+            throw new Error('无效的桌台ID');
         }
         catch (error) {
             console.error('解析scene参数失败:', error);
@@ -102,17 +119,21 @@ Page({
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 this.setData({ loading: true, error: null });
-                // 调用扫码接口验证桌台
-                const scanResult = yield (0, customer_basic_1.scanTableQRCode)(tableId);
-                // 获取桌台详细信息
-                const tableInfo = yield (0, customer_reservation_1.getTableInfo)(tableId);
+                const detail = yield (0, table_1.getTableDetail)(tableId);
+                const scanResult = yield (0, table_1.scanTable)(detail.merchant_id, detail.table_no);
                 this.setData({
                     loading: false,
-                    tableInfo: Object.assign(Object.assign({}, tableInfo), scanResult),
+                    tableInfo: {
+                        id: detail.id,
+                        table_no: detail.table_no,
+                        merchant_id: detail.merchant_id,
+                        capacity: detail.capacity,
+                        status: detail.status
+                    },
                     merchantInfo: scanResult.merchant
                 });
-                // 记录扫码行为
-                this.trackScanBehavior(tableId, scanResult.merchant_id);
+                this.trackScanBehavior(tableId, detail.merchant_id);
+                this.checkActiveSessionAndPrompt();
             }
             catch (error) {
                 console.error('加载桌台信息失败:', error);
@@ -122,6 +143,97 @@ Page({
                 });
             }
         });
+    },
+    loadTableInfoByNo(merchantId, tableNo) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                this.setData({ loading: true, error: null });
+                const scanResult = yield (0, table_1.scanTable)(merchantId, tableNo);
+                const table = scanResult.table;
+                this.setData({
+                    loading: false,
+                    tableInfo: {
+                        id: table.id,
+                        table_no: table.table_no,
+                        merchant_id: merchantId,
+                        capacity: table.capacity,
+                        status: table.status
+                    },
+                    merchantInfo: scanResult.merchant
+                });
+                this.trackScanBehavior(table.id, merchantId);
+                this.checkActiveSessionAndPrompt();
+            }
+            catch (error) {
+                console.error('加载桌台信息失败:', error);
+                this.setData({
+                    loading: false,
+                    error: error.message || '获取桌台信息失败，请重试'
+                });
+            }
+        });
+    },
+    checkActiveSessionAndPrompt() {
+        const { tableInfo } = this.data;
+        if (!tableInfo)
+            return;
+        let activeSession = null;
+        try {
+            activeSession = wx.getStorageSync('activeDiningSession');
+        }
+        catch (error) {
+            console.warn('读取用餐会话缓存失败:', error);
+        }
+        if (!activeSession || activeSession.status !== 'open')
+            return;
+        if (activeSession.merchant_id !== tableInfo.merchant_id)
+            return;
+        if (activeSession.table_id === tableInfo.id)
+            return;
+        this.setData({
+            showTransferDialog: true,
+            transferCode: '',
+            activeSession
+        });
+    },
+    onTransferCodeInput(e) {
+        this.setData({ transferCode: e.detail.value });
+    },
+    confirmTransfer() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { tableInfo, activeSession, transferCode, transferSubmitting } = this.data;
+            if (!tableInfo || !activeSession || transferSubmitting)
+                return;
+            if (!activeSession.reservation_id && (!transferCode || transferCode.trim() === '')) {
+                wx.showToast({ title: '请输入桌台验证码', icon: 'error' });
+                return;
+            }
+            this.setData({ transferSubmitting: true });
+            try {
+                yield (0, dining_session_1.transferDiningSessionTable)(activeSession.id, {
+                    to_table_id: tableInfo.id,
+                    table_code: activeSession.reservation_id ? undefined : transferCode.trim(),
+                    reason: '扫码换桌'
+                });
+                try {
+                    wx.setStorageSync('activeDiningSession', Object.assign(Object.assign({}, activeSession), { table_id: tableInfo.id, updated_at: new Date().toISOString() }));
+                }
+                catch (error) {
+                    console.warn('更新用餐会话缓存失败:', error);
+                }
+                wx.showToast({ title: '换桌成功', icon: 'success' });
+                this.setData({ showTransferDialog: false, transferSubmitting: false, transferCode: '' });
+                this.startDining();
+            }
+            catch (error) {
+                console.error('转台失败:', error);
+                wx.showToast({ title: error.message || '换桌失败', icon: 'error' });
+                this.setData({ transferSubmitting: false });
+            }
+        });
+    },
+    cancelTransfer() {
+        this.setData({ showTransferDialog: false, transferCode: '' });
     },
     /**
      * 记录扫码行为
@@ -176,7 +288,7 @@ Page({
     onShareAppMessage() {
         const { tableInfo, merchantInfo } = this.data;
         return {
-            title: `${(merchantInfo === null || merchantInfo === void 0 ? void 0 : merchantInfo.name) || '餐厅'}的${(tableInfo === null || tableInfo === void 0 ? void 0 : tableInfo.table_number) || ''}号桌`,
+            title: `${(merchantInfo === null || merchantInfo === void 0 ? void 0 : merchantInfo.name) || '餐厅'}的${(tableInfo === null || tableInfo === void 0 ? void 0 : tableInfo.table_no) || ''}号桌`,
             path: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableInfo === null || tableInfo === void 0 ? void 0 : tableInfo.id}`,
             imageUrl: (merchantInfo === null || merchantInfo === void 0 ? void 0 : merchantInfo.cover_image) || (merchantInfo === null || merchantInfo === void 0 ? void 0 : merchantInfo.logo_url)
         };

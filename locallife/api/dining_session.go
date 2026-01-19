@@ -45,6 +45,18 @@ type openDiningSessionResponse struct {
 	ImportedItems int                   `json:"imported_items"`
 }
 
+type transferDiningSessionRequest struct {
+	ToTableID int64   `json:"to_table_id" binding:"required,min=1"`
+	TableCode *string `json:"table_code,omitempty" binding:"omitempty,min=4,max=32"`
+	Reason    *string `json:"reason,omitempty" binding:"omitempty,max=200"`
+}
+
+type transferDiningSessionResponse struct {
+	Session   diningSessionResponse `json:"session"`
+	FromTable tableResponse         `json:"from_table"`
+	ToTable   tableResponse         `json:"to_table"`
+}
+
 type billingGroupResponse struct {
 	ID              int64   `json:"id"`
 	DiningSessionID int64   `json:"dining_session_id"`
@@ -436,6 +448,235 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 		BillingGroup:  newBillingGroupResponse(txResult.BillingGroup),
 		CartID:        txResult.CartID,
 		ImportedItems: txResult.ImportedItems,
+	})
+}
+
+// transferDiningSessionTable 转台/换桌
+// @Summary 转台（换桌）
+// @Description 将开放用餐会话从一个桌台转移到另一个桌台，支持商户与C端扫码
+// @Tags 用餐会话
+// @Accept json
+// @Produce json
+// @Param id path int64 true "用餐会话ID"
+// @Param request body transferDiningSessionRequest true "转台请求"
+// @Success 200 {object} transferDiningSessionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Security BearerAuth
+// @Router /v1/dining-sessions/{id}/transfer-table [post]
+func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
+	var uriReq struct {
+		ID int64 `uri:"id" binding:"required,min=1"`
+	}
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var req transferDiningSessionRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	session, err := server.store.GetDiningSession(ctx, uriReq.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if session.Status != "open" {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session is not open")))
+		return
+	}
+
+	if req.ToTableID == session.TableID {
+		table, err := server.store.GetTable(ctx, session.TableID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ctx.JSON(http.StatusOK, transferDiningSessionResponse{
+			Session:   newDiningSessionResponse(session),
+			FromTable: newTableResponse(table),
+			ToTable:   newTableResponse(table),
+		})
+		return
+	}
+
+	isOwner := session.UserID == authPayload.UserID
+	isMerchant := false
+	if merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID); err == nil && merchant.ID == session.MerchantID {
+		isMerchant = true
+	} else if err != nil && !isNotFoundError(err) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !isMerchant {
+		if staff, err := server.store.GetMerchantStaff(ctx, db.GetMerchantStaffParams{
+			MerchantID: session.MerchantID,
+			UserID:     authPayload.UserID,
+		}); err == nil {
+			if staff.Status == "active" {
+				isMerchant = true
+			}
+		} else if !isNotFoundError(err) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+	if !isOwner && !isMerchant {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to transfer dining session")))
+		return
+	}
+
+	toTable, err := server.store.GetTable(ctx, req.ToTableID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if toTable.MerchantID != session.MerchantID {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table does not belong to session merchant")))
+		return
+	}
+	if toTable.Status == "disabled" {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is disabled")))
+		return
+	}
+
+	if session.ReservationID.Valid && !isMerchant {
+		res, err := server.store.GetTableReservation(ctx, session.ReservationID.Int64)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if res.UserID != authPayload.UserID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
+			return
+		}
+	}
+
+	activeReservation, err := server.findActiveReservationForTable(ctx, toTable.ID, time.Now())
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if activeReservation != nil {
+		if !session.ReservationID.Valid || activeReservation.ID != session.ReservationID.Int64 {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is reserved and unavailable")))
+			return
+		}
+	}
+
+	if !isMerchant && !session.ReservationID.Valid {
+		if req.TableCode == nil || strings.TrimSpace(*req.TableCode) == "" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table access code is required")))
+			return
+		}
+		if !toTable.AccessCodeHash.Valid || strings.TrimSpace(toTable.AccessCodeHash.String) == "" {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("table access code is not configured")))
+			return
+		}
+		if err := util.CheckPassword(*req.TableCode, toTable.AccessCodeHash.String); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("invalid table access code")))
+			return
+		}
+	}
+
+	var reason pgtype.Text
+	if req.Reason != nil && strings.TrimSpace(*req.Reason) != "" {
+		reason = pgtype.Text{String: strings.TrimSpace(*req.Reason), Valid: true}
+	}
+
+	result, err := server.store.TransferDiningSessionTableTx(ctx, db.TransferDiningSessionTableTxParams{
+		SessionID:      session.ID,
+		ToTableID:      req.ToTableID,
+		OperatorUserID: authPayload.UserID,
+		Reason:         reason,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, db.ErrDiningSessionNotFound):
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
+			return
+		case errors.Is(err, db.ErrDiningSessionNotOpen):
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session is not open")))
+			return
+		case errors.Is(err, db.ErrTargetTableDisabled):
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is disabled")))
+			return
+		case errors.Is(err, db.ErrTargetTableOccupied):
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is occupied")))
+			return
+		case errors.Is(err, db.ErrTargetTableReserved):
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is reserved")))
+			return
+		case errors.Is(err, db.ErrReservationMismatch):
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation mismatch")))
+			return
+		default:
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+
+	if server.wsHub != nil {
+		fromPayload, _ := json.Marshal(map[string]any{
+			"id":       result.FromTable.ID,
+			"table_no": result.FromTable.TableNo,
+			"status":   result.FromTable.Status,
+		})
+		server.wsHub.SendToMerchant(result.Session.MerchantID, websocket.Message{
+			Type:      "table_status_change",
+			Data:      fromPayload,
+			Timestamp: time.Now(),
+		})
+
+		toPayload, _ := json.Marshal(map[string]any{
+			"id":       result.ToTable.ID,
+			"table_no": result.ToTable.TableNo,
+			"status":   result.ToTable.Status,
+		})
+		server.wsHub.SendToMerchant(result.Session.MerchantID, websocket.Message{
+			Type:      "table_status_change",
+			Data:      toPayload,
+			Timestamp: time.Now(),
+		})
+
+		transferPayload, _ := json.Marshal(map[string]any{
+			"session_id":   result.Session.ID,
+			"from_table_id": result.FromTable.ID,
+			"to_table_id":   result.ToTable.ID,
+			"operator_id":   authPayload.UserID,
+		})
+		server.wsHub.SendToMerchant(result.Session.MerchantID, websocket.Message{
+			Type:      "table_transfer",
+			Data:      transferPayload,
+			Timestamp: time.Now(),
+		})
+	}
+
+	ctx.JSON(http.StatusOK, transferDiningSessionResponse{
+		Session:   newDiningSessionResponse(result.Session),
+		FromTable: newTableResponse(result.FromTable),
+		ToTable:   newTableResponse(result.ToTable),
 	})
 }
 

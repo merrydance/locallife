@@ -4851,6 +4851,88 @@
                 }
             }
         },
+        "/v1/dining-sessions/{id}/transfer-table": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "将开放用餐会话从一个桌台转移到另一个桌台，支持商户与C端扫码",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用餐会话"
+                ],
+                "summary": "转台（换桌）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用餐会话ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "转台请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.transferDiningSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.transferDiningSessionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/dining-sessions/precheck": {
             "get": {
                 "security": [
@@ -28428,6 +28510,41 @@
                 },
                 "session": {
                     "$ref": "#/definitions/api.diningSessionResponse"
+                }
+            }
+        },
+        "api.transferDiningSessionRequest": {
+            "type": "object",
+            "required": [
+                "to_table_id"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "table_code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 4
+                },
+                "to_table_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "api.transferDiningSessionResponse": {
+            "type": "object",
+            "properties": {
+                "from_table": {
+                    "$ref": "#/definitions/api.tableResponse"
+                },
+                "session": {
+                    "$ref": "#/definitions/api.diningSessionResponse"
+                },
+                "to_table": {
+                    "$ref": "#/definitions/api.tableResponse"
                 }
             }
         },

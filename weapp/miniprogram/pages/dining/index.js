@@ -89,6 +89,19 @@ Page({
                 reservation_id: reservationId
             });
             this.setData({ session: result.session, billingGroup: result.billing_group, billingGroupId: (_a = result.billing_group) === null || _a === void 0 ? void 0 : _a.id });
+                try {
+                    wx.setStorageSync('activeDiningSession', {
+                        id: result.session.id,
+                        table_id: result.session.table_id,
+                        merchant_id: result.session.merchant_id,
+                        reservation_id: result.session.reservation_id,
+                        status: result.session.status,
+                        updated_at: result.session.updated_at || result.session.created_at
+                    });
+                }
+                catch (error) {
+                    logger_1.logger.warn('缓存用餐会话失败', error, 'Dining.checkAndOpenSession');
+                }
             yield this.chooseBillingGroup(result.session.id, result.billing_group);
             yield this.loadSharedOrderSummary();
             return result.session;

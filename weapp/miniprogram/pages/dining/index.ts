@@ -77,6 +77,19 @@ Page({
 
         this.setData({ session: result.session, billingGroup: result.billing_group, billingGroupId: result.billing_group?.id })
 
+        try {
+            wx.setStorageSync('activeDiningSession', {
+                id: result.session.id,
+                table_id: result.session.table_id,
+                merchant_id: result.session.merchant_id,
+                reservation_id: result.session.reservation_id,
+                status: result.session.status,
+                updated_at: result.session.updated_at || result.session.created_at
+            })
+        } catch (error) {
+            logger.warn('缓存用餐会话失败', error, 'Dining.checkAndOpenSession')
+        }
+
         await this.chooseBillingGroup(result.session.id, result.billing_group)
         await this.loadSharedOrderSummary()
         return result.session

@@ -12042,6 +12042,21 @@ func (mr *MockStoreMockRecorder) OpenDiningSessionTx(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenDiningSessionTx", reflect.TypeOf((*MockStore)(nil).OpenDiningSessionTx), ctx, arg)
 }
 
+// TransferDiningSessionTableTx mocks base method.
+func (m *MockStore) TransferDiningSessionTableTx(ctx context.Context, arg db.TransferDiningSessionTableTxParams) (db.TransferDiningSessionTableTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TransferDiningSessionTableTx", ctx, arg)
+	ret0, _ := ret[0].(db.TransferDiningSessionTableTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TransferDiningSessionTableTx indicates an expected call of TransferDiningSessionTableTx.
+func (mr *MockStoreMockRecorder) TransferDiningSessionTableTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransferDiningSessionTableTx", reflect.TypeOf((*MockStore)(nil).TransferDiningSessionTableTx), ctx, arg)
+}
+
 // Ping mocks base method.
 func (m *MockStore) Ping(ctx context.Context) error {
 	m.ctrl.T.Helper()

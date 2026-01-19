@@ -3,18 +3,15 @@
  * 处理微信扫一扫跳转到小程序的场景
  */
 
-import { scanTableQRCode } from '../../../api/customer-basic';
-import { getTableInfo } from '../../../api/customer-reservation';
+import { scanTable, getTableDetail } from '../../../api/table';
+import { transferDiningSessionTable } from '../../../api/dining-session';
 
 interface TableInfo {
     id: number;
-    table_number: string;
+    table_no: string;
     merchant_id: number;
-    merchant_name: string;
-    merchant_logo: string;
     capacity: number;
     status: 'available' | 'occupied' | 'reserved';
-    qr_code_data: string;
 }
 
 Page({
@@ -22,7 +19,11 @@ Page({
         loading: true,
         tableInfo: null as TableInfo | null,
         error: null as string | null,
-        merchantInfo: null as any
+        merchantInfo: null as any,
+        showTransferDialog: false,
+        transferCode: '',
+        transferSubmitting: false,
+        activeSession: null as any
     },
 
     onLoad(options: any) {
@@ -56,13 +57,32 @@ Page({
      */
     handleSceneParam(scene: string) {
         try {
-            // scene格式: table_123 或 t123
-            const tableId = scene.replace(/^(table_|t)/, '');
+            const decoded = decodeURIComponent(scene);
+
+            const mMatch = decoded.match(/m_(\d+)/);
+            const tMatch = decoded.match(/t_([^-]+)/);
+            const tidMatch = decoded.match(/tid_(\d+)/);
+
+            if (mMatch && tMatch) {
+                const merchantId = parseInt(mMatch[1]);
+                const tableNo = tMatch[1];
+                this.loadTableInfoByNo(merchantId, tableNo);
+                return;
+            }
+
+            if (tidMatch) {
+                this.loadTableInfo(parseInt(tidMatch[1]));
+                return;
+            }
+
+            // 兼容旧格式: table_123 或 t123
+            const tableId = decoded.replace(/^(table_|t)/, '');
             if (tableId && !isNaN(parseInt(tableId))) {
                 this.loadTableInfo(parseInt(tableId));
-            } else {
-                throw new Error('无效的桌台ID');
+                return;
             }
+
+            throw new Error('无效的桌台ID');
         } catch (error) {
             console.error('解析scene参数失败:', error);
             this.setData({
@@ -103,23 +123,23 @@ Page({
         try {
             this.setData({ loading: true, error: null });
 
-            // 调用扫码接口验证桌台
-            const scanResult = await scanTableQRCode(tableId);
-
-            // 获取桌台详细信息
-            const tableInfo = await getTableInfo(tableId);
+            const detail = await getTableDetail(tableId);
+            const scanResult = await scanTable(detail.merchant_id, detail.table_no);
 
             this.setData({
                 loading: false,
                 tableInfo: {
-                    ...tableInfo,
-                    ...scanResult
+                    id: detail.id,
+                    table_no: detail.table_no,
+                    merchant_id: detail.merchant_id,
+                    capacity: detail.capacity,
+                    status: detail.status
                 },
                 merchantInfo: scanResult.merchant
             });
 
-            // 记录扫码行为
-            this.trackScanBehavior(tableId, scanResult.merchant_id);
+            this.trackScanBehavior(tableId, detail.merchant_id);
+            this.checkActiveSessionAndPrompt();
 
         } catch (error: any) {
             console.error('加载桌台信息失败:', error);
@@ -128,6 +148,103 @@ Page({
                 error: error.message || '获取桌台信息失败，请重试'
             });
         }
+    },
+
+    async loadTableInfoByNo(merchantId: number, tableNo: string) {
+        try {
+            this.setData({ loading: true, error: null });
+
+            const scanResult = await scanTable(merchantId, tableNo);
+            const table = scanResult.table;
+
+            this.setData({
+                loading: false,
+                tableInfo: {
+                    id: table.id,
+                    table_no: table.table_no,
+                    merchant_id: merchantId,
+                    capacity: table.capacity,
+                    status: table.status as 'available' | 'occupied' | 'reserved'
+                },
+                merchantInfo: scanResult.merchant
+            });
+
+            this.trackScanBehavior(table.id, merchantId);
+            this.checkActiveSessionAndPrompt();
+        } catch (error: any) {
+            console.error('加载桌台信息失败:', error);
+            this.setData({
+                loading: false,
+                error: error.message || '获取桌台信息失败，请重试'
+            });
+        }
+    },
+
+    checkActiveSessionAndPrompt() {
+        const { tableInfo } = this.data;
+        if (!tableInfo) return;
+
+        let activeSession: any = null;
+        try {
+            activeSession = wx.getStorageSync('activeDiningSession');
+        } catch (error) {
+            console.warn('读取用餐会话缓存失败:', error);
+        }
+
+        if (!activeSession || activeSession.status !== 'open') return;
+        if (activeSession.merchant_id !== tableInfo.merchant_id) return;
+        if (activeSession.table_id === tableInfo.id) return;
+
+        this.setData({
+            showTransferDialog: true,
+            transferCode: '',
+            activeSession
+        });
+    },
+
+    onTransferCodeInput(e: WechatMiniprogram.Input) {
+        this.setData({ transferCode: e.detail.value });
+    },
+
+    async confirmTransfer() {
+        const { tableInfo, activeSession, transferCode, transferSubmitting } = this.data;
+        if (!tableInfo || !activeSession || transferSubmitting) return;
+
+        if (!activeSession.reservation_id && (!transferCode || transferCode.trim() === '')) {
+            wx.showToast({ title: '请输入桌台验证码', icon: 'error' });
+            return;
+        }
+
+        this.setData({ transferSubmitting: true });
+        try {
+            await transferDiningSessionTable(activeSession.id, {
+                to_table_id: tableInfo.id,
+                table_code: activeSession.reservation_id ? undefined : transferCode.trim(),
+                reason: '扫码换桌'
+            });
+
+            try {
+                wx.setStorageSync('activeDiningSession', {
+                    ...activeSession,
+                    table_id: tableInfo.id,
+                    updated_at: new Date().toISOString()
+                });
+            } catch (error) {
+                console.warn('更新用餐会话缓存失败:', error);
+            }
+
+            wx.showToast({ title: '换桌成功', icon: 'success' });
+            this.setData({ showTransferDialog: false, transferSubmitting: false, transferCode: '' });
+            this.startDining();
+        } catch (error: any) {
+            console.error('转台失败:', error);
+            wx.showToast({ title: error.message || '换桌失败', icon: 'error' });
+            this.setData({ transferSubmitting: false });
+        }
+    },
+
+    cancelTransfer() {
+        this.setData({ showTransferDialog: false, transferCode: '' });
     },
 
     /**

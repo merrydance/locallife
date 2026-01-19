@@ -41,7 +41,7 @@
       <view class="table-header">
         <view class="table-number">
           <text class="table-label">桌号</text>
-          <text class="table-value">{{tableInfo.table_number}}</text>
+          <text class="table-value">{{tableInfo.table_no}}</text>
         </view>
         <view class="table-capacity">
           <text class="capacity-icon">👥</text>
@@ -123,6 +123,20 @@
           </view>
           <view class="service-arrow">></view>
         </view>
+      </view>
+    </view>
+  </view>
+  
+  <view wx:if="{{showTransferDialog}}" class="transfer-mask">
+    <view class="transfer-dialog">
+      <view class="dialog-title">发现进行中的用餐</view>
+      <view class="dialog-desc">检测到您在本门店有进行中的用餐，是否换桌到当前桌台？</view>
+      <view wx:if="{{!activeSession.reservation_id}}" class="dialog-input">
+        <input type="text" placeholder="请输入桌台验证码" value="{{transferCode}}" bindinput="onTransferCodeInput" />
+      </view>
+      <view class="dialog-actions">
+        <button class="btn cancel" bindtap="cancelTransfer">暂不换桌</button>
+        <button class="btn confirm" loading="{{transferSubmitting}}" bindtap="confirmTransfer">确认换桌</button>
       </view>
     </view>
   </view>

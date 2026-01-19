@@ -3795,6 +3795,30 @@ definitions:
       session:
         $ref: '#/definitions/api.diningSessionResponse'
     type: object
+  api.transferDiningSessionRequest:
+    properties:
+      reason:
+        maxLength: 200
+        type: string
+      table_code:
+        maxLength: 32
+        minLength: 4
+        type: string
+      to_table_id:
+        minimum: 1
+        type: integer
+    required:
+    - to_table_id
+    type: object
+  api.transferDiningSessionResponse:
+    properties:
+      from_table:
+        $ref: '#/definitions/api.tableResponse'
+      session:
+        $ref: '#/definitions/api.diningSessionResponse'
+      to_table:
+        $ref: '#/definitions/api.tableResponse'
+    type: object
   api.operatorApplicationResponse:
     properties:
       business_license_number:
@@ -9910,6 +9934,59 @@ paths:
       security:
       - BearerAuth: []
       summary: 开启用餐会话（堂食/预订到店）
+      tags:
+      - 用餐会话
+  /v1/dining-sessions/{id}/transfer-table:
+    post:
+      consumes:
+      - application/json
+      description: 将开放用餐会话从一个桌台转移到另一个桌台，支持商户与C端扫码
+      parameters:
+      - description: 用餐会话ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 转台请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.transferDiningSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.transferDiningSessionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 转台（换桌）
       tags:
       - 用餐会话
   /v1/dining-sessions/precheck:

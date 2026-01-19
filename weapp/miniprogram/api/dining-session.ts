@@ -37,6 +37,7 @@ export interface DiningSessionPrecheckResponse {
 export interface OpenDiningSessionRequest {
   table_id: number
   reservation_id?: number
+  table_code?: string
 }
 
 export interface OpenDiningSessionResponse {
@@ -44,6 +45,18 @@ export interface OpenDiningSessionResponse {
   billing_group: BillingGroupDTO
   cart_id?: number
   imported_items: number
+}
+
+export interface TransferDiningSessionRequest {
+  to_table_id: number
+  table_code?: string
+  reason?: string
+}
+
+export interface TransferDiningSessionResponse {
+  session: DiningSessionDTO
+  from_table: any
+  to_table: any
 }
 
 export interface BillingGroupDTO {
@@ -86,6 +99,15 @@ export async function openDiningSession(data: OpenDiningSessionRequest): Promise
   })
 }
 
+/** 转台（换桌） */
+export async function transferDiningSessionTable(sessionId: number, data: TransferDiningSessionRequest): Promise<TransferDiningSessionResponse> {
+  return request({
+    url: `/v1/dining-sessions/${sessionId}/transfer-table`,
+    method: 'POST',
+    data
+  })
+}
+
 /** 基于用餐会话创建堂食订单（占位，调用通用订单创建接口） */
 export async function createDiningOrder(payload: CreateDiningOrderRequest): Promise<OrderResponse> {
   const { merchant_id, table_id, reservation_id, items, notes, order_type = 'dine_in', billing_group_id } = payload
@@ -107,5 +129,6 @@ export async function createDiningOrder(payload: CreateDiningOrderRequest): Prom
 export default {
   precheckDiningSession,
   openDiningSession,
+  transferDiningSessionTable,
   createDiningOrder
 }
