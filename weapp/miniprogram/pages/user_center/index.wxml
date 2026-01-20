@@ -19,6 +19,9 @@
       <view class="info-wrapper">
         <input type="nickname" class="nickname-input" placeholder="请输入昵称" value="{{userInfo.nickName}}" bind:change="onNicknameChange" bind:blur="onNicknameChange" />
       </view>
+      <view class="scan-entry" bindtap="onScanToJoin">
+        <t-icon name="scan" size="44rpx" color="#333" />
+      </view>
     </view>
 
     <!-- Workbenches (for registered roles) -->
@@ -43,9 +46,9 @@
       <view class="card-title">常用功能</view>
       <view class="card-body">
         <t-cell-group>
-          <t-cell title="外卖订单" leftIcon="shop" arrow hover bind:click="onTakeoutOrders" />
-          <t-cell title="我的预订" leftIcon="calendar-1" arrow hover bind:click="onMyReservations" />
-          <t-cell title="堂食订单" leftIcon="shop" arrow hover bind:click="onDineInOrders" />
+          <t-cell title="外卖订单" arrow hover bind:click="onTakeoutOrders" />
+          <t-cell title="我的预订" arrow hover bind:click="onMyReservations" />
+          <t-cell title="堂食订单" arrow hover bind:click="onDineInOrders" />
           <t-cell title="地址管理" arrow hover bind:click="onAddresses" />
           <t-cell title="优惠券" arrow hover bind:click="onCoupons" />
           <t-cell title="收藏夹" arrow hover bind:click="onFavorites" />
@@ -72,14 +75,6 @@
             hover
             bind:click="onRegisterTap"
             data-id="{{item.id}}"
-          />
-          <t-cell 
-            title="扫码入职"
-            description="扫描邀请码加入商户团队"
-            arrow
-            hover
-            leftIcon="scan"
-            bind:click="onScanToJoin"
           />
         </t-cell-group>
       </view>

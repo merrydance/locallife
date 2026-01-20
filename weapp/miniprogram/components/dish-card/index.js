@@ -24,14 +24,20 @@ Component({
         onTap() {
             const dish = this.data.dish;
             if (dish) {
+                const monthSales = typeof dish.month_sales === 'number'
+                    ? dish.month_sales
+                    : typeof dish.salesBadge === 'string'
+                        ? Number(dish.salesBadge.replace(/[^0-9]/g, ''))
+                        : 0;
+                const estimatedMinutes = Math.round((dish.estimated_delivery_time || 0) / 60);
                 // 传递额外信息到详情页（小程序不支持 URLSearchParams）
                 const params = [
                     `id=${dish.id}`,
                     `merchant_id=${dish.merchantId || ''}`,
                     `shop_name=${encodeURIComponent(dish.shopName || '')}`,
-                    `month_sales=${dish.monthlySales || 0}`,
+                    `month_sales=${monthSales}`,
                     `distance=${dish.distance_meters || 0}`,
-                    `delivery_time=${Math.round((dish.deliveryTimeSeconds || 0) / 60) || 0}`
+                    `estimated_delivery_time=${estimatedMinutes || 0}`
                 ].join('&');
                 wx.navigateTo({
                     url: `/pages/takeout/dish-detail/index?${params}`

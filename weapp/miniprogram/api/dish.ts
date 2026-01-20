@@ -1091,6 +1091,11 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
     })
 
     // 转换响应格式以匹配 DishSearchResult
+    const page = response.page_id ?? 1
+    const pageSize = response.page_size ?? params?.limit ?? 20
+    const totalCount = response.total_count ?? response.total ?? 0
+    const hasMore = response.has_more ?? (page * pageSize < totalCount)
+
     return {
         dishes: (response.dishes || []).map(item => ({
             ...item,
@@ -1107,9 +1112,9 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
             tags: []
         } as unknown as DishSummary)),
 
-        has_more: response.has_more ?? false,
-        page: response.page_id ?? 1,
-        total_count: response.total ?? 0
+        has_more: hasMore,
+        page: page,
+        total_count: totalCount
     }
 }
 

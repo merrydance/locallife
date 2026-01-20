@@ -2,6 +2,7 @@ import Navigation from '../../utils/navigation'
 import { updateUserInfo, getUserInfo } from '../../api/auth'
 import { logger } from '../../utils/logger'
 import { UploadService } from '../../api/upload'
+import { getStableBarHeights } from '../../utils/responsive'
 
 const app = getApp<IAppOption>()
 
@@ -24,11 +25,8 @@ Page({
 
   onLoad() {
     // 计算导航栏高度和滚动区域高度
+    const { navBarHeight } = getStableBarHeights()
     const windowInfo = wx.getWindowInfo()
-    const menuButton = wx.getMenuButtonBoundingClientRect()
-    const statusBarHeight = windowInfo.statusBarHeight || 0
-    const navBarContentHeight = menuButton.height + (menuButton.top - statusBarHeight) * 2
-    const navBarHeight = statusBarHeight + navBarContentHeight
     // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
     const scrollViewHeight = windowInfo.windowHeight - navBarHeight
 
@@ -214,9 +212,17 @@ Page({
     wx.makePhoneCall({ phoneNumber: '400-800-8888' })
   },
 
-  // 扫码入职 - 跳转到员工绑定页面
+  // 扫码入职 - 直接打开相机扫码
   onScanToJoin() {
-    wx.navigateTo({ url: '/pages/user/bind-merchant/index' })
+    wx.scanCode({
+      onlyFromCamera: true,
+      success: (res) => {
+        logger.info('Scan success', res, 'UserCenter.scan')
+      },
+      fail: (err) => {
+        logger.warn('Scan cancelled', err, 'UserCenter.scan')
+      }
+    })
   },
 
   async onChooseAvatar(e: WechatMiniprogram.CustomEvent) {

@@ -20,15 +20,15 @@
         <text wx:if="{{dish.originalPriceDisplay}}" class="original-price">¥{{dish.originalPriceDisplay}}</text>
       </view>
       <view class="tags-row">
-        <t-tag wx:if="{{dish.is_premade}}" theme="warning" size="small">预制菜</t-tag>
-        <t-tag wx:for="{{dish.attributes}}" wx:key="*this" size="small">{{item}}</t-tag>
+        <t-tag wx:if="{{dish.is_premade}}" theme="warning" variant="dark" size="small">预制菜</t-tag>
+        <t-tag wx:for="{{dish.attributes}}" wx:key="*this" theme="primary" variant="dark" size="small">{{item}}</t-tag>
       </view>
       <view class="meta-row">
         <text class="sales">月销{{dish.month_sales}}</text>
       </view>
-      <view class="delivery-row">
-        <text class="distance">📍{{dish.distance_meters}}m</text>
-        <text class="delivery-time">🕐预计{{dish.estimated_delivery_time}}分钟送达</text>
+      <view class="delivery-row" wx:if="{{dish.distance_km_display || dish.estimated_delivery_time_display}}">
+        <text class="distance" wx:if="{{dish.distance_km_display}}">📍{{dish.distance_km_display}}</text>
+        <text class="delivery-time" wx:if="{{dish.estimated_delivery_time_display}}">🕐{{dish.estimated_delivery_time_display}}</text>
       </view>
     </view>
 
@@ -42,7 +42,7 @@
             wx:for-item="spec" 
             wx:key="id"
             class="spec-tag {{selectedSpecs[group.id] === spec.id ? 'active' : ''}}"
-            variant="{{selectedSpecs[group.id] === spec.id ? 'light' : 'outline'}}"
+            variant="{{selectedSpecs[group.id] === spec.id ? 'dark' : 'outline'}}"
             theme="{{selectedSpecs[group.id] === spec.id ? 'primary' : 'default'}}"
             data-group-id="{{group.id}}"
             data-spec-id="{{spec.id}}"

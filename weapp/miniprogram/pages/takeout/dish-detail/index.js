@@ -30,7 +30,7 @@ Page({
         const shopName = decodeURIComponent(options.shop_name || '');
         const monthSales = parseInt(options.month_sales || '0');
         const distanceMeters = parseInt(options.distance || '0');
-        const estimatedDeliveryTime = parseInt(options.estimated_delivery_time || '0');
+        const estimatedDeliveryTime = parseInt(options.estimated_delivery_time || options.delivery_time || '0');
         if (!dishId) {
             wx.showToast({ title: '菜品ID缺失', icon: 'error' });
             setTimeout(() => wx.navigateBack(), 1500);
@@ -80,6 +80,14 @@ Page({
             // 从 URL 参数获取额外信息
             const extraInfo = this.data.extraInfo || {};
             const imageUrl = (0, image_1.getPublicImageUrl)(dishData.image_url);
+            const distanceMeters = extraInfo.distanceMeters || 0;
+            const estimatedDeliveryMinutes = extraInfo.estimatedDeliveryTime || 0;
+            const distanceKmDisplay = distanceMeters > 0
+                ? `${(distanceMeters / 1000).toFixed(1)}km`
+                : '';
+            const estimatedDeliveryDisplay = estimatedDeliveryMinutes > 0
+                ? `预计${estimatedDeliveryMinutes}分钟送达`
+                : '';
             // 构建菜品视图模型
             const dish = {
                 id: dishData.id,
@@ -105,14 +113,16 @@ Page({
                 ingredients: (dishData.ingredients || []).map((ingredient) => ingredient.name),
                 // 额外展示字段（从列表页传递）
                 month_sales: extraInfo.monthSales || 0,
-                distance_meters: extraInfo.distanceMeters || 0,
-                estimated_delivery_time: extraInfo.estimatedDeliveryTime || Math.round((dishData.prepare_time || 10) + 15) // 制作时间+配送时间
+                distance_meters: distanceMeters,
+                distance_km_display: distanceKmDisplay,
+                estimated_delivery_time: estimatedDeliveryMinutes,
+                estimated_delivery_time_display: estimatedDeliveryDisplay
             };
             // 初始化规格选择
             const selectedSpecs = {};
             if (dish.spec_groups) {
                 dish.spec_groups.forEach((group) => {
-                    if (group.specs && group.specs.length > 0) {
+                    if (group.is_required && group.specs && group.specs.length > 0) {
                         selectedSpecs[group.id] = group.specs[0].id;
                     }
                 });

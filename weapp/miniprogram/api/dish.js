@@ -407,7 +407,7 @@ exports.InventoryManagementService = InventoryManagementService;
  * 支持分页，返回包含 has_more 的完整响应
  */
 async function searchDishes(params) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f;
     // 首页推荐重构：使用搜索接口替代推荐接口
     // 如果没有关键词，表示获取推荐流
     const searchParams = {
@@ -432,6 +432,10 @@ async function searchDishes(params) {
         cacheTTL: 1 * 60 * 1000 // 1分钟缓存 (数据即时性要求高)
     });
     // 转换响应格式以匹配 DishSearchResult
+    const page = (_a = response.page_id) !== null && _a !== void 0 ? _a : 1;
+    const pageSize = (_c = (_b = response.page_size) !== null && _b !== void 0 ? _b : params === null || params === void 0 ? void 0 : params.limit) !== null && _c !== void 0 ? _c : 20;
+    const totalCount = (_e = (_d = response.total_count) !== null && _d !== void 0 ? _d : response.total) !== null && _e !== void 0 ? _e : 0;
+    const hasMore = (_f = response.has_more) !== null && _f !== void 0 ? _f : (page * pageSize < totalCount);
     return {
         dishes: (response.dishes || []).map(item => {
             var _a;
@@ -450,9 +454,9 @@ async function searchDishes(params) {
                 tags: []
             });
         }),
-        has_more: (_a = response.has_more) !== null && _a !== void 0 ? _a : false,
-        page: (_b = response.page_id) !== null && _b !== void 0 ? _b : 1,
-        total_count: (_c = response.total) !== null && _c !== void 0 ? _c : 0
+        has_more: hasMore,
+        page: page,
+        total_count: totalCount
     };
 }
 /**

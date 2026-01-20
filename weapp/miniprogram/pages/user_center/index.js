@@ -7,6 +7,7 @@ const navigation_1 = __importDefault(require("../../utils/navigation"));
 const auth_1 = require("../../api/auth");
 const logger_1 = require("../../utils/logger");
 const upload_1 = require("../../api/upload");
+const responsive_1 = require("../../utils/responsive");
 const app = getApp();
 Page({
     data: {
@@ -26,11 +27,8 @@ Page({
     },
     onLoad() {
         // 计算导航栏高度和滚动区域高度
+        const { navBarHeight } = (0, responsive_1.getStableBarHeights)();
         const windowInfo = wx.getWindowInfo();
-        const menuButton = wx.getMenuButtonBoundingClientRect();
-        const statusBarHeight = windowInfo.statusBarHeight || 0;
-        const navBarContentHeight = menuButton.height + (menuButton.top - statusBarHeight) * 2;
-        const navBarHeight = statusBarHeight + navBarContentHeight;
         // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
         const scrollViewHeight = windowInfo.windowHeight - navBarHeight;
         this.setData({ navBarHeight, scrollViewHeight });
@@ -177,9 +175,17 @@ Page({
     onContact() {
         wx.makePhoneCall({ phoneNumber: '400-800-8888' });
     },
-    // 扫码入职 - 跳转到员工绑定页面
+    // 扫码入职 - 直接打开相机扫码
     onScanToJoin() {
-        wx.navigateTo({ url: '/pages/user/bind-merchant/index' });
+        wx.scanCode({
+            onlyFromCamera: true,
+            success: (res) => {
+                logger_1.logger.info('Scan success', res, 'UserCenter.scan');
+            },
+            fail: (err) => {
+                logger_1.logger.warn('Scan cancelled', err, 'UserCenter.scan');
+            }
+        });
     },
     async onChooseAvatar(e) {
         const { avatarUrl } = e.detail;
