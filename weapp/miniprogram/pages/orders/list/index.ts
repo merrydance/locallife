@@ -3,6 +3,9 @@ import {
   cancelOrder,
   OrderStatus,
   getOrderDetail,
+  OrderResponse,
+  OrderType,
+  ListOrdersParams,
 } from "../../../api/order";
 import { logger } from "../../../utils/logger";
 import { OrderCardAdapter } from "../../../adapters/order-card";
@@ -71,6 +74,28 @@ const CANCEL_REASONS = [
   "其他原因",
 ];
 
+type OrderTypeFilter = OrderType | "";
+
+const VALID_ORDER_TYPES: OrderType[] = ["takeout", "reservation", "dine_in", "takeaway"];
+
+const normalizeOrderType = (value?: string): OrderTypeFilter => {
+  if (value && VALID_ORDER_TYPES.includes(value as OrderType)) {
+    return value as OrderType;
+  }
+  return "";
+};
+
+const getDatasetId = (event: WechatMiniprogram.BaseEvent): number | null => {
+  const dataset = event.currentTarget.dataset as { id?: string | number };
+  const id = dataset.id;
+  const numericId = typeof id === "number" ? id : Number(id);
+  return Number.isFinite(numericId) ? numericId : null;
+};
+
+const isOrderResponse = (value: unknown): value is OrderResponse => {
+  return !!value && typeof value === "object" && "id" in value && "order_no" in value;
+};
+
 Page({
   data: {
     orders: [] as OrderCardViewModel[],
@@ -81,19 +106,20 @@ Page({
     hasMore: true,
     statusTabs: STATUS_TABS_MAP.default,
     currentStatus: "" as OrderStatus | "",
-    orderType: "" as "takeout" | "reservation" | "dine_in" | "takeaway" | "",
+    orderType: "" as OrderTypeFilter,
     pageTitle: "我的订单",
   },
 
   onLoad(options: { order_type?: string }) {
-    const orderType = (options?.order_type as any) || "";
+    const orderType = normalizeOrderType(options?.order_type);
     const titleMap: Record<string, string> = {
       takeout: "外卖订单",
       reservation: "预订订单",
       dine_in: "堂食订单",
+      takeaway: "自取订单",
     };
     this.setData({
-      orderType: orderType as any,
+      orderType,
       pageTitle: titleMap[orderType] || "我的订单",
       statusTabs: STATUS_TABS_MAP[orderType] || STATUS_TABS_MAP.default,
     });
@@ -129,28 +155,23 @@ Page({
     try {
       const { currentStatus, page, pageSize, orderType } = this.data;
       // API Call with status filter
-      const params = currentStatus
-        ? {
-            status: currentStatus as OrderStatus,
-            page_id: page,
-            page_size: pageSize,
-            order_type: orderType || undefined,
-          }
-        : {
-            page_id: page,
-            page_size: pageSize,
-            order_type: orderType || undefined,
-          };
+      const params: ListOrdersParams = {
+        page_id: page,
+        page_size: pageSize,
+        ...(currentStatus ? { status: currentStatus } : {}),
+        ...(orderType ? { order_type: orderType } : {}),
+      };
       const result = await getOrders(params);
 
       // 兼容不同返回结构：数组 / {orders} / {list} / {items} / {data: {...}}
-      const unwrap = (payload: any): any[] => {
+      const unwrap = (payload: unknown): unknown[] => {
         if (Array.isArray(payload)) return payload;
-        if (payload && typeof payload === 'object') {
-          if (Array.isArray(payload.orders)) return payload.orders;
-          if (Array.isArray(payload.list)) return payload.list;
-          if (Array.isArray(payload.items)) return payload.items;
-          if (payload.data) return unwrap(payload.data);
+        if (payload && typeof payload === "object") {
+          const record = payload as Record<string, unknown>;
+          if (Array.isArray(record.orders)) return record.orders;
+          if (Array.isArray(record.list)) return record.list;
+          if (Array.isArray(record.items)) return record.items;
+          if (record.data) return unwrap(record.data);
         }
         return [];
       };
@@ -158,13 +179,13 @@ Page({
       const orderDTOsRaw = unwrap(result);
 
       // 过滤掉空值或非对象；并在 map 阶段做单条 try/catch，避免坏数据导致整页崩溃
-      const orderDTOs = (orderDTOsRaw as any[])
-        .filter(item => item && typeof item === 'object')
+      const orderDTOs = orderDTOsRaw
+        .filter(isOrderResponse)
         .map((item) => {
           try {
-            return OrderCardAdapter.toCardViewModel(item as any);
+            return OrderCardAdapter.toCardViewModel(item);
           } catch (err) {
-            logger.error('Order map failed:', err, item);
+            logger.error("Order map failed:", err, item);
             return null;
           }
         })
@@ -177,9 +198,11 @@ Page({
         ? sortedOrders
         : [...this.data.orders, ...sortedOrders];
 
+      const totalCount = typeof result.total_count === 'number' ? result.total_count : orders.length;
+
       this.setData({
         orders,
-        hasMore: orderDTOs.length >= pageSize,
+        hasMore: page * pageSize < totalCount,
       });
     } catch (error) {
       logger.error("Load orders failed:", error, "List");
@@ -190,7 +213,7 @@ Page({
   },
 
   // 状态筛选切换
-  onStatusChange(e: WechatMiniprogram.CustomEvent) {
+  onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatus | "" }>) {
     const status = e.detail.value || "";
     if (status === this.data.currentStatus) return;
     this.setData({ currentStatus: status });
@@ -198,13 +221,14 @@ Page({
   },
 
   onViewOrder(e: WechatMiniprogram.BaseEvent) {
-    const { id } = e.currentTarget.dataset;
+    const id = getDatasetId(e);
+    if (!id) return;
     wx.navigateTo({ url: `/pages/orders/detail/index?id=${id}` });
   },
 
   // 快速取消订单
   onCancelOrder(e: WechatMiniprogram.BaseEvent) {
-    const { id } = e.currentTarget.dataset;
+    const id = getDatasetId(e);
     if (!id) return;
 
     wx.showActionSheet({
@@ -232,7 +256,7 @@ Page({
 
   // 去支付
   onPayOrder(e: WechatMiniprogram.BaseEvent) {
-    const { id } = e.currentTarget.dataset;
+    const id = getDatasetId(e);
     if (!id) {
       wx.showToast({ title: "订单信息缺失", icon: "none" });
       return;
@@ -243,8 +267,7 @@ Page({
   },
 
   onReorder(e: WechatMiniprogram.BaseEvent) {
-    const { id } = e.currentTarget.dataset;
-    const orderId = Number(id);
+    const orderId = getDatasetId(e);
     if (!orderId) {
       wx.showToast({ title: "订单信息缺失", icon: "none" });
       return;
@@ -256,9 +279,9 @@ Page({
         const orderDTO = await getOrderDetail(orderId);
         const orderDetail = OrderAdapter.toDetailViewModel(orderDTO);
 
-        const orderType = (orderDetail.type as typeof this.data.orderType) || 'takeout'
+        const orderType: OrderType = orderDetail.type || "takeout";
         const cartContext: {
-          orderType: typeof orderType
+          orderType: OrderType
           tableId?: number
           reservationId?: number
         } = { orderType }

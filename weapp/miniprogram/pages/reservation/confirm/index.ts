@@ -42,7 +42,15 @@ Page({
     loadingSlots: false
   },
 
-  onLoad(options: any) {
+  onLoad(options: {
+    roomId?: string
+    merchantId?: string
+    roomName?: string
+    capacity?: string
+    deposit?: string
+    date?: string
+    time?: string
+  }) {
     if (options.roomId) {
       this.setData({
         roomId: options.roomId,
@@ -233,9 +241,10 @@ Page({
           }
         })
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errMessage = error instanceof Error ? error.message : String(error)
       console.error('预定提交失败:', error)
-      wx.showToast({ title: error?.message || '提交失败', icon: 'none' })
+      wx.showToast({ title: errMessage || '提交失败', icon: 'none' })
     } finally {
       this.setData({ submitting: false })
     }

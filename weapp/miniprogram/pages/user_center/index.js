@@ -115,9 +115,6 @@ Page({
     onAddresses() {
         navigation_1.default.toAddressList();
     },
-    onPoints() {
-        navigation_1.default.toPoints();
-    },
     onCoupons() {
         navigation_1.default.toCoupons();
     },
@@ -197,19 +194,10 @@ Page({
     onScanToJoin() {
         wx.navigateTo({ url: '/pages/user/bind-merchant/index' });
     },
-    // 扫码认领 - 跳转到 Boss 认领页面
-    onScanToClaim() {
-        wx.navigateTo({ url: '/pages/user/claim-boss/index' });
-    },
     onChooseAvatar(e) {
         return __awaiter(this, void 0, void 0, function* () {
             const { avatarUrl } = e.detail;
             // Optimistic Update
-            this.setData({
-                'userInfo.avatarUrl': avatarUrl
-            });
-            wx.showLoading({ title: '上传中...' });
-            try {
                 // 1. Upload to Server
                 const imageUrl = yield upload_1.UploadService.uploadImage(avatarUrl, 'avatar');
                 const remoteUrl = imageUrl;

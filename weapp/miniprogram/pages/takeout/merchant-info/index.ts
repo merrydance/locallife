@@ -2,15 +2,31 @@ import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merc
 import { getPublicImageUrl } from '../../../utils/image'
 import { resolveImageURL } from '../../../utils/image-security'
 
+type BusinessHoursView = NonNullable<PublicMerchantDetail['business_hours']>[number] & {
+  day_name: string
+}
+
+type RestaurantInfoViewModel = PublicMerchantDetail & {
+  cover_image?: string
+  logo_url?: string
+  business_license_image_url?: string
+  food_permit_url?: string
+  business_hours: BusinessHoursView[]
+  biz_status: 'OPEN' | 'CLOSED'
+  discount_rules: PublicMerchantDetail['discount_rules']
+  vouchers: PublicMerchantDetail['vouchers']
+  delivery_promotions: PublicMerchantDetail['delivery_promotions']
+}
+
 Page({
   data: {
     restaurantId: '',
-    restaurant: null as any,
+    restaurant: null as RestaurantInfoViewModel | null,
     navBarHeight: 88,
     loading: true
   },
 
-  onLoad(options: any) {
+  onLoad(options: { id?: string }) {
     const restaurantId = options.id
     if (!restaurantId) {
       wx.showToast({ title: '商家ID缺失', icon: 'error' })
@@ -43,7 +59,7 @@ Page({
       ])
 
       const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-      const formattedHours = (merchant.business_hours || []).map(h => ({
+      const formattedHours: BusinessHoursView[] = (merchant.business_hours || []).map((h) => ({
         ...h,
         day_name: dayNames[h.day_of_week]
       }))
@@ -88,8 +104,8 @@ Page({
     })
   },
 
-  onPreviewLicense(e: any) {
-    const src = e.currentTarget.dataset.src
+  onPreviewLicense(e: WechatMiniprogram.CustomEvent) {
+    const { src } = e.currentTarget.dataset as { src?: string }
     if (!src) return
     wx.previewImage({ urls: [src] })
   }

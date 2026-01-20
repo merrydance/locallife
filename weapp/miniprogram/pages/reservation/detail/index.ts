@@ -35,7 +35,7 @@ Page({
         showModifyButton: false
     },
 
-    onLoad(options: any) {
+    onLoad(options: { id?: string }) {
         if (options.id) {
             this.setData({ id: parseInt(options.id) })
             this.loadDetail()
@@ -67,15 +67,15 @@ Page({
                 _statusTheme: ReservationAdapter.getStatusTheme(res.status),
                 _statusColor: this.getStatusColor(res.status),
                 _timeText: this.formatReservationDateTime(res.reservation_date, res.reservation_time),
-                _createdAt: this.formatDateSafe(res.created_at as any),
+                _createdAt: this.formatDateSafe(res.created_at),
                 _reservationDate: res.reservation_date || '--',
                 _reservationTime: res.reservation_time || '--',
-                _guestCount: (res.guest_count || (res as any).party_size) ? `${res.guest_count || (res as any).party_size}人` : '--'
+                _guestCount: res.guest_count ? `${res.guest_count}人` : '--'
             }
 
             const showPayButton = res.status === 'pending'
             const showCancelButton = ['pending', 'paid', 'confirmed'].includes(res.status)
-            const showModifyButton = ['paid', 'confirmed', 'checked_in'].includes(res.status) && !res.cooking_started_at
+            const showModifyButton = ['paid', 'confirmed', 'checked_in'].includes(res.status)
 
             this.setData({
                 reservation: formatted,
@@ -143,10 +143,8 @@ Page({
         if (!items || items.length === 0) return []
 
         return items.map((item) => {
-            const unitPrice = this.formatPrice(item.unit_price ?? item.price)
-            const totalPrice = this.formatPrice(
-                item.total_price ?? (item.unit_price ?? item.price ?? 0) * (item.quantity || 1)
-            )
+            const unitPrice = this.formatPrice(item.unit_price)
+            const totalPrice = this.formatPrice(item.total_price ?? (item.unit_price ?? 0) * (item.quantity || 1))
             return {
                 ...item,
                 _displayName: item.name || (item.type === 'combo' ? '套餐' : '菜品'),
@@ -177,7 +175,7 @@ Page({
         this.setData({ showCancelDialog: false })
     },
 
-    onReasonChange(e: any) {
+    onReasonChange(e: WechatMiniprogram.CustomEvent) {
         this.setData({ cancelReason: e.detail.value })
     },
 
@@ -193,8 +191,9 @@ Page({
             wx.showToast({ title: '已取消', icon: 'success' })
             this.closeCancelDialog()
             this.loadDetail()
-        } catch (error: any) {
-            wx.showToast({ title: error?.message || '取消失败', icon: 'none' })
+        } catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error)
+            wx.showToast({ title: errMessage || '取消失败', icon: 'none' })
         } finally {
             wx.hideLoading()
         }
@@ -213,11 +212,12 @@ Page({
         if (!this.data.reservation) return
         try {
             wx.showLoading({ title: '拉起支付' })
-            await processPayment(this.data.reservation.id, 'reservation' as any)
+            await processPayment(this.data.reservation.id, 'reservation')
             wx.showToast({ title: '支付成功', icon: 'success' })
             this.loadDetail()
-        } catch (error: any) {
-            wx.showToast({ title: error?.message || '支付失败', icon: 'none' })
+        } catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error)
+            wx.showToast({ title: errMessage || '支付失败', icon: 'none' })
         } finally {
             wx.hideLoading()
         }

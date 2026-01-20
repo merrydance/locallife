@@ -508,6 +508,9 @@ function performTokenRefresh() {
  */
 function ensureValidToken() {
     return __awaiter(this, void 0, void 0, function* () {
+        if (!(0, auth_1.hasToken)()) {
+            return performTokenRefresh(true);
+        }
         return performTokenRefresh(false);
     });
 }

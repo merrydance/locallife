@@ -49,9 +49,9 @@ const CartAPI = __importStar(require("../../../api/cart"));
 const logger_1 = require("../../../utils/logger");
 const address_1 = __importDefault(require("../../../api/address"));
 const order_1 = require("../../../api/order");
+const payment_1 = require("../../../api/payment");
 const util_1 = require("../../../utils/util");
 const image_1 = require("../../../utils/image");
-const request_1 = require("../../../utils/request");
 Page({
     data: {
         carts: [],
@@ -406,37 +406,21 @@ Page({
     handlePayment(orderId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const paymentResult = yield (0, request_1.request)({
-                    url: '/v1/payments',
-                    method: 'POST',
-                    data: {
-                        order_id: orderId,
-                        payment_type: 'miniprogram',
-                        business_type: 'order'
-                    }
-                });
+                const paymentResult = yield (0, payment_1.createOrderPayment)(orderId);
                 if (paymentResult.pay_params) {
-                    const params = paymentResult.pay_params;
-                    wx.requestPayment({
-                        timeStamp: params.timeStamp,
-                        nonceStr: params.nonceStr,
-                        package: params.package,
-                        signType: (params.signType || 'RSA'),
-                        paySign: params.paySign,
-                        success: () => {
-                            wx.showToast({ title: '支付成功', icon: 'success' });
-                            setTimeout(() => {
-                                wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` });
-                            }, 1500);
-                        },
-                        fail: (err) => {
-                            console.log('[Order-confirm] Payment cancelled or failed:', err);
-                            wx.showToast({ title: '支付取消', icon: 'none' });
-                            setTimeout(() => {
-                                wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` });
-                            }, 1500);
-                        }
-                    });
+                    try {
+                        yield (0, payment_1.invokeWechatPay)(paymentResult.pay_params);
+                        wx.showToast({ title: '支付成功', icon: 'success' });
+                    }
+                    catch (err) {
+                        console.log('[Order-confirm] Payment cancelled or failed:', err);
+                        wx.showToast({ title: '支付取消', icon: 'none' });
+                    }
+                    finally {
+                        setTimeout(() => {
+                            wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` });
+                        }, 1500);
+                    }
                 }
                 else {
                     this.showPaymentDevModal(orderId);

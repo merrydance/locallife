@@ -3,6 +3,7 @@
  */
 
 import { createReview, CreateReviewRequest } from '../../../../api/personal'
+import { ReviewService } from '../../../../api/review'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
 
@@ -15,17 +16,8 @@ Page({
         loading: false,
         submitting: false,
         // 表单数据
-        rating: 5,
         content: '',
         images: [] as string[],
-        // 评分选项
-        ratingOptions: [
-            { value: 5, label: '非常满意', icon: '😍' },
-            { value: 4, label: '满意', icon: '😊' },
-            { value: 3, label: '一般', icon: '😐' },
-            { value: 2, label: '不满意', icon: '😕' },
-            { value: 1, label: '非常不满意', icon: '😞' }
-        ],
         maxImages: 9,
         maxContentLength: 500
     },
@@ -54,11 +46,6 @@ Page({
         } catch (error) {
             logger.error('加载订单信息失败', error, 'reviews/create.loadOrderInfo')
         }
-    },
-
-    onRatingChange(e: WechatMiniprogram.CustomEvent) {
-        const rating = e.currentTarget.dataset.rating
-        this.setData({ rating })
     },
 
     onContentInput(e: WechatMiniprogram.CustomEvent) {
@@ -100,14 +87,7 @@ Page({
 
     async uploadImage(filePath: string): Promise<string | null> {
         try {
-            // TODO: 实际上传到服务器，这里暂时返回本地路径
-            // const res = await wx.uploadFile({
-            //   url: 'YOUR_UPLOAD_URL',
-            //   filePath,
-            //   name: 'file'
-            // })
-            // return JSON.parse(res.data).url
-            return filePath
+            return await ReviewService.uploadReviewImage(filePath)
         } catch (error) {
             logger.error('上传图片失败', error, 'reviews/create.uploadImage')
             return null
@@ -130,7 +110,7 @@ Page({
     },
 
     async onSubmit() {
-        const { orderId, content, rating, images, submitting } = this.data
+        const { orderId, content, images, submitting } = this.data
 
         if (submitting) return
 

@@ -1,4 +1,4 @@
-import { getRefundById, Refund } from '../../../api/payment-refund'
+import { getRefundById, RefundOrder } from '../../../api/payment-refund'
 import { logger } from '../../../utils/logger'
 
 interface RefundProgress {
@@ -11,7 +11,7 @@ interface RefundProgress {
 Page({
     data: {
         refundId: 0,
-        refund: null as Refund | null,
+        refund: null as RefundOrder | null,
         navBarHeight: 88,
         loading: true,
         // 显示字段
@@ -42,8 +42,8 @@ Page({
         }
     },
 
-    processRefund(refund: Refund) {
-        const amountDisplay = `¥${(refund.amount / 100).toFixed(2)}`
+    processRefund(refund: RefundOrder) {
+        const amountDisplay = `¥${(refund.refund_amount / 100).toFixed(2)}`
         const statusText = this.getStatusText(refund.status)
         const statusClass = refund.status
         const refundTypeText = refund.refund_type === 'full' ? '全额退款' : '部分退款'
@@ -69,7 +69,7 @@ Page({
         return statusMap[status] || status
     },
 
-    generateProgress(refund: Refund): RefundProgress[] {
+    generateProgress(refund: RefundOrder): RefundProgress[] {
         const progress: RefundProgress[] = [
             {
                 title: '提交申请',
@@ -91,7 +91,7 @@ Page({
             },
             {
                 title: refund.status === 'failed' ? '退款失败' : '退款完成',
-                time: refund.processed_at ? this.formatTime(refund.processed_at) : '',
+                time: refund.refunded_at ? this.formatTime(refund.refunded_at) : '',
                 done: ['success', 'failed'].includes(refund.status),
                 active: ['success', 'failed'].includes(refund.status)
             }

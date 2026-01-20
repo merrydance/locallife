@@ -7,84 +7,43 @@ import { request } from '../utils/request';
 
 // ==================== 类型定义 ====================
 
-// 支付相关类型
-export interface CreatePaymentParams {
-    order_id: number;
-    payment_method: 'wechat_pay' | 'alipay' | 'balance' | 'credit';
-    amount: number;
-    description?: string;
-    return_url?: string;
-    notify_url?: string;
+export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'closed'
+export type PaymentType = 'native' | 'miniprogram'
+export type BusinessType = 'order' | 'reservation'
+
+export interface MiniProgramPayParams {
+    timeStamp: string
+    nonceStr: string
+    package: string
+    signType: string
+    paySign: string
 }
 
-export interface PaymentListParams {
-    status?: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded';
-    order_id?: number;
-    start_date?: string;
-    end_date?: string;
-    page?: number;
-    page_size?: number;
+export interface PaymentOrder {
+    id: number
+    order_id?: number
+    user_id: number
+    payment_type: PaymentType
+    business_type: BusinessType
+    amount: number
+    out_trade_no: string
+    status: PaymentStatus
+    prepay_id?: string
+    pay_params?: MiniProgramPayParams
+    paid_at?: string
+    created_at: string
 }
 
-// 退款相关类型
-export interface CreateRefundParams {
-    payment_id: number;
-    amount: number;
-    reason: string;
-    refund_type: 'full' | 'partial';
-    operator_id?: number;
-}
-
-// 配送费计算类型
-export interface DeliveryFeeCalculateParams {
-    merchant_id: number;
-    user_address_id: number;
-    order_amount: number;
-    delivery_distance?: number;
-    peak_hour?: boolean;
-    promotion_codes?: string[];
-}
-
-// 响应类型
-export interface Payment {
-    id: number;
-    order_id: number;
-    payment_method: string;
-    amount: number;
-    status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded';
-    transaction_id?: string;
-    payment_url?: string;
-    qr_code?: string;
-    description: string;
-    created_at: string;
-    paid_at?: string;
-    expired_at?: string;
-    refund_amount?: number;
-    refund_status?: 'none' | 'partial' | 'full';
-}
-
-export interface PaymentResult {
-    payment: Payment;
-    payment_info?: {
-        payment_url?: string;
-        qr_code?: string;
-        app_pay_params?: any;
-        jsapi_params?: any;
-    };
-}
-
-export interface Refund {
-    id: number;
-    payment_id: number;
-    amount: number;
-    reason: string;
-    refund_type: 'full' | 'partial';
-    status: 'pending' | 'processing' | 'success' | 'failed';
-    refund_transaction_id?: string;
-    operator_id?: number;
-    created_at: string;
-    processed_at?: string;
-    failed_reason?: string;
+export interface RefundOrder {
+    id: number
+    payment_order_id: number
+    refund_type: 'full' | 'partial'
+    refund_amount: number
+    refund_reason?: string
+    out_refund_no: string
+    status: string
+    refunded_at?: string
+    created_at: string
 }
 
 /** 配送费计算结果 - 对齐 api.DeliveryFeeResult */
@@ -124,17 +83,24 @@ export interface CreateRefundOrderRequest extends Record<string, unknown> {
     refund_reason?: string;                      // 退款原因
 }
 
-/** 退款订单响应 - 对齐 api.refundOrderResponse */
-export interface RefundOrderResponse {
-    id: number;                                  // 退款订单ID
-    payment_order_id: number;                    // 支付订单ID
-    out_refund_no: string;                       // 退款单号
-    refund_amount: number;                       // 退款金额（分）
-    refund_type: string;                         // 退款类型
-    refund_reason?: string;                      // 退款原因
-    status: string;                              // 退款状态
-    refunded_at?: string;                        // 退款时间
-    created_at: string;                          // 创建时间
+export interface ListPaymentOrdersParams {
+    page_id?: number
+    page_size?: number
+    order_id?: number
+}
+
+export interface ListPaymentOrdersResponse {
+    payment_orders: PaymentOrder[]
+    total_count: number
+    total: number
+    page_id: number
+    page_size: number
+}
+
+export interface ListRefundOrdersByPaymentResponse {
+    refund_orders: RefundOrder[]
+    total_count: number
+    total: number
 }
 
 /** 创建配送促销请求 - 对齐 api.createDeliveryPromotionRequest */
@@ -160,101 +126,58 @@ export interface DeliveryPromotionResponse {
     updated_at: string;                          // 更新时间
 }
 
-export interface PaginatedResponse<T> {
-    data: T[];
-    pagination: {
-        page: number;
-        page_size: number;
-        total: number;
-        total_pages: number;
-    };
-}
-
 // ==================== API 接口函数 ====================
 
 /**
- * 创建支付订单
+ * 获取支付订单列表
  */
-export const createPayment = async (params: CreatePaymentParams): Promise<PaymentResult> => {
-    return request({
-        url: '/v1/payments',
-        method: 'POST',
-        data: params
-    });
-};
-
-/**
- * 获取支付列表
- */
-export const getPayments = async (params?: PaymentListParams): Promise<PaginatedResponse<Payment>> => {
+export const getPayments = async (params?: ListPaymentOrdersParams): Promise<ListPaymentOrdersResponse> => {
     return request({
         url: '/v1/payments',
         method: 'GET',
         data: params
-    });
-};
+    })
+}
 
 /**
  * 获取支付详情
  */
-export const getPaymentById = async (id: number): Promise<Payment> => {
+export const getPaymentById = async (id: number): Promise<PaymentOrder> => {
     return request({
         url: `/v1/payments/${id}`,
         method: 'GET'
-    });
-};
+    })
+}
 
 /**
  * 关闭支付订单
  */
-export const closePayment = async (id: number): Promise<{ success: boolean; message: string }> => {
+export const closePayment = async (id: number): Promise<PaymentOrder> => {
     return request({
         url: `/v1/payments/${id}/close`,
         method: 'POST'
-    });
-};
+    })
+}
 
 /**
  * 获取支付的退款记录
  */
-export const getPaymentRefunds = async (paymentId: number): Promise<Refund[]> => {
+export const getPaymentRefunds = async (paymentId: number): Promise<ListRefundOrdersByPaymentResponse> => {
     return request({
         url: `/v1/payments/${paymentId}/refunds`,
         method: 'GET'
-    });
-};
-
-/**
- * 创建退款申请
- */
-export const createRefund = async (params: CreateRefundParams): Promise<Refund> => {
-    return request({
-        url: '/v1/refunds',
-        method: 'POST',
-        data: params
-    });
-};
+    })
+}
 
 /**
  * 获取退款详情
  */
-export const getRefundById = async (id: number): Promise<Refund> => {
+export const getRefundById = async (id: number): Promise<RefundOrder> => {
     return request({
         url: `/v1/refunds/${id}`,
         method: 'GET'
-    });
-};
-
-/**
- * 计算配送费
- */
-export const calculateDeliveryFee = async (params: DeliveryFeeCalculateParams): Promise<DeliveryFeeResult> => {
-    return request({
-        url: '/delivery-fee/calculate',
-        method: 'POST',
-        data: params
-    });
-};
+    })
+}
 
 // ==================== 数据适配器 ====================
 
@@ -616,8 +539,8 @@ export class PaymentStatusManager {
                 const payment = await PaymentUtils.checkPaymentStatus(paymentId);
                 onStatusChange(payment);
 
-                // 如果支付完成或失败，停止轮询
-                if (payment.status === 'paid' || payment.status === 'failed' || payment.status === 'cancelled') {
+                // 如果支付完成或终态，停止轮询
+                if (payment.status === 'paid' || payment.status === 'refunded' || payment.status === 'closed') {
                     this.stopPaymentPolling(paymentId);
                     return;
                 }

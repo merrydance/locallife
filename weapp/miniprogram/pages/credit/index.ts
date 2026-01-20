@@ -1,7 +1,7 @@
 Page({
     data: {
-        score: null as any,
-        history: [] as any[],
+        score: null as number | null,
+        history: [] as Array<unknown>,
         loading: false,
         chartValue: 0,
         gradientColor: {

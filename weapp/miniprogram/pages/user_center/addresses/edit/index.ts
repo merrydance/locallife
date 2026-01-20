@@ -22,7 +22,7 @@ Page({
     navTitle: '编辑地址'
   },
 
-  onLoad(options: any) {
+  onLoad(options: { id?: string; wechat_data?: string }) {
     if (options.id) {
       this.setData({ addressId: Number(options.id) })
       this.loadAddress(Number(options.id))
@@ -69,19 +69,19 @@ Page({
     }
   },
 
-  onNameChange(e: any) {
+  onNameChange(e: WechatMiniprogram.CustomEvent) {
     this.setData({ contactName: e.detail.value })
   },
 
-  onPhoneChange(e: any) {
+  onPhoneChange(e: WechatMiniprogram.CustomEvent) {
     this.setData({ contactPhone: e.detail.value })
   },
 
-  onDetailChange(e: any) {
+  onDetailChange(e: WechatMiniprogram.CustomEvent) {
     this.setData({ detailAddress: e.detail.value })
   },
 
-  onDefaultChange(e: any) {
+  onDefaultChange(e: WechatMiniprogram.CustomEvent) {
     this.setData({ isDefault: e.detail.value })
   },
 
@@ -150,9 +150,8 @@ Page({
       logger.error('Save address failed:', error, 'AddressEdit')
 
       // 针对未能自动定位的错误，弹出短文案的确认弹窗
-      const message = (error as any)?.message
-        || (error as any)?.response?.data?.error
-        || (error as any)?.data?.error
+      const err = error as { message?: string; response?: { data?: { error?: string } }; data?: { error?: string } }
+      const message = err?.message || err?.response?.data?.error || err?.data?.error
       if (message && (
         message.includes('未能定位') ||
         message.includes('geocode no result') ||

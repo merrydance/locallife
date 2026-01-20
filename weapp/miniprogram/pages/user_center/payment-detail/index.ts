@@ -1,11 +1,24 @@
-import { getPaymentById, closePayment, getPaymentRefunds, getPayments, Payment, Refund } from '../../../api/payment-refund'
+import { getPaymentById, closePayment, getPaymentRefunds, getPayments, PaymentOrder, RefundOrder } from '../../../api/payment-refund'
 import { logger } from '../../../utils/logger'
+
+type RefundView = RefundOrder & {
+    _amountDisplay: string
+    _statusText: string
+    _statusClass: string
+}
+
+const getDatasetId = (event: WechatMiniprogram.BaseEvent): number | null => {
+    const dataset = event.currentTarget.dataset as { id?: string | number }
+    const id = dataset.id
+    const numericId = typeof id === 'number' ? id : Number(id)
+    return Number.isFinite(numericId) ? numericId : null
+}
 
 Page({
     data: {
         paymentId: 0,
-        payment: null as Payment | null,
-        refunds: [] as Refund[],
+        payment: null as PaymentOrder | null,
+        refunds: [] as RefundView[],
         navBarHeight: 88,
         loading: true,
         // 显示字段
@@ -33,10 +46,7 @@ Page({
             const payment = await getPaymentById(this.data.paymentId)
             this.processPayment(payment)
 
-            // 如果有退款，加载退款列表
-            if (payment.refund_status && payment.refund_status !== 'none') {
-                await this.loadRefunds()
-            }
+            await this.loadRefunds()
         } catch (error) {
             logger.error('加载支付详情失败', error, 'payment-detail.loadPaymentDetail')
             wx.showToast({ title: '加载失败', icon: 'error' })
@@ -49,15 +59,12 @@ Page({
         this.setData({ loading: true })
         try {
             // 通过订单ID获取支付列表，取第一条
-            const result = await getPayments({ order_id: orderId, page: 1, page_size: 1 })
-            if (result.data && result.data.length > 0) {
-                const payment = result.data[0]
+            const result = await getPayments({ order_id: orderId, page_id: 1, page_size: 1 })
+            if (result.payment_orders && result.payment_orders.length > 0) {
+                const payment = result.payment_orders[0]
                 this.setData({ paymentId: payment.id })
                 this.processPayment(payment)
-
-                if (payment.refund_status && payment.refund_status !== 'none') {
-                    await this.loadRefunds()
-                }
+                await this.loadRefunds()
             } else {
                 wx.showToast({ title: '未找到支付记录', icon: 'none' })
             }
@@ -69,13 +76,13 @@ Page({
         }
     },
 
-    processPayment(payment: Payment) {
+    processPayment(payment: PaymentOrder) {
         const amountDisplay = `¥${(payment.amount / 100).toFixed(2)}`
         const statusText = this.getStatusText(payment.status)
         const statusClass = payment.status
-        const paymentMethodText = this.getPaymentMethodText(payment.payment_method)
+        const paymentMethodText = this.getPaymentMethodText(payment.payment_type)
         const showCloseButton = payment.status === 'pending'
-        const showRefundList = payment.refund_status && payment.refund_status !== 'none'
+        const showRefundList = false
 
         this.setData({
             payment,
@@ -90,15 +97,15 @@ Page({
 
     async loadRefunds() {
         try {
-            const refunds = await getPaymentRefunds(this.data.paymentId)
+            const refundsResponse = await getPaymentRefunds(this.data.paymentId)
             // 处理退款显示字段
-            const processedRefunds = refunds.map(refund => ({
+            const processedRefunds: RefundView[] = refundsResponse.refund_orders.map(refund => ({
                 ...refund,
-                _amountDisplay: `¥${(refund.amount / 100).toFixed(2)}`,
+                _amountDisplay: `¥${(refund.refund_amount / 100).toFixed(2)}`,
                 _statusText: this.getRefundStatusText(refund.status),
                 _statusClass: refund.status
             }))
-            this.setData({ refunds: processedRefunds })
+            this.setData({ refunds: processedRefunds, showRefundList: processedRefunds.length > 0 })
         } catch (error) {
             logger.error('加载退款列表失败', error, 'payment-detail.loadRefunds')
         }
@@ -108,19 +115,16 @@ Page({
         const statusMap: Record<string, string> = {
             'pending': '待支付',
             'paid': '已支付',
-            'failed': '支付失败',
-            'cancelled': '已取消',
-            'refunded': '已退款'
+            'refunded': '已退款',
+            'closed': '已关闭'
         }
         return statusMap[status] || status
     },
 
     getPaymentMethodText(method: string): string {
         const methodMap: Record<string, string> = {
-            'wechat_pay': '微信支付',
-            'alipay': '支付宝',
-            'balance': '余额支付',
-            'credit': '信用支付'
+            'miniprogram': '小程序支付',
+            'native': '扫码支付'
         }
         return methodMap[method] || method
     },
@@ -173,7 +177,8 @@ Page({
     },
 
     onViewRefund(e: WechatMiniprogram.BaseEvent) {
-        const { id } = e.currentTarget.dataset
+        const id = getDatasetId(e)
+        if (!id) return
         wx.navigateTo({
             url: `/pages/user_center/refund-detail/index?id=${id}`
         })

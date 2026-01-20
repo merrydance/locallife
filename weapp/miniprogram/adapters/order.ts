@@ -78,7 +78,7 @@ export class OrderAdapter {
     const base = OrderAdapter.toViewModel(dto)
     const payableAmount = getPayableAmount(dto)
 
-    const items: OrderItem[] = dto.items.map((item) => ({
+    const items: OrderItem[] = (dto.items ?? []).map((item) => ({
       id: item.id,
       dishId: item.dish_id,
       comboId: item.combo_id,

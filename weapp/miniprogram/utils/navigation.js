@@ -134,15 +134,6 @@ class Navigation {
     }
     // ==================== 个人中心相关 ====================
     /**
-       * 跳转到积分中心
-       */
-    static toPoints(merchantId) {
-        const url = merchantId
-            ? `/pages/user_center/points/index?merchant_id=${merchantId}`
-            : '/pages/user_center/points/index';
-        wx.navigateTo({ url });
-    }
-    /**
        * 跳转到优惠券页
        */
     static toCoupons() {

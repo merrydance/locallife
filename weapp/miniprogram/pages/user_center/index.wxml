@@ -47,7 +47,6 @@
           <t-cell title="我的预订" leftIcon="calendar-1" arrow hover bind:click="onMyReservations" />
           <t-cell title="堂食订单" leftIcon="shop" arrow hover bind:click="onDineInOrders" />
           <t-cell title="地址管理" arrow hover bind:click="onAddresses" />
-          <t-cell title="积分中心" arrow hover bind:click="onPoints" />
           <t-cell title="优惠券" arrow hover bind:click="onCoupons" />
           <t-cell title="收藏夹" arrow hover bind:click="onFavorites" />
           <t-cell title="会员中心" arrow hover bind:click="onMembership" />
@@ -81,14 +80,6 @@
             hover
             leftIcon="scan"
             bind:click="onScanToJoin"
-          />
-          <t-cell 
-            title="扫码认领"
-            description="Boss扫码认领店铺管理权限"
-            arrow
-            hover
-            leftIcon="qrcode"
-            bind:click="onScanToClaim"
           />
         </t-cell-group>
       </view>

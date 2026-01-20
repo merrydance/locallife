@@ -3,13 +3,10 @@
  * 用户扫描邀请码二维码或手动输入邀请码加入商户
  */
 
-import { request } from '@/utils/request'
+import { bindMerchant, BindMerchantResponse } from '../../../api/personal'
 
-interface BindResult {
-    message: string
-    merchant_id: number
-    merchant_name: string
-    role: string
+const isBindMerchantError = (error: unknown): error is { statusCode?: number; message?: string } => {
+    return !!error && typeof error === 'object'
 }
 
 Page({
@@ -17,7 +14,7 @@ Page({
         inviteCode: '',
         loading: false,
         success: false,
-        result: null as BindResult | null
+        result: null as BindMerchantResponse | null
     },
 
     onLoad(options: { code?: string }) {
@@ -66,11 +63,7 @@ Page({
 
         this.setData({ loading: true })
         try {
-            const result = await request<BindResult>({
-                url: '/v1/bind-merchant',
-                method: 'POST',
-                data: { invite_code: inviteCode.trim() }
-            })
+            const result = await bindMerchant(inviteCode.trim())
 
             this.setData({
                 success: true,
@@ -79,12 +72,12 @@ Page({
             })
 
             wx.showToast({ title: '加入成功', icon: 'success' })
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('绑定失败:', error)
             this.setData({ loading: false })
 
             // 友好提示已入职情况
-            if (error.statusCode === 409 || error.message?.includes('already')) {
+            if (isBindMerchantError(error) && (error.statusCode === 409 || error.message?.includes('already'))) {
                 wx.showModal({
                     title: '已入职',
                     content: '您已经是该商户的员工，无需重复绑定',
@@ -92,7 +85,7 @@ Page({
                     confirmText: '我知道了'
                 })
             } else {
-                wx.showToast({ title: error.message || '绑定失败', icon: 'none' })
+                wx.showToast({ title: error instanceof Error ? error.message : '绑定失败', icon: 'none' })
             }
         }
     },

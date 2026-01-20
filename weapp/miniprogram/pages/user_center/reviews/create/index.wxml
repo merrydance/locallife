@@ -6,23 +6,6 @@
     <text class="merchant-name">{{merchantName}}</text>
   </view>
 
-  <!-- 评分选择 -->
-  <view class="rating-section">
-    <view class="section-title">整体评分</view>
-    <view class="rating-options">
-      <view 
-        wx:for="{{ratingOptions}}" 
-        wx:key="value"
-        class="rating-item {{rating === item.value ? 'active' : ''}}"
-        data-rating="{{item.value}}"
-        bindtap="onRatingChange"
-      >
-        <text class="rating-icon">{{item.icon}}</text>
-        <text class="rating-label">{{item.label}}</text>
-      </view>
-    </view>
-  </view>
-
   <!-- 评价内容 -->
   <view class="content-section">
     <view class="section-title">评价内容</view>

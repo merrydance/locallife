@@ -16,12 +16,8 @@
     <view wx:else>
       <view wx:for="{{reviews}}" wx:key="id" class="review-card">
         <view class="card-header">
-          <text class="shop-name">{{item.restaurant_name}}</text>
+          <text class="shop-name">{{item.merchantName}}</text>
           <text class="time">{{item.created_at}}</text>
-        </view>
-        
-        <view class="rating-row">
-          <t-rate value="{{item.rating}}" size="14" readonly />
         </view>
 
         <text class="content">{{item.content}}</text>

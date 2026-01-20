@@ -2,10 +2,10 @@ import * as CartAPI from '../../../api/cart'
 import { CartItemResponse } from '../../../api/cart'
 import { logger } from '../../../utils/logger'
 import AddressService, { Address } from '../../../api/address'
-import { createOrder, CreateOrderRequest } from '../../../api/order'
+import { createOrder, CreateOrderRequest, OrderType } from '../../../api/order'
+import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
-import { request } from '../../../utils/request'
 
 interface CartItemView {
   id: number
@@ -24,7 +24,7 @@ interface CartItemView {
 interface MerchantCartView {
   merchantId: number
   merchantName: string
-  orderType: string
+  orderType: OrderType
   tableId?: number
   reservationId?: number
   items: CartItemView[]
@@ -67,10 +67,12 @@ Page({
   onShow() {
     // If returning from address selection, we might have a selectedAddressId
     const pages = getCurrentPages()
-    const currPage = pages[pages.length - 1]
-    if ((currPage as any).data.selectedAddressId) {
-      this.loadAddressById((currPage as any).data.selectedAddressId)
-        ; (currPage as any).setData({ selectedAddressId: null })
+    const currPage = pages[pages.length - 1] as WechatMiniprogram.Page.Instance & {
+      data: { selectedAddressId?: number | string | null }
+    }
+    if (currPage.data?.selectedAddressId) {
+      this.loadAddressById(currPage.data.selectedAddressId)
+      currPage.setData({ selectedAddressId: null })
     }
   },
 
@@ -110,7 +112,7 @@ Page({
       const cartViews: MerchantCartView[] = []
       for (const merchantCart of selectedCarts) {
         const merchantId = merchantCart.merchant_id
-        const orderType = merchantCart.order_type || 'takeout'
+        const orderType = (merchantCart.order_type || 'takeout') as OrderType
 
         if (!merchantId) {
           wx.showToast({ title: '商户信息缺失', icon: 'none' })
@@ -215,9 +217,10 @@ Page({
   },
 
   onRemarkInput(e: WechatMiniprogram.CustomEvent) {
-    const merchantId = Number((e.currentTarget as any).dataset?.merchantId)
-    if (!merchantId) return
-    const remarks = { ...this.data.remarks, [merchantId]: e.detail.value }
+    const { merchantId } = e.currentTarget.dataset as { merchantId?: number | string }
+    const merchantIdNum = Number(merchantId)
+    if (!merchantIdNum) return
+    const remarks = { ...this.data.remarks, [merchantIdNum]: e.detail.value }
     this.setData({ remarks })
   },
 
@@ -323,9 +326,10 @@ Page({
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
+      const errMessage = error instanceof Error ? error.message : String(error)
       wx.showModal({
         title: '调试',
-        content: '计算运费失败: ' + (error as any)?.message || '未知错误',
+        content: `计算运费失败: ${errMessage || '未知错误'}`,
         showCancel: false
       })
       // 保留现有金额显示，不打断流程
@@ -377,7 +381,7 @@ Page({
             if (item.customizations) orderItem.customizations = item.customizations
             return orderItem
           }),
-          order_type: cart.orderType as any,
+          order_type: cart.orderType,
           address_id: address.id,
           notes: remarks[cart.merchantId] || '',
           delivery_fee: cart.deliveryFee,
@@ -420,38 +424,20 @@ Page({
 
   async handlePayment(orderId: number) {
     try {
-      const paymentResult = await request({
-        url: '/v1/payments',
-        method: 'POST',
-        data: {
-          order_id: orderId,
-          payment_type: 'miniprogram',
-          business_type: 'order'
-        }
-      }) as { pay_params?: { timeStamp: string; nonceStr: string; package: string; signType: string; paySign: string } }
+      const paymentResult = await createOrderPayment(orderId)
 
       if (paymentResult.pay_params) {
-        const params = paymentResult.pay_params
-        wx.requestPayment({
-          timeStamp: params.timeStamp,
-          nonceStr: params.nonceStr,
-          package: params.package,
-          signType: (params.signType || 'RSA') as 'RSA' | 'MD5' | 'HMAC-SHA256',
-          paySign: params.paySign,
-          success: () => {
-            wx.showToast({ title: '支付成功', icon: 'success' })
-            setTimeout(() => {
-              wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
-            }, 1500)
-          },
-          fail: (err) => {
-            console.log('[Order-confirm] Payment cancelled or failed:', err)
-            wx.showToast({ title: '支付取消', icon: 'none' })
-            setTimeout(() => {
-              wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
-            }, 1500)
-          }
-        })
+        try {
+          await invokeWechatPay(paymentResult.pay_params)
+          wx.showToast({ title: '支付成功', icon: 'success' })
+        } catch (err) {
+          console.log('[Order-confirm] Payment cancelled or failed:', err)
+          wx.showToast({ title: '支付取消', icon: 'none' })
+        } finally {
+          setTimeout(() => {
+            wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+          }, 1500)
+        }
       } else {
         this.showPaymentDevModal(orderId)
       }

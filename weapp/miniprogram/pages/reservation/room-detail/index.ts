@@ -10,10 +10,15 @@ interface DayAvailability {
   dinnerAvailable: boolean   // 晚餐时段是否可订
 }
 
+type RoomView = Room & {
+  minSpendDisplay: string
+  depositDisplay: string
+}
+
 Page({
   data: {
     roomId: '',
-    room: null as Room | null,
+    room: null as RoomView | null,
     navBarHeight: 88,
     loading: false,
     // 可用日期列表（未来7天）
@@ -24,7 +29,7 @@ Page({
     selectedType: '' as 'lunch' | 'dinner' | ''
   },
 
-  onLoad(options: any) {
+  onLoad(options: { id?: string }) {
     if (options.id) {
       this.setData({ roomId: options.id })
       this.loadRoomDetail(options.id)
@@ -128,8 +133,8 @@ Page({
     }
   },
 
-  onCellTap(e: any) {
-    const { date, type, available } = e.currentTarget.dataset
+  onCellTap(e: WechatMiniprogram.CustomEvent) {
+    const { date, type, available } = e.currentTarget.dataset as { date?: string; type?: 'lunch' | 'dinner'; available?: boolean }
     if (!available) {
       wx.showToast({ title: '时段已满', icon: 'none' })
       return

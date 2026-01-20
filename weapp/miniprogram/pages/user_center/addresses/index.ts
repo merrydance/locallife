@@ -10,7 +10,7 @@ Page({
     isSelectMode: false
   },
 
-  onLoad(options: any) {
+  onLoad(options: { select?: string }) {
     if (options.select === 'true') {
       this.setData({ isSelectMode: true })
     }
@@ -99,9 +99,11 @@ Page({
     const { id } = e.currentTarget.dataset
     if (this.data.isSelectMode) {
       const pages = getCurrentPages()
-      const prevPage = pages[pages.length - 2]
+      const prevPage = pages[pages.length - 2] as WechatMiniprogram.Page.Instance & {
+        setData: (data: Record<string, unknown>) => void
+      }
       if (prevPage) {
-        (prevPage as any).setData({ selectedAddressId: id })
+        prevPage.setData({ selectedAddressId: id })
       }
       wx.navigateBack()
     }

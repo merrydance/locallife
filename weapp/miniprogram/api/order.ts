@@ -43,7 +43,7 @@ export interface OrderItemResponse {
   dish_id?: number        // 菜品ID (菜品订单时有值)
   combo_id?: number       // 套餐ID (套餐订单时有值)
   name: string            // 商品名称
-  image_url: string       // 商品图片URL
+  image_url?: string      // 商品图片URL
   quantity: number
   unit_price: number      // 单价（分）
   subtotal: number        // 小计金额（分，含定制化加价）
@@ -66,18 +66,23 @@ export interface OrderResponse {
   order_no: string
   user_id: number
   merchant_id: number
-  merchant_name: string
+  merchant_name?: string
   merchant_phone?: string          // 商户电话
   status: OrderStatus
   status_hint?: string
   badges?: Array<{ text: string; type?: string; locale?: string }> | string[]
   actions?: string[]
+  dispatch_order_id?: number
+  flow_id?: number
+  pickup_code?: string
   pickup_code_masked?: string
+  exception_state?: string
+  claim_channel?: string
   overtime?: boolean
-  fulfillment_status?: FulfillmentStatus
+  fulfillment_status: FulfillmentStatus
   order_type: OrderType
   payment_method?: 'wechat' | 'balance'
-  items: OrderItemResponse[]
+  items?: OrderItemResponse[]
   subtotal: number              // 商品小计（分，不含配送费）
   total_amount: number          // 订单总金额（分）
   delivery_fee: number
@@ -87,8 +92,15 @@ export interface OrderResponse {
   estimated_delivery_at?: string     // 预计送达时间（ISO字符串）
   notes?: string
   created_at: string
-  updated_at: string
+  updated_at?: string
   paid_at?: string
+  prep_start_at?: string
+  ready_at?: string
+  courier_accept_at?: string
+  picked_at?: string
+  rider_delivered_at?: string
+  user_delivered_at?: string
+  auto_user_delivered_at?: string
   completed_at?: string
   cancelled_at?: string
   cancel_reason?: string
@@ -145,39 +157,42 @@ export interface ListOrdersParams extends Record<string, unknown> {
   fulfillment_status?: FulfillmentStatus
 }
 
+/** 订单列表响应 - 对齐 api.listOrdersResponse */
+export interface ListOrdersResponse {
+  orders: OrderResponse[]
+  total_count: number
+  total: number
+  page_id: number
+  page_size: number
+}
+
 /** 订单计算参数 */
 export interface CalculateOrderParams extends Record<string, unknown> {
   merchant_id: number
-  items: Array<{
-    dish_id: number
-    quantity: number
-    customizations?: Array<{
-      group_id: number
-      option_id: number
-    }>
-    combo_id?: number
-  }>
-  address_id?: number
-  voucher_id?: number
-  use_membership_discount?: boolean
   order_type: OrderType
+  latitude?: number
+  longitude?: number
+  address_id?: number
+  user_voucher_id?: number
+  voucher_code?: string
 }
 
 /** 订单计算结果 - 对齐 api.calculateCartResponse */
 /** 订单计算结果 - 对齐 api.orderCalculationResponse */
 export interface OrderCalculationResponse {
-  delivery_fee?: number             // 配送费（分）
-  delivery_fee_discount?: number    // 配送费优惠（分）
-  discount_amount?: number          // 满减优惠（分）
-  items?: CalculatedItemResponse[]  // 商品明细
+  delivery_fee: number              // 配送费（分）
+  delivery_fee_discount: number     // 配送费优惠（分）
+  discount_amount: number           // 满减优惠（分）
+  items: CalculatedItemResponse[]   // 商品明细
   promotions?: PromotionApplied[]   // 优惠明细
-  subtotal?: number                 // 商品小计（分）
-  total_amount?: number             // 最终应付金额（分）
+  subtotal: number                  // 商品小计（分）
+  total_amount: number              // 最终应付金额（分）
 }
 
 /** 计算后的商品项 */
 export interface CalculatedItemResponse {
-  dish_id: number
+  dish_id?: number
+  combo_id?: number
   name: string
   quantity: number
   unit_price: number
@@ -186,8 +201,9 @@ export interface CalculatedItemResponse {
 
 /** 已应用的优惠 */
 export interface PromotionApplied {
-  name: string
-  discount_amount: number
+  title: string
+  amount: number
+  type: string
 }
 
 /** 取消订单请求 */
@@ -220,9 +236,9 @@ export interface OrderCalculationItem {
 
 /** 订单优惠项 - 对齐 api.orderPromotion */
 export interface OrderPromotion {
-  amount?: number             // 优惠金额（分）
-  title?: string              // 优惠名称
-  type?: string               // 优惠类型：discount, delivery_fee_return, voucher
+  amount: number              // 优惠金额（分）
+  title: string               // 优惠名称
+  type: string                // 优惠类型：discount, delivery_fee_return, voucher
 }
 
 // ==================== API接口函数 ====================
@@ -231,7 +247,7 @@ export interface OrderPromotion {
  * 获取订单列表
  * @param params 查询参数
  */
-export async function getOrderList(params: ListOrdersParams): Promise<OrderResponse[]> {
+export async function getOrderList(params: ListOrdersParams): Promise<ListOrdersResponse> {
   return request({
     url: '/v1/orders',
     method: 'GET',
@@ -279,7 +295,7 @@ export async function calculateOrder(params: CalculateOrderParams): Promise<Orde
  * @param orderId 订单ID
  * @param cancelData 取消原因
  */
-export async function cancelOrder(orderId: number, cancelData: CancelOrderRequest): Promise<void> {
+export async function cancelOrder(orderId: number, cancelData: CancelOrderRequest): Promise<OrderResponse> {
   return request({
     url: `/v1/orders/${orderId}/cancel`,
     method: 'POST',
@@ -291,7 +307,7 @@ export async function cancelOrder(orderId: number, cancelData: CancelOrderReques
  * 确认订单（用户确认收货）
  * @param orderId 订单ID
  */
-export async function confirmOrder(orderId: number): Promise<void> {
+export async function confirmOrder(orderId: number): Promise<OrderResponse> {
   return request({
     url: `/v1/orders/${orderId}/confirm`,
     method: 'POST'
@@ -330,11 +346,12 @@ export async function replaceOrder(orderId: number, data: ReplaceOrderRequest = 
  * @param pageSize 每页数量
  */
 export async function getOrdersByStatus(status: OrderStatus, pageSize: number = 10): Promise<OrderResponse[]> {
-  return getOrderList({
+  const response = await getOrderList({
     page_id: 1,
     page_size: pageSize,
     status
   })
+  return response.orders
 }
 
 /**

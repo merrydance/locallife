@@ -16,13 +16,43 @@
 .member-card {
   border-radius: 24rpx;
   padding: 40rpx;
-  color: #fff;
+  color: #333;
+  background: #fff;
   margin-bottom: 32rpx;
   box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.15);
-  min-height: 300rpx;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+}
+
+.membership-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.merchant-name {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.balance {
+  font-size: 28rpx;
+  color: #E34D59;
+  font-weight: 600;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+
+.meta-label {
+  color: #999;
 }
 
 .member-card.level-GOLD {

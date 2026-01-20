@@ -6,7 +6,7 @@
  * 3. 预订点菜：直接传 reservation_id 和 merchant_id
  */
 
-import { scanTable, ScanTableResponse, ScanTableCategoryInfo } from '../../../api/table'
+import { scanTable, getTableDetail, ScanTableResponse, ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo } from '../../../api/table'
 import {
     getCart,
     addToCart,
@@ -18,10 +18,39 @@ import {
 } from '../../../api/cart'
 import { getReservationDetail } from '../../../api/reservation'
 import { getMerchantDishes } from '../../../api/merchant'
-import type { DishResponse } from '../../../api/dish'
+import type { DishResponse, CustomizationGroup, CustomizationOption } from '../../../api/dish'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getStableBarHeights } from '../../../utils/responsive'
+
+type MenuDish = DishResponse & {
+    image_url: string
+    priceDisplay: string
+    memberPriceDisplay: string | null
+    hasCustomizations: boolean
+    cartQty: number
+}
+
+type MenuCategory = {
+    id: number
+    name: string
+    sort_order?: number
+    dishes: MenuDish[]
+}
+
+type CartItemView = CartItemResponse & {
+    priceDisplay: string
+    subtotalDisplay: string
+}
+
+type CartView = CartResponse & {
+    total_quantity: number
+    subtotalDisplay: string
+    items: CartItemView[]
+}
+
+type MerchantInfoView = ScanTableMerchantInfo | { id: number; name: string }
+type TableInfoView = ScanTableTableInfo | { table_no: string }
 
 Page({
     data: {
@@ -35,15 +64,15 @@ Page({
         orderType: 'dine_in' as 'dine_in' | 'reservation',
 
         // 商户和桌台信息
-        merchantInfo: null as any,
-        tableInfo: null as any,
+        merchantInfo: null as MerchantInfoView | null,
+        tableInfo: null as TableInfoView | null,
 
         // 菜品数据
-        categories: [] as ScanTableCategoryInfo[],
-        combos: [] as any[],
-        promotions: [] as any[],
+        categories: [] as MenuCategory[],
+        combos: [] as ScanTableComboInfo[],
+        promotions: [] as ScanTablePromotionInfo[],
         currentCategoryId: 0,
-        currentDishes: [] as DishResponse[],
+        currentDishes: [] as MenuDish[],
 
         // 购物车数据
         cart: null as CartResponse | null,
@@ -57,7 +86,7 @@ Page({
 
         // 定制 Drawer 状态
         drawerVisible: false,
-        drawerDish: null as any,
+        drawerDish: null as MenuDish | null,
         drawerSpecs: {} as Record<string, string>,
         drawerQty: 1,
 
@@ -66,7 +95,7 @@ Page({
         errorMessage: ''
     },
 
-    onLoad(options: any) {
+    onLoad(options: { reservation_id?: string; merchant_id?: string; table_id?: string; scene?: string }) {
         // 设置导航栏高度
         const { navBarHeight } = getStableBarHeights()
         this.setData({ navBarHeight })
@@ -157,19 +186,14 @@ Page({
         this.setData({ loading: true })
 
         try {
-            // 先获取桌台信息
-            const { request } = require('../../../utils/request')
-            const tableDetail = await request({
-                url: `/v1/tables/${tableId}`,
-                method: 'GET'
-            })
+            const tableDetail = await getTableDetail(tableId)
 
             if (tableDetail && tableDetail.table_no) {
                 await this.initPageByTableNo(merchantId, tableDetail.table_no)
             } else {
                 throw new Error('无法获取桌台信息')
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error('初始化失败:', error)
             wx.showToast({ title: '加载失败', icon: 'error' })
             this.setData({ loading: false })
@@ -199,23 +223,23 @@ Page({
             }
 
             // 从响应中提取菜品列表，并预处理价格、图片和定制标志
-            const dishes = (dishesResponse.dishes || []).map((dish: any) => ({
+            const dishes: MenuDish[] = (dishesResponse.dishes || []).map((dish: DishResponse) => ({
                 ...dish,
                 image_url: getPublicImageUrl(dish.image_url || ''),
                 priceDisplay: formatPriceNoSymbol(dish.price || 0),
                 memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
-                hasCustomizations: (dish.customization_groups && dish.customization_groups.length > 0),
+                hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
                 cartQty: 0
             }))
 
             // 按分类整理菜品
-            const finalCategories: any[] = []
-            const categoryMap = new Map<number, { id: number; name: string; dishes: any[] }>()
+            const finalCategories: MenuCategory[] = []
+            const categoryMap = new Map<number, MenuCategory>()
 
             // 添加"全部"分类
             finalCategories.push({ id: 0, name: '全部', sort_order: -1, dishes: [...dishes] })
 
-            dishes.forEach((dish: any) => {
+            dishes.forEach((dish) => {
                 const catId = dish.category_id || 0
                 const catName = dish.category_name || '其他'
                 if (!categoryMap.has(catId)) {
@@ -258,11 +282,11 @@ Page({
             await this.loadCart()
 
             wx.hideLoading()
-        } catch (error: any) {
+        } catch (error) {
             wx.hideLoading()
             console.error('预订初始化失败:', error)
             wx.showToast({
-                title: error.userMessage || '加载失败',
+                title: error instanceof Error ? error.message : '加载失败',
                 icon: 'error'
             })
         } finally {
@@ -282,25 +306,25 @@ Page({
             const scanResult = await scanTable(merchantId, tableNo)
 
             // 预处理菜品价格、图片和定制标志
-            const allDishes: any[] = []
-            const processedCategories = (scanResult.categories || []).map((cat: any) => {
-                const dishes = (cat.dishes || []).map((dish: any) => {
-                    const processedDish = {
+            const allDishes: MenuDish[] = []
+            const processedCategories: MenuCategory[] = (scanResult.categories || []).map((cat: ScanTableCategoryInfo) => {
+                const dishes = (cat.dishes || []).map((dish: DishResponse) => {
+                    const processedDish: MenuDish = {
                         ...dish,
                         image_url: getPublicImageUrl(dish.image_url || ''),
                         priceDisplay: formatPriceNoSymbol(dish.price || 0),
                         memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
-                        hasCustomizations: (dish.customization_groups && dish.customization_groups.length > 0),
+                        hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
                         cartQty: 0
                     }
                     allDishes.push(processedDish)
                     return processedDish
                 })
-                return { ...cat, dishes }
+                return { id: cat.id, name: cat.name, sort_order: cat.sort_order, dishes }
             })
 
             // 添加"全部"分类
-            const finalCategories = [
+            const finalCategories: MenuCategory[] = [
                 { id: 0, name: '全部', sort_order: -1, dishes: allDishes },
                 ...processedCategories
             ]
@@ -326,11 +350,11 @@ Page({
             await this.loadCart()
 
             wx.hideLoading()
-        } catch (error: any) {
+        } catch (error) {
             wx.hideLoading()
             console.error('扫码初始化失败:', error)
             wx.showToast({
-                title: error.userMessage || '加载失败',
+                title: error instanceof Error ? error.message : '加载失败',
                 icon: 'error'
             })
         } finally {
@@ -346,18 +370,18 @@ Page({
             const cart = await getCart({
                 merchant_id: this.data.merchantId,
                 order_type: this.data.orderType,
-                table_id: this.data.tableId || 0,
-                reservation_id: this.data.reservationId || 0
-            } as any)
+                table_id: this.data.tableId || undefined,
+                reservation_id: this.data.reservationId || undefined
+            })
             // 预处理购物车价格，添加 total_quantity 别名
-            const processedCart = {
+            const processedCart: CartView = {
                 ...cart,
                 total_quantity: cart.total_count || 0, // WXML 使用 total_quantity
                 subtotalDisplay: formatPriceNoSymbol(cart.subtotal || 0),
-                items: (cart.items || []).map((item: any) => ({
+                items: (cart.items || []).map((item: CartItemResponse) => ({
                     ...item,
                     image_url: getPublicImageUrl(item.image_url),
-                    priceDisplay: formatPriceNoSymbol(item.price || item.unit_price || 0),
+                    priceDisplay: formatPriceNoSymbol(item.unit_price || 0),
                     subtotalDisplay: formatPriceNoSymbol(item.subtotal || (item.unit_price || 0) * (item.quantity || 1))
                 }))
             }
@@ -371,15 +395,15 @@ Page({
             }
 
             // 更新当前分类菜品的 cartQty
-            const updatedDishes = this.data.currentDishes.map((dish: any) => ({
+            const updatedDishes = this.data.currentDishes.map((dish) => ({
                 ...dish,
                 cartQty: cartQtyMap.get(dish.id) || 0
             }))
 
             // 同时更新 categories 中的 cartQty
-            const updatedCategories = this.data.categories.map((cat: any) => ({
+            const updatedCategories = this.data.categories.map((cat) => ({
                 ...cat,
-                dishes: (cat.dishes || []).map((dish: any) => ({
+                dishes: (cat.dishes || []).map((dish) => ({
                     ...dish,
                     cartQty: cartQtyMap.get(dish.id) || 0
                 }))
@@ -407,7 +431,7 @@ Page({
     /**
      * 切换分类
      */
-    switchCategory(e: any) {
+    switchCategory(e: WechatMiniprogram.CustomEvent) {
         const categoryId = e.currentTarget.dataset.id
         const category = this.data.categories.find(c => c.id === categoryId)
 
@@ -420,7 +444,7 @@ Page({
     /**
      * 查看菜品详情
      */
-    viewDishDetail(e: any) {
+    viewDishDetail(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
         const dish = this.data.currentDishes.find(d => d.id === dishId)
 
@@ -439,25 +463,18 @@ Page({
     /**
      * 更新购物车数量（WXML 事件绑定）
      */
-    async updateItemQuantity(e: any) {
+    async updateItemQuantity(e: WechatMiniprogram.CustomEvent) {
         const { itemId, quantity } = e.currentTarget.dataset
         try {
-            const params = {
-                order_type: this.data.orderType,
-                table_id: this.data.tableId || 0,
-                reservation_id: this.data.reservationId || 0
-            } as any;
-
             if (quantity <= 0) {
                 await removeFromCart(itemId)
             } else {
                 await updateCartItem(itemId, {
-                    quantity,
-                    ...params
+                    quantity
                 })
             }
             await this.loadCart()
-        } catch (error: any) {
+        } catch (error) {
             wx.showToast({ title: '操作失败', icon: 'none' })
         }
     },
@@ -499,9 +516,9 @@ Page({
             await calculateCart({
                 merchant_id: merchantId,
                 order_type: orderType,
-                table_id: this.data.tableId || 0,
-                reservation_id: this.data.reservationId || 0
-            } as any)
+                table_id: this.data.tableId || undefined,
+                reservation_id: this.data.reservationId || undefined
+            })
 
             // 根据订单类型拼接参数
             let url = `/pages/dine-in/checkout/checkout?merchant_id=${merchantId}&order_type=${orderType}`
@@ -513,9 +530,9 @@ Page({
 
             // 跳转到结算页面
             wx.navigateTo({ url })
-        } catch (error: any) {
+        } catch (error) {
             console.error('结算失败:', error)
-            wx.showToast({ title: error.userMessage || '结算失败', icon: 'none' })
+            wx.showToast({ title: error instanceof Error ? error.message : '结算失败', icon: 'none' })
         }
     },
 
@@ -574,7 +591,7 @@ Page({
     /**
      * 增加菜品数量（无定制）
      */
-    async onIncrease(e: any) {
+    async onIncrease(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
         try {
             await addToCart({
@@ -584,19 +601,19 @@ Page({
                 order_type: this.data.orderType,
                 table_id: this.data.tableId || 0,
                 reservation_id: this.data.reservationId || 0
-            } as any)
+            })
             await this.loadCart()
-        } catch (error: any) {
-            wx.showToast({ title: error.userMessage || '添加失败', icon: 'none' })
+        } catch (error) {
+            wx.showToast({ title: error instanceof Error ? error.message : '添加失败', icon: 'none' })
         }
     },
 
     /**
      * 减少菜品数量（无定制）
      */
-    async onDecrease(e: any) {
+    async onDecrease(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
-        const cartItem = this.data.cart?.items.find((i: any) => i.dish_id === dishId)
+        const cartItem = this.data.cart?.items.find((i) => i.dish_id === dishId)
         if (!cartItem) return
 
         try {
@@ -606,7 +623,7 @@ Page({
                 await updateCartItem(cartItem.id, { quantity: cartItem.quantity - 1 })
             }
             await this.loadCart()
-        } catch (error: any) {
+        } catch (error) {
             wx.showToast({ title: '操作失败', icon: 'none' })
         }
     },
@@ -616,17 +633,17 @@ Page({
     /**
      * 打开定制 Drawer
      */
-    openCustomDrawer(e: any) {
+    openCustomDrawer(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
-        const dish = this.data.currentDishes.find((d: any) => d.id === dishId)
+        const dish = this.data.currentDishes.find((d) => d.id === dishId)
         if (!dish) return
 
         // 将 customization_groups 转换为 spec_groups 格式
-        const specGroups = (dish.customization_groups || []).map((group: any) => ({
+        const specGroups = (dish.customization_groups || []).map((group: CustomizationGroup) => ({
             id: String(group.id),
             name: group.name,
             is_required: group.is_required,
-            specs: (group.options || []).map((opt: any) => ({
+            specs: (group.options || []).map((opt: CustomizationOption) => ({
                 id: String(opt.id),
                 name: opt.tag_name || opt.name,
                 price_diff: opt.extra_price || 0,
@@ -636,7 +653,7 @@ Page({
 
         // 初始化规格选择（每组选第一个）
         const defaultSpecs: Record<string, string> = {}
-        specGroups.forEach((group: any) => {
+        specGroups.forEach((group) => {
             if (group.specs && group.specs.length > 0) {
                 defaultSpecs[group.id] = group.specs[0].id
             }
@@ -660,7 +677,7 @@ Page({
     /**
      * 选择规格
      */
-    onDrawerSpecTap(e: any) {
+    onDrawerSpecTap(e: WechatMiniprogram.CustomEvent) {
         const { groupId, specId } = e.currentTarget.dataset
         this.setData({ [`drawerSpecs.${groupId}`]: specId })
     },
@@ -690,7 +707,7 @@ Page({
 
         try {
             // 构建定制信息
-            const customizations: Record<string, unknown> = {}
+            const customizations: Record<string, number | string> = {}
             for (const groupId in drawerSpecs) {
                 if (Object.prototype.hasOwnProperty.call(drawerSpecs, groupId)) {
                     customizations[groupId] = drawerSpecs[groupId]
@@ -705,13 +722,13 @@ Page({
                 order_type: this.data.orderType,
                 table_id: this.data.tableId || 0,
                 reservation_id: this.data.reservationId || 0
-            } as any)
+            })
 
             this.setData({ drawerVisible: false, drawerDish: null })
             await this.loadCart()
             wx.showToast({ title: '已添加', icon: 'success' })
-        } catch (error: any) {
-            wx.showToast({ title: error.userMessage || '添加失败', icon: 'none' })
+        } catch (error) {
+            wx.showToast({ title: error instanceof Error ? error.message : '添加失败', icon: 'none' })
         }
     }
 })

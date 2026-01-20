@@ -35,7 +35,7 @@
             <text class="item-desc">{{item.desc}}</text>
             <view class="item-bottom">
               <text wx:if="{{item.type === 'DISH'}}" class="price">¥{{item.priceDisplay}}</text>
-              <text wx:else class="rating">⭐ {{item.rating}}</text>
+              <text wx:else class="rating">{{item.status}}</text>
             </view>
           </view>
         </view>

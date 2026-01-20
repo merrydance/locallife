@@ -21,7 +21,6 @@
     "pages/user_center/credit/index",
     "pages/user_center/favorites/index",
     "pages/user_center/membership/index",
-    "pages/user_center/points/index",
     "pages/user_center/reviews/index",
     "pages/user_center/wallet/index",
     "pages/user_center/payment-detail/index",
@@ -36,8 +35,7 @@
     "pages/support/index",
     "pages/message/center/index",
     "pages/credit/index",
-    "pages/user/bind-merchant/index",
-    "pages/user/claim-boss/index"
+    "pages/user/bind-merchant/index"
   ],
   "subPackages": [
     {

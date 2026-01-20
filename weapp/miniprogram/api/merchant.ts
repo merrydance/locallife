@@ -110,17 +110,40 @@ export interface UploadImageResponse {
 export interface MerchantSummary {
   id: number                                   // 商户ID
   name: string                                 // 商户名称
-  address: string                              // 商户地址
-  description: string                          // 商户描述
-  logo_url: string                             // Logo URL
-  latitude: number                             // 纬度
-  longitude: number                            // 经度
-  distance: number                             // 距离（米）
-  estimated_delivery_fee: number              // 预估配送费（分）
-  monthly_sales: number                       // 近30天订单量
-  region_id: number                            // 区域ID
-  is_open: boolean                             // 是否营业
-  tags: string[]                               // 商户标签
+  address?: string                             // 商户地址
+  description?: string                         // 商户描述
+  logo_url?: string                            // Logo URL
+  distance?: number                            // 距离（米）
+  estimated_delivery_fee?: number              // 预估配送费（分）
+  total_orders?: number                        // 总销量（搜索返回）
+  monthly_sales?: number                       // 近30天订单量（旧字段）
+  region_id?: number                           // 区域ID
+  status?: string                              // 商户状态
+  is_open?: boolean                            // 是否营业（仅部分接口）
+  tags?: string[]                              // 商户标签（仅部分接口）
+}
+
+/** 搜索商户返回项 - 对齐后端 searchMerchantResponse */
+export interface SearchMerchantItem {
+  id: number
+  name: string
+  description?: string
+  address?: string
+  phone?: string
+  logo_url: string
+  status: string
+  region_id: number
+  total_orders?: number
+  distance?: number
+  estimated_delivery_fee?: number
+}
+
+export interface SearchMerchantsResponse {
+  merchants: SearchMerchantItem[]
+  total?: number
+  total_count?: number
+  page_id?: number
+  page_size?: number
 }
 
 
@@ -395,6 +418,7 @@ export class MerchantManagementService {
  */
 export async function searchMerchants(params: {
   keyword?: string
+  region_id?: number
   page_id?: number
   page_size?: number
   user_latitude?: number
@@ -415,7 +439,11 @@ export async function searchMerchants(params: {
     requestParams.user_longitude = params.user_longitude
   }
 
-  const response = await request<{ merchants: MerchantSummary[], total?: number }>({
+  if (params.region_id !== undefined && params.region_id !== null) {
+    requestParams.region_id = params.region_id
+  }
+
+  const response = await request<SearchMerchantsResponse>({
     url: '/v1/search/merchants',
     method: 'GET',
     data: requestParams,
@@ -423,8 +451,19 @@ export async function searchMerchants(params: {
     cacheTTL: 2 * 60 * 1000 // 2分钟缓存
   })
 
-  // 后端返回 { merchants: [...], total, page_id, page_size }，解包返回数组
-  return response.merchants || []
+  // 后端返回 { merchants: [...], total, page_id, page_size }，转换到 MerchantSummary
+  return (response.merchants || []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    address: item.address || '',
+    description: item.description || '',
+    logo_url: item.logo_url || '',
+    distance: item.distance,
+    estimated_delivery_fee: item.estimated_delivery_fee,
+    total_orders: item.total_orders,
+    region_id: item.region_id,
+    status: item.status,
+  }))
 }
 
 /**
@@ -525,7 +564,6 @@ export interface PublicMerchantDetail {
   is_open: boolean                             // 是否营业
   tags: string[]                               // 商户标签（如：快餐、川菜）
   monthly_sales: number                        // 近30天订单量
-  trust_score: number                          // 信誉分
   avg_prep_minutes: number                     // 平均出餐时间（分钟）
   business_license_image_url?: string          // 营业执照图片
   food_permit_url?: string                     // 食品经营许可证

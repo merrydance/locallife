@@ -1000,19 +1000,19 @@ export interface SearchDishItem {
     name: string
     description: string
     image_url: string
-    price: number      // 后端已转换为元
+    price: number      // 分
     member_price?: number
     is_available: boolean
     is_online: boolean
     sort_order: number
-    monthly_sales?: number
-    repurchase_rate?: number
+    monthly_sales: number
+    repurchase_rate: number
     merchant_name?: string
     merchant_logo?: string
     merchant_is_open?: boolean
-    distance?: number
-    estimated_delivery_fee?: number // Added field
-    estimated_delivery_time?: number // Added field (seconds)
+    distance: number
+    estimated_delivery_fee: number // 分
+    estimated_delivery_time: number // 秒
 }
 
 /**
@@ -1021,6 +1021,7 @@ export interface SearchDishItem {
 export interface SearchDishesResponse {
     dishes: SearchDishItem[]
     total?: number
+    total_count?: number
     page_id?: number
     page_size?: number
     has_more?: boolean
@@ -1211,8 +1212,8 @@ export interface SearchComboItem {
     name: string
     description: string
     image_url: string
-    original_price: number      // 元
-    combo_price: number         // 元
+    original_price: number      // 分
+    combo_price: number         // 分
     savings_percent: number     // %
     monthly_sales: number
     merchant_name: string
@@ -1220,11 +1221,12 @@ export interface SearchComboItem {
     merchant_is_open: boolean
     distance: number            // 米
     estimated_delivery_fee?: number // 分
-    estimated_delivery_time?: number // 秒
+    estimated_delivery_time: number // 秒
 }
 
 export interface ComboSearchParams {
     keyword?: string
+    region_id?: number
     page_id?: number
     page_size?: number
     user_latitude?: number
@@ -1249,6 +1251,7 @@ export async function searchCombos(params: ComboSearchParams): Promise<ComboSear
     }
 
     if (params.keyword) searchParams.keyword = params.keyword
+    if (params.region_id !== undefined) searchParams.region_id = params.region_id
     if (params.user_latitude !== undefined) searchParams.user_latitude = params.user_latitude
     if (params.user_longitude !== undefined) searchParams.user_longitude = params.user_longitude
 

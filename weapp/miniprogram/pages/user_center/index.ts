@@ -45,7 +45,15 @@ Page({
     this.refreshUserInfo()
   },
 
-  updateUser(info: any, roles: string[] | string) {
+  updateUser(
+    info: Partial<WechatMiniprogram.UserInfo> & {
+      full_name?: string
+      nickname?: string
+      avatar_url?: string
+      avatar?: string
+    },
+    roles: string[] | string
+  ) {
     const role = (Array.isArray(roles) ? roles[0] : roles) as 'guest' | 'merchant' | 'rider' | 'operator' // Primary role for display
     this.setData({
       userInfo: {
@@ -113,10 +121,6 @@ Page({
 
   onAddresses() {
     Navigation.toAddressList()
-  },
-
-  onPoints() {
-    Navigation.toPoints()
   },
 
   onCoupons() {
@@ -215,12 +219,7 @@ Page({
     wx.navigateTo({ url: '/pages/user/bind-merchant/index' })
   },
 
-  // 扫码认领 - 跳转到 Boss 认领页面
-  onScanToClaim() {
-    wx.navigateTo({ url: '/pages/user/claim-boss/index' })
-  },
-
-  async onChooseAvatar(e: any) {
+  async onChooseAvatar(e: WechatMiniprogram.CustomEvent) {
     const { avatarUrl } = e.detail
 
     // Optimistic Update
@@ -259,7 +258,7 @@ Page({
     }
   },
 
-  async onNicknameChange(e: any) {
+  async onNicknameChange(e: WechatMiniprogram.CustomEvent) {
     const nickName = e.detail.value
     if (!nickName) return
 

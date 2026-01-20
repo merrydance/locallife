@@ -9,18 +9,18 @@ export interface DeliveryResponse {
     rider_id?: number
     status: string
     pickup_address: string
-    pickup_contact: string
-    pickup_phone: string
+    pickup_contact?: string
+    pickup_phone?: string
     pickup_latitude: number
     pickup_longitude: number
     delivery_address: string
-    delivery_contact: string
-    delivery_phone: string
+    delivery_contact?: string
+    delivery_phone?: string
     delivery_latitude: number
     delivery_longitude: number
     distance: number
     delivery_fee: number
-    rider_earnings?: number
+    rider_earnings: number
     estimated_pickup_at?: string
     estimated_delivery_at?: string
     assigned_at?: string
@@ -36,9 +36,9 @@ export interface DeliveryResponse {
 export interface LocationResponse {
     latitude: number
     longitude: number
-    accuracy: number
-    speed: number
-    heading: number
+    accuracy?: number
+    speed?: number
+    heading?: number
     recorded_at: string
 }
 

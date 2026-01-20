@@ -1,4 +1,4 @@
-import { getMyVouchers, getMyAvailableVouchers, claimVoucher, UserVoucherResponse } from '../../../api/personal'
+import { getMyVouchers, getMyAvailableVouchers, claimVoucher, UserVoucherResponse, VoucherResponse } from '../../../api/personal'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
 interface CouponDisplay {
@@ -12,6 +12,13 @@ interface CouponDisplay {
   end_date: string
   can_claim?: boolean
   status?: string
+}
+
+const getDatasetId = (event: WechatMiniprogram.CustomEvent): number | null => {
+  const dataset = event.currentTarget.dataset as { id?: string | number }
+  const id = dataset.id
+  const numericId = typeof id === 'number' ? id : Number(id)
+  return Number.isFinite(numericId) ? numericId : null
 }
 
 Page({
@@ -40,15 +47,15 @@ Page({
       if (activeTab === 'AVAILABLE') {
         // 获取可领取的优惠券
         const response = await getMyAvailableVouchers()
-        coupons = response.vouchers.map(v => ({
+        coupons = response.vouchers.map((v: VoucherResponse) => ({
           id: v.id,
-          merchant_name: v.merchant_name || '平台通用',
+          merchant_name: v.merchant_name || (v.merchant_id === 0 ? '平台通用' : `商户${v.merchant_id}`),
           name: v.name,
           threshold: v.min_order_amount,
           thresholdDisplay: formatPriceNoSymbol(v.min_order_amount || 0),
-          discount: v.discount_amount,
-          discountDisplay: formatPriceNoSymbol(v.discount_amount || 0),
-          end_date: v.end_time?.split('T')[0] || '',
+          discount: v.amount,
+          discountDisplay: formatPriceNoSymbol(v.amount || 0),
+          end_date: v.valid_until?.split('T')[0] || '',
           can_claim: true
         }))
       } else {
@@ -57,12 +64,12 @@ Page({
         coupons = response.vouchers.map((v: UserVoucherResponse) => ({
           id: v.id,
           merchant_name: v.merchant_name || '平台通用',
-          name: v.voucher_name,
+          name: v.name,
           threshold: v.min_order_amount,
           thresholdDisplay: formatPriceNoSymbol(v.min_order_amount || 0),
-          discount: v.discount_amount,
-          discountDisplay: formatPriceNoSymbol(v.discount_amount || 0),
-          end_date: v.end_time?.split('T')[0] || '',
+          discount: v.amount,
+          discountDisplay: formatPriceNoSymbol(v.amount || 0),
+          end_date: v.expires_at?.split('T')[0] || '',
           status: v.status
         }))
       }
@@ -78,13 +85,13 @@ Page({
     }
   },
 
-  onTabChange(e: WechatMiniprogram.CustomEvent) {
+  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: 'AVAILABLE' | 'MY' }>) {
     this.setData({ activeTab: e.detail.value })
     this.loadCoupons()
   },
 
   async onClaimCoupon(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.currentTarget.dataset
+    const id = getDatasetId(e)
     if (!id) return
 
     try {

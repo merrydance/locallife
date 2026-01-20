@@ -1,5 +1,5 @@
 import { logger } from '../../utils/logger'
-import { searchRooms, getRecommendedMerchants, RoomSearchResult } from '../../api/search'
+import { searchRooms, getRecommendedMerchants, searchMerchants, RoomSearchResult } from '../../api/search'
 import { MerchantSummary } from '../../api/merchant'
 import { globalStore } from '../../utils/global-store'
 import { getPublicImageUrl } from '../../utils/image'
@@ -7,10 +7,29 @@ import { DishAdapter } from '../../adapters/dish'
 
 const app = getApp<IAppOption>()
 
+type RoomItemView = RoomSearchResult & {
+  type: 'room'
+  primary_image: string
+  distance_display: string
+}
+
+type RestaurantItemView = {
+  type: 'restaurant'
+  id: number
+  name: string
+  imageUrl: string
+  cuisineType: string[]
+  distance: string
+  address: string
+  tags: string[]
+}
+
+type ReservationListItem = RoomItemView | RestaurantItemView
+
 Page({
   data: {
     keyword: '',
-    itemList: [] as (RoomSearchResult | MerchantSummary)[],
+    itemList: [] as ReservationListItem[],
     activeTab: 'room' as 'room' | 'restaurant',
 
     // UI State
@@ -109,7 +128,7 @@ Page({
       const latitude = app.globalData.latitude || undefined
       const longitude = app.globalData.longitude || undefined
 
-      let newList: any[] = []
+      let newList: ReservationListItem[] = []
 
       if (activeTab === 'room') {
         // 统一走 search 路由；缺省日期/时段使用默认值
@@ -140,7 +159,6 @@ Page({
         let merchantResults: MerchantSummary[] = []
 
         if (keyword) {
-          const { searchMerchants } = require('../../api/search')
           merchantResults = await searchMerchants({
             keyword,
             page_id: page,
@@ -154,8 +172,7 @@ Page({
             user_longitude: longitude,
             limit: pageSize
           })
-          // API 返回 { merchants: [...] } 或直接返回数组
-          merchantResults = (result as any).merchants || result as MerchantSummary[]
+          merchantResults = result
         }
 
         // 转换为与外卖页一致的 ViewModel 格式

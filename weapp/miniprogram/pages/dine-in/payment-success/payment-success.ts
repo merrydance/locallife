@@ -7,19 +7,19 @@ Page({
     data: {
         orderId: 0,
         paymentAmount: 0,
-        merchantInfo: null as any,
-        tableInfo: null as any,
+        merchantInfo: null as { name: string } | null,
+        tableInfo: null as { table_number: string } | null,
         countdown: 5
     },
 
-    onLoad(options: any) {
+    onLoad(options: { order_id?: string; amount?: string; merchant_name?: string; table_number?: string }) {
         const { order_id, amount, merchant_name, table_number } = options;
 
         this.setData({
             orderId: parseInt(order_id) || 0,
             paymentAmount: parseFloat(amount) || 0,
-            merchantInfo: { name: merchant_name },
-            tableInfo: { table_number }
+            merchantInfo: { name: merchant_name || '' },
+            tableInfo: { table_number: table_number || '' }
         });
 
         // 开始倒计时
@@ -48,7 +48,7 @@ Page({
      */
     goToOrderDetail() {
         wx.redirectTo({
-            url: `/pages/order/detail/detail?id=${this.data.orderId}&type=dine_in`
+            url: `/pages/orders/detail/index?id=${this.data.orderId}&type=dine_in`
         });
     },
 

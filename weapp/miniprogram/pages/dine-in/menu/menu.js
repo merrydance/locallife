@@ -143,11 +143,7 @@ Page({
             this.setData({ loading: true });
             try {
                 // 先获取桌台信息
-                const { request } = require('../../../utils/request');
-                const tableDetail = yield request({
-                    url: `/v1/tables/${tableId}`,
-                    method: 'GET'
-                });
+                const tableDetail = yield (0, table_1.getTableDetail)(tableId);
                 if (tableDetail && tableDetail.table_no) {
                     yield this.initPageByTableNo(merchantId, tableDetail.table_no);
                 }

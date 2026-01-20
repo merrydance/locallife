@@ -14,9 +14,34 @@ import {
 import { logger } from '../../../utils/logger'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
+type FavoriteDishView = {
+  id: number
+  type: 'DISH'
+  name: string
+  image: string
+  price: number
+  priceDisplay: string
+  merchantId: number
+  merchantName: string
+  desc: string
+  isAvailable: boolean
+}
+
+type FavoriteMerchantView = {
+  id: number
+  type: 'MERCHANT'
+  name: string
+  image: string
+  address: string
+  status: string
+  desc: string
+}
+
+type FavoriteView = FavoriteDishView | FavoriteMerchantView
+
 Page({
   data: {
-    favorites: [] as any[],
+    favorites: [] as FavoriteView[],
     activeTab: 'dishes' as 'dishes' | 'merchants',
     loading: false,
     navBarHeight: 88
@@ -62,42 +87,42 @@ Page({
   },
 
   async loadFavoriteDishes() {
-    const result = await getFavoriteDishes({ page_id: 1, page_size: 50 })
+    const result = await getFavoriteDishes({ page: 1, page_size: 50 })
 
-    const favorites = (result.dishes || []).map((item: FavoriteDishResponse) => ({
+    const favorites: FavoriteDishView[] = (result.dishes || []).map((item: FavoriteDishResponse) => ({
       id: item.dish_id,
       type: 'DISH',
       name: item.dish_name,
-      image: item.dish_image_url || '/assets/default-dish.png',
+      image: item.image_url || '/assets/default-dish.png',
       price: item.price,
       priceDisplay: formatPriceNoSymbol(item.price || 0),
       merchantId: item.merchant_id,
       merchantName: item.merchant_name,
-      desc: item.merchant_name
+      desc: item.description || item.merchant_name,
+      isAvailable: item.is_available
     }))
 
     this.setData({ favorites })
   },
 
   async loadFavoriteMerchants() {
-    const result = await getFavoriteMerchants({ page_id: 1, page_size: 50 })
+    const result = await getFavoriteMerchants({ page: 1, page_size: 50 })
 
-    const favorites = (result.merchants || []).map((item: FavoriteMerchantResponse) => ({
+    const favorites: FavoriteMerchantView[] = (result.merchants || []).map((item: FavoriteMerchantResponse) => ({
       id: item.merchant_id,
       type: 'MERCHANT',
       name: item.merchant_name,
-      image: item.merchant_logo_url || '/assets/default-merchant.png',
-      monthlySales: item.monthly_sales,
-      deliveryFee: item.estimated_delivery_fee,
-      tags: item.tags || [],
-      desc: item.tags?.slice(0, 2).join(' · ') || ''
+      image: item.merchant_logo || '/assets/default-merchant.png',
+      address: item.address,
+      status: item.status,
+      desc: item.address
     }))
 
     this.setData({ favorites })
   },
 
   onItemClick(e: WechatMiniprogram.CustomEvent) {
-    const { id, type } = e.currentTarget.dataset
+    const { id, type } = e.currentTarget.dataset as { id?: number; type?: 'DISH' | 'MERCHANT' }
     if (type === 'DISH') {
       const item = this.data.favorites.find(f => f.id === id)
       wx.navigateTo({
@@ -109,7 +134,8 @@ Page({
   },
 
   onRemoveFavorite(e: WechatMiniprogram.CustomEvent) {
-    const { id, type } = e.currentTarget.dataset
+    const { id, type } = e.currentTarget.dataset as { id?: number; type?: 'DISH' | 'MERCHANT' }
+    if (!id || !type) return
 
     wx.showModal({
       title: '取消收藏',

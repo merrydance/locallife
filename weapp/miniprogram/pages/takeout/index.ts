@@ -1,16 +1,17 @@
 import { DishAdapter } from '../../adapters/dish'
 import { Dish } from '../../models/dish'
 import { Category } from '../../models/category'
-import { searchDishes, DishSummary, getTags } from '../../api/dish'
+import { searchDishes, DishSummary, getTags, DishSearchParams, ComboSummary, getRecommendedCombos } from '../../api/dish'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
+import { searchMerchants, MerchantSummary } from '../../api/merchant'
+import { searchCombos, SearchComboItem } from '../../api/combo'
 import { enrichMerchantsWithDistance } from '../../utils/geo'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
 import { ErrorHandler } from '../../utils/error-handler'
 import { globalStore } from '../../utils/global-store'
 import { requestManager } from '../../utils/request-manager'
-import { ComboSummary } from '../../api/dish'
 import { getStableBarHeights } from '../../utils/responsive'
 import { getPublicImageUrl } from '../../utils/image'
 import { formatPrice } from '../../utils/util'
@@ -18,12 +19,52 @@ import { formatPrice } from '../../utils/util'
 const PAGE_CONTEXT = 'takeout_index'
 const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
 
+interface RestaurantViewModel {
+  id: number
+  name: string
+  imageUrl?: string
+  cuisineType: string[]
+  avgPrice: number
+  avgPriceDisplay: string
+  distance: string
+  address: string
+  businessHoursDisplay: string
+  isOpen: boolean
+  availableRooms: number
+  availableRoomsBadge: string
+  tags: string[]
+  monthlySales: number
+  deliveryFee?: number
+  deliveryFeeDisplay: string
+}
+
+interface PackageViewModel {
+  id: number
+  name: string
+  merchantId: number
+  merchantName: string
+  imageUrl: string
+  price: number
+  priceDisplay: string
+  originalPrice: number
+  originalPriceDisplay: string
+  savingsPercent: number
+  monthlySales: number
+  salesBadge: string
+  distance: string
+  deliveryFee?: number
+  deliveryFeeDisplay: string
+  tags: string[]
+  merchantIsOpen: boolean
+  estimatedDeliveryTime?: number
+}
+
 Page({
   data: {
     activeTab: 'dishes' as 'dishes' | 'restaurants' | 'packages',
     dishes: [] as Dish[],
-    restaurants: [] as any[],
-    packages: [] as any[],
+    restaurants: [] as RestaurantViewModel[],
+    packages: [] as PackageViewModel[],
     categories: [] as Category[],
     activeCategoryId: '1',
     cartTotalCount: 0,
@@ -44,10 +85,11 @@ Page({
   },
 
   // 预加载缓存 (不放在 data 中以免触发渲染)
-  _prefetchedDishes: [] as any[],
-  _prefetchedRestaurants: [] as any[],
-  _prefetchedPackages: [] as any[],
+  _prefetchedDishes: [] as Dish[],
+  _prefetchedRestaurants: [] as RestaurantViewModel[],
+  _prefetchedPackages: [] as PackageViewModel[],
   _prefetchHasMore: true,
+  _unsubscribeLocation: undefined as undefined | (() => void),
 
   onLoad() {
     // 设置导航栏高度和滚动区域高度
@@ -77,7 +119,7 @@ Page({
     }
 
     // 订阅位置变化
-    (this as any)._unsubscribeLocation = globalStore.subscribe('location', (newLocation) => {
+    this._unsubscribeLocation = globalStore.subscribe('location', (newLocation) => {
       logger.info('[Takeout] 收到位置更新', newLocation, 'Takeout.onLoad')
       if (newLocation.name) {
         // 隐藏位置引导提示，更新地址显示
@@ -306,8 +348,8 @@ Page({
     requestManager.cancelByContext(PAGE_CONTEXT)
 
     // 取消位置订阅
-    if ((this as any)._unsubscribeLocation) {
-      (this as any)._unsubscribeLocation()
+    if (this._unsubscribeLocation) {
+      this._unsubscribeLocation()
     }
   },
 
@@ -412,7 +454,7 @@ Page({
         // 2. 没有缓存则请求当前页
         // 获取选中的标签ID用于过滤（空字符串表示"全部"，不传 tag_id）
         const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null
-        const params: any = {
+        const params: DishSearchParams = {
           user_latitude: app.globalData.latitude || undefined,
           user_longitude: app.globalData.longitude || undefined,
           limit: PAGE_SIZE,
@@ -430,7 +472,7 @@ Page({
       // 更新视图
       if (reset) {
         this.setData({
-          dishes: newDishes as any[],
+          dishes: newDishes,
           hasMore
         })
       } else {
@@ -490,8 +532,6 @@ Page({
       // 使用搜索商户接口
       const app = getApp<IAppOption>()
       const currentPage = reset ? 1 : this.data.page
-      const { searchMerchants } = require('../../api/merchant')
-
       const merchants = await searchMerchants({
         keyword: this.data.searchKeyword, // 使用当前搜索词，如果是空字符串则返回默认列表
         page_id: currentPage,
@@ -508,22 +548,22 @@ Page({
       // Assuming hasMore = length === PAGE_SIZE for now or update wrapper later.
       const hasMore = merchants.length === PAGE_SIZE
 
-      const restaurantViewModels = merchants.map((m: any) => ({
+      const restaurantViewModels: RestaurantViewModel[] = merchants.map((m: MerchantSummary) => ({
         id: m.id,
         name: m.name,
         imageUrl: m.logo_url,
         cuisineType: m.tags ? m.tags.slice(0, 2) : [],
         avgPrice: 0,
         avgPriceDisplay: '人均未知',
-        distance: DishAdapter.formatDistance(m.distance),
-        address: m.address,
+        distance: DishAdapter.formatDistance(m.distance ?? 0),
+        address: m.address || '',
         businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
-        isOpen: m.is_open ?? true, // 商户营业状态
+        isOpen: m.is_open ?? true, // 商户营业状态（搜索接口未返回时默认营业）
         availableRooms: 0,
         availableRoomsBadge: '',
         tags: m.tags ? m.tags.slice(0, 3) : [],
         // New fields
-        monthlySales: m.monthly_sales || 0,
+        monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
         deliveryFee: m.estimated_delivery_fee,
         deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
           ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
@@ -545,7 +585,7 @@ Page({
 
       // 预加载图片
       const { preloadImages } = require('../../utils/image')
-      const imageUrls = restaurantViewModels.map((r: any) => r.imageUrl).filter(Boolean)
+      const imageUrls = restaurantViewModels.map((r) => r.imageUrl).filter(Boolean)
       setTimeout(() => {
         preloadImages(imageUrls, false)
       }, 100)
@@ -565,8 +605,6 @@ Page({
       // 使用搜索套餐接口
       const app = getApp<IAppOption>()
       const currentPage = reset ? 1 : this.data.page
-      const { searchCombos } = require('../../api/combo')
-
       // 构造搜索参数
       // 注意：getTags 返回的 id 是数字转字符串，searchCombos 可能需要数字？
       // 当前 backend searchCombos 只接受 keyword。Category 过滤暂不支持？
@@ -583,7 +621,7 @@ Page({
 
       const hasMore = result.combos.length === PAGE_SIZE // 简单分页逻辑，或使用 result.total
 
-      const packageViewModels = result.combos.map((combo: any) => ({
+      const packageViewModels: PackageViewModel[] = result.combos.map((combo: SearchComboItem) => ({
         id: combo.id,
         name: combo.name,
         merchantId: combo.merchant_id,
@@ -602,8 +640,7 @@ Page({
         deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
           ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
           : '',
-        tags: [], // search combos doesn't return tags yet? 
-        is_online: true,
+        tags: [], // search combos doesn't return tags yet
         merchantIsOpen: combo.merchant_is_open ?? true,
         estimatedDeliveryTime: combo.estimated_delivery_time
       }))
@@ -717,7 +754,7 @@ Page({
   onDishClick(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.detail
     // 查找对应菜品
-    const dish = this.data.dishes.find((d: any) => d.id == id) as any
+    const dish = this.data.dishes.find((d) => String(d.id) === String(id))
 
     if (dish) {
       Navigation.toDishDetail(id, {
@@ -808,7 +845,7 @@ Page({
       const adaptedDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
 
       this.setData({
-        dishes: adaptedDishes as any[],
+        dishes: adaptedDishes,
         hasMore: result.has_more,
         page: 1
       })
@@ -819,7 +856,6 @@ Page({
 
     } else if (activeTab === 'restaurants') {
       // 搜索餐厅 - 复用现有 searchMerchants API
-      const { searchMerchants } = require('../../api/merchant')
       const result = await searchMerchants({
         keyword,
         page_id: 1,
@@ -829,7 +865,7 @@ Page({
       })
 
       // 转换为与列表一致的展示格式（与 loadRestaurants 保持一致）
-      const restaurants = (result || []).map((m: any) => ({
+      const restaurants: RestaurantViewModel[] = (result || []).map((m: MerchantSummary) => ({
         id: m.id,
         name: m.name,
         imageUrl: m.logo_url,
@@ -838,10 +874,16 @@ Page({
         avgPriceDisplay: '人均未知',
         distance: DishAdapter.formatDistance(m.distance),
         address: m.address,
-        businessHoursDisplay: '营业中',
+        businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
+        isOpen: m.is_open ?? true,
         availableRooms: 0,
         availableRoomsBadge: '',
-        tags: m.tags ? m.tags.slice(0, 3) : []
+        tags: m.tags ? m.tags.slice(0, 3) : [],
+        monthlySales: m.monthly_sales || 0,
+        deliveryFee: m.estimated_delivery_fee,
+        deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
+          ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
+          : ''
       }))
 
       this.setData({
@@ -856,7 +898,6 @@ Page({
 
     } else if (activeTab === 'packages') {
       // 搜索套餐 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
-      const { getRecommendedCombos } = require('../../api/dish')
       const result = await getRecommendedCombos({
         keyword,
         page: 1,
@@ -865,20 +906,27 @@ Page({
 
       // 转换为与列表一致的展示格式（与 loadPackages 保持一致）
       const combos = result.combos || []
-      const packageViewModels = combos.map((combo: any) => ({
+      const packageViewModels: PackageViewModel[] = combos.map((combo: ComboSummary) => ({
         id: combo.id,
         name: combo.name,
-        description: combo.description || '',
+        merchantId: combo.merchant_id,
+        merchantName: combo.merchant_name || '',
         price: combo.combo_price,
-        priceDisplay: (combo.combo_price / 100).toFixed(2),
-        original_price: combo.original_price || combo.combo_price,
-        originalPriceDisplay: ((combo.original_price || combo.combo_price) / 100).toFixed(2),
-        image_url: combo.image_url || '',
-        is_online: combo.is_online,
-        // 新增的丰富字段
-        shopName: combo.merchant_name || '',
-        distance: combo.distance,
-        monthlySales: combo.monthly_sales || 0
+        priceDisplay: formatPrice(combo.combo_price),
+        originalPrice: combo.original_price || combo.combo_price,
+        originalPriceDisplay: formatPrice(combo.original_price || combo.combo_price),
+        imageUrl: getPublicImageUrl(combo.image_url) || '/assets/placeholder_food.png',
+        savingsPercent: combo.savings_percent || 0,
+        monthlySales: combo.monthly_sales || 0,
+        salesBadge: `月售${combo.monthly_sales || 0}`,
+        distance: DishAdapter.formatDistance(combo.distance),
+        deliveryFee: combo.estimated_delivery_fee,
+        deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
+          ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
+          : '',
+        tags: combo.tags || [],
+        merchantIsOpen: combo.merchant_is_open ?? true,
+        estimatedDeliveryTime: combo.estimated_delivery_time
       }))
 
       this.setData({

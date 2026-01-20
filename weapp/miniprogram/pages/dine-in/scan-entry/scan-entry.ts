@@ -3,15 +3,15 @@
  * 处理微信扫一扫跳转到小程序的场景
  */
 
-import { scanTable, getTableDetail } from '../../../api/table';
-import { transferDiningSessionTable } from '../../../api/dining-session';
+import { scanTable, getTableDetail, ScanTableMerchantInfo, TableStatus } from '../../../api/table';
+import { transferDiningSessionTable, DiningSessionDTO } from '../../../api/dining-session';
 
 interface TableInfo {
     id: number;
     table_no: string;
     merchant_id: number;
     capacity: number;
-    status: 'available' | 'occupied' | 'reserved';
+    status: TableStatus;
 }
 
 Page({
@@ -19,14 +19,14 @@ Page({
         loading: true,
         tableInfo: null as TableInfo | null,
         error: null as string | null,
-        merchantInfo: null as any,
+        merchantInfo: null as ScanTableMerchantInfo | null,
         showTransferDialog: false,
         transferCode: '',
         transferSubmitting: false,
-        activeSession: null as any
+        activeSession: null as DiningSessionDTO | null
     },
 
-    onLoad(options: any) {
+    onLoad(options: { scene?: string; q?: string; table_id?: string }) {
         console.log('扫码点餐页面加载，参数:', options);
 
         // 从扫码参数中获取桌台信息
@@ -141,11 +141,12 @@ Page({
             this.trackScanBehavior(tableId, detail.merchant_id);
             this.checkActiveSessionAndPrompt();
 
-        } catch (error: any) {
+        } catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error);
             console.error('加载桌台信息失败:', error);
             this.setData({
                 loading: false,
-                error: error.message || '获取桌台信息失败，请重试'
+                error: errMessage || '获取桌台信息失败，请重试'
             });
         }
     },
@@ -171,11 +172,12 @@ Page({
 
             this.trackScanBehavior(table.id, merchantId);
             this.checkActiveSessionAndPrompt();
-        } catch (error: any) {
+        } catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error);
             console.error('加载桌台信息失败:', error);
             this.setData({
                 loading: false,
-                error: error.message || '获取桌台信息失败，请重试'
+                error: errMessage || '获取桌台信息失败，请重试'
             });
         }
     },
@@ -184,9 +186,9 @@ Page({
         const { tableInfo } = this.data;
         if (!tableInfo) return;
 
-        let activeSession: any = null;
+        let activeSession: DiningSessionDTO | null = null;
         try {
-            activeSession = wx.getStorageSync('activeDiningSession');
+            activeSession = wx.getStorageSync('activeDiningSession') as DiningSessionDTO | null;
         } catch (error) {
             console.warn('读取用餐会话缓存失败:', error);
         }
@@ -236,9 +238,10 @@ Page({
             wx.showToast({ title: '换桌成功', icon: 'success' });
             this.setData({ showTransferDialog: false, transferSubmitting: false, transferCode: '' });
             this.startDining();
-        } catch (error: any) {
+        } catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error);
             console.error('转台失败:', error);
-            wx.showToast({ title: error.message || '换桌失败', icon: 'error' });
+            wx.showToast({ title: errMessage || '换桌失败', icon: 'error' });
             this.setData({ transferSubmitting: false });
         }
     },

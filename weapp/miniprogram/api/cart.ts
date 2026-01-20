@@ -25,7 +25,7 @@ export interface CartItemResponse {
     dish_id?: number
     combo_id?: number
     name: string              // 商品名称
-    image_url: string         // 商品图片
+    image_url?: string        // 商品图片
     quantity: number
     unit_price: number
     subtotal: number          // 小计金额
@@ -81,14 +81,14 @@ export interface ClearCartRequest extends Record<string, unknown> {
 
 /** 商户购物车响应 - 对齐 api.merchantCartResponse */
 export interface MerchantCartResponse {
-    all_available?: boolean   // 所有商品是否可购买
-    cart_id?: number          // 购物车ID
-    item_count?: number       // 商品数量
-    merchant_id?: number      // 商户ID
+    all_available: boolean    // 所有商品是否可购买
+    cart_id: number           // 购物车ID
+    item_count: number        // 商品数量
+    merchant_id: number       // 商户ID
     merchant_logo?: string    // 商户Logo URL
-    merchant_name?: string    // 商户名称
-    subtotal?: number         // 商品小计（分）
-    order_type?: string       // 订单类型
+    merchant_name: string     // 商户名称
+    subtotal: number          // 商品小计（分）
+    order_type: string        // 订单类型
     table_id?: number         // 桌台ID
     reservation_id?: number   // 预约ID
 }
@@ -142,13 +142,14 @@ export interface CalculateCartResponse {
     subtotal: number              // 商品小计（分）
     delivery_fee: number          // 配送费（分）
     delivery_fee_discount: number // 配送费满返减免（分）
+    delivery_distance?: number    // 配送距离（米）
     delivery_eta_minutes?: number // 预计送达总时长（分钟）
     prepare_minutes?: number      // 出餐时间（分钟）
     rider_to_store_minutes?: number // 骑手到店时间（分钟）
     store_to_user_minutes?: number // 店到用户时间（分钟）
     buffer_minutes?: number       // 缓冲时间（分钟）
     discount_amount: number       // 优惠券减免金额（分）
-    discount_info?: string        // 优惠说明
+    discount_info: string         // 优惠说明
     meets_min_order: boolean      // 是否满足起送金额
     min_order_amount: number      // 最小起送金额（分），0表示无限制
     total_amount: number          // 实付金额（分）
@@ -178,11 +179,12 @@ export async function getCart(params: {
  * @param orderType 订单类型过滤
  */
 export async function getCartSummary(orderType?: string): Promise<CartSummaryResponse> {
-    return request({
+    const response = await request<UserCartsResponse>({
         url: '/v1/cart/summary',
         method: 'GET',
         data: orderType ? { order_type: orderType } : undefined
     })
+    return response.summary
 }
 
 /**

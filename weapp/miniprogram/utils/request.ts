@@ -1,4 +1,4 @@
-import { getToken, clearToken, setToken, isTokenNearExpiry } from './auth'
+import { getToken, clearToken, setToken, isTokenNearExpiry, hasToken } from './auth'
 import { ApiResponse, ErrorCode } from '../api/types'
 import { logger } from './logger'
 import { ErrorHandler, ErrorType, AppError } from './error-handler'
@@ -542,6 +542,9 @@ async function performTokenRefresh(force: boolean = false): Promise<void> {
  * 确保Token有效性(请求前检查)
  */
 async function ensureValidToken(): Promise<void> {
+  if (!hasToken()) {
+    return performTokenRefresh(true)
+  }
   return performTokenRefresh(false)
 }
 

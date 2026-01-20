@@ -44,7 +44,7 @@ export const OrderCardAdapter = {
         return {
             id: order.id,
             orderNo: order.order_no,
-            merchantName: order.merchant_name,
+            merchantName: order.merchant_name || '未知商户',
             status,
             statusClass: status,
             statusLabel: getStatusLabel(order.status, order.status_hint),

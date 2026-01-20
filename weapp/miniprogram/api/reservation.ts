@@ -79,7 +79,6 @@ export interface ReservationItem {
   combo_id?: number
   quantity: number
   name?: string
-  price?: number
   unit_price?: number
   total_price?: number
   type?: 'dish' | 'combo'
@@ -158,9 +157,6 @@ export interface ReservationResponse {
   completed_at?: string
   cancelled_at?: string
   cancel_reason?: string
-  checked_in_at?: string
-  cooking_started_at?: string
-  source?: ReservationSource
   items?: ReservationItem[]
   created_at: string
   updated_at?: string
@@ -174,6 +170,14 @@ export interface ReservationListParams {
   page_size: number
   status?: ReservationStatus
   date?: string  // YYYY-MM-DD
+}
+
+export interface ReservationListResponse {
+  reservations: ReservationResponse[]
+  total: number
+  total_count: number
+  page_id: number
+  page_size: number
 }
 
 /**
@@ -212,7 +216,7 @@ export class ReservationService {
    * 获取用户预订列表
    * GET /v1/reservations/me
    */
-  static async getUserReservations(params: ReservationListParams): Promise<{ reservations: ReservationResponse[] }> {
+  static async getUserReservations(params: ReservationListParams): Promise<ReservationListResponse> {
     return await request({
       url: '/v1/reservations/me',
       method: 'GET',

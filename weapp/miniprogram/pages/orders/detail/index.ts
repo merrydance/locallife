@@ -198,31 +198,40 @@ Page({
     const { order } = this.data
     if (!order) return
 
-    CartService.clear()
-
-    // 使用更新后的字段名，转换ID为string（CartItem使用string类型）
-    const addPromises = order.items.map((item) =>
-      CartService.addItem({
-        merchantId: String(order.merchantId),
-        dishId: String(item.dishId || 0),
-        dishName: item.name,
-        shopName: order.merchantName,
-        imageUrl: item.imageUrl,
-        price: item.unitPrice,
-        priceDisplay: item.unitPriceDisplay,
-        quantity: item.quantity
+    wx.showLoading({ title: '再次购买中...' })
+    try {
+      await CartService.loadCart(order.merchantId, {
+        orderType: order.type,
+        tableId: order.tableId,
+        reservationId: order.reservationId
       })
-    )
 
-    const results = await Promise.all(addPromises)
-    if (results.some((success) => !success)) {
-      return
+      const addResults = await Promise.all(
+        order.items.map((item) =>
+          CartService.addItem({
+            merchantId: order.merchantId,
+            dishId: item.dishId,
+            comboId: item.comboId,
+            quantity: item.quantity
+          })
+        )
+      )
+
+      if (addResults.some((ok) => !ok)) {
+        wx.showToast({ title: '部分商品添加失败', icon: 'none' })
+        return
+      }
+
+      wx.showToast({ title: '已加入购物车', icon: 'success' })
+      setTimeout(() => {
+        wx.navigateTo({ url: '/pages/takeout/cart/index' })
+      }, 300)
+    } catch (error) {
+      logger.error('再次购买失败', error, 'Detail.onReorder')
+      wx.showToast({ title: '操作失败', icon: 'error' })
+    } finally {
+      wx.hideLoading()
     }
-
-    wx.showToast({ title: '已加入购物车', icon: 'success' })
-    setTimeout(() => {
-      wx.navigateTo({ url: '/pages/takeout/order-confirm/index' })
-    }, 500)
   },
 
   onViewTracking() {

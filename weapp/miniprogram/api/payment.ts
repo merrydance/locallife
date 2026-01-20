@@ -11,9 +11,8 @@ import { request } from '../utils/request'
 export type PaymentStatus =
     | 'pending'   // 待支付
     | 'paid'      // 已支付
-    | 'failed'    // 支付失败
-    | 'cancelled' // 已取消
     | 'refunded'  // 已退款
+    | 'closed'    // 已关闭
 
 /** 支付类型枚举 */
 export type PaymentType =
@@ -24,7 +23,6 @@ export type PaymentType =
 export type BusinessType =
     | 'order'             // 订单支付
     | 'reservation'       // 预定押金/全款
-    | 'reservation_addon' // 预订追加菜品支付
 
 /** 小程序支付参数 */
 export interface MiniProgramPayParams {
@@ -39,9 +37,9 @@ export interface MiniProgramPayParams {
 export interface PaymentOrderResponse {
     id: number
     user_id: number
-    order_id: number
+    order_id?: number
     out_trade_no: string
-    prepay_id: string
+    prepay_id?: string
     amount: number
     status: PaymentStatus
     payment_type: PaymentType
@@ -56,7 +54,6 @@ export interface CreatePaymentRequest {
     order_id: number
     payment_type: PaymentType
     business_type: BusinessType
-    return_url?: string
 }
 
 /** 退款响应 */
@@ -79,10 +76,17 @@ export interface CreateRefundRequest {
 
 /** 支付列表查询参数 */
 export interface ListPaymentsParams {
+    page_id?: number
+    page_size?: number
+    order_id?: number
+}
+
+export interface ListPaymentsResponse {
+    payment_orders: PaymentOrderResponse[]
+    total_count: number
+    total: number
     page_id: number
     page_size: number
-    status?: PaymentStatus
-    business_type?: BusinessType
 }
 
 // ==================== API接口函数 ====================
@@ -91,7 +95,7 @@ export interface ListPaymentsParams {
  * 获取支付订单列表
  * @param params 查询参数
  */
-export async function getPaymentList(params: ListPaymentsParams): Promise<PaymentOrderResponse[]> {
+export async function getPaymentList(params: ListPaymentsParams): Promise<ListPaymentsResponse> {
     return request({
         url: '/v1/payments',
         method: 'GET',
@@ -246,7 +250,7 @@ export async function pollPaymentStatus(
     for (let i = 0; i < maxAttempts; i++) {
         const status = await checkPaymentStatus(paymentId)
 
-        if (status === 'paid' || status === 'failed' || status === 'cancelled') {
+        if (status === 'paid' || status === 'refunded' || status === 'closed') {
             return status
         }
 

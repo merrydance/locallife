@@ -1,14 +1,13 @@
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
+import { formatPriceNoSymbol } from '../../../utils/util'
 
 interface MembershipDisplay {
   id: number
   merchantName: string
-  merchantLogo: string
-  level: string
-  levelName: string
   balance: number
-  points: number
-  discount: number
+  balanceDisplay: string
+  totalRechargedDisplay: string
+  totalConsumedDisplay: string
 }
 
 Page({
@@ -44,12 +43,10 @@ Page({
       const memberships: MembershipDisplay[] = response.memberships.map((m: MembershipResponse) => ({
         id: m.id,
         merchantName: m.merchant_name || '商户',
-        merchantLogo: m.merchant_logo_url || '',
-        level: m.level,
-        levelName: this.getLevelName(m.level),
         balance: m.balance,
-        points: m.points,
-        discount: this.getLevelDiscount(m.level)
+        balanceDisplay: formatPriceNoSymbol(m.balance || 0),
+        totalRechargedDisplay: formatPriceNoSymbol(m.total_recharged || 0),
+        totalConsumedDisplay: formatPriceNoSymbol(m.total_consumed || 0)
       }))
 
       this.setData({
@@ -62,35 +59,4 @@ Page({
       this.setData({ loading: false, memberships: [] })
     }
   },
-
-  getLevelName(level: string): string {
-    const levelMap: Record<string, string> = {
-      'NORMAL': '普通会员',
-      'SILVER': '银牌会员',
-      'GOLD': '金牌会员',
-      'PLATINUM': '铂金会员',
-      'DIAMOND': '钻石会员'
-    }
-    return levelMap[level] || '普通会员'
-  },
-
-  getLevelDiscount(level: string): number {
-    const discountMap: Record<string, number> = {
-      'NORMAL': 100,
-      'SILVER': 98,
-      'GOLD': 95,
-      'PLATINUM': 92,
-      'DIAMOND': 88
-    }
-    return discountMap[level] || 100
-  },
-
-  onMembershipTap(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.currentTarget.dataset
-    if (id) {
-      wx.navigateTo({
-        url: `/pages/user_center/membership/detail/index?id=${id}`
-      })
-    }
-  }
 })

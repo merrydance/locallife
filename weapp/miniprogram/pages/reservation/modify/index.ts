@@ -1,5 +1,5 @@
 import { ReservationItem, ReservationResponse, ReservationService } from '../../../api/reservation'
-import { getMerchantDishes } from '../../../api/merchant'
+import { getMerchantDishes, DishDTO } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
@@ -59,7 +59,7 @@ Page({
         submitting: false
     },
 
-    onLoad(options: any) {
+    onLoad(options: { id?: string }) {
         if (options.id) {
             this.setData({ reservationId: parseInt(options.id) })
             this.loadData()
@@ -77,7 +77,7 @@ Page({
             const reservation = await ReservationService.getReservationDetail(reservationId)
             const dishesResponse = await getMerchantDishes(String(reservation.merchant_id))
 
-            const dishList: DishView[] = (dishesResponse.dishes || []).map((dish: any) => {
+            const dishList: DishView[] = (dishesResponse.dishes || []).map((dish: DishDTO) => {
                 const id = Number(dish.id)
                 return {
                     id,
@@ -111,8 +111,8 @@ Page({
                         orphanItems.push({
                             dish_id: dishId,
                             name: item.name || '已下架菜品',
-                            price: Number(item.unit_price ?? item.price ?? 0),
-                            priceDisplay: formatPriceNoSymbol(Number(item.unit_price ?? item.price ?? 0)),
+                            price: Number(item.unit_price ?? 0),
+                            priceDisplay: formatPriceNoSymbol(Number(item.unit_price ?? 0)),
                             quantity: item.quantity || 0
                         })
                     }
@@ -121,8 +121,8 @@ Page({
                     comboItems.push({
                         combo_id: Number(item.combo_id),
                         name: item.name || '套餐',
-                        price: Number(item.unit_price ?? item.price ?? 0),
-                        priceDisplay: formatPriceNoSymbol(Number(item.unit_price ?? item.price ?? 0)),
+                        price: Number(item.unit_price ?? 0),
+                        priceDisplay: formatPriceNoSymbol(Number(item.unit_price ?? 0)),
                         quantity: item.quantity || 0
                     })
                 }
@@ -168,12 +168,13 @@ Page({
             })
 
             this.updateTotals()
-        } catch (error: any) {
+        } catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error)
             console.error(error)
             this.setData({
                 loading: false,
                 hasError: true,
-                errorMessage: error?.message || '加载失败'
+                errorMessage: errMessage || '加载失败'
             })
         }
     },
@@ -188,7 +189,7 @@ Page({
         return timePart
     },
 
-    switchCategory(e: any) {
+    switchCategory(e: WechatMiniprogram.CustomEvent) {
         const categoryId = Number(e.currentTarget.dataset.id)
         const category = this.data.categories.find((c) => c.id === categoryId)
         this.setData({
@@ -197,7 +198,7 @@ Page({
         })
     },
 
-    onIncrease(e: any) {
+    onIncrease(e: WechatMiniprogram.CustomEvent) {
         const id = Number(e.currentTarget.dataset.id)
         const type = e.currentTarget.dataset.type || 'dish'
         if (type === 'combo') {
@@ -207,7 +208,7 @@ Page({
         this.updateDishQty(id, 1)
     },
 
-    onDecrease(e: any) {
+    onDecrease(e: WechatMiniprogram.CustomEvent) {
         const id = Number(e.currentTarget.dataset.id)
         const type = e.currentTarget.dataset.type || 'dish'
         if (type === 'combo') {
@@ -317,8 +318,9 @@ Page({
             setTimeout(() => {
                 wx.navigateBack()
             }, 1200)
-        } catch (error: any) {
-            wx.showToast({ title: error?.message || '修改失败', icon: 'none' })
+        } catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error)
+            wx.showToast({ title: errMessage || '修改失败', icon: 'none' })
         } finally {
             this.setData({ submitting: false })
         }

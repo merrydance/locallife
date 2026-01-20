@@ -1,11 +1,9 @@
-import { getOrderDetail } from "../../../api/order";
 import {
   getDeliveryByOrder,
   getRiderLocation,
-  getDeliveryTrack,
   DeliveryResponse,
-  LocationResponse,
 } from "../../../api/delivery";
+import { getBicyclingDirection } from "../../../api/location";
 import { logger } from "../../../utils/logger";
 
 interface MapPoint {
@@ -95,22 +93,19 @@ Page({
   async loadDeliveryData() {
     this.setData({ loading: true });
     try {
-      // 1. 获取订单信息
-      const order = await getOrderDetail(this.data.orderId);
-
-      // 2. 获取配送信息
+      // 1. 获取配送信息
       const delivery = await getDeliveryByOrder(this.data.orderId);
 
-      // 3. 处理骑手信息
+      // 2. 处理骑手信息
       const riderPhone = delivery.pickup_phone || "";
       const riderPhoneDisplay = riderPhone
         ? riderPhone.replace(/(\d{3})\d{4}(\d{4})/, "$1****$2")
         : "";
 
-      // 4. 生成配送进度
+      // 3. 生成配送进度
       const progress = this.generateProgress(delivery);
 
-      // 5. 设置地图标记点
+      // 4. 设置地图标记点
       const merchantPoint: MapPoint = {
         latitude: delivery.pickup_latitude,
         longitude: delivery.pickup_longitude,
@@ -135,10 +130,10 @@ Page({
         loading: false,
       });
 
-      // 6. 设置地图
+      // 5. 设置地图
       this.setupMap(merchantPoint, customerPoint);
 
-      // 7. 开始位置追踪（配送中状态）
+      // 6. 开始位置追踪（配送中状态）
       if (delivery.status === "delivering" || delivery.status === "picked") {
         this.startLocationTracking();
       }
@@ -293,17 +288,10 @@ Page({
 
   async planRoute(merchantPoint: MapPoint, customerPoint: MapPoint) {
     try {
-      const { request } = await import("../../../utils/request");
       const fromStr = `${merchantPoint.latitude},${merchantPoint.longitude}`;
       const toStr = `${customerPoint.latitude},${customerPoint.longitude}`;
 
-      const data = await request<{ code: number; message?: string; data?: { distance?: number; duration?: number } }>(
-        {
-        url: "/v1/location/direction/bicycling",
-        method: "GET",
-        data: { from: fromStr, to: toStr },
-        },
-      );
+      const data = await getBicyclingDirection({ from: fromStr, to: toStr });
 
       // 自建 OSM 返回 {code,message,data{distance,duration}}
       if (data.code === 0) {

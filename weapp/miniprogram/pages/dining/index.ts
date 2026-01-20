@@ -9,6 +9,16 @@ import { ErrorHandler } from '../../utils/error-handler'
 import { BehaviorTracker, EventType } from '../../utils/tracker'
 import { formatPriceNoSymbol } from '../../utils/util'
 
+type DishView = DishDTO & {
+    priceDisplay: string
+    memberPriceDisplay: string | null
+}
+
+type CategoryView = {
+    id: string | number
+    name: string
+}
+
 Page({
     data: {
         tableId: '',
@@ -17,8 +27,8 @@ Page({
         billingGroup: null as BillingGroupDTO | null,
         billingGroupId: undefined as number | undefined,
         reservationId: undefined as number | undefined,
-        dishes: [] as any[],
-        categories: [] as any[],
+        dishes: [] as DishView[],
+        categories: [] as CategoryView[],
         activeCategoryId: 'all',
         cartCount: 0,
         cartPrice: 0,
@@ -28,7 +38,7 @@ Page({
         loading: true
     },
 
-    onLoad(options: any) {
+    onLoad(options: { table_id?: string; merchant_id?: string; dev?: string }) {
         // 微信扫码进入,参数格式: ?table_id=xxx&merchant_id=xxx
         if (options.table_id && options.merchant_id) {
             this.setData({
@@ -152,16 +162,16 @@ Page({
         try {
             const response = await getMerchantDishes(this.data.merchantId)
             // 预处理菜品价格
-            const dishes = (response.dishes || []).map((dish: any) => ({
+            const dishes: DishView[] = (response.dishes || []).map((dish: DishDTO) => ({
                 ...dish,
                 priceDisplay: formatPriceNoSymbol(dish.price || 0),
                 memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null
             }))
 
-            const categories = [{ id: 'all', name: '全部' }]
-            const categoryMap = new Map()
+            const categories: CategoryView[] = [{ id: 'all', name: '全部' }]
+            const categoryMap = new Map<number | string, CategoryView>()
 
-            dishes.forEach((dish: any) => {
+            dishes.forEach((dish) => {
                 if (dish.category_id && !categoryMap.has(dish.category_id)) {
                     categoryMap.set(dish.category_id, {
                         id: dish.category_id,
@@ -207,12 +217,7 @@ Page({
             }
             const success = await CartService.addItem({
                 merchantId: this.data.merchantId,
-                dishId: dish.id,
-                dishName: dish.name,
-                shopName: '当前餐厅',
-                imageUrl: dish.image_url,
-                price: dish.price,
-                priceDisplay: `¥${(dish.price / 100).toFixed(2)}`
+                dishId: dish.id
             })
 
             if (!success) {
@@ -226,10 +231,14 @@ Page({
 
     updateCartDisplay() {
         const cart = CartService.getCart()
+        if (!cart) {
+            this.setData({ cartCount: 0, cartPrice: 0, cartPriceDisplay: '0.00' })
+            return
+        }
         this.setData({
-            cartCount: cart.totalCount,
-            cartPrice: cart.totalPrice,
-            cartPriceDisplay: formatPriceNoSymbol(cart.totalPrice || 0)
+            cartCount: cart.total_count || 0,
+            cartPrice: cart.subtotal || 0,
+            cartPriceDisplay: formatPriceNoSymbol(cart.subtotal || 0)
         })
     },
 
@@ -247,6 +256,10 @@ Page({
         }
 
         const cart = CartService.getCart()
+        if (!cart) {
+            wx.showToast({ title: '购物车为空', icon: 'none' })
+            return
+        }
 
         wx.showModal({
             title: '确认下单',
@@ -255,9 +268,9 @@ Page({
                 if (res.confirm) {
                     try {
                         const items = cart.items.map((i) => ({
-                            dish_id: i.dishId,
+                            dish_id: i.dish_id,
                             quantity: i.quantity,
-                            customizations: []
+                            customizations: i.customizations as Record<string, number | string> | undefined
                         }))
 
                         await createDiningOrder({
@@ -271,7 +284,7 @@ Page({
 
                         wx.showToast({ title: '下单成功', icon: 'success' })
                         CartService.clear()
-                        this.setData({ cartCount: 0, cartPrice: 0 })
+                        this.setData({ cartCount: 0, cartPrice: 0, cartPriceDisplay: '0.00' })
                         await this.loadSharedOrderSummary()
                     } catch (error) {
                         logger.error('下单失败', error, 'Dining.onSubmitOrder')

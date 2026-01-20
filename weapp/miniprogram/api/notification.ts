@@ -1,36 +1,68 @@
 import { request } from '../utils/request';
 
+export type NotificationType = 'order' | 'payment' | 'delivery' | 'system' | 'food_safety'
+
 export interface Notification {
     id: number;
-    type: 'system' | 'order' | 'promotion';
+    user_id: number;
+    type: NotificationType;
     title: string;
     content: string;
+    related_type?: string;
+    related_id?: number;
+    extra_data?: Record<string, unknown>;
     is_read: boolean;
+    read_at?: string;
+    is_pushed: boolean;
+    pushed_at?: string;
     created_at: string;
-    action_url?: string;
+    expires_at?: string;
+}
+
+export interface ListNotificationsResponse {
+    notifications: Notification[];
+    total_count: number;
+    total: number;
+    page_id: number;
+    page_size: number;
 }
 
 export class NotificationService {
-    async getNotifications(params: { page: number; page_size: number; type?: string }) {
-        return request<{ list: Notification[]; total: number }>({
+    async getNotifications(params: { page_id?: number; page_size?: number; type?: NotificationType; is_read?: boolean }) {
+        const pageId = params.page_id ?? 1
+        const pageSize = params.page_size ?? 20
+        const offset = (pageId - 1) * pageSize
+        return request<ListNotificationsResponse>({
             url: '/v1/notifications',
             method: 'GET',
-            data: params
+            data: {
+                type: params.type,
+                is_read: params.is_read,
+                limit: pageSize,
+                offset
+            }
         });
     }
 
     async markAsRead(id: number) {
         return request({
             url: `/v1/notifications/${id}/read`,
-            method: 'POST'
+            method: 'PUT'
         });
     }
 
     async markAllAsRead() {
         return request({
             url: `/v1/notifications/read-all`,
-            method: 'POST'
+            method: 'PUT'
         });
+    }
+
+    async getUnreadCount() {
+        return request<{ count: number }>({
+            url: '/v1/notifications/unread/count',
+            method: 'GET'
+        })
     }
 }
 

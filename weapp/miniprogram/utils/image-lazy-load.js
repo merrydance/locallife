@@ -52,7 +52,13 @@ class ImageLazyLoader {
             }
             // 超过重试次数，跳过
             if (cacheItem && cacheItem.retryCount >= this.MAX_RETRY) {
-                reject(new Error('Max retry exceeded'));
+                this.cache.set(url, {
+                    state: ImageLoadState.ERROR,
+                    timestamp: Date.now(),
+                    retryCount: cacheItem.retryCount
+                });
+                logger_1.logger.warn(`图片预加载失败: ${url} Max retry exceeded`, undefined, 'ImageLazyLoader');
+                resolve();
                 return;
             }
             // 更新状态为加载中

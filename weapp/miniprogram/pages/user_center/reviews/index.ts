@@ -11,6 +11,7 @@ Page({
       id: number
       order_id: number
       merchant_id: number
+      merchantName: string
       content: string
       images: string[]
       created_at: string
@@ -72,6 +73,7 @@ Page({
         id: review.id,
         order_id: review.order_id,
         merchant_id: review.merchant_id,
+        merchantName: `商户${review.merchant_id}`,
         content: review.content,
         images: review.images || [],
         created_at: review.created_at,

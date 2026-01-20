@@ -3,23 +3,86 @@
  * 使用真实后端API
  */
 
-import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantCombos, PublicMerchantDetail, PublicDishCategory } from '../../../api/merchant'
+import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantCombos, PublicMerchantDetail, PublicDishCategory, PublicDish, PublicCombo } from '../../../api/merchant'
 import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
 import { getUserCarts } from '../../../api/cart'
+import CartService from '../../../services/cart'
 import { getPublicImageUrl } from '../../../utils/image'
 import { resolveImageURL } from '../../../utils/image-security'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
+interface BusinessHoursView {
+  day_of_week: number
+  open_time: string
+  close_time: string
+  is_closed: boolean
+  day_name: string
+}
+
+interface RestaurantViewModel {
+  id: number
+  name: string
+  cover_image?: string
+  logo_url: string
+  address: string
+  phone: string
+  latitude: number
+  longitude: number
+  tags: string[]
+  monthly_sales: number
+  avg_prep_minutes: number
+  biz_status: 'OPEN' | 'CLOSED'
+  description: string
+  business_license_image_url?: string
+  food_permit_url?: string
+  business_hours: BusinessHoursView[]
+  business_hours_display: string
+  discount_rules: PublicMerchantDetail['discount_rules']
+  vouchers: PublicMerchantDetail['vouchers']
+  delivery_promotions: PublicMerchantDetail['delivery_promotions']
+}
+
+interface DishView {
+  id: number
+  name: string
+  image_url: string
+  price: number
+  priceDisplay: string
+  member_price?: number
+  memberPriceDisplay: string | null
+  original_price?: number
+  originalPriceDisplay: string | null
+  category_id: number
+  category_name: string
+  monthly_sales: number
+  prepare_time: number
+  tags: string[]
+  is_available: boolean
+}
+
+interface ComboView {
+  id: number
+  name: string
+  description: string
+  image_url: string
+  combo_price: number
+  comboPriceDisplay: string
+  original_price: number
+  originalPriceDisplay: string
+  savingsDisplay: string
+  dishes: PublicCombo['dishes']
+}
+
 Page({
   data: {
     restaurantId: '',
-    restaurant: null as any,
+    restaurant: null as RestaurantViewModel | null,
     activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms',
     activeCategoryId: '' as string | number,
     categories: [] as PublicDishCategory[],
-    dishes: [] as any[],
-    filteredDishes: [] as any[],
-    combos: [] as any[],
+    dishes: [] as DishView[],
+    filteredDishes: [] as DishView[],
+    combos: [] as ComboView[],
     rooms: [] as PublicRoom[],
     cartCount: 0,
     cartPrice: 0,
@@ -28,7 +91,7 @@ Page({
     loading: true
   },
 
-  onLoad(options: any) {
+  onLoad(options: { id?: string }) {
     const restaurantId = options.id
     if (!restaurantId) {
       wx.showToast({ title: '商家ID缺失', icon: 'error' })
@@ -95,7 +158,7 @@ Page({
     }
   },
 
-  async loadMerchantInfo(merchantId: number): Promise<any> {
+  async loadMerchantInfo(merchantId: number): Promise<RestaurantViewModel | null> {
     try {
       const merchant: PublicMerchantDetail = await getPublicMerchantDetail(merchantId)
 
@@ -122,7 +185,7 @@ Page({
 
         // 格式化所有营业时间
         const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-        const formattedHours = (merchant.business_hours || []).map(h => ({
+        const formattedHours: BusinessHoursView[] = (merchant.business_hours || []).map((h) => ({
           ...h,
           day_name: dayNames[h.day_of_week]
         }));
@@ -157,10 +220,10 @@ Page({
     }
   },
 
-  async loadDishes(merchantId: number): Promise<{ dishes: any[], categories: PublicDishCategory[] }> {
+  async loadDishes(merchantId: number): Promise<{ dishes: DishView[]; categories: PublicDishCategory[] }> {
     try {
       const result = await getPublicMerchantDishes(merchantId)
-      const dishes = (result.dishes || []).map((dish: any) => ({
+      const dishes: DishView[] = (result.dishes || []).map((dish: PublicDish) => ({
         id: dish.id,
         name: dish.name,
         image_url: getPublicImageUrl(dish.image_url || ''),
@@ -184,10 +247,10 @@ Page({
     }
   },
 
-  async loadCombos(merchantId: number): Promise<any[]> {
+  async loadCombos(merchantId: number): Promise<ComboView[]> {
     try {
       const result = await getPublicMerchantCombos(merchantId)
-      return (result.combos || []).map((combo: any) => ({
+      return (result.combos || []).map((combo: PublicCombo) => ({
         id: combo.id,
         name: combo.name,
         description: combo.description || '',
@@ -219,7 +282,7 @@ Page({
     }
   },
 
-  extractCategories(dishesResult: { dishes: any[], categories: PublicDishCategory[] }): PublicDishCategory[] {
+  extractCategories(dishesResult: { dishes: DishView[]; categories: PublicDishCategory[] }): PublicDishCategory[] {
     const categoryMap = new Map<number, PublicDishCategory>()
     categoryMap.set(0, { id: 0, name: '全部', sort_order: -1 })
 
@@ -261,7 +324,7 @@ Page({
     if (activeCategoryId === 0 || activeCategoryId === '0' || !activeCategoryId) {
       this.setData({ filteredDishes: dishes })
     } else {
-      const filtered = dishes.filter((d: any) => d.category_id == activeCategoryId)
+      const filtered = dishes.filter((d) => String(d.category_id) === String(activeCategoryId))
       this.setData({ filteredDishes: filtered })
     }
   },
@@ -278,19 +341,13 @@ Page({
 
   async onAddCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
-    const dish = this.data.dishes.find((d: any) => d.id === id)
+    const { restaurant } = this.data
+    const dish = this.data.dishes.find((d) => d.id === id)
 
-    if (dish) {
-      const CartService = require('../../../services/cart').default
+    if (dish && restaurant) {
       const success = await CartService.addItem({
-        merchantId: this.data.restaurant.id,
-        dishId: dish.id,
-        dishName: dish.name,
-        shopName: this.data.restaurant.name,
-        imageUrl: dish.image_url,
-        price: dish.price,
-        priceDisplay: `¥${(dish.price / 100).toFixed(2)}`,
-        quantity: 1
+        merchantId: restaurant.id,
+        dishId: dish.id
       })
 
       if (success) {
@@ -302,20 +359,13 @@ Page({
 
   async onAddComboCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
-    const combo = this.data.combos.find((c: any) => c.id === id)
+    const { restaurant } = this.data
+    const combo = this.data.combos.find((c) => c.id === id)
 
-    if (combo) {
-      const CartService = require('../../../services/cart').default
+    if (combo && restaurant) {
       const success = await CartService.addItem({
-        merchantId: this.data.restaurant.id,
-        comboId: combo.id,
-        dishName: combo.name,
-        shopName: this.data.restaurant.name,
-        imageUrl: combo.image_url,
-        price: combo.combo_price,
-        priceDisplay: `¥${(combo.combo_price / 100).toFixed(2)}`,
-        quantity: 1,
-        isCombo: true
+        merchantId: restaurant.id,
+        comboId: combo.id
       })
 
       if (success) {

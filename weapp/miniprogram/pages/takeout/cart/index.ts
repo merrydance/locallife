@@ -170,7 +170,7 @@ Page({
       dishId: item.dish_id,
       comboId: item.combo_id,
       name: item.name,
-      imageUrl: getPublicImageUrl(item.image_url),
+      imageUrl: getPublicImageUrl(item.image_url || ''),
       quantity: item.quantity,
       unitPrice: item.unit_price,
       priceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,

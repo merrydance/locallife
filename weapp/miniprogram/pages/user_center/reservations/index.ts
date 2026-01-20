@@ -3,7 +3,7 @@
  * 显示用户的所有预订记录
  */
 
-import { ReservationService, ReservationResponse, ReservationStatus } from '../../../api/reservation'
+import { ReservationService, ReservationResponse, ReservationStatus, ReservationListParams } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
 
 type ReservationView = ReservationResponse & {
@@ -16,6 +16,22 @@ type ReservationView = ReservationResponse & {
     _merchantName: string
     _merchantAddress: string
     _merchantPhone: string
+}
+
+type ShareEvent = {
+    target?: {
+        dataset?: {
+            id?: string | number
+        }
+    }
+}
+
+const getEventId = (event: WechatMiniprogram.BaseEvent): number | null => {
+    const currentDataset = event.currentTarget.dataset as { id?: string | number }
+    const targetDataset = (event.target as { dataset?: { id?: string | number } } | undefined)?.dataset
+    const rawId = currentDataset?.id ?? targetDataset?.id
+    const id = typeof rawId === 'number' ? rawId : Number(rawId)
+    return Number.isFinite(id) ? id : null
 }
 
 function formatReservationDateTime(reservationDate?: string, reservationTime?: string): string {
@@ -117,13 +133,15 @@ Page({
 
         try {
             const { currentStatus, page, pageSize } = this.data
-            const params: any = { page_id: page, page_size: pageSize }
-            if (currentStatus) {
-                params.status = currentStatus
+            const params: ReservationListParams = {
+                page_id: page,
+                page_size: pageSize,
+                ...(currentStatus ? { status: currentStatus } : {})
             }
 
             const response = await ReservationService.getUserReservations(params)
             const result = response.reservations
+            const totalCount = typeof response.total_count === 'number' ? response.total_count : result.length
 
             // 处理显示字段
             const processedReservations = result.map((r: ReservationResponse) => this.processReservation(r))
@@ -132,7 +150,7 @@ Page({
             this.setData({
                 reservations,
                 loading: false,
-                hasMore: result.length === pageSize
+                hasMore: page * pageSize < totalCount
             })
         } catch (error) {
             logger.error('加载预订列表失败', error, 'reservations.loadReservations')
@@ -142,13 +160,9 @@ Page({
     },
 
     processReservation(r: ReservationResponse): ReservationView {
-        const merchantName = (r as any).merchant_name
-            || (r as any).merchantName
-            || (r as any).merchant?.name
-            || (r as any).merchant?.merchant_name
-            || ''
-        const merchantAddress = (r as any).merchant_address || (r as any).merchant?.address || ''
-        const merchantPhone = (r as any).merchant_phone || (r as any).merchant?.phone || ''
+        const merchantName = r.merchant_name || ''
+        const merchantAddress = r.merchant_address || ''
+        const merchantPhone = r.merchant_phone || ''
         return {
             ...r,
             _statusText: this.getStatusText(r.status || ''),
@@ -165,10 +179,10 @@ Page({
 
     noop() {},
 
-    onShareAppMessage(res: any) {
+    onShareAppMessage(res?: ShareEvent) {
         const idFromButton = res?.target?.dataset?.id
         const targetId = Number(idFromButton || this.data.reservations[0]?.id || 0)
-        const target = this.data.reservations.find((r: any) => r.id === targetId)
+        const target = this.data.reservations.find((r) => r.id === targetId)
 
         const titleParts = [target?._merchantName || '预订']
         if (target?._dateTimeDisplay) {
@@ -193,7 +207,7 @@ Page({
         return statusMap[status] || status
     },
 
-    onStatusChange(e: WechatMiniprogram.CustomEvent) {
+    onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: ReservationStatus | '' }>) {
         const status = e.detail.value || ''
         if (status === this.data.currentStatus) return
         this.setData({ currentStatus: status })
@@ -201,7 +215,7 @@ Page({
     },
 
     onViewDetail(e: WechatMiniprogram.BaseEvent) {
-        const id = Number((e.currentTarget.dataset as any).id || (e.target as any).dataset?.id || 0)
+        const id = getEventId(e)
         if (!id) {
             wx.showToast({ title: '缺少预订ID', icon: 'none' })
             return
@@ -213,7 +227,7 @@ Page({
     },
 
     onCancelReservation(e: WechatMiniprogram.BaseEvent) {
-        const { id } = e.currentTarget.dataset
+        const id = getEventId(e)
         if (!id) return
 
         wx.showActionSheet({
@@ -243,7 +257,7 @@ Page({
      * 跳转到点菜页面
      */
     onGoToOrder(e: WechatMiniprogram.BaseEvent) {
-        const item = e.currentTarget.dataset.item as ReservationResponse
+        const item = (e.currentTarget.dataset as { item?: ReservationResponse }).item
         if (!item) return
 
         // 跳转到堂食点餐页面，传递预订ID和商户ID

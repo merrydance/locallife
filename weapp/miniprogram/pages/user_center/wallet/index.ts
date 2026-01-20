@@ -1,4 +1,6 @@
 import { formatPriceNoSymbol } from '../../../utils/util'
+import { getPayments, PaymentOrder } from '../../../api/payment-refund'
+import { getMyMemberships } from '../../../api/personal'
 
 Page({
   data: {
@@ -27,41 +29,32 @@ Page({
   async loadWallet() {
     this.setData({ loading: true })
     try {
-      // Mock data - GET /api/v1/customers/wallet
-      const mockWallet = {
-        balance: 5800,
-        transactions: [
-          {
-            id: 'tx_1',
-            type: 'PAYMENT' as const,
-            amount: -3800,
-            title: '外卖订单支付',
-            time: '2024-11-19 18:30'
-          },
-          {
-            id: 'tx_2',
-            type: 'REFUND' as const,
-            amount: 1200,
-            title: '订单退款',
-            time: '2024-11-18 10:00'
-          },
-          {
-            id: 'tx_3',
-            type: 'TOPUP' as const,
-            amount: 10000,
-            title: '余额充值',
-            time: '2024-11-15 09:00'
-          }
-        ]
-      }
-      // 预处理价格
-      const processedTransactions = mockWallet.transactions.map(t => ({
-        ...t,
-        amountDisplay: (t.amount > 0 ? '+' : '') + formatPriceNoSymbol(Math.abs(t.amount))
-      }))
+      const [memberships, payments] = await Promise.all([
+        getMyMemberships(),
+        getPayments({ page_id: 1, page_size: 20 })
+      ])
+
+      const balance = memberships.memberships.reduce((sum, m) => sum + (m.balance || 0), 0)
+      const processedTransactions = (payments.payment_orders || []).map((payment: PaymentOrder) => {
+        const isRefund = payment.status === 'refunded'
+        const signedAmount = isRefund ? payment.amount : -payment.amount
+        const title = payment.business_type === 'reservation'
+          ? (isRefund ? '预订退款' : '预订支付')
+          : (isRefund ? '订单退款' : '订单支付')
+
+        return {
+          id: String(payment.id),
+          type: isRefund ? 'REFUND' : 'PAYMENT',
+          amount: signedAmount,
+          amountDisplay: (signedAmount > 0 ? '+' : '') + formatPriceNoSymbol(Math.abs(signedAmount)),
+          title,
+          time: payment.paid_at || payment.created_at
+        }
+      })
+
       this.setData({
-        balance: mockWallet.balance,
-        balanceDisplay: formatPriceNoSymbol(mockWallet.balance),
+        balance,
+        balanceDisplay: formatPriceNoSymbol(balance),
         transactions: processedTransactions,
         loading: false
       })
