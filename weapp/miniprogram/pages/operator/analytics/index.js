@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const responsive_1 = require("@/utils/responsive");
-const echarts = __importStar(require("../libs/echarts"));
+const echarts = __importStar(require("@/libs/echarts"));
 function initChart(canvas, width, height, dpr) {
     const chart = echarts.init(canvas, null, {
         width,

@@ -776,22 +776,24 @@ export async function getRiderManagementDashboard(regionId?: number): Promise<{
     ])
 
     // 统计骑手状态分布
+    const riders = riderList.riders || []
+    const total = riderList.total ?? riders.length
     const riderSummary = {
-        total: riderList.total,
-        active: riderList.riders.filter(r => r.status === 'active').length,
-        online: riderList.riders.filter(r => r.online_status === 'online').length,
-        suspended: riderList.riders.filter(r => r.status === 'suspended').length,
-        pending: riderList.riders.filter(r => r.status === 'pending_approval').length
+        total,
+        active: riders.filter(r => r.status === 'active').length,
+        online: riders.filter(r => r.online_status === 'online').length,
+        suspended: riders.filter(r => r.status === 'suspended').length,
+        pending: riders.filter(r => r.status === 'pending_approval').length
     }
 
     // 分析骑手分布
-    const distribution = riderAnalyticsService.analyzeRiderDistribution(riderList.riders)
+    const distribution = riderAnalyticsService.analyzeRiderDistribution(riders)
 
     // 获取最近注册的骑手
-    const recentRiders = riderList.riders.slice(0, 10)
+    const recentRiders = riders.slice(0, 10)
 
     // 获取在线骑手
-    const onlineRiders = riderList.riders.filter(r => r.online_status === 'online').slice(0, 20)
+    const onlineRiders = riders.filter(r => r.online_status === 'online').slice(0, 20)
 
     return {
         riderSummary,

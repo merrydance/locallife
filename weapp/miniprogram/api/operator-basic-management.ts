@@ -25,6 +25,10 @@ export interface RegionResponse {
     longitude: string
     name: string
     parent_id?: number
+    status?: RegionStatus
+    operator_id?: number
+    created_at?: string
+    updated_at?: string
 }
 
 /** 区域统计响应 - 对齐 api.regionStatsResponse */
@@ -35,6 +39,14 @@ export interface RegionStatsResponse {
     total_commission: number
     total_gmv: number
     total_orders: number
+    completed_order_count?: number
+    order_count?: number
+    completion_rate?: number
+    active_merchant_count?: number
+    rider_count?: number
+    active_rider_count?: number
+    avg_order_value?: number
+    created_at?: string
 }
 
 /** 区域查询参数 */
@@ -65,6 +77,17 @@ export interface OperatorFinanceOverviewResponse {
         total_commission: number      // 累计平台佣金
         total_gmv: number             // 累计交易额
     }
+    total_commission?: number
+    today_commission?: number
+    week_commission?: number
+    month_commission?: number
+    pending_settlement?: number
+    settled_amount?: number
+    commission_rate?: number
+    merchant_count?: number
+    active_merchant_count?: number
+    order_count?: number
+    gmv?: number
 }
 
 /** 佣金明细响应 - 对齐 api.operatorCommissionResponse */
@@ -79,6 +102,16 @@ export interface OperatorCommissionResponse {
     }
     total: number
     total_count: number
+    id?: number
+    operator_id?: number
+    order_id?: number
+    merchant_id?: number
+    commission_amount?: number
+    commission_rate?: number
+    order_amount?: number
+    settlement_status?: 'pending' | 'settled' | 'cancelled'
+    settlement_date?: string
+    created_at?: string
 }
 
 /** 佣金明细项 - 对齐 api.operatorCommissionItem */
@@ -244,12 +277,17 @@ export class RegionAnalyticsService {
         performanceScore: number
         performanceLevel: 'excellent' | 'good' | 'average' | 'poor'
     } {
-        const merchantDensity = stats.active_merchant_count / Math.max(stats.merchant_count, 1)
-        const riderDensity = stats.active_rider_count / Math.max(stats.rider_count, 1)
-        const orderDensity = stats.completed_order_count / Math.max(stats.order_count, 1)
-        const avgOrderValue = stats.total_gmv / Math.max(stats.completed_order_count, 1)
-        const completionRate = stats.completion_rate
-        const commissionRate = stats.total_commission / Math.max(stats.total_gmv, 1)
+        const activeMerchantCount = stats.active_merchant_count ?? 0
+        const activeRiderCount = stats.active_rider_count ?? 0
+        const completedOrderCount = stats.completed_order_count ?? 0
+        const orderCount = stats.order_count ?? stats.total_orders ?? 0
+        const completionRate = stats.completion_rate ?? 0
+
+        const merchantDensity = activeMerchantCount / Math.max(stats.merchant_count ?? 0, 1)
+        const riderDensity = activeRiderCount / Math.max(stats.rider_count ?? 0, 1)
+        const orderDensity = completedOrderCount / Math.max(orderCount, 1)
+        const avgOrderValue = stats.total_gmv / Math.max(completedOrderCount, 1)
+        const commissionRate = stats.total_commission / Math.max(stats.total_gmv ?? 0, 1)
 
         // 计算综合绩效分数 (0-100)
         const performanceScore = Math.min(100, Math.round(
@@ -336,24 +374,24 @@ export class RegionAnalyticsService {
         growthTrend: 'up' | 'down' | 'stable'
     } {
         const merchantGrowth = this.calculateGrowthRate(
-            currentStats.active_merchant_count,
-            previousStats.active_merchant_count
+            currentStats.active_merchant_count ?? 0,
+            previousStats.active_merchant_count ?? 0
         )
         const riderGrowth = this.calculateGrowthRate(
-            currentStats.active_rider_count,
-            previousStats.active_rider_count
+            currentStats.active_rider_count ?? 0,
+            previousStats.active_rider_count ?? 0
         )
         const orderGrowth = this.calculateGrowthRate(
-            currentStats.completed_order_count,
-            previousStats.completed_order_count
+            currentStats.completed_order_count ?? 0,
+            previousStats.completed_order_count ?? 0
         )
         const gmvGrowth = this.calculateGrowthRate(
-            currentStats.total_gmv,
-            previousStats.total_gmv
+            currentStats.total_gmv ?? 0,
+            previousStats.total_gmv ?? 0
         )
         const commissionGrowth = this.calculateGrowthRate(
-            currentStats.total_commission,
-            previousStats.total_commission
+            currentStats.total_commission ?? 0,
+            previousStats.total_commission ?? 0
         )
 
         const overallGrowth = (merchantGrowth + riderGrowth + orderGrowth + gmvGrowth + commissionGrowth) / 5
@@ -411,10 +449,10 @@ export class OperatorBasicManagementAdapter {
             code: data.code,
             parentId: data.parent_id,
             level: data.level,
-            status: data.status,
+            status: data.status ?? 'pending',
             operatorId: data.operator_id,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at
+            createdAt: data.created_at ?? '',
+            updatedAt: data.updated_at ?? ''
         }
     }
 
@@ -439,17 +477,17 @@ export class OperatorBasicManagementAdapter {
         return {
             regionId: data.region_id,
             regionName: data.region_name,
-            merchantCount: data.merchant_count,
-            activeMerchantCount: data.active_merchant_count,
-            riderCount: data.rider_count,
-            activeRiderCount: data.active_rider_count,
-            orderCount: data.order_count,
-            completedOrderCount: data.completed_order_count,
-            totalGmv: data.total_gmv,
-            totalCommission: data.total_commission,
-            avgOrderValue: data.avg_order_value,
-            completionRate: data.completion_rate,
-            createdAt: data.created_at
+            merchantCount: data.merchant_count ?? 0,
+            activeMerchantCount: data.active_merchant_count ?? 0,
+            riderCount: data.rider_count ?? 0,
+            activeRiderCount: data.active_rider_count ?? 0,
+            orderCount: data.order_count ?? data.total_orders ?? 0,
+            completedOrderCount: data.completed_order_count ?? 0,
+            totalGmv: data.total_gmv ?? 0,
+            totalCommission: data.total_commission ?? 0,
+            avgOrderValue: data.avg_order_value ?? 0,
+            completionRate: data.completion_rate ?? 0,
+            createdAt: data.created_at ?? ''
         }
     }
 
@@ -470,17 +508,17 @@ export class OperatorBasicManagementAdapter {
         gmv: number
     } {
         return {
-            totalCommission: data.total_commission,
-            todayCommission: data.today_commission,
-            weekCommission: data.week_commission,
-            monthCommission: data.month_commission,
-            pendingSettlement: data.pending_settlement,
-            settledAmount: data.settled_amount,
-            commissionRate: data.commission_rate,
-            merchantCount: data.merchant_count,
-            activeMerchantCount: data.active_merchant_count,
-            orderCount: data.order_count,
-            gmv: data.gmv
+            totalCommission: data.total_commission ?? 0,
+            todayCommission: data.today_commission ?? 0,
+            weekCommission: data.week_commission ?? 0,
+            monthCommission: data.month_commission ?? 0,
+            pendingSettlement: data.pending_settlement ?? 0,
+            settledAmount: data.settled_amount ?? 0,
+            commissionRate: data.commission_rate ?? 0,
+            merchantCount: data.merchant_count ?? 0,
+            activeMerchantCount: data.active_merchant_count ?? 0,
+            orderCount: data.order_count ?? 0,
+            gmv: data.gmv ?? 0
         }
     }
 
@@ -500,16 +538,16 @@ export class OperatorBasicManagementAdapter {
         createdAt: string
     } {
         return {
-            id: data.id,
-            operatorId: data.operator_id,
-            orderId: data.order_id,
-            merchantId: data.merchant_id,
-            commissionAmount: data.commission_amount,
-            commissionRate: data.commission_rate,
-            orderAmount: data.order_amount,
-            settlementStatus: data.settlement_status,
+            id: data.id ?? 0,
+            operatorId: data.operator_id ?? 0,
+            orderId: data.order_id ?? 0,
+            merchantId: data.merchant_id ?? 0,
+            commissionAmount: data.commission_amount ?? 0,
+            commissionRate: data.commission_rate ?? 0,
+            orderAmount: data.order_amount ?? 0,
+            settlementStatus: data.settlement_status ?? 'pending',
             settlementDate: data.settlement_date,
-            createdAt: data.created_at
+            createdAt: data.created_at ?? ''
         }
     }
 

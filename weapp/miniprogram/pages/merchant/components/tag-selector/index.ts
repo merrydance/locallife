@@ -46,7 +46,8 @@ Component({
          */
         onTagToggle(e: WechatMiniprogram.TouchEvent) {
             const tagId = e.currentTarget.dataset.id as number
-            const { selectedIds, maxCount } = this.properties
+            const selectedIds = this.properties.selectedIds as number[]
+            const maxCount = this.properties.maxCount as number
 
             let newIds: number[]
             if (selectedIds.includes(tagId)) {
@@ -76,7 +77,7 @@ Component({
          * 检查标签是否选中
          */
         isSelected(tagId: number): boolean {
-            return this.properties.selectedIds.includes(tagId)
+            return (this.properties.selectedIds as number[]).includes(tagId)
         }
     }
 })

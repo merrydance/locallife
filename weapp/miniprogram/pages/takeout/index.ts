@@ -757,10 +757,14 @@ Page({
     const dish = this.data.dishes.find((d) => String(d.id) === String(id))
 
     if (dish) {
+      const monthSales = dish.salesBadge
+        ? Number(dish.salesBadge.replace(/[^0-9]/g, ''))
+        : undefined
+      const distanceMeters = dish.distance_meters
       Navigation.toDishDetail(id, {
-        shopName: dish.shop_name || dish.merchant_name,
-        monthSales: dish.month_sales,
-        distance: dish.distance,
+        shopName: dish.shopName,
+        monthSales: monthSales,
+        distance: distanceMeters,
         estimatedDeliveryTime: Math.ceil((dish.estimated_delivery_time || 0) / 60) // 转换为分钟传递
       })
     } else {
@@ -873,7 +877,7 @@ Page({
         avgPrice: 0,
         avgPriceDisplay: '人均未知',
         distance: DishAdapter.formatDistance(m.distance),
-        address: m.address,
+        address: m.address || '',
         businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
         isOpen: m.is_open ?? true,
         availableRooms: 0,

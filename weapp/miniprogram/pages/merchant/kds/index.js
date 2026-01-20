@@ -3,15 +3,6 @@
  * KDS 厨房显示系统 - 全屏沉浸式界面
  * 通过 WebSocket 实时接收订单推送，支持三栏看板布局
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const order_management_1 = require("@/api/order-management");
 const websocket_realtime_1 = require("@/api/websocket-realtime");
@@ -97,94 +88,95 @@ Page({
         }
     },
     // 加载订单
-    loadOrders() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            try {
-                if (!this.data.loading) {
-                    // 静默刷新，不显示 loading
-                }
-                else {
-                    this.setData({ loading: true });
-                }
-                const result = yield order_management_1.KitchenDisplayService.getKitchenOrders();
-                // 处理订单数据，添加显示用字段
-                const processOrders = (orders) => {
-                    return (orders || []).map(order => (Object.assign(Object.assign({}, order), { order_type_text: ORDER_TYPE_MAP[order.order_type] || order.order_type, created_time: formatTime(order.created_at), paid_time: order.paid_at ? formatTime(order.paid_at) : '' })));
-                };
-                const prevNewCount = this.data.stats.new_count || 0;
-                const newCount = ((_a = result.new_orders) === null || _a === void 0 ? void 0 : _a.length) || 0;
-                this.setData({
-                    newOrders: processOrders(result.new_orders),
-                    preparingOrders: processOrders(result.preparing_orders),
-                    readyOrders: processOrders(result.ready_orders),
-                    stats: result.stats || this.data.stats,
-                    loading: false
-                });
-                // 检查新订单提醒
-                if (newCount > prevNewCount && this.data.voiceEnabled) {
-                    this.playAlert();
-                }
+    async loadOrders() {
+        var _a;
+        try {
+            if (!this.data.loading) {
+                // 静默刷新，不显示 loading
             }
-            catch (error) {
-                logger_1.logger.error('加载订单失败', error, 'KDS');
-                this.setData({ loading: false });
-                wx.showToast({ title: '加载失败', icon: 'none' });
+            else {
+                this.setData({ loading: true });
             }
-        });
+            const result = await order_management_1.KitchenDisplayService.getKitchenOrders();
+            // 处理订单数据，添加显示用字段
+            const processOrders = (orders) => {
+                return (orders || []).map(order => ({
+                    ...order,
+                    order_type_text: ORDER_TYPE_MAP[order.order_type] || order.order_type,
+                    created_time: formatTime(order.created_at),
+                    paid_time: order.paid_at ? formatTime(order.paid_at) : ''
+                }));
+            };
+            const prevNewCount = this.data.stats.new_count || 0;
+            const newCount = ((_a = result.new_orders) === null || _a === void 0 ? void 0 : _a.length) || 0;
+            this.setData({
+                newOrders: processOrders(result.new_orders),
+                preparingOrders: processOrders(result.preparing_orders),
+                readyOrders: processOrders(result.ready_orders),
+                stats: result.stats || this.data.stats,
+                loading: false
+            });
+            // 检查新订单提醒
+            if (newCount > prevNewCount && this.data.voiceEnabled) {
+                this.playAlert();
+            }
+        }
+        catch (error) {
+            logger_1.logger.error('加载订单失败', error, 'KDS');
+            this.setData({ loading: false });
+            wx.showToast({ title: '加载失败', icon: 'none' });
+        }
     },
     // WebSocket 连接
-    connectWebSocket() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            try {
-                // 获取用户和商户信息
-                const app = getApp();
-                const userId = (_a = app.globalData) === null || _a === void 0 ? void 0 : _a.userId;
-                const merchantId = (_b = app.globalData) === null || _b === void 0 ? void 0 : _b.merchantId;
-                if (!userId || !merchantId) {
-                    logger_1.logger.warn('无法获取用户/商户ID，使用轮询模式', null, 'KDS');
-                    this.startAutoRefresh();
-                    return;
-                }
-                // 使用现有的 WebSocket 服务初始化商户连接
-                yield websocket_realtime_1.RealtimeUtils.initializeForMerchant(userId, merchantId, {
-                    onOpen: () => {
-                        logger_1.logger.info('KDS WebSocket 已连接', null, 'KDS');
-                        this.setData({ connected: true });
-                        // 连接成功后停止轮询，使用实时推送
-                        this.stopAutoRefresh();
-                    },
-                    onOrderUpdate: (orderData) => {
-                        logger_1.logger.info('收到订单更新', orderData, 'KDS');
-                        // 收到订单更新时刷新订单列表
+    async connectWebSocket() {
+        var _a, _b;
+        try {
+            // 获取用户和商户信息
+            const app = getApp();
+            const userId = (_a = app.globalData) === null || _a === void 0 ? void 0 : _a.userId;
+            const merchantId = (_b = app.globalData) === null || _b === void 0 ? void 0 : _b.merchantId;
+            if (!userId || !merchantId) {
+                logger_1.logger.warn('无法获取用户/商户ID，使用轮询模式', null, 'KDS');
+                this.startAutoRefresh();
+                return;
+            }
+            // 使用现有的 WebSocket 服务初始化商户连接
+            await websocket_realtime_1.RealtimeUtils.initializeForMerchant(userId, merchantId, {
+                onOpen: () => {
+                    logger_1.logger.info('KDS WebSocket 已连接', null, 'KDS');
+                    this.setData({ connected: true });
+                    // 连接成功后停止轮询，使用实时推送
+                    this.stopAutoRefresh();
+                },
+                onOrderUpdate: (orderData) => {
+                    logger_1.logger.info('收到订单更新', orderData, 'KDS');
+                    // 收到订单更新时刷新订单列表
+                    this.loadOrders();
+                },
+                onNotification: (notification) => {
+                    // 处理新订单通知
+                    if (notification.type === 'new_order') {
+                        logger_1.logger.info('收到新订单通知', notification, 'KDS');
                         this.loadOrders();
-                    },
-                    onNotification: (notification) => {
-                        // 处理新订单通知
-                        if (notification.type === 'new_order') {
-                            logger_1.logger.info('收到新订单通知', notification, 'KDS');
-                            this.loadOrders();
-                            if (this.data.voiceEnabled) {
-                                this.playAlert();
-                            }
-                        }
-                    },
-                    onMessage: (message) => {
-                        // 处理所有消息，检查是否是订单相关
-                        if (message.type === 'order_update' || message.type === 'new_order') {
-                            this.loadOrders();
+                        if (this.data.voiceEnabled) {
+                            this.playAlert();
                         }
                     }
-                });
-                this.setData({ connected: websocket_realtime_1.WebSocketUtils.isConnected() });
-            }
-            catch (error) {
-                logger_1.logger.error('WebSocket 连接失败，使用轮询模式', error, 'KDS');
-                this.setData({ connected: false });
-                this.startAutoRefresh();
-            }
-        });
+                },
+                onMessage: (message) => {
+                    // 处理所有消息，检查是否是订单相关
+                    if (message.type === 'order_update' || message.type === 'new_order') {
+                        this.loadOrders();
+                    }
+                }
+            });
+            this.setData({ connected: websocket_realtime_1.WebSocketUtils.isConnected() });
+        }
+        catch (error) {
+            logger_1.logger.error('WebSocket 连接失败，使用轮询模式', error, 'KDS');
+            this.setData({ connected: false });
+            this.startAutoRefresh();
+        }
     },
     // 断开 WebSocket
     disconnectWebSocket() {
@@ -250,44 +242,40 @@ Page({
         this._audioCtx.play();
     },
     // 开始制作
-    onStartPreparing(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const orderId = e.currentTarget.dataset.id;
-            if (!orderId)
-                return;
-            try {
-                wx.showLoading({ title: '处理中' });
-                yield order_management_1.KitchenDisplayService.startPreparing(orderId);
-                wx.hideLoading();
-                wx.showToast({ title: '已开始制作', icon: 'success' });
-                this.loadOrders();
-            }
-            catch (error) {
-                wx.hideLoading();
-                logger_1.logger.error('开始制作失败', error, 'KDS');
-                wx.showToast({ title: '操作失败', icon: 'none' });
-            }
-        });
+    async onStartPreparing(e) {
+        const orderId = e.currentTarget.dataset.id;
+        if (!orderId)
+            return;
+        try {
+            wx.showLoading({ title: '处理中' });
+            await order_management_1.KitchenDisplayService.startPreparing(orderId);
+            wx.hideLoading();
+            wx.showToast({ title: '已开始制作', icon: 'success' });
+            this.loadOrders();
+        }
+        catch (error) {
+            wx.hideLoading();
+            logger_1.logger.error('开始制作失败', error, 'KDS');
+            wx.showToast({ title: '操作失败', icon: 'none' });
+        }
     },
     // 制作完成
-    onMarkReady(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const orderId = e.currentTarget.dataset.id;
-            if (!orderId)
-                return;
-            try {
-                wx.showLoading({ title: '处理中' });
-                yield order_management_1.KitchenDisplayService.markKitchenOrderReady(orderId);
-                wx.hideLoading();
-                wx.showToast({ title: '已完成', icon: 'success' });
-                this.loadOrders();
-            }
-            catch (error) {
-                wx.hideLoading();
-                logger_1.logger.error('标记完成失败', error, 'KDS');
-                wx.showToast({ title: '操作失败', icon: 'none' });
-            }
-        });
+    async onMarkReady(e) {
+        const orderId = e.currentTarget.dataset.id;
+        if (!orderId)
+            return;
+        try {
+            wx.showLoading({ title: '处理中' });
+            await order_management_1.KitchenDisplayService.markKitchenOrderReady(orderId);
+            wx.hideLoading();
+            wx.showToast({ title: '已完成', icon: 'success' });
+            this.loadOrders();
+        }
+        catch (error) {
+            wx.hideLoading();
+            logger_1.logger.error('标记完成失败', error, 'KDS');
+            wx.showToast({ title: '操作失败', icon: 'none' });
+        }
     },
     // 查看订单详情
     onViewOrder(e) {

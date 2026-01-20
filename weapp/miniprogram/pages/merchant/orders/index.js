@@ -3,15 +3,6 @@
  * 订单管理页面 - 桌面级 SaaS 实现
  * 完全对齐后端 API：/v1/merchant/orders
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -86,91 +77,85 @@ Page({
             this.loadOrders();
         }
     },
-    initPage() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const merchantId = app.globalData.merchantId;
-            const merchantName = ((_a = app.globalData.merchantInfo) === null || _a === void 0 ? void 0 : _a.name) || '商户';
-            this.setData({ merchantName });
-            if (merchantId) {
-                yield this.loadStatusCounts();
-                yield this.loadOrders();
-            }
-            else {
-                app.userInfoReadyCallback = () => {
-                    var _a;
-                    this.setData({ merchantName: ((_a = app.globalData.merchantInfo) === null || _a === void 0 ? void 0 : _a.name) || '商户' });
-                    this.loadStatusCounts();
-                    this.loadOrders();
-                };
-            }
-        });
+    async initPage() {
+        var _a;
+        const merchantId = app.globalData.merchantId;
+        const merchantName = ((_a = app.globalData.merchantInfo) === null || _a === void 0 ? void 0 : _a.name) || '商户';
+        this.setData({ merchantName });
+        if (merchantId) {
+            await this.loadStatusCounts();
+            await this.loadOrders();
+        }
+        else {
+            app.userInfoReadyCallback = () => {
+                var _a;
+                this.setData({ merchantName: ((_a = app.globalData.merchantInfo) === null || _a === void 0 ? void 0 : _a.name) || '商户' });
+                this.loadStatusCounts();
+                this.loadOrders();
+            };
+        }
     },
     // 加载各状态订单数量
-    loadStatusCounts() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // 并行请求各状态的订单数
-                const [paidRes, preparingRes, readyRes, completedRes] = yield Promise.all([
-                    order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'paid' }),
-                    order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'preparing' }),
-                    order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'ready' }),
-                    order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'completed' })
-                ]);
-                // 计算今日营业额（已完成订单）
-                let revenue = 0;
-                completedRes.forEach(order => {
-                    revenue += order.total_amount;
-                });
-                this.setData({
-                    statusCounts: {
-                        paid: paidRes.length,
-                        preparing: preparingRes.length,
-                        ready: readyRes.length,
-                        completed: completedRes.length
-                    },
-                    todayRevenue: (0, util_1.formatPriceNoSymbol)(revenue)
-                });
-            }
-            catch (error) {
-                logger_1.logger.error('加载订单统计失败', error, 'Orders');
-            }
-        });
+    async loadStatusCounts() {
+        try {
+            // 并行请求各状态的订单数
+            const [paidRes, preparingRes, readyRes, completedRes] = await Promise.all([
+                order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'paid' }),
+                order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'preparing' }),
+                order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'ready' }),
+                order_management_1.MerchantOrderManagementService.getOrderList({ page_id: 1, page_size: 1, status: 'completed' })
+            ]);
+            // 计算今日营业额（已完成订单）
+            let revenue = 0;
+            completedRes.forEach(order => {
+                revenue += order.total_amount;
+            });
+            this.setData({
+                statusCounts: {
+                    paid: paidRes.length,
+                    preparing: preparingRes.length,
+                    ready: readyRes.length,
+                    completed: completedRes.length
+                },
+                todayRevenue: (0, util_1.formatPriceNoSymbol)(revenue)
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('加载订单统计失败', error, 'Orders');
+        }
     },
     // 加载订单列表
-    loadOrders() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const params = {
-                    page_id: this.data.currentPage,
-                    page_size: this.data.pageSize
-                };
-                if (this.data.currentStatus) {
-                    params.status = this.data.currentStatus;
-                }
-                const orders = yield order_management_1.MerchantOrderManagementService.getOrderList(params);
-                // 转换数据格式
-                const formattedOrders = orders.map(order => this.formatOrder(order));
-                // 计算分页（API 可能不返回总数，这里用返回条数判断）
-                const totalCount = formattedOrders.length;
-                const totalPages = Math.max(1, Math.ceil(totalCount / this.data.pageSize));
-                this.setData({
-                    orders: formattedOrders,
-                    totalCount,
-                    totalPages,
-                    pageNumbers: this.generatePageNumbers(this.data.currentPage, totalPages),
-                    loading: false,
-                    allSelected: false,
-                    selectedCount: 0
-                });
+    async loadOrders() {
+        this.setData({ loading: true });
+        try {
+            const params = {
+                page_id: this.data.currentPage,
+                page_size: this.data.pageSize
+            };
+            if (this.data.currentStatus) {
+                params.status = this.data.currentStatus;
             }
-            catch (error) {
-                logger_1.logger.error('加载订单列表失败', error, 'Orders');
-                wx.showToast({ title: '加载失败', icon: 'error' });
-                this.setData({ loading: false });
-            }
-        });
+            const orders = await order_management_1.MerchantOrderManagementService.getOrderList(params);
+            // 转换数据格式
+            const formattedOrders = orders.map(order => this.formatOrder(order));
+            // 计算分页（API 可能不返回总数，这里用返回条数判断）
+            const totalCount = formattedOrders.length;
+            const totalPages = Math.max(1, Math.ceil(totalCount / this.data.pageSize));
+            this.setData({
+                orders: formattedOrders,
+                totalCount,
+                totalPages,
+                pageNumbers: this.generatePageNumbers(this.data.currentPage, totalPages),
+                loading: false,
+                allSelected: false,
+                selectedCount: 0
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('加载订单列表失败', error, 'Orders');
+            wx.showToast({ title: '加载失败', icon: 'error' });
+            this.setData({ loading: false });
+        }
     },
     // 格式化订单数据
     formatOrder(order) {
@@ -185,7 +170,24 @@ Page({
             }
             itemsCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
         }
-        return Object.assign(Object.assign({}, order), { selected: false, status_label: STATUS_LABELS[order.status] || order.status, order_type_label: TYPE_LABELS[order.order_type] || order.order_type, total_display: (0, util_1.formatPriceNoSymbol)(order.total_amount || 0), discount_display: (0, util_1.formatPriceNoSymbol)(order.discount_amount || 0), subtotal_display: (0, util_1.formatPriceNoSymbol)(order.subtotal || 0), delivery_fee_display: (0, util_1.formatPriceNoSymbol)(order.delivery_fee || 0), items: (order.items || []).map(item => (Object.assign(Object.assign({}, item), { subtotal_display: (0, util_1.formatPriceNoSymbol)(item.subtotal || 0) }))), items_summary: itemsSummary || '无商品信息', items_count: itemsCount, created_date: createdAt.format('MM-DD'), created_time: createdAt.format('HH:mm:ss') });
+        return {
+            ...order,
+            selected: false,
+            status_label: STATUS_LABELS[order.status] || order.status,
+            order_type_label: TYPE_LABELS[order.order_type] || order.order_type,
+            total_display: (0, util_1.formatPriceNoSymbol)(order.total_amount || 0),
+            discount_display: (0, util_1.formatPriceNoSymbol)(order.discount_amount || 0),
+            subtotal_display: (0, util_1.formatPriceNoSymbol)(order.subtotal || 0),
+            delivery_fee_display: (0, util_1.formatPriceNoSymbol)(order.delivery_fee || 0),
+            items: (order.items || []).map(item => ({
+                ...item,
+                subtotal_display: (0, util_1.formatPriceNoSymbol)(item.subtotal || 0)
+            })),
+            items_summary: itemsSummary || '无商品信息',
+            items_count: itemsCount,
+            created_date: createdAt.format('MM-DD'),
+            created_time: createdAt.format('HH:mm:ss')
+        };
     },
     // 生成页码数组
     generatePageNumbers(current, total) {
@@ -197,12 +199,10 @@ Page({
         return pages;
     },
     // 刷新订单
-    refreshOrders() {
-        return __awaiter(this, void 0, void 0, function* () {
-            yield this.loadStatusCounts();
-            yield this.loadOrders();
-            wx.showToast({ title: '已刷新', icon: 'success' });
-        });
+    async refreshOrders() {
+        await this.loadStatusCounts();
+        await this.loadOrders();
+        wx.showToast({ title: '已刷新', icon: 'success' });
     },
     // 导出订单
     exportOrders() {
@@ -244,7 +244,7 @@ Page({
     // 全选/取消全选
     toggleSelectAll() {
         const allSelected = !this.data.allSelected;
-        const orders = this.data.orders.map(o => (Object.assign(Object.assign({}, o), { selected: allSelected })));
+        const orders = this.data.orders.map(o => ({ ...o, selected: allSelected }));
         const selectedCount = allSelected ? orders.length : 0;
         const canBatchAccept = allSelected && orders.every(o => o.status === 'paid');
         this.setData({ orders, allSelected, selectedCount, canBatchAccept });
@@ -254,7 +254,7 @@ Page({
         const id = e.currentTarget.dataset.id;
         const orders = this.data.orders.map(o => {
             if (o.id === id) {
-                return Object.assign(Object.assign({}, o), { selected: !o.selected });
+                return { ...o, selected: !o.selected };
             }
             return o;
         });
@@ -265,7 +265,7 @@ Page({
     },
     // 清除选择
     clearSelection() {
-        const orders = this.data.orders.map(o => (Object.assign(Object.assign({}, o), { selected: false })));
+        const orders = this.data.orders.map(o => ({ ...o, selected: false }));
         this.setData({ orders, allSelected: false, selectedCount: 0, canBatchAccept: false });
     },
     // 分页
@@ -296,85 +296,77 @@ Page({
         this.loadOrders();
     },
     // 接单
-    acceptOrder(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const id = e.currentTarget.dataset.id;
-            wx.showModal({
-                title: '确认接单',
-                content: '接单后将开始制作，确定接单吗？',
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        try {
-                            yield order_management_1.MerchantOrderManagementService.acceptOrder(id);
-                            wx.showToast({ title: '已接单', icon: 'success' });
-                            this.loadStatusCounts();
-                            this.loadOrders();
-                        }
-                        catch (error) {
-                            logger_1.logger.error('接单失败', error, 'Orders');
-                            wx.showToast({ title: '接单失败', icon: 'error' });
-                        }
+    async acceptOrder(e) {
+        const id = e.currentTarget.dataset.id;
+        wx.showModal({
+            title: '确认接单',
+            content: '接单后将开始制作，确定接单吗？',
+            success: async (res) => {
+                if (res.confirm) {
+                    try {
+                        await order_management_1.MerchantOrderManagementService.acceptOrder(id);
+                        wx.showToast({ title: '已接单', icon: 'success' });
+                        this.loadStatusCounts();
+                        this.loadOrders();
                     }
-                })
-            });
+                    catch (error) {
+                        logger_1.logger.error('接单失败', error, 'Orders');
+                        wx.showToast({ title: '接单失败', icon: 'error' });
+                    }
+                }
+            }
         });
     },
     // 拒单
-    rejectOrder(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const id = e.currentTarget.dataset.id;
-            wx.showModal({
-                title: '拒单原因',
-                editable: true,
-                placeholderText: '请输入拒单原因',
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm && res.content) {
-                        try {
-                            yield order_management_1.MerchantOrderManagementService.rejectOrder(id, { reason: res.content });
-                            wx.showToast({ title: '已拒单', icon: 'success' });
-                            this.loadStatusCounts();
-                            this.loadOrders();
-                        }
-                        catch (error) {
-                            logger_1.logger.error('拒单失败', error, 'Orders');
-                            wx.showToast({ title: '拒单失败', icon: 'error' });
-                        }
+    async rejectOrder(e) {
+        const id = e.currentTarget.dataset.id;
+        wx.showModal({
+            title: '拒单原因',
+            editable: true,
+            placeholderText: '请输入拒单原因',
+            success: async (res) => {
+                if (res.confirm && res.content) {
+                    try {
+                        await order_management_1.MerchantOrderManagementService.rejectOrder(id, { reason: res.content });
+                        wx.showToast({ title: '已拒单', icon: 'success' });
+                        this.loadStatusCounts();
+                        this.loadOrders();
                     }
-                })
-            });
+                    catch (error) {
+                        logger_1.logger.error('拒单失败', error, 'Orders');
+                        wx.showToast({ title: '拒单失败', icon: 'error' });
+                    }
+                }
+            }
         });
     },
     // 出餐
-    markReady(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const id = e.currentTarget.dataset.id;
-            try {
-                yield order_management_1.MerchantOrderManagementService.markOrderReady(id);
-                wx.showToast({ title: '已出餐', icon: 'success' });
-                this.loadStatusCounts();
-                this.loadOrders();
-            }
-            catch (error) {
-                logger_1.logger.error('出餐失败', error, 'Orders');
-                wx.showToast({ title: '操作失败', icon: 'error' });
-            }
-        });
+    async markReady(e) {
+        const id = e.currentTarget.dataset.id;
+        try {
+            await order_management_1.MerchantOrderManagementService.markOrderReady(id);
+            wx.showToast({ title: '已出餐', icon: 'success' });
+            this.loadStatusCounts();
+            this.loadOrders();
+        }
+        catch (error) {
+            logger_1.logger.error('出餐失败', error, 'Orders');
+            wx.showToast({ title: '操作失败', icon: 'error' });
+        }
     },
     // 完成订单
-    completeOrder(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const id = e.currentTarget.dataset.id;
-            try {
-                yield order_management_1.MerchantOrderManagementService.completeOrder(id);
-                wx.showToast({ title: '已完成', icon: 'success' });
-                this.loadStatusCounts();
-                this.loadOrders();
-            }
-            catch (error) {
-                logger_1.logger.error('完成订单失败', error, 'Orders');
-                wx.showToast({ title: '操作失败', icon: 'error' });
-            }
-        });
+    async completeOrder(e) {
+        const id = e.currentTarget.dataset.id;
+        try {
+            await order_management_1.MerchantOrderManagementService.completeOrder(id);
+            wx.showToast({ title: '已完成', icon: 'success' });
+            this.loadStatusCounts();
+            this.loadOrders();
+        }
+        catch (error) {
+            logger_1.logger.error('完成订单失败', error, 'Orders');
+            wx.showToast({ title: '操作失败', icon: 'error' });
+        }
     },
     // 查看详情
     viewDetail(e) {
@@ -396,30 +388,28 @@ Page({
         wx.showToast({ title: '打印指令已发送', icon: 'none' });
     },
     // 批量接单
-    batchAccept() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const selectedOrders = this.data.orders.filter(o => o.selected && o.status === 'paid');
-            if (selectedOrders.length === 0)
-                return;
-            wx.showModal({
-                title: '批量接单',
-                content: `确定接收 ${selectedOrders.length} 个订单吗？`,
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        try {
-                            yield Promise.all(selectedOrders.map(o => order_management_1.MerchantOrderManagementService.acceptOrder(o.id)));
-                            wx.showToast({ title: `已接收 ${selectedOrders.length} 单`, icon: 'success' });
-                            this.clearSelection();
-                            this.loadStatusCounts();
-                            this.loadOrders();
-                        }
-                        catch (error) {
-                            logger_1.logger.error('批量接单失败', error, 'Orders');
-                            wx.showToast({ title: '部分订单接收失败', icon: 'none' });
-                        }
+    async batchAccept() {
+        const selectedOrders = this.data.orders.filter(o => o.selected && o.status === 'paid');
+        if (selectedOrders.length === 0)
+            return;
+        wx.showModal({
+            title: '批量接单',
+            content: `确定接收 ${selectedOrders.length} 个订单吗？`,
+            success: async (res) => {
+                if (res.confirm) {
+                    try {
+                        await Promise.all(selectedOrders.map(o => order_management_1.MerchantOrderManagementService.acceptOrder(o.id)));
+                        wx.showToast({ title: `已接收 ${selectedOrders.length} 单`, icon: 'success' });
+                        this.clearSelection();
+                        this.loadStatusCounts();
+                        this.loadOrders();
                     }
-                })
-            });
+                    catch (error) {
+                        logger_1.logger.error('批量接单失败', error, 'Orders');
+                        wx.showToast({ title: '部分订单接收失败', icon: 'none' });
+                    }
+                }
+            }
         });
     },
     // 批量打印

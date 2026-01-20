@@ -6,15 +6,6 @@
  * - GET/POST/PATCH/DELETE /v1/dishes/categories - 分类管理
  * - POST /v1/dishes/images/upload - 图片上传
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const dish_1 = require("../../../api/dish");
 const image_security_1 = require("../../../utils/image-security");
@@ -71,40 +62,36 @@ Page({
     onSidebarCollapse(e) {
         this.setData({ sidebarCollapsed: e.detail.collapsed });
     },
-    initData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 获取商户信息
-            const merchantId = app.globalData.merchantId;
-            if (merchantId) {
-                yield this.loadCategories();
-                yield this.loadDishes();
-                yield this.loadAvailableTags();
-                yield this.loadCustomizationTags();
-            }
-            else {
-                // 等待商户信息
-                app.userInfoReadyCallback = () => __awaiter(this, void 0, void 0, function* () {
-                    if (app.globalData.merchantId) {
-                        yield this.loadCategories();
-                        yield this.loadDishes();
-                        yield this.loadAvailableTags();
-                        yield this.loadCustomizationTags();
-                    }
-                });
-            }
-        });
+    async initData() {
+        // 获取商户信息
+        const merchantId = app.globalData.merchantId;
+        if (merchantId) {
+            await this.loadCategories();
+            await this.loadDishes();
+            await this.loadAvailableTags();
+            await this.loadCustomizationTags();
+        }
+        else {
+            // 等待商户信息
+            app.userInfoReadyCallback = async () => {
+                if (app.globalData.merchantId) {
+                    await this.loadCategories();
+                    await this.loadDishes();
+                    await this.loadAvailableTags();
+                    await this.loadCustomizationTags();
+                }
+            };
+        }
     },
     // 加载可用标签
-    loadAvailableTags() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const tags = yield dish_1.TagService.listDishTags();
-                this.setData({ availableTags: tags });
-            }
-            catch (error) {
-                logger_1.logger.error('加载标签失败', error, 'Dishes');
-            }
-        });
+    async loadAvailableTags() {
+        try {
+            const tags = await dish_1.TagService.listDishTags();
+            this.setData({ availableTags: tags });
+        }
+        catch (error) {
+            logger_1.logger.error('加载标签失败', error, 'Dishes');
+        }
     },
     // 切换标签选中状态
     onTagToggle(e) {
@@ -122,67 +109,68 @@ Page({
         }
     },
     // 加载定制标签
-    loadCustomizationTags() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const tags = yield dish_1.TagService.listCustomizationTags();
-                this.setData({ customizationTags: tags });
-            }
-            catch (error) {
-                logger_1.logger.error('加载定制标签失败', error, 'Dishes');
-            }
-        });
+    async loadCustomizationTags() {
+        try {
+            const tags = await dish_1.TagService.listCustomizationTags();
+            this.setData({ customizationTags: tags });
+        }
+        catch (error) {
+            logger_1.logger.error('加载定制标签失败', error, 'Dishes');
+        }
     },
-    loadCategories() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const result = yield dish_1.DishManagementService.getDishCategories();
-                const allDishes = this.data.allDishes || [];
-                // 计算每个分类的菜品数量
-                const categoriesWithCount = result.map(cat => (Object.assign(Object.assign({}, cat), { dish_count: allDishes.filter(d => d.category_id === cat.id).length })));
-                this.setData({
-                    categories: [
-                        { id: 'all', name: '全部菜品', dish_count: allDishes.length },
-                        ...categoriesWithCount
-                    ]
-                });
-                // 更新分类选项数据
-                this.updateCategoryOptions();
-            }
-            catch (error) {
-                logger_1.logger.error('加载分类失败', error, 'Dishes');
-            }
-        });
+    async loadCategories() {
+        try {
+            const result = await dish_1.DishManagementService.getDishCategories();
+            const allDishes = this.data.allDishes || [];
+            // 计算每个分类的菜品数量
+            const categoriesWithCount = result.map(cat => ({
+                ...cat,
+                dish_count: allDishes.filter(d => d.category_id === cat.id).length
+            }));
+            this.setData({
+                categories: [
+                    { id: 'all', name: '全部菜品', dish_count: allDishes.length },
+                    ...categoriesWithCount
+                ]
+            });
+            // 更新分类选项数据
+            this.updateCategoryOptions();
+        }
+        catch (error) {
+            logger_1.logger.error('加载分类失败', error, 'Dishes');
+        }
     },
-    loadDishes() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const response = yield dish_1.DishManagementService.listDishes({
-                    page_id: 1,
-                    page_size: 50 // 后端限制最大50
-                });
-                // 处理图片 URL
-                const processedDishes = yield Promise.all(response.dishes.map((dish) => __awaiter(this, void 0, void 0, function* () {
-                    let imageUrl = dish.image_url;
-                    if (imageUrl) {
-                        imageUrl = yield (0, image_security_1.resolveImageURL)(imageUrl);
-                    }
-                    return Object.assign(Object.assign({}, dish), { image_url: imageUrl, priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0) });
-                })));
-                this.setData({
-                    allDishes: processedDishes,
-                    loading: false
-                });
-                this.filterDishes();
-                // 重新计算分类数量
-                yield this.loadCategories();
-            }
-            catch (error) {
-                logger_1.logger.error('加载菜品失败', error, 'Dishes');
-                this.setData({ loading: false });
-            }
-        });
+    async loadDishes() {
+        this.setData({ loading: true });
+        try {
+            const response = await dish_1.DishManagementService.listDishes({
+                page_id: 1,
+                page_size: 50 // 后端限制最大50
+            });
+            // 处理图片 URL
+            const processedDishes = await Promise.all(response.dishes.map(async (dish) => {
+                let imageUrl = dish.image_url;
+                if (imageUrl) {
+                    imageUrl = await (0, image_security_1.resolveImageURL)(imageUrl);
+                }
+                return {
+                    ...dish,
+                    image_url: imageUrl,
+                    priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0)
+                };
+            }));
+            this.setData({
+                allDishes: processedDishes,
+                loading: false
+            });
+            this.filterDishes();
+            // 重新计算分类数量
+            await this.loadCategories();
+        }
+        catch (error) {
+            logger_1.logger.error('加载菜品失败', error, 'Dishes');
+            this.setData({ loading: false });
+        }
     },
     filterDishes() {
         const { allDishes, activeCategoryId, searchKeyword } = this.data;
@@ -236,56 +224,91 @@ Page({
             this.onSelectDish(e);
         }
     },
-    onSelectDish(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            const dishFromList = e.currentTarget.dataset.item;
-            const { categories } = this.data;
-            const requestedDishId = dishFromList.id; // 记录本次请求的菜品ID
-            // 第一步：只设置 ID，这是最快的操作，立即给用户视觉反馈
-            this.setData({ selectedDishId: requestedDishId });
-            // 第二步：设置完整选中状态
-            this.setData({
-                selectedDish: dishFromList,
-                isAdding: false,
-                selectedTagIds: [],
-                customizationGroupsDraft: [],
-                activeCustomizationGroupIndex: -1
-            });
-            // 从API获取完整的菜品信息（包含标签和定制选项）
-            let dish = dishFromList;
+    async onSelectDish(e) {
+        var _a, _b;
+        const dishFromList = e.currentTarget.dataset.item;
+        const { categories } = this.data;
+        const requestedDishId = dishFromList.id; // 记录本次请求的菜品ID
+        // 第一步：只设置 ID，这是最快的操作，立即给用户视觉反馈
+        this.setData({ selectedDishId: requestedDishId });
+        // 第二步：设置完整选中状态
+        this.setData({
+            selectedDish: dishFromList,
+            isAdding: false,
+            selectedTagIds: [],
+            customizationGroupsDraft: [],
+            activeCustomizationGroupIndex: -1
+        });
+        // 从API获取完整的菜品信息（包含标签和定制选项）
+        let dish = dishFromList;
+        try {
+            dish = await dish_1.DishManagementService.getDishDetail(dishFromList.id);
+        }
+        catch (error) {
+            logger_1.logger.error('获取菜品详情失败，使用列表数据', error, 'Dishes');
+        }
+        // 检查是否已经选择了其他菜品（防止旧请求覆盖新选择）
+        if (((_a = this.data.selectedDish) === null || _a === void 0 ? void 0 : _a.id) !== requestedDishId) {
+            console.log('[onSelectDish] 已选择其他菜品，忽略旧响应', requestedDishId);
+            return;
+        }
+        // 处理图片URL - 需要转换为完整URL用于显示
+        let imageUrlDisplay = dish.image_url;
+        if (dish.image_url) {
             try {
-                dish = yield dish_1.DishManagementService.getDishDetail(dishFromList.id);
+                imageUrlDisplay = await (0, image_security_1.resolveImageURL)(dish.image_url);
             }
             catch (error) {
-                logger_1.logger.error('获取菜品详情失败，使用列表数据', error, 'Dishes');
+                logger_1.logger.error('解析图片URL失败', error, 'Dishes');
             }
-            // 检查是否已经选择了其他菜品（防止旧请求覆盖新选择）
-            if (((_a = this.data.selectedDish) === null || _a === void 0 ? void 0 : _a.id) !== requestedDishId) {
-                console.log('[onSelectDish] 已选择其他菜品，忽略旧响应', requestedDishId);
-                return;
-            }
-            // 处理图片URL - 需要转换为完整URL用于显示
-            let imageUrlDisplay = dish.image_url;
-            if (dish.image_url) {
-                try {
-                    imageUrlDisplay = yield (0, image_security_1.resolveImageURL)(dish.image_url);
-                }
-                catch (error) {
-                    logger_1.logger.error('解析图片URL失败', error, 'Dishes');
-                }
-            }
-            // 再次检查（图片加载也是异步的）
-            if (((_b = this.data.selectedDish) === null || _b === void 0 ? void 0 : _b.id) !== requestedDishId) {
-                return;
-            }
-            // 处理分类数据回填
-            const category = categories.find((c) => c.id === dish.category_id);
-            const categoryIndex = categories.findIndex((c) => c.id === dish.category_id);
-            // 回填已有属性标签
-            const tagIds = (dish.tags || []).map((t) => t.id);
-            // 回填定制选项分组
-            const customizationGroupsDraft = (dish.customization_groups || []).map((group, index) => {
+        }
+        // 再次检查（图片加载也是异步的）
+        if (((_b = this.data.selectedDish) === null || _b === void 0 ? void 0 : _b.id) !== requestedDishId) {
+            return;
+        }
+        // 处理分类数据回填
+        const category = categories.find((c) => c.id === dish.category_id);
+        const categoryIndex = categories.findIndex((c) => c.id === dish.category_id);
+        // 回填已有属性标签
+        const tagIds = (dish.tags || []).map((t) => t.id);
+        // 回填定制选项分组
+        const customizationGroupsDraft = (dish.customization_groups || []).map((group, index) => {
+            var _a;
+            const options = (group.options || []).map((opt, optIndex) => {
+                var _a;
+                return ({
+                    tag_id: opt.tag_id,
+                    tag_name: opt.tag_name,
+                    extra_price: opt.extra_price || 0,
+                    sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
+                });
+            });
+            return {
+                name: group.name,
+                is_required: !!group.is_required,
+                sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : index,
+                options,
+                tag_ids: options.map((opt) => opt.tag_id)
+            };
+        });
+        this.setData({
+            selectedDish: {
+                ...dish,
+                category_name: (category === null || category === void 0 ? void 0 : category.name) || dish.category_name || '',
+                image_url_display: imageUrlDisplay // 用于显示的完整URL
+            },
+            isAdding: false,
+            categoryPickerIndex: categoryIndex >= 0 ? categoryIndex : 0,
+            selectedTagIds: tagIds,
+            customizationGroupsDraft,
+            activeCustomizationGroupIndex: customizationGroupsDraft.length > 0 ? 0 : -1
+        });
+    },
+    // 加载菜品定制选项 - 保留用于新建菜品后刷新
+    async loadDishCustomizations(dishId) {
+        try {
+            const result = await dish_1.DishManagementService.getDishCustomizations(dishId);
+            const customizationGroupsDraft = (result || []).map((group, index) => {
                 var _a;
                 const options = (group.options || []).map((opt, optIndex) => {
                     var _a;
@@ -305,49 +328,13 @@ Page({
                 };
             });
             this.setData({
-                selectedDish: Object.assign(Object.assign({}, dish), { category_name: (category === null || category === void 0 ? void 0 : category.name) || dish.category_name || '', image_url_display: imageUrlDisplay // 用于显示的完整URL
-                 }),
-                isAdding: false,
-                categoryPickerIndex: categoryIndex >= 0 ? categoryIndex : 0,
-                selectedTagIds: tagIds,
                 customizationGroupsDraft,
                 activeCustomizationGroupIndex: customizationGroupsDraft.length > 0 ? 0 : -1
             });
-        });
-    },
-    // 加载菜品定制选项 - 保留用于新建菜品后刷新
-    loadDishCustomizations(dishId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const result = yield dish_1.DishManagementService.getDishCustomizations(dishId);
-                const customizationGroupsDraft = (result || []).map((group, index) => {
-                    var _a;
-                    const options = (group.options || []).map((opt, optIndex) => {
-                        var _a;
-                        return ({
-                            tag_id: opt.tag_id,
-                            tag_name: opt.tag_name,
-                            extra_price: opt.extra_price || 0,
-                            sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
-                        });
-                    });
-                    return {
-                        name: group.name,
-                        is_required: !!group.is_required,
-                        sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : index,
-                        options,
-                        tag_ids: options.map((opt) => opt.tag_id)
-                    };
-                });
-                this.setData({
-                    customizationGroupsDraft,
-                    activeCustomizationGroupIndex: customizationGroupsDraft.length > 0 ? 0 : -1
-                });
-            }
-            catch (error) {
-                logger_1.logger.error('加载定制选项失败', error, 'Dishes');
-            }
-        });
+        }
+        catch (error) {
+            logger_1.logger.error('加载定制选项失败', error, 'Dishes');
+        }
     },
     onAddDish() {
         const { activeCategoryId, categories } = this.data;
@@ -397,33 +384,31 @@ Page({
             'selectedDish.is_online': !selectedDish.is_online
         });
     },
-    onUploadImage() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const res = yield wx.chooseMedia({
-                    count: 1,
-                    mediaType: ['image'],
-                    sourceType: ['album', 'camera']
-                });
-                const filePath = res.tempFiles[0].tempFilePath;
-                wx.showLoading({ title: '上传中...' });
-                // 后端返回相对路径，保存原始路径用于API请求
-                const imageUrl = yield dish_1.DishManagementService.uploadDishImage(filePath);
-                // 转换为完整URL仅用于显示
-                const displayUrl = yield (0, image_security_1.resolveImageURL)(imageUrl);
-                this.setData({
-                    'selectedDish.image_url': imageUrl, // 原始路径用于API
-                    'selectedDish.image_url_display': displayUrl // 完整URL用于显示
-                });
-                wx.hideLoading();
-                wx.showToast({ title: '上传成功', icon: 'success' });
-            }
-            catch (error) {
-                wx.hideLoading();
-                logger_1.logger.error('上传图片失败', error, 'Dishes');
-                wx.showToast({ title: '上传失败', icon: 'error' });
-            }
-        });
+    async onUploadImage() {
+        try {
+            const res = await wx.chooseMedia({
+                count: 1,
+                mediaType: ['image'],
+                sourceType: ['album', 'camera']
+            });
+            const filePath = res.tempFiles[0].tempFilePath;
+            wx.showLoading({ title: '上传中...' });
+            // 后端返回相对路径，保存原始路径用于API请求
+            const imageUrl = await dish_1.DishManagementService.uploadDishImage(filePath);
+            // 转换为完整URL仅用于显示
+            const displayUrl = await (0, image_security_1.resolveImageURL)(imageUrl);
+            this.setData({
+                'selectedDish.image_url': imageUrl, // 原始路径用于API
+                'selectedDish.image_url_display': displayUrl // 完整URL用于显示
+            });
+            wx.hideLoading();
+            wx.showToast({ title: '上传成功', icon: 'success' });
+        }
+        catch (error) {
+            wx.hideLoading();
+            logger_1.logger.error('上传图片失败', error, 'Dishes');
+            wx.showToast({ title: '上传失败', icon: 'error' });
+        }
     },
     // 提取图片路径：如果是完整URL则提取相对路径
     extractImagePath(url) {
@@ -438,101 +423,99 @@ Page({
         }
         return url;
     },
-    onSaveDish() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { selectedDish, isAdding } = this.data;
-            if (!selectedDish)
-                return;
-            // 验证
-            if (!selectedDish.name || selectedDish.name.trim().length < 1) {
-                wx.showToast({ title: '请输入菜品名称', icon: 'none' });
-                return;
-            }
-            // 后端要求 price >= 1 (分)，即至少 0.01 元
-            if (!selectedDish.price || selectedDish.price < 1) {
-                wx.showToast({ title: '请输入有效价格（至少0.01元）', icon: 'none' });
-                return;
-            }
-            this.setData({ saving: true });
-            // 提取正确的图片路径
-            const imageUrl = this.extractImagePath(selectedDish.image_url);
-            try {
-                if (isAdding) {
-                    let customizationGroups = undefined;
-                    if (this.data.customizationGroupsDraft.length > 0) {
-                        customizationGroups = this.data.customizationGroupsDraft
-                            .filter((group) => group.options && group.options.length > 0)
-                            .map((group, groupIndex) => {
-                            var _a;
-                            return ({
-                                name: group.name,
-                                is_required: !!group.is_required,
-                                sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : groupIndex,
-                                options: (group.options || []).map((opt, optIndex) => {
-                                    var _a;
-                                    return ({
-                                        tag_id: opt.tag_id,
-                                        extra_price: opt.extra_price || 0,
-                                        sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
-                                    });
-                                })
-                            });
+    async onSaveDish() {
+        const { selectedDish, isAdding } = this.data;
+        if (!selectedDish)
+            return;
+        // 验证
+        if (!selectedDish.name || selectedDish.name.trim().length < 1) {
+            wx.showToast({ title: '请输入菜品名称', icon: 'none' });
+            return;
+        }
+        // 后端要求 price >= 1 (分)，即至少 0.01 元
+        if (!selectedDish.price || selectedDish.price < 1) {
+            wx.showToast({ title: '请输入有效价格（至少0.01元）', icon: 'none' });
+            return;
+        }
+        this.setData({ saving: true });
+        // 提取正确的图片路径
+        const imageUrl = this.extractImagePath(selectedDish.image_url);
+        try {
+            if (isAdding) {
+                let customizationGroups = undefined;
+                if (this.data.customizationGroupsDraft.length > 0) {
+                    customizationGroups = this.data.customizationGroupsDraft
+                        .filter((group) => group.options && group.options.length > 0)
+                        .map((group, groupIndex) => {
+                        var _a;
+                        return ({
+                            name: group.name,
+                            is_required: !!group.is_required,
+                            sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : groupIndex,
+                            options: (group.options || []).map((opt, optIndex) => {
+                                var _a;
+                                return ({
+                                    tag_id: opt.tag_id,
+                                    extra_price: opt.extra_price || 0,
+                                    sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
+                                });
+                            })
                         });
-                    }
-                    // 创建菜品（包含标签和定制选项）
-                    yield dish_1.DishManagementService.createDish({
-                        name: selectedDish.name.trim(),
-                        description: selectedDish.description || '',
-                        image_url: imageUrl,
-                        price: selectedDish.price,
-                        member_price: selectedDish.member_price || undefined,
-                        category_id: selectedDish.category_id || undefined,
-                        is_online: selectedDish.is_online !== false,
-                        is_available: selectedDish.is_available !== false,
-                        prepare_time: selectedDish.prepare_time || 10,
-                        sort_order: selectedDish.sort_order || 0,
-                        tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined,
-                        customization_groups: customizationGroups
                     });
-                    wx.showToast({ title: '创建成功', icon: 'success' });
                 }
-                else {
-                    // 更新菜品 - 只发送需要更新的字段
-                    yield dish_1.DishManagementService.updateDish(selectedDish.id, {
-                        name: selectedDish.name.trim(),
-                        description: selectedDish.description || '',
-                        image_url: imageUrl,
-                        price: selectedDish.price,
-                        member_price: selectedDish.member_price || undefined,
-                        category_id: selectedDish.category_id || undefined,
-                        is_online: selectedDish.is_online,
-                        is_available: selectedDish.is_available,
-                        prepare_time: selectedDish.prepare_time || 10,
-                        sort_order: selectedDish.sort_order || 0,
-                        tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : []
-                    });
-                    // 保存定制选项
-                    if (this.data.customizationGroupsDraft.length > 0 || selectedDish.id) {
-                        yield this.saveDishCustomizations();
-                    }
-                    wx.showToast({ title: '保存成功', icon: 'success' });
-                }
-                this.setData({
-                    isAdding: false,
-                    selectedDish: null, // 清除选中状态
-                    customizationGroupsDraft: [],
-                    activeCustomizationGroupIndex: -1
+                // 创建菜品（包含标签和定制选项）
+                await dish_1.DishManagementService.createDish({
+                    name: selectedDish.name.trim(),
+                    description: selectedDish.description || '',
+                    image_url: imageUrl,
+                    price: selectedDish.price,
+                    member_price: selectedDish.member_price || undefined,
+                    category_id: selectedDish.category_id || undefined,
+                    is_online: selectedDish.is_online !== false,
+                    is_available: selectedDish.is_available !== false,
+                    prepare_time: selectedDish.prepare_time || 10,
+                    sort_order: selectedDish.sort_order || 0,
+                    tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined,
+                    customization_groups: customizationGroups
                 });
-                yield this.loadDishes();
+                wx.showToast({ title: '创建成功', icon: 'success' });
             }
-            catch (error) {
-                logger_1.logger.error('保存菜品失败', error, 'Dishes');
-                wx.showToast({ title: error.message || '保存失败', icon: 'error' });
+            else {
+                // 更新菜品 - 只发送需要更新的字段
+                await dish_1.DishManagementService.updateDish(selectedDish.id, {
+                    name: selectedDish.name.trim(),
+                    description: selectedDish.description || '',
+                    image_url: imageUrl,
+                    price: selectedDish.price,
+                    member_price: selectedDish.member_price || undefined,
+                    category_id: selectedDish.category_id || undefined,
+                    is_online: selectedDish.is_online,
+                    is_available: selectedDish.is_available,
+                    prepare_time: selectedDish.prepare_time || 10,
+                    sort_order: selectedDish.sort_order || 0,
+                    tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : []
+                });
+                // 保存定制选项
+                if (this.data.customizationGroupsDraft.length > 0 || selectedDish.id) {
+                    await this.saveDishCustomizations();
+                }
+                wx.showToast({ title: '保存成功', icon: 'success' });
             }
-            finally {
-                this.setData({ saving: false });
-            }
-        });
+            this.setData({
+                isAdding: false,
+                selectedDish: null, // 清除选中状态
+                customizationGroupsDraft: [],
+                activeCustomizationGroupIndex: -1
+            });
+            await this.loadDishes();
+        }
+        catch (error) {
+            logger_1.logger.error('保存菜品失败', error, 'Dishes');
+            wx.showToast({ title: error.message || '保存失败', icon: 'error' });
+        }
+        finally {
+            this.setData({ saving: false });
+        }
     },
     // 更新分类选项数据
     updateCategoryOptions() {
@@ -567,33 +550,31 @@ Page({
             selectedDish: null
         });
     },
-    onDeleteDish() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { selectedDish } = this.data;
-            if (!selectedDish || !selectedDish.id)
-                return;
-            const res = yield wx.showModal({
-                title: '确认删除',
-                content: `确定要删除菜品「${selectedDish.name}」吗？此操作不可恢复。`,
-                confirmColor: '#ff4d4f'
-            });
-            if (res.confirm) {
-                wx.showLoading({ title: '删除中...' });
-                try {
-                    yield dish_1.DishManagementService.deleteDish(selectedDish.id);
-                    wx.showToast({ title: '已删除', icon: 'success' });
-                    this.setData({ selectedDish: null });
-                    yield this.loadDishes();
-                }
-                catch (error) {
-                    logger_1.logger.error('删除菜品失败', error, 'Dishes');
-                    wx.showToast({ title: '删除失败', icon: 'error' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
-            }
+    async onDeleteDish() {
+        const { selectedDish } = this.data;
+        if (!selectedDish || !selectedDish.id)
+            return;
+        const res = await wx.showModal({
+            title: '确认删除',
+            content: `确定要删除菜品「${selectedDish.name}」吗？此操作不可恢复。`,
+            confirmColor: '#ff4d4f'
         });
+        if (res.confirm) {
+            wx.showLoading({ title: '删除中...' });
+            try {
+                await dish_1.DishManagementService.deleteDish(selectedDish.id);
+                wx.showToast({ title: '已删除', icon: 'success' });
+                this.setData({ selectedDish: null });
+                await this.loadDishes();
+            }
+            catch (error) {
+                logger_1.logger.error('删除菜品失败', error, 'Dishes');
+                wx.showToast({ title: '删除失败', icon: 'error' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
     // ========== 分类管理 ==========
     onOpenCategoryManager() {
@@ -605,54 +586,50 @@ Page({
     onNewCategoryNameChange(e) {
         this.setData({ newCategoryName: e.detail.value });
     },
-    onConfirmAddCategory() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { newCategoryName } = this.data;
-            const name = newCategoryName === null || newCategoryName === void 0 ? void 0 : newCategoryName.trim();
-            if (!name) {
-                wx.showToast({ title: '请输入分类名称', icon: 'none' });
-                return;
-            }
-            wx.showLoading({ title: '添加中...' });
+    async onConfirmAddCategory() {
+        const { newCategoryName } = this.data;
+        const name = newCategoryName === null || newCategoryName === void 0 ? void 0 : newCategoryName.trim();
+        if (!name) {
+            wx.showToast({ title: '请输入分类名称', icon: 'none' });
+            return;
+        }
+        wx.showLoading({ title: '添加中...' });
+        try {
+            await dish_1.DishManagementService.createDishCategory({ name });
+            this.setData({ newCategoryName: '' });
+            await this.loadCategories();
+            wx.showToast({ title: '添加成功', icon: 'success' });
+        }
+        catch (error) {
+            logger_1.logger.error('添加分类失败', error, 'Dishes');
+            wx.showToast({ title: '添加失败', icon: 'error' });
+        }
+        finally {
+            wx.hideLoading();
+        }
+    },
+    async onDeleteCategory(e) {
+        const { id, name } = e.currentTarget.dataset;
+        const res = await wx.showModal({
+            title: '确认删除',
+            content: `确定删除分类「${name}」吗？该分类下的菜品将变为未分类。`,
+            confirmColor: '#ff4d4f'
+        });
+        if (res.confirm) {
+            wx.showLoading({ title: '删除中...' });
             try {
-                yield dish_1.DishManagementService.createDishCategory({ name });
-                this.setData({ newCategoryName: '' });
-                yield this.loadCategories();
-                wx.showToast({ title: '添加成功', icon: 'success' });
+                await dish_1.DishManagementService.deleteDishCategory(id);
+                await this.loadCategories();
+                wx.showToast({ title: '已删除', icon: 'success' });
             }
             catch (error) {
-                logger_1.logger.error('添加分类失败', error, 'Dishes');
-                wx.showToast({ title: '添加失败', icon: 'error' });
+                logger_1.logger.error('删除分类失败', error, 'Dishes');
+                wx.showToast({ title: '删除失败', icon: 'error' });
             }
             finally {
                 wx.hideLoading();
             }
-        });
-    },
-    onDeleteCategory(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { id, name } = e.currentTarget.dataset;
-            const res = yield wx.showModal({
-                title: '确认删除',
-                content: `确定删除分类「${name}」吗？该分类下的菜品将变为未分类。`,
-                confirmColor: '#ff4d4f'
-            });
-            if (res.confirm) {
-                wx.showLoading({ title: '删除中...' });
-                try {
-                    yield dish_1.DishManagementService.deleteDishCategory(id);
-                    yield this.loadCategories();
-                    wx.showToast({ title: '已删除', icon: 'success' });
-                }
-                catch (error) {
-                    logger_1.logger.error('删除分类失败', error, 'Dishes');
-                    wx.showToast({ title: '删除失败', icon: 'error' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
-            }
-        });
+        }
     },
     // ========== 分类选择器 ==========
     onOpenCategorySelector() {
@@ -694,67 +671,63 @@ Page({
             this.setData({ selectedDishIds: allIds });
         }
     },
-    onBatchOnline() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { selectedDishIds } = this.data;
-            if (selectedDishIds.length === 0)
-                return;
-            const res = yield wx.showModal({
-                title: '确认上架',
-                content: `确定要上架选中的 ${selectedDishIds.length} 个菜品吗？`,
-                confirmColor: '#1890ff'
-            });
-            if (res.confirm) {
-                wx.showLoading({ title: '处理中...' });
-                try {
-                    yield dish_1.DishManagementService.batchUpdateDishStatus({
-                        dish_ids: selectedDishIds,
-                        is_online: true
-                    });
-                    wx.showToast({ title: '批量上架成功', icon: 'success' });
-                    this.setData({ selectedDishIds: [] });
-                    yield this.loadDishes();
-                }
-                catch (error) {
-                    logger_1.logger.error('批量上架失败', error, 'Dishes');
-                    wx.showToast({ title: '操作失败', icon: 'error' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
-            }
+    async onBatchOnline() {
+        const { selectedDishIds } = this.data;
+        if (selectedDishIds.length === 0)
+            return;
+        const res = await wx.showModal({
+            title: '确认上架',
+            content: `确定要上架选中的 ${selectedDishIds.length} 个菜品吗？`,
+            confirmColor: '#1890ff'
         });
+        if (res.confirm) {
+            wx.showLoading({ title: '处理中...' });
+            try {
+                await dish_1.DishManagementService.batchUpdateDishStatus({
+                    dish_ids: selectedDishIds,
+                    is_online: true
+                });
+                wx.showToast({ title: '批量上架成功', icon: 'success' });
+                this.setData({ selectedDishIds: [] });
+                await this.loadDishes();
+            }
+            catch (error) {
+                logger_1.logger.error('批量上架失败', error, 'Dishes');
+                wx.showToast({ title: '操作失败', icon: 'error' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
-    onBatchOffline() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { selectedDishIds } = this.data;
-            if (selectedDishIds.length === 0)
-                return;
-            const res = yield wx.showModal({
-                title: '确认下架',
-                content: `确定要下架选中的 ${selectedDishIds.length} 个菜品吗？`,
-                confirmColor: '#ff4d4f'
-            });
-            if (res.confirm) {
-                wx.showLoading({ title: '处理中...' });
-                try {
-                    yield dish_1.DishManagementService.batchUpdateDishStatus({
-                        dish_ids: selectedDishIds,
-                        is_online: false
-                    });
-                    wx.showToast({ title: '批量下架成功', icon: 'success' });
-                    this.setData({ selectedDishIds: [] });
-                    yield this.loadDishes();
-                }
-                catch (error) {
-                    logger_1.logger.error('批量下架失败', error, 'Dishes');
-                    wx.showToast({ title: '操作失败', icon: 'error' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
-            }
+    async onBatchOffline() {
+        const { selectedDishIds } = this.data;
+        if (selectedDishIds.length === 0)
+            return;
+        const res = await wx.showModal({
+            title: '确认下架',
+            content: `确定要下架选中的 ${selectedDishIds.length} 个菜品吗？`,
+            confirmColor: '#ff4d4f'
         });
+        if (res.confirm) {
+            wx.showLoading({ title: '处理中...' });
+            try {
+                await dish_1.DishManagementService.batchUpdateDishStatus({
+                    dish_ids: selectedDishIds,
+                    is_online: false
+                });
+                wx.showToast({ title: '批量下架成功', icon: 'success' });
+                this.setData({ selectedDishIds: [] });
+                await this.loadDishes();
+            }
+            catch (error) {
+                logger_1.logger.error('批量下架失败', error, 'Dishes');
+                wx.showToast({ title: '操作失败', icon: 'error' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
     // ========== 定制选项管理（完整分组） ==========
     onAddCustomizationGroup() {
@@ -857,58 +830,56 @@ Page({
         }
     },
     // 保存定制选项
-    saveDishCustomizations() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { selectedDish, customizationGroupsDraft } = this.data;
-            console.log('[DEBUG] saveDishCustomizations 被调用', {
-                dishId: selectedDish === null || selectedDish === void 0 ? void 0 : selectedDish.id,
-                groupCount: customizationGroupsDraft.length,
-                groups: customizationGroupsDraft
-            });
-            if (!selectedDish || !selectedDish.id) {
-                console.log('[DEBUG] saveDishCustomizations 跳过：无有效菜品ID');
-                return;
-            }
-            if (customizationGroupsDraft.length === 0 || customizationGroupsDraft.every((g) => !g.options || g.options.length === 0)) {
-                try {
-                    console.log('[DEBUG] 清空定制选项');
-                    yield dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups: [] });
-                    return true;
-                }
-                catch (error) {
-                    logger_1.logger.error('保存定制选项失败', error, 'Dishes');
-                    throw error;
-                }
-            }
-            const groups = customizationGroupsDraft
-                .filter((group) => group.options && group.options.length > 0)
-                .map((group, groupIndex) => {
-                var _a;
-                return ({
-                    name: group.name,
-                    is_required: !!group.is_required,
-                    sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : groupIndex,
-                    options: (group.options || []).map((opt, optIndex) => {
-                        var _a;
-                        return ({
-                            tag_id: opt.tag_id,
-                            extra_price: opt.extra_price || 0,
-                            sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
-                        });
-                    })
-                });
-            });
-            console.log('[DEBUG] 保存定制选项', { groups });
+    async saveDishCustomizations() {
+        const { selectedDish, customizationGroupsDraft } = this.data;
+        console.log('[DEBUG] saveDishCustomizations 被调用', {
+            dishId: selectedDish === null || selectedDish === void 0 ? void 0 : selectedDish.id,
+            groupCount: customizationGroupsDraft.length,
+            groups: customizationGroupsDraft
+        });
+        if (!selectedDish || !selectedDish.id) {
+            console.log('[DEBUG] saveDishCustomizations 跳过：无有效菜品ID');
+            return;
+        }
+        if (customizationGroupsDraft.length === 0 || customizationGroupsDraft.every((g) => !g.options || g.options.length === 0)) {
             try {
-                yield dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups });
-                console.log('[DEBUG] 保存定制选项成功');
+                console.log('[DEBUG] 清空定制选项');
+                await dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups: [] });
                 return true;
             }
             catch (error) {
                 logger_1.logger.error('保存定制选项失败', error, 'Dishes');
                 throw error;
             }
+        }
+        const groups = customizationGroupsDraft
+            .filter((group) => group.options && group.options.length > 0)
+            .map((group, groupIndex) => {
+            var _a;
+            return ({
+                name: group.name,
+                is_required: !!group.is_required,
+                sort_order: (_a = group.sort_order) !== null && _a !== void 0 ? _a : groupIndex,
+                options: (group.options || []).map((opt, optIndex) => {
+                    var _a;
+                    return ({
+                        tag_id: opt.tag_id,
+                        extra_price: opt.extra_price || 0,
+                        sort_order: (_a = opt.sort_order) !== null && _a !== void 0 ? _a : optIndex
+                    });
+                })
+            });
         });
+        console.log('[DEBUG] 保存定制选项', { groups });
+        try {
+            await dish_1.DishManagementService.setDishCustomizations(selectedDish.id, { groups });
+            console.log('[DEBUG] 保存定制选项成功');
+            return true;
+        }
+        catch (error) {
+            logger_1.logger.error('保存定制选项失败', error, 'Dishes');
+            throw error;
+        }
     },
     // ========== 标签管理 ==========
     onOpenTagManager(e) {
@@ -928,62 +899,58 @@ Page({
     onNewTagNameInput(e) {
         this.setData({ newTagName: e.detail.value });
     },
-    onAddTag() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { newTagName, tagManagerType } = this.data;
-            const name = newTagName.trim();
-            if (!name) {
-                wx.showToast({ title: '请输入标签名称', icon: 'none' });
-                return;
+    async onAddTag() {
+        const { newTagName, tagManagerType } = this.data;
+        const name = newTagName.trim();
+        if (!name) {
+            wx.showToast({ title: '请输入标签名称', icon: 'none' });
+            return;
+        }
+        try {
+            await dish_1.TagService.createTag({
+                name,
+                type: tagManagerType
+            });
+            wx.showToast({ title: '添加成功', icon: 'success' });
+            this.setData({ newTagName: '' });
+            // 刷新标签列表
+            if (tagManagerType === 'dish') {
+                await this.loadAvailableTags();
             }
-            try {
-                yield dish_1.TagService.createTag({
-                    name,
-                    type: tagManagerType
-                });
-                wx.showToast({ title: '添加成功', icon: 'success' });
-                this.setData({ newTagName: '' });
-                // 刷新标签列表
-                if (tagManagerType === 'dish') {
-                    yield this.loadAvailableTags();
-                }
-                else {
-                    yield this.loadCustomizationTags();
-                }
+            else {
+                await this.loadCustomizationTags();
             }
-            catch (error) {
-                logger_1.logger.error('添加标签失败', error, 'Dishes');
-                wx.showToast({ title: '添加失败', icon: 'error' });
-            }
-        });
+        }
+        catch (error) {
+            logger_1.logger.error('添加标签失败', error, 'Dishes');
+            wx.showToast({ title: '添加失败', icon: 'error' });
+        }
     },
-    onDeleteTag(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { id, name } = e.currentTarget.dataset;
-            const { tagManagerType } = this.data;
-            wx.showModal({
-                title: '确认删除',
-                content: `确定要删除标签"${name}"吗？`,
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        try {
-                            yield dish_1.TagService.deleteTag(id);
-                            wx.showToast({ title: '删除成功', icon: 'success' });
-                            // 刷新标签列表
-                            if (tagManagerType === 'dish') {
-                                yield this.loadAvailableTags();
-                            }
-                            else {
-                                yield this.loadCustomizationTags();
-                            }
+    async onDeleteTag(e) {
+        const { id, name } = e.currentTarget.dataset;
+        const { tagManagerType } = this.data;
+        wx.showModal({
+            title: '确认删除',
+            content: `确定要删除标签"${name}"吗？`,
+            success: async (res) => {
+                if (res.confirm) {
+                    try {
+                        await dish_1.TagService.deleteTag(id);
+                        wx.showToast({ title: '删除成功', icon: 'success' });
+                        // 刷新标签列表
+                        if (tagManagerType === 'dish') {
+                            await this.loadAvailableTags();
                         }
-                        catch (error) {
-                            logger_1.logger.error('删除标签失败', error, 'Dishes');
-                            wx.showToast({ title: '删除失败', icon: 'error' });
+                        else {
+                            await this.loadCustomizationTags();
                         }
                     }
-                })
-            });
+                    catch (error) {
+                        logger_1.logger.error('删除标签失败', error, 'Dishes');
+                        wx.showToast({ title: '删除失败', icon: 'error' });
+                    }
+                }
+            }
         });
     }
 });

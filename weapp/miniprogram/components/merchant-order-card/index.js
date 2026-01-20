@@ -4,7 +4,7 @@ Component({
     properties: {
         order: {
             type: Object,
-            value: null
+            value: undefined
         }
     },
     methods: {

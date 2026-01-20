@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -66,38 +57,34 @@ Page({
         const roleList = Array.isArray(roles) ? roles : [roles];
         this.loadWorkbenches(roleList);
     },
-    initUserInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (app.globalData.userInfo) {
-                // Use cached role as fallback
-                this.updateUser(app.globalData.userInfo, app.globalData.userRole);
-            }
-            yield this.refreshUserInfo();
-        });
+    async initUserInfo() {
+        if (app.globalData.userInfo) {
+            // Use cached role as fallback
+            this.updateUser(app.globalData.userInfo, app.globalData.userRole);
+        }
+        await this.refreshUserInfo();
     },
-    refreshUserInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const user = yield (0, auth_1.getUserInfo)();
-                if (user) {
-                    logger_1.logger.debug('Refreshed User Info from Backend', user); // Debug log
-                    // Recover avatar from local storage if backend returns empty
-                    const localAvatar = wx.getStorageSync('user_avatar');
-                    const finalAvatar = user.avatar_url || localAvatar || '';
-                    console.log('[UserCenter] Refresh Info - Avatar:', finalAvatar, 'User:', user);
-                    // Update Global Data
-                    app.globalData.userInfo = {
-                        nickName: user.full_name || '微信用户',
-                        avatarUrl: finalAvatar,
-                    };
-                    // Update Local Data
-                    this.updateUser(app.globalData.userInfo, user.roles || []);
-                }
+    async refreshUserInfo() {
+        try {
+            const user = await (0, auth_1.getUserInfo)();
+            if (user) {
+                logger_1.logger.debug('Refreshed User Info from Backend', user); // Debug log
+                // Recover avatar from local storage if backend returns empty
+                const localAvatar = wx.getStorageSync('user_avatar');
+                const finalAvatar = user.avatar_url || localAvatar || '';
+                console.log('[UserCenter] Refresh Info - Avatar:', finalAvatar, 'User:', user);
+                // Update Global Data
+                app.globalData.userInfo = {
+                    nickName: user.full_name || '微信用户',
+                    avatarUrl: finalAvatar,
+                };
+                // Update Local Data
+                this.updateUser(app.globalData.userInfo, user.roles || []);
             }
-            catch (err) {
-                logger_1.logger.error('Failed to refresh user info', err);
-            }
-        });
+        }
+        catch (err) {
+            logger_1.logger.error('Failed to refresh user info', err);
+        }
     },
     // ==================== 导航方法 ====================
     onMyOrders() {
@@ -194,49 +181,56 @@ Page({
     onScanToJoin() {
         wx.navigateTo({ url: '/pages/user/bind-merchant/index' });
     },
-    onChooseAvatar(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { avatarUrl } = e.detail;
-            // Optimistic Update
-                // 1. Upload to Server
-                const imageUrl = yield upload_1.UploadService.uploadImage(avatarUrl, 'avatar');
-                const remoteUrl = imageUrl;
-                // 2. Persist locally with remote URL
-                wx.setStorageSync('user_avatar', remoteUrl);
-                // 3. Update Global Data
-                app.globalData.userInfo = Object.assign(Object.assign({}, (app.globalData.userInfo || {})), { avatarUrl: remoteUrl });
-                this.setData({
-                    'userInfo.avatarUrl': remoteUrl
-                });
-                // 4. Update Backend Profile
-                yield (0, auth_1.updateUserInfo)({ avatar_url: remoteUrl });
-            }
-            catch (error) {
-                console.error('Failed to update avatar on backend', error);
-                wx.showToast({ title: '头像上传失败', icon: 'none' });
-            }
-            finally {
-                wx.hideLoading();
-            }
+    async onChooseAvatar(e) {
+        const { avatarUrl } = e.detail;
+        // Optimistic Update
+        this.setData({
+            'userInfo.avatarUrl': avatarUrl
         });
-    },
-    onNicknameChange(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const nickName = e.detail.value;
-            if (!nickName)
-                return;
+        wx.showLoading({ title: '上传中...' });
+        try {
+            // 1. Upload to Server
+            const imageUrl = await upload_1.UploadService.uploadImage(avatarUrl, 'avatar');
+            const remoteUrl = imageUrl;
+            // 2. Persist locally with remote URL
+            wx.setStorageSync('user_avatar', remoteUrl);
+            // 3. Update Global Data
+            app.globalData.userInfo = {
+                ...(app.globalData.userInfo || {}),
+                avatarUrl: remoteUrl
+            };
             this.setData({
-                'userInfo.nickName': nickName
+                'userInfo.avatarUrl': remoteUrl
             });
-            // Update Global Data
-            app.globalData.userInfo = Object.assign(Object.assign({}, (app.globalData.userInfo || {})), { nickName: nickName });
-            // Call Backend API
-            try {
-                yield (0, auth_1.updateUserInfo)({ full_name: nickName });
-            }
-            catch (error) {
-                console.error('Failed to update nickname on backend', error);
-            }
+            // 4. Update Backend Profile
+            await (0, auth_1.updateUserInfo)({ avatar_url: remoteUrl });
+        }
+        catch (error) {
+            console.error('Failed to update avatar on backend', error);
+            wx.showToast({ title: '头像上传失败', icon: 'none' });
+        }
+        finally {
+            wx.hideLoading();
+        }
+    },
+    async onNicknameChange(e) {
+        const nickName = e.detail.value;
+        if (!nickName)
+            return;
+        this.setData({
+            'userInfo.nickName': nickName
         });
+        // Update Global Data
+        app.globalData.userInfo = {
+            ...(app.globalData.userInfo || {}),
+            nickName: nickName
+        };
+        // Call Backend API
+        try {
+            await (0, auth_1.updateUserInfo)({ full_name: nickName });
+        }
+        catch (error) {
+            console.error('Failed to update nickname on backend', error);
+        }
     }
 });

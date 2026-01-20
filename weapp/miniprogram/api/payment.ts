@@ -29,7 +29,7 @@ export interface MiniProgramPayParams {
     timeStamp: string
     nonceStr: string
     package: string
-    signType: string
+    signType?: 'MD5' | 'HMAC-SHA256' | 'RSA'
     paySign: string
 }
 

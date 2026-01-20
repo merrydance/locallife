@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -43,30 +34,39 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight || 88 });
     },
-    loadDetail() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const res = yield reservation_1.ReservationService.getReservationDetail(this.data.id);
-                const mappedItems = this.mapReservationItems(res.items || []);
-                const formatted = Object.assign(Object.assign({}, res), { items: mappedItems, _statusText: reservation_2.default.formatStatus(res.status), _statusTheme: reservation_2.default.getStatusTheme(res.status), _statusColor: this.getStatusColor(res.status), _timeText: this.formatReservationDateTime(res.reservation_date, res.reservation_time), _createdAt: this.formatDateSafe(res.created_at), _reservationDate: res.reservation_date || '--', _reservationTime: res.reservation_time || '--', _guestCount: (res.guest_count || res.party_size) ? `${res.guest_count || res.party_size}人` : '--' });
-                const showPayButton = res.status === 'pending';
-                const showCancelButton = ['pending', 'paid', 'confirmed'].includes(res.status);
-                const showModifyButton = ['paid', 'confirmed', 'checked_in'].includes(res.status) && !res.cooking_started_at;
-                this.setData({
-                    reservation: formatted,
-                    loading: false,
-                    showPayButton,
-                    showCancelButton,
-                    showModifyButton
-                });
-            }
-            catch (error) {
-                console.error(error);
-                wx.showToast({ title: '加载失败', icon: 'none' });
-                this.setData({ loading: false });
-            }
-        });
+    async loadDetail() {
+        this.setData({ loading: true });
+        try {
+            const res = await reservation_1.ReservationService.getReservationDetail(this.data.id);
+            const mappedItems = this.mapReservationItems(res.items || []);
+            const formatted = {
+                ...res,
+                items: mappedItems,
+                _statusText: reservation_2.default.formatStatus(res.status),
+                _statusTheme: reservation_2.default.getStatusTheme(res.status),
+                _statusColor: this.getStatusColor(res.status),
+                _timeText: this.formatReservationDateTime(res.reservation_date, res.reservation_time),
+                _createdAt: this.formatDateSafe(res.created_at),
+                _reservationDate: res.reservation_date || '--',
+                _reservationTime: res.reservation_time || '--',
+                _guestCount: res.guest_count ? `${res.guest_count}人` : '--'
+            };
+            const showPayButton = res.status === 'pending';
+            const showCancelButton = ['pending', 'paid', 'confirmed'].includes(res.status);
+            const showModifyButton = ['paid', 'confirmed', 'checked_in'].includes(res.status);
+            this.setData({
+                reservation: formatted,
+                loading: false,
+                showPayButton,
+                showCancelButton,
+                showModifyButton
+            });
+        }
+        catch (error) {
+            console.error(error);
+            wx.showToast({ title: '加载失败', icon: 'none' });
+            this.setData({ loading: false });
+        }
     },
     getStatusColor(status) {
         switch (status) {
@@ -120,10 +120,16 @@ Page({
         if (!items || items.length === 0)
             return [];
         return items.map((item) => {
-            var _a, _b, _c, _d;
-            const unitPrice = this.formatPrice((_a = item.unit_price) !== null && _a !== void 0 ? _a : item.price);
-            const totalPrice = this.formatPrice((_b = item.total_price) !== null && _b !== void 0 ? _b : ((_d = (_c = item.unit_price) !== null && _c !== void 0 ? _c : item.price) !== null && _d !== void 0 ? _d : 0) * (item.quantity || 1));
-            return Object.assign(Object.assign({}, item), { _displayName: item.name || (item.type === 'combo' ? '套餐' : '菜品'), _unitPrice: unitPrice, _totalPrice: totalPrice, _image: this.normalizeImage(item.image_url) });
+            var _a, _b;
+            const unitPrice = this.formatPrice(item.unit_price);
+            const totalPrice = this.formatPrice((_a = item.total_price) !== null && _a !== void 0 ? _a : ((_b = item.unit_price) !== null && _b !== void 0 ? _b : 0) * (item.quantity || 1));
+            return {
+                ...item,
+                _displayName: item.name || (item.type === 'combo' ? '套餐' : '菜品'),
+                _unitPrice: unitPrice,
+                _totalPrice: totalPrice,
+                _image: this.normalizeImage(item.image_url)
+            };
         });
     },
     formatPrice(amount) {
@@ -149,26 +155,25 @@ Page({
     onReasonChange(e) {
         this.setData({ cancelReason: e.detail.value });
     },
-    confirmCancel() {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!this.data.cancelReason) {
-                wx.showToast({ title: '请选择取消原因', icon: 'none' });
-                return;
-            }
-            try {
-                wx.showLoading({ title: '提交中...' });
-                yield reservation_1.ReservationService.cancelReservation(this.data.id, this.data.cancelReason);
-                wx.showToast({ title: '已取消', icon: 'success' });
-                this.closeCancelDialog();
-                this.loadDetail();
-            }
-            catch (error) {
-                wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.message) || '取消失败', icon: 'none' });
-            }
-            finally {
-                wx.hideLoading();
-            }
-        });
+    async confirmCancel() {
+        if (!this.data.cancelReason) {
+            wx.showToast({ title: '请选择取消原因', icon: 'none' });
+            return;
+        }
+        try {
+            wx.showLoading({ title: '提交中...' });
+            await reservation_1.ReservationService.cancelReservation(this.data.id, this.data.cancelReason);
+            wx.showToast({ title: '已取消', icon: 'success' });
+            this.closeCancelDialog();
+            this.loadDetail();
+        }
+        catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error);
+            wx.showToast({ title: errMessage || '取消失败', icon: 'none' });
+        }
+        finally {
+            wx.hideLoading();
+        }
     },
     onCallMerchant() {
         var _a, _b;
@@ -179,35 +184,32 @@ Page({
         }
         wx.makePhoneCall({ phoneNumber: phone });
     },
-    onPay() {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!this.data.reservation)
-                return;
-            try {
-                wx.showLoading({ title: '拉起支付' });
-                yield (0, payment_1.processPayment)(this.data.reservation.id, 'reservation');
-                wx.showToast({ title: '支付成功', icon: 'success' });
-                this.loadDetail();
-            }
-            catch (error) {
-                wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.message) || '支付失败', icon: 'none' });
-            }
-            finally {
-                wx.hideLoading();
-            }
-        });
+    async onPay() {
+        if (!this.data.reservation)
+            return;
+        try {
+            wx.showLoading({ title: '拉起支付' });
+            await (0, payment_1.processPayment)(this.data.reservation.id, 'reservation');
+            wx.showToast({ title: '支付成功', icon: 'success' });
+            this.loadDetail();
+        }
+        catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error);
+            wx.showToast({ title: errMessage || '支付失败', icon: 'none' });
+        }
+        finally {
+            wx.hideLoading();
+        }
     },
-    onModifyDishes() {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!this.data.reservation)
-                return;
-            if (this.data.reservation.cooking_started_at) {
-                wx.showToast({ title: '已开始起菜，无法修改', icon: 'none' });
-                return;
-            }
-            wx.navigateTo({
-                url: `/pages/reservation/modify/index?id=${this.data.reservation.id}`
-            });
+    async onModifyDishes() {
+        if (!this.data.reservation)
+            return;
+        if (this.data.reservation.cooking_started_at) {
+            wx.showToast({ title: '已开始起菜，无法修改', icon: 'none' });
+            return;
+        }
+        wx.navigateTo({
+            url: `/pages/reservation/modify/index?id=${this.data.reservation.id}`
         });
     }
 });

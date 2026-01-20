@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const review_1 = require("../../../api/review");
 Page({
@@ -36,7 +27,11 @@ Page({
         // Mock upload: usually we upload here and get URL. 
         // For simple demo, we just append local path and pretend it's a URL in submit.
         // In real app, use wx.uploadFile
-        const newFiles = files.map((file) => (Object.assign(Object.assign({}, file), { url: file.url, status: 'done' })));
+        const newFiles = files.map((file) => ({
+            ...file,
+            url: file.url, // In real world this would be result of upload
+            status: 'done'
+        }));
         this.setData({
             fileList: [...fileList, ...newFiles]
         });
@@ -47,33 +42,31 @@ Page({
         fileList.splice(index, 1);
         this.setData({ fileList });
     },
-    onSubmit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { orderId, rating, content, fileList } = this.data;
-            if (!content) {
-                wx.showToast({ title: '虽然不想写，但还是写点评价吧', icon: 'none' });
-                return;
-            }
-            this.setData({ submitting: true });
-            try {
-                const images = fileList.map(f => f.url);
-                yield review_1.ReviewService.createReview({
-                    order_id: orderId,
-                    rating: rating,
-                    content,
-                    images
-                });
-                wx.showToast({ title: '评价成功', icon: 'success' });
-                setTimeout(() => {
-                    wx.navigateBack();
-                }, 1500);
-            }
-            catch (error) {
-                wx.showToast({ title: error.message || '评价失败', icon: 'none' });
-            }
-            finally {
-                this.setData({ submitting: false });
-            }
-        });
+    async onSubmit() {
+        const { orderId, rating, content, fileList } = this.data;
+        if (!content) {
+            wx.showToast({ title: '虽然不想写，但还是写点评价吧', icon: 'none' });
+            return;
+        }
+        this.setData({ submitting: true });
+        try {
+            const images = fileList.map(f => f.url);
+            await review_1.ReviewService.createReview({
+                order_id: orderId,
+                rating: rating,
+                content,
+                images
+            });
+            wx.showToast({ title: '评价成功', icon: 'success' });
+            setTimeout(() => {
+                wx.navigateBack();
+            }, 1500);
+        }
+        catch (error) {
+            wx.showToast({ title: error.message || '评价失败', icon: 'none' });
+        }
+        finally {
+            this.setData({ submitting: false });
+        }
     }
 });

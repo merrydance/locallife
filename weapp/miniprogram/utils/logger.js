@@ -114,7 +114,11 @@ class Logger {
                     stack: error.stack
                 } : error,
                 timestamp: Date.now(),
-                userAgent: Object.assign(Object.assign(Object.assign({}, wx.getDeviceInfo()), wx.getWindowInfo()), wx.getAppBaseInfo()),
+                userAgent: {
+                    ...wx.getDeviceInfo(),
+                    ...wx.getWindowInfo(),
+                    ...wx.getAppBaseInfo()
+                },
                 page: ((_a = getCurrentPages().pop()) === null || _a === void 0 ? void 0 : _a.route) || 'unknown'
             };
             // 1. 使用微信小程序实时日志 (免费且集成在微信开发者工具)

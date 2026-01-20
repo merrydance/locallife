@@ -32,15 +32,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const CartAPI = __importStar(require("../api/cart"));
 const logger_1 = require("../utils/logger");
@@ -81,152 +72,138 @@ class CartService {
     /**
      * Initialize or switch to a specific merchant's cart
      */
-    loadCart(merchantId, options) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f;
-            this.currentMerchantId = merchantId;
-            this.currentOrderType = (_b = (_a = options === null || options === void 0 ? void 0 : options.orderType) !== null && _a !== void 0 ? _a : this.currentOrderType) !== null && _b !== void 0 ? _b : 'takeout';
-            this.currentTableId = (_d = (_c = options === null || options === void 0 ? void 0 : options.tableId) !== null && _c !== void 0 ? _c : this.currentTableId) !== null && _d !== void 0 ? _d : null;
-            this.currentReservationId = (_f = (_e = options === null || options === void 0 ? void 0 : options.reservationId) !== null && _e !== void 0 ? _e : this.currentReservationId) !== null && _f !== void 0 ? _f : null;
-            return this.refreshCart();
-        });
+    async loadCart(merchantId, options) {
+        var _a, _b, _c, _d, _e, _f;
+        this.currentMerchantId = merchantId;
+        this.currentOrderType = (_b = (_a = options === null || options === void 0 ? void 0 : options.orderType) !== null && _a !== void 0 ? _a : this.currentOrderType) !== null && _b !== void 0 ? _b : 'takeout';
+        this.currentTableId = (_d = (_c = options === null || options === void 0 ? void 0 : options.tableId) !== null && _c !== void 0 ? _c : this.currentTableId) !== null && _d !== void 0 ? _d : null;
+        this.currentReservationId = (_f = (_e = options === null || options === void 0 ? void 0 : options.reservationId) !== null && _e !== void 0 ? _e : this.currentReservationId) !== null && _f !== void 0 ? _f : null;
+        return this.refreshCart();
     }
     /**
      * Refresh the cart data from backend
      */
-    refreshCart() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c;
-            if (!this.currentMerchantId) {
-                throw new Error('No merchant selected for CartService');
-            }
-            try {
-                logger_1.logger.debug('Refreshing cart from backend', { merchantId: this.currentMerchantId }, 'CartService.refreshCart');
-                const cart = yield CartAPI.getCart({
-                    merchant_id: this.currentMerchantId,
-                    order_type: (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : undefined,
-                    table_id: (_b = this.currentTableId) !== null && _b !== void 0 ? _b : undefined,
-                    reservation_id: (_c = this.currentReservationId) !== null && _c !== void 0 ? _c : undefined
-                });
-                this.currentCart = cart;
-                this.notifyListeners();
-                return cart;
-            }
-            catch (error) {
-                logger_1.logger.error('Failed to refresh cart', error, 'CartService.refreshCart');
-                throw error;
-            }
-        });
+    async refreshCart() {
+        var _a, _b, _c;
+        if (!this.currentMerchantId) {
+            throw new Error('No merchant selected for CartService');
+        }
+        try {
+            logger_1.logger.debug('Refreshing cart from backend', { merchantId: this.currentMerchantId }, 'CartService.refreshCart');
+            const cart = await CartAPI.getCart({
+                merchant_id: this.currentMerchantId,
+                order_type: (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : undefined,
+                table_id: (_b = this.currentTableId) !== null && _b !== void 0 ? _b : undefined,
+                reservation_id: (_c = this.currentReservationId) !== null && _c !== void 0 ? _c : undefined
+            });
+            this.currentCart = cart;
+            this.notifyListeners();
+            return cart;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to refresh cart', error, 'CartService.refreshCart');
+            throw error;
+        }
     }
     /**
      * Add item to backend cart
      */
-    addItem(item) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d;
-            try {
-                const merchantId = Number(item.merchantId);
-                const quantity = item.quantity || 1;
-                // 确保有明确的订单类型，避免传递 undefined
-                this.currentOrderType = (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : 'takeout';
-                const req = {
-                    merchant_id: merchantId,
-                    order_type: (_b = this.currentOrderType) !== null && _b !== void 0 ? _b : undefined,
-                    table_id: (_c = this.currentTableId) !== null && _c !== void 0 ? _c : undefined,
-                    reservation_id: (_d = this.currentReservationId) !== null && _d !== void 0 ? _d : undefined,
-                    dish_id: item.dishId ? Number(item.dishId) : undefined,
-                    combo_id: item.comboId ? Number(item.comboId) : undefined,
-                    quantity: quantity,
-                    customizations: item.customizations
-                };
-                logger_1.logger.info('Adding item to backend cart', req, 'CartService.addItem');
-                const updatedCart = yield CartAPI.addToCart(req);
-                // Update local state
-                this.currentMerchantId = merchantId;
-                this.currentCart = updatedCart;
-                this.notifyListeners();
-                return true;
-            }
-            catch (error) {
-                logger_1.logger.error('Failed to add item to cart', error, 'CartService.addItem');
-                // Handle simple error reporting
-                wx.showToast({
-                    title: '添加失败，请重试',
-                    icon: 'none'
-                });
-                return false;
-            }
-        });
+    async addItem(item) {
+        var _a, _b, _c, _d;
+        try {
+            const merchantId = Number(item.merchantId);
+            const quantity = item.quantity || 1;
+            // 确保有明确的订单类型，避免传递 undefined
+            this.currentOrderType = (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : 'takeout';
+            const req = {
+                merchant_id: merchantId,
+                order_type: (_b = this.currentOrderType) !== null && _b !== void 0 ? _b : undefined,
+                table_id: (_c = this.currentTableId) !== null && _c !== void 0 ? _c : undefined,
+                reservation_id: (_d = this.currentReservationId) !== null && _d !== void 0 ? _d : undefined,
+                dish_id: item.dishId ? Number(item.dishId) : undefined,
+                combo_id: item.comboId ? Number(item.comboId) : undefined,
+                quantity: quantity,
+                customizations: item.customizations
+            };
+            logger_1.logger.info('Adding item to backend cart', req, 'CartService.addItem');
+            const updatedCart = await CartAPI.addToCart(req);
+            // Update local state
+            this.currentMerchantId = merchantId;
+            this.currentCart = updatedCart;
+            this.notifyListeners();
+            return true;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to add item to cart', error, 'CartService.addItem');
+            // Handle simple error reporting
+            wx.showToast({
+                title: '添加失败，请重试',
+                icon: 'none'
+            });
+            return false;
+        }
     }
     /**
      * Update item quantity or specs
      */
-    updateItem(itemId, updates) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const updatedCart = yield CartAPI.updateCartItem(itemId, updates);
-                this.currentCart = updatedCart;
-                this.notifyListeners();
-                return true;
-            }
-            catch (error) {
-                logger_1.logger.error('Failed to update cart item', error, 'CartService.updateItem');
-                return false;
-            }
-        });
+    async updateItem(itemId, updates) {
+        try {
+            const updatedCart = await CartAPI.updateCartItem(itemId, updates);
+            this.currentCart = updatedCart;
+            this.notifyListeners();
+            return true;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to update cart item', error, 'CartService.updateItem');
+            return false;
+        }
     }
     /**
      * Remove item from cart
      */
-    removeItem(itemId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const updatedCart = yield CartAPI.removeFromCart(itemId);
-                this.currentCart = updatedCart;
-                this.notifyListeners();
-                return true;
-            }
-            catch (error) {
-                logger_1.logger.error('Failed to remove item', error, 'CartService.removeItem');
-                return false;
-            }
-        });
+    async removeItem(itemId) {
+        try {
+            const updatedCart = await CartAPI.removeFromCart(itemId);
+            this.currentCart = updatedCart;
+            this.notifyListeners();
+            return true;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to remove item', error, 'CartService.removeItem');
+            return false;
+        }
     }
     /**
      * Update quantity helper
      */
-    updateQuantity(itemId, quantity) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (quantity <= 0) {
-                return this.removeItem(itemId);
-            }
-            return this.updateItem(itemId, { quantity });
-        });
+    async updateQuantity(itemId, quantity) {
+        if (quantity <= 0) {
+            return this.removeItem(itemId);
+        }
+        return this.updateItem(itemId, { quantity });
     }
     /**
      * Clear current merchant's cart
      */
-    clear() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c;
-            if (!this.currentMerchantId)
-                return false;
-            try {
-                yield CartAPI.clearCart({
-                    merchant_id: this.currentMerchantId,
-                    order_type: (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : undefined,
-                    table_id: (_b = this.currentTableId) !== null && _b !== void 0 ? _b : undefined,
-                    reservation_id: (_c = this.currentReservationId) !== null && _c !== void 0 ? _c : undefined
-                });
-                // Reset local state to empty structure manually or refetch
-                // Refetching is safer to ensure backend state
-                return this.refreshCart().then(() => true);
-            }
-            catch (error) {
-                logger_1.logger.error('Failed to clear cart', error, 'CartService.clear');
-                return false;
-            }
-        });
+    async clear() {
+        var _a, _b, _c;
+        if (!this.currentMerchantId)
+            return false;
+        try {
+            await CartAPI.clearCart({
+                merchant_id: this.currentMerchantId,
+                order_type: (_a = this.currentOrderType) !== null && _a !== void 0 ? _a : undefined,
+                table_id: (_b = this.currentTableId) !== null && _b !== void 0 ? _b : undefined,
+                reservation_id: (_c = this.currentReservationId) !== null && _c !== void 0 ? _c : undefined
+            });
+            // Reset local state to empty structure manually or refetch
+            // Refetching is safer to ensure backend state
+            return this.refreshCart().then(() => true);
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to clear cart', error, 'CartService.clear');
+            return false;
+        }
     }
     /**
      * Notify global store or event system about cart changes

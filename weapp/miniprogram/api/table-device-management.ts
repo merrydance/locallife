@@ -620,7 +620,7 @@ export const displayConfigService = new DisplayConfigService()
  */
 export async function getAvailableTables(): Promise<TableResponse[]> {
     const response = await tableManagementService.listTables('table')
-    return response.tables.filter(table => table.status === 'available')
+    return (response.tables || []).filter(table => table.status === 'available')
 }
 
 /**
@@ -628,7 +628,7 @@ export async function getAvailableTables(): Promise<TableResponse[]> {
  */
 export async function getPrivateRooms(): Promise<TableResponse[]> {
     const response = await tableManagementService.listTables('room')
-    return response.tables
+    return response.tables || []
 }
 
 /**

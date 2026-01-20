@@ -3,15 +3,6 @@
  * WebSocket和实时通信接口模块
  * 基于swagger.json完全重构，提供WebSocket连接和实时位置追踪
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RealtimeDataAdapter = exports.RealtimeUtils = exports.WebSocketUtils = exports.RiderLocationManager = exports.DeliveryTrackingManager = exports.WebSocketManager = void 0;
 const request_1 = require("../utils/request");
@@ -38,62 +29,60 @@ class WebSocketManager {
      * 连接WebSocket
      * 使用 wx.connectSocket 建立 WebSocket 连接
      */
-    connect(params_1) {
-        return __awaiter(this, arguments, void 0, function* (params, handlers = {}) {
-            var _a, _b;
-            // 如果正在连接中，不重复触发
-            if (this.isConnecting) {
-                console.log("WebSocket 正在连接中，忽略重复请求");
-                return;
+    async connect(params, handlers = {}) {
+        var _a, _b;
+        // 如果正在连接中，不重复触发
+        if (this.isConnecting) {
+            console.log("WebSocket 正在连接中，忽略重复请求");
+            return;
+        }
+        this.isConnecting = true;
+        this.connectionParams = params;
+        this.eventHandlers = handlers;
+        this.isManualClose = false; // 每次发起新连接时重置手动关闭状态
+        // 清理先前的连接
+        if (this.socketTask) {
+            console.log("正在清理先前的 WebSocket 任务...");
+            this.stopHeartbeat();
+            if (this.stableConnectionTimer) {
+                clearTimeout(this.stableConnectionTimer);
+                this.stableConnectionTimer = null;
             }
-            this.isConnecting = true;
-            this.connectionParams = params;
-            this.eventHandlers = handlers;
-            this.isManualClose = false; // 每次发起新连接时重置手动关闭状态
-            // 清理先前的连接
-            if (this.socketTask) {
-                console.log("正在清理先前的 WebSocket 任务...");
-                this.stopHeartbeat();
-                if (this.stableConnectionTimer) {
-                    clearTimeout(this.stableConnectionTimer);
-                    this.stableConnectionTimer = null;
-                }
-                yield this.closeCurrentTask("Re-connecting");
+            await this.closeCurrentTask("Re-connecting");
+        }
+        try {
+            // 获取认证 token
+            const token = (0, auth_1.getToken)();
+            if (!token) {
+                this.isConnecting = false;
+                throw new Error("未登录，无法建立 WebSocket 连接");
             }
-            try {
-                // 获取认证 token
-                const token = (0, auth_1.getToken)();
-                if (!token) {
-                    this.isConnecting = false;
-                    throw new Error("未登录，无法建立 WebSocket 连接");
-                }
-                // 构建 WebSocket URL - 仅使用 token
-                const wsUrl = this.buildWebSocketUrl();
-                console.log("正在开启 WebSocket 物理连接:", wsUrl.split("?")[0]);
-                // 使用微信小程序 WebSocket API
-                this.socketTask = wx.connectSocket({
-                    url: wsUrl,
-                    // 注意：移除 header 中的 Authorization，完全依赖 URL query
-                    // 因为小程序 connectSocket 对 header 的支持在不同平台表现不一
-                    success: () => {
-                        console.log("WebSocket 连接请求已成功发送:", wsUrl.split("?")[0]); // 只记录不带 token 的 URL
-                    },
-                    fail: (error) => {
-                        var _a, _b;
-                        console.error("WebSocket 连接请求失败:", error);
-                        this.isConnecting = false; // 连接请求失败，重置连接状态
-                        (_b = (_a = this.eventHandlers).onError) === null || _b === void 0 ? void 0 : _b.call(_a, new Error(error.errMsg));
-                    },
-                });
-                this.setupEventListeners();
-            }
-            catch (error) {
-                this.isConnecting = false; // 捕获到错误，重置连接状态
-                console.error("WebSocket 系统错误:", error);
-                (_b = (_a = this.eventHandlers).onError) === null || _b === void 0 ? void 0 : _b.call(_a, error);
-                throw error;
-            }
-        });
+            // 构建 WebSocket URL - 仅使用 token
+            const wsUrl = this.buildWebSocketUrl();
+            console.log("正在开启 WebSocket 物理连接:", wsUrl.split("?")[0]);
+            // 使用微信小程序 WebSocket API
+            this.socketTask = wx.connectSocket({
+                url: wsUrl,
+                // 注意：移除 header 中的 Authorization，完全依赖 URL query
+                // 因为小程序 connectSocket 对 header 的支持在不同平台表现不一
+                success: () => {
+                    console.log("WebSocket 连接请求已成功发送:", wsUrl.split("?")[0]); // 只记录不带 token 的 URL
+                },
+                fail: (error) => {
+                    var _a, _b;
+                    console.error("WebSocket 连接请求失败:", error);
+                    this.isConnecting = false; // 连接请求失败，重置连接状态
+                    (_b = (_a = this.eventHandlers).onError) === null || _b === void 0 ? void 0 : _b.call(_a, new Error(error.errMsg));
+                },
+            });
+            this.setupEventListeners();
+        }
+        catch (error) {
+            this.isConnecting = false; // 捕获到错误，重置连接状态
+            console.error("WebSocket 系统错误:", error);
+            (_b = (_a = this.eventHandlers).onError) === null || _b === void 0 ? void 0 : _b.call(_a, error);
+            throw error;
+        }
     }
     /**
      * 构建 WebSocket URL
@@ -299,44 +288,40 @@ class WebSocketManager {
     /**
      * 安全关闭当前任务并等待释放
      */
-    closeCurrentTask() {
-        return __awaiter(this, arguments, void 0, function* (reason = "Close") {
+    async closeCurrentTask(reason = "Close") {
+        if (!this.socketTask)
+            return;
+        await new Promise((resolve) => {
             if (!this.socketTask)
-                return;
-            yield new Promise((resolve) => {
-                if (!this.socketTask)
-                    return resolve();
-                const task = this.socketTask;
-                let resolved = false;
-                const finish = () => {
-                    if (resolved)
-                        return;
-                    resolved = true;
-                    resolve();
-                };
-                task.onClose(finish);
-                task.onError(finish);
-                try {
-                    task.close({ code: 1000, reason });
-                }
-                catch (e) {
-                    finish();
-                }
-                // 强制超时释放
-                setTimeout(finish, 1000);
-            });
-            this.socketTask = null;
+                return resolve();
+            const task = this.socketTask;
+            let resolved = false;
+            const finish = () => {
+                if (resolved)
+                    return;
+                resolved = true;
+                resolve();
+            };
+            task.onClose(finish);
+            task.onError(finish);
+            try {
+                task.close({ code: 1000, reason });
+            }
+            catch (e) {
+                finish();
+            }
+            // 强制超时释放
+            setTimeout(finish, 1000);
         });
+        this.socketTask = null;
     }
     /**
      * 关闭连接
      */
-    close() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.isManualClose = true;
-            this.stopHeartbeat();
-            yield this.closeCurrentTask("Manual close");
-        });
+    async close() {
+        this.isManualClose = true;
+        this.stopHeartbeat();
+        await this.closeCurrentTask("Manual close");
     }
     /**
      * 获取连接状态
@@ -383,49 +368,45 @@ class DeliveryTrackingManager {
     /**
      * 获取配送追踪信息
      */
-    getDeliveryTracking(deliveryId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/track`,
-                method: "GET",
-            });
+    async getDeliveryTracking(deliveryId) {
+        return (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/track`,
+            method: "GET",
         });
     }
     /**
      * 开始追踪配送
      */
-    startTracking(deliveryId_1, onLocationUpdate_1) {
-        return __awaiter(this, arguments, void 0, function* (deliveryId, onLocationUpdate, interval = 5000) {
-            // 停止之前的追踪
-            this.stopTracking(deliveryId);
-            // 立即获取一次位置信息
+    async startTracking(deliveryId, onLocationUpdate, interval = 5000) {
+        // 停止之前的追踪
+        this.stopTracking(deliveryId);
+        // 立即获取一次位置信息
+        try {
+            const trackingInfo = await this.getDeliveryTracking(deliveryId);
+            onLocationUpdate(trackingInfo);
+        }
+        catch (error) {
+            console.error("获取配送追踪信息失败:", error);
+        }
+        // 设置定时轮询
+        const timeoutId = setInterval(async () => {
             try {
-                const trackingInfo = yield this.getDeliveryTracking(deliveryId);
+                const trackingInfo = await this.getDeliveryTracking(deliveryId);
                 onLocationUpdate(trackingInfo);
+                // 如果配送已完成，停止追踪
+                if (trackingInfo.status === "delivered") {
+                    this.stopTracking(deliveryId);
+                }
             }
             catch (error) {
-                console.error("获取配送追踪信息失败:", error);
+                console.error("轮询配送追踪信息失败:", error);
             }
-            // 设置定时轮询
-            const timeoutId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
-                try {
-                    const trackingInfo = yield this.getDeliveryTracking(deliveryId);
-                    onLocationUpdate(trackingInfo);
-                    // 如果配送已完成，停止追踪
-                    if (trackingInfo.status === "delivered") {
-                        this.stopTracking(deliveryId);
-                    }
-                }
-                catch (error) {
-                    console.error("轮询配送追踪信息失败:", error);
-                }
-            }), interval);
-            this.trackingMap.set(deliveryId, timeoutId);
-            // 如果有WebSocket连接，订阅实时位置更新
-            if (this.wsManager && this.wsManager.isConnected()) {
-                this.wsManager.subscribe([`delivery_${deliveryId}`]);
-            }
-        });
+        }, interval);
+        this.trackingMap.set(deliveryId, timeoutId);
+        // 如果有WebSocket连接，订阅实时位置更新
+        if (this.wsManager && this.wsManager.isConnected()) {
+            this.wsManager.subscribe([`delivery_${deliveryId}`]);
+        }
     }
     /**
      * 停止追踪配送
@@ -543,20 +524,18 @@ class WebSocketUtils {
     /**
      * 初始化WebSocket连接
      */
-    static initializeConnection(role_1, userId_1) {
-        return __awaiter(this, arguments, void 0, function* (role, userId, // 这里应为实际的 User ID
-        handlers = {}, entityId) {
-            // 单例模式：只有在不存在或已关闭时才创建新实例
-            if (!this.wsManager) {
-                this.wsManager = new WebSocketManager();
-            }
-            yield this.wsManager.connect({
-                user_id: userId,
-                role,
-                entity_id: entityId,
-            }, handlers);
-            return this.wsManager;
-        });
+    static async initializeConnection(role, userId, // 这里应为实际的 User ID
+    handlers = {}, entityId) {
+        // 单例模式：只有在不存在或已关闭时才创建新实例
+        if (!this.wsManager) {
+            this.wsManager = new WebSocketManager();
+        }
+        await this.wsManager.connect({
+            user_id: userId,
+            role,
+            entity_id: entityId,
+        }, handlers);
+        return this.wsManager;
     }
     /**
      * 获取WebSocket管理器实例
@@ -618,15 +597,13 @@ class RealtimeUtils {
     /**
      * 为顾客初始化实时通信
      */
-    static initializeForCustomer(userId, onOrderUpdate, onDeliveryUpdate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return WebSocketUtils.initializeConnection("customer", userId, {
-                onOrderUpdate,
-                onDeliveryUpdate,
-                onError: (error) => {
-                    console.error("顾客端WebSocket错误:", error);
-                },
-            });
+    static async initializeForCustomer(userId, onOrderUpdate, onDeliveryUpdate) {
+        return WebSocketUtils.initializeConnection("customer", userId, {
+            onOrderUpdate,
+            onDeliveryUpdate,
+            onError: (error) => {
+                console.error("顾客端WebSocket错误:", error);
+            },
         });
     }
     /**
@@ -635,41 +612,35 @@ class RealtimeUtils {
     /**
      * 为商户初始化实时通信
      */
-    static initializeForMerchant(userId_1, merchantId_1) {
-        return __awaiter(this, arguments, void 0, function* (userId, merchantId, handlers = {}) {
-            return WebSocketUtils.initializeConnection("merchant", userId, {
-                onOpen: handlers.onOpen,
-                onOrderUpdate: handlers.onOrderUpdate,
-                onNotification: handlers.onNotification,
-                onMessage: handlers.onMessage,
-                onError: (error) => {
-                    console.error("商户端WebSocket错误:", error);
-                },
-            }, merchantId);
-        });
+    static async initializeForMerchant(userId, merchantId, handlers = {}) {
+        return WebSocketUtils.initializeConnection("merchant", userId, {
+            onOpen: handlers.onOpen,
+            onOrderUpdate: handlers.onOrderUpdate,
+            onNotification: handlers.onNotification,
+            onMessage: handlers.onMessage,
+            onError: (error) => {
+                console.error("商户端WebSocket错误:", error);
+            },
+        }, merchantId);
     }
     /**
      * 为骑手初始化实时通信
      */
-    static initializeForRider(userId, onDeliveryUpdate, onLocationUpdate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return WebSocketUtils.initializeConnection("rider", userId, {
-                onDeliveryUpdate,
-                onLocationUpdate,
-                onError: (error) => {
-                    console.error("骑手端WebSocket错误:", error);
-                },
-            });
+    static async initializeForRider(userId, onDeliveryUpdate, onLocationUpdate) {
+        return WebSocketUtils.initializeConnection("rider", userId, {
+            onDeliveryUpdate,
+            onLocationUpdate,
+            onError: (error) => {
+                console.error("骑手端WebSocket错误:", error);
+            },
         });
     }
     /**
      * 开始追踪订单配送
      */
-    static startOrderTracking(deliveryId, onLocationUpdate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const trackingManager = WebSocketUtils.getDeliveryTrackingManager();
-            yield trackingManager.startTracking(deliveryId, onLocationUpdate);
-        });
+    static async startOrderTracking(deliveryId, onLocationUpdate) {
+        const trackingManager = WebSocketUtils.getDeliveryTrackingManager();
+        await trackingManager.startTracking(deliveryId, onLocationUpdate);
     }
     /**
      * 停止追踪订单配送
@@ -704,19 +675,45 @@ class RealtimeDataAdapter {
      */
     static adaptDeliveryTracking(tracking) {
         var _a;
-        return Object.assign(Object.assign({}, tracking), { delivery_id: Number(tracking.delivery_id), order_id: Number(tracking.order_id), rider_id: Number(tracking.rider_id), current_location: Object.assign(Object.assign({}, tracking.current_location), { latitude: Number(tracking.current_location.latitude), longitude: Number(tracking.current_location.longitude), accuracy: tracking.current_location.accuracy
+        return {
+            ...tracking,
+            delivery_id: Number(tracking.delivery_id),
+            order_id: Number(tracking.order_id),
+            rider_id: Number(tracking.rider_id),
+            current_location: {
+                ...tracking.current_location,
+                latitude: Number(tracking.current_location.latitude),
+                longitude: Number(tracking.current_location.longitude),
+                accuracy: tracking.current_location.accuracy
                     ? Number(tracking.current_location.accuracy)
-                    : undefined, heading: tracking.current_location.heading
+                    : undefined,
+                heading: tracking.current_location.heading
                     ? Number(tracking.current_location.heading)
-                    : undefined, speed: tracking.current_location.speed
+                    : undefined,
+                speed: tracking.current_location.speed
                     ? Number(tracking.current_location.speed)
-                    : undefined }), route_points: (_a = tracking.route_points) === null || _a === void 0 ? void 0 : _a.map((point) => (Object.assign(Object.assign({}, point), { latitude: Number(point.latitude), longitude: Number(point.longitude) }))) });
+                    : undefined,
+            },
+            route_points: (_a = tracking.route_points) === null || _a === void 0 ? void 0 : _a.map((point) => ({
+                ...point,
+                latitude: Number(point.latitude),
+                longitude: Number(point.longitude),
+            })),
+        };
     }
     /**
      * 适配位置更新数据
      */
     static adaptLocationUpdate(update) {
-        return Object.assign(Object.assign({}, update), { delivery_id: Number(update.delivery_id), latitude: Number(update.latitude), longitude: Number(update.longitude), accuracy: update.accuracy ? Number(update.accuracy) : undefined, heading: update.heading ? Number(update.heading) : undefined, speed: update.speed ? Number(update.speed) : undefined });
+        return {
+            ...update,
+            delivery_id: Number(update.delivery_id),
+            latitude: Number(update.latitude),
+            longitude: Number(update.longitude),
+            accuracy: update.accuracy ? Number(update.accuracy) : undefined,
+            heading: update.heading ? Number(update.heading) : undefined,
+            speed: update.speed ? Number(update.speed) : undefined,
+        };
     }
 }
 exports.RealtimeDataAdapter = RealtimeDataAdapter;

@@ -161,16 +161,20 @@ export interface CalculateCartResponse {
  * 获取指定商户的购物车
  * @param params 获取参数
  */
-export async function getCart(params: {
-    merchant_id: number,
-    order_type?: string,
-    table_id?: number,
-    reservation_id?: number
-}): Promise<CartResponse> {
+export async function getCart(
+    params: {
+        merchant_id: number,
+        order_type?: string,
+        table_id?: number,
+        reservation_id?: number
+    },
+    options?: { loading?: boolean; loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: '/v1/cart',
         method: 'GET',
-        data: params
+        data: params,
+        ...(options || {})
     })
 }
 
@@ -203,11 +207,15 @@ export async function getUserCarts(orderType?: string): Promise<UserCartsRespons
  * 添加商品到购物车
  * @param item 商品信息
  */
-export async function addToCart(item: AddCartItemRequest): Promise<CartResponse> {
+export async function addToCart(
+    item: AddCartItemRequest,
+    options?: { loading?: boolean; loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: '/v1/cart/items',
         method: 'POST',
-        data: item
+        data: item,
+        ...(options || {})
     })
 }
 
@@ -216,11 +224,16 @@ export async function addToCart(item: AddCartItemRequest): Promise<CartResponse>
  * @param itemId 商品项ID
  * @param updates 更新数据
  */
-export async function updateCartItem(itemId: number, updates: UpdateCartItemRequest): Promise<CartResponse> {
+export async function updateCartItem(
+    itemId: number,
+    updates: UpdateCartItemRequest,
+    options?: { loading?: boolean; loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: `/v1/cart/items/${itemId}`,
         method: 'PATCH',  // Swagger 定义是 PATCH
-        data: updates
+        data: updates,
+        ...(options || {})
     })
 }
 
@@ -228,10 +241,14 @@ export async function updateCartItem(itemId: number, updates: UpdateCartItemRequ
  * 从购物车删除商品
  * @param itemId 商品项ID
  */
-export async function removeFromCart(itemId: number): Promise<CartResponse> {
+export async function removeFromCart(
+    itemId: number,
+    options?: { loading?: boolean; loadingText?: string }
+): Promise<CartResponse> {
     return request({
         url: `/v1/cart/items/${itemId}`,
-        method: 'DELETE'
+        method: 'DELETE',
+        ...(options || {})
     })
 }
 
@@ -251,11 +268,15 @@ export async function clearCart(params: ClearCartRequest): Promise<void> {
  * 计算购物车金额
  * @param params 计算参数
  */
-export async function calculateCart(params: CalculateCartRequest): Promise<CalculateCartResponse> {
+export async function calculateCart(
+    params: CalculateCartRequest,
+    options?: { loading?: boolean; loadingText?: string }
+): Promise<CalculateCartResponse> {
     return request({
         url: '/v1/cart/calculate',
         method: 'POST',
-        data: params
+        data: params,
+        ...(options || {})
     })
 }
 

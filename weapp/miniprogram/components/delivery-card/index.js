@@ -8,7 +8,7 @@ Component({
     },
     methods: {
         onAction() {
-            const { task } = this.properties;
+            const task = this.properties.task;
             if (!task || !task.id)
                 return;
             let nextAction = '';
@@ -26,7 +26,7 @@ Component({
         },
         onCall(e) {
             const { type } = e.currentTarget.dataset;
-            const { task } = this.properties;
+            const task = this.properties.task;
             // Use task phone if available, else fallback (per ISSUES.md)
             const phoneNumber = type === 'shop' ? (task.merchant_phone || '13800138000') : (task.customer_phone || '13900139000');
             wx.makePhoneCall({ phoneNumber });

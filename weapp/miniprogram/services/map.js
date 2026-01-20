@@ -3,15 +3,6 @@
  * 地图服务
  * 提供地图相关功能：路线规划、坐标解码、标记创建等
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.mapService = void 0;
 const logger_1 = require("../utils/logger");
@@ -26,49 +17,47 @@ class MapService {
      * 后端接口：GET /v1/location/direction/bicycling
      * 参数：from=lat,lng&to=lat,lng
      */
-    planRoute(from, to) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const fromStr = `${from.latitude},${from.longitude}`;
-                const toStr = `${to.latitude},${to.longitude}`;
-                logger_1.logger.info("开始规划路线", {
+    async planRoute(from, to) {
+        try {
+            const fromStr = `${from.latitude},${from.longitude}`;
+            const toStr = `${to.latitude},${to.longitude}`;
+            logger_1.logger.info("开始规划路线", {
+                from: fromStr,
+                to: toStr,
+            }, "MapService.planRoute");
+            // 调用后端代理接口
+            const data = await (0, request_1.request)({
+                url: "/v1/location/direction/bicycling",
+                method: "GET",
+                data: {
                     from: fromStr,
                     to: toStr,
+                },
+            });
+            // 后端已改为返回 {code,message,data{distance,duration}}
+            if (data.code === 0 && data.data) {
+                const result = {
+                    points: [], // OSRM 不返回 polyline，这里留空以免误用
+                    distance: data.data.distance || 0,
+                    duration: data.data.duration || 0,
+                };
+                logger_1.logger.info("路线规划成功", {
+                    distance: result.distance,
+                    duration: result.duration,
+                    pointsCount: result.points.length,
                 }, "MapService.planRoute");
-                // 调用后端代理接口
-                const data = yield (0, request_1.request)({
-                    url: "/v1/location/direction/bicycling",
-                    method: "GET",
-                    data: {
-                        from: fromStr,
-                        to: toStr,
-                    },
-                });
-                // 后端已改为返回 {code,message,data{distance,duration}}
-                if (data.code === 0 && data.data) {
-                    const result = {
-                        points: [], // OSRM 不返回 polyline，这里留空以免误用
-                        distance: data.data.distance || 0,
-                        duration: data.data.duration || 0,
-                    };
-                    logger_1.logger.info("路线规划成功", {
-                        distance: result.distance,
-                        duration: result.duration,
-                        pointsCount: result.points.length,
-                    }, "MapService.planRoute");
-                    return result;
-                }
-                else {
-                    const errorMsg = data.message || "路线规划失败";
-                    logger_1.logger.error("路线规划失败", data, "MapService.planRoute");
-                    throw new Error(errorMsg);
-                }
+                return result;
             }
-            catch (err) {
-                logger_1.logger.error("路线规划请求失败", err, "MapService.planRoute");
-                throw err;
+            else {
+                const errorMsg = data.message || "路线规划失败";
+                logger_1.logger.error("路线规划失败", data, "MapService.planRoute");
+                throw new Error(errorMsg);
             }
-        });
+        }
+        catch (err) {
+            logger_1.logger.error("路线规划请求失败", err, "MapService.planRoute");
+            throw err;
+        }
     }
     /**
      * 创建地图标记
@@ -125,19 +114,17 @@ class MapService {
      * 逆地理编码（坐标转地址）
      * 使用后端代理接口
      */
-    reverseGeocode(point) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const locationInfo = yield location_1.locationService.reverseGeocode(point.latitude, point.longitude);
-                const address = locationInfo.street || locationInfo.district || locationInfo.address;
-                logger_1.logger.info("逆地理编码成功", { address }, "MapService.reverseGeocode");
-                return address;
-            }
-            catch (err) {
-                logger_1.logger.error("逆地理编码失败", err, "MapService.reverseGeocode");
-                throw err;
-            }
-        });
+    async reverseGeocode(point) {
+        try {
+            const locationInfo = await location_1.locationService.reverseGeocode(point.latitude, point.longitude);
+            const address = locationInfo.street || locationInfo.district || locationInfo.address;
+            logger_1.logger.info("逆地理编码成功", { address }, "MapService.reverseGeocode");
+            return address;
+        }
+        catch (err) {
+            logger_1.logger.error("逆地理编码失败", err, "MapService.reverseGeocode");
+            throw err;
+        }
     }
     /**
      * 计算两点之间的直线距离（米）

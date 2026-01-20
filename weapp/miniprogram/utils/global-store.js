@@ -164,7 +164,7 @@ class GlobalStore {
        * 获取完整状态(用于调试)
        */
     getState() {
-        return Object.assign({}, this.state);
+        return { ...this.state };
     }
 }
 exports.globalStore = GlobalStore.getInstance();

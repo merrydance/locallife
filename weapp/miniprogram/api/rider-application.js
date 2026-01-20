@@ -3,15 +3,6 @@
  * 骑手入驻申请接口
  * 基于swagger.json完全重构，包含OCR识别和数据回填功能
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RiderApplicationFlow = void 0;
 exports.getRiderApplicationDraft = getRiderApplicationDraft;
@@ -174,61 +165,51 @@ class RiderApplicationFlow {
     /**
      * 初始化申请流程
      */
-    initialize() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.draft = yield getRiderApplicationDraft();
-            return this.draft;
-        });
+    async initialize() {
+        this.draft = await getRiderApplicationDraft();
+        return this.draft;
     }
     /**
      * 上传并识别身份证
      */
-    uploadAndRecognizeIDCard(imageUrl) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const result = yield recognizeRiderIDCard({ image_url: imageUrl });
-            this.draft = result;
-            // 自动回填识别到的信息
-            if (result.id_card_ocr) {
-                const ocrData = result.id_card_ocr;
-                const updateData = {};
-                if (ocrData.name)
-                    updateData.real_name = ocrData.name;
-                // 如果有识别到的信息，自动更新
-                if (Object.keys(updateData).length > 0) {
-                    this.draft = yield updateRiderApplicationBasic(updateData);
-                }
+    async uploadAndRecognizeIDCard(imageUrl) {
+        const result = await recognizeRiderIDCard({ image_url: imageUrl });
+        this.draft = result;
+        // 自动回填识别到的信息
+        if (result.id_card_ocr) {
+            const ocrData = result.id_card_ocr;
+            const updateData = {};
+            if (ocrData.name)
+                updateData.real_name = ocrData.name;
+            // 如果有识别到的信息，自动更新
+            if (Object.keys(updateData).length > 0) {
+                this.draft = await updateRiderApplicationBasic(updateData);
             }
-            return this.draft;
-        });
+        }
+        return this.draft;
     }
     /**
      * 上传并识别健康证
      */
-    uploadAndRecognizeHealthCert(imageUrl) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const result = yield uploadHealthCert({ image_url: imageUrl });
-            this.draft = result;
-            return this.draft;
-        });
+    async uploadAndRecognizeHealthCert(imageUrl) {
+        const result = await uploadHealthCert({ image_url: imageUrl });
+        this.draft = result;
+        return this.draft;
     }
     /**
      * 更新基本信息
      */
-    updateBasicInfo(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.draft = yield updateRiderApplicationBasic(data);
-            return this.draft;
-        });
+    async updateBasicInfo(data) {
+        this.draft = await updateRiderApplicationBasic(data);
+        return this.draft;
     }
     /**
      * 提交申请
      */
-    submit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const result = yield submitRiderApplication();
-            this.draft = result;
-            return result;
-        });
+    async submit() {
+        const result = await submitRiderApplication();
+        this.draft = result;
+        return result;
     }
     /**
      * 获取当前草稿
@@ -304,24 +285,22 @@ function createRiderApplicationFlow() {
 /**
  * 快速检查申请状态
  */
-function checkRiderApplicationStatus() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const application = yield getRiderApplicationDraft();
-            return {
-                hasApplication: !!application.id,
-                status: application.status,
-                canApply: !application.status || application.status === 'rejected' // 没有申请或被拒绝后才能申请
-            };
-        }
-        catch (error) {
-            // 如果没有申请记录，返回可以申请
-            return {
-                hasApplication: false,
-                canApply: true
-            };
-        }
-    });
+async function checkRiderApplicationStatus() {
+    try {
+        const application = await getRiderApplicationDraft();
+        return {
+            hasApplication: !!application.id,
+            status: application.status,
+            canApply: !application.status || application.status === 'rejected' // 没有申请或被拒绝后才能申请
+        };
+    }
+    catch (error) {
+        // 如果没有申请记录，返回可以申请
+        return {
+            hasApplication: false,
+            canApply: true
+        };
+    }
 }
 /**
  * 获取申请进度描述

@@ -3,18 +3,17 @@
  * 我的预订页面
  * 显示用户的所有预订记录
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const reservation_1 = require("../../../api/reservation");
 const logger_1 = require("../../../utils/logger");
+const getEventId = (event) => {
+    var _a, _b;
+    const currentDataset = event.currentTarget.dataset;
+    const targetDataset = (_a = event.target) === null || _a === void 0 ? void 0 : _a.dataset;
+    const rawId = (_b = currentDataset === null || currentDataset === void 0 ? void 0 : currentDataset.id) !== null && _b !== void 0 ? _b : targetDataset === null || targetDataset === void 0 ? void 0 : targetDataset.id;
+    const id = typeof rawId === 'number' ? rawId : Number(rawId);
+    return Number.isFinite(id) ? id : null;
+};
 function formatReservationDateTime(reservationDate, reservationTime) {
     const datePart = (reservationDate || '').trim();
     const timePart = (reservationTime || '').trim();
@@ -93,48 +92,54 @@ Page({
             this.loadReservations(false);
         }
     },
-    loadReservations() {
-        return __awaiter(this, arguments, void 0, function* (reset = false) {
-            if (this.data.loading)
-                return;
-            this.setData({ loading: true });
-            if (reset) {
-                this.setData({ page: 1, reservations: [], hasMore: true });
-            }
-            try {
-                const { currentStatus, page, pageSize } = this.data;
-                const params = { page_id: page, page_size: pageSize };
-                if (currentStatus) {
-                    params.status = currentStatus;
-                }
-                const response = yield reservation_1.ReservationService.getUserReservations(params);
-                const result = response.reservations;
-                // 处理显示字段
-                const processedReservations = result.map((r) => this.processReservation(r));
-                const reservations = reset ? processedReservations : [...this.data.reservations, ...processedReservations];
-                this.setData({
-                    reservations,
-                    loading: false,
-                    hasMore: result.length === pageSize
-                });
-            }
-            catch (error) {
-                logger_1.logger.error('加载预订列表失败', error, 'reservations.loadReservations');
-                wx.showToast({ title: '加载失败', icon: 'error' });
-                this.setData({ loading: false });
-            }
-        });
+    async loadReservations(reset = false) {
+        if (this.data.loading)
+            return;
+        this.setData({ loading: true });
+        if (reset) {
+            this.setData({ page: 1, reservations: [], hasMore: true });
+        }
+        try {
+            const { currentStatus, page, pageSize } = this.data;
+            const params = {
+                page_id: page,
+                page_size: pageSize,
+                ...(currentStatus ? { status: currentStatus } : {})
+            };
+            const response = await reservation_1.ReservationService.getUserReservations(params);
+            const result = response.reservations;
+            const totalCount = typeof response.total_count === 'number' ? response.total_count : result.length;
+            // 处理显示字段
+            const processedReservations = result.map((r) => this.processReservation(r));
+            const reservations = reset ? processedReservations : [...this.data.reservations, ...processedReservations];
+            this.setData({
+                reservations,
+                loading: false,
+                hasMore: page * pageSize < totalCount
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('加载预订列表失败', error, 'reservations.loadReservations');
+            wx.showToast({ title: '加载失败', icon: 'error' });
+            this.setData({ loading: false });
+        }
     },
     processReservation(r) {
-        var _a, _b, _c, _d;
-        const merchantName = r.merchant_name
-            || r.merchantName
-            || ((_a = r.merchant) === null || _a === void 0 ? void 0 : _a.name)
-            || ((_b = r.merchant) === null || _b === void 0 ? void 0 : _b.merchant_name)
-            || '';
-        const merchantAddress = r.merchant_address || ((_c = r.merchant) === null || _c === void 0 ? void 0 : _c.address) || '';
-        const merchantPhone = r.merchant_phone || ((_d = r.merchant) === null || _d === void 0 ? void 0 : _d.phone) || '';
-        return Object.assign(Object.assign({}, r), { _statusText: this.getStatusText(r.status || ''), _statusClass: r.status || '', _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''), _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''), _dateTimeDisplay: formatReservationDateTime(r.reservation_date, r.reservation_time), _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '', _merchantName: merchantName, _merchantAddress: merchantAddress, _merchantPhone: merchantPhone });
+        const merchantName = r.merchant_name || '';
+        const merchantAddress = r.merchant_address || '';
+        const merchantPhone = r.merchant_phone || '';
+        return {
+            ...r,
+            _statusText: this.getStatusText(r.status || ''),
+            _statusClass: r.status || '',
+            _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''),
+            _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''), // 已确认或已签到可点菜
+            _dateTimeDisplay: formatReservationDateTime(r.reservation_date, r.reservation_time),
+            _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '',
+            _merchantName: merchantName,
+            _merchantAddress: merchantAddress,
+            _merchantPhone: merchantPhone
+        };
     },
     noop() { },
     onShareAppMessage(res) {
@@ -170,8 +175,7 @@ Page({
         this.loadReservations(true);
     },
     onViewDetail(e) {
-        var _a;
-        const id = Number(e.currentTarget.dataset.id || ((_a = e.target.dataset) === null || _a === void 0 ? void 0 : _a.id) || 0);
+        const id = getEventId(e);
         if (!id) {
             wx.showToast({ title: '缺少预订ID', icon: 'none' });
             return;
@@ -181,32 +185,30 @@ Page({
         });
     },
     onCancelReservation(e) {
-        const { id } = e.currentTarget.dataset;
+        const id = getEventId(e);
         if (!id)
             return;
         wx.showActionSheet({
             itemList: CANCEL_REASONS,
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 const reason = CANCEL_REASONS[res.tapIndex];
-                yield this.doCancelReservation(Number(id), reason);
-            })
+                await this.doCancelReservation(Number(id), reason);
+            }
         });
     },
-    doCancelReservation(reservationId, reason) {
-        return __awaiter(this, void 0, void 0, function* () {
-            wx.showLoading({ title: '取消中...' });
-            try {
-                yield reservation_1.ReservationService.cancelReservation(reservationId, reason);
-                wx.hideLoading();
-                wx.showToast({ title: '已取消', icon: 'success' });
-                setTimeout(() => this.loadReservations(true), 1500);
-            }
-            catch (error) {
-                wx.hideLoading();
-                logger_1.logger.error('取消预订失败', error, 'reservations.doCancelReservation');
-                wx.showToast({ title: '取消失败', icon: 'error' });
-            }
-        });
+    async doCancelReservation(reservationId, reason) {
+        wx.showLoading({ title: '取消中...' });
+        try {
+            await reservation_1.ReservationService.cancelReservation(reservationId, reason);
+            wx.hideLoading();
+            wx.showToast({ title: '已取消', icon: 'success' });
+            setTimeout(() => this.loadReservations(true), 1500);
+        }
+        catch (error) {
+            wx.hideLoading();
+            logger_1.logger.error('取消预订失败', error, 'reservations.doCancelReservation');
+            wx.showToast({ title: '取消失败', icon: 'error' });
+        }
     },
     /**
      * 跳转到点菜页面

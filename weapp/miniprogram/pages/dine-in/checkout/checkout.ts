@@ -32,7 +32,7 @@ type CartView = CartResponse & {
     items: CartItemView[];
 }
 
-type TableInfoView = { table_number: string; table_no?: string };
+type TableInfoView = { table_number: string; table_no?: string; merchant_name?: string };
 
 type LegacyPaymentResult = {
     payment_info?: {
@@ -64,7 +64,7 @@ Page({
             { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat' },
             { id: 'balance', name: '储值支付', icon: 'wallet', disabled: true }
         ],
-        selectedPaymentMethod: 'wechat_pay',
+        selectedPaymentMethod: 'wechat_pay' as 'wechat_pay' | 'balance',
         memberBalance: 0,  // 用户在该商户的储值余额（分）
         memberBalanceDisplay: '0.00',  // 格式化后的余额
 
@@ -250,8 +250,9 @@ Page({
      * 支付方式变化 (t-radio-group)
      */
     onPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
+        const value = e.detail.value as 'wechat_pay' | 'balance'
         this.setData({
-            selectedPaymentMethod: e.detail.value
+            selectedPaymentMethod: value
         });
     },
 
@@ -421,7 +422,7 @@ Page({
 
         if (submitting) return;
 
-        if (!cart.items || cart.items.length === 0) {
+        if (!cart || !cart.items || cart.items.length === 0) {
             wx.showToast({
                 title: '购物车为空',
                 icon: 'error'

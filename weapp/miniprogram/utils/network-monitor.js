@@ -3,15 +3,6 @@
  * 网络状态监控器
  * 监听网络变化、提供离线提示、重试机制
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.networkMonitor = void 0;
 const logger_1 = require("./logger");
@@ -136,7 +127,7 @@ class NetworkMonitor {
        * 获取当前网络状态
        */
     getState() {
-        return Object.assign({}, this.networkState);
+        return { ...this.networkState };
     }
     /**
        * 是否在线
@@ -165,27 +156,25 @@ class NetworkMonitor {
     /**
        * 检查网络并执行操作
        */
-    checkAndExecute(fn_1) {
-        return __awaiter(this, arguments, void 0, function* (fn, options = {}) {
-            if (!this.isOnline()) {
-                this.showOfflineHint(options.offlineMessage);
-                throw new Error('Network offline');
-            }
-            if (options.requireGoodNetwork && !this.isGoodNetwork()) {
-                const proceed = yield new Promise((resolve) => {
-                    wx.showModal({
-                        title: '网络较差',
-                        content: '当前网络环境不佳,是否继续?',
-                        success: (res) => resolve(res.confirm),
-                        fail: () => resolve(false)
-                    });
+    async checkAndExecute(fn, options = {}) {
+        if (!this.isOnline()) {
+            this.showOfflineHint(options.offlineMessage);
+            throw new Error('Network offline');
+        }
+        if (options.requireGoodNetwork && !this.isGoodNetwork()) {
+            const proceed = await new Promise((resolve) => {
+                wx.showModal({
+                    title: '网络较差',
+                    content: '当前网络环境不佳,是否继续?',
+                    success: (res) => resolve(res.confirm),
+                    fail: () => resolve(false)
                 });
-                if (!proceed) {
-                    throw new Error('User cancelled due to poor network');
-                }
+            });
+            if (!proceed) {
+                throw new Error('User cancelled due to poor network');
             }
-            return fn();
-        });
+        }
+        return fn();
     }
 }
 exports.networkMonitor = NetworkMonitor.getInstance();

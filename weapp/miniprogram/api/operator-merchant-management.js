@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：商户列表、商户操作、商户详情、商户排行
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.merchantAnalyticsService = exports.operatorMerchantManagementService = exports.OperatorMerchantManagementAdapter = exports.MerchantAnalyticsService = exports.OperatorMerchantManagementService = void 0;
 exports.getMerchantManagementDashboard = getMerchantManagementDashboard;
@@ -34,38 +25,32 @@ class OperatorMerchantManagementService {
      * 获取商户列表
      * @param params 查询参数
      */
-    getMerchantList(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/merchants',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantList(params) {
+        return (0, request_1.request)({
+            url: '/v1/operator/merchants',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取商户详情
      * @param merchantId 商户ID
      */
-    getMerchantDetail(merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/merchants/${merchantId}`,
-                method: 'GET'
-            });
+    async getMerchantDetail(merchantId) {
+        return (0, request_1.request)({
+            url: `/v1/operator/merchants/${merchantId}`,
+            method: 'GET'
         });
     }
     /**
      * 获取商户排行榜
      * @param params 查询参数
      */
-    getMerchantRanking(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/merchants/ranking',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantRanking(params) {
+        return (0, request_1.request)({
+            url: '/v1/operator/merchants/ranking',
+            method: 'GET',
+            data: params
         });
     }
     /**
@@ -73,13 +58,11 @@ class OperatorMerchantManagementService {
      * @param merchantId 商户ID
      * @param actionData 操作数据
      */
-    suspendMerchant(merchantId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/merchants/${merchantId}/suspend`,
-                method: 'POST',
-                data: actionData
-            });
+    async suspendMerchant(merchantId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/operator/merchants/${merchantId}/suspend`,
+            method: 'POST',
+            data: actionData
         });
     }
     /**
@@ -87,13 +70,11 @@ class OperatorMerchantManagementService {
      * @param merchantId 商户ID
      * @param actionData 操作数据
      */
-    resumeMerchant(merchantId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/merchants/${merchantId}/resume`,
-                method: 'POST',
-                data: actionData
-            });
+    async resumeMerchant(merchantId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/operator/merchants/${merchantId}/resume`,
+            method: 'POST',
+            data: actionData
         });
     }
 }
@@ -346,74 +327,73 @@ exports.merchantAnalyticsService = new MerchantAnalyticsService();
  * 获取商户管理工作台数据
  * @param regionId 区域ID（可选）
  */
-function getMerchantManagementDashboard(regionId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [merchantList, merchantRanking] = yield Promise.all([
-            exports.operatorMerchantManagementService.getMerchantList({
-                region_id: regionId,
-                limit: 100,
-                sort_by: 'created_at',
-                sort_order: 'desc'
-            }),
-            exports.operatorMerchantManagementService.getMerchantRanking({
-                region_id: regionId,
-                start_date: startDate,
-                end_date: endDate,
-                rank_by: 'total_gmv',
-                limit: 10
-            })
-        ]);
-        // 统计商户状态分布
-        const merchantSummary = {
-            total: merchantList.total,
-            active: merchantList.merchants.filter(m => m.status === 'active').length,
-            suspended: merchantList.merchants.filter(m => m.status === 'suspended').length,
-            pending: merchantList.merchants.filter(m => m.status === 'pending_approval').length
-        };
-        // 分析商户分类
-        const categoryAnalysis = exports.merchantAnalyticsService.analyzeMerchantsByCategory(merchantList.merchants);
-        // 获取最近注册的商户
-        const recentMerchants = merchantList.merchants.slice(0, 10);
-        // 模拟绩效分布（实际应该基于详细数据计算）
-        const performanceDistribution = {
-            excellent: Math.round(merchantList.total * 0.15),
-            good: Math.round(merchantList.total * 0.35),
-            average: Math.round(merchantList.total * 0.35),
-            poor: Math.round(merchantList.total * 0.15)
-        };
-        return {
-            merchantSummary,
-            topMerchants: merchantRanking.rankings,
-            categoryAnalysis,
-            recentMerchants,
-            performanceDistribution
-        };
-    });
+async function getMerchantManagementDashboard(regionId) {
+    var _a;
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const [merchantList, merchantRanking] = await Promise.all([
+        exports.operatorMerchantManagementService.getMerchantList({
+            region_id: regionId,
+            limit: 100,
+            sort_by: 'created_at',
+            sort_order: 'desc'
+        }),
+        exports.operatorMerchantManagementService.getMerchantRanking({
+            region_id: regionId,
+            start_date: startDate,
+            end_date: endDate,
+            rank_by: 'total_gmv',
+            limit: 10
+        })
+    ]);
+    // 统计商户状态分布
+    const merchants = merchantList.merchants || [];
+    const total = (_a = merchantList.total) !== null && _a !== void 0 ? _a : merchants.length;
+    const merchantSummary = {
+        total,
+        active: merchants.filter(m => m.status === 'active').length,
+        suspended: merchants.filter(m => m.status === 'suspended').length,
+        pending: merchants.filter(m => m.status === 'pending_approval').length
+    };
+    // 分析商户分类
+    const categoryAnalysis = exports.merchantAnalyticsService.analyzeMerchantsByCategory(merchants);
+    // 获取最近注册的商户
+    const recentMerchants = merchants.slice(0, 10);
+    // 模拟绩效分布（实际应该基于详细数据计算）
+    const performanceDistribution = {
+        excellent: Math.round(total * 0.15),
+        good: Math.round(total * 0.35),
+        average: Math.round(total * 0.35),
+        poor: Math.round(total * 0.15)
+    };
+    return {
+        merchantSummary,
+        topMerchants: merchantRanking.rankings,
+        categoryAnalysis,
+        recentMerchants,
+        performanceDistribution
+    };
 }
 /**
  * 获取商户详细分析报告
  * @param merchantId 商户ID
  */
-function getMerchantAnalysisReport(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const merchantDetail = yield exports.operatorMerchantManagementService.getMerchantDetail(merchantId);
-        const performance = exports.merchantAnalyticsService.calculateMerchantPerformance(merchantDetail);
-        // 生成改进建议
-        const recommendations = generateMerchantRecommendations(merchantDetail, performance);
-        // 评估风险等级
-        const riskLevel = assessMerchantRisk(merchantDetail, performance);
-        // 生成操作建议
-        const actionSuggestions = generateActionSuggestions(merchantDetail, performance, riskLevel);
-        return {
-            merchantDetail,
-            performance,
-            recommendations,
-            riskLevel,
-            actionSuggestions
-        };
-    });
+async function getMerchantAnalysisReport(merchantId) {
+    const merchantDetail = await exports.operatorMerchantManagementService.getMerchantDetail(merchantId);
+    const performance = exports.merchantAnalyticsService.calculateMerchantPerformance(merchantDetail);
+    // 生成改进建议
+    const recommendations = generateMerchantRecommendations(merchantDetail, performance);
+    // 评估风险等级
+    const riskLevel = assessMerchantRisk(merchantDetail, performance);
+    // 生成操作建议
+    const actionSuggestions = generateActionSuggestions(merchantDetail, performance, riskLevel);
+    return {
+        merchantDetail,
+        performance,
+        recommendations,
+        riskLevel,
+        actionSuggestions
+    };
 }
 /**
  * 生成商户改进建议
@@ -541,33 +521,31 @@ function generateActionSuggestions(merchant, performance, riskLevel) {
  * @param action 操作类型
  * @param actionData 操作数据
  */
-function batchMerchantAction(merchantIds, action, actionData) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const success = [];
-        const failed = [];
-        for (const merchantId of merchantIds) {
-            try {
-                switch (action) {
-                    case 'suspend':
-                        yield exports.operatorMerchantManagementService.suspendMerchant(merchantId, actionData);
-                        break;
-                    case 'resume':
-                        yield exports.operatorMerchantManagementService.resumeMerchant(merchantId, actionData);
-                        break;
-                    default:
-                        throw new Error(`不支持的操作类型: ${action}`);
-                }
-                success.push(merchantId);
+async function batchMerchantAction(merchantIds, action, actionData) {
+    const success = [];
+    const failed = [];
+    for (const merchantId of merchantIds) {
+        try {
+            switch (action) {
+                case 'suspend':
+                    await exports.operatorMerchantManagementService.suspendMerchant(merchantId, actionData);
+                    break;
+                case 'resume':
+                    await exports.operatorMerchantManagementService.resumeMerchant(merchantId, actionData);
+                    break;
+                default:
+                    throw new Error(`不支持的操作类型: ${action}`);
             }
-            catch (error) {
-                failed.push({
-                    id: merchantId,
-                    error: error instanceof Error ? error.message : '操作失败'
-                });
-            }
+            success.push(merchantId);
         }
-        return { success, failed };
-    });
+        catch (error) {
+            failed.push({
+                id: merchantId,
+                error: error instanceof Error ? error.message : '操作失败'
+            });
+        }
+    }
+    return { success, failed };
 }
 /**
  * 格式化商户状态显示

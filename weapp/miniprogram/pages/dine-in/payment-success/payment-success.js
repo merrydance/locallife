@@ -14,10 +14,10 @@ Page({
     onLoad(options) {
         const { order_id, amount, merchant_name, table_number } = options;
         this.setData({
-            orderId: parseInt(order_id) || 0,
-            paymentAmount: parseFloat(amount) || 0,
-            merchantInfo: { name: merchant_name },
-            tableInfo: { table_number }
+            orderId: parseInt(order_id || '0', 10) || 0,
+            paymentAmount: parseFloat(amount || '0') || 0,
+            merchantInfo: { name: merchant_name || '' },
+            tableInfo: { table_number: table_number || '' }
         });
         // 开始倒计时
         this.startCountdown();
@@ -44,7 +44,7 @@ Page({
      */
     goToOrderDetail() {
         wx.redirectTo({
-            url: `/pages/order/detail/detail?id=${this.data.orderId}&type=dine_in`
+            url: `/pages/orders/detail/index?id=${this.data.orderId}&type=dine_in`
         });
     },
     /**

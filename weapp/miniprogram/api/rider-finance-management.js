@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：保证金管理、提现功能、积分历史
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.financeStatsService = exports.riderFinanceManagementService = exports.RiderFinanceManagementAdapter = exports.FinanceStatsService = exports.RiderFinanceManagementService = void 0;
 exports.getRiderFinanceDashboard = getRiderFinanceDashboard;
@@ -34,72 +25,62 @@ class RiderFinanceManagementService {
     /**
      * 获取保证金余额
      */
-    getDepositBalance() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/deposit',
-                method: 'GET'
-            });
+    async getDepositBalance() {
+        return (0, request_1.request)({
+            url: '/v1/rider/deposit',
+            method: 'GET'
         });
     }
     /**
      * 保证金充值
      * @param rechargeData 充值数据
      */
-    rechargeDeposit(rechargeData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/deposit',
-                method: 'POST',
-                data: rechargeData
-            });
+    async rechargeDeposit(rechargeData) {
+        return (0, request_1.request)({
+            url: '/v1/rider/deposit',
+            method: 'POST',
+            data: rechargeData
         });
     }
     /**
      * 获取保证金流水记录
      * @param params 查询参数
      */
-    getDepositHistory(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const deposits = yield (0, request_1.request)({
-                url: '/v1/rider/deposits',
-                method: 'GET',
-                data: params
-            });
-            // 由于swagger中返回的是数组，这里需要适配成分页格式
-            return {
-                deposits: deposits || [],
-                total: (deposits === null || deposits === void 0 ? void 0 : deposits.length) || 0,
-                page: params.page,
-                limit: params.limit,
-                has_more: ((deposits === null || deposits === void 0 ? void 0 : deposits.length) || 0) >= params.limit
-            };
+    async getDepositHistory(params) {
+        const deposits = await (0, request_1.request)({
+            url: '/v1/rider/deposits',
+            method: 'GET',
+            data: params
         });
+        // 由于swagger中返回的是数组，这里需要适配成分页格式
+        return {
+            deposits: deposits || [],
+            total: (deposits === null || deposits === void 0 ? void 0 : deposits.length) || 0,
+            page: params.page,
+            limit: params.limit,
+            has_more: ((deposits === null || deposits === void 0 ? void 0 : deposits.length) || 0) >= params.limit
+        };
     }
     /**
      * 申请提现
      * @param withdrawData 提现数据
      */
-    withdrawDeposit(withdrawData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/withdraw',
-                method: 'POST',
-                data: withdrawData
-            });
+    async withdrawDeposit(withdrawData) {
+        return (0, request_1.request)({
+            url: '/v1/rider/withdraw',
+            method: 'POST',
+            data: withdrawData
         });
     }
     /**
      * 获取积分历史记录
      * @param params 查询参数
      */
-    getScoreHistory(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/score/history',
-                method: 'GET',
-                data: params
-            });
+    async getScoreHistory(params) {
+        return (0, request_1.request)({
+            url: '/v1/rider/score/history',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -243,29 +224,27 @@ exports.financeStatsService = new FinanceStatsService();
 /**
  * 获取骑手财务工作台数据
  */
-function getRiderFinanceDashboard() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [depositBalance, depositHistory] = yield Promise.all([
-            exports.riderFinanceManagementService.getDepositBalance(),
-            exports.riderFinanceManagementService.getDepositHistory({ page: 1, limit: 10 })
-        ]);
-        const earningsStats = exports.financeStatsService.calculateEarningsStats(depositHistory.deposits);
-        const depositStats = exports.financeStatsService.calculateDepositStats(depositHistory.deposits);
-        // 检查是否可以提现
-        const canWithdraw = depositBalance.available_deposit >= 100; // 最小提现金额1元
-        return {
-            depositBalance,
-            recentDeposits: depositHistory.deposits,
-            earningsStats,
-            depositStats,
-            canWithdraw,
-            withdrawLimits: {
-                minAmount: 100, // 1元
-                maxAmount: 5000000, // 50000元
-                dailyLimit: 1000000 // 10000元（需要根据实际业务调整）
-            }
-        };
-    });
+async function getRiderFinanceDashboard() {
+    const [depositBalance, depositHistory] = await Promise.all([
+        exports.riderFinanceManagementService.getDepositBalance(),
+        exports.riderFinanceManagementService.getDepositHistory({ page: 1, limit: 10 })
+    ]);
+    const earningsStats = exports.financeStatsService.calculateEarningsStats(depositHistory.deposits);
+    const depositStats = exports.financeStatsService.calculateDepositStats(depositHistory.deposits);
+    // 检查是否可以提现
+    const canWithdraw = depositBalance.available_deposit >= 100; // 最小提现金额1元
+    return {
+        depositBalance,
+        recentDeposits: depositHistory.deposits,
+        earningsStats,
+        depositStats,
+        canWithdraw,
+        withdrawLimits: {
+            minAmount: 100, // 1元
+            maxAmount: 5000000, // 50000元
+            dailyLimit: 1000000 // 10000元（需要根据实际业务调整）
+        }
+    };
 }
 /**
  * 智能提现建议

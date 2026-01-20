@@ -9,30 +9,14 @@ import {
     updateDish,
     deleteDish,
     updateDishStatus,
-    batchUpdateDishStatus
-} from '../../../../api/merchant-dish-combo-management';
-import {
+    batchUpdateDishStatus,
     getInventory,
     updateInventory
 } from '../../../../api/merchant-dish-combo-management';
 import { uploadImage } from '../../../../api/merchant-basic-management';
+import type { DishResponse } from '../../../../api/dish'
 
-interface Dish {
-    id: number;
-    name: string;
-    description: string;
-    price: number;
-    original_price?: number;
-    image_url: string;
-    category_id: number;
-    category_name: string;
-    is_available: boolean;
-    sales_count: number;
-    rating: number;
-    inventory_count?: number;
-    created_at: string;
-    updated_at: string;
-}
+type Dish = DishResponse
 
 interface Category {
     id: number;
@@ -81,6 +65,8 @@ Page({
             reason: ''
         }
     },
+
+    searchTimer: undefined as ReturnType<typeof setTimeout> | undefined,
 
     onLoad() {
         this.initPage();
@@ -167,7 +153,7 @@ Page({
             const result = await getDishes(params);
 
             this.setData({
-                dishes: result.data
+                dishes: result.data as Dish[]
             });
 
         } catch (error: any) {
@@ -218,7 +204,9 @@ Page({
         this.setData({ searchKeyword: keyword });
 
         // 防抖搜索
-        clearTimeout(this.searchTimer);
+        if (this.searchTimer) {
+            clearTimeout(this.searchTimer);
+        }
         this.searchTimer = setTimeout(() => {
             this.loadDishes();
         }, 500);
@@ -291,11 +279,11 @@ Page({
         try {
             switch (operation) {
                 case 'enable':
-                    await batchUpdateDishStatus(selectedDishes, true);
+                    await batchUpdateDishStatus({ dish_ids: selectedDishes, is_online: true });
                     wx.showToast({ title: '批量上架成功', icon: 'success' });
                     break;
                 case 'disable':
-                    await batchUpdateDishStatus(selectedDishes, false);
+                    await batchUpdateDishStatus({ dish_ids: selectedDishes, is_online: false });
                     wx.showToast({ title: '批量下架成功', icon: 'success' });
                     break;
                 case 'delete':
@@ -349,7 +337,7 @@ Page({
         const { id, available } = e.currentTarget.dataset;
 
         try {
-            await updateDishStatus(id, !available);
+            await updateDishStatus(id, { is_available: !available });
             wx.showToast({
                 title: available ? '已下架' : '已上架',
                 icon: 'success'
@@ -466,7 +454,7 @@ Page({
             const result = await uploadImage(filePath, 'dish');
 
             this.setData({
-                'editForm.image_url': result.url
+                'editForm.image_url': result
             });
 
             wx.hideLoading();

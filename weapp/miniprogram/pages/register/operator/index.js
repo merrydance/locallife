@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const ocr_1 = require("../../../api/ocr");
 const logger_1 = require("../../../utils/logger");
@@ -169,35 +160,33 @@ Page({
     onInvestmentCancel() { this.setData({ investmentPickerVisible: false }); },
     // ==================== 图片上传与OCR ====================
     // 营业执照
-    onLicenseUpload(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { files } = e.detail;
-            this.setData({ licenseImages: files });
-            this.saveDraft();
-            if (files.length > 0) {
-                wx.showLoading({ title: '识别中...' });
-                try {
-                    const res = yield (0, ocr_1.ocrOperatorBusinessLicense)(files[0].url);
-                    const info = res.ocrData;
-                    this.setData({
-                        'formData.creditCode': info.reg_num || info.credit_code || '',
-                        'formData.registerAddress': info.address || '',
-                        'formData.legalPerson': info.person || info.legal_person || '',
-                        'formData.licenseValidity': info.valid_period || info.validity || '',
-                        'formData.businessScope': info.business || info.business_scope || ''
-                    });
-                    this.saveDraft();
-                    wx.showToast({ title: '识别成功', icon: 'success' });
-                }
-                catch (error) {
-                    logger_1.logger.error('OCR failed', error, 'Operator');
-                    wx.showToast({ title: '识别失败', icon: 'none' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
+    async onLicenseUpload(e) {
+        const { files } = e.detail;
+        this.setData({ licenseImages: files });
+        this.saveDraft();
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' });
+            try {
+                const res = await (0, ocr_1.ocrOperatorBusinessLicense)(files[0].url);
+                const info = res.ocrData;
+                this.setData({
+                    'formData.creditCode': info.reg_num || info.credit_code || '',
+                    'formData.registerAddress': info.address || '',
+                    'formData.legalPerson': info.person || info.legal_person || '',
+                    'formData.licenseValidity': info.valid_period || info.validity || '',
+                    'formData.businessScope': info.business || info.business_scope || ''
+                });
+                this.saveDraft();
+                wx.showToast({ title: '识别成功', icon: 'success' });
             }
-        });
+            catch (error) {
+                logger_1.logger.error('OCR failed', error, 'Operator');
+                wx.showToast({ title: '识别失败', icon: 'none' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
     onLicenseRemove() {
         this.setData({ licenseImages: [] });
@@ -214,65 +203,61 @@ Page({
         this.saveDraft();
     },
     // 身份证正面
-    onIdCardFrontUpload(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { files } = e.detail;
-            this.setData({ idCardFrontImages: files });
-            this.saveDraft();
-            if (files.length > 0) {
-                wx.showLoading({ title: '识别中...' });
-                try {
-                    const res = yield (0, ocr_1.ocrOperatorIdCard)(files[0].url, 'front');
-                    const info = res.ocrData;
-                    this.setData({
-                        'formData.legalPerson': info.name || '',
-                        'formData.idCard': info.id || info.id_num || '',
-                        'formData.gender': info.gender || '',
-                        'formData.hometown': info.addr || info.address || ''
-                    });
-                    this.saveDraft();
-                    wx.showToast({ title: '识别成功', icon: 'success' });
-                }
-                catch (error) {
-                    logger_1.logger.error('OCR failed', error, 'Operator');
-                    wx.showToast({ title: '识别失败', icon: 'none' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
+    async onIdCardFrontUpload(e) {
+        const { files } = e.detail;
+        this.setData({ idCardFrontImages: files });
+        this.saveDraft();
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' });
+            try {
+                const res = await (0, ocr_1.ocrOperatorIdCard)(files[0].url, 'front');
+                const info = res.ocrData;
+                this.setData({
+                    'formData.legalPerson': info.name || '',
+                    'formData.idCard': info.id || info.id_num || '',
+                    'formData.gender': info.gender || '',
+                    'formData.hometown': info.addr || info.address || ''
+                });
+                this.saveDraft();
+                wx.showToast({ title: '识别成功', icon: 'success' });
             }
-        });
+            catch (error) {
+                logger_1.logger.error('OCR failed', error, 'Operator');
+                wx.showToast({ title: '识别失败', icon: 'none' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
     onIdCardFrontRemove() {
         this.setData({ idCardFrontImages: [] });
         this.saveDraft();
     },
     // 身份证反面
-    onIdCardBackUpload(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { files } = e.detail;
-            this.setData({ idCardBackImages: files });
-            this.saveDraft();
-            if (files.length > 0) {
-                wx.showLoading({ title: '识别中...' });
-                try {
-                    const res = yield (0, ocr_1.ocrOperatorIdCard)(files[0].url, 'back');
-                    const info = res.ocrData;
-                    this.setData({
-                        'formData.idCardValidity': info.valid_date || info.valid_period || ''
-                    });
-                    this.saveDraft();
-                    wx.showToast({ title: '识别成功', icon: 'success' });
-                }
-                catch (error) {
-                    logger_1.logger.error('OCR failed', error, 'Operator');
-                    wx.showToast({ title: '识别失败', icon: 'none' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
+    async onIdCardBackUpload(e) {
+        const { files } = e.detail;
+        this.setData({ idCardBackImages: files });
+        this.saveDraft();
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' });
+            try {
+                const res = await (0, ocr_1.ocrOperatorIdCard)(files[0].url, 'back');
+                const info = res.ocrData;
+                this.setData({
+                    'formData.idCardValidity': info.valid_date || info.valid_period || ''
+                });
+                this.saveDraft();
+                wx.showToast({ title: '识别成功', icon: 'success' });
             }
-        });
+            catch (error) {
+                logger_1.logger.error('OCR failed', error, 'Operator');
+                wx.showToast({ title: '识别失败', icon: 'none' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
     onIdCardBackRemove() {
         this.setData({ idCardBackImages: [] });
@@ -316,7 +301,14 @@ Page({
         if (!formData.legalPerson)
             return wx.showToast({ title: '缺少法人信息', icon: 'none' });
         // 构建提交数据
-        const submitData = Object.assign(Object.assign({}, formData), { licenseImages: licenseImages.map((img) => img.url), accountPermitImages: accountPermitImages.map((img) => img.url), idCardFrontImages: idCardFrontImages.map((img) => img.url), idCardBackImages: idCardBackImages.map((img) => img.url), planImages: this.data.planImages.map((img) => img.url) });
+        const submitData = {
+            ...formData,
+            licenseImages: licenseImages.map((img) => img.url),
+            accountPermitImages: accountPermitImages.map((img) => img.url),
+            idCardFrontImages: idCardFrontImages.map((img) => img.url),
+            idCardBackImages: idCardBackImages.map((img) => img.url),
+            planImages: this.data.planImages.map((img) => img.url)
+        };
         logger_1.logger.debug('提交的数据:', submitData, 'Operator');
         // TODO: 调用后端 API 提交数据
         wx.showToast({

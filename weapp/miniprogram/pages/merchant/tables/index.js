@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 /**
  * 桌台管理页面
@@ -67,45 +58,41 @@ Page({
             this.loadTables();
         }
     },
-    initData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const merchantId = app.globalData.merchantId;
-            if (merchantId) {
-                this.setData({ merchantName: app.globalData.merchantName || '' });
-                yield Promise.all([
-                    this.loadTables(),
-                    this.loadAvailableTableTags()
-                ]);
-            }
-            else {
-                app.userInfoReadyCallback = () => __awaiter(this, void 0, void 0, function* () {
-                    if (app.globalData.merchantId) {
-                        this.setData({ merchantName: app.globalData.merchantName || '' });
-                        yield Promise.all([
-                            this.loadTables(),
-                            this.loadAvailableTableTags()
-                        ]);
-                    }
-                });
-            }
-        });
+    async initData() {
+        const merchantId = app.globalData.merchantId;
+        if (merchantId) {
+            this.setData({ merchantName: app.globalData.merchantName || '' });
+            await Promise.all([
+                this.loadTables(),
+                this.loadAvailableTableTags()
+            ]);
+        }
+        else {
+            app.userInfoReadyCallback = async () => {
+                if (app.globalData.merchantId) {
+                    this.setData({ merchantName: app.globalData.merchantName || '' });
+                    await Promise.all([
+                        this.loadTables(),
+                        this.loadAvailableTableTags()
+                    ]);
+                }
+            };
+        }
     },
     // ========== 数据加载 ==========
-    loadTables() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const response = yield table_device_management_1.tableManagementService.listTables();
-                const tables = response.tables || [];
-                this.setData({ tables, loading: false });
-                this.applyFilter();
-            }
-            catch (error) {
-                logger_1.logger.error('加载桌台列表失败', error, 'Tables');
-                this.setData({ loading: false });
-                wx.showToast({ title: '加载失败', icon: 'none' });
-            }
-        });
+    async loadTables() {
+        this.setData({ loading: true });
+        try {
+            const response = await table_device_management_1.tableManagementService.listTables();
+            const tables = response.tables || [];
+            this.setData({ tables, loading: false });
+            this.applyFilter();
+        }
+        catch (error) {
+            logger_1.logger.error('加载桌台列表失败', error, 'Tables');
+            this.setData({ loading: false });
+            wx.showToast({ title: '加载失败', icon: 'none' });
+        }
     },
     // ========== 筛选 ==========
     onTypeFilter(e) {
@@ -122,51 +109,47 @@ Page({
         this.setData({ filteredTables: filtered });
     },
     // ========== 选择/添加 ==========
-    onSelectTable(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const item = e.currentTarget.dataset.item;
-            const minSpend = item.minimum_spend ? String(item.minimum_spend / 100) : '';
-            // 提取已选标签 ID
-            const selectedTagIds = (item.tags || []).map((t) => t.id);
-            this.setData({
-                selectedTable: Object.assign({}, item),
-                isAdding: false,
-                currentStep: 1,
-                minimumSpendYuan: minSpend,
-                tableImages: [],
-                selectedTagIds,
-                qrCodeUrl: ''
-            });
-            // 加载图片和二维码
-            yield this.loadTableExtras(item.id);
+    async onSelectTable(e) {
+        const item = e.currentTarget.dataset.item;
+        const minSpend = item.minimum_spend ? String(item.minimum_spend / 100) : '';
+        // 提取已选标签 ID
+        const selectedTagIds = (item.tags || []).map((t) => t.id);
+        this.setData({
+            selectedTable: { ...item },
+            isAdding: false,
+            currentStep: 1,
+            minimumSpendYuan: minSpend,
+            tableImages: [],
+            selectedTagIds,
+            qrCodeUrl: ''
         });
+        // 加载图片和二维码
+        await this.loadTableExtras(item.id);
     },
-    loadTableExtras(tableId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const [imagesRes, qrRes] = yield Promise.all([
-                    table_device_management_1.tableManagementService.getTableImages(tableId).catch(() => ({ images: [] })),
-                    table_device_management_1.tableManagementService.getTableQRCode(tableId).catch(() => ({ qr_code_url: '' }))
-                ]);
-                const images = [];
-                for (const img of (imagesRes.images || [])) {
-                    const resolvedUrl = yield (0, image_security_1.resolveImageURL)(img.image_url || '');
-                    images.push(Object.assign(Object.assign({}, img), { image_url: resolvedUrl }));
-                }
-                // 解析二维码URL为完整路径
-                let qrCodeUrl = '';
-                if (qrRes.qr_code_url) {
-                    qrCodeUrl = yield (0, image_security_1.resolveImageURL)(qrRes.qr_code_url);
-                }
-                this.setData({
-                    tableImages: images,
-                    qrCodeUrl
-                });
+    async loadTableExtras(tableId) {
+        try {
+            const [imagesRes, qrRes] = await Promise.all([
+                table_device_management_1.tableManagementService.getTableImages(tableId).catch(() => ({ images: [] })),
+                table_device_management_1.tableManagementService.getTableQRCode(tableId).catch(() => ({ qr_code_url: '' }))
+            ]);
+            const images = [];
+            for (const img of (imagesRes.images || [])) {
+                const resolvedUrl = await (0, image_security_1.resolveImageURL)(img.image_url || '');
+                images.push({ ...img, image_url: resolvedUrl });
             }
-            catch (error) {
-                logger_1.logger.error('加载桌台附加信息失败', error, 'Tables');
+            // 解析二维码URL为完整路径
+            let qrCodeUrl = '';
+            if (qrRes.qr_code_url) {
+                qrCodeUrl = await (0, image_security_1.resolveImageURL)(qrRes.qr_code_url);
             }
-        });
+            this.setData({
+                tableImages: images,
+                qrCodeUrl
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('加载桌台附加信息失败', error, 'Tables');
+        }
     },
     onAddTable() {
         this.setData({
@@ -212,105 +195,99 @@ Page({
         this.setData({ 'selectedTable.status': status });
     },
     // ========== 两步向导 ==========
-    onNextStep() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            const { selectedTable } = this.data;
-            if (!selectedTable)
-                return;
-            if (!((_a = selectedTable.table_no) === null || _a === void 0 ? void 0 : _a.trim())) {
-                wx.showToast({ title: '请输入桌号', icon: 'none' });
-                return;
-            }
-            if (!selectedTable.capacity || selectedTable.capacity < 1) {
-                wx.showToast({ title: '请输入有效人数', icon: 'none' });
-                return;
-            }
-            this.setData({ saving: true });
+    async onNextStep() {
+        var _a, _b;
+        const { selectedTable } = this.data;
+        if (!selectedTable)
+            return;
+        if (!((_a = selectedTable.table_no) === null || _a === void 0 ? void 0 : _a.trim())) {
+            wx.showToast({ title: '请输入桌号', icon: 'none' });
+            return;
+        }
+        if (!selectedTable.capacity || selectedTable.capacity < 1) {
+            wx.showToast({ title: '请输入有效人数', icon: 'none' });
+            return;
+        }
+        this.setData({ saving: true });
+        try {
+            const createData = {
+                table_no: selectedTable.table_no.trim(),
+                table_type: selectedTable.table_type,
+                capacity: selectedTable.capacity,
+                description: ((_b = selectedTable.description) === null || _b === void 0 ? void 0 : _b.trim()) || undefined,
+                minimum_spend: selectedTable.minimum_spend || undefined,
+                tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined
+            };
+            const newTable = await table_device_management_1.tableManagementService.createTable(createData);
+            this.setData({
+                saving: false,
+                currentStep: 2,
+                selectedTable: newTable
+            });
+            wx.showToast({ title: '桌台已创建', icon: 'success' });
+            this.loadTables();
+        }
+        catch (error) {
+            logger_1.logger.error('创建桌台失败', error, 'Tables');
+            this.setData({ saving: false });
+            wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.userMessage) || '创建失败', icon: 'none' });
+        }
+    },
+    async onFinishAdd() {
+        // 如果有选择标签，保存到已创建的桌台
+        const { selectedTable, selectedTagIds } = this.data;
+        if ((selectedTable === null || selectedTable === void 0 ? void 0 : selectedTable.id) && selectedTagIds.length > 0) {
             try {
-                const createData = {
-                    table_no: selectedTable.table_no.trim(),
-                    table_type: selectedTable.table_type,
-                    capacity: selectedTable.capacity,
-                    description: ((_b = selectedTable.description) === null || _b === void 0 ? void 0 : _b.trim()) || undefined,
-                    minimum_spend: selectedTable.minimum_spend || undefined,
-                    tag_ids: this.data.selectedTagIds.length > 0 ? this.data.selectedTagIds : undefined
-                };
-                const newTable = yield table_device_management_1.tableManagementService.createTable(createData);
-                this.setData({
-                    saving: false,
-                    currentStep: 2,
-                    selectedTable: newTable
+                await table_device_management_1.tableManagementService.updateTable(selectedTable.id, {
+                    tag_ids: selectedTagIds
                 });
-                wx.showToast({ title: '桌台已创建', icon: 'success' });
-                this.loadTables();
             }
             catch (error) {
-                logger_1.logger.error('创建桌台失败', error, 'Tables');
-                this.setData({ saving: false });
-                wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.userMessage) || '创建失败', icon: 'none' });
+                logger_1.logger.error('保存标签失败', error, 'Tables');
             }
+        }
+        this.setData({
+            selectedTable: null,
+            isAdding: false,
+            currentStep: 1,
+            selectedTagIds: [] // 重置标签选择
         });
-    },
-    onFinishAdd() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 如果有选择标签，保存到已创建的桌台
-            const { selectedTable, selectedTagIds } = this.data;
-            if ((selectedTable === null || selectedTable === void 0 ? void 0 : selectedTable.id) && selectedTagIds.length > 0) {
-                try {
-                    yield table_device_management_1.tableManagementService.updateTable(selectedTable.id, {
-                        tag_ids: selectedTagIds
-                    });
-                }
-                catch (error) {
-                    logger_1.logger.error('保存标签失败', error, 'Tables');
-                }
-            }
-            this.setData({
-                selectedTable: null,
-                isAdding: false,
-                currentStep: 1,
-                selectedTagIds: [] // 重置标签选择
-            });
-            this.loadTables();
-        });
+        this.loadTables();
     },
     // ========== 保存（编辑模式） ==========
-    onSaveTable() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c;
-            const { selectedTable } = this.data;
-            if (!(selectedTable === null || selectedTable === void 0 ? void 0 : selectedTable.id))
-                return;
-            if (!((_a = selectedTable.table_no) === null || _a === void 0 ? void 0 : _a.trim())) {
-                wx.showToast({ title: '请输入桌号', icon: 'none' });
-                return;
-            }
-            if (!selectedTable.capacity || selectedTable.capacity < 1) {
-                wx.showToast({ title: '请输入有效人数', icon: 'none' });
-                return;
-            }
-            this.setData({ saving: true });
-            try {
-                const updateData = {
-                    table_no: (_b = selectedTable.table_no) === null || _b === void 0 ? void 0 : _b.trim(),
-                    capacity: selectedTable.capacity,
-                    description: ((_c = selectedTable.description) === null || _c === void 0 ? void 0 : _c.trim()) || undefined,
-                    minimum_spend: selectedTable.minimum_spend || undefined,
-                    status: selectedTable.status,
-                    tag_ids: this.data.selectedTagIds // 添加标签ID列表
-                };
-                yield table_device_management_1.tableManagementService.updateTable(selectedTable.id, updateData);
-                this.setData({ saving: false });
-                wx.showToast({ title: '保存成功', icon: 'success' });
-                yield this.loadTables();
-            }
-            catch (error) {
-                logger_1.logger.error('保存桌台失败', error, 'Tables');
-                this.setData({ saving: false });
-                wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.userMessage) || '保存失败', icon: 'none' });
-            }
-        });
+    async onSaveTable() {
+        var _a, _b, _c;
+        const { selectedTable } = this.data;
+        if (!(selectedTable === null || selectedTable === void 0 ? void 0 : selectedTable.id))
+            return;
+        if (!((_a = selectedTable.table_no) === null || _a === void 0 ? void 0 : _a.trim())) {
+            wx.showToast({ title: '请输入桌号', icon: 'none' });
+            return;
+        }
+        if (!selectedTable.capacity || selectedTable.capacity < 1) {
+            wx.showToast({ title: '请输入有效人数', icon: 'none' });
+            return;
+        }
+        this.setData({ saving: true });
+        try {
+            const updateData = {
+                table_no: (_b = selectedTable.table_no) === null || _b === void 0 ? void 0 : _b.trim(),
+                capacity: selectedTable.capacity,
+                description: ((_c = selectedTable.description) === null || _c === void 0 ? void 0 : _c.trim()) || undefined,
+                minimum_spend: selectedTable.minimum_spend || undefined,
+                status: selectedTable.status,
+                tag_ids: this.data.selectedTagIds // 添加标签ID列表
+            };
+            await table_device_management_1.tableManagementService.updateTable(selectedTable.id, updateData);
+            this.setData({ saving: false });
+            wx.showToast({ title: '保存成功', icon: 'success' });
+            await this.loadTables();
+        }
+        catch (error) {
+            logger_1.logger.error('保存桌台失败', error, 'Tables');
+            this.setData({ saving: false });
+            wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.userMessage) || '保存失败', icon: 'none' });
+        }
     },
     // ========== 删除 ==========
     onDeleteTable() {
@@ -322,130 +299,122 @@ Page({
             title: '确认删除',
             content: '确定要删除桌台 ' + tableNo + ' 吗？',
             confirmColor: '#ff4d4f',
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 if (res.confirm) {
                     try {
-                        yield table_device_management_1.tableManagementService.deleteTable(selectedTable.id);
+                        await table_device_management_1.tableManagementService.deleteTable(selectedTable.id);
                         wx.showToast({ title: '已删除', icon: 'success' });
                         this.setData({ selectedTable: null, isAdding: false });
-                        yield this.loadTables();
+                        await this.loadTables();
                     }
                     catch (error) {
                         logger_1.logger.error('删除失败', error, 'Tables');
                         wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.userMessage) || '删除失败', icon: 'none' });
                     }
                 }
-            })
+            }
         });
     },
     // ========== 图片管理 ==========
-    onUploadImage() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
-            if (!tableId)
-                return;
-            try {
-                const res = yield wx.chooseMedia({
-                    count: 1,
-                    mediaType: ['image'],
-                    sourceType: ['album', 'camera']
-                });
-                const tempPath = res.tempFiles[0].tempFilePath;
-                wx.showLoading({ title: '上传中...' });
-                // 上传图片到服务器
-                const { getToken } = require('../../../utils/auth');
-                const token = getToken();
-                const uploadRes = yield new Promise((resolve, reject) => {
-                    wx.uploadFile({
-                        url: request_1.API_BASE + '/v1/tables/images/upload',
-                        filePath: tempPath,
-                        name: 'image',
-                        header: { 'Authorization': 'Bearer ' + token },
-                        success: (uploadResult) => {
-                            // 200 OK 或 201 Created 都表示成功
-                            if (uploadResult.statusCode === 200 || uploadResult.statusCode === 201) {
-                                const data = JSON.parse(uploadResult.data);
-                                resolve(data.image_url || data.url || '');
-                            }
-                            else {
-                                reject(new Error('HTTP ' + uploadResult.statusCode));
-                            }
-                        },
-                        fail: (err) => {
-                            reject(err);
-                        }
-                    });
-                });
-                // 添加到桌台
-                yield table_device_management_1.tableManagementService.uploadTableImage(tableId, { image_url: uploadRes });
-                wx.hideLoading();
-                wx.showToast({ title: '上传成功', icon: 'success' });
-                yield this.loadTableExtras(tableId);
-            }
-            catch (error) {
-                wx.hideLoading();
-                const errMsg = (error === null || error === void 0 ? void 0 : error.message) || (error === null || error === void 0 ? void 0 : error.errMsg) || String(error);
-                logger_1.logger.error('上传图片失败', error, 'Tables');
-                wx.showToast({ title: errMsg.substring(0, 15) || '上传失败', icon: 'none' });
-            }
-        });
-    },
-    onSetPrimaryImage(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const imageId = e.currentTarget.dataset.id;
-            const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
-            if (!tableId || !imageId)
-                return;
-            try {
-                yield table_device_management_1.tableManagementService.setPrimaryTableImage(tableId, imageId);
-                wx.showToast({ title: '已设为主图', icon: 'success' });
-                yield this.loadTableExtras(tableId);
-            }
-            catch (error) {
-                logger_1.logger.error('设置主图失败', error, 'Tables');
-                wx.showToast({ title: '操作失败', icon: 'none' });
-            }
-        });
-    },
-    onDeleteImage(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const imageId = e.currentTarget.dataset.id;
-            const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
-            if (!tableId || !imageId)
-                return;
-            wx.showModal({
-                title: '确认删除',
-                content: '确定要删除这张图片吗？',
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        try {
-                            yield table_device_management_1.tableManagementService.deleteTableImage(tableId, imageId);
-                            wx.showToast({ title: '已删除', icon: 'success' });
-                            yield this.loadTableExtras(tableId);
-                        }
-                        catch (error) {
-                            logger_1.logger.error('删除图片失败', error, 'Tables');
-                            wx.showToast({ title: '删除失败', icon: 'none' });
-                        }
-                    }
-                })
+    async onUploadImage() {
+        var _a;
+        const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
+        if (!tableId)
+            return;
+        try {
+            const res = await wx.chooseMedia({
+                count: 1,
+                mediaType: ['image'],
+                sourceType: ['album', 'camera']
             });
+            const tempPath = res.tempFiles[0].tempFilePath;
+            wx.showLoading({ title: '上传中...' });
+            // 上传图片到服务器
+            const { getToken } = require('../../../utils/auth');
+            const token = getToken();
+            const uploadRes = await new Promise((resolve, reject) => {
+                wx.uploadFile({
+                    url: request_1.API_BASE + '/v1/tables/images/upload',
+                    filePath: tempPath,
+                    name: 'image',
+                    header: { 'Authorization': 'Bearer ' + token },
+                    success: (uploadResult) => {
+                        // 200 OK 或 201 Created 都表示成功
+                        if (uploadResult.statusCode === 200 || uploadResult.statusCode === 201) {
+                            const data = JSON.parse(uploadResult.data);
+                            resolve(data.image_url || data.url || '');
+                        }
+                        else {
+                            reject(new Error('HTTP ' + uploadResult.statusCode));
+                        }
+                    },
+                    fail: (err) => {
+                        reject(err);
+                    }
+                });
+            });
+            // 添加到桌台
+            await table_device_management_1.tableManagementService.uploadTableImage(tableId, { image_url: uploadRes });
+            wx.hideLoading();
+            wx.showToast({ title: '上传成功', icon: 'success' });
+            await this.loadTableExtras(tableId);
+        }
+        catch (error) {
+            wx.hideLoading();
+            const errMsg = (error === null || error === void 0 ? void 0 : error.message) || (error === null || error === void 0 ? void 0 : error.errMsg) || String(error);
+            logger_1.logger.error('上传图片失败', error, 'Tables');
+            wx.showToast({ title: errMsg.substring(0, 15) || '上传失败', icon: 'none' });
+        }
+    },
+    async onSetPrimaryImage(e) {
+        var _a;
+        const imageId = e.currentTarget.dataset.id;
+        const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
+        if (!tableId || !imageId)
+            return;
+        try {
+            await table_device_management_1.tableManagementService.setPrimaryTableImage(tableId, imageId);
+            wx.showToast({ title: '已设为主图', icon: 'success' });
+            await this.loadTableExtras(tableId);
+        }
+        catch (error) {
+            logger_1.logger.error('设置主图失败', error, 'Tables');
+            wx.showToast({ title: '操作失败', icon: 'none' });
+        }
+    },
+    async onDeleteImage(e) {
+        var _a;
+        const imageId = e.currentTarget.dataset.id;
+        const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
+        if (!tableId || !imageId)
+            return;
+        wx.showModal({
+            title: '确认删除',
+            content: '确定要删除这张图片吗？',
+            success: async (res) => {
+                if (res.confirm) {
+                    try {
+                        await table_device_management_1.tableManagementService.deleteTableImage(tableId, imageId);
+                        wx.showToast({ title: '已删除', icon: 'success' });
+                        await this.loadTableExtras(tableId);
+                    }
+                    catch (error) {
+                        logger_1.logger.error('删除图片失败', error, 'Tables');
+                        wx.showToast({ title: '删除失败', icon: 'none' });
+                    }
+                }
+            }
         });
     },
     // ========== 标签管理 ==========
-    loadAvailableTableTags() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const tags = yield dish_1.TagService.listTags('table');
-                this.setData({ availableTableTags: tags });
-            }
-            catch (error) {
-                logger_1.logger.error('加载标签列表失败', error, 'Tables');
-            }
-        });
+    async loadAvailableTableTags() {
+        try {
+            const tags = await dish_1.TagService.listTags('table');
+            this.setData({ availableTableTags: tags });
+        }
+        catch (error) {
+            logger_1.logger.error('加载标签列表失败', error, 'Tables');
+        }
     },
     // 切换标签选中状态
     onTagToggle(e) {
@@ -478,80 +447,74 @@ Page({
         this.setData({ newTagName: e.detail.value });
     },
     // 创建新标签
-    onCreateTag() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { newTagName } = this.data;
-            if (!newTagName.trim()) {
-                wx.showToast({ title: '请输入标签名称', icon: 'none' });
-                return;
-            }
-            try {
-                const newTag = yield dish_1.TagService.createTag({ name: newTagName.trim(), type: 'table' });
-                this.setData({
-                    availableTableTags: [...this.data.availableTableTags, newTag],
-                    newTagName: ''
-                });
-                wx.showToast({ title: '标签已创建', icon: 'success' });
-            }
-            catch (error) {
-                logger_1.logger.error('创建标签失败', error, 'Tables');
-                wx.showToast({ title: '创建失败', icon: 'none' });
-            }
-        });
+    async onCreateTag() {
+        const { newTagName } = this.data;
+        if (!newTagName.trim()) {
+            wx.showToast({ title: '请输入标签名称', icon: 'none' });
+            return;
+        }
+        try {
+            const newTag = await dish_1.TagService.createTag({ name: newTagName.trim(), type: 'table' });
+            this.setData({
+                availableTableTags: [...this.data.availableTableTags, newTag],
+                newTagName: ''
+            });
+            wx.showToast({ title: '标签已创建', icon: 'success' });
+        }
+        catch (error) {
+            logger_1.logger.error('创建标签失败', error, 'Tables');
+            wx.showToast({ title: '创建失败', icon: 'none' });
+        }
     },
     // 删除标签
-    onDeleteTag(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const tagId = e.currentTarget.dataset.id;
-            const tagName = e.currentTarget.dataset.name;
-            const res = yield new Promise(resolve => {
-                wx.showModal({
-                    title: '确认删除',
-                    content: `确定要删除标签"${tagName}"吗？`,
-                    success: resolve
-                });
+    async onDeleteTag(e) {
+        const tagId = e.currentTarget.dataset.id;
+        const tagName = e.currentTarget.dataset.name;
+        const res = await new Promise(resolve => {
+            wx.showModal({
+                title: '确认删除',
+                content: `确定要删除标签"${tagName}"吗？`,
+                success: resolve
             });
-            if (!res.confirm)
-                return;
-            try {
-                yield dish_1.TagService.deleteTag(tagId);
-                this.setData({
-                    availableTableTags: this.data.availableTableTags.filter(t => t.id !== tagId),
-                    selectedTagIds: this.data.selectedTagIds.filter(id => id !== tagId)
-                });
-                wx.showToast({ title: '标签已删除', icon: 'success' });
-            }
-            catch (error) {
-                logger_1.logger.error('删除标签失败', error, 'Tables');
-                wx.showToast({ title: '删除失败', icon: 'none' });
-            }
         });
+        if (!res.confirm)
+            return;
+        try {
+            await dish_1.TagService.deleteTag(tagId);
+            this.setData({
+                availableTableTags: this.data.availableTableTags.filter(t => t.id !== tagId),
+                selectedTagIds: this.data.selectedTagIds.filter(id => id !== tagId)
+            });
+            wx.showToast({ title: '标签已删除', icon: 'success' });
+        }
+        catch (error) {
+            logger_1.logger.error('删除标签失败', error, 'Tables');
+            wx.showToast({ title: '删除失败', icon: 'none' });
+        }
     },
     // ========== 二维码 ==========
-    onGenerateQRCode() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
-            if (!tableId)
-                return;
-            try {
-                wx.showLoading({ title: '生成中...' });
-                const res = yield table_device_management_1.tableManagementService.getTableQRCode(tableId);
-                wx.hideLoading();
-                // 解析二维码URL为完整路径
-                let qrCodeUrl = '';
-                if (res.qr_code_url) {
-                    qrCodeUrl = yield (0, image_security_1.resolveImageURL)(res.qr_code_url);
-                }
-                this.setData({ qrCodeUrl });
-                wx.showToast({ title: '二维码已生成', icon: 'success' });
+    async onGenerateQRCode() {
+        var _a;
+        const tableId = (_a = this.data.selectedTable) === null || _a === void 0 ? void 0 : _a.id;
+        if (!tableId)
+            return;
+        try {
+            wx.showLoading({ title: '生成中...' });
+            const res = await table_device_management_1.tableManagementService.getTableQRCode(tableId);
+            wx.hideLoading();
+            // 解析二维码URL为完整路径
+            let qrCodeUrl = '';
+            if (res.qr_code_url) {
+                qrCodeUrl = await (0, image_security_1.resolveImageURL)(res.qr_code_url);
             }
-            catch (error) {
-                wx.hideLoading();
-                logger_1.logger.error('生成二维码失败', error, 'Tables');
-                wx.showToast({ title: '生成失败', icon: 'none' });
-            }
-        });
+            this.setData({ qrCodeUrl });
+            wx.showToast({ title: '二维码已生成', icon: 'success' });
+        }
+        catch (error) {
+            wx.hideLoading();
+            logger_1.logger.error('生成二维码失败', error, 'Tables');
+            wx.showToast({ title: '生成失败', icon: 'none' });
+        }
     },
     onPreviewQRCode() {
         const { qrCodeUrl } = this.data;

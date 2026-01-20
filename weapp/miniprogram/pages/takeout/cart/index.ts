@@ -207,7 +207,7 @@ Page({
    * 计算各商户代取费
    * 获取用户当前地址并计算每个商户的代取费
    */
-  async calculateDeliveryFees() {
+  async calculateDeliveryFees(silent: boolean = false) {
     const { merchantGroups } = this.data
     if (merchantGroups.length === 0) return
 
@@ -231,7 +231,7 @@ Page({
           address_id: addressId || undefined,
           latitude: !addressId && latitude ? latitude : undefined,
           longitude: !addressId && longitude ? longitude : undefined
-        })
+        }, { loading: !silent })
 
         // 更新代取费信息
         updatedGroups[i] = {
@@ -303,6 +303,7 @@ Page({
    */
   async onIncrease(e: WechatMiniprogram.CustomEvent) {
     const { itemId } = e.currentTarget.dataset
+    if (!itemId) return
     const currentQuantity = this.getItemQuantity(itemId)
     const newQuantity = currentQuantity + 1
 
@@ -310,11 +311,11 @@ Page({
     this.updateLocalQuantity(itemId, newQuantity)
 
     try {
-      await CartAPI.updateCartItem(itemId, { quantity: newQuantity })
+      await CartAPI.updateCartItem(itemId, { quantity: newQuantity }, { loading: false })
       // 更新小计和总价
       this.recalculateSubtotals()
       // 重新计算代取费（后端根据订单金额计算）
-      this.calculateDeliveryFees()
+      this.calculateDeliveryFees(true)
     } catch (error) {
       // 回滚本地状态
       this.updateLocalQuantity(itemId, currentQuantity)
@@ -327,13 +328,14 @@ Page({
    */
   async onDecrease(e: WechatMiniprogram.CustomEvent) {
     const { itemId } = e.currentTarget.dataset
+    if (!itemId) return
     const currentQuantity = this.getItemQuantity(itemId)
 
     if (currentQuantity <= 1) {
-      // 删除商品需要重新加载列表
+      // 删除商品，本地移除避免整页刷新
       try {
-        await CartAPI.removeFromCart(itemId)
-        await this.loadAllCarts()
+        await CartAPI.removeFromCart(itemId, { loading: false })
+        this.removeLocalItem(itemId)
       } catch (error) {
         wx.showToast({ title: '删除失败', icon: 'none' })
       }
@@ -346,10 +348,10 @@ Page({
     this.updateLocalQuantity(itemId, newQuantity)
 
     try {
-      await CartAPI.updateCartItem(itemId, { quantity: newQuantity })
+      await CartAPI.updateCartItem(itemId, { quantity: newQuantity }, { loading: false })
       this.recalculateSubtotals()
       // 重新计算代取费
-      this.calculateDeliveryFees()
+      this.calculateDeliveryFees(true)
     } catch (error) {
       // 回滚
       this.updateLocalQuantity(itemId, currentQuantity)
@@ -400,9 +402,15 @@ Page({
       const subtotal = group.items.reduce((sum, item) => {
         return sum + (item.unitPrice * item.quantity)
       }, 0)
+      const itemCount = group.items.reduce((sum, item) => sum + item.quantity, 0)
+      const deliveryFee = group.deliveryFee || 0
+      const totalAmount = subtotal + deliveryFee
 
       updates[`merchantGroups[${i}].subtotal`] = subtotal
       updates[`merchantGroups[${i}].subtotalDisplay`] = `¥${(subtotal / 100).toFixed(2)}`
+      updates[`merchantGroups[${i}].itemCount`] = itemCount
+      updates[`merchantGroups[${i}].totalAmount`] = totalAmount
+      updates[`merchantGroups[${i}].totalAmountDisplay`] = `¥${(totalAmount / 100).toFixed(2)}`
     }
 
     // 一次性更新所有值
@@ -413,6 +421,61 @@ Page({
 
     // 同步到全局 store
     this.syncToGlobalStore()
+  },
+
+  /**
+   * 本地移除商品（避免整页刷新）
+   */
+  removeLocalItem(itemId: number) {
+    const { merchantGroups, selectedCartIds } = this.data
+    let targetGroupIndex = -1
+    let targetItemIndex = -1
+
+    for (let i = 0; i < merchantGroups.length; i++) {
+      const itemIndex = merchantGroups[i].items.findIndex(item => item.id === itemId)
+      if (itemIndex !== -1) {
+        targetGroupIndex = i
+        targetItemIndex = itemIndex
+        break
+      }
+    }
+
+    if (targetGroupIndex === -1 || targetItemIndex === -1) return
+
+    const updatedGroups = merchantGroups.map((group, index) => {
+      if (index !== targetGroupIndex) return group
+      const nextItems = group.items.filter((_, itemIndex) => itemIndex !== targetItemIndex)
+      return {
+        ...group,
+        items: nextItems
+      }
+    }).filter(group => group.items.length > 0)
+
+    const removedGroup = merchantGroups[targetGroupIndex]
+    const nextSelectedCartIds = removedGroup && updatedGroups.every(group => group.cartId !== removedGroup.cartId)
+      ? selectedCartIds.filter(id => id !== removedGroup.cartId)
+      : selectedCartIds
+
+    this.setData({
+      merchantGroups: updatedGroups,
+      selectedCartIds: nextSelectedCartIds
+    }, () => {
+      if (updatedGroups.length === 0) {
+        this.setData({
+          summary: {
+            cartCount: 0,
+            totalItems: 0,
+            totalAmount: 0,
+            totalAmountDisplay: '¥0.00'
+          }
+        })
+      } else {
+        this.recalculateSubtotals()
+        this.calculateDeliveryFees(true)
+      }
+      this.calculateCheckoutTotal()
+      this.syncToGlobalStore()
+    })
   },
 
   /**

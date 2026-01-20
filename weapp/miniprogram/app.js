@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const tracker_1 = require("./utils/tracker");
 const auth_1 = require("./api/auth");
@@ -27,6 +18,7 @@ App({
         userRole: 'guest',
         userId: undefined,
         merchantId: undefined,
+        merchantName: '',
         // 多店铺切换支持
         currentMerchantId: undefined,
         merchantInfo: undefined,
@@ -145,7 +137,7 @@ App({
         clearToken();
         logger_1.logger.debug('已清除旧 token，准备重新登录', undefined, 'silentLogin');
         wx.login({
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 if (res.code) {
                     try {
                         logger_1.logger.debug('微信登录成功,code获取成功', { code: res.code.substring(0, 10) + '...' }, 'silentLogin');
@@ -154,7 +146,7 @@ App({
                         logger_1.logger.debug('设备ID已生成', { deviceId: deviceId.substring(0, 15) + '...' }, 'silentLogin');
                         // 调用登录接口
                         logger_1.logger.debug('开始调用后端登录接口', undefined, 'silentLogin');
-                        const loginData = yield (0, auth_1.wechatLogin)({
+                        const loginData = await (0, auth_1.wechatLogin)({
                             code: res.code,
                             device_id: deviceId,
                             device_type: 'miniprogram'
@@ -239,7 +231,7 @@ App({
                 else {
                     logger_1.logger.error('wx.login成功但未返回code', res, 'App.silentLogin');
                 }
-            }),
+            },
             fail: (err) => {
                 logger_1.logger.error('❌ wx.login调用失败', err, 'App.wx.login');
                 error_handler_1.ErrorHandler.handle(err, 'App.wx.login');
@@ -338,105 +330,103 @@ App({
     /**
      * 等待 token 准备好后，调用逆地理编码
      */
-    reverseGeocodeWhenReady() {
-        return __awaiter(this, arguments, void 0, function* (retryCount = 0) {
-            const MAX_RETRIES = 20; // 最多等待 10 秒
-            const RETRY_INTERVAL = 500;
-            // 引入距离计算工具
-            const { haversineDistance } = require('./utils/geo');
-            // 检查是否已有缓存的坐标
-            if (!this.globalData.latitude || !this.globalData.longitude) {
-                logger_1.logger.warn('坐标不存在，无法进行逆地理编码', undefined, 'reverseGeocodeWhenReady');
+    async reverseGeocodeWhenReady(retryCount = 0) {
+        const MAX_RETRIES = 20; // 最多等待 10 秒
+        const RETRY_INTERVAL = 500;
+        // 引入距离计算工具
+        const { haversineDistance } = require('./utils/geo');
+        // 检查是否已有缓存的坐标
+        if (!this.globalData.latitude || !this.globalData.longitude) {
+            logger_1.logger.warn('坐标不存在，无法进行逆地理编码', undefined, 'reverseGeocodeWhenReady');
+            return;
+        }
+        // === 新增：位置更新优化策略 ===
+        const lastLoc = this.globalData._lastLocationContext || { lat: 0, lng: 0, time: 0, name: '' };
+        const now = Date.now();
+        const TIME_THRESHOLD = 5 * 60 * 1000; // 5分钟
+        const DISTANCE_THRESHOLD_KM = 0.05; // 50米
+        const distance = haversineDistance(lastLoc.lat, lastLoc.lng, this.globalData.latitude, this.globalData.longitude);
+        const isRecent = (now - lastLoc.time) < TIME_THRESHOLD;
+        const isSmallMove = distance < DISTANCE_THRESHOLD_KM;
+        const hasCachedName = !!lastLoc.name;
+        if (isRecent && isSmallMove && hasCachedName) {
+            logger_1.logger.info('📍 移动距离过小且时间较短，使用缓存位置名称', {
+                distance: `${(distance * 1000).toFixed(1)}m`,
+                cachedName: lastLoc.name
+            }, 'reverseGeocodeWhenReady');
+            // 复用上次的名称，但更新坐标
+            this.globalData.location = {
+                name: lastLoc.name,
+                address: lastLoc.address || lastLoc.name
+            };
+            // 同步到 globalStore
+            const { globalStore } = require('./utils/global-store');
+            globalStore.updateLocation(this.globalData.latitude, this.globalData.longitude, lastLoc.name, lastLoc.address || lastLoc.name);
+            return;
+        }
+        // ============================
+        // 检查 token 是否准备好
+        const { getToken } = require('./utils/auth');
+        const token = getToken();
+        if (!token) {
+            if (retryCount >= MAX_RETRIES) {
+                logger_1.logger.warn('⏰ Token 等待超时，逆地理编码失败', { retryCount }, 'reverseGeocodeWhenReady');
+                this.globalData.location = { name: '定位失败' };
                 return;
             }
-            // === 新增：位置更新优化策略 ===
-            const lastLoc = this.globalData._lastLocationContext || { lat: 0, lng: 0, time: 0, name: '' };
-            const now = Date.now();
-            const TIME_THRESHOLD = 5 * 60 * 1000; // 5分钟
-            const DISTANCE_THRESHOLD_KM = 0.05; // 50米
-            const distance = haversineDistance(lastLoc.lat, lastLoc.lng, this.globalData.latitude, this.globalData.longitude);
-            const isRecent = (now - lastLoc.time) < TIME_THRESHOLD;
-            const isSmallMove = distance < DISTANCE_THRESHOLD_KM;
-            const hasCachedName = !!lastLoc.name;
-            if (isRecent && isSmallMove && hasCachedName) {
-                logger_1.logger.info('📍 移动距离过小且时间较短，使用缓存位置名称', {
-                    distance: `${(distance * 1000).toFixed(1)}m`,
-                    cachedName: lastLoc.name
-                }, 'reverseGeocodeWhenReady');
-                // 复用上次的名称，但更新坐标
-                this.globalData.location = {
-                    name: lastLoc.name,
-                    address: lastLoc.address || lastLoc.name
-                };
-                // 同步到 globalStore
-                const { globalStore } = require('./utils/global-store');
-                globalStore.updateLocation(this.globalData.latitude, this.globalData.longitude, lastLoc.name, lastLoc.address || lastLoc.name);
-                return;
+            // Token 未准备好，等待后重试
+            if (retryCount === 0) {
+                logger_1.logger.debug('等待 token 准备好以进行逆地理编码...', undefined, 'reverseGeocodeWhenReady');
             }
-            // ============================
-            // 检查 token 是否准备好
-            const { getToken } = require('./utils/auth');
-            const token = getToken();
-            if (!token) {
-                if (retryCount >= MAX_RETRIES) {
-                    logger_1.logger.warn('⏰ Token 等待超时，逆地理编码失败', { retryCount }, 'reverseGeocodeWhenReady');
-                    this.globalData.location = { name: '定位失败' };
-                    return;
-                }
-                // Token 未准备好，等待后重试
-                if (retryCount === 0) {
-                    logger_1.logger.debug('等待 token 准备好以进行逆地理编码...', undefined, 'reverseGeocodeWhenReady');
-                }
-                setTimeout(() => {
-                    this.reverseGeocodeWhenReady(retryCount + 1);
-                }, RETRY_INTERVAL);
-                return;
-            }
-            // Token 已准备好，调用逆地理编码
-            try {
-                logger_1.logger.debug('开始调用逆地理编码', {
-                    latitude: this.globalData.latitude,
-                    longitude: this.globalData.longitude,
-                    waitedTime: `${(retryCount * RETRY_INTERVAL) / 1000}秒`
-                }, 'reverseGeocodeWhenReady');
-                const locationInfo = yield location_1.locationService.reverseGeocode(this.globalData.latitude, this.globalData.longitude);
-                // 缓存位置信息到 globalData
-                const fullAddress = locationInfo.formatted_address || locationInfo.address;
-                const locationName = locationInfo.street || locationInfo.district || fullAddress || '当前位置';
-                this.globalData.location = {
-                    name: locationName,
-                    address: fullAddress
-                };
-                // === 更新缓存上下文 ===
-                this.globalData._lastLocationContext = {
-                    lat: this.globalData.latitude,
-                    lng: this.globalData.longitude,
-                    time: Date.now(),
-                    name: locationName,
-                    address: fullAddress
-                };
-                // ====================
-                // 同步到 globalStore（导航栏等组件使用）
-                const { globalStore } = require('./utils/global-store');
-                globalStore.updateLocation(this.globalData.latitude, this.globalData.longitude, locationName, fullAddress);
-                logger_1.logger.info('✅ 逆地理编码成功，位置已缓存', {
-                    name: locationName,
-                    address: fullAddress,
-                    syncedToGlobalStore: true
-                }, 'reverseGeocodeWhenReady');
-            }
-            catch (err) {
-                // 逆地理编码失败
-                this.globalData.location = {
-                    name: '定位失败',
-                    address: `${this.globalData.latitude.toFixed(6)}, ${this.globalData.longitude.toFixed(6)}`
-                };
-                // 同步到 globalStore
-                const { globalStore } = require('./utils/global-store');
-                globalStore.updateLocation(this.globalData.latitude, this.globalData.longitude, '定位失败', this.globalData.location.address);
-                logger_1.logger.warn('❌ 逆地理编码失败', err, 'reverseGeocodeWhenReady');
-            }
-        });
+            setTimeout(() => {
+                this.reverseGeocodeWhenReady(retryCount + 1);
+            }, RETRY_INTERVAL);
+            return;
+        }
+        // Token 已准备好，调用逆地理编码
+        try {
+            logger_1.logger.debug('开始调用逆地理编码', {
+                latitude: this.globalData.latitude,
+                longitude: this.globalData.longitude,
+                waitedTime: `${(retryCount * RETRY_INTERVAL) / 1000}秒`
+            }, 'reverseGeocodeWhenReady');
+            const locationInfo = await location_1.locationService.reverseGeocode(this.globalData.latitude, this.globalData.longitude);
+            // 缓存位置信息到 globalData
+            const fullAddress = locationInfo.formatted_address || locationInfo.address;
+            const locationName = locationInfo.street || locationInfo.district || fullAddress || '当前位置';
+            this.globalData.location = {
+                name: locationName,
+                address: fullAddress
+            };
+            // === 更新缓存上下文 ===
+            this.globalData._lastLocationContext = {
+                lat: this.globalData.latitude,
+                lng: this.globalData.longitude,
+                time: Date.now(),
+                name: locationName,
+                address: fullAddress
+            };
+            // ====================
+            // 同步到 globalStore（导航栏等组件使用）
+            const { globalStore } = require('./utils/global-store');
+            globalStore.updateLocation(this.globalData.latitude, this.globalData.longitude, locationName, fullAddress);
+            logger_1.logger.info('✅ 逆地理编码成功，位置已缓存', {
+                name: locationName,
+                address: fullAddress,
+                syncedToGlobalStore: true
+            }, 'reverseGeocodeWhenReady');
+        }
+        catch (err) {
+            // 逆地理编码失败
+            this.globalData.location = {
+                name: '定位失败',
+                address: `${this.globalData.latitude.toFixed(6)}, ${this.globalData.longitude.toFixed(6)}`
+            };
+            // 同步到 globalStore
+            const { globalStore } = require('./utils/global-store');
+            globalStore.updateLocation(this.globalData.latitude, this.globalData.longitude, '定位失败', this.globalData.location.address);
+            logger_1.logger.warn('❌ 逆地理编码失败', err, 'reverseGeocodeWhenReady');
+        }
     },
     /**
      * 获取位置（兼容旧代码，Demo 模式使用）
@@ -490,7 +480,10 @@ App({
                 isPc: platform === 'windows' || platform === 'mac' || platform === 'ohos_pc',
                 isDevtools: platform === 'devtools'
             };
-            logger_1.logger.info('📱 设备平台信息已初始化', Object.assign({ platform }, this.globalData.devicePlatform), 'initDevicePlatform');
+            logger_1.logger.info('📱 设备平台信息已初始化', {
+                platform,
+                ...this.globalData.devicePlatform
+            }, 'initDevicePlatform');
         }
         catch (e) {
             logger_1.logger.warn('获取设备平台信息失败', e, 'initDevicePlatform');

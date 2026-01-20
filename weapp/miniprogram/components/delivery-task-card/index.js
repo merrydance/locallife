@@ -5,7 +5,7 @@ Component({
     properties: {
         task: {
             type: Object,
-            value: null
+            value: undefined
         },
         type: {
             type: String,
@@ -14,22 +14,40 @@ Component({
     },
     methods: {
         onGrab() {
-            this.triggerEvent('grab', { id: this.properties.task.order_id });
+            const task = this.properties.task;
+            if (!(task === null || task === void 0 ? void 0 : task.order_id))
+                return;
+            this.triggerEvent('grab', { id: task.order_id });
         },
         onPickup() {
-            this.triggerEvent('pickup', { id: this.properties.task.delivery_id });
+            const task = this.properties.task;
+            if (!(task === null || task === void 0 ? void 0 : task.delivery_id))
+                return;
+            this.triggerEvent('pickup', { id: task.delivery_id });
         },
         onConfirmPickup() {
-            this.triggerEvent('confirmPickup', { id: this.properties.task.delivery_id });
+            const task = this.properties.task;
+            if (!(task === null || task === void 0 ? void 0 : task.delivery_id))
+                return;
+            this.triggerEvent('confirmPickup', { id: task.delivery_id });
         },
         onDeliver() {
-            this.triggerEvent('deliver', { id: this.properties.task.delivery_id });
+            const task = this.properties.task;
+            if (!(task === null || task === void 0 ? void 0 : task.delivery_id))
+                return;
+            this.triggerEvent('deliver', { id: task.delivery_id });
         },
         onConfirmDeliver() {
-            this.triggerEvent('confirmDeliver', { id: this.properties.task.delivery_id });
+            const task = this.properties.task;
+            if (!(task === null || task === void 0 ? void 0 : task.delivery_id))
+                return;
+            this.triggerEvent('confirmDeliver', { id: task.delivery_id });
         },
         onException() {
-            this.triggerEvent('exception', { id: this.properties.task.delivery_id });
+            const task = this.properties.task;
+            if (!(task === null || task === void 0 ? void 0 : task.delivery_id))
+                return;
+            this.triggerEvent('exception', { id: task.delivery_id });
         },
         onCall(e) {
             const phone = e.currentTarget.dataset.phone;

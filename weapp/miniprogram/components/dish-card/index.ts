@@ -2,6 +2,17 @@
 
 import { formatImageUrl, ImageSize } from '../../utils/image'
 
+type DishCardData = {
+  id?: number
+  imageUrl?: string
+  _imageOptimized?: boolean
+  merchantId?: number
+  shopName?: string
+  monthlySales?: number
+  distance_meters?: number
+  deliveryTimeSeconds?: number
+}
+
 Component({
   properties: {
     dish: {
@@ -9,8 +20,9 @@ Component({
       value: {},
       observer(newVal: Record<string, unknown>) {
         // 当dish数据更新时，优化图片URL
-        if (newVal && newVal.imageUrl && !newVal._imageOptimized) {
-          const optimizedUrl = formatImageUrl(newVal.imageUrl, ImageSize.CARD)
+        const dishVal = newVal as DishCardData
+        if (dishVal && dishVal.imageUrl && !dishVal._imageOptimized) {
+          const optimizedUrl = formatImageUrl(dishVal.imageUrl, ImageSize.CARD)
           this.setData({
             'dish.imageUrl': optimizedUrl,
             'dish._imageOptimized': true

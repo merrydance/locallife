@@ -4,15 +4,6 @@
  * 基于swagger.json中的扫码点餐接口
  * 商户端桌台管理功能已迁移到 table-device-management.ts
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getTable = exports.getScanTableInfo = void 0;
 exports.scanTable = scanTable;
@@ -27,25 +18,21 @@ const request_1 = require("../utils/request");
  * @param merchantId 商户ID
  * @param tableNo 桌台编号
  */
-function scanTable(merchantId, tableNo) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: '/v1/scan/table',
-            method: 'GET',
-            data: { merchant_id: merchantId, table_no: tableNo }
-        });
+async function scanTable(merchantId, tableNo) {
+    return (0, request_1.request)({
+        url: '/v1/scan/table',
+        method: 'GET',
+        data: { merchant_id: merchantId, table_no: tableNo }
     });
 }
 /**
  * 获取桌台详情
  * @param tableId 桌台ID
  */
-function getTableDetail(tableId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}`,
-            method: 'GET'
-        });
+async function getTableDetail(tableId) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}`,
+        method: 'GET'
     });
 }
 // ==================== 注意 ====================

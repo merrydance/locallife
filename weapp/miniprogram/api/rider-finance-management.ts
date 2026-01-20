@@ -137,7 +137,7 @@ export class RiderFinanceManagementService {
         limit: number
         has_more: boolean
     }> {
-        const deposits = await request({
+        const deposits = await request<DepositResponse[]>({
             url: '/v1/rider/deposits',
             method: 'GET',
             data: params

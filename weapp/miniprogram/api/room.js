@@ -3,15 +3,6 @@
  * 包间相关API接口
  * 基于swagger.json中的包间浏览接口
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRoom = exports.getRooms = void 0;
 exports.getPublicMerchantRooms = getPublicMerchantRooms;
@@ -33,12 +24,10 @@ const request_1 = require("../utils/request");
  * 获取商户包间列表（消费者端）
  * @param merchantId 商户ID
  */
-function getPublicMerchantRooms(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/public/merchants/${merchantId}/rooms`,
-            method: 'GET'
-        });
+async function getPublicMerchantRooms(merchantId) {
+    return (0, request_1.request)({
+        url: `/v1/public/merchants/${merchantId}/rooms`,
+        method: 'GET'
     });
 }
 // ==================== API接口函数 ====================
@@ -46,36 +35,30 @@ function getPublicMerchantRooms(merchantId) {
  * 获取商户可用包间列表
  * @param merchantId 商户ID
  */
-function getMerchantAvailableRooms(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/merchants/${merchantId}/rooms`,
-            method: 'GET'
-        });
+async function getMerchantAvailableRooms(merchantId) {
+    return (0, request_1.request)({
+        url: `/v1/merchants/${merchantId}/rooms`,
+        method: 'GET'
     });
 }
 /**
  * 获取商户全部包间列表
  * @param merchantId 商户ID
  */
-function getMerchantAllRooms(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/merchants/${merchantId}/rooms/all`,
-            method: 'GET'
-        });
+async function getMerchantAllRooms(merchantId) {
+    return (0, request_1.request)({
+        url: `/v1/merchants/${merchantId}/rooms/all`,
+        method: 'GET'
     });
 }
 /**
  * 获取包间详情（消费者端）
  * @param roomId 包间ID
  */
-function getRoomDetail(roomId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/rooms/${roomId}`,
-            method: 'GET'
-        });
+async function getRoomDetail(roomId) {
+    return (0, request_1.request)({
+        url: `/v1/rooms/${roomId}`,
+        method: 'GET'
     });
 }
 /**
@@ -83,13 +66,11 @@ function getRoomDetail(roomId) {
  * @param roomId 包间ID
  * @param params 检查参数
  */
-function checkRoomAvailability(roomId, params) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/rooms/${roomId}/availability`,
-            method: 'GET',
-            data: params
-        });
+async function checkRoomAvailability(roomId, params) {
+    return (0, request_1.request)({
+        url: `/v1/rooms/${roomId}/availability`,
+        method: 'GET',
+        data: params
     });
 }
 // ==================== 便捷方法 ====================
@@ -99,15 +80,13 @@ function checkRoomAvailability(roomId, params) {
  * @param minCapacity 最小容量
  * @param maxCapacity 最大容量
  */
-function getRoomsByCapacity(merchantId, minCapacity, maxCapacity) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield getMerchantAvailableRooms(merchantId);
-        return response.rooms.filter(room => {
-            if (maxCapacity) {
-                return room.capacity >= minCapacity && room.capacity <= maxCapacity;
-            }
-            return room.capacity >= minCapacity;
-        });
+async function getRoomsByCapacity(merchantId, minCapacity, maxCapacity) {
+    const response = await getMerchantAvailableRooms(merchantId);
+    return response.rooms.filter(room => {
+        if (maxCapacity) {
+            return room.capacity >= minCapacity && room.capacity <= maxCapacity;
+        }
+        return room.capacity >= minCapacity;
     });
 }
 /**
@@ -116,19 +95,17 @@ function getRoomsByCapacity(merchantId, minCapacity, maxCapacity) {
  * @param maxHourlyRate 最大时租
  * @param maxMinimumSpend 最大最低消费
  */
-function getRoomsByPrice(merchantId, maxHourlyRate, maxMinimumSpend) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield getMerchantAvailableRooms(merchantId);
-        return response.rooms.filter(room => {
-            let match = true;
-            if (maxHourlyRate && room.hourly_rate > maxHourlyRate) {
-                match = false;
-            }
-            if (maxMinimumSpend && room.minimum_spend > maxMinimumSpend) {
-                match = false;
-            }
-            return match;
-        });
+async function getRoomsByPrice(merchantId, maxHourlyRate, maxMinimumSpend) {
+    const response = await getMerchantAvailableRooms(merchantId);
+    return response.rooms.filter(room => {
+        let match = true;
+        if (maxHourlyRate && room.hourly_rate > maxHourlyRate) {
+            match = false;
+        }
+        if (maxMinimumSpend && room.minimum_spend > maxMinimumSpend) {
+            match = false;
+        }
+        return match;
     });
 }
 /**
@@ -136,40 +113,32 @@ function getRoomsByPrice(merchantId, maxHourlyRate, maxMinimumSpend) {
  * @param merchantId 商户ID
  * @param roomType 包间类型
  */
-function getRoomsByType(merchantId, roomType) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield getMerchantAvailableRooms(merchantId);
-        return response.rooms.filter(room => room.room_type === roomType);
-    });
+async function getRoomsByType(merchantId, roomType) {
+    const response = await getMerchantAvailableRooms(merchantId);
+    return response.rooms.filter(room => room.room_type === roomType);
 }
 /**
  * 获取VIP包间
  * @param merchantId 商户ID
  */
-function getVIPRooms(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return getRoomsByType(merchantId, 'vip');
-    });
+async function getVIPRooms(merchantId) {
+    return getRoomsByType(merchantId, 'vip');
 }
 /**
  * 获取豪华包间
  * @param merchantId 商户ID
  */
-function getLuxuryRooms(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return getRoomsByType(merchantId, 'luxury');
-    });
+async function getLuxuryRooms(merchantId) {
+    return getRoomsByType(merchantId, 'luxury');
 }
 /**
  * 检查多个包间的可用性
  * @param roomIds 包间ID列表
  * @param params 检查参数
  */
-function checkMultipleRoomsAvailability(roomIds, params) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const results = yield Promise.all(roomIds.map(roomId => checkRoomAvailability(roomId, params)));
-        return results;
-    });
+async function checkMultipleRoomsAvailability(roomIds, params) {
+    const results = await Promise.all(roomIds.map(roomId => checkRoomAvailability(roomId, params)));
+    return results;
 }
 /**
  * 获取指定时间段的可用包间
@@ -178,16 +147,14 @@ function checkMultipleRoomsAvailability(roomIds, params) {
  * @param startTime 开始时间
  * @param endTime 结束时间
  */
-function getAvailableRoomsForTimeSlot(merchantId, date, startTime, endTime) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield getMerchantAvailableRooms(merchantId);
-        const availabilityChecks = yield Promise.all(response.rooms.map(room => checkRoomAvailability(room.id, { date, start_time: startTime, end_time: endTime })));
-        return response.rooms.filter((_room, index) => {
-            var _a, _b;
-            const check = availabilityChecks[index];
-            // 检查所有时间段是否都可用
-            return (_b = (_a = check.time_slots) === null || _a === void 0 ? void 0 : _a.every(slot => slot.available)) !== null && _b !== void 0 ? _b : false;
-        });
+async function getAvailableRoomsForTimeSlot(merchantId, date, startTime, endTime) {
+    const response = await getMerchantAvailableRooms(merchantId);
+    const availabilityChecks = await Promise.all(response.rooms.map(room => checkRoomAvailability(room.id, { date, start_time: startTime, end_time: endTime })));
+    return response.rooms.filter((_room, index) => {
+        var _a, _b;
+        const check = availabilityChecks[index];
+        // 检查所有时间段是否都可用
+        return (_b = (_a = check.time_slots) === null || _a === void 0 ? void 0 : _a.every(slot => slot.available)) !== null && _b !== void 0 ? _b : false;
     });
 }
 /**

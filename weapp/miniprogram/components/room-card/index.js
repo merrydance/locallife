@@ -9,9 +9,10 @@ Component({
     },
     methods: {
         onTap() {
-            if (this.data.room) {
+            const room = this.data.room;
+            if (room === null || room === void 0 ? void 0 : room.id) {
                 wx.navigateTo({
-                    url: `/pages/reservation/room-detail/index?id=${this.data.room.id}`
+                    url: `/pages/reservation/room-detail/index?id=${room.id}`
                 });
             }
         }

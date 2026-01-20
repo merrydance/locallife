@@ -3,15 +3,6 @@
  * 性能优化工具
  * 提供性能监控、优化和分析功能
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MemoryOptimizer = exports.RequestQueue = exports.CacheManager = exports.ImageLazyLoader = exports.PerformanceMonitor = void 0;
 exports.debounce = debounce;
@@ -149,11 +140,9 @@ class ImageLazyLoader {
     /**
      * 批量预加载图片
      */
-    static preloadBatch(imageUrls) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const promises = imageUrls.map(url => this.preload(url));
-            yield Promise.all(promises);
-        });
+    static async preloadBatch(imageUrls) {
+        const promises = imageUrls.map(url => this.preload(url));
+        await Promise.all(promises);
     }
 }
 exports.ImageLazyLoader = ImageLazyLoader;
@@ -223,10 +212,10 @@ class RequestQueue {
      */
     static add(request) {
         return new Promise((resolve, reject) => {
-            const task = () => __awaiter(this, void 0, void 0, function* () {
+            const task = async () => {
                 try {
                     this.running++;
-                    const result = yield request();
+                    const result = await request();
                     resolve(result);
                 }
                 catch (error) {
@@ -236,7 +225,7 @@ class RequestQueue {
                     this.running--;
                     this.processQueue();
                 }
-            });
+            };
             this.queue.push(task);
             this.processQueue();
         });

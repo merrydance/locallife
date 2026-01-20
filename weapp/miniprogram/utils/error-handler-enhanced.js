@@ -3,15 +3,6 @@
  * 增强的错误处理工具
  * 提供统一的错误处理、日志记录和用户提示
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnhancedErrorHandler = exports.ErrorLevel = exports.ErrorType = void 0;
 exports.handleAsyncError = handleAsyncError;
@@ -281,19 +272,18 @@ exports.EnhancedErrorHandler = EnhancedErrorHandler;
  */
 function handleAsyncError(target, propertyKey, descriptor) {
     const originalMethod = descriptor.value;
-    descriptor.value = function (...args) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                return yield originalMethod.apply(this, args);
-            }
-            catch (error) {
-                EnhancedErrorHandler.handle(error, {
-                    page: this.route || 'unknown',
-                    action: propertyKey
-                });
-                throw error;
-            }
-        });
+    descriptor.value = async function (...args) {
+        try {
+            return await originalMethod.apply(this, args);
+        }
+        catch (error) {
+            const pageRoute = this.route;
+            EnhancedErrorHandler.handle(error, {
+                page: pageRoute || 'unknown',
+                action: propertyKey
+            });
+            throw error;
+        }
     };
     return descriptor;
 }
@@ -303,27 +293,26 @@ function handleAsyncError(target, propertyKey, descriptor) {
 function retry(maxRetries = 3, delay = 1000) {
     return function (target, propertyKey, descriptor) {
         const originalMethod = descriptor.value;
-        descriptor.value = function (...args) {
-            return __awaiter(this, void 0, void 0, function* () {
-                let lastError;
-                for (let i = 0; i < maxRetries; i++) {
-                    try {
-                        return yield originalMethod.apply(this, args);
-                    }
-                    catch (error) {
-                        lastError = error;
-                        console.log(`Retry ${i + 1}/${maxRetries} for ${propertyKey}`);
-                        if (i < maxRetries - 1) {
-                            yield new Promise(resolve => setTimeout(resolve, delay));
-                        }
+        descriptor.value = async function (...args) {
+            let lastError;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    return await originalMethod.apply(this, args);
+                }
+                catch (error) {
+                    lastError = error;
+                    console.log(`Retry ${i + 1}/${maxRetries} for ${propertyKey}`);
+                    if (i < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
                     }
                 }
-                EnhancedErrorHandler.handle(lastError, {
-                    page: this.route || 'unknown',
-                    action: propertyKey
-                });
-                throw lastError;
+            }
+            const pageRoute = this.route;
+            EnhancedErrorHandler.handle(lastError, {
+                page: pageRoute || 'unknown',
+                action: propertyKey
             });
+            throw lastError;
         };
         return descriptor;
     };
@@ -334,15 +323,11 @@ function retry(maxRetries = 3, delay = 1000) {
 function setupGlobalErrorHandler() {
     // 捕获未处理的Promise错误
     if (typeof wx !== 'undefined') {
-        const originalOnError = wx.onError;
-        wx.onError = function (error) {
+        wx.onError((error) => {
             EnhancedErrorHandler.handle(error, {
                 page: 'global',
                 action: 'unhandledError'
             });
-            if (originalOnError) {
-                originalOnError(error);
-            }
-        };
+        });
     }
 }

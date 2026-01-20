@@ -3,15 +3,6 @@
  * 统一错误处理器
  * 提供一致的错误处理策略和用户提示
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ErrorHandler = exports.AppError = exports.ErrorType = void 0;
 const logger_1 = require("./logger");
@@ -234,38 +225,34 @@ class ErrorHandler {
     /**
        * 安全执行异步函数
        */
-    static safeExecute(fn, context, fallback) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                return yield fn();
-            }
-            catch (error) {
-                this.handle(error, context);
-                return fallback;
-            }
-        });
+    static async safeExecute(fn, context, fallback) {
+        try {
+            return await fn();
+        }
+        catch (error) {
+            this.handle(error, context);
+            return fallback;
+        }
     }
     /**
        * 创建带重试的执行器
        */
-    static executeWithRetry(fn_1) {
-        return __awaiter(this, arguments, void 0, function* (fn, options = {}) {
-            const { maxRetries = 3, retryDelay = 1000, context } = options;
-            let lastError;
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    return yield fn();
-                }
-                catch (error) {
-                    lastError = error;
-                    logger_1.logger.warn(`执行失败,准备重试 (${i + 1}/${maxRetries})`, error, context);
-                    if (i < maxRetries - 1) {
-                        yield new Promise((resolve) => setTimeout(resolve, retryDelay));
-                    }
+    static async executeWithRetry(fn, options = {}) {
+        const { maxRetries = 3, retryDelay = 1000, context } = options;
+        let lastError;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                return await fn();
+            }
+            catch (error) {
+                lastError = error;
+                logger_1.logger.warn(`执行失败,准备重试 (${i + 1}/${maxRetries})`, error, context);
+                if (i < maxRetries - 1) {
+                    await new Promise((resolve) => setTimeout(resolve, retryDelay));
                 }
             }
-            throw this.handle(lastError, context);
-        });
+        }
+        throw this.handle(lastError, context);
     }
     static resolveErrorText(error) {
         if (!error) {

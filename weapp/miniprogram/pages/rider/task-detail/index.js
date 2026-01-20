@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const rider_1 = require("../../../api/rider");
 const logger_1 = require("../../../utils/logger");
@@ -28,31 +19,29 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },
-    loadTaskDetail() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                // Note: Missing GET /rider/orders/{id} API.
-                // Trying to find in dashboard active tasks.
-                const dashboard = yield (0, rider_1.getRiderDashboard)();
-                const taskDTO = dashboard.active_tasks.find((t) => t.id === this.data.taskId);
-                if (taskDTO) {
-                    this.setData({
-                        task: this.mapTask(taskDTO),
-                        loading: false
-                    });
-                }
-                else {
-                    wx.showToast({ title: '任务详情获取失败(API缺失)', icon: 'none' });
-                    this.setData({ loading: false });
-                }
+    async loadTaskDetail() {
+        this.setData({ loading: true });
+        try {
+            // Note: Missing GET /rider/orders/{id} API.
+            // Trying to find in dashboard active tasks.
+            const dashboard = await (0, rider_1.getRiderDashboard)();
+            const taskDTO = dashboard.active_tasks.find((t) => t.id === this.data.taskId);
+            if (taskDTO) {
+                this.setData({
+                    task: this.mapTask(taskDTO),
+                    loading: false
+                });
             }
-            catch (error) {
-                logger_1.logger.error('Load failed', error, 'Task-detail');
-                wx.showToast({ title: '加载失败', icon: 'error' });
+            else {
+                wx.showToast({ title: '任务详情获取失败(API缺失)', icon: 'none' });
                 this.setData({ loading: false });
             }
-        });
+        }
+        catch (error) {
+            logger_1.logger.error('Load failed', error, 'Task-detail');
+            wx.showToast({ title: '加载失败', icon: 'error' });
+            this.setData({ loading: false });
+        }
     },
     mapTask(dto) {
         return {
@@ -106,10 +95,10 @@ Page({
         wx.showModal({
             title: '状态更新',
             content: `确认${actionText}?`,
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 if (res.confirm) {
                     try {
-                        yield actionPromise;
+                        await actionPromise;
                         wx.showToast({ title: '操作成功', icon: 'success' });
                         this.loadTaskDetail();
                     }
@@ -117,7 +106,7 @@ Page({
                         wx.showToast({ title: '操作失败', icon: 'none' });
                     }
                 }
-            })
+            }
         });
     },
     onReportIssue() {

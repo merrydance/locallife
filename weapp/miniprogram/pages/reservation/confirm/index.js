@@ -3,15 +3,6 @@
  * 预约确认页面
  * 支持定金模式和全款模式
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const util_1 = require("@/utils/util");
 const reservation_1 = require("../../../api/reservation");
@@ -47,14 +38,18 @@ Page({
     },
     onLoad(options) {
         if (options.roomId) {
+            const roomIdNum = parseInt(options.roomId || '0', 10) || 0;
+            const merchantIdNum = parseInt(options.merchantId || '0', 10) || 0;
+            const capacityNum = parseInt(options.capacity || '10', 10) || 10;
+            const depositNum = Number(options.deposit) || 10000;
             this.setData({
                 roomId: options.roomId,
-                tableId: parseInt(options.roomId) || 0,
-                merchantId: parseInt(options.merchantId) || 0,
+                tableId: roomIdNum,
+                merchantId: merchantIdNum,
                 roomName: decodeURIComponent(options.roomName || ''),
-                capacity: parseInt(options.capacity) || 10,
-                deposit: Number(options.deposit) || 10000,
-                depositDisplay: (0, util_1.formatPriceNoSymbol)(Number(options.deposit) || 10000)
+                capacity: capacityNum,
+                deposit: depositNum,
+                depositDisplay: (0, util_1.formatPriceNoSymbol)(depositNum)
             });
         }
         // 处理传入的日期和时间
@@ -63,7 +58,7 @@ Page({
             if (options.time) {
                 this.setData({ 'form.time': options.time, selectedTimeLabel: this.buildTimeLabel(options.time) });
             }
-            this.loadAvailability(options.date, parseInt(options.roomId));
+            this.loadAvailability(options.date, parseInt(options.roomId || '0', 10));
         }
         else {
             // 默认日期为当天
@@ -72,7 +67,7 @@ Page({
             const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
             this.setData({ 'form.date': dateStr });
             if (options.roomId) {
-                this.loadAvailability(dateStr, parseInt(options.roomId));
+                this.loadAvailability(dateStr, parseInt(options.roomId || '0', 10));
             }
         }
     },
@@ -105,37 +100,35 @@ Page({
         this.loadAvailability(date);
     },
     // 加载可用时段
-    loadAvailability(date, tableIdOverride) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const tableId = tableIdOverride || this.data.tableId;
-            if (!tableId)
-                return;
-            this.setData({ loadingSlots: true });
-            try {
-                const response = yield (0, room_1.checkRoomAvailability)(tableId, { date });
-                const timeSlots = response.time_slots || [];
-                // 转换为picker需要的格式：{label, value}，并标记午餐/晚餐
-                const availableTimeSlots = timeSlots
-                    .filter(slot => slot.available)
-                    .map(slot => {
-                    const mealLabel = this.buildTimeLabel(slot.time, true);
-                    return { label: mealLabel, value: slot.time };
-                });
-                this.setData({
-                    timeSlots,
-                    availableTimeSlots,
-                    loadingSlots: false
-                });
-                if (availableTimeSlots.length === 0) {
-                    wx.showToast({ title: '该日期暂无可用时段', icon: 'none' });
-                }
+    async loadAvailability(date, tableIdOverride) {
+        const tableId = tableIdOverride || this.data.tableId;
+        if (!tableId)
+            return;
+        this.setData({ loadingSlots: true });
+        try {
+            const response = await (0, room_1.checkRoomAvailability)(tableId, { date });
+            const timeSlots = response.time_slots || [];
+            // 转换为picker需要的格式：{label, value}，并标记午餐/晚餐
+            const availableTimeSlots = timeSlots
+                .filter(slot => slot.available)
+                .map(slot => {
+                const mealLabel = this.buildTimeLabel(slot.time, true);
+                return { label: mealLabel, value: slot.time };
+            });
+            this.setData({
+                timeSlots,
+                availableTimeSlots,
+                loadingSlots: false
+            });
+            if (availableTimeSlots.length === 0) {
+                wx.showToast({ title: '该日期暂无可用时段', icon: 'none' });
             }
-            catch (error) {
-                console.error('获取可用时段失败:', error);
-                this.setData({ loadingSlots: false });
-                wx.showToast({ title: '获取时段失败', icon: 'error' });
-            }
-        });
+        }
+        catch (error) {
+            console.error('获取可用时段失败:', error);
+            this.setData({ loadingSlots: false });
+            wx.showToast({ title: '获取时段失败', icon: 'error' });
+        }
     },
     showTimePicker() {
         if (this.data.availableTimeSlots.length === 0) {
@@ -169,62 +162,61 @@ Page({
     onPaymentModeChange(e) {
         this.setData({ paymentMode: e.detail.value });
     },
-    onSubmit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { form, tableId, paymentMode, merchantId } = this.data;
-            // 表单验证
-            if (!form.date || !form.time || !form.name || !form.phone) {
-                wx.showToast({ title: '请填写完整信息', icon: 'none' });
-                return;
+    async onSubmit() {
+        const { form, tableId, paymentMode, merchantId } = this.data;
+        // 表单验证
+        if (!form.date || !form.time || !form.name || !form.phone) {
+            wx.showToast({ title: '请填写完整信息', icon: 'none' });
+            return;
+        }
+        if (!/^1\d{10}$/.test(form.phone)) {
+            wx.showToast({ title: '手机号格式不正确', icon: 'none' });
+            return;
+        }
+        if (!tableId) {
+            wx.showToast({ title: '请选择包间', icon: 'none' });
+            return;
+        }
+        this.setData({ submitting: true });
+        try {
+            // 无论哪种模式，都先创建预订（锁定房间）
+            const reservationData = {
+                table_id: tableId,
+                date: form.date,
+                time: form.time,
+                guest_count: form.guestCount,
+                contact_name: form.name,
+                contact_phone: form.phone,
+                payment_mode: paymentMode,
+                notes: form.remark || undefined
+            };
+            console.log('[预订] 发送数据:', JSON.stringify(reservationData));
+            const reservation = await (0, reservation_1.createReservation)(reservationData);
+            if (paymentMode === 'full') {
+                // 全款模式：跳转到点菜页面（传入 reservation_id）
+                wx.redirectTo({
+                    url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${merchantId}`
+                });
             }
-            if (!/^1\d{10}$/.test(form.phone)) {
-                wx.showToast({ title: '手机号格式不正确', icon: 'none' });
-                return;
+            else {
+                // 定金模式：跳转到支付页面
+                wx.showModal({
+                    title: '预定创建成功',
+                    content: '支付页面正在开发中，请稍后在预订列表中完成支付',
+                    showCancel: false,
+                    success: () => {
+                        wx.navigateBack();
+                    }
+                });
             }
-            if (!tableId) {
-                wx.showToast({ title: '请选择包间', icon: 'none' });
-                return;
-            }
-            this.setData({ submitting: true });
-            try {
-                // 无论哪种模式，都先创建预订（锁定房间）
-                const reservationData = {
-                    table_id: tableId,
-                    date: form.date,
-                    time: form.time,
-                    guest_count: form.guestCount,
-                    contact_name: form.name,
-                    contact_phone: form.phone,
-                    payment_mode: paymentMode,
-                    notes: form.remark || undefined
-                };
-                console.log('[预订] 发送数据:', JSON.stringify(reservationData));
-                const reservation = yield (0, reservation_1.createReservation)(reservationData);
-                if (paymentMode === 'full') {
-                    // 全款模式：跳转到点菜页面（传入 reservation_id）
-                    wx.redirectTo({
-                        url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${merchantId}`
-                    });
-                }
-                else {
-                    // 定金模式：跳转到支付页面
-                    wx.showModal({
-                        title: '预定创建成功',
-                        content: '支付页面正在开发中，请稍后在预订列表中完成支付',
-                        showCancel: false,
-                        success: () => {
-                            wx.navigateBack();
-                        }
-                    });
-                }
-            }
-            catch (error) {
-                console.error('预定提交失败:', error);
-                wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.message) || '提交失败', icon: 'none' });
-            }
-            finally {
-                this.setData({ submitting: false });
-            }
-        });
+        }
+        catch (error) {
+            const errMessage = error instanceof Error ? error.message : String(error);
+            console.error('预定提交失败:', error);
+            wx.showToast({ title: errMessage || '提交失败', icon: 'none' });
+        }
+        finally {
+            this.setData({ submitting: false });
+        }
     }
 });

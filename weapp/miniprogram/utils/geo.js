@@ -3,15 +3,6 @@
  * 地理位置工具函数
  * 用于前端计算距离和配送时间
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.haversineDistance = haversineDistance;
 exports.estimateDeliveryTime = estimateDeliveryTime;
@@ -119,23 +110,36 @@ function getUserLocation() {
  * @param merchants 商户列表
  * @returns 包含距离和 ETA 的商户列表
  */
-function enrichMerchantsWithDistance(merchants) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const userLocation = yield getUserLocation();
-            return merchants.map((m) => {
-                if (!m.merchant_latitude || !m.merchant_longitude) {
-                    return Object.assign(Object.assign({}, m), { distance_km: 0, distance_meters: 0, delivery_time_minutes: m.prep_minutes || BASE_PREP_TIME_MINUTES });
-                }
-                const distanceKm = haversineDistance(userLocation.latitude, userLocation.longitude, m.merchant_latitude, m.merchant_longitude);
-                const etaMinutes = estimateDeliveryTime(distanceKm, m.prep_minutes || BASE_PREP_TIME_MINUTES);
-                return Object.assign(Object.assign({}, m), { distance_km: Math.round(distanceKm * 100) / 100, distance_meters: Math.round(distanceKm * 1000), delivery_time_minutes: etaMinutes });
-            });
-        }
-        catch (error) {
-            logger_1.logger.warn('无法获取用户位置,返回原始数据', error, 'enrichMerchantsWithDistance');
-            // 如果获取位置失败，返回原始数据
-            return merchants.map((m) => (Object.assign(Object.assign({}, m), { distance_km: 0, distance_meters: 0, delivery_time_minutes: m.prep_minutes || BASE_PREP_TIME_MINUTES })));
-        }
-    });
+async function enrichMerchantsWithDistance(merchants) {
+    try {
+        const userLocation = await getUserLocation();
+        return merchants.map((m) => {
+            if (!m.merchant_latitude || !m.merchant_longitude) {
+                return {
+                    ...m,
+                    distance_km: 0,
+                    distance_meters: 0,
+                    delivery_time_minutes: m.prep_minutes || BASE_PREP_TIME_MINUTES
+                };
+            }
+            const distanceKm = haversineDistance(userLocation.latitude, userLocation.longitude, m.merchant_latitude, m.merchant_longitude);
+            const etaMinutes = estimateDeliveryTime(distanceKm, m.prep_minutes || BASE_PREP_TIME_MINUTES);
+            return {
+                ...m,
+                distance_km: Math.round(distanceKm * 100) / 100, // 保留2位小数
+                distance_meters: Math.round(distanceKm * 1000),
+                delivery_time_minutes: etaMinutes
+            };
+        });
+    }
+    catch (error) {
+        logger_1.logger.warn('无法获取用户位置,返回原始数据', error, 'enrichMerchantsWithDistance');
+        // 如果获取位置失败，返回原始数据
+        return merchants.map((m) => ({
+            ...m,
+            distance_km: 0,
+            distance_meters: 0,
+            delivery_time_minutes: m.prep_minutes || BASE_PREP_TIME_MINUTES
+        }));
+    }
 }

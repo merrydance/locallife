@@ -6,15 +6,6 @@
  * 2. 扫描小程序码：scene 参数格式 m=商户ID&t=桌号
  * 3. 预订点菜：直接传 reservation_id 和 merchant_id
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const table_1 = require("../../../api/table");
 const cart_1 = require("../../../api/cart");
@@ -135,208 +126,375 @@ Page({
     /**
      * 通过桌台ID和商户ID初始化页面
      */
-    initPageById(tableId, merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 暂时用 initPageByTableNo 的方式，需要查询桌号
-            // 后续可以优化为直接用 tableId
-            wx.showToast({ title: '加载中...', icon: 'loading' });
-            this.setData({ loading: true });
-            try {
-                // 先获取桌台信息
-                const tableDetail = yield (0, table_1.getTableDetail)(tableId);
-                if (tableDetail && tableDetail.table_no) {
-                    yield this.initPageByTableNo(merchantId, tableDetail.table_no);
-                }
-                else {
-                    throw new Error('无法获取桌台信息');
-                }
+    async initPageById(tableId, merchantId) {
+        // 暂时用 initPageByTableNo 的方式，需要查询桌号
+        // 后续可以优化为直接用 tableId
+        wx.showToast({ title: '加载中...', icon: 'loading' });
+        this.setData({ loading: true });
+        try {
+            const tableDetail = await (0, table_1.getTableDetail)(tableId);
+            if (tableDetail && tableDetail.table_no) {
+                await this.initPageByTableNo(merchantId, tableDetail.table_no);
             }
-            catch (error) {
-                console.error('初始化失败:', error);
-                wx.showToast({ title: '加载失败', icon: 'error' });
-                this.setData({ loading: false });
+            else {
+                throw new Error('无法获取桌台信息');
             }
-        });
+        }
+        catch (error) {
+            console.error('初始化失败:', error);
+            wx.showToast({ title: '加载失败', icon: 'error' });
+            this.setData({ loading: false });
+        }
     },
     /**
      * 预订点菜初始化（从预订详情页跳转）
      */
-    initPageForReservation(reservationId, merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                this.setData({ loading: true });
-                wx.showLoading({ title: '加载菜单...' });
-                // 并行获取预订详情、商户信息和菜品列表
-                const { getPublicMerchantDetail } = require('../../../api/merchant');
-                const [reservation, merchantDetail, dishesResponse] = yield Promise.all([
-                    (0, reservation_1.getReservationDetail)(reservationId),
-                    getPublicMerchantDetail(merchantId),
-                    (0, merchant_1.getMerchantDishes)(String(merchantId))
-                ]);
-                // 从预订详情提取桌号（预订必须有桌台）
-                const tableNo = reservation.table_no;
-                if (!tableNo) {
-                    throw new Error('预订信息缺少桌台号');
+    async initPageForReservation(reservationId, merchantId) {
+        try {
+            this.setData({ loading: true });
+            wx.showLoading({ title: '加载菜单...' });
+            // 并行获取预订详情、商户信息和菜品列表
+            const { getPublicMerchantDetail } = require('../../../api/merchant');
+            const [reservation, merchantDetail, dishesResponse] = await Promise.all([
+                (0, reservation_1.getReservationDetail)(reservationId),
+                getPublicMerchantDetail(merchantId),
+                (0, merchant_1.getMerchantDishes)(String(merchantId))
+            ]);
+            // 从预订详情提取桌号（预订必须有桌台）
+            const tableNo = reservation.table_no;
+            if (!tableNo) {
+                throw new Error('预订信息缺少桌台号');
+            }
+            // 从响应中提取菜品列表，并预处理价格、图片和定制标志
+            const dishes = (dishesResponse.dishes || []).map((dish) => {
+                const dishData = dish;
+                return {
+                    ...dishData,
+                    image_url: (0, image_1.getPublicImageUrl)(dishData.image_url || ''),
+                    priceDisplay: (0, util_1.formatPriceNoSymbol)(dishData.price || 0),
+                    memberPriceDisplay: dishData.member_price ? (0, util_1.formatPriceNoSymbol)(dishData.member_price) : null,
+                    hasCustomizations: Array.isArray(dishData.customization_groups) && dishData.customization_groups.length > 0,
+                    cartQty: 0
+                };
+            });
+            // 按分类整理菜品
+            const finalCategories = [];
+            const categoryMap = new Map();
+            // 添加"全部"分类
+            finalCategories.push({ id: 0, name: '全部', sort_order: -1, dishes: [...dishes] });
+            dishes.forEach((dish) => {
+                const catId = dish.category_id || 0;
+                const catName = dish.category_name || '其他';
+                if (!categoryMap.has(catId)) {
+                    categoryMap.set(catId, { id: catId, name: catName, dishes: [] });
                 }
-                // 从响应中提取菜品列表，并预处理价格、图片和定制标志
-                const dishes = (dishesResponse.dishes || []).map((dish) => (Object.assign(Object.assign({}, dish), { image_url: (0, image_1.getPublicImageUrl)(dish.image_url || ''), priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0), memberPriceDisplay: dish.member_price ? (0, util_1.formatPriceNoSymbol)(dish.member_price) : null, hasCustomizations: (dish.customization_groups && dish.customization_groups.length > 0), cartQty: 0 })));
-                // 按分类整理菜品
-                const finalCategories = [];
-                const categoryMap = new Map();
-                // 添加"全部"分类
-                finalCategories.push({ id: 0, name: '全部', sort_order: -1, dishes: [...dishes] });
-                dishes.forEach((dish) => {
-                    const catId = dish.category_id || 0;
-                    const catName = dish.category_name || '其他';
-                    if (!categoryMap.has(catId)) {
-                        categoryMap.set(catId, { id: catId, name: catName, dishes: [] });
-                    }
-                    categoryMap.get(catId).dishes.push(dish);
-                });
-                // 合并其他分类
-                const otherCategories = Array.from(categoryMap.values()).sort((a, b) => a.id - b.id);
-                finalCategories.push(...otherCategories);
-                // 从商户详情获取商户名
-                const merchantName = merchantDetail.name;
-                if (!merchantName) {
-                    throw new Error('无法获取商户信息');
-                }
-                this.setData({
-                    reservationId,
-                    merchantId,
-                    tableNo,
-                    merchantInfo: {
-                        id: merchantId,
-                        name: merchantName
-                    },
-                    tableInfo: {
-                        table_no: tableNo
-                    },
-                    categories: finalCategories,
-                    currentCategoryId: 0,
-                    currentDishes: dishes,
-                    loading: false
-                });
-                // 设置页面标题
-                wx.setNavigationBarTitle({ title: merchantName });
-                // 加载购物车
-                yield this.loadCart();
-                wx.hideLoading();
+                categoryMap.get(catId).dishes.push(dish);
+            });
+            // 合并其他分类
+            const otherCategories = Array.from(categoryMap.values()).sort((a, b) => a.id - b.id);
+            finalCategories.push(...otherCategories);
+            // 从商户详情获取商户名
+            const merchantName = merchantDetail.name;
+            if (!merchantName) {
+                throw new Error('无法获取商户信息');
             }
-            catch (error) {
-                wx.hideLoading();
-                console.error('预订初始化失败:', error);
-                wx.showToast({
-                    title: error.userMessage || '加载失败',
-                    icon: 'error'
-                });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+            this.setData({
+                reservationId,
+                merchantId,
+                tableNo,
+                merchantInfo: {
+                    id: merchantId,
+                    name: merchantName
+                },
+                tableInfo: {
+                    table_no: tableNo
+                },
+                categories: finalCategories,
+                currentCategoryId: 0,
+                currentDishes: dishes,
+                loading: false
+            });
+            // 设置页面标题
+            wx.setNavigationBarTitle({ title: merchantName });
+            // 加载购物车
+            await this.loadCart();
+            wx.hideLoading();
+        }
+        catch (error) {
+            wx.hideLoading();
+            console.error('预订初始化失败:', error);
+            wx.showToast({
+                title: error instanceof Error ? error.message : '加载失败',
+                icon: 'error'
+            });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     /**
      * 通过桌号初始化页面（扫码场景）
      */
-    initPageByTableNo(merchantId, tableNo) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                this.setData({ loading: true });
-                wx.showLoading({ title: '加载菜单...' });
-                // 调用扫码API获取完整信息
-                const scanResult = yield (0, table_1.scanTable)(merchantId, tableNo);
-                // 预处理菜品价格、图片和定制标志
-                const allDishes = [];
-                const processedCategories = (scanResult.categories || []).map((cat) => {
-                    const dishes = (cat.dishes || []).map((dish) => {
-                        const processedDish = Object.assign(Object.assign({}, dish), { image_url: (0, image_1.getPublicImageUrl)(dish.image_url || ''), priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0), memberPriceDisplay: dish.member_price ? (0, util_1.formatPriceNoSymbol)(dish.member_price) : null, hasCustomizations: (dish.customization_groups && dish.customization_groups.length > 0), cartQty: 0 });
-                        allDishes.push(processedDish);
-                        return processedDish;
-                    });
-                    return Object.assign(Object.assign({}, cat), { dishes });
+    async initPageByTableNo(merchantId, tableNo) {
+        try {
+            this.setData({ loading: true });
+            wx.showLoading({ title: '加载菜单...' });
+            // 调用扫码API获取完整信息
+            const scanResult = await (0, table_1.scanTable)(merchantId, tableNo);
+            // 预处理菜品价格、图片和定制标志
+            const allDishes = [];
+            const processedCategories = (scanResult.categories || []).map((cat) => {
+                const dishes = (cat.dishes || []).map((dish) => {
+                    const processedDish = {
+                        ...dish,
+                        image_url: (0, image_1.getPublicImageUrl)(dish.image_url || ''),
+                        priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0),
+                        memberPriceDisplay: dish.member_price ? (0, util_1.formatPriceNoSymbol)(dish.member_price) : null,
+                        hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
+                        cartQty: 0
+                    };
+                    allDishes.push(processedDish);
+                    return processedDish;
                 });
-                // 添加"全部"分类
-                const finalCategories = [
-                    { id: 0, name: '全部', sort_order: -1, dishes: allDishes },
-                    ...processedCategories
-                ];
-                // 设置桌台和商户信息
-                this.setData({
-                    tableId: scanResult.table.id,
-                    merchantId: scanResult.merchant.id,
-                    tableNo: scanResult.table.table_no,
-                    merchantInfo: scanResult.merchant,
-                    tableInfo: scanResult.table,
-                    categories: finalCategories,
-                    combos: scanResult.combos || [],
-                    promotions: scanResult.promotions || [],
-                    currentCategoryId: 0,
-                    currentDishes: allDishes
-                });
-                // 设置页面标题
-                wx.setNavigationBarTitle({ title: scanResult.merchant.name });
-                // 加载购物车
-                yield this.loadCart();
-                wx.hideLoading();
-            }
-            catch (error) {
-                wx.hideLoading();
-                console.error('扫码初始化失败:', error);
-                wx.showToast({
-                    title: error.userMessage || '加载失败',
-                    icon: 'error'
-                });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+                return { id: cat.id, name: cat.name, sort_order: cat.sort_order, dishes };
+            });
+            // 添加"全部"分类
+            const finalCategories = [
+                { id: 0, name: '全部', sort_order: -1, dishes: allDishes },
+                ...processedCategories
+            ];
+            // 设置桌台和商户信息
+            this.setData({
+                tableId: scanResult.table.id,
+                merchantId: scanResult.merchant.id,
+                tableNo: scanResult.table.table_no,
+                merchantInfo: scanResult.merchant,
+                tableInfo: scanResult.table,
+                categories: finalCategories,
+                combos: scanResult.combos || [],
+                promotions: scanResult.promotions || [],
+                currentCategoryId: 0,
+                currentDishes: allDishes
+            });
+            // 设置页面标题
+            wx.setNavigationBarTitle({ title: scanResult.merchant.name });
+            // 加载购物车
+            await this.loadCart();
+            wx.hideLoading();
+        }
+        catch (error) {
+            wx.hideLoading();
+            console.error('扫码初始化失败:', error);
+            wx.showToast({
+                title: error instanceof Error ? error.message : '加载失败',
+                icon: 'error'
+            });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     /**
      * 加载购物车
      */
-    loadCart() {
-        return __awaiter(this, void 0, void 0, function* () {
+    async loadCart() {
+        try {
+            const cart = await (0, cart_1.getCart)({
+                merchant_id: this.data.merchantId,
+                order_type: this.data.orderType,
+                table_id: this.data.tableId || undefined,
+                reservation_id: this.data.reservationId || undefined
+            });
+            this.applyCartData(cart);
+        }
+        catch (error) {
+            console.warn('加载购物车失败:', error);
+            this.setData({
+                cart: null,
+                cartTotal: 0,
+                cartCount: 0
+            });
+        }
+    },
+    /**
+     * 延迟同步购物车（合并多次点击，避免频繁全量更新）
+     */
+    scheduleCartSync() {
+        const page = this;
+        if (page._cartSyncTimer) {
+            clearTimeout(page._cartSyncTimer);
+        }
+        page._cartSyncTimer = setTimeout(async () => {
             try {
-                const cart = yield (0, cart_1.getCart)({
+                const cart = await (0, cart_1.getCart)({
                     merchant_id: this.data.merchantId,
                     order_type: this.data.orderType,
-                    table_id: this.data.tableId || 0,
-                    reservation_id: this.data.reservationId || 0
-                });
-                // 预处理购物车价格，添加 total_quantity 别名
-                const processedCart = Object.assign(Object.assign({}, cart), { total_quantity: cart.total_count || 0, subtotalDisplay: (0, util_1.formatPriceNoSymbol)(cart.subtotal || 0), items: (cart.items || []).map((item) => (Object.assign(Object.assign({}, item), { image_url: (0, image_1.getPublicImageUrl)(item.image_url), priceDisplay: (0, util_1.formatPriceNoSymbol)(item.price || item.unit_price || 0), subtotalDisplay: (0, util_1.formatPriceNoSymbol)(item.subtotal || (item.unit_price || 0) * (item.quantity || 1)) }))) });
-                // 构建菜品ID到购物车数量的映射
-                const cartQtyMap = new Map();
-                for (const item of processedCart.items) {
-                    if (item.dish_id) {
-                        cartQtyMap.set(item.dish_id, (cartQtyMap.get(item.dish_id) || 0) + item.quantity);
-                    }
-                }
-                // 更新当前分类菜品的 cartQty
-                const updatedDishes = this.data.currentDishes.map((dish) => (Object.assign(Object.assign({}, dish), { cartQty: cartQtyMap.get(dish.id) || 0 })));
-                // 同时更新 categories 中的 cartQty
-                const updatedCategories = this.data.categories.map((cat) => (Object.assign(Object.assign({}, cat), { dishes: (cat.dishes || []).map((dish) => (Object.assign(Object.assign({}, dish), { cartQty: cartQtyMap.get(dish.id) || 0 }))) })));
-                this.setData({
-                    cart: processedCart,
-                    cartTotal: cart.subtotal,
-                    cartCount: cart.total_count,
-                    totalPrice: cart.subtotal, // 为 cart-bar 组件同步
-                    totalCount: cart.total_count, // 为 cart-bar 组件同步
-                    currentDishes: updatedDishes,
-                    categories: updatedCategories
-                });
+                    table_id: this.data.tableId || undefined,
+                    reservation_id: this.data.reservationId || undefined
+                }, { loading: false });
+                this.applyCartData(cart);
             }
             catch (error) {
-                console.warn('加载购物车失败:', error);
-                this.setData({
-                    cart: null,
-                    cartTotal: 0,
-                    cartCount: 0
-                });
+                // 忽略后台同步失败，避免打断操作
+            }
+        }, 300);
+    },
+    /**
+     * 应用购物车数据并同步菜品数量（避免整页重绘）
+     */
+    applyCartData(cart) {
+        // 预处理购物车价格，添加 total_quantity 别名
+        const processedCart = {
+            ...cart,
+            total_quantity: cart.total_count || 0,
+            subtotalDisplay: (0, util_1.formatPriceNoSymbol)(cart.subtotal || 0),
+            items: (cart.items || []).map((item) => ({
+                ...item,
+                image_url: (0, image_1.getPublicImageUrl)(item.image_url),
+                priceDisplay: (0, util_1.formatPriceNoSymbol)(item.unit_price || 0),
+                subtotalDisplay: (0, util_1.formatPriceNoSymbol)(item.subtotal || (item.unit_price || 0) * (item.quantity || 1))
+            }))
+        };
+        // 构建菜品ID到购物车数量的映射
+        const cartQtyMap = new Map();
+        for (const item of processedCart.items) {
+            if (item.dish_id) {
+                cartQtyMap.set(item.dish_id, (cartQtyMap.get(item.dish_id) || 0) + item.quantity);
+            }
+        }
+        const dataUpdate = {
+            cart: processedCart,
+            cartTotal: cart.subtotal,
+            cartCount: cart.total_count,
+            totalPrice: cart.subtotal,
+            totalCount: cart.total_count
+        };
+        // 仅更新变化的菜品数量，避免整页重绘导致滚动复位
+        this.data.currentDishes.forEach((dish, index) => {
+            const nextQty = cartQtyMap.get(dish.id) || 0;
+            if (dish.cartQty !== nextQty) {
+                dataUpdate[`currentDishes[${index}].cartQty`] = nextQty;
             }
         });
+        this.data.categories.forEach((cat, catIndex) => {
+            (cat.dishes || []).forEach((dish, dishIndex) => {
+                const nextQty = cartQtyMap.get(dish.id) || 0;
+                if (dish.cartQty !== nextQty) {
+                    dataUpdate[`categories[${catIndex}].dishes[${dishIndex}].cartQty`] = nextQty;
+                }
+            });
+        });
+        this.setData(dataUpdate);
+    },
+    /**
+     * 仅更新指定菜品的数量显示（避免整页重绘）
+     */
+    updateDishQtyInLists(dishId, nextQty) {
+        const dataUpdate = {};
+        this.data.currentDishes.forEach((dish, index) => {
+            if (dish.id === dishId && dish.cartQty !== nextQty) {
+                dataUpdate[`currentDishes[${index}].cartQty`] = nextQty;
+            }
+        });
+        this.data.categories.forEach((cat, catIndex) => {
+            (cat.dishes || []).forEach((dish, dishIndex) => {
+                if (dish.id === dishId && dish.cartQty !== nextQty) {
+                    dataUpdate[`categories[${catIndex}].dishes[${dishIndex}].cartQty`] = nextQty;
+                }
+            });
+        });
+        if (Object.keys(dataUpdate).length > 0) {
+            this.setData(dataUpdate);
+        }
+    },
+    /**
+     * 查找无定制的菜品购物车项
+     */
+    findPlainDishCartItem(dishId) {
+        var _a;
+        return (_a = this.data.cart) === null || _a === void 0 ? void 0 : _a.items.find((item) => {
+            const hasCustomizations = item.customizations && Object.keys(item.customizations).length > 0;
+            return item.dish_id === dishId && !hasCustomizations;
+        });
+    },
+    /**
+     * 乐观更新：根据购物车项ID调整数量
+     */
+    applyOptimisticCartItemChange(itemId, nextQty) {
+        const cart = this.data.cart;
+        if (!cart)
+            return;
+        const items = [...(cart.items || [])];
+        const index = items.findIndex((item) => item.id === itemId);
+        if (index < 0)
+            return;
+        const target = items[index];
+        const unitPrice = target.unit_price || target.price || 0;
+        const prevQty = target.quantity || 0;
+        const safeNextQty = Math.max(0, nextQty);
+        if (safeNextQty <= 0) {
+            items.splice(index, 1);
+        }
+        else {
+            items[index] = {
+                ...target,
+                quantity: safeNextQty,
+                subtotal: unitPrice * safeNextQty,
+                subtotalDisplay: (0, util_1.formatPriceNoSymbol)(unitPrice * safeNextQty)
+            };
+        }
+        const nextTotalCount = Math.max(0, (cart.total_count || 0) - prevQty + safeNextQty);
+        const nextSubtotal = Math.max(0, (cart.subtotal || 0) - unitPrice * prevQty + unitPrice * safeNextQty);
+        const dataUpdate = {
+            'cart.items': items,
+            'cart.total_count': nextTotalCount,
+            'cart.total_quantity': nextTotalCount,
+            'cart.subtotal': nextSubtotal,
+            'cart.subtotalDisplay': (0, util_1.formatPriceNoSymbol)(nextSubtotal),
+            cartTotal: nextSubtotal,
+            cartCount: nextTotalCount,
+            totalPrice: nextSubtotal,
+            totalCount: nextTotalCount
+        };
+        this.setData(dataUpdate);
+        if (target.dish_id) {
+            const nextDishQty = items
+                .filter((item) => item.dish_id === target.dish_id)
+                .reduce((sum, item) => sum + (item.quantity || 0), 0);
+            this.updateDishQtyInLists(target.dish_id, nextDishQty);
+        }
+    },
+    /**
+     * 乐观更新：无定制菜品加减（仅更新数量与合计）
+     */
+    applyOptimisticDishDelta(dishId, deltaQty) {
+        const cart = this.data.cart;
+        if (!cart)
+            return;
+        const dish = this.data.currentDishes.find((d) => d.id === dishId);
+        const unitPrice = (dish === null || dish === void 0 ? void 0 : dish.price) || 0;
+        const currentQty = (dish === null || dish === void 0 ? void 0 : dish.cartQty) || 0;
+        const nextQty = Math.max(0, currentQty + deltaQty);
+        const item = this.findPlainDishCartItem(dishId);
+        if (item) {
+            const nextItemQty = Math.max(0, (item.quantity || 0) + deltaQty);
+            this.applyOptimisticCartItemChange(item.id, nextItemQty);
+        }
+        else {
+            const nextTotalCount = Math.max(0, (cart.total_count || 0) + deltaQty);
+            const nextSubtotal = Math.max(0, (cart.subtotal || 0) + unitPrice * deltaQty);
+            this.setData({
+                'cart.total_count': nextTotalCount,
+                'cart.total_quantity': nextTotalCount,
+                'cart.subtotal': nextSubtotal,
+                'cart.subtotalDisplay': (0, util_1.formatPriceNoSymbol)(nextSubtotal),
+                cartTotal: nextSubtotal,
+                cartCount: nextTotalCount,
+                totalPrice: nextSubtotal,
+                totalCount: nextTotalCount
+            });
+            this.updateDishQtyInLists(dishId, nextQty);
+        }
     },
     /**
      * 切换分类
@@ -368,27 +526,22 @@ Page({
     /**
      * 更新购物车数量（WXML 事件绑定）
      */
-    updateItemQuantity(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { itemId, quantity } = e.currentTarget.dataset;
-            try {
-                const params = {
-                    order_type: this.data.orderType,
-                    table_id: this.data.tableId || 0,
-                    reservation_id: this.data.reservationId || 0
-                };
-                if (quantity <= 0) {
-                    yield (0, cart_1.removeFromCart)(itemId);
-                }
-                else {
-                    yield (0, cart_1.updateCartItem)(itemId, Object.assign({ quantity }, params));
-                }
-                yield this.loadCart();
+    async updateItemQuantity(e) {
+        const { itemId, quantity } = e.currentTarget.dataset;
+        try {
+            this.applyOptimisticCartItemChange(itemId, quantity);
+            if (quantity <= 0) {
+                await (0, cart_1.removeFromCart)(itemId, { loading: false });
             }
-            catch (error) {
-                wx.showToast({ title: '操作失败', icon: 'none' });
+            else {
+                await (0, cart_1.updateCartItem)(itemId, { quantity }, { loading: false });
             }
-        });
+            this.scheduleCartSync();
+        }
+        catch (error) {
+            this.loadCart();
+            wx.showToast({ title: '操作失败', icon: 'none' });
+        }
     },
     /**
      * 显示/隐藏购物车
@@ -411,37 +564,35 @@ Page({
     /**
      * 去结算
      */
-    goToCheckout() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { cart, tableId, merchantId, orderType, reservationId } = this.data;
-            if (!cart || cart.items.length === 0) {
-                wx.showToast({ title: '购物车为空', icon: 'none' });
-                return;
+    async goToCheckout() {
+        const { cart, tableId, merchantId, orderType, reservationId } = this.data;
+        if (!cart || cart.items.length === 0) {
+            wx.showToast({ title: '购物车为空', icon: 'none' });
+            return;
+        }
+        try {
+            // 计算订单金额
+            await (0, cart_1.calculateCart)({
+                merchant_id: merchantId,
+                order_type: orderType,
+                table_id: this.data.tableId || undefined,
+                reservation_id: this.data.reservationId || undefined
+            });
+            // 根据订单类型拼接参数
+            let url = `/pages/dine-in/checkout/checkout?merchant_id=${merchantId}&order_type=${orderType}`;
+            if (orderType === 'dine_in') {
+                url += `&table_id=${tableId}`;
             }
-            try {
-                // 计算订单金额
-                yield (0, cart_1.calculateCart)({
-                    merchant_id: merchantId,
-                    order_type: orderType,
-                    table_id: this.data.tableId || 0,
-                    reservation_id: this.data.reservationId || 0
-                });
-                // 根据订单类型拼接参数
-                let url = `/pages/dine-in/checkout/checkout?merchant_id=${merchantId}&order_type=${orderType}`;
-                if (orderType === 'dine_in') {
-                    url += `&table_id=${tableId}`;
-                }
-                else if (orderType === 'reservation') {
-                    url += `&reservation_id=${reservationId}`;
-                }
-                // 跳转到结算页面
-                wx.navigateTo({ url });
+            else if (orderType === 'reservation') {
+                url += `&reservation_id=${reservationId}`;
             }
-            catch (error) {
-                console.error('结算失败:', error);
-                wx.showToast({ title: error.userMessage || '结算失败', icon: 'none' });
-            }
-        });
+            // 跳转到结算页面
+            wx.navigateTo({ url });
+        }
+        catch (error) {
+            console.error('结算失败:', error);
+            wx.showToast({ title: error instanceof Error ? error.message : '结算失败', icon: 'none' });
+        }
     },
     /**
      * 获取购物车中菜品数量
@@ -495,48 +646,48 @@ Page({
     /**
      * 增加菜品数量（无定制）
      */
-    onIncrease(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const dishId = e.currentTarget.dataset.id;
-            try {
-                yield (0, cart_1.addToCart)({
-                    merchant_id: this.data.merchantId,
-                    dish_id: dishId,
-                    quantity: 1,
-                    order_type: this.data.orderType,
-                    table_id: this.data.tableId || 0,
-                    reservation_id: this.data.reservationId || 0
-                });
-                yield this.loadCart();
-            }
-            catch (error) {
-                wx.showToast({ title: error.userMessage || '添加失败', icon: 'none' });
-            }
-        });
+    async onIncrease(e) {
+        const dishId = e.currentTarget.dataset.id;
+        try {
+            this.applyOptimisticDishDelta(dishId, 1);
+            await (0, cart_1.addToCart)({
+                merchant_id: this.data.merchantId,
+                dish_id: dishId,
+                quantity: 1,
+                order_type: this.data.orderType,
+                table_id: this.data.tableId || 0,
+                reservation_id: this.data.reservationId || 0
+            }, { loading: false });
+            this.scheduleCartSync();
+        }
+        catch (error) {
+            this.loadCart();
+            wx.showToast({ title: error instanceof Error ? error.message : '添加失败', icon: 'none' });
+        }
     },
     /**
      * 减少菜品数量（无定制）
      */
-    onDecrease(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const dishId = e.currentTarget.dataset.id;
-            const cartItem = (_a = this.data.cart) === null || _a === void 0 ? void 0 : _a.items.find((i) => i.dish_id === dishId);
-            if (!cartItem)
-                return;
-            try {
-                if (cartItem.quantity <= 1) {
-                    yield (0, cart_1.removeFromCart)(cartItem.id);
-                }
-                else {
-                    yield (0, cart_1.updateCartItem)(cartItem.id, { quantity: cartItem.quantity - 1 });
-                }
-                yield this.loadCart();
+    async onDecrease(e) {
+        var _a;
+        const dishId = e.currentTarget.dataset.id;
+        const cartItem = (_a = this.data.cart) === null || _a === void 0 ? void 0 : _a.items.find((i) => i.dish_id === dishId);
+        if (!cartItem)
+            return;
+        try {
+            this.applyOptimisticDishDelta(dishId, -1);
+            if (cartItem.quantity <= 1) {
+                await (0, cart_1.removeFromCart)(cartItem.id, { loading: false });
             }
-            catch (error) {
-                wx.showToast({ title: '操作失败', icon: 'none' });
+            else {
+                await (0, cart_1.updateCartItem)(cartItem.id, { quantity: cartItem.quantity - 1 }, { loading: false });
             }
-        });
+            this.scheduleCartSync();
+        }
+        catch (error) {
+            this.loadCart();
+            wx.showToast({ title: '操作失败', icon: 'none' });
+        }
     },
     // ==================== 定制 Drawer ====================
     /**
@@ -554,7 +705,7 @@ Page({
             is_required: group.is_required,
             specs: (group.options || []).map((opt) => ({
                 id: String(opt.id),
-                name: opt.tag_name || opt.name,
+                name: opt.tag_name || opt.name || '',
                 price_diff: opt.extra_price || 0,
                 priceDiffDisplay: opt.extra_price ? (0, util_1.formatPriceNoSymbol)(opt.extra_price) : null
             }))
@@ -568,7 +719,7 @@ Page({
         });
         this.setData({
             drawerVisible: true,
-            drawerDish: Object.assign(Object.assign({}, dish), { spec_groups: specGroups }),
+            drawerDish: { ...dish, spec_groups: specGroups },
             drawerSpecs: defaultSpecs,
             drawerQty: 1
         });
@@ -603,35 +754,34 @@ Page({
     /**
      * 确认定制加入购物车
      */
-    onConfirmCustom() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { drawerDish, drawerSpecs, drawerQty, merchantId } = this.data;
-            if (!drawerDish)
-                return;
-            try {
-                // 构建定制信息
-                const customizations = {};
-                for (const groupId in drawerSpecs) {
-                    if (Object.prototype.hasOwnProperty.call(drawerSpecs, groupId)) {
-                        customizations[groupId] = drawerSpecs[groupId];
-                    }
+    async onConfirmCustom() {
+        const { drawerDish, drawerSpecs, drawerQty, merchantId } = this.data;
+        if (!drawerDish)
+            return;
+        try {
+            // 构建定制信息
+            const customizations = {};
+            for (const groupId in drawerSpecs) {
+                if (Object.prototype.hasOwnProperty.call(drawerSpecs, groupId)) {
+                    customizations[groupId] = drawerSpecs[groupId];
                 }
-                yield (0, cart_1.addToCart)({
-                    merchant_id: merchantId,
-                    dish_id: drawerDish.id,
-                    quantity: drawerQty,
-                    customizations,
-                    order_type: this.data.orderType,
-                    table_id: this.data.tableId || 0,
-                    reservation_id: this.data.reservationId || 0
-                });
-                this.setData({ drawerVisible: false, drawerDish: null });
-                yield this.loadCart();
-                wx.showToast({ title: '已添加', icon: 'success' });
             }
-            catch (error) {
-                wx.showToast({ title: error.userMessage || '添加失败', icon: 'none' });
-            }
-        });
+            const updatedCart = await (0, cart_1.addToCart)({
+                merchant_id: merchantId,
+                dish_id: drawerDish.id,
+                quantity: drawerQty,
+                customizations,
+                order_type: this.data.orderType,
+                table_id: this.data.tableId || 0,
+                reservation_id: this.data.reservationId || 0
+            }, { loading: false });
+            this.setData({ drawerVisible: false, drawerDish: null });
+            this.applyCartData(updatedCart);
+            wx.showToast({ title: '已添加', icon: 'success' });
+        }
+        catch (error) {
+            this.loadCart();
+            wx.showToast({ title: error instanceof Error ? error.message : '添加失败', icon: 'none' });
+        }
     }
 });

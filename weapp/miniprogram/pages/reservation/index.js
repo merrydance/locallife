@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const logger_1 = require("../../utils/logger");
 const search_1 = require("../../api/search");
@@ -93,84 +84,85 @@ Page({
         }
     },
     // ==================== Data Loading ====================
-    loadItems() {
-        return __awaiter(this, arguments, void 0, function* (reset = false) {
-            var _a, _b;
-            if (this.data.loading)
-                return;
-            this.setData({ loading: true });
-            if (reset) {
-                this.setData({ page: 1, itemList: [], hasMore: true });
+    async loadItems(reset = false) {
+        var _a, _b;
+        if (this.data.loading)
+            return;
+        this.setData({ loading: true });
+        if (reset) {
+            this.setData({ page: 1, itemList: [], hasMore: true });
+        }
+        try {
+            const { activeTab, page, pageSize, keyword, appliedFilters } = this.data;
+            const latitude = app.globalData.latitude || undefined;
+            const longitude = app.globalData.longitude || undefined;
+            let newList = [];
+            if (activeTab === 'room') {
+                // 统一走 search 路由；缺省日期/时段使用默认值
+                const effectiveDate = appliedFilters.date || ((_a = this.data.dateOptions[0]) === null || _a === void 0 ? void 0 : _a.value) || this.formatDateLocal(new Date());
+                const effectiveTime = appliedFilters.startTime || ((_b = this.data.timeOptions[0]) === null || _b === void 0 ? void 0 : _b.value) || '18:00';
+                const results = await (0, search_1.searchRooms)({
+                    reservation_date: effectiveDate,
+                    reservation_time: effectiveTime,
+                    min_capacity: appliedFilters.guestCount,
+                    min_minimum_spend: appliedFilters.minSpend,
+                    max_minimum_spend: appliedFilters.maxSpend,
+                    user_latitude: latitude,
+                    user_longitude: longitude,
+                    page_id: page,
+                    page_size: pageSize
+                });
+                // 在 TypeScript 中预处理距离和图片
+                newList = results.map((r) => ({
+                    ...r,
+                    type: 'room',
+                    primary_image: (0, image_1.getPublicImageUrl)(r.primary_image) || '',
+                    distance_display: r.distance !== undefined ? dish_1.DishAdapter.formatDistance(r.distance) : ''
+                }));
             }
-            try {
-                const { activeTab, page, pageSize, keyword, appliedFilters } = this.data;
-                const latitude = app.globalData.latitude || undefined;
-                const longitude = app.globalData.longitude || undefined;
-                let newList = [];
-                if (activeTab === 'room') {
-                    // 统一走 search 路由；缺省日期/时段使用默认值
-                    const effectiveDate = appliedFilters.date || ((_a = this.data.dateOptions[0]) === null || _a === void 0 ? void 0 : _a.value) || this.formatDateLocal(new Date());
-                    const effectiveTime = appliedFilters.startTime || ((_b = this.data.timeOptions[0]) === null || _b === void 0 ? void 0 : _b.value) || '18:00';
-                    const results = yield (0, search_1.searchRooms)({
-                        reservation_date: effectiveDate,
-                        reservation_time: effectiveTime,
-                        min_capacity: appliedFilters.guestCount,
-                        min_minimum_spend: appliedFilters.minSpend,
-                        max_minimum_spend: appliedFilters.maxSpend,
-                        user_latitude: latitude,
-                        user_longitude: longitude,
+            else {
+                // Restaurant Stream - 与外卖页 loadRestaurants 保持一致的数据格式
+                let merchantResults = [];
+                if (keyword) {
+                    merchantResults = await (0, search_1.searchMerchants)({
+                        keyword,
                         page_id: page,
-                        page_size: pageSize
+                        page_size: pageSize,
+                        user_latitude: latitude,
+                        user_longitude: longitude
                     });
-                    // 在 TypeScript 中预处理距离和图片
-                    newList = results.map((r) => (Object.assign(Object.assign({}, r), { type: 'room', primary_image: (0, image_1.getPublicImageUrl)(r.primary_image) || '', distance_display: r.distance !== undefined ? dish_1.DishAdapter.formatDistance(r.distance) : '' })));
                 }
                 else {
-                    // Restaurant Stream - 与外卖页 loadRestaurants 保持一致的数据格式
-                    let merchantResults = [];
-                    if (keyword) {
-                        const { searchMerchants } = require('../../api/search');
-                        merchantResults = yield searchMerchants({
-                            keyword,
-                            page_id: page,
-                            page_size: pageSize,
-                            user_latitude: latitude,
-                            user_longitude: longitude
-                        });
-                    }
-                    else {
-                        const result = yield (0, search_1.getRecommendedMerchants)({
-                            user_latitude: latitude,
-                            user_longitude: longitude,
-                            limit: pageSize
-                        });
-                        // API 返回 { merchants: [...] } 或直接返回数组
-                        merchantResults = result.merchants || result;
-                    }
-                    // 转换为与外卖页一致的 ViewModel 格式
-                    newList = merchantResults.map((m) => ({
-                        id: m.id,
-                        name: m.name,
-                        imageUrl: (0, image_1.getPublicImageUrl)(m.logo_url) || '',
-                        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
-                        distance: m.distance !== undefined ? dish_1.DishAdapter.formatDistance(m.distance) : '',
-                        address: m.address,
-                        tags: m.tags ? m.tags.slice(0, 3) : [],
-                        type: 'restaurant'
-                    }));
+                    const result = await (0, search_1.getRecommendedMerchants)({
+                        user_latitude: latitude,
+                        user_longitude: longitude,
+                        limit: pageSize
+                    });
+                    merchantResults = result;
                 }
-                this.setData({
-                    itemList: reset ? newList : [...this.data.itemList, ...newList],
-                    loading: false,
-                    hasMore: newList.length === pageSize
-                });
+                // 转换为与外卖页一致的 ViewModel 格式
+                newList = merchantResults.map((m) => ({
+                    id: m.id,
+                    name: m.name,
+                    imageUrl: (0, image_1.getPublicImageUrl)(m.logo_url) || '',
+                    cuisineType: m.tags ? m.tags.slice(0, 2) : [],
+                    distance: m.distance !== undefined ? dish_1.DishAdapter.formatDistance(m.distance) : '',
+                    address: m.address || '',
+                    tags: m.tags ? m.tags.slice(0, 3) : [],
+                    type: 'restaurant'
+                }));
             }
-            catch (error) {
-                logger_1.logger.error('Load items failed', error, 'Reservation');
-                wx.showToast({ title: '加载失败', icon: 'none' });
-                this.setData({ loading: false });
-            }
-        });
+            this.setData({
+                itemList: reset ? newList : [...this.data.itemList, ...newList],
+                loading: false,
+                hasMore: newList.length === pageSize
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Load items failed', error, 'Reservation');
+            wx.showToast({ title: '加载失败', icon: 'none' });
+            this.setData({ loading: false });
+        }
     },
     // ==================== Interactions ====================
     onNavHeight(e) {
@@ -216,18 +208,16 @@ Page({
      * scroll-view 下拉刷新事件处理
      * 在 Skyline 模式下实现下拉刷新
      */
-    onRefresh() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ refresherTriggered: true, page: 1 });
-            try {
-                yield this.loadItems(true);
-            }
-            finally {
-                setTimeout(() => {
-                    this.setData({ refresherTriggered: false });
-                }, 300);
-            }
-        });
+    async onRefresh() {
+        this.setData({ refresherTriggered: true, page: 1 });
+        try {
+            await this.loadItems(true);
+        }
+        finally {
+            setTimeout(() => {
+                this.setData({ refresherTriggered: false });
+            }, 300);
+        }
     },
     // ==================== Filter Popup ====================
     showFilterPopup() {

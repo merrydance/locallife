@@ -89,13 +89,17 @@ export interface ReservationItem {
  * 用户创建预订请求
  */
 export interface CreateReservationRequest {
-  table_id: number
-  date: string              // YYYY-MM-DD
-  time: string              // HH:MM
-  guest_count: number
+  table_id?: number
+  date?: string              // YYYY-MM-DD
+  time?: string              // HH:MM
+  guest_count?: number
+  // 兼容旧字段（reservation_time/party_size）
+  reservation_time?: string
+  party_size?: number
+  merchant_id?: number
   contact_name: string
   contact_phone: string
-  payment_mode: PaymentMode
+  payment_mode?: PaymentMode
   notes?: string
   items?: ReservationItem[] // 全款模式预点菜品
 }

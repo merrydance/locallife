@@ -247,10 +247,12 @@ Page({
 
     // 构建提交数据
     const submitData: ApplyRiderRequest = {
-      name: formData.name,
+      real_name: formData.name,
       phone: formData.phone,
-      id_card: formData.idCard,
+      id_card_no: formData.idCard,
       vehicle_type: formData.vehicle,
+      address: formData.address,
+      gender: formData.gender,
 
       id_card_front_images: idCardFrontImages.map((img) => img.url),
       id_card_back_images: idCardBackImages.map((img) => img.url),

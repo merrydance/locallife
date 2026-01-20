@@ -3,15 +3,6 @@
  * 优惠券服务
  * 使用真实后端API
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CouponService = void 0;
 const marketing_membership_1 = require("../api/marketing-membership");
@@ -26,43 +17,37 @@ class CouponService {
     /**
      * 获取商户可用优惠券
      */
-    getAvailableCoupons(merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const merchantIdNum = parseInt(merchantId);
-                if (isNaN(merchantIdNum)) {
-                    return [];
-                }
-                const vouchers = yield marketing_membership_1.voucherManagementService.listActiveVouchers(merchantIdNum);
-                return this.convertVouchersToCoupons(vouchers);
-            }
-            catch (error) {
-                console.error('获取优惠券失败:', error);
+    async getAvailableCoupons(merchantId) {
+        try {
+            const merchantIdNum = parseInt(merchantId);
+            if (isNaN(merchantIdNum)) {
                 return [];
             }
-        });
+            const vouchers = await marketing_membership_1.voucherManagementService.listActiveVouchers(merchantIdNum);
+            return this.convertVouchersToCoupons(vouchers);
+        }
+        catch (error) {
+            console.error('获取优惠券失败:', error);
+            return [];
+        }
     }
     /**
      * 获取用户优惠券
      * 注意：后端暂无用户优惠券列表接口，返回空数组
      */
-    getUserCoupons() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // TODO: 后端需要实现 GET /v1/customers/vouchers 接口
-            console.warn('getUserCoupons: 后端暂无用户优惠券列表接口');
-            return [];
-        });
+    async getUserCoupons() {
+        // TODO: 后端需要实现 GET /v1/customers/vouchers 接口
+        console.warn('getUserCoupons: 后端暂无用户优惠券列表接口');
+        return [];
     }
     /**
      * 领取优惠券
      * 注意：后端暂无领取优惠券接口
      */
-    claimCoupon(couponId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // TODO: 后端需要实现 POST /v1/vouchers/{id}/claim 接口
-            console.warn('claimCoupon: 后端暂无领取优惠券接口');
-            return false;
-        });
+    async claimCoupon(couponId) {
+        // TODO: 后端需要实现 POST /v1/vouchers/{id}/claim 接口
+        console.warn('claimCoupon: 后端暂无领取优惠券接口');
+        return false;
     }
     /**
      * 计算优惠金额

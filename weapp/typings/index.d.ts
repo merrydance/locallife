@@ -26,6 +26,7 @@ interface IAppOption {
         userRole: 'guest' | 'customer' | 'merchant' | 'rider' | 'operator'
         userId?: number
         merchantId?: string
+        merchantName?: string
         // 多店铺切换支持
         currentMerchantId?: number
         merchantInfo?: {

@@ -182,7 +182,7 @@ Page({
           imageUrl: getPublicImageUrl(m.logo_url) || '',
           cuisineType: m.tags ? m.tags.slice(0, 2) : [],
           distance: m.distance !== undefined ? DishAdapter.formatDistance(m.distance) : '',
-          address: m.address,
+          address: m.address || '',
           tags: m.tags ? m.tags.slice(0, 3) : [],
           type: 'restaurant'
         }))

@@ -419,8 +419,8 @@ Page({
     const restaurant = this.data.restaurant
     if (restaurant && restaurant.latitude && restaurant.longitude) {
       wx.openLocation({
-        latitude: parseFloat(restaurant.latitude),
-        longitude: parseFloat(restaurant.longitude),
+        latitude: Number(restaurant.latitude),
+        longitude: Number(restaurant.longitude),
         name: restaurant.name,
         address: restaurant.address
       })

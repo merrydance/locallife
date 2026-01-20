@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：商户审核、骑手审核、配送费配置、高峰时段管理
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.reviewAnalyticsService = exports.PlatformManagementAdapter = exports.ReviewAnalyticsService = exports.platformManagementService = exports.PlatformManagementService = void 0;
 exports.getPlatformManagementDashboard = getPlatformManagementDashboard;
@@ -36,13 +27,11 @@ class PlatformManagementService {
      * 获取商户申请列表
      * @param params 查询参数
      */
-    getMerchantApplications(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/admin/merchants/applications',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantApplications(params) {
+        return (0, request_1.request)({
+            url: '/v1/admin/merchants/applications',
+            method: 'GET',
+            data: params
         });
     }
     /**
@@ -50,26 +39,22 @@ class PlatformManagementService {
      * @param applicationId 申请ID
      * @param reviewData 审核数据
      */
-    reviewMerchantApplication(applicationId, reviewData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/admin/merchants/applications/review',
-                method: 'POST',
-                data: Object.assign({ application_id: applicationId }, reviewData)
-            });
+    async reviewMerchantApplication(applicationId, reviewData) {
+        return (0, request_1.request)({
+            url: '/v1/admin/merchants/applications/review',
+            method: 'POST',
+            data: Object.assign({ application_id: applicationId }, reviewData)
         });
     }
     /**
      * 获取骑手列表
      * @param params 查询参数
      */
-    getAdminRiders(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/admin/riders',
-                method: 'GET',
-                data: params
-            });
+    async getAdminRiders(params) {
+        return (0, request_1.request)({
+            url: '/v1/admin/riders',
+            method: 'GET',
+            data: params
         });
     }
     /**
@@ -77,13 +62,11 @@ class PlatformManagementService {
      * @param riderId 骑手ID
      * @param approveData 批准数据
      */
-    approveRider(riderId, approveData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/admin/riders/${riderId}/approve`,
-                method: 'POST',
-                data: approveData
-            });
+    async approveRider(riderId, approveData) {
+        return (0, request_1.request)({
+            url: `/v1/admin/riders/${riderId}/approve`,
+            method: 'POST',
+            data: approveData
         });
     }
     /**
@@ -91,25 +74,21 @@ class PlatformManagementService {
      * @param riderId 骑手ID
      * @param rejectData 拒绝数据
      */
-    rejectRider(riderId, rejectData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/admin/riders/${riderId}/reject`,
-                method: 'POST',
-                data: rejectData
-            });
+    async rejectRider(riderId, rejectData) {
+        return (0, request_1.request)({
+            url: `/v1/admin/riders/${riderId}/reject`,
+            method: 'POST',
+            data: rejectData
         });
     }
     /**
      * 获取配送费配置
      * @param regionId 区域ID
      */
-    getDeliveryFeeConfig(regionId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/delivery-fee/config/${regionId}`,
-                method: 'GET'
-            });
+    async getDeliveryFeeConfig(regionId) {
+        return (0, request_1.request)({
+            url: `/delivery-fee/config/${regionId}`,
+            method: 'GET'
         });
     }
     /**
@@ -117,13 +96,11 @@ class PlatformManagementService {
      * @param regionId 区域ID
      * @param configData 配置数据
      */
-    createDeliveryFeeConfig(regionId, configData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/delivery-fee/regions/${regionId}/config`,
-                method: 'POST',
-                data: configData
-            });
+    async createDeliveryFeeConfig(regionId, configData) {
+        return (0, request_1.request)({
+            url: `/delivery-fee/regions/${regionId}/config`,
+            method: 'POST',
+            data: configData
         });
     }
     /**
@@ -131,25 +108,21 @@ class PlatformManagementService {
      * @param regionId 区域ID
      * @param configData 配置数据
      */
-    updateDeliveryFeeConfig(regionId, configData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/delivery-fee/regions/${regionId}/config`,
-                method: 'PATCH',
-                data: configData
-            });
+    async updateDeliveryFeeConfig(regionId, configData) {
+        return (0, request_1.request)({
+            url: `/delivery-fee/regions/${regionId}/config`,
+            method: 'PATCH',
+            data: configData
         });
     }
     /**
      * 获取高峰时段配置列表
      * @param regionId 区域ID
      */
-    getPeakHourConfigs(regionId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/operator/regions/${regionId}/peak-hours`,
-                method: 'GET'
-            });
+    async getPeakHourConfigs(regionId) {
+        return (0, request_1.request)({
+            url: `/operator/regions/${regionId}/peak-hours`,
+            method: 'GET'
         });
     }
     /**
@@ -157,25 +130,21 @@ class PlatformManagementService {
      * @param regionId 区域ID
      * @param configData 配置数据
      */
-    createPeakHourConfig(regionId, configData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/operator/regions/${regionId}/peak-hours`,
-                method: 'POST',
-                data: configData
-            });
+    async createPeakHourConfig(regionId, configData) {
+        return (0, request_1.request)({
+            url: `/operator/regions/${regionId}/peak-hours`,
+            method: 'POST',
+            data: configData
         });
     }
     /**
      * 删除高峰时段配置
      * @param configId 配置ID
      */
-    deletePeakHourConfig(configId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/operator/peak-hours/${configId}`,
-                method: 'DELETE'
-            });
+    async deletePeakHourConfig(configId) {
+        return (0, request_1.request)({
+            url: `/operator/peak-hours/${configId}`,
+            method: 'DELETE'
         });
     }
 }
@@ -543,71 +512,67 @@ exports.reviewAnalyticsService = new ReviewAnalyticsService();
 /**
  * 获取平台管理工作台数据
  */
-function getPlatformManagementDashboard() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [merchantApps, riders] = yield Promise.all([
-            exports.platformManagementService.getMerchantApplications({
-                status: 'pending',
-                limit: 50
-            }),
-            exports.platformManagementService.getAdminRiders({
-                status: 'pending',
-                limit: 50
-            })
-        ]);
-        // 获取所有申请进行效率分析
-        const [allMerchantApps, allRiders] = yield Promise.all([
-            exports.platformManagementService.getMerchantApplications({ limit: 1000 }),
-            exports.platformManagementService.getAdminRiders({ limit: 1000 })
-        ]);
-        const merchantEfficiency = exports.reviewAnalyticsService.analyzeMerchantReviewEfficiency(allMerchantApps.applications);
-        const riderEfficiency = exports.reviewAnalyticsService.analyzeRiderReviewEfficiency(allRiders.riders);
-        // 获取系统配置（示例区域ID为1）
-        const [deliveryFeeConfigs, peakHourConfigs] = yield Promise.all([
-            exports.platformManagementService.getDeliveryFeeConfig(1).catch(() => null),
-            exports.platformManagementService.getPeakHourConfigs(1).catch(() => [])
-        ]);
-        return {
-            merchantApplications: {
-                pending: merchantApps.applications,
-                stats: merchantApps.stats,
-                efficiency: merchantEfficiency
-            },
-            riderApplications: {
-                pending: riders.riders,
-                stats: riders.stats,
-                efficiency: riderEfficiency
-            },
-            systemConfig: {
-                deliveryFeeConfigs: deliveryFeeConfigs ? [deliveryFeeConfigs] : [],
-                peakHourConfigs: peakHourConfigs
-            }
-        };
-    });
+async function getPlatformManagementDashboard() {
+    const [merchantApps, riders] = await Promise.all([
+        exports.platformManagementService.getMerchantApplications({
+            status: 'pending',
+            limit: 50
+        }),
+        exports.platformManagementService.getAdminRiders({
+            status: 'pending',
+            limit: 50
+        })
+    ]);
+    // 获取所有申请进行效率分析
+    const [allMerchantApps, allRiders] = await Promise.all([
+        exports.platformManagementService.getMerchantApplications({ limit: 1000 }),
+        exports.platformManagementService.getAdminRiders({ limit: 1000 })
+    ]);
+    const merchantEfficiency = exports.reviewAnalyticsService.analyzeMerchantReviewEfficiency(allMerchantApps.applications);
+    const riderEfficiency = exports.reviewAnalyticsService.analyzeRiderReviewEfficiency(allRiders.riders);
+    // 获取系统配置（示例区域ID为1）
+    const [deliveryFeeConfigs, peakHourConfigs] = await Promise.all([
+        exports.platformManagementService.getDeliveryFeeConfig(1).catch(() => null),
+        exports.platformManagementService.getPeakHourConfigs(1).catch(() => [])
+    ]);
+    return {
+        merchantApplications: {
+            pending: merchantApps.applications,
+            stats: merchantApps.stats,
+            efficiency: merchantEfficiency
+        },
+        riderApplications: {
+            pending: riders.riders,
+            stats: riders.stats,
+            efficiency: riderEfficiency
+        },
+        systemConfig: {
+            deliveryFeeConfigs: deliveryFeeConfigs ? [deliveryFeeConfigs] : [],
+            peakHourConfigs: peakHourConfigs
+        }
+    };
 }
 /**
  * 批量审核商户申请
  * @param applicationIds 申请ID列表
  * @param reviewData 审核数据
  */
-function batchReviewMerchantApplications(applicationIds, reviewData) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const success = [];
-        const failed = [];
-        for (const applicationId of applicationIds) {
-            try {
-                yield exports.platformManagementService.reviewMerchantApplication(applicationId, reviewData);
-                success.push(applicationId);
-            }
-            catch (error) {
-                failed.push({
-                    id: applicationId,
-                    error: error instanceof Error ? error.message : '审核失败'
-                });
-            }
+async function batchReviewMerchantApplications(applicationIds, reviewData) {
+    const success = [];
+    const failed = [];
+    for (const applicationId of applicationIds) {
+        try {
+            await exports.platformManagementService.reviewMerchantApplication(applicationId, reviewData);
+            success.push(applicationId);
         }
-        return { success, failed };
-    });
+        catch (error) {
+            failed.push({
+                id: applicationId,
+                error: error instanceof Error ? error.message : '审核失败'
+            });
+        }
+    }
+    return { success, failed };
 }
 /**
  * 批量审核骑手申请
@@ -615,29 +580,27 @@ function batchReviewMerchantApplications(applicationIds, reviewData) {
  * @param action 操作类型
  * @param actionData 操作数据
  */
-function batchReviewRiders(riderIds, action, actionData) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const success = [];
-        const failed = [];
-        for (const riderId of riderIds) {
-            try {
-                if (action === 'approve') {
-                    yield exports.platformManagementService.approveRider(riderId, actionData);
-                }
-                else {
-                    yield exports.platformManagementService.rejectRider(riderId, actionData);
-                }
-                success.push(riderId);
+async function batchReviewRiders(riderIds, action, actionData) {
+    const success = [];
+    const failed = [];
+    for (const riderId of riderIds) {
+        try {
+            if (action === 'approve') {
+                await exports.platformManagementService.approveRider(riderId, actionData);
             }
-            catch (error) {
-                failed.push({
-                    id: riderId,
-                    error: error instanceof Error ? error.message : '审核失败'
-                });
+            else {
+                await exports.platformManagementService.rejectRider(riderId, actionData);
             }
+            success.push(riderId);
         }
-        return { success, failed };
-    });
+        catch (error) {
+            failed.push({
+                id: riderId,
+                error: error instanceof Error ? error.message : '审核失败'
+            });
+        }
+    }
+    return { success, failed };
 }
 /**
  * 格式化申请状态显示

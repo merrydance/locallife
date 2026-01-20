@@ -28,7 +28,8 @@ Page({
   pollTimer: null as any,
 
   onLoad() {
-    this.setData({ riderId: app.globalData.userInfo?.id || '' })
+    const userInfo = app.globalData.userInfo as { id?: string | number } | null
+    this.setData({ riderId: userInfo?.id ? String(userInfo.id) : '' })
     this.loadDashboard()
   },
 

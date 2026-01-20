@@ -32,15 +32,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const CartAPI = __importStar(require("@/api/cart"));
 const logger_1 = require("@/utils/logger");
@@ -73,72 +64,70 @@ Page({
     /**
      * 加载所有商户的购物车
      */
-    loadAllCarts() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f;
-            try {
-                this.setData({ loading: true });
-                // 获取用户所有购物车汇总
-                const userCarts = yield CartAPI.getUserCarts('takeout');
-                if (!userCarts.carts || userCarts.carts.length === 0) {
-                    this.setData({
-                        loading: false,
-                        merchantGroups: [],
-                        summary: {
-                            cartCount: 0,
-                            totalItems: 0,
-                            totalAmount: 0,
-                            totalAmountDisplay: '¥0.00'
-                        }
-                    });
-                    // 重要：空购物车也要同步到全局状态
-                    this.syncToGlobalStore();
-                    return;
-                }
-                // 为每个商户获取详细购物车内容
-                const merchantGroups = [];
-                for (const merchantCart of userCarts.carts) {
-                    if (!merchantCart.merchant_id)
-                        continue;
-                    try {
-                        const cartDetail = yield CartAPI.getCart({
-                            merchant_id: merchantCart.merchant_id,
-                            order_type: merchantCart.order_type || 'takeout',
-                            table_id: (_a = merchantCart.table_id) !== null && _a !== void 0 ? _a : undefined,
-                            reservation_id: (_b = merchantCart.reservation_id) !== null && _b !== void 0 ? _b : undefined
-                        });
-                        const group = this.buildMerchantGroup(merchantCart, cartDetail);
-                        merchantGroups.push(group);
-                    }
-                    catch (error) {
-                        logger_1.logger.warn('Failed to load cart for merchant', { merchantId: merchantCart.merchant_id }, 'cart.loadAllCarts');
-                    }
-                }
-                // 默认全选
-                const selectedCartIds = merchantGroups.map(g => g.cartId);
+    async loadAllCarts() {
+        var _a, _b, _c, _d, _e, _f;
+        try {
+            this.setData({ loading: true });
+            // 获取用户所有购物车汇总
+            const userCarts = await CartAPI.getUserCarts('takeout');
+            if (!userCarts.carts || userCarts.carts.length === 0) {
                 this.setData({
                     loading: false,
-                    merchantGroups,
-                    selectedCartIds,
+                    merchantGroups: [],
                     summary: {
-                        cartCount: ((_c = userCarts.summary) === null || _c === void 0 ? void 0 : _c.cart_count) || merchantGroups.length,
-                        totalItems: ((_d = userCarts.summary) === null || _d === void 0 ? void 0 : _d.total_items) || 0,
-                        totalAmount: ((_e = userCarts.summary) === null || _e === void 0 ? void 0 : _e.total_amount) || 0,
-                        totalAmountDisplay: `¥${((((_f = userCarts.summary) === null || _f === void 0 ? void 0 : _f.total_amount) || 0) / 100).toFixed(2)}`
+                        cartCount: 0,
+                        totalItems: 0,
+                        totalAmount: 0,
+                        totalAmountDisplay: '¥0.00'
                     }
                 });
-                // 计算各商户代取费
-                yield this.calculateDeliveryFees();
-                this.calculateCheckoutTotal();
-                // 同步到全局状态，让其他页面（如外卖首页）能感知购物车变化
+                // 重要：空购物车也要同步到全局状态
                 this.syncToGlobalStore();
+                return;
             }
-            catch (error) {
-                logger_1.logger.error('Failed to load carts', error, 'cart.loadAllCarts');
-                this.setData({ loading: false });
-                wx.showToast({ title: '加载购物车失败', icon: 'none' });
+            // 为每个商户获取详细购物车内容
+            const merchantGroups = [];
+            for (const merchantCart of userCarts.carts) {
+                if (!merchantCart.merchant_id)
+                    continue;
+                try {
+                    const cartDetail = await CartAPI.getCart({
+                        merchant_id: merchantCart.merchant_id,
+                        order_type: merchantCart.order_type || 'takeout',
+                        table_id: (_a = merchantCart.table_id) !== null && _a !== void 0 ? _a : undefined,
+                        reservation_id: (_b = merchantCart.reservation_id) !== null && _b !== void 0 ? _b : undefined
+                    });
+                    const group = this.buildMerchantGroup(merchantCart, cartDetail);
+                    merchantGroups.push(group);
+                }
+                catch (error) {
+                    logger_1.logger.warn('Failed to load cart for merchant', { merchantId: merchantCart.merchant_id }, 'cart.loadAllCarts');
+                }
             }
-        });
+            // 默认全选
+            const selectedCartIds = merchantGroups.map(g => g.cartId);
+            this.setData({
+                loading: false,
+                merchantGroups,
+                selectedCartIds,
+                summary: {
+                    cartCount: ((_c = userCarts.summary) === null || _c === void 0 ? void 0 : _c.cart_count) || merchantGroups.length,
+                    totalItems: ((_d = userCarts.summary) === null || _d === void 0 ? void 0 : _d.total_items) || 0,
+                    totalAmount: ((_e = userCarts.summary) === null || _e === void 0 ? void 0 : _e.total_amount) || 0,
+                    totalAmountDisplay: `¥${((((_f = userCarts.summary) === null || _f === void 0 ? void 0 : _f.total_amount) || 0) / 100).toFixed(2)}`
+                }
+            });
+            // 计算各商户代取费
+            await this.calculateDeliveryFees();
+            this.calculateCheckoutTotal();
+            // 同步到全局状态，让其他页面（如外卖首页）能感知购物车变化
+            this.syncToGlobalStore();
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to load carts', error, 'cart.loadAllCarts');
+            this.setData({ loading: false });
+            wx.showToast({ title: '加载购物车失败', icon: 'none' });
+        }
     },
     /**
      * 同步购物车状态到全局存储
@@ -166,7 +155,7 @@ Page({
             dishId: item.dish_id,
             comboId: item.combo_id,
             name: item.name,
-            imageUrl: (0, image_1.getPublicImageUrl)(item.image_url),
+            imageUrl: (0, image_1.getPublicImageUrl)(item.image_url || ''),
             quantity: item.quantity,
             unitPrice: item.unit_price,
             priceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
@@ -200,43 +189,47 @@ Page({
      * 计算各商户代取费
      * 获取用户当前地址并计算每个商户的代取费
      */
-    calculateDeliveryFees() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d;
-            const { merchantGroups } = this.data;
-            if (merchantGroups.length === 0)
-                return;
-            // 获取用户地址或当前位置用于计算代取费
-            const app = getApp();
-            const addressId = ((_a = app.globalData) === null || _a === void 0 ? void 0 : _a.selectedAddressId) || ((_b = app.globalData) === null || _b === void 0 ? void 0 : _b.defaultAddressId);
-            const latitude = (_c = app.globalData) === null || _c === void 0 ? void 0 : _c.latitude;
-            const longitude = (_d = app.globalData) === null || _d === void 0 ? void 0 : _d.longitude;
-            const updatedGroups = [...merchantGroups];
-            for (let i = 0; i < updatedGroups.length; i++) {
-                const group = updatedGroups[i];
-                try {
-                    // 优先使用 address_id，fallback 到当前位置坐标
-                    const result = yield CartAPI.calculateCart({
-                        merchant_id: group.merchantId,
-                        order_type: group.orderType,
-                        table_id: group.tableId,
-                        reservation_id: group.reservationId,
-                        address_id: addressId || undefined,
-                        latitude: !addressId && latitude ? latitude : undefined,
-                        longitude: !addressId && longitude ? longitude : undefined
-                    });
-                    // 更新代取费信息
-                    updatedGroups[i] = Object.assign(Object.assign({}, group), { deliveryFee: result.delivery_fee || 0, deliveryFeeDisplay: result.delivery_fee > 0
-                            ? `¥${(result.delivery_fee / 100).toFixed(2)}`
-                            : '免代取费', totalAmount: group.subtotal + (result.delivery_fee || 0), totalAmountDisplay: `¥${((group.subtotal + (result.delivery_fee || 0)) / 100).toFixed(2)}` });
-                }
-                catch (error) {
-                    logger_1.logger.warn('Failed to calculate delivery fee', { merchantId: group.merchantId }, 'cart.calculateDeliveryFees');
-                    // 保持原有值，显示"待计算"
-                }
+    async calculateDeliveryFees(silent = false) {
+        var _a, _b, _c, _d;
+        const { merchantGroups } = this.data;
+        if (merchantGroups.length === 0)
+            return;
+        // 获取用户地址或当前位置用于计算代取费
+        const app = getApp();
+        const addressId = ((_a = app.globalData) === null || _a === void 0 ? void 0 : _a.selectedAddressId) || ((_b = app.globalData) === null || _b === void 0 ? void 0 : _b.defaultAddressId);
+        const latitude = (_c = app.globalData) === null || _c === void 0 ? void 0 : _c.latitude;
+        const longitude = (_d = app.globalData) === null || _d === void 0 ? void 0 : _d.longitude;
+        const updatedGroups = [...merchantGroups];
+        for (let i = 0; i < updatedGroups.length; i++) {
+            const group = updatedGroups[i];
+            try {
+                // 优先使用 address_id，fallback 到当前位置坐标
+                const result = await CartAPI.calculateCart({
+                    merchant_id: group.merchantId,
+                    order_type: group.orderType,
+                    table_id: group.tableId,
+                    reservation_id: group.reservationId,
+                    address_id: addressId || undefined,
+                    latitude: !addressId && latitude ? latitude : undefined,
+                    longitude: !addressId && longitude ? longitude : undefined
+                }, { loading: !silent });
+                // 更新代取费信息
+                updatedGroups[i] = {
+                    ...group,
+                    deliveryFee: result.delivery_fee || 0,
+                    deliveryFeeDisplay: result.delivery_fee > 0
+                        ? `¥${(result.delivery_fee / 100).toFixed(2)}`
+                        : '免代取费',
+                    totalAmount: group.subtotal + (result.delivery_fee || 0),
+                    totalAmountDisplay: `¥${((group.subtotal + (result.delivery_fee || 0)) / 100).toFixed(2)}`
+                };
             }
-            this.setData({ merchantGroups: updatedGroups });
-        });
+            catch (error) {
+                logger_1.logger.warn('Failed to calculate delivery fee', { merchantId: group.merchantId }, 'cart.calculateDeliveryFees');
+                // 保持原有值，显示"待计算"
+            }
+        }
+        this.setData({ merchantGroups: updatedGroups });
     },
     /**
      * 计算结算总价
@@ -268,7 +261,10 @@ Page({
             selectedCartIds.push(cartId);
         }
         // 同时更新 merchantGroups 中对应项的 selected 状态
-        const updatedGroups = merchantGroups.map(group => (Object.assign(Object.assign({}, group), { selected: selectedCartIds.includes(group.cartId) })));
+        const updatedGroups = merchantGroups.map(group => ({
+            ...group,
+            selected: selectedCartIds.includes(group.cartId)
+        }));
         this.setData({
             selectedCartIds,
             merchantGroups: updatedGroups
@@ -278,60 +274,60 @@ Page({
     /**
      * 增加商品数量
      */
-    onIncrease(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { itemId } = e.currentTarget.dataset;
-            const currentQuantity = this.getItemQuantity(itemId);
-            const newQuantity = currentQuantity + 1;
-            // 先更新本地状态（乐观更新）
-            this.updateLocalQuantity(itemId, newQuantity);
-            try {
-                yield CartAPI.updateCartItem(itemId, { quantity: newQuantity });
-                // 更新小计和总价
-                this.recalculateSubtotals();
-                // 重新计算代取费（后端根据订单金额计算）
-                this.calculateDeliveryFees();
-            }
-            catch (error) {
-                // 回滚本地状态
-                this.updateLocalQuantity(itemId, currentQuantity);
-                wx.showToast({ title: '更新失败', icon: 'none' });
-            }
-        });
+    async onIncrease(e) {
+        const { itemId } = e.currentTarget.dataset;
+        if (!itemId)
+            return;
+        const currentQuantity = this.getItemQuantity(itemId);
+        const newQuantity = currentQuantity + 1;
+        // 先更新本地状态（乐观更新）
+        this.updateLocalQuantity(itemId, newQuantity);
+        try {
+            await CartAPI.updateCartItem(itemId, { quantity: newQuantity }, { loading: false });
+            // 更新小计和总价
+            this.recalculateSubtotals();
+            // 重新计算代取费（后端根据订单金额计算）
+            this.calculateDeliveryFees(true);
+        }
+        catch (error) {
+            // 回滚本地状态
+            this.updateLocalQuantity(itemId, currentQuantity);
+            wx.showToast({ title: '更新失败', icon: 'none' });
+        }
     },
     /**
      * 减少商品数量
      */
-    onDecrease(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { itemId } = e.currentTarget.dataset;
-            const currentQuantity = this.getItemQuantity(itemId);
-            if (currentQuantity <= 1) {
-                // 删除商品需要重新加载列表
-                try {
-                    yield CartAPI.removeFromCart(itemId);
-                    yield this.loadAllCarts();
-                }
-                catch (error) {
-                    wx.showToast({ title: '删除失败', icon: 'none' });
-                }
-                return;
-            }
-            const newQuantity = currentQuantity - 1;
-            // 乐观更新
-            this.updateLocalQuantity(itemId, newQuantity);
+    async onDecrease(e) {
+        const { itemId } = e.currentTarget.dataset;
+        if (!itemId)
+            return;
+        const currentQuantity = this.getItemQuantity(itemId);
+        if (currentQuantity <= 1) {
+            // 删除商品，本地移除避免整页刷新
             try {
-                yield CartAPI.updateCartItem(itemId, { quantity: newQuantity });
-                this.recalculateSubtotals();
-                // 重新计算代取费
-                this.calculateDeliveryFees();
+                await CartAPI.removeFromCart(itemId, { loading: false });
+                this.removeLocalItem(itemId);
             }
             catch (error) {
-                // 回滚
-                this.updateLocalQuantity(itemId, currentQuantity);
-                wx.showToast({ title: '更新失败', icon: 'none' });
+                wx.showToast({ title: '删除失败', icon: 'none' });
             }
-        });
+            return;
+        }
+        const newQuantity = currentQuantity - 1;
+        // 乐观更新
+        this.updateLocalQuantity(itemId, newQuantity);
+        try {
+            await CartAPI.updateCartItem(itemId, { quantity: newQuantity }, { loading: false });
+            this.recalculateSubtotals();
+            // 重新计算代取费
+            this.calculateDeliveryFees(true);
+        }
+        catch (error) {
+            // 回滚
+            this.updateLocalQuantity(itemId, currentQuantity);
+            wx.showToast({ title: '更新失败', icon: 'none' });
+        }
     },
     /**
      * 获取商品当前数量
@@ -372,8 +368,14 @@ Page({
             const subtotal = group.items.reduce((sum, item) => {
                 return sum + (item.unitPrice * item.quantity);
             }, 0);
+            const itemCount = group.items.reduce((sum, item) => sum + item.quantity, 0);
+            const deliveryFee = group.deliveryFee || 0;
+            const totalAmount = subtotal + deliveryFee;
             updates[`merchantGroups[${i}].subtotal`] = subtotal;
             updates[`merchantGroups[${i}].subtotalDisplay`] = `¥${(subtotal / 100).toFixed(2)}`;
+            updates[`merchantGroups[${i}].itemCount`] = itemCount;
+            updates[`merchantGroups[${i}].totalAmount`] = totalAmount;
+            updates[`merchantGroups[${i}].totalAmountDisplay`] = `¥${(totalAmount / 100).toFixed(2)}`;
         }
         // 一次性更新所有值
         this.setData(updates);
@@ -383,46 +385,96 @@ Page({
         this.syncToGlobalStore();
     },
     /**
+     * 本地移除商品（避免整页刷新）
+     */
+    removeLocalItem(itemId) {
+        const { merchantGroups, selectedCartIds } = this.data;
+        let targetGroupIndex = -1;
+        let targetItemIndex = -1;
+        for (let i = 0; i < merchantGroups.length; i++) {
+            const itemIndex = merchantGroups[i].items.findIndex(item => item.id === itemId);
+            if (itemIndex !== -1) {
+                targetGroupIndex = i;
+                targetItemIndex = itemIndex;
+                break;
+            }
+        }
+        if (targetGroupIndex === -1 || targetItemIndex === -1)
+            return;
+        const updatedGroups = merchantGroups.map((group, index) => {
+            if (index !== targetGroupIndex)
+                return group;
+            const nextItems = group.items.filter((_, itemIndex) => itemIndex !== targetItemIndex);
+            return {
+                ...group,
+                items: nextItems
+            };
+        }).filter(group => group.items.length > 0);
+        const removedGroup = merchantGroups[targetGroupIndex];
+        const nextSelectedCartIds = removedGroup && updatedGroups.every(group => group.cartId !== removedGroup.cartId)
+            ? selectedCartIds.filter(id => id !== removedGroup.cartId)
+            : selectedCartIds;
+        this.setData({
+            merchantGroups: updatedGroups,
+            selectedCartIds: nextSelectedCartIds
+        }, () => {
+            if (updatedGroups.length === 0) {
+                this.setData({
+                    summary: {
+                        cartCount: 0,
+                        totalItems: 0,
+                        totalAmount: 0,
+                        totalAmountDisplay: '¥0.00'
+                    }
+                });
+            }
+            else {
+                this.recalculateSubtotals();
+                this.calculateDeliveryFees(true);
+            }
+            this.calculateCheckoutTotal();
+            this.syncToGlobalStore();
+        });
+    },
+    /**
      * 清空某个商户的购物车
      */
-    onClearMerchant(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { merchantId } = e.currentTarget.dataset;
-            wx.showModal({
-                title: '清空购物车',
-                content: '确定要清空该商户的购物车吗?',
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        try {
-                            const group = this.data.merchantGroups.find(g => g.merchantId === merchantId);
-                            yield CartAPI.clearCart({
-                                merchant_id: merchantId,
-                                order_type: (group === null || group === void 0 ? void 0 : group.orderType) || 'takeout',
-                                table_id: group === null || group === void 0 ? void 0 : group.tableId,
-                                reservation_id: group === null || group === void 0 ? void 0 : group.reservationId
+    async onClearMerchant(e) {
+        const { merchantId } = e.currentTarget.dataset;
+        wx.showModal({
+            title: '清空购物车',
+            content: '确定要清空该商户的购物车吗?',
+            success: async (res) => {
+                if (res.confirm) {
+                    try {
+                        const group = this.data.merchantGroups.find(g => g.merchantId === merchantId);
+                        await CartAPI.clearCart({
+                            merchant_id: merchantId,
+                            order_type: (group === null || group === void 0 ? void 0 : group.orderType) || 'takeout',
+                            table_id: group === null || group === void 0 ? void 0 : group.tableId,
+                            reservation_id: group === null || group === void 0 ? void 0 : group.reservationId
+                        });
+                        // 本地移除该商户分组，避免重新加载整个页面
+                        const { merchantGroups, selectedCartIds } = this.data;
+                        const groupIndex = merchantGroups.findIndex(g => g.merchantId === merchantId);
+                        if (groupIndex !== -1) {
+                            const removedGroup = merchantGroups[groupIndex];
+                            const newGroups = merchantGroups.filter((_, i) => i !== groupIndex);
+                            const newSelectedIds = selectedCartIds.filter(id => id !== removedGroup.cartId);
+                            this.setData({
+                                merchantGroups: newGroups,
+                                selectedCartIds: newSelectedIds
                             });
-                            // 本地移除该商户分组，避免重新加载整个页面
-                            const { merchantGroups, selectedCartIds } = this.data;
-                            const groupIndex = merchantGroups.findIndex(g => g.merchantId === merchantId);
-                            if (groupIndex !== -1) {
-                                const removedGroup = merchantGroups[groupIndex];
-                                const newGroups = merchantGroups.filter((_, i) => i !== groupIndex);
-                                const newSelectedIds = selectedCartIds.filter(id => id !== removedGroup.cartId);
-                                this.setData({
-                                    merchantGroups: newGroups,
-                                    selectedCartIds: newSelectedIds
-                                });
-                                // 重新计算总价并同步
-                                this.calculateCheckoutTotal();
-                                this.syncToGlobalStore();
-                            }
-                        }
-                        catch (error) {
-                            wx.showToast({ title: '清空失败', icon: 'none' });
+                            // 重新计算总价并同步
+                            this.calculateCheckoutTotal();
+                            this.syncToGlobalStore();
                         }
                     }
-                })
-            });
+                    catch (error) {
+                        wx.showToast({ title: '清空失败', icon: 'none' });
+                    }
+                }
+            }
         });
     },
     /**

@@ -32,15 +32,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -74,10 +65,11 @@ Page({
         this.loadDefaultAddress();
     },
     onShow() {
+        var _a;
         // If returning from address selection, we might have a selectedAddressId
         const pages = getCurrentPages();
         const currPage = pages[pages.length - 1];
-        if (currPage.data.selectedAddressId) {
+        if ((_a = currPage.data) === null || _a === void 0 ? void 0 : _a.selectedAddressId) {
             this.loadAddressById(currPage.data.selectedAddressId);
             currPage.setData({ selectedAddressId: null });
         }
@@ -85,163 +77,155 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },
-    loadCart() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                this.setData({ loading: true });
-                console.log('[Order-confirm] Loading takeout cart...');
-                // Step 1: 获取外卖类型的购物车列表
-                const userCarts = yield CartAPI.getUserCarts('takeout');
-                console.log('[Order-confirm] userCarts:', JSON.stringify(userCarts));
-                if (!userCarts.carts || userCarts.carts.length === 0) {
-                    console.log('[Order-confirm] No carts found, navigating back');
-                    wx.showToast({ title: '购物车为空', icon: 'none' });
+    async loadCart() {
+        try {
+            this.setData({ loading: true });
+            console.log('[Order-confirm] Loading takeout cart...');
+            // Step 1: 获取外卖类型的购物车列表
+            const userCarts = await CartAPI.getUserCarts('takeout');
+            console.log('[Order-confirm] userCarts:', JSON.stringify(userCarts));
+            if (!userCarts.carts || userCarts.carts.length === 0) {
+                console.log('[Order-confirm] No carts found, navigating back');
+                wx.showToast({ title: '购物车为空', icon: 'none' });
+                setTimeout(() => wx.navigateBack(), 1500);
+                return;
+            }
+            // 如果有指定的cart_ids，只使用这些购物车
+            const { cartIds } = this.data;
+            let selectedCarts = userCarts.carts;
+            if (cartIds.length > 0) {
+                selectedCarts = userCarts.carts.filter(c => cartIds.includes(c.cart_id || 0));
+            }
+            if (selectedCarts.length === 0) {
+                // 如果没有匹配的cart_ids，使用第一个购物车
+                selectedCarts = [userCarts.carts[0]];
+            }
+            // 逐商户拉取购物车详情
+            const cartViews = [];
+            for (const merchantCart of selectedCarts) {
+                const merchantId = merchantCart.merchant_id;
+                const orderType = (merchantCart.order_type || 'takeout');
+                if (!merchantId) {
+                    wx.showToast({ title: '商户信息缺失', icon: 'none' });
                     setTimeout(() => wx.navigateBack(), 1500);
                     return;
                 }
-                // 如果有指定的cart_ids，只使用这些购物车
-                const { cartIds } = this.data;
-                let selectedCarts = userCarts.carts;
-                if (cartIds.length > 0) {
-                    selectedCarts = userCarts.carts.filter(c => cartIds.includes(c.cart_id || 0));
+                const cartDetail = await CartAPI.getCart({
+                    merchant_id: merchantId,
+                    order_type: orderType,
+                    table_id: merchantCart.table_id || undefined,
+                    reservation_id: merchantCart.reservation_id || undefined
+                });
+                if (!cartDetail.items || cartDetail.items.length === 0) {
+                    continue;
                 }
-                if (selectedCarts.length === 0) {
-                    // 如果没有匹配的cart_ids，使用第一个购物车
-                    selectedCarts = [userCarts.carts[0]];
-                }
-                // 逐商户拉取购物车详情
-                const cartViews = [];
-                for (const merchantCart of selectedCarts) {
-                    const merchantId = merchantCart.merchant_id;
-                    const orderType = merchantCart.order_type || 'takeout';
-                    if (!merchantId) {
-                        wx.showToast({ title: '商户信息缺失', icon: 'none' });
-                        setTimeout(() => wx.navigateBack(), 1500);
-                        return;
-                    }
-                    const cartDetail = yield CartAPI.getCart({
-                        merchant_id: merchantId,
-                        order_type: orderType,
-                        table_id: merchantCart.table_id || undefined,
-                        reservation_id: merchantCart.reservation_id || undefined
-                    });
-                    if (!cartDetail.items || cartDetail.items.length === 0) {
-                        continue;
-                    }
-                    const items = cartDetail.items.map((item) => ({
-                        id: item.id,
-                        dishId: item.dish_id,
-                        comboId: item.combo_id,
-                        name: item.name,
-                        imageUrl: (0, image_1.getPublicImageUrl)(item.image_url || ''),
-                        quantity: item.quantity,
-                        unitPrice: item.unit_price,
-                        priceDisplay: (0, util_1.formatPriceNoSymbol)(item.unit_price),
-                        subtotal: item.subtotal,
-                        subtotalDisplay: (0, util_1.formatPriceNoSymbol)(item.subtotal),
-                        customizations: item.customizations || undefined
-                    }));
-                    const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
-                    const subtotal = cartDetail.subtotal;
-                    cartViews.push({
-                        merchantId,
-                        merchantName: merchantCart.merchant_name || '商家',
-                        orderType,
-                        tableId: merchantCart.table_id || undefined,
-                        reservationId: merchantCart.reservation_id || undefined,
-                        items,
-                        totalCount,
-                        subtotal,
-                        subtotalDisplay: (0, util_1.formatPriceNoSymbol)(subtotal),
-                        deliveryFee: 0,
-                        deliveryFeeDisplay: '待计算',
-                        deliveryFeeDiscount: 0,
-                        deliveryDistance: 0,
-                        deliveryEtaMinutes: 0,
-                        deliveryEtaDisplay: '',
-                        orderTotal: subtotal,
-                        orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(subtotal)
-                    });
-                }
-                if (cartViews.length === 0) {
-                    wx.showToast({ title: '购物车为空', icon: 'none' });
-                    setTimeout(() => wx.navigateBack(), 1500);
-                    return;
-                }
-                this.setData({ carts: cartViews, loading: false });
-                // 根据地址计算每个商户配送费
-                yield this.calculateDeliveryFee();
+                const items = cartDetail.items.map((item) => ({
+                    id: item.id,
+                    dishId: item.dish_id,
+                    comboId: item.combo_id,
+                    name: item.name,
+                    imageUrl: (0, image_1.getPublicImageUrl)(item.image_url || ''),
+                    quantity: item.quantity,
+                    unitPrice: item.unit_price,
+                    priceDisplay: (0, util_1.formatPriceNoSymbol)(item.unit_price),
+                    subtotal: item.subtotal,
+                    subtotalDisplay: (0, util_1.formatPriceNoSymbol)(item.subtotal),
+                    customizations: item.customizations || undefined
+                }));
+                const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
+                const subtotal = cartDetail.subtotal;
+                cartViews.push({
+                    merchantId,
+                    merchantName: merchantCart.merchant_name || '商家',
+                    orderType,
+                    tableId: merchantCart.table_id || undefined,
+                    reservationId: merchantCart.reservation_id || undefined,
+                    items,
+                    totalCount,
+                    subtotal,
+                    subtotalDisplay: (0, util_1.formatPriceNoSymbol)(subtotal),
+                    deliveryFee: 0,
+                    deliveryFeeDisplay: '待计算',
+                    deliveryFeeDiscount: 0,
+                    deliveryDistance: 0,
+                    deliveryEtaMinutes: 0,
+                    deliveryEtaDisplay: '',
+                    orderTotal: subtotal,
+                    orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(subtotal)
+                });
             }
-            catch (error) {
-                logger_1.logger.error('Load cart failed', error, 'Order-confirm');
-                wx.showToast({ title: '加载购物车失败', icon: 'error' });
-                this.setData({ loading: false });
+            if (cartViews.length === 0) {
+                wx.showToast({ title: '购物车为空', icon: 'none' });
+                setTimeout(() => wx.navigateBack(), 1500);
+                return;
             }
-        });
+            this.setData({ carts: cartViews, loading: false });
+            // 根据地址计算每个商户配送费
+            await this.calculateDeliveryFee();
+        }
+        catch (error) {
+            logger_1.logger.error('Load cart failed', error, 'Order-confirm');
+            wx.showToast({ title: '加载购物车失败', icon: 'error' });
+            this.setData({ loading: false });
+        }
     },
-    loadDefaultAddress() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const addresses = yield address_1.default.getAddresses();
-                if (addresses && addresses.length > 0) {
-                    const defaultAddr = addresses.find((a) => a.is_default) || addresses[0];
-                    this.setData({ address: defaultAddr });
-                    yield this.calculateDeliveryFee();
-                }
+    async loadDefaultAddress() {
+        try {
+            const addresses = await address_1.default.getAddresses();
+            if (addresses && addresses.length > 0) {
+                const defaultAddr = addresses.find((a) => a.is_default) || addresses[0];
+                this.setData({ address: defaultAddr });
+                await this.calculateDeliveryFee();
             }
-            catch (error) {
-                logger_1.logger.error('Load address failed', error, 'Order-confirm');
-            }
-        });
+        }
+        catch (error) {
+            logger_1.logger.error('Load address failed', error, 'Order-confirm');
+        }
     },
-    loadAddressById(id) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const addresses = yield address_1.default.getAddresses();
-                const addr = addresses.find((a) => String(a.id) === String(id));
-                if (addr) {
-                    this.setData({ address: addr });
-                    yield this.calculateDeliveryFee();
-                }
+    async loadAddressById(id) {
+        try {
+            const addresses = await address_1.default.getAddresses();
+            const addr = addresses.find((a) => String(a.id) === String(id));
+            if (addr) {
+                this.setData({ address: addr });
+                await this.calculateDeliveryFee();
             }
-            catch (error) {
-                logger_1.logger.error('Load address failed', error, 'Order-confirm');
-            }
-        });
+        }
+        catch (error) {
+            logger_1.logger.error('Load address failed', error, 'Order-confirm');
+        }
     },
     onSelectAddress() {
         wx.navigateTo({ url: '/pages/user_center/addresses/index?select=true' });
     },
     onRemarkInput(e) {
-        var _a;
-        const merchantId = Number((_a = e.currentTarget.dataset) === null || _a === void 0 ? void 0 : _a.merchantId);
-        if (!merchantId)
+        const { merchantId } = e.currentTarget.dataset;
+        const merchantIdNum = Number(merchantId);
+        if (!merchantIdNum)
             return;
-        const remarks = Object.assign(Object.assign({}, this.data.remarks), { [merchantId]: e.detail.value });
+        const remarks = { ...this.data.remarks, [merchantIdNum]: e.detail.value };
         this.setData({ remarks });
     },
     onDeliveryTimeChange() { },
     /**
      * 选择预约时间（仅当天，默认营业时段 10:00-22:00，30 分钟粒度）
      */
-    chooseScheduleSlot() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const slots = this.buildTodaySlots(10, 22, 30);
-            if (slots.length === 0) {
-                wx.showToast({ title: '今日无可选时间', icon: 'none' });
-                this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' });
-                return;
-            }
-            try {
-                const res = yield wx.showActionSheet({ itemList: slots });
-                const picked = slots[res.tapIndex];
-                this.setData({ deliveryTime: 'SCHEDULED', scheduleSlot: picked });
-            }
-            catch (err) {
-                // 取消选择则回退到尽快送达
-                this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' });
-            }
-        });
+    async chooseScheduleSlot() {
+        const slots = this.buildTodaySlots(10, 22, 30);
+        if (slots.length === 0) {
+            wx.showToast({ title: '今日无可选时间', icon: 'none' });
+            this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' });
+            return;
+        }
+        try {
+            const res = await wx.showActionSheet({ itemList: slots });
+            const picked = slots[res.tapIndex];
+            this.setData({ deliveryTime: 'SCHEDULED', scheduleSlot: picked });
+        }
+        catch (err) {
+            // 取消选择则回退到尽快送达
+            this.setData({ deliveryTime: 'ASAP', scheduleSlot: '' });
+        }
     },
     /**
      * 构建当天可选时间段
@@ -265,59 +249,65 @@ Page({
     /**
      * 计算配送费并更新应付总额
      */
-    calculateDeliveryFee() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { carts, address } = this.data;
-            if (!carts || carts.length === 0)
-                return;
-            if (!address) {
-                this.setData({
-                    summaryDeliveryDisplay: '待选择地址',
-                    orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(carts.reduce((s, c) => s + (c.subtotal || 0), 0))
+    async calculateDeliveryFee() {
+        const { carts, address } = this.data;
+        if (!carts || carts.length === 0)
+            return;
+        if (!address) {
+            this.setData({
+                summaryDeliveryDisplay: '待选择地址',
+                orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(carts.reduce((s, c) => s + (c.subtotal || 0), 0))
+            });
+            return;
+        }
+        try {
+            const updated = [];
+            for (const cart of carts) {
+                const result = await CartAPI.calculateCart({
+                    merchant_id: cart.merchantId,
+                    order_type: cart.orderType,
+                    address_id: address.id,
+                    latitude: address.latitude ? Number(address.latitude) : undefined,
+                    longitude: address.longitude ? Number(address.longitude) : undefined
                 });
-                return;
-            }
-            try {
-                const updated = [];
-                for (const cart of carts) {
-                    const result = yield CartAPI.calculateCart({
-                        merchant_id: cart.merchantId,
-                        order_type: cart.orderType,
-                        address_id: address.id,
-                        latitude: address.latitude ? Number(address.latitude) : undefined,
-                        longitude: address.longitude ? Number(address.longitude) : undefined
-                    });
-                    const deliveryFee = result.delivery_fee || 0;
-                    const deliveryFeeDiscount = result.delivery_fee_discount || 0;
-                    const deliveryDistance = result.delivery_distance || 0;
-                    const orderTotal = (cart.subtotal || 0) + deliveryFee;
-                    const deliveryEtaMinutes = result.delivery_eta_minutes || 0;
-                    const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes);
-                    updated.push(Object.assign(Object.assign({}, cart), { deliveryFee, deliveryFeeDisplay: deliveryFee > 0 ? '¥' + (0, util_1.formatPriceNoSymbol)(deliveryFee) : '免配送费', deliveryFeeDiscount,
-                        deliveryDistance,
-                        orderTotal, orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(orderTotal), deliveryEtaMinutes,
-                        deliveryEtaDisplay }));
-                }
-                const summarySubtotal = updated.reduce((sum, c) => sum + (c.subtotal || 0), 0);
-                const summaryDelivery = updated.reduce((sum, c) => sum + (c.deliveryFee || 0), 0);
-                const orderTotal = summarySubtotal + summaryDelivery;
-                this.setData({
-                    carts: updated,
-                    summarySubtotalDisplay: (0, util_1.formatPriceNoSymbol)(summarySubtotal),
-                    summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + (0, util_1.formatPriceNoSymbol)(summaryDelivery) : '免配送费',
-                    orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(orderTotal)
+                const deliveryFee = result.delivery_fee || 0;
+                const deliveryFeeDiscount = result.delivery_fee_discount || 0;
+                const deliveryDistance = result.delivery_distance || 0;
+                const orderTotal = (cart.subtotal || 0) + deliveryFee;
+                const deliveryEtaMinutes = result.delivery_eta_minutes || 0;
+                const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes);
+                updated.push({
+                    ...cart,
+                    deliveryFee,
+                    deliveryFeeDisplay: deliveryFee > 0 ? '¥' + (0, util_1.formatPriceNoSymbol)(deliveryFee) : '免配送费',
+                    deliveryFeeDiscount,
+                    deliveryDistance,
+                    orderTotal,
+                    orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(orderTotal),
+                    deliveryEtaMinutes,
+                    deliveryEtaDisplay
                 });
             }
-            catch (error) {
-                logger_1.logger.error('Calculate delivery fee failed', error, 'Order-confirm');
-                wx.showModal({
-                    title: '调试',
-                    content: '计算运费失败: ' + (error === null || error === void 0 ? void 0 : error.message) || '未知错误',
-                    showCancel: false
-                });
-                // 保留现有金额显示，不打断流程
-            }
-        });
+            const summarySubtotal = updated.reduce((sum, c) => sum + (c.subtotal || 0), 0);
+            const summaryDelivery = updated.reduce((sum, c) => sum + (c.deliveryFee || 0), 0);
+            const orderTotal = summarySubtotal + summaryDelivery;
+            this.setData({
+                carts: updated,
+                summarySubtotalDisplay: (0, util_1.formatPriceNoSymbol)(summarySubtotal),
+                summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + (0, util_1.formatPriceNoSymbol)(summaryDelivery) : '免配送费',
+                orderTotalDisplay: (0, util_1.formatPriceNoSymbol)(orderTotal)
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Calculate delivery fee failed', error, 'Order-confirm');
+            const errMessage = error instanceof Error ? error.message : String(error);
+            wx.showModal({
+                title: '调试',
+                content: `计算运费失败: ${errMessage || '未知错误'}`,
+                showCancel: false
+            });
+            // 保留现有金额显示，不打断流程
+        }
     },
     formatEtaWindow(etaMinutes) {
         if (!etaMinutes || etaMinutes <= 0)
@@ -333,104 +323,113 @@ Page({
         const mm = String(date.getMinutes()).padStart(2, '0');
         return `${hh}:${mm}`;
     },
-    onSubmitOrder() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { carts, address, remarks } = this.data;
-            if (!address || !address.id) {
-                wx.showToast({ title: '请选择收货地址', icon: 'none' });
-                return;
+    normalizeCustomizations(customizations) {
+        const normalized = {};
+        Object.entries(customizations).forEach(([key, value]) => {
+            if (typeof value === 'number' || typeof value === 'string') {
+                normalized[key] = value;
             }
-            if (!carts || carts.length === 0) {
-                wx.showToast({ title: '购物车为空', icon: 'none' });
-                return;
-            }
-            this.setData({ loading: true });
-            try {
-                const ordersCreated = [];
-                for (const cart of carts) {
-                    const requestData = {
-                        merchant_id: cart.merchantId,
-                        items: cart.items.map((item) => {
-                            const orderItem = {
-                                quantity: item.quantity
-                            };
-                            if (item.dishId)
-                                orderItem.dish_id = item.dishId;
-                            if (item.comboId)
-                                orderItem.combo_id = item.comboId;
-                            if (item.customizations)
-                                orderItem.customizations = item.customizations;
-                            return orderItem;
-                        }),
-                        order_type: cart.orderType,
-                        address_id: address.id,
-                        notes: remarks[cart.merchantId] || '',
-                        delivery_fee: cart.deliveryFee,
-                        delivery_fee_discount: cart.deliveryFeeDiscount,
-                        delivery_distance: cart.deliveryDistance
-                    };
-                    const order = yield (0, order_1.createOrder)(requestData);
-                    ordersCreated.push(order.id);
-                    // 清理当前商户购物车项
-                    const cartItemIds = cart.items.map((item) => item.id).filter(Boolean);
-                    if (cartItemIds.length > 0) {
-                        try {
-                            yield Promise.all(cartItemIds.map((id) => CartAPI.removeFromCart(id)));
-                        }
-                        catch (clearErr) {
-                            logger_1.logger.error('Remove cart items after order failed', clearErr, 'Order-confirm');
-                            showDebugModal('清理购物车失败（已创建订单）', clearErr);
-                        }
-                    }
-                }
-                if (ordersCreated.length === 1) {
-                    yield this.handlePayment(ordersCreated[0]);
-                }
-                else {
-                    this.setData({ loading: false });
-                    wx.showModal({
-                        title: '订单已创建',
-                        content: `已创建 ${ordersCreated.length} 个订单，当前不支持合单支付，请在订单列表逐单支付。`,
-                        showCancel: false,
-                        success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
-                    });
-                }
-            }
-            catch (error) {
-                logger_1.logger.error('Create order failed:', error, 'Order-confirm');
-                wx.showToast({ title: '下单失败', icon: 'error' });
-                this.setData({ loading: false });
+            else if (value !== null && value !== undefined) {
+                normalized[key] = String(value);
             }
         });
+        return normalized;
     },
-    handlePayment(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const paymentResult = yield (0, payment_1.createOrderPayment)(orderId);
-                if (paymentResult.pay_params) {
+    async onSubmitOrder() {
+        const { carts, address, remarks } = this.data;
+        if (!address || !address.id) {
+            wx.showToast({ title: '请选择收货地址', icon: 'none' });
+            return;
+        }
+        if (!carts || carts.length === 0) {
+            wx.showToast({ title: '购物车为空', icon: 'none' });
+            return;
+        }
+        this.setData({ loading: true });
+        try {
+            const ordersCreated = [];
+            for (const cart of carts) {
+                const requestData = {
+                    merchant_id: cart.merchantId,
+                    items: cart.items.map((item) => {
+                        const orderItem = {
+                            quantity: item.quantity
+                        };
+                        if (item.dishId)
+                            orderItem.dish_id = item.dishId;
+                        if (item.comboId)
+                            orderItem.combo_id = item.comboId;
+                        if (item.customizations) {
+                            orderItem.customizations = this.normalizeCustomizations(item.customizations);
+                        }
+                        return orderItem;
+                    }),
+                    order_type: cart.orderType,
+                    address_id: address.id,
+                    notes: remarks[cart.merchantId] || '',
+                    delivery_fee: cart.deliveryFee,
+                    delivery_fee_discount: cart.deliveryFeeDiscount,
+                    delivery_distance: cart.deliveryDistance
+                };
+                const order = await (0, order_1.createOrder)(requestData);
+                ordersCreated.push(order.id);
+                // 清理当前商户购物车项
+                const cartItemIds = cart.items.map((item) => item.id).filter(Boolean);
+                if (cartItemIds.length > 0) {
                     try {
-                        yield (0, payment_1.invokeWechatPay)(paymentResult.pay_params);
-                        wx.showToast({ title: '支付成功', icon: 'success' });
+                        await Promise.all(cartItemIds.map((id) => CartAPI.removeFromCart(id)));
                     }
-                    catch (err) {
-                        console.log('[Order-confirm] Payment cancelled or failed:', err);
-                        wx.showToast({ title: '支付取消', icon: 'none' });
+                    catch (clearErr) {
+                        logger_1.logger.error('Remove cart items after order failed', clearErr, 'Order-confirm');
+                        showDebugModal('清理购物车失败（已创建订单）', clearErr);
                     }
-                    finally {
-                        setTimeout(() => {
-                            wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` });
-                        }, 1500);
-                    }
-                }
-                else {
-                    this.showPaymentDevModal(orderId);
                 }
             }
-            catch (paymentError) {
-                console.error('[Order-confirm] Payment creation failed:', paymentError);
+            if (ordersCreated.length === 1) {
+                await this.handlePayment(ordersCreated[0]);
+            }
+            else {
+                this.setData({ loading: false });
+                wx.showModal({
+                    title: '订单已创建',
+                    content: `已创建 ${ordersCreated.length} 个订单，当前不支持合单支付，请在订单列表逐单支付。`,
+                    showCancel: false,
+                    success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
+                });
+            }
+        }
+        catch (error) {
+            logger_1.logger.error('Create order failed:', error, 'Order-confirm');
+            wx.showToast({ title: '下单失败', icon: 'error' });
+            this.setData({ loading: false });
+        }
+    },
+    async handlePayment(orderId) {
+        try {
+            const paymentResult = await (0, payment_1.createOrderPayment)(orderId);
+            if (paymentResult.pay_params) {
+                try {
+                    await (0, payment_1.invokeWechatPay)(paymentResult.pay_params);
+                    wx.showToast({ title: '支付成功', icon: 'success' });
+                }
+                catch (err) {
+                    console.log('[Order-confirm] Payment cancelled or failed:', err);
+                    wx.showToast({ title: '支付取消', icon: 'none' });
+                }
+                finally {
+                    setTimeout(() => {
+                        wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` });
+                    }, 1500);
+                }
+            }
+            else {
                 this.showPaymentDevModal(orderId);
             }
-        });
+        }
+        catch (paymentError) {
+            console.error('[Order-confirm] Payment creation failed:', paymentError);
+            this.showPaymentDevModal(orderId);
+        }
     },
     showPaymentDevModal(orderId) {
         this.setData({ loading: false });
@@ -445,3 +444,15 @@ Page({
         });
     }
 });
+function showDebugModal(title, error) {
+    const message = error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+            ? error
+            : JSON.stringify(error);
+    wx.showModal({
+        title,
+        content: message || '未知错误',
+        showCancel: false
+    });
+}

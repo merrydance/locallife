@@ -75,13 +75,15 @@ Page({
             }
 
             const result = await operatorMerchantManagementService.getMerchantList(params)
-
-            const merchants = refresh ? result.merchants : [...this.data.merchants, ...result.merchants]
+            const list = result.merchants || []
+            const merchants = refresh ? list : [...this.data.merchants, ...list]
+            const total = result.total || 0
+            const hasMore = merchants.length < total
 
             this.setData({
                 merchants,
-                total: result.total,
-                hasMore: result.has_more,
+                total,
+                hasMore,
                 page: this.data.page + 1
             })
         } catch (error) {

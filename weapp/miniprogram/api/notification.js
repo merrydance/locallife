@@ -1,40 +1,40 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notificationService = exports.NotificationService = void 0;
 const request_1 = require("../utils/request");
 class NotificationService {
-    getNotifications(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/notifications',
-                method: 'GET',
-                data: params
-            });
+    async getNotifications(params) {
+        var _a, _b;
+        const pageId = (_a = params.page_id) !== null && _a !== void 0 ? _a : 1;
+        const pageSize = (_b = params.page_size) !== null && _b !== void 0 ? _b : 20;
+        const offset = (pageId - 1) * pageSize;
+        return (0, request_1.request)({
+            url: '/v1/notifications',
+            method: 'GET',
+            data: {
+                type: params.type,
+                is_read: params.is_read,
+                limit: pageSize,
+                offset
+            }
         });
     }
-    markAsRead(id) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/notifications/${id}/read`,
-                method: 'POST'
-            });
+    async markAsRead(id) {
+        return (0, request_1.request)({
+            url: `/v1/notifications/${id}/read`,
+            method: 'PUT'
         });
     }
-    markAllAsRead() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/notifications/read-all`,
-                method: 'POST'
-            });
+    async markAllAsRead() {
+        return (0, request_1.request)({
+            url: `/v1/notifications/read-all`,
+            method: 'PUT'
+        });
+    }
+    async getUnreadCount() {
+        return (0, request_1.request)({
+            url: '/v1/notifications/unread/count',
+            method: 'GET'
         });
     }
 }

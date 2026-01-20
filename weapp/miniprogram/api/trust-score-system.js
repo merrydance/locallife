@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：信任分系统、风控检测、申诉审核、食品安全
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.trustScoreAnalyticsService = exports.TrustScoreSystemAdapter = exports.TrustScoreAnalyticsService = exports.foodSafetyService = exports.fraudDetectionService = exports.trustScoreSystemService = exports.FoodSafetyService = exports.FraudDetectionService = exports.TrustScoreSystemService = void 0;
 exports.getUserTrustScoreReport = getUserTrustScoreReport;
@@ -35,10 +26,8 @@ class TrustScoreSystemService {
      * @param role 用户角色
      * @param userId 用户ID
      */
-    getTrustScoreProfile(role, userId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return Promise.reject(new Error('trust-score profile is deprecated'));
-        });
+    async getTrustScoreProfile(role, userId) {
+        return Promise.reject(new Error('trust-score profile is deprecated'));
     }
     /**
      * 获取信任分历史记录
@@ -47,31 +36,25 @@ class TrustScoreSystemService {
      * @param page 页码
      * @param limit 每页数量
      */
-    getTrustScoreHistory(role_1, userId_1) {
-        return __awaiter(this, arguments, void 0, function* (role, userId, page = 1, limit = 20) {
-            return Promise.reject(new Error('trust-score history is deprecated'));
-        });
+    async getTrustScoreHistory(role, userId, page = 1, limit = 20) {
+        return Promise.reject(new Error('trust-score history is deprecated'));
     }
     /**
      * 提交信任分申诉
      * @param appealData 申诉数据
      */
-    submitTrustScoreAppeal(appealData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return Promise.reject(new Error('trust-score appeal is deprecated'));
-        });
+    async submitTrustScoreAppeal(appealData) {
+        return Promise.reject(new Error('trust-score appeal is deprecated'));
     }
     /**
      * 提交索赔申请
      * @param claimData 索赔数据
      */
-    submitClaim(claimData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/claims',
-                method: 'POST',
-                data: claimData
-            });
+    async submitClaim(claimData) {
+        return (0, request_1.request)({
+            url: '/v1/claims',
+            method: 'POST',
+            data: claimData
         });
     }
     /**
@@ -79,23 +62,19 @@ class TrustScoreSystemService {
      * @param claimId 索赔ID
      * @param reviewData 审核数据
      */
-    reviewClaim(claimId, reviewData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/claims/${claimId}/review`,
-                method: 'PATCH',
-                data: reviewData
-            });
+    async reviewClaim(claimId, reviewData) {
+        return (0, request_1.request)({
+            url: `/v1/claims/${claimId}/review`,
+            method: 'PATCH',
+            data: reviewData
         });
     }
     /**
      * 申请信任分恢复
      * @param recoveryData 恢复数据
      */
-    requestTrustScoreRecovery(recoveryData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return Promise.reject(new Error('trust-score recovery is deprecated'));
-        });
+    async requestTrustScoreRecovery(recoveryData) {
+        return Promise.reject(new Error('trust-score recovery is deprecated'));
     }
 }
 exports.TrustScoreSystemService = TrustScoreSystemService;
@@ -109,13 +88,11 @@ class FraudDetectionService {
      * 执行风控检测
      * @param detectionData 检测数据
      */
-    detectFraud(detectionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/fraud/detect',
-                method: 'POST',
-                data: detectionData
-            });
+    async detectFraud(detectionData) {
+        return (0, request_1.request)({
+            url: '/v1/fraud/detect',
+            method: 'POST',
+            data: detectionData
         });
     }
     /**
@@ -123,13 +100,11 @@ class FraudDetectionService {
      * @param merchantId 商户ID
      * @param suspendData 暂停数据
      */
-    suspendMerchant(merchantId, suspendData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/food-safety/merchants/${merchantId}/suspend`,
-                method: 'PATCH',
-                data: suspendData
-            });
+    async suspendMerchant(merchantId, suspendData) {
+        return (0, request_1.request)({
+            url: `/v1/food-safety/merchants/${merchantId}/suspend`,
+            method: 'PATCH',
+            data: suspendData
         });
     }
 }
@@ -144,13 +119,11 @@ class FoodSafetyService {
      * 提交食品安全报告
      * @param reportData 报告数据
      */
-    submitFoodSafetyReport(reportData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/food-safety/report',
-                method: 'POST',
-                data: reportData
-            });
+    async submitFoodSafetyReport(reportData) {
+        return (0, request_1.request)({
+            url: '/v1/food-safety/report',
+            method: 'POST',
+            data: reportData
         });
     }
 }
@@ -473,26 +446,24 @@ exports.trustScoreAnalyticsService = new TrustScoreAnalyticsService();
  * @param role 用户角色
  * @param userId 用户ID
  */
-function getUserTrustScoreReport(role, userId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [profile, history] = yield Promise.all([
-            exports.trustScoreSystemService.getTrustScoreProfile(role, userId),
-            exports.trustScoreSystemService.getTrustScoreHistory(role, userId, 1, 50)
-        ]);
-        const analysis = exports.trustScoreAnalyticsService.analyzeTrustScoreStatus(profile);
-        // 简化的风险评估
-        const riskAssessment = {
-            currentRisk: analysis.riskLevel,
-            trendAnalysis: analyzeTrend(history.history),
-            recommendations: analysis.recommendations
-        };
-        return {
-            profile,
-            history,
-            analysis,
-            riskAssessment
-        };
-    });
+async function getUserTrustScoreReport(role, userId) {
+    const [profile, history] = await Promise.all([
+        exports.trustScoreSystemService.getTrustScoreProfile(role, userId),
+        exports.trustScoreSystemService.getTrustScoreHistory(role, userId, 1, 50)
+    ]);
+    const analysis = exports.trustScoreAnalyticsService.analyzeTrustScoreStatus(profile);
+    // 简化的风险评估
+    const riskAssessment = {
+        currentRisk: analysis.riskLevel,
+        trendAnalysis: analyzeTrend(history.history),
+        recommendations: analysis.recommendations
+    };
+    return {
+        profile,
+        history,
+        analysis,
+        riskAssessment
+    };
 }
 /**
  * 执行综合风控检查
@@ -501,27 +472,25 @@ function getUserTrustScoreReport(role, userId) {
  * @param actionType 操作类型
  * @param contextData 上下文数据
  */
-function performComprehensiveRiskCheck(userId, role, actionType, contextData) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [trustScore, fraudDetection] = yield Promise.all([
-            exports.trustScoreSystemService.getTrustScoreProfile(role, userId),
-            exports.fraudDetectionService.detectFraud({
-                user_id: userId,
-                role,
-                action_type: actionType,
-                context_data: contextData
-            })
-        ]);
-        const riskAnalysis = exports.trustScoreAnalyticsService.analyzeFraudDetection(fraudDetection);
-        // 综合决策逻辑
-        const finalDecision = makeFinalRiskDecision(trustScore, fraudDetection, riskAnalysis);
-        return {
-            trustScore,
-            fraudDetection,
-            riskAnalysis,
-            finalDecision
-        };
-    });
+async function performComprehensiveRiskCheck(userId, role, actionType, contextData) {
+    const [trustScore, fraudDetection] = await Promise.all([
+        exports.trustScoreSystemService.getTrustScoreProfile(role, userId),
+        exports.fraudDetectionService.detectFraud({
+            user_id: userId,
+            role,
+            action_type: actionType,
+            context_data: contextData
+        })
+    ]);
+    const riskAnalysis = exports.trustScoreAnalyticsService.analyzeFraudDetection(fraudDetection);
+    // 综合决策逻辑
+    const finalDecision = makeFinalRiskDecision(trustScore, fraudDetection, riskAnalysis);
+    return {
+        trustScore,
+        fraudDetection,
+        riskAnalysis,
+        finalDecision
+    };
 }
 /**
  * 分析趋势

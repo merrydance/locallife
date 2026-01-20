@@ -4,15 +4,6 @@
  * 功能：代金券的创建、编辑、启用/停用、删除
  * 遵循 PC-SaaS 布局规范
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const logger_1 = require("@/utils/logger");
 const util_1 = require("@/utils/util");
@@ -53,56 +44,58 @@ Page({
         calendarMonth: 1,
         calendarDays: []
     },
-    onLoad() {
-        return __awaiter(this, void 0, void 0, function* () {
-            yield this.initData();
-        });
+    async onLoad() {
+        await this.initData();
     },
-    initData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const app = getApp();
-            const merchantId = app.globalData.merchantId;
-            if (merchantId) {
-                this.setData({ merchantId: Number(merchantId) });
-                yield this.loadVouchers();
-            }
-            else {
-                app.userInfoReadyCallback = () => __awaiter(this, void 0, void 0, function* () {
-                    if (app.globalData.merchantId) {
-                        this.setData({ merchantId: Number(app.globalData.merchantId) });
-                        yield this.loadVouchers();
-                    }
-                });
-            }
-        });
+    async initData() {
+        const app = getApp();
+        const merchantId = app.globalData.merchantId;
+        if (merchantId) {
+            this.setData({ merchantId: Number(merchantId) });
+            await this.loadVouchers();
+        }
+        else {
+            app.userInfoReadyCallback = async () => {
+                if (app.globalData.merchantId) {
+                    this.setData({ merchantId: Number(app.globalData.merchantId) });
+                    await this.loadVouchers();
+                }
+            };
+        }
     },
     onSidebarCollapse(e) {
         this.setData({ sidebarCollapsed: e.detail.collapsed });
     },
     // ==================== 数据加载 ====================
-    loadVouchers() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { merchantId } = this.data;
-            if (!merchantId)
-                return;
-            this.setData({ loading: true });
-            try {
-                const vouchers = yield marketing_management_1.VoucherManagementService.getVoucherList(merchantId, {
-                    page_id: 1,
-                    page_size: 50
-                });
-                // 添加状态信息和价格预处理
-                const vouchersWithStatus = vouchers.map(v => (Object.assign(Object.assign({}, v), { statusText: marketing_management_1.MarketingAdapter.getVoucherStatusText(v), statusClass: this.getStatusClass(v), amount_display: (0, util_1.formatPriceNoSymbol)(v.amount || 0), min_order_amount_display: (0, util_1.formatPriceNoSymbol)(v.min_order_amount || 0), valid_from_display: v.valid_from ? v.valid_from.slice(0, 10) : '-', valid_until_display: v.valid_until ? v.valid_until.slice(0, 10) : '-' })));
-                this.setData({ vouchers: vouchersWithStatus });
-            }
-            catch (error) {
-                logger_1.logger.error('加载代金券失败', error, 'vouchers');
-                wx.showToast({ title: '加载失败', icon: 'error' });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+    async loadVouchers() {
+        const { merchantId } = this.data;
+        if (!merchantId)
+            return;
+        this.setData({ loading: true });
+        try {
+            const vouchers = await marketing_management_1.VoucherManagementService.getVoucherList(merchantId, {
+                page_id: 1,
+                page_size: 50
+            });
+            // 添加状态信息和价格预处理
+            const vouchersWithStatus = vouchers.map(v => ({
+                ...v,
+                statusText: marketing_management_1.MarketingAdapter.getVoucherStatusText(v),
+                statusClass: this.getStatusClass(v),
+                amount_display: (0, util_1.formatPriceNoSymbol)(v.amount || 0),
+                min_order_amount_display: (0, util_1.formatPriceNoSymbol)(v.min_order_amount || 0),
+                valid_from_display: v.valid_from ? v.valid_from.slice(0, 10) : '-',
+                valid_until_display: v.valid_until ? v.valid_until.slice(0, 10) : '-'
+            }));
+            this.setData({ vouchers: vouchersWithStatus });
+        }
+        catch (error) {
+            logger_1.logger.error('加载代金券失败', error, 'vouchers');
+            wx.showToast({ title: '加载失败', icon: 'error' });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     getStatusClass(v) {
         if (!v.is_active)
@@ -174,114 +167,108 @@ Page({
         }
         this.setData({ 'form.allowed_order_types': types });
     },
-    onSaveVoucher() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { merchantId, editingVoucher, form } = this.data;
-            // 验证
-            if (!form.name.trim()) {
-                wx.showToast({ title: '请输入代金券名称', icon: 'none' });
-                return;
+    async onSaveVoucher() {
+        const { merchantId, editingVoucher, form } = this.data;
+        // 验证
+        if (!form.name.trim()) {
+            wx.showToast({ title: '请输入代金券名称', icon: 'none' });
+            return;
+        }
+        const amount = parseFloat(form.amount);
+        if (isNaN(amount) || amount <= 0) {
+            wx.showToast({ title: '请输入有效的优惠金额', icon: 'none' });
+            return;
+        }
+        const quantity = parseInt(form.total_quantity, 10);
+        if (isNaN(quantity) || quantity <= 0) {
+            wx.showToast({ title: '请输入有效的发行数量', icon: 'none' });
+            return;
+        }
+        if (!form.valid_from || !form.valid_until) {
+            wx.showToast({ title: '请选择有效期', icon: 'none' });
+            return;
+        }
+        if (form.valid_until < form.valid_from) {
+            wx.showToast({ title: '结束日期应晚于开始日期', icon: 'none' });
+            return;
+        }
+        if (form.allowed_order_types.length === 0) {
+            wx.showToast({ title: '请至少选择一个适用场景', icon: 'none' });
+            return;
+        }
+        wx.showLoading({ title: '保存中...' });
+        try {
+            const minAmount = parseFloat(form.min_order_amount) || 0;
+            if (editingVoucher) {
+                const request = {
+                    name: form.name,
+                    description: form.description || undefined,
+                    total_quantity: quantity,
+                    valid_from: form.valid_from + 'T00:00:00Z',
+                    valid_until: form.valid_until + 'T23:59:59Z',
+                    allowed_order_types: form.allowed_order_types
+                };
+                await marketing_management_1.VoucherManagementService.updateVoucher(merchantId, editingVoucher.id, request);
             }
-            const amount = parseFloat(form.amount);
-            if (isNaN(amount) || amount <= 0) {
-                wx.showToast({ title: '请输入有效的优惠金额', icon: 'none' });
-                return;
+            else {
+                const request = {
+                    name: form.name,
+                    amount: Math.round(amount * 100),
+                    min_order_amount: Math.round(minAmount * 100),
+                    total_quantity: quantity,
+                    valid_from: form.valid_from + 'T00:00:00Z',
+                    valid_until: form.valid_until + 'T23:59:59Z',
+                    description: form.description || undefined,
+                    allowed_order_types: form.allowed_order_types
+                };
+                await marketing_management_1.VoucherManagementService.createVoucher(merchantId, request);
             }
-            const quantity = parseInt(form.total_quantity, 10);
-            if (isNaN(quantity) || quantity <= 0) {
-                wx.showToast({ title: '请输入有效的发行数量', icon: 'none' });
-                return;
-            }
-            if (!form.valid_from || !form.valid_until) {
-                wx.showToast({ title: '请选择有效期', icon: 'none' });
-                return;
-            }
-            if (form.valid_until < form.valid_from) {
-                wx.showToast({ title: '结束日期应晚于开始日期', icon: 'none' });
-                return;
-            }
-            if (form.allowed_order_types.length === 0) {
-                wx.showToast({ title: '请至少选择一个适用场景', icon: 'none' });
-                return;
-            }
-            wx.showLoading({ title: '保存中...' });
-            try {
-                const minAmount = parseFloat(form.min_order_amount) || 0;
-                if (editingVoucher) {
-                    const request = {
-                        name: form.name,
-                        description: form.description || undefined,
-                        total_quantity: quantity,
-                        valid_from: form.valid_from + 'T00:00:00Z',
-                        valid_until: form.valid_until + 'T23:59:59Z',
-                        allowed_order_types: form.allowed_order_types
-                    };
-                    yield marketing_management_1.VoucherManagementService.updateVoucher(merchantId, editingVoucher.id, request);
-                }
-                else {
-                    const request = {
-                        name: form.name,
-                        amount: Math.round(amount * 100),
-                        min_order_amount: Math.round(minAmount * 100),
-                        total_quantity: quantity,
-                        valid_from: form.valid_from + 'T00:00:00Z',
-                        valid_until: form.valid_until + 'T23:59:59Z',
-                        description: form.description || undefined,
-                        allowed_order_types: form.allowed_order_types
-                    };
-                    yield marketing_management_1.VoucherManagementService.createVoucher(merchantId, request);
-                }
-                wx.hideLoading();
-                wx.showToast({ title: '保存成功', icon: 'success' });
-                this.setData({ showModal: false });
-                yield this.loadVouchers();
-            }
-            catch (error) {
-                wx.hideLoading();
-                logger_1.logger.error('保存代金券失败', error, 'vouchers');
-                wx.showToast({ title: '保存失败', icon: 'error' });
-            }
-        });
+            wx.hideLoading();
+            wx.showToast({ title: '保存成功', icon: 'success' });
+            this.setData({ showModal: false });
+            await this.loadVouchers();
+        }
+        catch (error) {
+            wx.hideLoading();
+            logger_1.logger.error('保存代金券失败', error, 'vouchers');
+            wx.showToast({ title: '保存失败', icon: 'error' });
+        }
     },
-    onDeleteVoucher(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const voucher = e.currentTarget.dataset.voucher;
-            wx.showModal({
-                title: '确认删除',
-                content: `确定删除代金券"${voucher.name}"？已领取但未使用的券将失效。`,
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        wx.showLoading({ title: '删除中...' });
-                        try {
-                            yield marketing_management_1.VoucherManagementService.deleteVoucher(this.data.merchantId, voucher.id);
-                            wx.hideLoading();
-                            wx.showToast({ title: '已删除', icon: 'success' });
-                            yield this.loadVouchers();
-                        }
-                        catch (error) {
-                            wx.hideLoading();
-                            logger_1.logger.error('删除代金券失败', error, 'vouchers');
-                            wx.showToast({ title: '删除失败，可能有未使用的券', icon: 'none' });
-                        }
+    async onDeleteVoucher(e) {
+        const voucher = e.currentTarget.dataset.voucher;
+        wx.showModal({
+            title: '确认删除',
+            content: `确定删除代金券"${voucher.name}"？已领取但未使用的券将失效。`,
+            success: async (res) => {
+                if (res.confirm) {
+                    wx.showLoading({ title: '删除中...' });
+                    try {
+                        await marketing_management_1.VoucherManagementService.deleteVoucher(this.data.merchantId, voucher.id);
+                        wx.hideLoading();
+                        wx.showToast({ title: '已删除', icon: 'success' });
+                        await this.loadVouchers();
                     }
-                })
-            });
+                    catch (error) {
+                        wx.hideLoading();
+                        logger_1.logger.error('删除代金券失败', error, 'vouchers');
+                        wx.showToast({ title: '删除失败，可能有未使用的券', icon: 'none' });
+                    }
+                }
+            }
         });
     },
-    onToggleVoucherStatus(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const voucher = e.currentTarget.dataset.voucher;
-            const newStatus = !voucher.is_active;
-            try {
-                yield marketing_management_1.VoucherManagementService.updateVoucher(this.data.merchantId, voucher.id, { is_active: newStatus });
-                wx.showToast({ title: newStatus ? '已启用' : '已停用', icon: 'success' });
-                yield this.loadVouchers();
-            }
-            catch (error) {
-                logger_1.logger.error('更新代金券状态失败', error, 'vouchers');
-                wx.showToast({ title: '操作失败', icon: 'error' });
-            }
-        });
+    async onToggleVoucherStatus(e) {
+        const voucher = e.currentTarget.dataset.voucher;
+        const newStatus = !voucher.is_active;
+        try {
+            await marketing_management_1.VoucherManagementService.updateVoucher(this.data.merchantId, voucher.id, { is_active: newStatus });
+            wx.showToast({ title: newStatus ? '已启用' : '已停用', icon: 'success' });
+            await this.loadVouchers();
+        }
+        catch (error) {
+            logger_1.logger.error('更新代金券状态失败', error, 'vouchers');
+            wx.showToast({ title: '操作失败', icon: 'error' });
+        }
     },
     // ==================== 日历选择器 ====================
     onOpenCalendar(e) {

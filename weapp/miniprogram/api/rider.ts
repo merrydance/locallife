@@ -1,4 +1,5 @@
 import { request } from '../utils/request'
+import type { PagingData } from './types'
 
 export interface RiderOrderDTO {
   id: string

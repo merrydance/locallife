@@ -410,6 +410,23 @@ export class MerchantManagementService {
   }
 }
 
+/**
+ * 获取商户经营概览
+ */
+export async function getMerchantDashboard(merchantId?: number): Promise<{
+  seven_days_sales: Array<{ date: string; amount: number }>
+  today_sales?: number
+  today_orders?: number
+  yesterday_sales?: number
+  yesterday_orders?: number
+  pending_orders?: number
+}> {
+  return request({
+    url: '/v1/merchants/me/dashboard',
+    method: 'GET'
+  })
+}
+
 // ==================== 顾客端商户接口 ====================
 
 /**
@@ -610,6 +627,7 @@ export interface PublicDish {
   name: string
   description?: string
   price: number
+  original_price?: number
   member_price?: number
   image_url?: string
   category_id: number

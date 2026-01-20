@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：桌台管理、设备管理、显示配置、二维码管理
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.displayConfigService = exports.deviceManagementService = exports.tableManagementService = exports.TableDeviceAdapter = exports.DisplayConfigService = exports.DeviceManagementService = exports.TableManagementService = void 0;
 exports.getAvailableTables = getAvailableTables;
@@ -30,42 +21,36 @@ class TableManagementService {
      * 获取桌台列表
      * @param tableType 桌台类型筛选
      */
-    listTables(tableType) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const params = {};
-            if (tableType) {
-                params.table_type = tableType;
-            }
-            return (0, request_1.request)({
-                url: '/v1/tables',
-                method: 'GET',
-                data: params
-            });
+    async listTables(tableType) {
+        const params = {};
+        if (tableType) {
+            params.table_type = tableType;
+        }
+        return (0, request_1.request)({
+            url: '/v1/tables',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取桌台详情
      * @param tableId 桌台ID
      */
-    getTableDetail(tableId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}`,
-                method: 'GET'
-            });
+    async getTableDetail(tableId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}`,
+            method: 'GET'
         });
     }
     /**
      * 创建桌台
      * @param tableData 桌台数据
      */
-    createTable(tableData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/tables',
-                method: 'POST',
-                data: tableData
-            });
+    async createTable(tableData) {
+        return (0, request_1.request)({
+            url: '/v1/tables',
+            method: 'POST',
+            data: tableData
         });
     }
     /**
@@ -73,25 +58,21 @@ class TableManagementService {
      * @param tableId 桌台ID
      * @param tableData 更新数据
      */
-    updateTable(tableId, tableData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}`,
-                method: 'PATCH',
-                data: tableData
-            });
+    async updateTable(tableId, tableData) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}`,
+            method: 'PATCH',
+            data: tableData
         });
     }
     /**
      * 删除桌台
      * @param tableId 桌台ID
      */
-    deleteTable(tableId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}`,
-                method: 'DELETE'
-            });
+    async deleteTable(tableId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}`,
+            method: 'DELETE'
         });
     }
     /**
@@ -99,37 +80,31 @@ class TableManagementService {
      * @param tableId 桌台ID
      * @param statusData 状态数据
      */
-    updateTableStatus(tableId, statusData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/status`,
-                method: 'PATCH',
-                data: statusData
-            });
+    async updateTableStatus(tableId, statusData) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/status`,
+            method: 'PATCH',
+            data: statusData
         });
     }
     /**
      * 获取桌台二维码
      * @param tableId 桌台ID
      */
-    getTableQRCode(tableId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/qrcode`,
-                method: 'GET'
-            });
+    async getTableQRCode(tableId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/qrcode`,
+            method: 'GET'
         });
     }
     /**
      * 获取桌台图片列表
      * @param tableId 桌台ID
      */
-    getTableImages(tableId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/images`,
-                method: 'GET'
-            });
+    async getTableImages(tableId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/images`,
+            method: 'GET'
         });
     }
     /**
@@ -137,13 +112,11 @@ class TableManagementService {
      * @param tableId 桌台ID
      * @param imageData 图片数据
      */
-    uploadTableImage(tableId, imageData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/images`,
-                method: 'POST',
-                data: imageData
-            });
+    async uploadTableImage(tableId, imageData) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/images`,
+            method: 'POST',
+            data: imageData
         });
     }
     /**
@@ -151,12 +124,10 @@ class TableManagementService {
      * @param tableId 桌台ID
      * @param imageId 图片ID
      */
-    deleteTableImage(tableId, imageId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/images/${imageId}`,
-                method: 'DELETE'
-            });
+    async deleteTableImage(tableId, imageId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/images/${imageId}`,
+            method: 'DELETE'
         });
     }
     /**
@@ -164,24 +135,20 @@ class TableManagementService {
      * @param tableId 桌台ID
      * @param imageId 图片ID
      */
-    setPrimaryTableImage(tableId, imageId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/images/${imageId}/primary`,
-                method: 'PUT'
-            });
+    async setPrimaryTableImage(tableId, imageId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/images/${imageId}/primary`,
+            method: 'PUT'
         });
     }
     /**
      * 获取桌台标签
      * @param tableId 桌台ID
      */
-    getTableTags(tableId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/tags`,
-                method: 'GET'
-            });
+    async getTableTags(tableId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/tags`,
+            method: 'GET'
         });
     }
     /**
@@ -189,13 +156,11 @@ class TableManagementService {
      * @param tableId 桌台ID
      * @param tagData 标签数据
      */
-    addTableTag(tableId, tagData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/tags`,
-                method: 'POST',
-                data: tagData
-            });
+    async addTableTag(tableId, tagData) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/tags`,
+            method: 'POST',
+            data: tagData
         });
     }
     /**
@@ -203,12 +168,10 @@ class TableManagementService {
      * @param tableId 桌台ID
      * @param tagId 标签ID
      */
-    deleteTableTag(tableId, tagId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/tables/${tableId}/tags/${tagId}`,
-                method: 'DELETE'
-            });
+    async deleteTableTag(tableId, tagId) {
+        return (0, request_1.request)({
+            url: `/v1/tables/${tableId}/tags/${tagId}`,
+            method: 'DELETE'
         });
     }
 }
@@ -223,42 +186,36 @@ class DeviceManagementService {
      * 获取打印机列表
      * @param onlyActive 是否只返回启用的打印机
      */
-    listPrinters(onlyActive) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const params = {};
-            if (onlyActive !== undefined) {
-                params.only_active = onlyActive;
-            }
-            return (0, request_1.request)({
-                url: '/v1/merchant/devices',
-                method: 'GET',
-                data: params
-            });
+    async listPrinters(onlyActive) {
+        const params = {};
+        if (onlyActive !== undefined) {
+            params.only_active = onlyActive;
+        }
+        return (0, request_1.request)({
+            url: '/v1/merchant/devices',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取打印机详情
      * @param printerId 打印机ID
      */
-    getPrinterDetail(printerId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/devices/${printerId}`,
-                method: 'GET'
-            });
+    async getPrinterDetail(printerId) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/devices/${printerId}`,
+            method: 'GET'
         });
     }
     /**
      * 注册打印机
      * @param printerData 打印机数据
      */
-    createPrinter(printerData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/devices',
-                method: 'POST',
-                data: printerData
-            });
+    async createPrinter(printerData) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/devices',
+            method: 'POST',
+            data: printerData
         });
     }
     /**
@@ -266,25 +223,21 @@ class DeviceManagementService {
      * @param printerId 打印机ID
      * @param printerData 更新数据
      */
-    updatePrinter(printerId, printerData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/devices/${printerId}`,
-                method: 'PUT',
-                data: printerData
-            });
+    async updatePrinter(printerId, printerData) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/devices/${printerId}`,
+            method: 'PUT',
+            data: printerData
         });
     }
     /**
      * 删除打印机
      * @param printerId 打印机ID
      */
-    deletePrinter(printerId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/devices/${printerId}`,
-                method: 'DELETE'
-            });
+    async deletePrinter(printerId) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/devices/${printerId}`,
+            method: 'DELETE'
         });
     }
     /**
@@ -292,13 +245,11 @@ class DeviceManagementService {
      * @param printerId 打印机ID
      * @param testData 测试数据
      */
-    testPrinter(printerId, testData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/devices/${printerId}/test`,
-                method: 'POST',
-                data: testData || {}
-            });
+    async testPrinter(printerId, testData) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/devices/${printerId}/test`,
+            method: 'POST',
+            data: testData || {}
         });
     }
 }
@@ -312,25 +263,21 @@ class DisplayConfigService {
     /**
      * 获取订单展示配置
      */
-    getDisplayConfig() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/display-config',
-                method: 'GET'
-            });
+    async getDisplayConfig() {
+        return (0, request_1.request)({
+            url: '/v1/merchant/display-config',
+            method: 'GET'
         });
     }
     /**
      * 更新订单展示配置
      * @param configData 配置数据
      */
-    updateDisplayConfig(configData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/display-config',
-                method: 'PUT',
-                data: configData
-            });
+    async updateDisplayConfig(configData) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/display-config',
+            method: 'PUT',
+            data: configData
         });
     }
 }
@@ -435,49 +382,41 @@ exports.displayConfigService = new DisplayConfigService();
 /**
  * 获取可用桌台列表
  */
-function getAvailableTables() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield exports.tableManagementService.listTables('table');
-        return response.tables.filter(table => table.status === 'available');
-    });
+async function getAvailableTables() {
+    const response = await exports.tableManagementService.listTables('table');
+    return (response.tables || []).filter(table => table.status === 'available');
 }
 /**
  * 获取包间列表
  */
-function getPrivateRooms() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield exports.tableManagementService.listTables('room');
-        return response.tables;
-    });
+async function getPrivateRooms() {
+    const response = await exports.tableManagementService.listTables('room');
+    return response.tables || [];
 }
 /**
  * 获取启用的打印机列表
  */
-function getActivePrinters() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield exports.deviceManagementService.listPrinters(true);
-        return response.printers;
-    });
+async function getActivePrinters() {
+    const response = await exports.deviceManagementService.listPrinters(true);
+    return response.printers;
 }
 /**
  * 批量测试打印机
  * @param printerIds 打印机ID列表
  */
-function batchTestPrinters(printerIds) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const promises = printerIds.map((printerId) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const result = yield exports.deviceManagementService.testPrinter(printerId);
-                return { printerId, success: result.success, message: result.message };
-            }
-            catch (error) {
-                return {
-                    printerId,
-                    success: false,
-                    message: (error === null || error === void 0 ? void 0 : error.message) || '测试失败'
-                };
-            }
-        }));
-        return Promise.all(promises);
+async function batchTestPrinters(printerIds) {
+    const promises = printerIds.map(async (printerId) => {
+        try {
+            const result = await exports.deviceManagementService.testPrinter(printerId);
+            return { printerId, success: result.success, message: result.message };
+        }
+        catch (error) {
+            return {
+                printerId,
+                success: false,
+                message: (error === null || error === void 0 ? void 0 : error.message) || '测试失败'
+            };
+        }
     });
+    return Promise.all(promises);
 }

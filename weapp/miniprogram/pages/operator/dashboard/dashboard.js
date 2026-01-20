@@ -3,15 +3,6 @@
  * 运营商工作台
  * 提供区域管理、商户管理、骑手管理、数据统计等功能入口
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const operator_basic_management_1 = require("@/api/operator-basic-management");
 const operator_merchant_management_1 = require("@/api/operator-merchant-management");
@@ -71,39 +62,37 @@ Page({
     /**
      * 加载工作台数据
      */
-    loadDashboardData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            try {
-                this.setData({ loading: true });
-                // 并行加载所有数据
-                const [dashboardData, merchantData, riderData, analyticsData] = yield Promise.all([
-                    (0, operator_basic_management_1.getOperatorDashboard)(),
-                    (0, operator_merchant_management_1.getMerchantManagementDashboard)(),
-                    (0, operator_rider_management_1.getRiderManagementDashboard)(),
-                    (0, operator_analytics_1.getOperatorAnalyticsDashboard)()
-                ]);
-                this.setData({
-                    operatorInfo: dashboardData.operatorInfo,
-                    financeOverview: dashboardData.financeOverview,
-                    regionStats: dashboardData.regionStats,
-                    selectedRegionId: ((_a = dashboardData.regionStats[0]) === null || _a === void 0 ? void 0 : _a.id) || 0,
-                    merchantSummary: merchantData.merchantSummary,
-                    riderSummary: riderData.riderSummary,
-                    appealSummary: analyticsData.appealSummary
-                });
-            }
-            catch (error) {
-                console.error('加载工作台数据失败:', error);
-                wx.showToast({
-                    title: '加载失败',
-                    icon: 'none'
-                });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+    async loadDashboardData() {
+        var _a;
+        try {
+            this.setData({ loading: true });
+            // 并行加载所有数据
+            const [dashboardData, merchantData, riderData, analyticsData] = await Promise.all([
+                (0, operator_basic_management_1.getOperatorDashboard)(),
+                (0, operator_merchant_management_1.getMerchantManagementDashboard)(),
+                (0, operator_rider_management_1.getRiderManagementDashboard)(),
+                (0, operator_analytics_1.getOperatorAnalyticsDashboard)()
+            ]);
+            this.setData({
+                operatorInfo: dashboardData.operatorInfo,
+                financeOverview: dashboardData.financeOverview,
+                regionStats: dashboardData.regionStats,
+                selectedRegionId: ((_a = dashboardData.regionStats[0]) === null || _a === void 0 ? void 0 : _a.region_id) || 0,
+                merchantSummary: merchantData.merchantSummary,
+                riderSummary: riderData.riderSummary,
+                appealSummary: analyticsData.appealSummary
+            });
+        }
+        catch (error) {
+            console.error('加载工作台数据失败:', error);
+            wx.showToast({
+                title: '加载失败',
+                icon: 'none'
+            });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     /**
      * 切换区域
@@ -116,30 +105,28 @@ Page({
     /**
      * 加载指定区域的数据
      */
-    loadRegionData(regionId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                wx.showLoading({ title: '加载中...' });
-                const [merchantData, riderData] = yield Promise.all([
-                    (0, operator_merchant_management_1.getMerchantManagementDashboard)(regionId),
-                    (0, operator_rider_management_1.getRiderManagementDashboard)(regionId)
-                ]);
-                this.setData({
-                    merchantSummary: merchantData.merchantSummary,
-                    riderSummary: riderData.riderSummary
-                });
-            }
-            catch (error) {
-                console.error('加载区域数据失败:', error);
-                wx.showToast({
-                    title: '加载失败',
-                    icon: 'none'
-                });
-            }
-            finally {
-                wx.hideLoading();
-            }
-        });
+    async loadRegionData(regionId) {
+        try {
+            wx.showLoading({ title: '加载中...' });
+            const [merchantData, riderData] = await Promise.all([
+                (0, operator_merchant_management_1.getMerchantManagementDashboard)(regionId),
+                (0, operator_rider_management_1.getRiderManagementDashboard)(regionId)
+            ]);
+            this.setData({
+                merchantSummary: merchantData.merchantSummary,
+                riderSummary: riderData.riderSummary
+            });
+        }
+        catch (error) {
+            console.error('加载区域数据失败:', error);
+            wx.showToast({
+                title: '加载失败',
+                icon: 'none'
+            });
+        }
+        finally {
+            wx.hideLoading();
+        }
     },
     /**
      * 快捷入口点击

@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：任务获取、配送流程、任务历史
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeliveryReminderManager = exports.deliveryProcessService = exports.deliveryTaskManagementService = exports.DeliveryTaskManagementAdapter = exports.DeliveryProcessService = exports.DeliveryTaskManagementService = void 0;
 exports.getRiderDeliveryDashboard = getRiderDeliveryDashboard;
@@ -34,61 +25,51 @@ class DeliveryTaskManagementService {
      * 获取推荐订单列表
      * @param params 查询参数
      */
-    getRecommendedOrders(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/delivery/recommend',
-                method: 'GET',
-                data: params
-            });
+    async getRecommendedOrders(params) {
+        return (0, request_1.request)({
+            url: '/v1/delivery/recommend',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 抢单
      * @param orderId 订单ID
      */
-    grabOrder(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/delivery/grab/${orderId}`,
-                method: 'POST'
-            });
+    async grabOrder(orderId) {
+        return (0, request_1.request)({
+            url: `/v1/delivery/grab/${orderId}`,
+            method: 'POST'
         });
     }
     /**
      * 获取当前活跃配送任务
      */
-    getActiveDeliveries() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/delivery/active',
-                method: 'GET'
-            });
+    async getActiveDeliveries() {
+        return (0, request_1.request)({
+            url: '/v1/delivery/active',
+            method: 'GET'
         });
     }
     /**
      * 获取配送历史
      * @param params 查询参数
      */
-    getDeliveryHistory(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/delivery/history',
-                method: 'GET',
-                data: params
-            });
+    async getDeliveryHistory(params) {
+        return (0, request_1.request)({
+            url: '/v1/delivery/history',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取配送任务详情
      * @param deliveryId 配送任务ID
      */
-    getDeliveryDetail(deliveryId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}`,
-                method: 'GET'
-            });
+    async getDeliveryDetail(deliveryId) {
+        return (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}`,
+            method: 'GET'
         });
     }
     /**
@@ -96,13 +77,11 @@ class DeliveryTaskManagementService {
      * @param deliveryId 配送任务ID
      * @param actionData 操作数据
      */
-    startPickup(deliveryId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/start-pickup`,
-                method: 'POST',
-                data: actionData || {}
-            });
+    async startPickup(deliveryId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/start-pickup`,
+            method: 'POST',
+            data: actionData || {}
         });
     }
     /**
@@ -110,13 +89,11 @@ class DeliveryTaskManagementService {
      * @param deliveryId 配送任务ID
      * @param actionData 操作数据
      */
-    confirmPickup(deliveryId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/confirm-pickup`,
-                method: 'POST',
-                data: actionData || {}
-            });
+    async confirmPickup(deliveryId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/confirm-pickup`,
+            method: 'POST',
+            data: actionData || {}
         });
     }
     /**
@@ -124,13 +101,11 @@ class DeliveryTaskManagementService {
      * @param deliveryId 配送任务ID
      * @param actionData 操作数据
      */
-    startDelivery(deliveryId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/start-delivery`,
-                method: 'POST',
-                data: actionData || {}
-            });
+    async startDelivery(deliveryId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/start-delivery`,
+            method: 'POST',
+            data: actionData || {}
         });
     }
     /**
@@ -138,13 +113,11 @@ class DeliveryTaskManagementService {
      * @param deliveryId 配送任务ID
      * @param actionData 操作数据
      */
-    confirmDelivery(deliveryId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/confirm-delivery`,
-                method: 'POST',
-                data: actionData || {}
-            });
+    async confirmDelivery(deliveryId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/confirm-delivery`,
+            method: 'POST',
+            data: actionData || {}
         });
     }
 }
@@ -213,50 +186,48 @@ class DeliveryProcessService {
      * @param delivery 配送任务信息
      * @param actionData 操作数据
      */
-    executeDeliveryAction(delivery, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const nextAction = this.getNextAction(delivery);
-            if (!nextAction.canExecute) {
-                return {
-                    success: false,
-                    message: nextAction.reason || '无法执行操作'
-                };
+    async executeDeliveryAction(delivery, actionData) {
+        const nextAction = this.getNextAction(delivery);
+        if (!nextAction.canExecute) {
+            return {
+                success: false,
+                message: nextAction.reason || '无法执行操作'
+            };
+        }
+        try {
+            const service = new DeliveryTaskManagementService();
+            let updatedDelivery;
+            switch (nextAction.action) {
+                case 'start_pickup':
+                    updatedDelivery = await service.startPickup(delivery.id, actionData);
+                    break;
+                case 'confirm_pickup':
+                    updatedDelivery = await service.confirmPickup(delivery.id, actionData);
+                    break;
+                case 'start_delivery':
+                    updatedDelivery = await service.startDelivery(delivery.id, actionData);
+                    break;
+                case 'confirm_delivery':
+                    updatedDelivery = await service.confirmDelivery(delivery.id, actionData);
+                    break;
+                default:
+                    return {
+                        success: false,
+                        message: '未知的操作类型'
+                    };
             }
-            try {
-                const service = new DeliveryTaskManagementService();
-                let updatedDelivery;
-                switch (nextAction.action) {
-                    case 'start_pickup':
-                        updatedDelivery = yield service.startPickup(delivery.id, actionData);
-                        break;
-                    case 'confirm_pickup':
-                        updatedDelivery = yield service.confirmPickup(delivery.id, actionData);
-                        break;
-                    case 'start_delivery':
-                        updatedDelivery = yield service.startDelivery(delivery.id, actionData);
-                        break;
-                    case 'confirm_delivery':
-                        updatedDelivery = yield service.confirmDelivery(delivery.id, actionData);
-                        break;
-                    default:
-                        return {
-                            success: false,
-                            message: '未知的操作类型'
-                        };
-                }
-                return {
-                    success: true,
-                    message: `${nextAction.actionText}成功`,
-                    updatedDelivery
-                };
-            }
-            catch (error) {
-                return {
-                    success: false,
-                    message: (error === null || error === void 0 ? void 0 : error.message) || `${nextAction.actionText}失败`
-                };
-            }
-        });
+            return {
+                success: true,
+                message: `${nextAction.actionText}成功`,
+                updatedDelivery
+            };
+        }
+        catch (error) {
+            return {
+                success: false,
+                message: (error === null || error === void 0 ? void 0 : error.message) || `${nextAction.actionText}失败`
+            };
+        }
     }
 }
 exports.DeliveryProcessService = DeliveryProcessService;
@@ -333,25 +304,23 @@ exports.deliveryProcessService = new DeliveryProcessService();
  * @param latitude 当前纬度
  * @param longitude 当前经度
  */
-function getRiderDeliveryDashboard(latitude, longitude) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [recommendedOrders, activeDeliveries] = yield Promise.all([
-            exports.deliveryTaskManagementService.getRecommendedOrders({ latitude, longitude }),
-            exports.deliveryTaskManagementService.getActiveDeliveries()
-        ]);
-        // 今日统计数据需要根据实际接口调整
-        const todayStats = {
-            completedDeliveries: 0,
-            totalEarnings: 0,
-            totalDistance: 0,
-            avgDeliveryTime: 0
-        };
-        return {
-            recommendedOrders,
-            activeDeliveries,
-            todayStats
-        };
-    });
+async function getRiderDeliveryDashboard(latitude, longitude) {
+    const [recommendedOrders, activeDeliveries] = await Promise.all([
+        exports.deliveryTaskManagementService.getRecommendedOrders({ latitude, longitude }),
+        exports.deliveryTaskManagementService.getActiveDeliveries()
+    ]);
+    // 今日统计数据需要根据实际接口调整
+    const todayStats = {
+        completedDeliveries: 0,
+        totalEarnings: 0,
+        totalDistance: 0,
+        avgDeliveryTime: 0
+    };
+    return {
+        recommendedOrders,
+        activeDeliveries,
+        todayStats
+    };
 }
 /**
  * 智能抢单推荐

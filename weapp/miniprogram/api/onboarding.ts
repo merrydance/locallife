@@ -263,6 +263,12 @@ export interface ApplyRiderRequest {
   id_card_no: string
   phone: string
   real_name: string
+  vehicle_type?: string
+  address?: string
+  gender?: string
+  id_card_front_images?: string[]
+  id_card_back_images?: string[]
+  health_certificate_images?: string[]
 }
 
 export function submitRiderApplication(data: ApplyRiderRequest) {

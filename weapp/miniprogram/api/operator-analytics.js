@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：区域统计、趋势分析、申诉处理
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dataAnalysisService = exports.operatorAppealService = exports.operatorAnalyticsService = exports.OperatorAnalyticsAdapter = exports.DataAnalysisService = exports.OperatorAppealService = exports.OperatorAnalyticsService = void 0;
 exports.getOperatorAnalyticsDashboard = getOperatorAnalyticsDashboard;
@@ -35,16 +26,14 @@ class OperatorAnalyticsService {
      * @param startDate 开始日期
      * @param endDate 结束日期
      */
-    getRegionStats(regionId, startDate, endDate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/regions/${regionId}/stats`,
-                method: 'GET',
-                data: {
-                    start_date: startDate,
-                    end_date: endDate
-                }
-            });
+    async getRegionStats(regionId, startDate, endDate) {
+        return (0, request_1.request)({
+            url: `/v1/operator/regions/${regionId}/stats`,
+            method: 'GET',
+            data: {
+                start_date: startDate,
+                end_date: endDate
+            }
         });
     }
     /**
@@ -53,17 +42,15 @@ class OperatorAnalyticsService {
      * @param startDate 开始日期
      * @param endDate 结束日期
      */
-    getDailyTrend(regionId, startDate, endDate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/trend/daily',
-                method: 'GET',
-                data: {
-                    region_id: regionId,
-                    start_date: startDate,
-                    end_date: endDate
-                }
-            });
+    async getDailyTrend(regionId, startDate, endDate) {
+        return (0, request_1.request)({
+            url: '/v1/operator/trend/daily',
+            method: 'GET',
+            data: {
+                region_id: regionId,
+                start_date: startDate,
+                end_date: endDate
+            }
         });
     }
 }
@@ -78,25 +65,21 @@ class OperatorAppealService {
      * 获取申诉列表
      * @param params 查询参数
      */
-    getAppealList(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/appeals',
-                method: 'GET',
-                data: params
-            });
+    async getAppealList(params) {
+        return (0, request_1.request)({
+            url: '/v1/operator/appeals',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取申诉详情
      * @param appealId 申诉ID
      */
-    getAppealDetail(appealId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/appeals/${appealId}`,
-                method: 'GET'
-            });
+    async getAppealDetail(appealId) {
+        return (0, request_1.request)({
+            url: `/v1/operator/appeals/${appealId}`,
+            method: 'GET'
         });
     }
     /**
@@ -104,13 +87,11 @@ class OperatorAppealService {
      * @param appealId 申诉ID
      * @param reviewData 审核数据
      */
-    reviewAppeal(appealId, reviewData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/appeals/${appealId}/review`,
-                method: 'POST',
-                data: reviewData
-            });
+    async reviewAppeal(appealId, reviewData) {
+        return (0, request_1.request)({
+            url: `/v1/operator/appeals/${appealId}/review`,
+            method: 'POST',
+            data: reviewData
         });
     }
 }
@@ -379,9 +360,10 @@ class DataAnalysisService {
         if (efficiency.workload > 50) {
             insights.push('待处理申诉数量较多，建议增加处理人员');
         }
-        const orderIssueCount = distribution.byType.get('order_issue') || 0;
-        const totalCount = Array.from(distribution.byType.values()).reduce((sum, count) => sum + count, 0);
-        if (orderIssueCount / totalCount > 0.5) {
+        const byType = distribution.byType;
+        const orderIssueCount = byType.get('order_issue') || 0;
+        const totalCount = Array.from(byType.values()).reduce((sum, count) => sum + count, 0);
+        if (totalCount > 0 && orderIssueCount / totalCount > 0.5) {
             insights.push('订单相关申诉占比较高，建议重点关注订单流程');
         }
         return insights;
@@ -506,74 +488,70 @@ exports.dataAnalysisService = new DataAnalysisService();
  * 获取运营商分析工作台数据
  * @param regionId 区域ID（可选）
  */
-function getOperatorAnalyticsDashboard(regionId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [regionStats, trendAnalysis, appealList] = yield Promise.all([
-            exports.operatorAnalyticsService.getRegionStats(regionId || 1, startDate, endDate),
-            exports.operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate),
-            exports.operatorAppealService.getAppealList({
-                region_id: regionId,
-                limit: 20,
-                sort_by: 'created_at',
-                sort_order: 'desc'
-            })
-        ]);
-        // 分析区域绩效
-        const performanceAnalysis = exports.dataAnalysisService.analyzeRegionPerformanceTrend(regionStats);
-        // 申诉摘要
-        const appealSummary = {
-            totalAppeals: appealList.total,
-            pendingAppeals: appealList.stats.pending_count,
-            avgResolutionTime: appealList.stats.avg_resolution_time,
-            satisfactionRate: 4.2 // 模拟数据，实际应该从API获取
-        };
-        return {
-            regionStats,
-            trendAnalysis,
-            performanceAnalysis,
-            appealSummary,
-            recentAppeals: appealList.appeals.slice(0, 10)
-        };
-    });
+async function getOperatorAnalyticsDashboard(regionId) {
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const [regionStats, trendAnalysis, appealList] = await Promise.all([
+        exports.operatorAnalyticsService.getRegionStats(regionId || 1, startDate, endDate),
+        exports.operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate),
+        exports.operatorAppealService.getAppealList({
+            region_id: regionId,
+            limit: 20,
+            sort_by: 'created_at',
+            sort_order: 'desc'
+        })
+    ]);
+    // 分析区域绩效
+    const performanceAnalysis = exports.dataAnalysisService.analyzeRegionPerformanceTrend(regionStats);
+    // 申诉摘要
+    const appealSummary = {
+        totalAppeals: appealList.total,
+        pendingAppeals: appealList.stats.pending_count,
+        avgResolutionTime: appealList.stats.avg_resolution_time,
+        satisfactionRate: 4.2 // 模拟数据，实际应该从API获取
+    };
+    return {
+        regionStats,
+        trendAnalysis,
+        performanceAnalysis,
+        appealSummary,
+        recentAppeals: appealList.appeals.slice(0, 10)
+    };
 }
 /**
  * 生成区域分析报告
  * @param regionId 区域ID
  * @param days 分析天数
  */
-function generateRegionAnalysisReport(regionId_1) {
-    return __awaiter(this, arguments, void 0, function* (regionId, days = 30) {
-        const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [regionStats, trendAnalysis] = yield Promise.all([
-            exports.operatorAnalyticsService.getRegionStats(regionId, startDate, endDate),
-            exports.operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
-        ]);
-        const detailedAnalysis = exports.dataAnalysisService.analyzeRegionPerformanceTrend(regionStats);
-        // 生成关键发现
-        const keyFindings = [
-            ...detailedAnalysis.insights.slice(0, 3),
-            `区域综合绩效评分: ${detailedAnalysis.performanceScore}分`,
-            `商户健康度: ${detailedAnalysis.keyMetrics.merchantHealth.toFixed(1)}分`,
-            `骑手健康度: ${detailedAnalysis.keyMetrics.riderHealth.toFixed(1)}分`
-        ];
-        // 生成行动计划
-        const actionPlan = generateActionPlan(detailedAnalysis);
-        return {
-            summary: {
-                regionName: regionStats.region_name,
-                analysisPeriod: `${startDate} 至 ${endDate}`,
-                performanceScore: detailedAnalysis.performanceScore,
-                performanceLevel: detailedAnalysis.performanceLevel,
-                keyFindings
-            },
-            detailedAnalysis,
-            trendAnalysis,
-            actionPlan
-        };
-    });
+async function generateRegionAnalysisReport(regionId, days = 30) {
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const [regionStats, trendAnalysis] = await Promise.all([
+        exports.operatorAnalyticsService.getRegionStats(regionId, startDate, endDate),
+        exports.operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
+    ]);
+    const detailedAnalysis = exports.dataAnalysisService.analyzeRegionPerformanceTrend(regionStats);
+    // 生成关键发现
+    const keyFindings = [
+        ...detailedAnalysis.insights.slice(0, 3),
+        `区域综合绩效评分: ${detailedAnalysis.performanceScore}分`,
+        `商户健康度: ${detailedAnalysis.keyMetrics.merchantHealth.toFixed(1)}分`,
+        `骑手健康度: ${detailedAnalysis.keyMetrics.riderHealth.toFixed(1)}分`
+    ];
+    // 生成行动计划
+    const actionPlan = generateActionPlan(detailedAnalysis);
+    return {
+        summary: {
+            regionName: regionStats.region_name,
+            analysisPeriod: `${startDate} 至 ${endDate}`,
+            performanceScore: detailedAnalysis.performanceScore,
+            performanceLevel: detailedAnalysis.performanceLevel,
+            keyFindings
+        },
+        detailedAnalysis,
+        trendAnalysis,
+        actionPlan
+    };
 }
 /**
  * 生成行动计划

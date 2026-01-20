@@ -19,6 +19,7 @@ type ReservationView = ReservationResponse & {
     _reservationTime: string
     _guestCount: string
     items?: ReservationItemView[]
+    cooking_started_at?: string
 }
 
 Page({

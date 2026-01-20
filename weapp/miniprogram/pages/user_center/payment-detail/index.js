@@ -1,16 +1,13 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const payment_refund_1 = require("../../../api/payment-refund");
 const logger_1 = require("../../../utils/logger");
+const getDatasetId = (event) => {
+    const dataset = event.currentTarget.dataset;
+    const id = dataset.id;
+    const numericId = typeof id === 'number' ? id : Number(id);
+    return Number.isFinite(numericId) ? numericId : null;
+};
 Page({
     data: {
         paymentId: 0,
@@ -36,60 +33,51 @@ Page({
             this.loadPaymentByOrder(parseInt(options.orderId));
         }
     },
-    loadPaymentDetail() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const payment = yield (0, payment_refund_1.getPaymentById)(this.data.paymentId);
-                this.processPayment(payment);
-                // 如果有退款，加载退款列表
-                if (payment.refund_status && payment.refund_status !== 'none') {
-                    yield this.loadRefunds();
-                }
-            }
-            catch (error) {
-                logger_1.logger.error('加载支付详情失败', error, 'payment-detail.loadPaymentDetail');
-                wx.showToast({ title: '加载失败', icon: 'error' });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+    async loadPaymentDetail() {
+        this.setData({ loading: true });
+        try {
+            const payment = await (0, payment_refund_1.getPaymentById)(this.data.paymentId);
+            this.processPayment(payment);
+            await this.loadRefunds();
+        }
+        catch (error) {
+            logger_1.logger.error('加载支付详情失败', error, 'payment-detail.loadPaymentDetail');
+            wx.showToast({ title: '加载失败', icon: 'error' });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
-    loadPaymentByOrder(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                // 通过订单ID获取支付列表，取第一条
-                const result = yield (0, payment_refund_1.getPayments)({ order_id: orderId, page: 1, page_size: 1 });
-                if (result.data && result.data.length > 0) {
-                    const payment = result.data[0];
-                    this.setData({ paymentId: payment.id });
-                    this.processPayment(payment);
-                    if (payment.refund_status && payment.refund_status !== 'none') {
-                        yield this.loadRefunds();
-                    }
-                }
-                else {
-                    wx.showToast({ title: '未找到支付记录', icon: 'none' });
-                }
+    async loadPaymentByOrder(orderId) {
+        this.setData({ loading: true });
+        try {
+            // 通过订单ID获取支付列表，取第一条
+            const result = await (0, payment_refund_1.getPayments)({ order_id: orderId, page: 1, page_size: 1 });
+            if (result.payment_orders && result.payment_orders.length > 0) {
+                const payment = result.payment_orders[0];
+                this.setData({ paymentId: payment.id });
+                this.processPayment(payment);
+                await this.loadRefunds();
             }
-            catch (error) {
-                logger_1.logger.error('加载支付详情失败', error, 'payment-detail.loadPaymentByOrder');
-                wx.showToast({ title: '加载失败', icon: 'error' });
+            else {
+                wx.showToast({ title: '未找到支付记录', icon: 'none' });
             }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+        }
+        catch (error) {
+            logger_1.logger.error('加载支付详情失败', error, 'payment-detail.loadPaymentByOrder');
+            wx.showToast({ title: '加载失败', icon: 'error' });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     processPayment(payment) {
         const amountDisplay = `¥${(payment.amount / 100).toFixed(2)}`;
         const statusText = this.getStatusText(payment.status);
         const statusClass = payment.status;
-        const paymentMethodText = this.getPaymentMethodText(payment.payment_method);
+        const paymentMethodText = this.getPaymentMethodText(payment.payment_type);
         const showCloseButton = payment.status === 'pending';
-        const showRefundList = payment.refund_status && payment.refund_status !== 'none';
+        const showRefundList = false;
         this.setData({
             payment,
             amountDisplay,
@@ -100,35 +88,35 @@ Page({
             showRefundList
         });
     },
-    loadRefunds() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const refunds = yield (0, payment_refund_1.getPaymentRefunds)(this.data.paymentId);
-                // 处理退款显示字段
-                const processedRefunds = refunds.map(refund => (Object.assign(Object.assign({}, refund), { _amountDisplay: `¥${(refund.amount / 100).toFixed(2)}`, _statusText: this.getRefundStatusText(refund.status), _statusClass: refund.status })));
-                this.setData({ refunds: processedRefunds });
-            }
-            catch (error) {
-                logger_1.logger.error('加载退款列表失败', error, 'payment-detail.loadRefunds');
-            }
-        });
+    async loadRefunds() {
+        try {
+            const refundsResponse = await (0, payment_refund_1.getPaymentRefunds)(this.data.paymentId);
+            // 处理退款显示字段
+            const processedRefunds = refundsResponse.refund_orders.map(refund => ({
+                ...refund,
+                _amountDisplay: `¥${(refund.refund_amount / 100).toFixed(2)}`,
+                _statusText: this.getRefundStatusText(refund.status),
+                _statusClass: refund.status
+            }));
+            this.setData({ refunds: processedRefunds, showRefundList: processedRefunds.length > 0 });
+        }
+        catch (error) {
+            logger_1.logger.error('加载退款列表失败', error, 'payment-detail.loadRefunds');
+        }
     },
     getStatusText(status) {
         const statusMap = {
             'pending': '待支付',
             'paid': '已支付',
-            'failed': '支付失败',
-            'cancelled': '已取消',
-            'refunded': '已退款'
+            'refunded': '已退款',
+            'closed': '已关闭'
         };
         return statusMap[status] || status;
     },
     getPaymentMethodText(method) {
         const methodMap = {
-            'wechat_pay': '微信支付',
-            'alipay': '支付宝',
-            'balance': '余额支付',
-            'credit': '信用支付'
+            'miniprogram': '小程序支付',
+            'native': '扫码支付'
         };
         return methodMap[method] || method;
     },
@@ -157,32 +145,32 @@ Page({
             return timeStr;
         }
     },
-    onClosePayment() {
-        return __awaiter(this, void 0, void 0, function* () {
-            wx.showModal({
-                title: '关闭支付',
-                content: '确定要关闭此支付订单吗？关闭后将无法继续支付。',
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        wx.showLoading({ title: '处理中...' });
-                        try {
-                            yield (0, payment_refund_1.closePayment)(this.data.paymentId);
-                            wx.hideLoading();
-                            wx.showToast({ title: '已关闭', icon: 'success' });
-                            setTimeout(() => this.loadPaymentDetail(), 1500);
-                        }
-                        catch (error) {
-                            wx.hideLoading();
-                            logger_1.logger.error('关闭支付失败', error, 'payment-detail.onClosePayment');
-                            wx.showToast({ title: '操作失败', icon: 'error' });
-                        }
+    async onClosePayment() {
+        wx.showModal({
+            title: '关闭支付',
+            content: '确定要关闭此支付订单吗？关闭后将无法继续支付。',
+            success: async (res) => {
+                if (res.confirm) {
+                    wx.showLoading({ title: '处理中...' });
+                    try {
+                        await (0, payment_refund_1.closePayment)(this.data.paymentId);
+                        wx.hideLoading();
+                        wx.showToast({ title: '已关闭', icon: 'success' });
+                        setTimeout(() => this.loadPaymentDetail(), 1500);
                     }
-                })
-            });
+                    catch (error) {
+                        wx.hideLoading();
+                        logger_1.logger.error('关闭支付失败', error, 'payment-detail.onClosePayment');
+                        wx.showToast({ title: '操作失败', icon: 'error' });
+                    }
+                }
+            }
         });
     },
     onViewRefund(e) {
-        const { id } = e.currentTarget.dataset;
+        const id = getDatasetId(e);
+        if (!id)
+            return;
         wx.navigateTo({
             url: `/pages/user_center/refund-detail/index?id=${id}`
         });

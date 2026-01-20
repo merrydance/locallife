@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：骑手信息、上下线管理、位置上报、积分管理
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ScoreManagementUtils = exports.LocationReportManager = exports.locationManagementService = exports.riderBasicManagementService = exports.RiderBasicManagementAdapter = exports.LocationManagementService = exports.RiderBasicManagementService = void 0;
 exports.getRiderDashboard = getRiderDashboard;
@@ -32,82 +23,68 @@ class RiderBasicManagementService {
     /**
      * 获取当前骑手信息
      */
-    getRiderInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/me',
-                method: 'GET'
-            });
+    async getRiderInfo() {
+        return (0, request_1.request)({
+            url: '/v1/rider/me',
+            method: 'GET'
         });
     }
     /**
      * 获取骑手状态
      */
-    getRiderStatus() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/status',
-                method: 'GET'
-            });
+    async getRiderStatus() {
+        return (0, request_1.request)({
+            url: '/v1/rider/status',
+            method: 'GET'
         });
     }
     /**
      * 骑手上线
      */
-    goOnline() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/online',
-                method: 'POST'
-            });
+    async goOnline() {
+        return (0, request_1.request)({
+            url: '/v1/rider/online',
+            method: 'POST'
         });
     }
     /**
      * 骑手下线
      */
-    goOffline() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/offline',
-                method: 'POST'
-            });
+    async goOffline() {
+        return (0, request_1.request)({
+            url: '/v1/rider/offline',
+            method: 'POST'
         });
     }
     /**
      * 更新骑手位置
      * @param locationData 位置数据
      */
-    updateLocation(locationData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/location',
-                method: 'POST',
-                data: locationData
-            });
+    async updateLocation(locationData) {
+        return (0, request_1.request)({
+            url: '/v1/rider/location',
+            method: 'POST',
+            data: locationData
         });
     }
     /**
      * 获取骑手积分信息
      */
-    getRiderScore() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/score',
-                method: 'GET'
-            });
+    async getRiderScore() {
+        return (0, request_1.request)({
+            url: '/v1/rider/score',
+            method: 'GET'
         });
     }
     /**
      * 获取积分历史记录
      * @param params 查询参数
      */
-    getScoreHistory(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/score/history',
-                method: 'GET',
-                data: params
-            });
+    async getScoreHistory(params) {
+        return (0, request_1.request)({
+            url: '/v1/rider/score/history',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -122,36 +99,30 @@ class LocationManagementService {
      * 批量上报位置点
      * @param locations 位置点数组
      */
-    batchUpdateLocation(locations) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/location',
-                method: 'POST',
-                data: { locations }
-            });
+    async batchUpdateLocation(locations) {
+        return (0, request_1.request)({
+            url: '/v1/rider/location',
+            method: 'POST',
+            data: { locations }
         });
     }
     /**
      * 单点位置上报
      * @param location 单个位置点
      */
-    updateSingleLocation(location) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return this.batchUpdateLocation([location]);
-        });
+    async updateSingleLocation(location) {
+        return this.batchUpdateLocation([location]);
     }
     /**
      * 获取当前位置
      */
-    getCurrentLocation() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const riderInfo = yield new RiderBasicManagementService().getRiderInfo();
-            return {
-                latitude: riderInfo.current_latitude || 0,
-                longitude: riderInfo.current_longitude || 0,
-                updated_at: riderInfo.location_updated_at || ''
-            };
-        });
+    async getCurrentLocation() {
+        const riderInfo = await new RiderBasicManagementService().getRiderInfo();
+        return {
+            latitude: riderInfo.current_latitude || 0,
+            longitude: riderInfo.current_longitude || 0,
+            updated_at: riderInfo.location_updated_at || ''
+        };
     }
 }
 exports.LocationManagementService = LocationManagementService;
@@ -237,71 +208,67 @@ exports.locationManagementService = new LocationManagementService();
 /**
  * 获取骑手工作台数据
  */
-function getRiderDashboard() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [riderInfo, riderStatus, scoreInfo] = yield Promise.all([
-            exports.riderBasicManagementService.getRiderInfo(),
-            exports.riderBasicManagementService.getRiderStatus(),
-            exports.riderBasicManagementService.getRiderScore()
-        ]);
-        // 今日统计数据需要根据实际接口调整
-        const todayStats = {
-            onlineDuration: riderInfo.online_duration,
-            completedOrders: riderInfo.total_orders,
-            earnings: riderInfo.total_earnings
-        };
-        return {
-            riderInfo,
-            riderStatus,
-            scoreInfo,
-            todayStats
-        };
-    });
+async function getRiderDashboard() {
+    const [riderInfo, riderStatus, scoreInfo] = await Promise.all([
+        exports.riderBasicManagementService.getRiderInfo(),
+        exports.riderBasicManagementService.getRiderStatus(),
+        exports.riderBasicManagementService.getRiderScore()
+    ]);
+    // 今日统计数据需要根据实际接口调整
+    const todayStats = {
+        onlineDuration: riderInfo.online_duration,
+        completedOrders: riderInfo.total_orders,
+        earnings: riderInfo.total_earnings
+    };
+    return {
+        riderInfo,
+        riderStatus,
+        scoreInfo,
+        todayStats
+    };
 }
 /**
  * 智能上下线管理
  * @param action 操作类型
  */
-function smartOnlineManagement(action) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const status = yield exports.riderBasicManagementService.getRiderStatus();
-            if (action === 'online') {
-                if (!status.can_go_online) {
-                    return {
-                        success: false,
-                        message: status.online_block_reason || '当前无法上线'
-                    };
-                }
-                const riderInfo = yield exports.riderBasicManagementService.goOnline();
+async function smartOnlineManagement(action) {
+    try {
+        const status = await exports.riderBasicManagementService.getRiderStatus();
+        if (action === 'online') {
+            if (!status.can_go_online) {
                 return {
-                    success: true,
-                    message: '上线成功',
-                    riderInfo
+                    success: false,
+                    message: status.online_block_reason || '当前无法上线'
                 };
             }
-            else {
-                if (!status.can_go_offline) {
-                    return {
-                        success: false,
-                        message: status.active_deliveries > 0 ? '有配送中的订单，无法下线' : '当前无法下线'
-                    };
-                }
-                const riderInfo = yield exports.riderBasicManagementService.goOffline();
-                return {
-                    success: true,
-                    message: '下线成功',
-                    riderInfo
-                };
-            }
-        }
-        catch (error) {
+            const riderInfo = await exports.riderBasicManagementService.goOnline();
             return {
-                success: false,
-                message: (error === null || error === void 0 ? void 0 : error.message) || `${action === 'online' ? '上线' : '下线'}失败`
+                success: true,
+                message: '上线成功',
+                riderInfo
             };
         }
-    });
+        else {
+            if (!status.can_go_offline) {
+                return {
+                    success: false,
+                    message: status.active_deliveries > 0 ? '有配送中的订单，无法下线' : '当前无法下线'
+                };
+            }
+            const riderInfo = await exports.riderBasicManagementService.goOffline();
+            return {
+                success: true,
+                message: '下线成功',
+                riderInfo
+            };
+        }
+    }
+    catch (error) {
+        return {
+            success: false,
+            message: (error === null || error === void 0 ? void 0 : error.message) || `${action === 'online' ? '上线' : '下线'}失败`
+        };
+    }
 }
 /**
  * 位置上报管理器
@@ -319,14 +286,14 @@ class LocationReportManager {
     startAutoReport(interval = 30000) {
         this.reportInterval = interval;
         this.stopAutoReport(); // 先停止之前的定时器
-        this.intervalId = setInterval(() => __awaiter(this, void 0, void 0, function* () {
+        this.intervalId = setInterval(async () => {
             try {
-                yield this.reportCurrentLocation();
+                await this.reportCurrentLocation();
             }
             catch (error) {
                 console.error('位置上报失败:', error);
             }
-        }), this.reportInterval);
+        }, this.reportInterval);
     }
     /**
      * 停止自动位置上报
@@ -340,46 +307,43 @@ class LocationReportManager {
     /**
      * 上报当前位置
      */
-    reportCurrentLocation() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // 获取当前位置（这里需要调用微信小程序的位置API）
-                const location = yield this.getCurrentPosition();
-                if (location) {
-                    const result = yield exports.locationManagementService.updateSingleLocation(location);
-                    this.lastLocation = location;
-                    return result;
-                }
+    async reportCurrentLocation() {
+        try {
+            // 获取当前位置（这里需要调用微信小程序的位置API）
+            const location = await this.getCurrentPosition();
+            if (location) {
+                const result = await exports.locationManagementService.updateSingleLocation(location);
+                this.lastLocation = location;
+                return result;
             }
-            catch (error) {
-                console.error('获取位置失败:', error);
-            }
-            return null;
-        });
+        }
+        catch (error) {
+            console.error('获取位置失败:', error);
+        }
+        return null;
     }
     /**
      * 获取当前GPS位置
      */
-    getCurrentPosition() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => {
-                // 微信小程序获取位置
-                wx.getLocation({
-                    type: 'gcj02',
-                    success: (res) => {
-                        resolve({
-                            latitude: res.latitude,
-                            longitude: res.longitude,
-                            recorded_at: new Date().toISOString(),
-                            accuracy: res.accuracy,
-                            speed: res.speed,
-                            heading: res.heading
-                        });
-                    },
-                    fail: () => {
-                        resolve(null);
-                    }
-                });
+    async getCurrentPosition() {
+        return new Promise((resolve) => {
+            // 微信小程序获取位置
+            wx.getLocation({
+                type: 'gcj02',
+                success: (res) => {
+                    const heading = res.heading;
+                    resolve({
+                        latitude: res.latitude,
+                        longitude: res.longitude,
+                        recorded_at: new Date().toISOString(),
+                        accuracy: res.accuracy,
+                        speed: res.speed,
+                        heading
+                    });
+                },
+                fail: () => {
+                    resolve(null);
+                }
             });
         });
     }

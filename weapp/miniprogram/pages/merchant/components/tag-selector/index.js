@@ -45,7 +45,8 @@ Component({
          */
         onTagToggle(e) {
             const tagId = e.currentTarget.dataset.id;
-            const { selectedIds, maxCount } = this.properties;
+            const selectedIds = this.properties.selectedIds;
+            const maxCount = this.properties.maxCount;
             let newIds;
             if (selectedIds.includes(tagId)) {
                 // 已选中，移除

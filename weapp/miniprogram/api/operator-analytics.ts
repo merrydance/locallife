@@ -677,9 +677,10 @@ export class DataAnalysisService {
             insights.push('待处理申诉数量较多，建议增加处理人员')
         }
 
-        const orderIssueCount = distribution.byType.get('order_issue') || 0
-        const totalCount = Array.from(distribution.byType.values()).reduce((sum, count) => sum + count, 0)
-        if (orderIssueCount / totalCount > 0.5) {
+        const byType = distribution.byType as Map<string, number>
+        const orderIssueCount = byType.get('order_issue') || 0
+        const totalCount = Array.from(byType.values()).reduce((sum, count) => sum + count, 0)
+        if (totalCount > 0 && orderIssueCount / totalCount > 0.5) {
             insights.push('订单相关申诉占比较高，建议重点关注订单流程')
         }
 

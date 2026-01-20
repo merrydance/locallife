@@ -17,6 +17,7 @@ App<IAppOption>({
     userRole: 'guest',
     userId: undefined as number | undefined,
     merchantId: undefined,
+    merchantName: '',
     // 多店铺切换支持
     currentMerchantId: undefined as number | undefined,
     merchantInfo: undefined as {

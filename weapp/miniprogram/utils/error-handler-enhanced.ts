@@ -309,8 +309,9 @@ export function handleAsyncError(
         try {
             return await originalMethod.apply(this, args)
         } catch (error) {
+            const pageRoute = (this as { route?: string }).route
             EnhancedErrorHandler.handle(error, {
-                page: this.route || 'unknown',
+                page: pageRoute || 'unknown',
                 action: propertyKey
             })
             throw error
@@ -347,8 +348,9 @@ export function retry(maxRetries: number = 3, delay: number = 1000) {
                 }
             }
 
+            const pageRoute = (this as { route?: string }).route
             EnhancedErrorHandler.handle(lastError, {
-                page: this.route || 'unknown',
+                page: pageRoute || 'unknown',
                 action: propertyKey
             })
             throw lastError
@@ -364,15 +366,11 @@ export function retry(maxRetries: number = 3, delay: number = 1000) {
 export function setupGlobalErrorHandler(): void {
     // 捕获未处理的Promise错误
     if (typeof wx !== 'undefined') {
-        const originalOnError = wx.onError
-        wx.onError = function (error: string) {
+        wx.onError((error) => {
             EnhancedErrorHandler.handle(error, {
                 page: 'global',
                 action: 'unhandledError'
             })
-            if (originalOnError) {
-                originalOnError(error)
-            }
-        }
+        })
     }
 }

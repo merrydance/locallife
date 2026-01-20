@@ -75,9 +75,10 @@ class OrderAdapter {
      * 将API响应转换为详情视图模型
      */
     static toDetailViewModel(dto) {
+        var _a;
         const base = OrderAdapter.toViewModel(dto);
         const payableAmount = (0, order_1.getPayableAmount)(dto);
-        const items = dto.items.map((item) => {
+        const items = ((_a = dto.items) !== null && _a !== void 0 ? _a : []).map((item) => {
             var _a;
             return ({
                 id: item.id,
@@ -94,14 +95,38 @@ class OrderAdapter {
             });
         });
         const expectDeliverTime = formatDeliveryWindow(dto.estimated_delivery_at, dto.delivery_eta_minutes);
-        return Object.assign(Object.assign({}, base), { items, subtotal: dto.subtotal, subtotalDisplay: `¥${(dto.subtotal / 100).toFixed(2)}`, deliveryFee: dto.delivery_fee, deliveryFeeDisplay: dto.delivery_fee > 0 ? `¥${(dto.delivery_fee / 100).toFixed(2)}` : '免配送费', deliveryFeeDiscount: dto.delivery_fee_discount, deliveryFeeDiscountDisplay: dto.delivery_fee_discount > 0 ? `-¥${(dto.delivery_fee_discount / 100).toFixed(2)}` : '', discountAmount: dto.discount_amount, discountAmountDisplay: dto.discount_amount > 0 ? `-¥${(dto.discount_amount / 100).toFixed(2)}` : '', payableAmount, payableAmountDisplay: `¥${(payableAmount / 100).toFixed(2)}`, notes: dto.notes, 
+        return {
+            ...base,
+            items,
+            subtotal: dto.subtotal,
+            subtotalDisplay: `¥${(dto.subtotal / 100).toFixed(2)}`,
+            deliveryFee: dto.delivery_fee,
+            deliveryFeeDisplay: dto.delivery_fee > 0 ? `¥${(dto.delivery_fee / 100).toFixed(2)}` : '免配送费',
+            deliveryFeeDiscount: dto.delivery_fee_discount,
+            deliveryFeeDiscountDisplay: dto.delivery_fee_discount > 0 ? `-¥${(dto.delivery_fee_discount / 100).toFixed(2)}` : '',
+            discountAmount: dto.discount_amount,
+            discountAmountDisplay: dto.discount_amount > 0 ? `-¥${(dto.discount_amount / 100).toFixed(2)}` : '',
+            payableAmount,
+            payableAmountDisplay: `¥${(payableAmount / 100).toFixed(2)}`,
+            notes: dto.notes,
             // 配送地址信息
-            address: dto.delivery_address, contactName: dto.delivery_contact_name, contactPhone: dto.delivery_contact_phone, 
+            address: dto.delivery_address,
+            contactName: dto.delivery_contact_name,
+            contactPhone: dto.delivery_contact_phone,
             // 商户电话
-            merchantPhone: dto.merchant_phone, estimatedDeliveryAt: dto.estimated_delivery_at, deliveryEtaMinutes: dto.delivery_eta_minutes, expectDeliverTime, tableId: dto.table_id, reservationId: dto.reservation_id, replacedByOrderId: dto.replaced_by_order_id, fulfillmentStatus: dto.fulfillment_status, timeline: dto.fulfillment_status ? [{
+            merchantPhone: dto.merchant_phone,
+            estimatedDeliveryAt: dto.estimated_delivery_at,
+            deliveryEtaMinutes: dto.delivery_eta_minutes,
+            expectDeliverTime,
+            tableId: dto.table_id,
+            reservationId: dto.reservation_id,
+            replacedByOrderId: dto.replaced_by_order_id,
+            fulfillmentStatus: dto.fulfillment_status,
+            timeline: dto.fulfillment_status ? [{
                     time: dto.updated_at || dto.created_at,
                     title: FULFILLMENT_STATUS_TEXT[dto.fulfillment_status] || dto.fulfillment_status
-                }] : undefined });
+                }] : undefined
+        };
     }
 }
 exports.OrderAdapter = OrderAdapter;

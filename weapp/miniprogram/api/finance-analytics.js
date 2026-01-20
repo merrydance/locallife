@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：财务概览、财务明细、统计分析、客户分析、菜品分析
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dishAnalyticsService = exports.customerAnalyticsService = exports.statsAnalyticsService = exports.financeManagementService = exports.FinanceAnalyticsAdapter = exports.DishAnalyticsService = exports.CustomerAnalyticsService = exports.StatsAnalyticsService = exports.FinanceManagementService = void 0;
 exports.getComprehensiveAnalytics = getComprehensiveAnalytics;
@@ -33,78 +24,66 @@ class FinanceManagementService {
      * 获取财务概览
      * @param params 查询参数
      */
-    getFinanceOverview(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/finance/overview',
-                method: 'GET',
-                data: params
-            });
+    async getFinanceOverview(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/finance/overview',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取每日财务汇总
      * @param params 查询参数
      */
-    getDailyFinanceSummary(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/finance/daily',
-                method: 'GET',
-                data: params
-            });
+    async getDailyFinanceSummary(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/finance/daily',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取订单收入明细
      * @param params 查询参数
      */
-    getFinanceOrders(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/finance/orders',
-                method: 'GET',
-                data: params
-            });
+    async getFinanceOrders(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/finance/orders',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取结算记录
      * @param params 查询参数
      */
-    getSettlements(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/finance/settlements',
-                method: 'GET',
-                data: params
-            });
+    async getSettlements(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/finance/settlements',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取促销支出明细
      * @param params 查询参数
      */
-    getPromotionExpenses(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/finance/promotions',
-                method: 'GET',
-                data: params
-            });
+    async getPromotionExpenses(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/finance/promotions',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取服务费明细
      * @param params 查询参数
      */
-    getServiceFees(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/finance/service-fees',
-                method: 'GET',
-                data: params
-            });
+    async getServiceFees(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/finance/service-fees',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -119,52 +98,44 @@ class StatsAnalyticsService {
      * 获取商户概览统计
      * @param params 查询参数
      */
-    getMerchantOverview(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/overview',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantOverview(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/overview',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取商户日报统计
      * @param params 查询参数
      */
-    getDailyStats(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/daily',
-                method: 'GET',
-                data: params
-            });
+    async getDailyStats(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/daily',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取小时分布统计
      * @param params 查询参数
      */
-    getHourlyStats(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/hourly',
-                method: 'GET',
-                data: params
-            });
+    async getHourlyStats(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/hourly',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取订单来源统计
      * @param params 查询参数
      */
-    getSourceStats(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/sources',
-                method: 'GET',
-                data: params
-            });
+    async getSourceStats(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/sources',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -179,38 +150,32 @@ class CustomerAnalyticsService {
      * 获取商户顾客列表
      * @param params 查询参数
      */
-    getCustomers(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/customers',
-                method: 'GET',
-                data: params
-            });
+    async getCustomers(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/customers',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取顾客详情
      * @param userId 用户ID
      */
-    getCustomerDetail(userId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/stats/customers/${userId}`,
-                method: 'GET'
-            });
+    async getCustomerDetail(userId) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/stats/customers/${userId}`,
+            method: 'GET'
         });
     }
     /**
      * 获取复购率统计
      * @param params 查询参数
      */
-    getRepurchaseRate(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/repurchase',
-                method: 'GET',
-                data: params
-            });
+    async getRepurchaseRate(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/repurchase',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -225,26 +190,22 @@ class DishAnalyticsService {
      * 获取菜品销量排行
      * @param params 查询参数
      */
-    getTopSellingDishes(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/dishes/top',
-                method: 'GET',
-                data: params
-            });
+    async getTopSellingDishes(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/dishes/top',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取菜品分类统计
      * @param params 查询参数
      */
-    getCategoryStats(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/stats/categories',
-                method: 'GET',
-                data: params
-            });
+    async getCategoryStats(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/stats/categories',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -345,26 +306,24 @@ exports.dishAnalyticsService = new DishAnalyticsService();
  * @param startDate 开始日期
  * @param endDate 结束日期
  */
-function getComprehensiveAnalytics(startDate, endDate) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const params = { start_date: startDate, end_date: endDate };
-        const [financeOverview, merchantOverview, dailyStats, repurchaseRate, topDishes, categoryStats] = yield Promise.all([
-            exports.financeManagementService.getFinanceOverview(params),
-            exports.statsAnalyticsService.getMerchantOverview(params),
-            exports.statsAnalyticsService.getDailyStats(params),
-            exports.customerAnalyticsService.getRepurchaseRate(params),
-            exports.dishAnalyticsService.getTopSellingDishes(Object.assign(Object.assign({}, params), { limit: 10 })),
-            exports.dishAnalyticsService.getCategoryStats(params)
-        ]);
-        return {
-            financeOverview,
-            merchantOverview,
-            dailyStats,
-            repurchaseRate,
-            topDishes,
-            categoryStats
-        };
-    });
+async function getComprehensiveAnalytics(startDate, endDate) {
+    const params = { start_date: startDate, end_date: endDate };
+    const [financeOverview, merchantOverview, dailyStats, repurchaseRate, topDishes, categoryStats] = await Promise.all([
+        exports.financeManagementService.getFinanceOverview(params),
+        exports.statsAnalyticsService.getMerchantOverview(params),
+        exports.statsAnalyticsService.getDailyStats(params),
+        exports.customerAnalyticsService.getRepurchaseRate(params),
+        exports.dishAnalyticsService.getTopSellingDishes({ ...params, limit: 10 }),
+        exports.dishAnalyticsService.getCategoryStats(params)
+    ]);
+    return {
+        financeOverview,
+        merchantOverview,
+        dailyStats,
+        repurchaseRate,
+        topDishes,
+        categoryStats
+    };
 }
 /**
  * 计算财务指标

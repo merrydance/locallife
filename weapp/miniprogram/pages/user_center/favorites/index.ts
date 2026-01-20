@@ -124,7 +124,7 @@ Page({
   onItemClick(e: WechatMiniprogram.CustomEvent) {
     const { id, type } = e.currentTarget.dataset as { id?: number; type?: 'DISH' | 'MERCHANT' }
     if (type === 'DISH') {
-      const item = this.data.favorites.find(f => f.id === id)
+      const item = this.data.favorites.find(f => f.id === id) as FavoriteDishView | undefined
       wx.navigateTo({
         url: `/pages/takeout/dish-detail/index?id=${id}&merchant_id=${item?.merchantId || ''}`
       })

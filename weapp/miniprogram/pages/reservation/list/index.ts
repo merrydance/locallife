@@ -63,13 +63,13 @@ Page({
             const page = reset ? 1 : this.data.page;
             const status = this.data.currentTab === 'all' ? undefined : (this.data.currentTab as ReservationStatus);
 
-            const res = await ReservationService.getReservations({
+            const res = await ReservationService.getUserReservations({
                 page_id: page,
                 page_size: this.data.pageSize,
                 status
             });
 
-            const formattedReservations = res.reservations.map(r => ({
+            const formattedReservations = res.reservations.map((r) => ({
                 ...r,
                 _statusText: ReservationAdapter.formatStatus(r.status),
                 _statusTheme: ReservationAdapter.getStatusTheme(r.status),

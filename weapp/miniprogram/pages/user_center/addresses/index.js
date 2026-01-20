@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -33,21 +24,19 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },
-    loadAddresses() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const addresses = yield address_1.default.getAddresses();
-                this.setData({
-                    addresses,
-                    loading: false
-                });
-            }
-            catch (error) {
-                error_handler_1.ErrorHandler.handle(error, 'Addresses.loadAddresses');
-                this.setData({ loading: false });
-            }
-        });
+    async loadAddresses() {
+        this.setData({ loading: true });
+        try {
+            const addresses = await address_1.default.getAddresses();
+            this.setData({
+                addresses,
+                loading: false
+            });
+        }
+        catch (error) {
+            error_handler_1.ErrorHandler.handle(error, 'Addresses.loadAddresses');
+            this.setData({ loading: false });
+        }
     },
     onAddAddress() {
         wx.navigateTo({
@@ -89,10 +78,10 @@ Page({
         wx.showModal({
             title: '删除地址',
             content: '确认删除此地址?',
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 if (res.confirm) {
                     try {
-                        yield address_1.default.deleteAddress(id);
+                        await address_1.default.deleteAddress(id);
                         wx.showToast({ title: '已删除', icon: 'success' });
                         this.loadAddresses();
                     }
@@ -100,7 +89,7 @@ Page({
                         error_handler_1.ErrorHandler.handle(error, 'Addresses.deleteAddress');
                     }
                 }
-            })
+            }
         });
     },
     onSelectAddress(e) {
@@ -114,17 +103,15 @@ Page({
             wx.navigateBack();
         }
     },
-    onSetDefault(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { id } = e.currentTarget.dataset;
-            try {
-                yield address_1.default.setDefaultAddress(id);
-                wx.showToast({ title: '已设为默认', icon: 'success' });
-                this.loadAddresses();
-            }
-            catch (error) {
-                error_handler_1.ErrorHandler.handle(error, 'Addresses.setDefault');
-            }
-        });
+    async onSetDefault(e) {
+        const { id } = e.currentTarget.dataset;
+        try {
+            await address_1.default.setDefaultAddress(id);
+            wx.showToast({ title: '已设为默认', icon: 'success' });
+            this.loadAddresses();
+        }
+        catch (error) {
+            error_handler_1.ErrorHandler.handle(error, 'Addresses.setDefault');
+        }
     }
 });

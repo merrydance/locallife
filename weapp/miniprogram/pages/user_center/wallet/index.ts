@@ -31,7 +31,7 @@ Page({
     try {
       const [memberships, payments] = await Promise.all([
         getMyMemberships(),
-        getPayments({ page_id: 1, page_size: 20 })
+        getPayments({ page: 1, page_size: 20 })
       ])
 
       const balance = memberships.memberships.reduce((sum, m) => sum + (m.balance || 0), 0)
@@ -50,7 +50,14 @@ Page({
           title,
           time: payment.paid_at || payment.created_at
         }
-      })
+      }) as Array<{
+        id: string
+        type: 'PAYMENT' | 'REFUND' | 'TOPUP'
+        amount: number
+        amountDisplay: string
+        title: string
+        time: string
+      }>
 
       this.setData({
         balance,

@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const ocr_1 = require("../../../api/ocr");
 const logger_1 = require("../../../utils/logger");
@@ -144,65 +135,61 @@ Page({
     onTimeCancel() { this.setData({ timePickerVisible: false }); },
     // ==================== 图片上传与OCR ====================
     // 身份证正面
-    onIdCardFrontUpload(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { files } = e.detail;
-            this.setData({ idCardFrontImages: files });
-            this.saveDraft();
-            if (files.length > 0) {
-                wx.showLoading({ title: '识别中...' });
-                try {
-                    const res = yield (0, ocr_1.ocrRiderIdCard)(files[0].url, 'front');
-                    const info = res.ocrData;
-                    this.setData({
-                        'formData.name': info.name || '',
-                        'formData.idCard': info.id || info.id_num || '',
-                        'formData.gender': info.gender || '',
-                        'formData.hometown': info.addr || info.address || ''
-                    });
-                    this.saveDraft();
-                    wx.showToast({ title: '识别成功', icon: 'success' });
-                }
-                catch (error) {
-                    logger_1.logger.error('OCR failed', error, 'Rider');
-                    wx.showToast({ title: '识别失败', icon: 'none' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
+    async onIdCardFrontUpload(e) {
+        const { files } = e.detail;
+        this.setData({ idCardFrontImages: files });
+        this.saveDraft();
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' });
+            try {
+                const res = await (0, ocr_1.ocrRiderIdCard)(files[0].url, 'front');
+                const info = res.ocrData;
+                this.setData({
+                    'formData.name': info.name || '',
+                    'formData.idCard': info.id || info.id_num || '',
+                    'formData.gender': info.gender || '',
+                    'formData.hometown': info.addr || info.address || ''
+                });
+                this.saveDraft();
+                wx.showToast({ title: '识别成功', icon: 'success' });
             }
-        });
+            catch (error) {
+                logger_1.logger.error('OCR failed', error, 'Rider');
+                wx.showToast({ title: '识别失败', icon: 'none' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
     onIdCardFrontRemove() {
         this.setData({ idCardFrontImages: [] });
         this.saveDraft();
     },
     // 身份证反面
-    onIdCardBackUpload(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { files } = e.detail;
-            this.setData({ idCardBackImages: files });
-            this.saveDraft();
-            if (files.length > 0) {
-                wx.showLoading({ title: '识别中...' });
-                try {
-                    const res = yield (0, ocr_1.ocrRiderIdCard)(files[0].url, 'back');
-                    const info = res.ocrData;
-                    this.setData({
-                        'formData.idCardValidity': info.valid_date || info.valid_period || ''
-                    });
-                    this.saveDraft();
-                    wx.showToast({ title: '识别成功', icon: 'success' });
-                }
-                catch (error) {
-                    logger_1.logger.error('OCR failed', error, 'Rider');
-                    wx.showToast({ title: '识别失败', icon: 'none' });
-                }
-                finally {
-                    wx.hideLoading();
-                }
+    async onIdCardBackUpload(e) {
+        const { files } = e.detail;
+        this.setData({ idCardBackImages: files });
+        this.saveDraft();
+        if (files.length > 0) {
+            wx.showLoading({ title: '识别中...' });
+            try {
+                const res = await (0, ocr_1.ocrRiderIdCard)(files[0].url, 'back');
+                const info = res.ocrData;
+                this.setData({
+                    'formData.idCardValidity': info.valid_date || info.valid_period || ''
+                });
+                this.saveDraft();
+                wx.showToast({ title: '识别成功', icon: 'success' });
             }
-        });
+            catch (error) {
+                logger_1.logger.error('OCR failed', error, 'Rider');
+                wx.showToast({ title: '识别失败', icon: 'none' });
+            }
+            finally {
+                wx.hideLoading();
+            }
+        }
     },
     onIdCardBackRemove() {
         this.setData({ idCardBackImages: [] });
@@ -219,58 +206,58 @@ Page({
         this.saveDraft();
     },
     // ==================== 提交申请 ====================
-    onSubmit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { formData, idCardFrontImages, idCardBackImages, healthCertImages } = this.data;
-            // 验证必填字段
-            if (!idCardFrontImages.length)
-                return wx.showToast({ title: '请上传身份证正面', icon: 'none' });
-            if (!idCardBackImages.length)
-                return wx.showToast({ title: '请上传身份证反面', icon: 'none' });
-            if (!healthCertImages.length)
-                return wx.showToast({ title: '请上传健康证', icon: 'none' });
-            if (!formData.name)
-                return wx.showToast({ title: '请输入真实姓名', icon: 'none' });
-            if (!formData.phone)
-                return wx.showToast({ title: '请输入联系电话', icon: 'none' });
-            if (!formData.idCard)
-                return wx.showToast({ title: '请输入身份证号', icon: 'none' });
-            if (!formData.address)
-                return wx.showToast({ title: '请选择常驻地址', icon: 'none' });
-            if (!formData.gender)
-                return wx.showToast({ title: '缺少身份信息', icon: 'none' });
-            // 构建提交数据
-            const submitData = {
-                name: formData.name,
-                phone: formData.phone,
-                id_card: formData.idCard,
-                vehicle_type: formData.vehicle,
-                id_card_front_images: idCardFrontImages.map((img) => img.url),
-                id_card_back_images: idCardBackImages.map((img) => img.url),
-                health_certificate_images: healthCertImages.map((img) => img.url)
-            };
-            wx.showLoading({ title: '提交中...' });
-            try {
-                yield (0, onboarding_1.submitRiderApplication)(submitData);
-                wx.showToast({
-                    title: '申请提交成功',
-                    icon: 'success',
-                    duration: 2000,
-                    success: () => {
-                        draft_storage_1.DraftStorage.clear(DRAFT_KEY);
-                        setTimeout(() => {
-                            wx.navigateBack();
-                        }, 2000);
-                    }
-                });
-            }
-            catch (error) {
-                logger_1.logger.error('Apply rider failed:', error, 'Rider');
-                wx.showToast({ title: '提交失败', icon: 'error' });
-            }
-            finally {
-                wx.hideLoading();
-            }
-        });
+    async onSubmit() {
+        const { formData, idCardFrontImages, idCardBackImages, healthCertImages } = this.data;
+        // 验证必填字段
+        if (!idCardFrontImages.length)
+            return wx.showToast({ title: '请上传身份证正面', icon: 'none' });
+        if (!idCardBackImages.length)
+            return wx.showToast({ title: '请上传身份证反面', icon: 'none' });
+        if (!healthCertImages.length)
+            return wx.showToast({ title: '请上传健康证', icon: 'none' });
+        if (!formData.name)
+            return wx.showToast({ title: '请输入真实姓名', icon: 'none' });
+        if (!formData.phone)
+            return wx.showToast({ title: '请输入联系电话', icon: 'none' });
+        if (!formData.idCard)
+            return wx.showToast({ title: '请输入身份证号', icon: 'none' });
+        if (!formData.address)
+            return wx.showToast({ title: '请选择常驻地址', icon: 'none' });
+        if (!formData.gender)
+            return wx.showToast({ title: '缺少身份信息', icon: 'none' });
+        // 构建提交数据
+        const submitData = {
+            real_name: formData.name,
+            phone: formData.phone,
+            id_card_no: formData.idCard,
+            vehicle_type: formData.vehicle,
+            address: formData.address,
+            gender: formData.gender,
+            id_card_front_images: idCardFrontImages.map((img) => img.url),
+            id_card_back_images: idCardBackImages.map((img) => img.url),
+            health_certificate_images: healthCertImages.map((img) => img.url)
+        };
+        wx.showLoading({ title: '提交中...' });
+        try {
+            await (0, onboarding_1.submitRiderApplication)(submitData);
+            wx.showToast({
+                title: '申请提交成功',
+                icon: 'success',
+                duration: 2000,
+                success: () => {
+                    draft_storage_1.DraftStorage.clear(DRAFT_KEY);
+                    setTimeout(() => {
+                        wx.navigateBack();
+                    }, 2000);
+                }
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Apply rider failed:', error, 'Rider');
+            wx.showToast({ title: '提交失败', icon: 'error' });
+        }
+        finally {
+            wx.hideLoading();
+        }
     }
 });

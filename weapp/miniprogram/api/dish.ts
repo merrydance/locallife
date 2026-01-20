@@ -17,6 +17,7 @@ export interface DishResponse {
     name: string                                 // 菜品名称
     description: string                          // 菜品描述
     price: number                                // 价格（分）
+    original_price?: number                      // 原价（分）
     member_price?: number                        // 会员价（分）
     image_url: string                            // 菜品图片URL
     category_id: number                          // 分类ID
@@ -512,6 +513,7 @@ export interface ComboSummary {
     merchant_region_id: number                   // 商户区域ID
     merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
+    estimated_delivery_time?: number             // 预估配送时间（秒）
     estimated_delivery_fee?: number              // 预估配送费（分）
 }
 

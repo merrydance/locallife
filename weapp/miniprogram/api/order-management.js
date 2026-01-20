@@ -3,15 +3,6 @@
  * 商户订单管理接口
  * 基于swagger.json完全重构，仅保留后端支持的接口
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrderManagementAdapter = exports.KitchenDisplayService = exports.MerchantOrderManagementService = void 0;
 const request_1 = require("../utils/request");
@@ -25,87 +16,73 @@ class MerchantOrderManagementService {
      * 获取商户订单列表
      * GET /v1/merchant/orders
      */
-    static getOrderList(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchant/orders',
-                method: 'GET',
-                data: params
-            });
+    static async getOrderList(params) {
+        return await (0, request_1.request)({
+            url: '/v1/merchant/orders',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取订单统计
      * GET /v1/merchant/orders/stats
      */
-    static getOrderStats(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchant/orders/stats',
-                method: 'GET',
-                data: params
-            });
+    static async getOrderStats(params) {
+        return await (0, request_1.request)({
+            url: '/v1/merchant/orders/stats',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取订单详情
      * GET /v1/merchant/orders/{id}
      */
-    static getOrderDetail(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchant/orders/${orderId}`,
-                method: 'GET'
-            });
+    static async getOrderDetail(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchant/orders/${orderId}`,
+            method: 'GET'
         });
     }
     /**
      * 商户接单
      * POST /v1/merchant/orders/{id}/accept
      */
-    static acceptOrder(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchant/orders/${orderId}/accept`,
-                method: 'POST'
-            });
+    static async acceptOrder(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchant/orders/${orderId}/accept`,
+            method: 'POST'
         });
     }
     /**
      * 商户拒单
      * POST /v1/merchant/orders/{id}/reject
      */
-    static rejectOrder(orderId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchant/orders/${orderId}/reject`,
-                method: 'POST',
-                data
-            });
+    static async rejectOrder(orderId, data) {
+        return await (0, request_1.request)({
+            url: `/v1/merchant/orders/${orderId}/reject`,
+            method: 'POST',
+            data
         });
     }
     /**
      * 标记订单准备完成
      * POST /v1/merchant/orders/{id}/ready
      */
-    static markOrderReady(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchant/orders/${orderId}/ready`,
-                method: 'POST'
-            });
+    static async markOrderReady(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchant/orders/${orderId}/ready`,
+            method: 'POST'
         });
     }
     /**
      * 完成订单（堂食/打包自取）
      * POST /v1/merchant/orders/{id}/complete
      */
-    static completeOrder(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchant/orders/${orderId}/complete`,
-                method: 'POST'
-            });
+    static async completeOrder(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchant/orders/${orderId}/complete`,
+            method: 'POST'
         });
     }
 }
@@ -120,48 +97,40 @@ class KitchenDisplayService {
      * 获取厨房订单列表
      * GET /v1/kitchen/orders
      */
-    static getKitchenOrders() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/kitchen/orders',
-                method: 'GET'
-            });
+    static async getKitchenOrders() {
+        return await (0, request_1.request)({
+            url: '/v1/kitchen/orders',
+            method: 'GET'
         });
     }
     /**
      * 获取厨房订单详情
      * GET /v1/kitchen/orders/{id}
      */
-    static getKitchenOrderDetail(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/kitchen/orders/${orderId}`,
-                method: 'GET'
-            });
+    static async getKitchenOrderDetail(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/kitchen/orders/${orderId}`,
+            method: 'GET'
         });
     }
     /**
      * 开始制作订单
      * POST /v1/kitchen/orders/{id}/preparing
      */
-    static startPreparing(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/kitchen/orders/${orderId}/preparing`,
-                method: 'POST'
-            });
+    static async startPreparing(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/kitchen/orders/${orderId}/preparing`,
+            method: 'POST'
         });
     }
     /**
      * 标记订单制作完成
      * POST /v1/kitchen/orders/{id}/ready
      */
-    static markKitchenOrderReady(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/kitchen/orders/${orderId}/ready`,
-                method: 'POST'
-            });
+    static async markKitchenOrderReady(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/kitchen/orders/${orderId}/ready`,
+            method: 'POST'
         });
     }
 }

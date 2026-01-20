@@ -52,14 +52,18 @@ Page({
     time?: string
   }) {
     if (options.roomId) {
+      const roomIdNum = parseInt(options.roomId || '0', 10) || 0
+      const merchantIdNum = parseInt(options.merchantId || '0', 10) || 0
+      const capacityNum = parseInt(options.capacity || '10', 10) || 10
+      const depositNum = Number(options.deposit) || 10000
       this.setData({
         roomId: options.roomId,
-        tableId: parseInt(options.roomId) || 0,
-        merchantId: parseInt(options.merchantId) || 0,
+        tableId: roomIdNum,
+        merchantId: merchantIdNum,
         roomName: decodeURIComponent(options.roomName || ''),
-        capacity: parseInt(options.capacity) || 10,
-        deposit: Number(options.deposit) || 10000,
-        depositDisplay: formatPriceNoSymbol(Number(options.deposit) || 10000)
+        capacity: capacityNum,
+        deposit: depositNum,
+        depositDisplay: formatPriceNoSymbol(depositNum)
       })
     }
 
@@ -69,7 +73,7 @@ Page({
       if (options.time) {
         this.setData({ 'form.time': options.time, selectedTimeLabel: this.buildTimeLabel(options.time) })
       }
-      this.loadAvailability(options.date, parseInt(options.roomId))
+      this.loadAvailability(options.date, parseInt(options.roomId || '0', 10))
     } else {
       // 默认日期为当天
       const today = new Date()
@@ -77,7 +81,7 @@ Page({
       const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
       this.setData({ 'form.date': dateStr })
       if (options.roomId) {
-        this.loadAvailability(dateStr, parseInt(options.roomId))
+        this.loadAvailability(dateStr, parseInt(options.roomId || '0', 10))
       }
     }
   },

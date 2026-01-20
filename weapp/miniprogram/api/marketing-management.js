@@ -3,15 +3,6 @@
  * 营销活动管理接口
  * 基于swagger.json完全重构，包含优惠券、充值规则、会员设置等
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MarketingAdapter = exports.PromotionService = exports.MembershipSettingsService = exports.RechargeRuleManagementService = exports.DiscountRuleManagementService = exports.VoucherManagementService = void 0;
 const request_1 = require("../utils/request");
@@ -24,63 +15,53 @@ class VoucherManagementService {
      * 获取商户优惠券列表
      * GET /v1/merchants/{id}/vouchers
      */
-    static getVoucherList(merchantId, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/vouchers?page_id=${params.page_id}&page_size=${params.page_size}`,
-                method: 'GET'
-            });
+    static async getVoucherList(merchantId, params) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/vouchers?page_id=${params.page_id}&page_size=${params.page_size}`,
+            method: 'GET'
         });
     }
     /**
      * 获取可领取优惠券列表
      * GET /v1/merchants/{id}/vouchers/active
      */
-    static getActiveVouchers(merchantId, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/vouchers/active`,
-                method: 'GET',
-                data: params
-            });
+    static async getActiveVouchers(merchantId, params) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/vouchers/active`,
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 创建优惠券
      * POST /v1/merchants/{id}/vouchers
      */
-    static createVoucher(merchantId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/vouchers`,
-                method: 'POST',
-                data
-            });
+    static async createVoucher(merchantId, data) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/vouchers`,
+            method: 'POST',
+            data
         });
     }
     /**
      * 删除优惠券
      * DELETE /v1/merchants/{id}/vouchers/{voucher_id}
      */
-    static deleteVoucher(merchantId, voucherId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
-                method: 'DELETE'
-            });
+    static async deleteVoucher(merchantId, voucherId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
+            method: 'DELETE'
         });
     }
     /**
      * 更新优惠券
      * PATCH /v1/merchants/{id}/vouchers/{voucher_id}
      */
-    static updateVoucher(merchantId, voucherId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
-                method: 'PATCH',
-                data
-            });
+    static async updateVoucher(merchantId, voucherId, data) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
+            method: 'PATCH',
+            data
         });
     }
 }
@@ -93,25 +74,21 @@ class DiscountRuleManagementService {
      * 获取满减规则列表
      * GET /v1/merchants/{id}/discounts
      */
-    static getDiscountRuleList(merchantId, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/discounts?page_id=${params.page_id}&page_size=${params.page_size}`,
-                method: 'GET'
-            });
+    static async getDiscountRuleList(merchantId, params) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/discounts?page_id=${params.page_id}&page_size=${params.page_size}`,
+            method: 'GET'
         });
     }
     /**
      * 创建满减规则
      * POST /v1/merchants/{merchantId}/discounts
      */
-    static createDiscountRule(merchantId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/discounts`,
-                method: 'POST',
-                data
-            });
+    static async createDiscountRule(merchantId, data) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/discounts`,
+            method: 'POST',
+            data
         });
     }
     /**
@@ -119,25 +96,21 @@ class DiscountRuleManagementService {
      * PATCH /v1/merchants/{merchantId}/discounts/{id}
      * 后端要求 id 必须在请求体中
      */
-    static updateDiscountRule(merchantId, ruleId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
-                method: 'PATCH',
-                data: Object.assign({ id: ruleId }, data)
-            });
+    static async updateDiscountRule(merchantId, ruleId, data) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+            method: 'PATCH',
+            data: { id: ruleId, ...data }
         });
     }
     /**
      * 删除满减规则
      * DELETE /v1/merchants/{merchantId}/discounts/{id}
      */
-    static deleteDiscountRule(merchantId, ruleId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
-                method: 'DELETE'
-            });
+    static async deleteDiscountRule(merchantId, ruleId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+            method: 'DELETE'
         });
     }
 }
@@ -151,62 +124,52 @@ class RechargeRuleManagementService {
      * 获取充值规则列表
      * GET /v1/merchants/{id}/recharge-rules
      */
-    static getRechargeRules(merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/recharge-rules`,
-                method: 'GET'
-            });
+    static async getRechargeRules(merchantId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/recharge-rules`,
+            method: 'GET'
         });
     }
     /**
      * 获取生效中的充值规则
      * GET /v1/merchants/{id}/recharge-rules/active
      */
-    static getActiveRechargeRules(merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/recharge-rules/active`,
-                method: 'GET'
-            });
+    static async getActiveRechargeRules(merchantId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/recharge-rules/active`,
+            method: 'GET'
         });
     }
     /**
      * 创建充值规则
      * POST /v1/merchants/{id}/recharge-rules
      */
-    static createRechargeRule(merchantId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/recharge-rules`,
-                method: 'POST',
-                data
-            });
+    static async createRechargeRule(merchantId, data) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/recharge-rules`,
+            method: 'POST',
+            data
         });
     }
     /**
      * 更新充值规则
      * PATCH /v1/merchants/{id}/recharge-rules/{rule_id}
      */
-    static updateRechargeRule(merchantId, ruleId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
-                method: 'PATCH',
-                data
-            });
+    static async updateRechargeRule(merchantId, ruleId, data) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
+            method: 'PATCH',
+            data
         });
     }
     /**
      * 删除充值规则
      * DELETE /v1/merchants/{id}/recharge-rules/{rule_id}
      */
-    static deleteRechargeRule(merchantId, ruleId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
-                method: 'DELETE'
-            });
+    static async deleteRechargeRule(merchantId, ruleId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/recharge-rules/${ruleId}`,
+            method: 'DELETE'
         });
     }
 }
@@ -220,25 +183,21 @@ class MembershipSettingsService {
      * 获取商户会员设置
      * GET /v1/merchants/me/membership-settings
      */
-    static getMembershipSettings() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me/membership-settings',
-                method: 'GET'
-            });
+    static async getMembershipSettings() {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me/membership-settings',
+            method: 'GET'
         });
     }
     /**
      * 更新商户会员设置
      * PUT /v1/merchants/me/membership-settings
      */
-    static updateMembershipSettings(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me/membership-settings',
-                method: 'PUT',
-                data
-            });
+    static async updateMembershipSettings(data) {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me/membership-settings',
+            method: 'PUT',
+            data
         });
     }
 }
@@ -252,12 +211,10 @@ class PromotionService {
      * 获取商户优惠活动
      * GET /v1/merchants/{id}/promotions
      */
-    static getMerchantPromotions(merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/promotions`,
-                method: 'GET'
-            });
+    static async getMerchantPromotions(merchantId) {
+        return await (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/promotions`,
+            method: 'GET'
         });
     }
 }

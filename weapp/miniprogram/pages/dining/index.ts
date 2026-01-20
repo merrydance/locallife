@@ -162,11 +162,14 @@ Page({
         try {
             const response = await getMerchantDishes(this.data.merchantId)
             // 预处理菜品价格
-            const dishes: DishView[] = (response.dishes || []).map((dish: DishDTO) => ({
-                ...dish,
-                priceDisplay: formatPriceNoSymbol(dish.price || 0),
-                memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null
-            }))
+            const dishes: DishView[] = (response.dishes || []).map((dish: DishDTO) => {
+                const memberPrice = (dish as unknown as { member_price?: number }).member_price
+                return {
+                    ...dish,
+                    priceDisplay: formatPriceNoSymbol(dish.price || 0),
+                    memberPriceDisplay: memberPrice ? formatPriceNoSymbol(memberPrice) : null
+                }
+            })
 
             const categories: CategoryView[] = [{ id: 'all', name: '全部' }]
             const categoryMap = new Map<number | string, CategoryView>()
@@ -200,7 +203,8 @@ Page({
         const dish = this.data.dishes.find((d: DishDTO) => d.id === id)
 
         if (dish) {
-            const sharedCount = this.data.sharedDishCounts[dish.id] || 0
+            const dishId = Number(dish.id)
+            const sharedCount = this.data.sharedDishCounts[dishId] || 0
             if (sharedCount > 0) {
                 const proceed = await new Promise<boolean>((resolve) => {
                     wx.showModal({
@@ -263,7 +267,7 @@ Page({
 
         wx.showModal({
             title: '确认下单',
-            content: `共${cart.totalCount}件菜品，${cart.totalPriceDisplay}`,
+            content: `共${cart.total_count}件菜品，${formatPriceNoSymbol(cart.subtotal || 0)}`,
             success: async (res) => {
                 if (res.confirm) {
                     try {

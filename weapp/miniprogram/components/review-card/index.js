@@ -7,7 +7,7 @@ Component({
     properties: {
         review: {
             type: Object,
-            value: null
+            value: undefined
         },
         // Whether to show merchant info instead of user info (e.g. in "My Reviews")
         showMerchant: {
@@ -18,7 +18,8 @@ Component({
     methods: {
         onPreviewImage(e) {
             const { index } = e.currentTarget.dataset;
-            const images = this.properties.review.images || [];
+            const review = this.properties.review;
+            const images = (review === null || review === void 0 ? void 0 : review.images) || [];
             wx.previewImage({
                 current: images[index],
                 urls: images
@@ -26,7 +27,10 @@ Component({
         },
         onReply(e) {
             // Trigger event for merchant reply
-            this.triggerEvent('reply', { id: this.properties.review.id });
+            const review = this.properties.review;
+            if (!(review === null || review === void 0 ? void 0 : review.id))
+                return;
+            this.triggerEvent('reply', { id: review.id });
         }
     }
 });

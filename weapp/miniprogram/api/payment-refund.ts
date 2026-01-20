@@ -7,7 +7,7 @@ import { request } from '../utils/request';
 
 // ==================== 类型定义 ====================
 
-export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'closed'
+export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'closed' | 'failed' | 'cancelled'
 export type PaymentType = 'native' | 'miniprogram'
 export type BusinessType = 'order' | 'reservation'
 
@@ -34,6 +34,11 @@ export interface PaymentOrder {
     created_at: string
 }
 
+export interface Payment extends PaymentOrder {
+    refund_amount?: number
+    expired_at?: string
+}
+
 export interface RefundOrder {
     id: number
     payment_order_id: number
@@ -44,28 +49,80 @@ export interface RefundOrder {
     status: string
     refunded_at?: string
     created_at: string
+    payment_id?: number
+    amount?: number
+    operator_id?: number
+    processed_at?: string
+}
+
+export type Refund = RefundOrder
+
+export interface PaymentResult {
+    payment: Payment
+    payment_info?: MiniProgramPayParams
+}
+
+export interface PaginatedResponse<T> {
+    data: T[]
+    total: number
+    page: number
+    page_size: number
+}
+
+export interface CreatePaymentParams {
+    order_id: number
+    payment_method: 'wechat_pay' | 'alipay' | 'balance' | 'credit'
+    amount: number
+    description?: string
+}
+
+export interface CreateRefundParams {
+    payment_id: number
+    amount: number
+    reason: string
+    refund_type: 'full' | 'partial'
+    operator_id?: number
+}
+
+export interface DeliveryFeeCalculateParams extends CalculateDeliveryFeeRequest {}
+
+export interface DeliveryFeeBreakdown {
+    base_fee: number
+    distance_fee: number
+    peak_hour_fee: number
+    total_before_discount: number
+    promotion_discount: number
+    final_fee: number
+}
+
+export interface DeliveryPromotionApplied {
+    code: string
+    discount_amount: number
+    description?: string
 }
 
 /** 配送费计算结果 - 对齐 api.DeliveryFeeResult */
 export interface DeliveryFeeResult {
-    baseFee?: number;                            // 基础配送费
-    deliverySuspended?: boolean;                 // 是否暂停配送
-    distanceFee?: number;                        // 距离费
-    finalFee?: number;                           // 最终费用
-    peakHourCoefficient?: number;                // 高峰时段系数
-    promotionDiscount?: number;                  // 促销折扣
-    subtotalFee?: number;                        // 小计费用
-    suspendReason?: string;                      // 暂停原因
-    valueFee?: number;                           // 价值费
-    weatherCoefficient?: number;                 // 天气系数
+    base_fee?: number
+    distance_fee?: number
+    peak_hour_fee?: number
+    promotion_discount?: number
+    final_fee?: number
+    delivery_distance?: number
+    delivery_suspended?: boolean
+    suspend_reason?: string
+    breakdown?: DeliveryFeeBreakdown
+    promotions_applied?: DeliveryPromotionApplied[]
 }
 
 /** 计算配送费请求 - 对齐 api.calculateDeliveryFeeRequest */
 export interface CalculateDeliveryFeeRequest extends Record<string, unknown> {
-    distance: number;                            // 配送距离（米，必填）
-    merchant_id: number;                         // 商户ID（必填）
-    order_amount: number;                        // 订单金额（分，必填）
-    region_id: number;                           // 区域ID（必填）
+    merchant_id: number
+    user_address_id: number
+    order_amount: number
+    delivery_distance?: number
+    peak_hour?: boolean
+    promotion_codes?: string[]
 }
 
 /** 创建支付订单请求 - 对齐 api.createPaymentOrderRequest */
@@ -84,9 +141,10 @@ export interface CreateRefundOrderRequest extends Record<string, unknown> {
 }
 
 export interface ListPaymentOrdersParams {
-    page_id?: number
+    page?: number
     page_size?: number
     order_id?: number
+    status?: PaymentStatus
 }
 
 export interface ListPaymentOrdersResponse {
@@ -170,6 +228,45 @@ export const getPaymentRefunds = async (paymentId: number): Promise<ListRefundOr
 }
 
 /**
+ * 创建支付订单
+ */
+export const createPayment = async (params: CreatePaymentOrderRequest | CreatePaymentParams): Promise<PaymentOrder> => {
+    return request({
+        url: '/v1/payments',
+        method: 'POST',
+        data: params
+    })
+}
+
+/**
+ * 创建退款订单
+ */
+export const createRefund = async (params: CreateRefundOrderRequest | CreateRefundParams): Promise<RefundOrder> => {
+    const data = 'payment_id' in params ? {
+        payment_order_id: params.payment_id,
+        refund_amount: params.amount,
+        refund_reason: params.reason,
+        refund_type: params.refund_type
+    } : params
+    return request({
+        url: '/v1/refunds',
+        method: 'POST',
+        data
+    })
+}
+
+/**
+ * 计算配送费
+ */
+export const calculateDeliveryFee = async (params: CalculateDeliveryFeeRequest): Promise<DeliveryFeeResult> => {
+    return request({
+        url: '/v1/delivery-fee/calculate',
+        method: 'POST',
+        data: params
+    })
+}
+
+/**
  * 获取退款详情
  */
 export const getRefundById = async (id: number): Promise<RefundOrder> => {
@@ -237,14 +334,16 @@ export class RefundAdapter {
      * 适配退款数据
      */
     static adaptRefund(refund: Refund): Refund {
+        const paymentId = refund.payment_id ?? refund.payment_order_id
+        const amount = refund.amount ?? refund.refund_amount
         return {
             ...refund,
             id: Number(refund.id),
-            payment_id: Number(refund.payment_id),
-            amount: Number(refund.amount),
+            payment_id: paymentId ? Number(paymentId) : undefined,
+            amount: amount ? Number(amount) : 0,
             operator_id: refund.operator_id ? Number(refund.operator_id) : undefined,
             created_at: refund.created_at,
-            processed_at: refund.processed_at || undefined
+            processed_at: refund.processed_at || refund.refunded_at || undefined
         };
     }
 
@@ -276,22 +375,31 @@ export class DeliveryFeeAdapter {
      * 适配配送费结果
      */
     static adaptDeliveryFeeResult(result: DeliveryFeeResult): DeliveryFeeResult {
+        const breakdown = result.breakdown || {
+            base_fee: 0,
+            distance_fee: 0,
+            peak_hour_fee: 0,
+            total_before_discount: 0,
+            promotion_discount: 0,
+            final_fee: 0
+        }
+        const promotionsApplied = result.promotions_applied || []
         return {
             ...result,
-            base_fee: Number(result.base_fee),
-            distance_fee: Number(result.distance_fee),
-            peak_hour_fee: Number(result.peak_hour_fee),
-            promotion_discount: Number(result.promotion_discount),
-            final_fee: Number(result.final_fee),
+            base_fee: Number(result.base_fee || 0),
+            distance_fee: Number(result.distance_fee || 0),
+            peak_hour_fee: Number(result.peak_hour_fee || 0),
+            promotion_discount: Number(result.promotion_discount || 0),
+            final_fee: Number(result.final_fee || 0),
             breakdown: {
-                base_fee: Number(result.breakdown.base_fee),
-                distance_fee: Number(result.breakdown.distance_fee),
-                peak_hour_fee: Number(result.breakdown.peak_hour_fee),
-                total_before_discount: Number(result.breakdown.total_before_discount),
-                promotion_discount: Number(result.breakdown.promotion_discount),
-                final_fee: Number(result.breakdown.final_fee)
+                base_fee: Number(breakdown.base_fee),
+                distance_fee: Number(breakdown.distance_fee),
+                peak_hour_fee: Number(breakdown.peak_hour_fee),
+                total_before_discount: Number(breakdown.total_before_discount),
+                promotion_discount: Number(breakdown.promotion_discount),
+                final_fee: Number(breakdown.final_fee)
             },
-            promotions_applied: result.promotions_applied.map(promo => ({
+            promotions_applied: promotionsApplied.map(promo => ({
                 ...promo,
                 discount_amount: Number(promo.discount_amount)
             }))
@@ -334,7 +442,7 @@ export class PaymentUtils {
     static async createWechatPayment(orderId: number, amount: number, description?: string): Promise<PaymentResult> {
         const params = PaymentAdapter.buildPaymentParams(orderId, 'wechat_pay', amount, description);
         const result = await createPayment(params);
-        return PaymentAdapter.adaptPaymentResult(result);
+        return PaymentAdapter.adaptPaymentResult({ payment: result });
     }
 
     /**
@@ -343,7 +451,7 @@ export class PaymentUtils {
     static async createAlipayPayment(orderId: number, amount: number, description?: string): Promise<PaymentResult> {
         const params = PaymentAdapter.buildPaymentParams(orderId, 'alipay', amount, description);
         const result = await createPayment(params);
-        return PaymentAdapter.adaptPaymentResult(result);
+        return PaymentAdapter.adaptPaymentResult({ payment: result });
     }
 
     /**
@@ -352,7 +460,7 @@ export class PaymentUtils {
     static async createBalancePayment(orderId: number, amount: number, description?: string): Promise<PaymentResult> {
         const params = PaymentAdapter.buildPaymentParams(orderId, 'balance', amount, description);
         const result = await createPayment(params);
-        return PaymentAdapter.adaptPaymentResult(result);
+        return PaymentAdapter.adaptPaymentResult({ payment: result });
     }
 
     /**
@@ -372,14 +480,16 @@ export class PaymentUtils {
         pageSize: number = 20
     ): Promise<PaginatedResponse<Payment>> {
         const result = await getPayments({
-            status,
+            status: status as PaymentStatus | undefined,
             page,
             page_size: pageSize
         });
 
         return {
-            ...result,
-            data: result.data.map(payment => PaymentAdapter.adaptPayment(payment))
+            data: result.payment_orders.map(payment => PaymentAdapter.adaptPayment(payment as Payment)),
+            total: result.total,
+            page: result.page_id || page,
+            page_size: result.page_size || pageSize
         };
     }
 }
@@ -413,7 +523,7 @@ export class RefundUtils {
      */
     static async getRefundHistory(paymentId: number): Promise<Refund[]> {
         const refunds = await getPaymentRefunds(paymentId);
-        return refunds.map(refund => RefundAdapter.adaptRefund(refund));
+        return refunds.refund_orders.map(refund => RefundAdapter.adaptRefund(refund));
     }
 
     /**
@@ -452,7 +562,7 @@ export class DeliveryFeeUtils {
         promotionCodes: string[]
     ): Promise<DeliveryFeeResult> {
         const params = DeliveryFeeAdapter.buildCalculateParams(merchantId, userAddressId, orderAmount, {
-            promotion_codes: promotionCodes
+            promotionCodes: promotionCodes
         });
         const result = await calculateDeliveryFee(params);
         return DeliveryFeeAdapter.adaptDeliveryFeeResult(result);
@@ -468,8 +578,8 @@ export class DeliveryFeeUtils {
         deliveryDistance?: number
     ): Promise<DeliveryFeeResult> {
         const params = DeliveryFeeAdapter.buildCalculateParams(merchantId, userAddressId, orderAmount, {
-            peak_hour: true,
-            delivery_distance: deliveryDistance
+            peakHour: true,
+            deliveryDistance: deliveryDistance
         });
         const result = await calculateDeliveryFee(params);
         return DeliveryFeeAdapter.adaptDeliveryFeeResult(result);
@@ -485,26 +595,36 @@ export class DeliveryFeeUtils {
     } {
         const breakdown: string[] = [];
 
-        if (result.breakdown.base_fee > 0) {
-            breakdown.push(`起送费: ¥${result.breakdown.base_fee.toFixed(2)}`);
+        const breakdownDetail = result.breakdown || {
+            base_fee: 0,
+            distance_fee: 0,
+            peak_hour_fee: 0,
+            total_before_discount: 0,
+            promotion_discount: 0,
+            final_fee: 0
         }
 
-        if (result.breakdown.distance_fee > 0) {
-            breakdown.push(`距离费: ¥${result.breakdown.distance_fee.toFixed(2)}`);
+        if (breakdownDetail.base_fee > 0) {
+            breakdown.push(`起送费: ¥${breakdownDetail.base_fee.toFixed(2)}`);
         }
 
-        if (result.breakdown.peak_hour_fee > 0) {
-            breakdown.push(`高峰费: ¥${result.breakdown.peak_hour_fee.toFixed(2)}`);
+        if (breakdownDetail.distance_fee > 0) {
+            breakdown.push(`距离费: ¥${breakdownDetail.distance_fee.toFixed(2)}`);
         }
 
-        const hasDiscount = result.breakdown.promotion_discount > 0;
+        if (breakdownDetail.peak_hour_fee > 0) {
+            breakdown.push(`高峰费: ¥${breakdownDetail.peak_hour_fee.toFixed(2)}`);
+        }
+
+        const hasDiscount = breakdownDetail.promotion_discount > 0;
         if (hasDiscount) {
-            breakdown.push(`优惠减免: -¥${result.breakdown.promotion_discount.toFixed(2)}`);
+            breakdown.push(`优惠减免: -¥${breakdownDetail.promotion_discount.toFixed(2)}`);
         }
 
-        const displayText = result.final_fee === 0
+        const finalFee = result.final_fee ?? 0
+        const displayText = finalFee === 0
             ? '免配送费'
-            : `配送费 ¥${result.final_fee.toFixed(2)}`;
+            : `配送费 ¥${finalFee.toFixed(2)}`;
 
         return {
             displayText,
@@ -520,7 +640,7 @@ export class DeliveryFeeUtils {
  * 支付状态管理器
  */
 export class PaymentStatusManager {
-    private static paymentPollingMap = new Map<number, NodeJS.Timeout>();
+    private static paymentPollingMap = new Map<number, ReturnType<typeof setTimeout>>();
 
     /**
      * 开始轮询支付状态

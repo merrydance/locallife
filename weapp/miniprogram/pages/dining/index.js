@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -63,226 +54,223 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },
-    init() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                yield this.checkAndOpenSession();
-                yield this.loadMenu();
-                this.setData({ loading: false });
-            }
-            catch (error) {
-                error_handler_1.ErrorHandler.handle(error, 'Dining.init');
-                this.setData({ loading: false });
-            }
-        });
+    async init() {
+        this.setData({ loading: true });
+        try {
+            await this.checkAndOpenSession();
+            await this.loadMenu();
+            this.setData({ loading: false });
+        }
+        catch (error) {
+            error_handler_1.ErrorHandler.handle(error, 'Dining.init');
+            this.setData({ loading: false });
+        }
     },
-    checkAndOpenSession() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            // 先做预检，判断是否存在属于当前用户的预订
-            const precheck = yield (0, reservation_1.precheckDiningSession)(Number(this.data.tableId));
-            const reservationId = precheck.reserved && precheck.is_reservation_owner ? precheck.reservation_id : undefined;
-            this.setData({ reservationId });
-            const result = yield (0, reservation_1.openDiningSession)({
-                table_id: Number(this.data.tableId),
-                reservation_id: reservationId
+    async checkAndOpenSession() {
+        var _a;
+        // 先做预检，判断是否存在属于当前用户的预订
+        const precheck = await (0, reservation_1.precheckDiningSession)(Number(this.data.tableId));
+        const reservationId = precheck.reserved && precheck.is_reservation_owner ? precheck.reservation_id : undefined;
+        this.setData({ reservationId });
+        const result = await (0, reservation_1.openDiningSession)({
+            table_id: Number(this.data.tableId),
+            reservation_id: reservationId
+        });
+        this.setData({ session: result.session, billingGroup: result.billing_group, billingGroupId: (_a = result.billing_group) === null || _a === void 0 ? void 0 : _a.id });
+        try {
+            wx.setStorageSync('activeDiningSession', {
+                id: result.session.id,
+                table_id: result.session.table_id,
+                merchant_id: result.session.merchant_id,
+                reservation_id: result.session.reservation_id,
+                status: result.session.status,
+                updated_at: result.session.updated_at || result.session.created_at
             });
-            this.setData({ session: result.session, billingGroup: result.billing_group, billingGroupId: (_a = result.billing_group) === null || _a === void 0 ? void 0 : _a.id });
-                try {
-                    wx.setStorageSync('activeDiningSession', {
-                        id: result.session.id,
-                        table_id: result.session.table_id,
-                        merchant_id: result.session.merchant_id,
-                        reservation_id: result.session.reservation_id,
-                        status: result.session.status,
-                        updated_at: result.session.updated_at || result.session.created_at
-                    });
-                }
-                catch (error) {
-                    logger_1.logger.warn('缓存用餐会话失败', error, 'Dining.checkAndOpenSession');
-                }
-            yield this.chooseBillingGroup(result.session.id, result.billing_group);
-            yield this.loadSharedOrderSummary();
-            return result.session;
-        });
+        }
+        catch (error) {
+            logger_1.logger.warn('缓存用餐会话失败', error, 'Dining.checkAndOpenSession');
+        }
+        await this.chooseBillingGroup(result.session.id, result.billing_group);
+        await this.loadSharedOrderSummary();
+        return result.session;
     },
-    chooseBillingGroup(sessionId, defaultGroup) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => {
-                wx.showModal({
-                    title: '结算方式',
-                    content: '是否单独结算？',
-                    confirmText: '单独结算',
-                    cancelText: '一起点餐',
-                    success: (res) => __awaiter(this, void 0, void 0, function* () {
-                        if (res.confirm) {
-                            try {
-                                const group = yield (0, billing_group_1.createBillingGroup)(sessionId);
-                                this.setData({ billingGroup: group, billingGroupId: group.id });
-                            }
-                            catch (error) {
-                                logger_1.logger.error('创建账单组失败', error, 'Dining.chooseBillingGroup');
-                                wx.showToast({ title: '创建账单组失败', icon: 'error' });
-                                this.setData({ billingGroup: defaultGroup, billingGroupId: defaultGroup.id });
-                            }
+    async chooseBillingGroup(sessionId, defaultGroup) {
+        return new Promise((resolve) => {
+            wx.showModal({
+                title: '结算方式',
+                content: '是否单独结算？',
+                confirmText: '单独结算',
+                cancelText: '一起点餐',
+                success: async (res) => {
+                    if (res.confirm) {
+                        try {
+                            const group = await (0, billing_group_1.createBillingGroup)(sessionId);
+                            this.setData({ billingGroup: group, billingGroupId: group.id });
                         }
-                        else {
+                        catch (error) {
+                            logger_1.logger.error('创建账单组失败', error, 'Dining.chooseBillingGroup');
+                            wx.showToast({ title: '创建账单组失败', icon: 'error' });
                             this.setData({ billingGroup: defaultGroup, billingGroupId: defaultGroup.id });
                         }
-                        resolve();
-                    })
-                });
+                    }
+                    else {
+                        this.setData({ billingGroup: defaultGroup, billingGroupId: defaultGroup.id });
+                    }
+                    resolve();
+                }
             });
         });
     },
-    loadSharedOrderSummary() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const billingGroupId = this.data.billingGroupId;
-            if (!billingGroupId) {
-                return;
-            }
-            try {
-                const { orders } = yield (0, billing_group_1.listBillingGroupOrders)(billingGroupId);
-                const summary = {};
-                for (const order of orders) {
-                    try {
-                        const detail = yield (0, order_1.getOrderDetail)(order.order_id);
-                        for (const item of detail.items || []) {
-                            if (item.dish_id) {
-                                summary[item.dish_id] = (summary[item.dish_id] || 0) + item.quantity;
-                            }
+    async loadSharedOrderSummary() {
+        const billingGroupId = this.data.billingGroupId;
+        if (!billingGroupId) {
+            return;
+        }
+        try {
+            const { orders } = await (0, billing_group_1.listBillingGroupOrders)(billingGroupId);
+            const summary = {};
+            for (const order of orders) {
+                try {
+                    const detail = await (0, order_1.getOrderDetail)(order.order_id);
+                    for (const item of detail.items || []) {
+                        if (item.dish_id) {
+                            summary[item.dish_id] = (summary[item.dish_id] || 0) + item.quantity;
                         }
                     }
-                    catch (error) {
-                        logger_1.logger.warn('获取订单详情失败', error, 'Dining.loadSharedOrderSummary');
-                    }
                 }
-                this.setData({ sharedDishCounts: summary });
+                catch (error) {
+                    logger_1.logger.warn('获取订单详情失败', error, 'Dining.loadSharedOrderSummary');
+                }
             }
-            catch (error) {
-                logger_1.logger.warn('获取账单组订单失败', error, 'Dining.loadSharedOrderSummary');
-            }
-        });
+            this.setData({ sharedDishCounts: summary });
+        }
+        catch (error) {
+            logger_1.logger.warn('获取账单组订单失败', error, 'Dining.loadSharedOrderSummary');
+        }
     },
-    loadMenu() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const response = yield (0, merchant_1.getMerchantDishes)(this.data.merchantId);
-                // 预处理菜品价格
-                const dishes = (response.dishes || []).map((dish) => (Object.assign(Object.assign({}, dish), { priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0), memberPriceDisplay: dish.member_price ? (0, util_1.formatPriceNoSymbol)(dish.member_price) : null })));
-                const categories = [{ id: 'all', name: '全部' }];
-                const categoryMap = new Map();
-                dishes.forEach((dish) => {
-                    if (dish.category_id && !categoryMap.has(dish.category_id)) {
-                        categoryMap.set(dish.category_id, {
-                            id: dish.category_id,
-                            name: dish.category_name || String(dish.category_id)
-                        });
-                    }
-                });
-                categories.push(...Array.from(categoryMap.values()));
-                this.setData({ dishes, categories });
-            }
-            catch (error) {
-                logger_1.logger.error('加载菜单失败', error, 'Dining.loadMenu');
-                wx.showToast({ title: '加载菜单失败', icon: 'error' });
-            }
-        });
+    async loadMenu() {
+        try {
+            const response = await (0, merchant_1.getMerchantDishes)(this.data.merchantId);
+            // 预处理菜品价格
+            const dishes = (response.dishes || []).map((dish) => {
+                const memberPrice = dish.member_price;
+                return {
+                    ...dish,
+                    priceDisplay: (0, util_1.formatPriceNoSymbol)(dish.price || 0),
+                    memberPriceDisplay: memberPrice ? (0, util_1.formatPriceNoSymbol)(memberPrice) : null
+                };
+            });
+            const categories = [{ id: 'all', name: '全部' }];
+            const categoryMap = new Map();
+            dishes.forEach((dish) => {
+                if (dish.category_id && !categoryMap.has(dish.category_id)) {
+                    categoryMap.set(dish.category_id, {
+                        id: dish.category_id,
+                        name: dish.category_name || String(dish.category_id)
+                    });
+                }
+            });
+            categories.push(...Array.from(categoryMap.values()));
+            this.setData({ dishes, categories });
+        }
+        catch (error) {
+            logger_1.logger.error('加载菜单失败', error, 'Dining.loadMenu');
+            wx.showToast({ title: '加载菜单失败', icon: 'error' });
+        }
     },
     onCategoryChange(e) {
         const detail = e.detail;
         const categoryId = typeof detail === 'string' ? detail : (detail.id || '');
         this.setData({ activeCategoryId: categoryId });
     },
-    onAddCart(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { id } = e.detail;
-            const dish = this.data.dishes.find((d) => d.id === id);
-            if (dish) {
-                const sharedCount = this.data.sharedDishCounts[dish.id] || 0;
-                if (sharedCount > 0) {
-                    const proceed = yield new Promise((resolve) => {
-                        wx.showModal({
-                            title: '同伴已点',
-                            content: `同伴已点 ${sharedCount} 份该菜，是否继续添加？`,
-                            confirmText: '继续添加',
-                            cancelText: '取消',
-                            success: (res) => resolve(res.confirm)
-                        });
+    async onAddCart(e) {
+        const { id } = e.detail;
+        const dish = this.data.dishes.find((d) => d.id === id);
+        if (dish) {
+            const dishId = Number(dish.id);
+            const sharedCount = this.data.sharedDishCounts[dishId] || 0;
+            if (sharedCount > 0) {
+                const proceed = await new Promise((resolve) => {
+                    wx.showModal({
+                        title: '同伴已点',
+                        content: `同伴已点 ${sharedCount} 份该菜，是否继续添加？`,
+                        confirmText: '继续添加',
+                        cancelText: '取消',
+                        success: (res) => resolve(res.confirm)
                     });
-                    if (!proceed) {
-                        return;
-                    }
-                }
-                const success = yield cart_1.default.addItem({
-                    merchantId: this.data.merchantId,
-                    dishId: dish.id,
-                    dishName: dish.name,
-                    shopName: '当前餐厅',
-                    imageUrl: dish.image_url,
-                    price: dish.price,
-                    priceDisplay: `¥${(dish.price / 100).toFixed(2)}`
                 });
-                if (!success) {
+                if (!proceed) {
                     return;
                 }
-                this.updateCartDisplay();
-                wx.showToast({ title: '已加入', icon: 'success', duration: 500 });
             }
-        });
+            const success = await cart_1.default.addItem({
+                merchantId: this.data.merchantId,
+                dishId: dish.id
+            });
+            if (!success) {
+                return;
+            }
+            this.updateCartDisplay();
+            wx.showToast({ title: '已加入', icon: 'success', duration: 500 });
+        }
     },
     updateCartDisplay() {
         const cart = cart_1.default.getCart();
+        if (!cart) {
+            this.setData({ cartCount: 0, cartPrice: 0, cartPriceDisplay: '0.00' });
+            return;
+        }
         this.setData({
-            cartCount: cart.totalCount,
-            cartPrice: cart.totalPrice,
-            cartPriceDisplay: (0, util_1.formatPriceNoSymbol)(cart.totalPrice || 0)
+            cartCount: cart.total_count || 0,
+            cartPrice: cart.subtotal || 0,
+            cartPriceDisplay: (0, util_1.formatPriceNoSymbol)(cart.subtotal || 0)
         });
     },
-    onSubmitOrder() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { session, cartCount, billingGroupId } = this.data;
-            if (cartCount === 0) {
-                wx.showToast({ title: '请先选择菜品', icon: 'none' });
-                return;
-            }
-            if (!session) {
-                wx.showToast({ title: '会话无效', icon: 'none' });
-                return;
-            }
-            const cart = cart_1.default.getCart();
-            wx.showModal({
-                title: '确认下单',
-                content: `共${cart.totalCount}件菜品，${cart.totalPriceDisplay}`,
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        try {
-                            const items = cart.items.map((i) => ({
-                                dish_id: i.dishId,
-                                quantity: i.quantity,
-                                customizations: []
-                            }));
-                            yield (0, dining_session_1.createDiningOrder)({
-                                merchant_id: Number(this.data.merchantId),
-                                table_id: Number(this.data.tableId),
-                                reservation_id: this.data.reservationId,
-                                items,
-                                order_type: 'dine_in',
-                                billing_group_id: billingGroupId
-                            });
-                            wx.showToast({ title: '下单成功', icon: 'success' });
-                            cart_1.default.clear();
-                            this.setData({ cartCount: 0, cartPrice: 0 });
-                            yield this.loadSharedOrderSummary();
-                        }
-                        catch (error) {
-                            logger_1.logger.error('下单失败', error, 'Dining.onSubmitOrder');
-                            wx.showToast({ title: '下单失败', icon: 'error' });
-                        }
+    async onSubmitOrder() {
+        const { session, cartCount, billingGroupId } = this.data;
+        if (cartCount === 0) {
+            wx.showToast({ title: '请先选择菜品', icon: 'none' });
+            return;
+        }
+        if (!session) {
+            wx.showToast({ title: '会话无效', icon: 'none' });
+            return;
+        }
+        const cart = cart_1.default.getCart();
+        if (!cart) {
+            wx.showToast({ title: '购物车为空', icon: 'none' });
+            return;
+        }
+        wx.showModal({
+            title: '确认下单',
+            content: `共${cart.total_count}件菜品，${(0, util_1.formatPriceNoSymbol)(cart.subtotal || 0)}`,
+            success: async (res) => {
+                if (res.confirm) {
+                    try {
+                        const items = cart.items.map((i) => ({
+                            dish_id: i.dish_id,
+                            quantity: i.quantity,
+                            customizations: i.customizations
+                        }));
+                        await (0, dining_session_1.createDiningOrder)({
+                            merchant_id: Number(this.data.merchantId),
+                            table_id: Number(this.data.tableId),
+                            reservation_id: this.data.reservationId,
+                            items,
+                            order_type: 'dine_in',
+                            billing_group_id: billingGroupId
+                        });
+                        wx.showToast({ title: '下单成功', icon: 'success' });
+                        cart_1.default.clear();
+                        this.setData({ cartCount: 0, cartPrice: 0, cartPriceDisplay: '0.00' });
+                        await this.loadSharedOrderSummary();
                     }
-                })
-            });
+                    catch (error) {
+                        logger_1.logger.error('下单失败', error, 'Dining.onSubmitOrder');
+                        wx.showToast({ title: '下单失败', icon: 'error' });
+                    }
+                }
+            }
         });
     },
     onCallWaiter() {

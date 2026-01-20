@@ -99,7 +99,7 @@ Page({
     const { id } = e.currentTarget.dataset
     if (this.data.isSelectMode) {
       const pages = getCurrentPages()
-      const prevPage = pages[pages.length - 2] as WechatMiniprogram.Page.Instance & {
+      const prevPage = pages[pages.length - 2] as WechatMiniprogram.Page.Instance<WechatMiniprogram.IAnyObject, WechatMiniprogram.IAnyObject> & {
         setData: (data: Record<string, unknown>) => void
       }
       if (prevPage) {

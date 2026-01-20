@@ -3,15 +3,6 @@
  * 个人中心功能接口
  * 基于swagger.json完全重构，包含收藏、历史、评价、会员、通知、申诉等功能
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getFavoriteDishes = getFavoriteDishes;
 exports.addDishToFavorites = addDishToFavorites;
@@ -23,6 +14,7 @@ exports.getBrowseHistory = getBrowseHistory;
 exports.clearBrowseHistory = clearBrowseHistory;
 exports.createReview = createReview;
 exports.getMyReviews = getMyReviews;
+exports.bindMerchant = bindMerchant;
 exports.getReviewDetail = getReviewDetail;
 exports.getMerchantReviews = getMerchantReviews;
 exports.getAllMerchantReviews = getAllMerchantReviews;
@@ -152,6 +144,16 @@ function getMyReviews(params = {}) {
     });
 }
 /**
+ * 员工绑定商户
+ */
+function bindMerchant(inviteCode) {
+    return (0, request_1.request)({
+        url: '/v1/bind-merchant',
+        method: 'POST',
+        data: { invite_code: inviteCode }
+    });
+}
+/**
  * 获取评价详情
  */
 function getReviewDetail(reviewId) {
@@ -197,7 +199,8 @@ function replyToReview(reviewId, data) {
 function getMyMemberships() {
     return (0, request_1.request)({
         url: '/v1/memberships',
-        method: 'GET'
+        method: 'GET',
+        data: { page_id: 1, page_size: 20 }
     });
 }
 /**
@@ -234,10 +237,19 @@ function getMembershipTransactions(membershipId, params = {}) {
  * 获取通知列表
  */
 function getNotifications(params = {}) {
+    var _a, _b;
+    const pageId = (_a = params.page) !== null && _a !== void 0 ? _a : 1;
+    const pageSize = (_b = params.page_size) !== null && _b !== void 0 ? _b : 20;
+    const offset = (pageId - 1) * pageSize;
     return (0, request_1.request)({
         url: '/v1/notifications',
         method: 'GET',
-        data: params
+        data: {
+            type: params.type,
+            is_read: params.is_read,
+            limit: pageSize,
+            offset
+        }
     });
 }
 /**
@@ -330,19 +342,36 @@ function getClaimDetail(claimId) {
  * 获取我的优惠券列表
  */
 function getMyVouchers(params = {}) {
+    var _a, _b;
+    const pageId = (_a = params.page) !== null && _a !== void 0 ? _a : 1;
+    const pageSize = (_b = params.page_size) !== null && _b !== void 0 ? _b : 20;
     return (0, request_1.request)({
         url: '/v1/vouchers/me',
         method: 'GET',
-        data: params
+        data: {
+            page_id: pageId,
+            page_size: pageSize,
+            status: params.status,
+            merchant_id: params.merchant_id
+        }
     });
 }
 /**
  * 获取我的可用优惠券
  */
-function getMyAvailableVouchers() {
+function getMyAvailableVouchers(params = {}) {
+    var _a, _b;
+    const pageId = (_a = params.page) !== null && _a !== void 0 ? _a : 1;
+    const pageSize = (_b = params.page_size) !== null && _b !== void 0 ? _b : 20;
     return (0, request_1.request)({
         url: '/v1/vouchers/me/available',
-        method: 'GET'
+        method: 'GET',
+        data: {
+            page_id: pageId,
+            page_size: pageSize,
+            status: params.status,
+            merchant_id: params.merchant_id
+        }
     });
 }
 /**
@@ -367,98 +396,88 @@ function claimVoucher(voucherId) {
 /**
  * 检查菜品是否已收藏
  */
-function isDishFavorited(dishId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const response = yield getFavoriteDishes({ page: 1, page_size: 1000 });
-            return response.dishes.some(dish => dish.dish_id === dishId);
-        }
-        catch (error) {
-            console.error('检查菜品收藏状态失败:', error);
-            return false;
-        }
-    });
+async function isDishFavorited(dishId) {
+    try {
+        const response = await getFavoriteDishes({ page: 1, page_size: 1000 });
+        return response.dishes.some(dish => dish.dish_id === dishId);
+    }
+    catch (error) {
+        console.error('检查菜品收藏状态失败:', error);
+        return false;
+    }
 }
 /**
  * 检查商户是否已收藏
  */
-function isMerchantFavorited(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const response = yield getFavoriteMerchants({ page: 1, page_size: 1000 });
-            return response.merchants.some(merchant => merchant.merchant_id === merchantId);
-        }
-        catch (error) {
-            console.error('检查商户收藏状态失败:', error);
-            return false;
-        }
-    });
+async function isMerchantFavorited(merchantId) {
+    try {
+        const response = await getFavoriteMerchants({ page: 1, page_size: 1000 });
+        return response.merchants.some(merchant => merchant.merchant_id === merchantId);
+    }
+    catch (error) {
+        console.error('检查商户收藏状态失败:', error);
+        return false;
+    }
 }
 /**
  * 切换菜品收藏状态
  */
-function toggleDishFavorite(dishId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const isFavorited = yield isDishFavorited(dishId);
-        if (isFavorited) {
-            yield removeDishFromFavorites(dishId);
-            return false;
-        }
-        else {
-            yield addDishToFavorites(dishId);
-            return true;
-        }
-    });
+async function toggleDishFavorite(dishId) {
+    const isFavorited = await isDishFavorited(dishId);
+    if (isFavorited) {
+        await removeDishFromFavorites(dishId);
+        return false;
+    }
+    else {
+        await addDishToFavorites(dishId);
+        return true;
+    }
 }
 /**
  * 切换商户收藏状态
  */
-function toggleMerchantFavorite(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const isFavorited = yield isMerchantFavorited(merchantId);
-        if (isFavorited) {
-            yield removeMerchantFromFavorites(merchantId);
-            return false;
-        }
-        else {
-            yield addMerchantToFavorites(merchantId);
-            return true;
-        }
-    });
+async function toggleMerchantFavorite(merchantId) {
+    const isFavorited = await isMerchantFavorited(merchantId);
+    if (isFavorited) {
+        await removeMerchantFromFavorites(merchantId);
+        return false;
+    }
+    else {
+        await addMerchantToFavorites(merchantId);
+        return true;
+    }
 }
 /**
  * 获取个人中心概览数据
  */
-function getPersonalCenterOverview() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const [favoriteDishes, favoriteMerchants, unreadCount, availableVouchers, memberships] = yield Promise.all([
-                getFavoriteDishes({ page: 1, page_size: 1 }),
-                getFavoriteMerchants({ page: 1, page_size: 1 }),
-                getUnreadNotificationCount(),
-                getMyAvailableVouchers(),
-                getMyMemberships()
-            ]);
-            return {
-                favoriteCount: {
-                    dishes: favoriteDishes.total,
-                    merchants: favoriteMerchants.total
-                },
-                unreadNotifications: unreadCount.count,
-                availableVouchers: availableVouchers.total,
-                membershipCount: memberships.total
-            };
-        }
-        catch (error) {
-            console.error('获取个人中心概览失败:', error);
-            return {
-                favoriteCount: { dishes: 0, merchants: 0 },
-                unreadNotifications: 0,
-                availableVouchers: 0,
-                membershipCount: 0
-            };
-        }
-    });
+async function getPersonalCenterOverview() {
+    try {
+        const [favoriteDishes, favoriteMerchants, unreadCount, availableVouchers, memberships] = await Promise.all([
+            getFavoriteDishes({ page: 1, page_size: 1 }),
+            getFavoriteMerchants({ page: 1, page_size: 1 }),
+            getUnreadNotificationCount(),
+            getMyAvailableVouchers(),
+            getMyMemberships()
+        ]);
+        return {
+            favoriteCount: {
+                dishes: favoriteDishes.total,
+                merchants: favoriteMerchants.total
+            },
+            unreadNotifications: unreadCount.count,
+            availableVouchers: availableVouchers.total,
+            membershipCount: memberships.total
+        };
+    }
+    catch (error) {
+        console.error('获取个人中心概览失败:', error);
+        return {
+            favoriteCount: { dishes: 0, merchants: 0 },
+            unreadNotifications: 0,
+            availableVouchers: 0,
+            membershipCount: 0
+        };
+    }
 }
 // 兼容性导出
 exports.default = {

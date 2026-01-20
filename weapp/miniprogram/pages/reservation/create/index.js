@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -121,43 +112,41 @@ Page({
         this.setData({ notes: e.detail.value });
     },
     // Submit
-    onSubmit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { merchantId, date, time, partySize, contactName, contactPhone, notes } = this.data;
-            const reservationTime = `${date} ${time}:00`;
-            const validation = reservation_2.default.validateReservation({
+    async onSubmit() {
+        const { merchantId, date, time, partySize, contactName, contactPhone, notes } = this.data;
+        const reservationTime = `${date} ${time}:00`;
+        const validation = reservation_2.default.validateReservation({
+            reservation_time: reservationTime,
+            party_size: partySize,
+            contact_name: contactName,
+            contact_phone: contactPhone
+        });
+        if (!validation.valid) {
+            wx.showToast({ title: validation.message || '信息不完整', icon: 'none' });
+            return;
+        }
+        try {
+            wx.showLoading({ title: '提交中...' });
+            await reservation_1.ReservationService.createReservation({
+                merchant_id: merchantId,
                 reservation_time: reservationTime,
                 party_size: partySize,
                 contact_name: contactName,
-                contact_phone: contactPhone
+                contact_phone: contactPhone,
+                notes: notes
             });
-            if (!validation.valid) {
-                wx.showToast({ title: validation.message || '信息不完整', icon: 'none' });
-                return;
-            }
-            try {
-                wx.showLoading({ title: '提交中...' });
-                yield reservation_1.ReservationService.createReservation({
-                    merchant_id: merchantId,
-                    reservation_time: reservationTime,
-                    party_size: partySize,
-                    contact_name: contactName,
-                    contact_phone: contactPhone,
-                    notes: notes
+            wx.showToast({ title: '预订成功', icon: 'success' });
+            setTimeout(() => {
+                wx.redirectTo({
+                    url: '/pages/reservation/list/index'
                 });
-                wx.showToast({ title: '预订成功', icon: 'success' });
-                setTimeout(() => {
-                    wx.redirectTo({
-                        url: '/pages/reservation/list/index'
-                    });
-                }, 1500);
-            }
-            catch (error) {
-                wx.showToast({ title: error.message || '预订失败', icon: 'none' });
-            }
-            finally {
-                wx.hideLoading();
-            }
-        });
+            }, 1500);
+        }
+        catch (error) {
+            wx.showToast({ title: error.message || '预订失败', icon: 'none' });
+        }
+        finally {
+            wx.hideLoading();
+        }
     }
 });

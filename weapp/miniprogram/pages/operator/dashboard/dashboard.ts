@@ -98,7 +98,7 @@ Page({
                 operatorInfo: dashboardData.operatorInfo,
                 financeOverview: dashboardData.financeOverview,
                 regionStats: dashboardData.regionStats,
-                selectedRegionId: dashboardData.regionStats[0]?.id || 0,
+                selectedRegionId: dashboardData.regionStats[0]?.region_id || 0,
                 merchantSummary: merchantData.merchantSummary,
                 riderSummary: riderData.riderSummary,
                 appealSummary: analyticsData.appealSummary

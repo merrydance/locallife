@@ -1,15 +1,8 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const util_1 = require("../../../utils/util");
+const payment_refund_1 = require("../../../api/payment-refund");
+const personal_1 = require("../../../api/personal");
 Page({
     data: {
         balance: 0,
@@ -24,51 +17,40 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },
-    loadWallet() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                // Mock data - GET /api/v1/customers/wallet
-                const mockWallet = {
-                    balance: 5800,
-                    transactions: [
-                        {
-                            id: 'tx_1',
-                            type: 'PAYMENT',
-                            amount: -3800,
-                            title: '外卖订单支付',
-                            time: '2024-11-19 18:30'
-                        },
-                        {
-                            id: 'tx_2',
-                            type: 'REFUND',
-                            amount: 1200,
-                            title: '订单退款',
-                            time: '2024-11-18 10:00'
-                        },
-                        {
-                            id: 'tx_3',
-                            type: 'TOPUP',
-                            amount: 10000,
-                            title: '余额充值',
-                            time: '2024-11-15 09:00'
-                        }
-                    ]
+    async loadWallet() {
+        this.setData({ loading: true });
+        try {
+            const [memberships, payments] = await Promise.all([
+                (0, personal_1.getMyMemberships)(),
+                (0, payment_refund_1.getPayments)({ page: 1, page_size: 20 })
+            ]);
+            const balance = memberships.memberships.reduce((sum, m) => sum + (m.balance || 0), 0);
+            const processedTransactions = (payments.payment_orders || []).map((payment) => {
+                const isRefund = payment.status === 'refunded';
+                const signedAmount = isRefund ? payment.amount : -payment.amount;
+                const title = payment.business_type === 'reservation'
+                    ? (isRefund ? '预订退款' : '预订支付')
+                    : (isRefund ? '订单退款' : '订单支付');
+                return {
+                    id: String(payment.id),
+                    type: isRefund ? 'REFUND' : 'PAYMENT',
+                    amount: signedAmount,
+                    amountDisplay: (signedAmount > 0 ? '+' : '') + (0, util_1.formatPriceNoSymbol)(Math.abs(signedAmount)),
+                    title,
+                    time: payment.paid_at || payment.created_at
                 };
-                // 预处理价格
-                const processedTransactions = mockWallet.transactions.map(t => (Object.assign(Object.assign({}, t), { amountDisplay: (t.amount > 0 ? '+' : '') + (0, util_1.formatPriceNoSymbol)(Math.abs(t.amount)) })));
-                this.setData({
-                    balance: mockWallet.balance,
-                    balanceDisplay: (0, util_1.formatPriceNoSymbol)(mockWallet.balance),
-                    transactions: processedTransactions,
-                    loading: false
-                });
-            }
-            catch (error) {
-                wx.showToast({ title: '加载失败', icon: 'error' });
-                this.setData({ loading: false });
-            }
-        });
+            });
+            this.setData({
+                balance,
+                balanceDisplay: (0, util_1.formatPriceNoSymbol)(balance),
+                transactions: processedTransactions,
+                loading: false
+            });
+        }
+        catch (error) {
+            wx.showToast({ title: '加载失败', icon: 'error' });
+            this.setData({ loading: false });
+        }
     },
     onTopUp() {
         wx.showToast({ title: '充值功能开发中', icon: 'none' });

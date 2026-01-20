@@ -631,25 +631,27 @@ export async function getMerchantManagementDashboard(regionId?: number): Promise
     ])
 
     // 统计商户状态分布
+    const merchants = merchantList.merchants || []
+    const total = merchantList.total ?? merchants.length
     const merchantSummary = {
-        total: merchantList.total,
-        active: merchantList.merchants.filter(m => m.status === 'active').length,
-        suspended: merchantList.merchants.filter(m => m.status === 'suspended').length,
-        pending: merchantList.merchants.filter(m => m.status === 'pending_approval').length
+        total,
+        active: merchants.filter(m => m.status === 'active').length,
+        suspended: merchants.filter(m => m.status === 'suspended').length,
+        pending: merchants.filter(m => m.status === 'pending_approval').length
     }
 
     // 分析商户分类
-    const categoryAnalysis = merchantAnalyticsService.analyzeMerchantsByCategory(merchantList.merchants)
+    const categoryAnalysis = merchantAnalyticsService.analyzeMerchantsByCategory(merchants)
 
     // 获取最近注册的商户
-    const recentMerchants = merchantList.merchants.slice(0, 10)
+    const recentMerchants = merchants.slice(0, 10)
 
     // 模拟绩效分布（实际应该基于详细数据计算）
     const performanceDistribution = {
-        excellent: Math.round(merchantList.total * 0.15),
-        good: Math.round(merchantList.total * 0.35),
-        average: Math.round(merchantList.total * 0.35),
-        poor: Math.round(merchantList.total * 0.15)
+        excellent: Math.round(total * 0.15),
+        good: Math.round(total * 0.35),
+        average: Math.round(total * 0.35),
+        poor: Math.round(total * 0.15)
     }
 
     return {

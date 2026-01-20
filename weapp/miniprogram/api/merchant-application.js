@@ -3,15 +3,6 @@
  * 商户入驻申请接口
  * 基于swagger.json完全重构，包含OCR识别和数据回填功能
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MerchantApplicationFlow = void 0;
 exports.getMerchantApplicationDraft = getMerchantApplicationDraft;
@@ -156,96 +147,84 @@ class MerchantApplicationFlow {
     /**
      * 初始化申请流程
      */
-    initialize() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.draft = yield getMerchantApplicationDraft();
-            return this.draft;
-        });
+    async initialize() {
+        this.draft = await getMerchantApplicationDraft();
+        return this.draft;
     }
     /**
      * 上传并识别身份证正面
      */
-    uploadAndRecognizeIDCard(imageUrl) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const result = yield recognizeIDCardFront({ image_url: imageUrl });
-            this.draft = result;
-            // 自动回填识别到的信息
-            if (result.id_card_front_ocr) {
-                const ocrData = result.id_card_front_ocr;
-                const updateData = {};
-                if (ocrData.name)
-                    updateData.legal_person_name = ocrData.name;
-                if (ocrData.id_number)
-                    updateData.legal_person_id_number = ocrData.id_number;
-                if (ocrData.address)
-                    updateData.business_address = ocrData.address;
-                // 如果有识别到的信息，自动更新
-                if (Object.keys(updateData).length > 0) {
-                    this.draft = yield updateMerchantApplicationBasic(updateData);
-                }
+    async uploadAndRecognizeIDCard(imageUrl) {
+        const result = await recognizeIDCardFront({ image_url: imageUrl });
+        this.draft = result;
+        // 自动回填识别到的信息
+        if (result.id_card_front_ocr) {
+            const ocrData = result.id_card_front_ocr;
+            const updateData = {};
+            if (ocrData.name)
+                updateData.legal_person_name = ocrData.name;
+            if (ocrData.id_number)
+                updateData.legal_person_id_number = ocrData.id_number;
+            if (ocrData.address)
+                updateData.business_address = ocrData.address;
+            // 如果有识别到的信息，自动更新
+            if (Object.keys(updateData).length > 0) {
+                this.draft = await updateMerchantApplicationBasic(updateData);
             }
-            return this.draft;
-        });
+        }
+        return this.draft;
     }
     /**
      * 上传并识别营业执照
      */
-    uploadAndRecognizeBusinessLicense(imageUrl) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const result = yield recognizeBusinessLicense({ image_url: imageUrl });
-            this.draft = result;
-            // 自动回填识别到的信息
-            if (result.business_license_ocr) {
-                const ocrData = result.business_license_ocr;
-                const updateData = {};
-                if (ocrData.enterprise_name) {
-                    // 营业执照上的企业名称作为默认商户名称，用户可以自定义修改
-                    updateData.merchant_name = ocrData.enterprise_name;
-                }
-                if (ocrData.credit_code)
-                    updateData.business_license_number = ocrData.credit_code;
-                if (ocrData.business_scope)
-                    updateData.business_scope = ocrData.business_scope;
-                if (ocrData.legal_representative)
-                    updateData.legal_person_name = ocrData.legal_representative;
-                if (ocrData.address)
-                    updateData.business_address = ocrData.address;
-                // 如果有识别到的信息，自动更新
-                if (Object.keys(updateData).length > 0) {
-                    this.draft = yield updateMerchantApplicationBasic(updateData);
-                }
+    async uploadAndRecognizeBusinessLicense(imageUrl) {
+        const result = await recognizeBusinessLicense({ image_url: imageUrl });
+        this.draft = result;
+        // 自动回填识别到的信息
+        if (result.business_license_ocr) {
+            const ocrData = result.business_license_ocr;
+            const updateData = {};
+            if (ocrData.enterprise_name) {
+                // 营业执照上的企业名称作为默认商户名称，用户可以自定义修改
+                updateData.merchant_name = ocrData.enterprise_name;
             }
-            return this.draft;
-        });
+            if (ocrData.credit_code)
+                updateData.business_license_number = ocrData.credit_code;
+            if (ocrData.business_scope)
+                updateData.business_scope = ocrData.business_scope;
+            if (ocrData.legal_representative)
+                updateData.legal_person_name = ocrData.legal_representative;
+            if (ocrData.address)
+                updateData.business_address = ocrData.address;
+            // 如果有识别到的信息，自动更新
+            if (Object.keys(updateData).length > 0) {
+                this.draft = await updateMerchantApplicationBasic(updateData);
+            }
+        }
+        return this.draft;
     }
     /**
      * 上传并识别食品经营许可证
      */
-    uploadAndRecognizeFoodPermit(imageUrl) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const result = yield recognizeFoodPermit({ image_url: imageUrl });
-            this.draft = result;
-            return this.draft;
-        });
+    async uploadAndRecognizeFoodPermit(imageUrl) {
+        const result = await recognizeFoodPermit({ image_url: imageUrl });
+        this.draft = result;
+        return this.draft;
     }
     /**
      * 更新基本信息
      */
-    updateBasicInfo(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.draft = yield updateMerchantApplicationBasic(data);
-            return this.draft;
-        });
+    async updateBasicInfo(data) {
+        this.draft = await updateMerchantApplicationBasic(data);
+        return this.draft;
     }
     /**
      * 提交申请
      */
-    submit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const result = yield submitMerchantApplication();
-            this.draft = result;
-            return result;
-        });
+    async submit() {
+        const result = await submitMerchantApplication();
+        this.draft = result;
+        return result;
     }
     /**
      * 获取当前草稿
@@ -296,24 +275,22 @@ function createMerchantApplicationFlow() {
 /**
  * 快速检查申请状态
  */
-function checkMerchantApplicationStatus() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const application = yield getMyMerchantApplication();
-            return {
-                hasApplication: true,
-                status: application.status,
-                canApply: application.status === 'rejected' // 只有被拒绝后才能重新申请
-            };
-        }
-        catch (error) {
-            // 如果没有申请记录，返回可以申请
-            return {
-                hasApplication: false,
-                canApply: true
-            };
-        }
-    });
+async function checkMerchantApplicationStatus() {
+    try {
+        const application = await getMyMerchantApplication();
+        return {
+            hasApplication: true,
+            status: application.status,
+            canApply: application.status === 'rejected' // 只有被拒绝后才能重新申请
+        };
+    }
+    catch (error) {
+        // 如果没有申请记录，返回可以申请
+        return {
+            hasApplication: false,
+            canApply: true
+        };
+    }
 }
 /**
  * 获取申请进度描述

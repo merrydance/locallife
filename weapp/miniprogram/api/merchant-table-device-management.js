@@ -3,15 +3,6 @@
  * 商户桌台和设备管理API接口
  * 基于swagger.json重构，提供桌台管理和二维码生成功能
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeviceAdapter = exports.TableAdapter = void 0;
 exports.getTables = getTables;
@@ -42,160 +33,140 @@ const auth_1 = require("../utils/auth");
 /**
  * 获取桌台列表
  */
-function getTables() {
-    return __awaiter(this, arguments, void 0, function* (params = {}) {
-        // 手动构建查询字符串（小程序不支持 URLSearchParams）
-        const queryParts = [];
-        if (params.page)
-            queryParts.push(`page=${params.page}`);
-        if (params.page_size)
-            queryParts.push(`page_size=${params.page_size}`);
-        if (params.table_type)
-            queryParts.push(`table_type=${params.table_type}`);
-        if (params.status)
-            queryParts.push(`status=${params.status}`);
-        const queryString = queryParts.length > 0 ? '?' + queryParts.join('&') : '';
-        const url = `/v1/tables${queryString}`;
-        return (0, request_1.request)({
-            url,
-            method: 'GET'
-        });
+async function getTables(params = {}) {
+    // 手动构建查询字符串（小程序不支持 URLSearchParams）
+    const queryParts = [];
+    if (params.page)
+        queryParts.push(`page=${params.page}`);
+    if (params.page_size)
+        queryParts.push(`page_size=${params.page_size}`);
+    if (params.table_type)
+        queryParts.push(`table_type=${params.table_type}`);
+    if (params.status)
+        queryParts.push(`status=${params.status}`);
+    const queryString = queryParts.length > 0 ? '?' + queryParts.join('&') : '';
+    const url = `/v1/tables${queryString}`;
+    return (0, request_1.request)({
+        url,
+        method: 'GET'
     });
 }
 /**
  * 获取单个桌台信息
  */
-function getTable(tableId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}`,
-            method: 'GET'
-        });
+async function getTable(tableId) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}`,
+        method: 'GET'
     });
 }
 /**
  * 创建桌台
  */
-function createTable(data) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: '/v1/tables',
-            method: 'POST',
-            data
-        });
+async function createTable(data) {
+    return (0, request_1.request)({
+        url: '/v1/tables',
+        method: 'POST',
+        data
     });
 }
 /**
  * 更新桌台信息
  */
-function updateTable(tableId, data) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}`,
-            method: 'PATCH',
-            data
-        });
+async function updateTable(tableId, data) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}`,
+        method: 'PATCH',
+        data
     });
 }
 /**
  * 删除桌台
  */
-function deleteTable(tableId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}`,
-            method: 'DELETE'
-        });
+async function deleteTable(tableId) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}`,
+        method: 'DELETE'
     });
 }
 /**
  * 更新桌台状态
  */
-function updateTableStatus(tableId, status) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}/status`,
-            method: 'PATCH',
-            data: { status }
-        });
+async function updateTableStatus(tableId, status) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}/status`,
+        method: 'PATCH',
+        data: { status }
     });
 }
 // ==================== 二维码管理接口 ====================
 /**
  * 生成桌台二维码
  */
-function generateTableQRCode(tableId_1) {
-    return __awaiter(this, arguments, void 0, function* (tableId, regenerate = false) {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}/qrcode`,
-            method: 'GET'
-        });
+async function generateTableQRCode(tableId, regenerate = false) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}/qrcode`,
+        method: 'GET'
     });
 }
 /**
  * 获取桌台二维码
  */
-function getTableQRCode(tableId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}/qrcode`,
-            method: 'GET'
-        });
+async function getTableQRCode(tableId) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}/qrcode`,
+        method: 'GET'
     });
 }
 /**
  * 上传桌台图片
  */
-function uploadTableImages(tableId, images) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/tables/${tableId}/images`,
-            method: 'POST',
-            data: { images }
-        });
+async function uploadTableImages(tableId, images) {
+    return (0, request_1.request)({
+        url: `/v1/tables/${tableId}/images`,
+        method: 'POST',
+        data: { images }
     });
 }
 /**
  * 上传桌台图片文件
  */
-function uploadTableImage(filePath) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => {
-            const token = (0, auth_1.getToken)();
-            wx.uploadFile({
-                url: `${request_1.API_BASE}/v1/tables/images/upload`,
-                filePath,
-                name: 'image',
-                header: {
-                    'Authorization': `Bearer ${token}`
-                },
-                success: (res) => {
-                    var _a;
-                    if (res.statusCode === 200) {
-                        try {
-                            const data = JSON.parse(res.data);
-                            // api.uploadImageResponse
-                            if (data.code === 0 && data.data && data.data.image_url) {
-                                resolve(data.data.image_url);
-                            }
-                            else if (data.image_url) {
-                                resolve(data.image_url);
-                            }
-                            else {
-                                // Try fallback if data IS the object
-                                resolve(((_a = data.data) === null || _a === void 0 ? void 0 : _a.image_url) || data.image_url);
-                            }
+async function uploadTableImage(filePath) {
+    return new Promise((resolve, reject) => {
+        const token = (0, auth_1.getToken)();
+        wx.uploadFile({
+            url: `${request_1.API_BASE}/v1/tables/images/upload`,
+            filePath,
+            name: 'image',
+            header: {
+                'Authorization': `Bearer ${token}`
+            },
+            success: (res) => {
+                var _a;
+                if (res.statusCode === 200) {
+                    try {
+                        const data = JSON.parse(res.data);
+                        // api.uploadImageResponse
+                        if (data.code === 0 && data.data && data.data.image_url) {
+                            resolve(data.data.image_url);
                         }
-                        catch (e) {
-                            reject(new Error('Parse response failed'));
+                        else if (data.image_url) {
+                            resolve(data.image_url);
+                        }
+                        else {
+                            // Try fallback if data IS the object
+                            resolve(((_a = data.data) === null || _a === void 0 ? void 0 : _a.image_url) || data.image_url);
                         }
                     }
-                    else {
-                        reject(new Error(`HTTP ${res.statusCode}`));
+                    catch (e) {
+                        reject(new Error('Parse response failed'));
                     }
-                },
-                fail: reject
-            });
+                }
+                else {
+                    reject(new Error(`HTTP ${res.statusCode}`));
+                }
+            },
+            fail: reject
         });
     });
 }
@@ -203,93 +174,77 @@ function uploadTableImage(filePath) {
 /**
  * 获取设备列表
  */
-function getDevices() {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: '/v1/merchant/devices',
-            method: 'GET'
-        });
+async function getDevices() {
+    return (0, request_1.request)({
+        url: '/v1/merchant/devices',
+        method: 'GET'
     });
 }
 /**
  * 获取单个设备信息
  */
-function getDevice(deviceId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/merchant/devices/${deviceId}`,
-            method: 'GET'
-        });
+async function getDevice(deviceId) {
+    return (0, request_1.request)({
+        url: `/v1/merchant/devices/${deviceId}`,
+        method: 'GET'
     });
 }
 /**
  * 添加设备
  */
-function createDevice(data) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: '/v1/merchant/devices',
-            method: 'POST',
-            data
-        });
+async function createDevice(data) {
+    return (0, request_1.request)({
+        url: '/v1/merchant/devices',
+        method: 'POST',
+        data
     });
 }
 /**
  * 更新设备信息
  */
-function updateDevice(deviceId, data) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/merchant/devices/${deviceId}`,
-            method: 'PATCH',
-            data
-        });
+async function updateDevice(deviceId, data) {
+    return (0, request_1.request)({
+        url: `/v1/merchant/devices/${deviceId}`,
+        method: 'PATCH',
+        data
     });
 }
 /**
  * 删除设备
  */
-function deleteDevice(deviceId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/merchant/devices/${deviceId}`,
-            method: 'DELETE'
-        });
+async function deleteDevice(deviceId) {
+    return (0, request_1.request)({
+        url: `/v1/merchant/devices/${deviceId}`,
+        method: 'DELETE'
     });
 }
 /**
  * 测试设备连接
  */
-function testDevice(deviceId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: `/v1/merchant/devices/${deviceId}/test`,
-            method: 'POST'
-        });
+async function testDevice(deviceId) {
+    return (0, request_1.request)({
+        url: `/v1/merchant/devices/${deviceId}/test`,
+        method: 'POST'
     });
 }
 // ==================== 显示配置接口 ====================
 /**
  * 获取显示配置
  */
-function getDisplayConfig() {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: '/v1/merchant/display-config',
-            method: 'GET'
-        });
+async function getDisplayConfig() {
+    return (0, request_1.request)({
+        url: '/v1/merchant/display-config',
+        method: 'GET'
     });
 }
 /**
  * 更新显示配置
  */
-function updateDisplayConfig(data) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return (0, request_1.request)({
-            url: '/v1/merchant/display-config',
-            method: 'PATCH',
-            data
-        });
+async function updateDisplayConfig(data) {
+    return (0, request_1.request)({
+        url: '/v1/merchant/display-config',
+        method: 'PATCH',
+        data
     });
 }
 // ==================== 数据适配器 ====================
@@ -429,57 +384,52 @@ exports.DeviceAdapter = DeviceAdapter;
 /**
  * 批量更新桌台状态
  */
-function batchUpdateTableStatus(tableIds, status) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const promises = tableIds.map(id => updateTableStatus(id, status));
-        return Promise.all(promises);
-    });
+async function batchUpdateTableStatus(tableIds, status) {
+    const promises = tableIds.map(id => updateTableStatus(id, status));
+    return Promise.all(promises);
 }
 /**
  * 批量生成桌台二维码
  */
-function batchGenerateQRCodes(tableIds) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const promises = tableIds.map(id => generateTableQRCode(id));
-        return Promise.all(promises);
-    });
+async function batchGenerateQRCodes(tableIds) {
+    const promises = tableIds.map(id => generateTableQRCode(id));
+    return Promise.all(promises);
 }
 /**
  * 获取桌台类型统计信息
  */
-function getTableTypeStats() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const tables = yield getTables({ page_size: 1000 });
-        const typeStats = new Map();
-        tables.tables.forEach(table => {
-            const type = table.table_type || 'table';
-            if (!typeStats.has(type)) {
-                typeStats.set(type, {
-                    total: 0,
-                    available: 0,
-                    occupied: 0,
-                    disabled: 0
-                });
-            }
-            const stats = typeStats.get(type);
-            stats.total++;
-            stats[table.status]++;
-        });
-        return Array.from(typeStats.entries()).map(([type, stats]) => (Object.assign({ type }, stats)));
+async function getTableTypeStats() {
+    const tables = await getTables({ page_size: 1000 });
+    const typeStats = new Map();
+    tables.tables.forEach(table => {
+        const type = table.table_type || 'table';
+        if (!typeStats.has(type)) {
+            typeStats.set(type, {
+                total: 0,
+                available: 0,
+                occupied: 0,
+                disabled: 0
+            });
+        }
+        const stats = typeStats.get(type);
+        stats.total++;
+        stats[table.status]++;
     });
+    return Array.from(typeStats.entries()).map(([type, stats]) => ({
+        type,
+        ...stats
+    }));
 }
 /**
  * 检查桌台编号是否可用
  */
-function checkTableNumberAvailable(tableNo, excludeId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const tables = yield getTables({ page_size: 1000 });
-            return !tables.tables.some(table => table.table_no === tableNo && table.id !== excludeId);
-        }
-        catch (error) {
-            console.error('检查桌台编号失败:', error);
-            return false;
-        }
-    });
+async function checkTableNumberAvailable(tableNo, excludeId) {
+    try {
+        const tables = await getTables({ page_size: 1000 });
+        return !tables.tables.some(table => table.table_no === tableNo && table.id !== excludeId);
+    }
+    catch (error) {
+        console.error('检查桌台编号失败:', error);
+        return false;
+    }
 }

@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：骑手列表、骑手操作、骑手详情、骑手排行
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.riderAnalyticsService = exports.operatorRiderManagementService = exports.OperatorRiderManagementAdapter = exports.RiderAnalyticsService = exports.OperatorRiderManagementService = void 0;
 exports.getRiderManagementDashboard = getRiderManagementDashboard;
@@ -35,38 +26,32 @@ class OperatorRiderManagementService {
      * 获取骑手列表
      * @param params 查询参数
      */
-    getRiderList(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/riders',
-                method: 'GET',
-                data: params
-            });
+    async getRiderList(params) {
+        return (0, request_1.request)({
+            url: '/v1/operator/riders',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取骑手详情
      * @param riderId 骑手ID
      */
-    getRiderDetail(riderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/riders/${riderId}`,
-                method: 'GET'
-            });
+    async getRiderDetail(riderId) {
+        return (0, request_1.request)({
+            url: `/v1/operator/riders/${riderId}`,
+            method: 'GET'
         });
     }
     /**
      * 获取骑手排行榜
      * @param params 查询参数
      */
-    getRiderRanking(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/riders/ranking',
-                method: 'GET',
-                data: params
-            });
+    async getRiderRanking(params) {
+        return (0, request_1.request)({
+            url: '/v1/operator/riders/ranking',
+            method: 'GET',
+            data: params
         });
     }
     /**
@@ -74,13 +59,11 @@ class OperatorRiderManagementService {
      * @param riderId 骑手ID
      * @param actionData 操作数据
      */
-    suspendRider(riderId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/riders/${riderId}/suspend`,
-                method: 'POST',
-                data: actionData
-            });
+    async suspendRider(riderId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/operator/riders/${riderId}/suspend`,
+            method: 'POST',
+            data: actionData
         });
     }
     /**
@@ -88,13 +71,11 @@ class OperatorRiderManagementService {
      * @param riderId 骑手ID
      * @param actionData 操作数据
      */
-    resumeRider(riderId, actionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/riders/${riderId}/resume`,
-                method: 'POST',
-                data: actionData
-            });
+    async resumeRider(riderId, actionData) {
+        return (0, request_1.request)({
+            url: `/v1/operator/riders/${riderId}/resume`,
+            method: 'POST',
+            data: actionData
         });
     }
 }
@@ -395,70 +376,69 @@ exports.riderAnalyticsService = new RiderAnalyticsService();
  * 获取骑手管理工作台数据
  * @param regionId 区域ID（可选）
  */
-function getRiderManagementDashboard(regionId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [riderList, riderRanking] = yield Promise.all([
-            exports.operatorRiderManagementService.getRiderList({
-                region_id: regionId,
-                limit: 100,
-                sort_by: 'created_at',
-                sort_order: 'desc'
-            }),
-            exports.operatorRiderManagementService.getRiderRanking({
-                region_id: regionId,
-                start_date: startDate,
-                end_date: endDate,
-                rank_by: 'efficiency_score',
-                limit: 10
-            })
-        ]);
-        // 统计骑手状态分布
-        const riderSummary = {
-            total: riderList.total,
-            active: riderList.riders.filter(r => r.status === 'active').length,
-            online: riderList.riders.filter(r => r.online_status === 'online').length,
-            suspended: riderList.riders.filter(r => r.status === 'suspended').length,
-            pending: riderList.riders.filter(r => r.status === 'pending_approval').length
-        };
-        // 分析骑手分布
-        const distribution = exports.riderAnalyticsService.analyzeRiderDistribution(riderList.riders);
-        // 获取最近注册的骑手
-        const recentRiders = riderList.riders.slice(0, 10);
-        // 获取在线骑手
-        const onlineRiders = riderList.riders.filter(r => r.online_status === 'online').slice(0, 20);
-        return {
-            riderSummary,
-            topRiders: riderRanking.rankings,
-            distribution,
-            recentRiders,
-            onlineRiders
-        };
-    });
+async function getRiderManagementDashboard(regionId) {
+    var _a;
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const [riderList, riderRanking] = await Promise.all([
+        exports.operatorRiderManagementService.getRiderList({
+            region_id: regionId,
+            limit: 100,
+            sort_by: 'created_at',
+            sort_order: 'desc'
+        }),
+        exports.operatorRiderManagementService.getRiderRanking({
+            region_id: regionId,
+            start_date: startDate,
+            end_date: endDate,
+            rank_by: 'efficiency_score',
+            limit: 10
+        })
+    ]);
+    // 统计骑手状态分布
+    const riders = riderList.riders || [];
+    const total = (_a = riderList.total) !== null && _a !== void 0 ? _a : riders.length;
+    const riderSummary = {
+        total,
+        active: riders.filter(r => r.status === 'active').length,
+        online: riders.filter(r => r.online_status === 'online').length,
+        suspended: riders.filter(r => r.status === 'suspended').length,
+        pending: riders.filter(r => r.status === 'pending_approval').length
+    };
+    // 分析骑手分布
+    const distribution = exports.riderAnalyticsService.analyzeRiderDistribution(riders);
+    // 获取最近注册的骑手
+    const recentRiders = riders.slice(0, 10);
+    // 获取在线骑手
+    const onlineRiders = riders.filter(r => r.online_status === 'online').slice(0, 20);
+    return {
+        riderSummary,
+        topRiders: riderRanking.rankings,
+        distribution,
+        recentRiders,
+        onlineRiders
+    };
 }
 /**
  * 获取骑手详细分析报告
  * @param riderId 骑手ID
  */
-function getRiderAnalysisReport(riderId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const riderDetail = yield exports.operatorRiderManagementService.getRiderDetail(riderId);
-        const performance = exports.riderAnalyticsService.calculateRiderPerformance(riderDetail);
-        // 生成改进建议
-        const recommendations = generateRiderRecommendations(riderDetail, performance);
-        // 评估风险等级
-        const riskLevel = assessRiderRisk(riderDetail, performance);
-        // 生成操作建议
-        const actionSuggestions = generateRiderActionSuggestions(riderDetail, performance, riskLevel);
-        return {
-            riderDetail,
-            performance,
-            recommendations,
-            riskLevel,
-            actionSuggestions
-        };
-    });
+async function getRiderAnalysisReport(riderId) {
+    const riderDetail = await exports.operatorRiderManagementService.getRiderDetail(riderId);
+    const performance = exports.riderAnalyticsService.calculateRiderPerformance(riderDetail);
+    // 生成改进建议
+    const recommendations = generateRiderRecommendations(riderDetail, performance);
+    // 评估风险等级
+    const riskLevel = assessRiderRisk(riderDetail, performance);
+    // 生成操作建议
+    const actionSuggestions = generateRiderActionSuggestions(riderDetail, performance, riskLevel);
+    return {
+        riderDetail,
+        performance,
+        recommendations,
+        riskLevel,
+        actionSuggestions
+    };
 }
 /**
  * 生成骑手改进建议
@@ -596,33 +576,31 @@ function generateRiderActionSuggestions(rider, performance, riskLevel) {
  * @param action 操作类型
  * @param actionData 操作数据
  */
-function batchRiderAction(riderIds, action, actionData) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const success = [];
-        const failed = [];
-        for (const riderId of riderIds) {
-            try {
-                switch (action) {
-                    case 'suspend':
-                        yield exports.operatorRiderManagementService.suspendRider(riderId, actionData);
-                        break;
-                    case 'resume':
-                        yield exports.operatorRiderManagementService.resumeRider(riderId, actionData);
-                        break;
-                    default:
-                        throw new Error(`不支持的操作类型: ${action}`);
-                }
-                success.push(riderId);
+async function batchRiderAction(riderIds, action, actionData) {
+    const success = [];
+    const failed = [];
+    for (const riderId of riderIds) {
+        try {
+            switch (action) {
+                case 'suspend':
+                    await exports.operatorRiderManagementService.suspendRider(riderId, actionData);
+                    break;
+                case 'resume':
+                    await exports.operatorRiderManagementService.resumeRider(riderId, actionData);
+                    break;
+                default:
+                    throw new Error(`不支持的操作类型: ${action}`);
             }
-            catch (error) {
-                failed.push({
-                    id: riderId,
-                    error: error instanceof Error ? error.message : '操作失败'
-                });
-            }
+            success.push(riderId);
         }
-        return { success, failed };
-    });
+        catch (error) {
+            failed.push({
+                id: riderId,
+                error: error instanceof Error ? error.message : '操作失败'
+            });
+        }
+    }
+    return { success, failed };
 }
 /**
  * 格式化骑手状态显示

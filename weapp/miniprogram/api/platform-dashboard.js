@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：实时数据、增长数据、排行榜、区域对比
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.platformAnalyticsService = exports.platformDashboardService = exports.PlatformDashboardAdapter = exports.PlatformAnalyticsService = exports.PlatformDashboardService = void 0;
 exports.getPlatformDashboardData = getPlatformDashboardData;
@@ -33,90 +24,76 @@ class PlatformDashboardService {
     /**
      * 获取实时大盘数据
      */
-    getRealtimeDashboard() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/platform/stats/realtime',
-                method: 'GET'
-            });
+    async getRealtimeDashboard() {
+        return (0, request_1.request)({
+            url: '/v1/platform/stats/realtime',
+            method: 'GET'
         });
     }
     /**
      * 获取平台概览数据
      * @param params 查询参数
      */
-    getPlatformOverview(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/platform/stats/overview',
-                method: 'GET',
-                data: params
-            });
+    async getPlatformOverview(params) {
+        return (0, request_1.request)({
+            url: '/v1/platform/stats/overview',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取商户增长数据
      * @param params 查询参数
      */
-    getMerchantGrowth(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/platform/stats/growth/merchants',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantGrowth(params) {
+        return (0, request_1.request)({
+            url: '/v1/platform/stats/growth/merchants',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取用户增长数据
      * @param params 查询参数
      */
-    getUserGrowth(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/platform/stats/growth/users',
-                method: 'GET',
-                data: params
-            });
+    async getUserGrowth(params) {
+        return (0, request_1.request)({
+            url: '/v1/platform/stats/growth/users',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取商户排行榜
      * @param params 查询参数
      */
-    getMerchantRanking(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/platform/stats/merchants/ranking',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantRanking(params) {
+        return (0, request_1.request)({
+            url: '/v1/platform/stats/merchants/ranking',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取骑手排行榜
      * @param params 查询参数
      */
-    getRiderRanking(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/platform/stats/riders/ranking',
-                method: 'GET',
-                data: params
-            });
+    async getRiderRanking(params) {
+        return (0, request_1.request)({
+            url: '/v1/platform/stats/riders/ranking',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取区域对比数据
      * @param params 查询参数
      */
-    getRegionComparison(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/platform/stats/regions/compare',
-                method: 'GET',
-                data: params
-            });
+    async getRegionComparison(params) {
+        return (0, request_1.request)({
+            url: '/v1/platform/stats/regions/compare',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -532,84 +509,80 @@ exports.platformAnalyticsService = new PlatformAnalyticsService();
 /**
  * 获取平台大屏完整数据
  */
-function getPlatformDashboardData() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [realtime, overview, merchantGrowth, userGrowth, merchantRanking, riderRanking, regionComparison] = yield Promise.all([
-            exports.platformDashboardService.getRealtimeDashboard(),
-            exports.platformDashboardService.getPlatformOverview({ start_date: startDate, end_date: endDate }),
-            exports.platformDashboardService.getMerchantGrowth({ start_date: startDate, end_date: endDate }),
-            exports.platformDashboardService.getUserGrowth({ start_date: startDate, end_date: endDate }),
-            exports.platformDashboardService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 20 }),
-            exports.platformDashboardService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 20 }),
-            exports.platformDashboardService.getRegionComparison({ start_date: startDate, end_date: endDate })
-        ]);
-        // 进行数据分析
-        const healthAnalysis = exports.platformAnalyticsService.analyzePlatformHealth(overview, realtime);
-        const growthAnalysis = exports.platformAnalyticsService.analyzeGrowthTrends(merchantGrowth, userGrowth);
-        const regionalAnalysis = exports.platformAnalyticsService.analyzeRegionalPerformance(regionComparison);
-        return {
-            realtime,
-            overview,
-            merchantGrowth,
-            userGrowth,
-            merchantRanking,
-            riderRanking,
-            regionComparison,
-            healthAnalysis,
-            growthAnalysis,
-            regionalAnalysis
-        };
-    });
+async function getPlatformDashboardData() {
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const [realtime, overview, merchantGrowth, userGrowth, merchantRanking, riderRanking, regionComparison] = await Promise.all([
+        exports.platformDashboardService.getRealtimeDashboard(),
+        exports.platformDashboardService.getPlatformOverview({ start_date: startDate, end_date: endDate }),
+        exports.platformDashboardService.getMerchantGrowth({ start_date: startDate, end_date: endDate }),
+        exports.platformDashboardService.getUserGrowth({ start_date: startDate, end_date: endDate }),
+        exports.platformDashboardService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 20 }),
+        exports.platformDashboardService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 20 }),
+        exports.platformDashboardService.getRegionComparison({ start_date: startDate, end_date: endDate })
+    ]);
+    // 进行数据分析
+    const healthAnalysis = exports.platformAnalyticsService.analyzePlatformHealth(overview, realtime);
+    const growthAnalysis = exports.platformAnalyticsService.analyzeGrowthTrends(merchantGrowth, userGrowth);
+    const regionalAnalysis = exports.platformAnalyticsService.analyzeRegionalPerformance(regionComparison);
+    return {
+        realtime,
+        overview,
+        merchantGrowth,
+        userGrowth,
+        merchantRanking,
+        riderRanking,
+        regionComparison,
+        healthAnalysis,
+        growthAnalysis,
+        regionalAnalysis
+    };
 }
 /**
  * 生成平台运营报告
  * @param days 分析天数
  */
-function generatePlatformReport() {
-    return __awaiter(this, arguments, void 0, function* (days = 30) {
-        const dashboardData = yield getPlatformDashboardData();
-        const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        // 生成执行摘要
-        const executiveSummary = {
-            healthScore: dashboardData.healthAnalysis.healthScore,
-            healthLevel: dashboardData.healthAnalysis.healthLevel,
-            keyMetrics: [
-                `总订单数: ${dashboardData.overview.summary.total_orders.toLocaleString()}`,
-                `总GMV: ¥${(dashboardData.overview.summary.total_gmv / 100).toLocaleString()}`,
-                `完成率: ${dashboardData.overview.summary.completion_rate.toFixed(1)}%`,
-                `活跃商户: ${dashboardData.overview.summary.active_merchants.toLocaleString()}`,
-                `活跃骑手: ${dashboardData.overview.summary.active_riders.toLocaleString()}`
-            ],
-            majorAlerts: dashboardData.healthAnalysis.alerts
-                .filter(alert => alert.level === 'error')
-                .map(alert => alert.message)
-        };
-        // 生成行动项
-        const actionItems = generateReportActionItems(dashboardData);
-        return {
-            reportTitle: '平台运营分析报告',
-            reportPeriod: `${startDate} 至 ${endDate}`,
-            executiveSummary,
-            detailedAnalysis: {
-                healthAnalysis: dashboardData.healthAnalysis,
-                growthAnalysis: dashboardData.growthAnalysis,
-                regionalAnalysis: dashboardData.regionalAnalysis
-            },
-            actionItems,
-            appendix: {
-                dataSource: '平台实时数据库和统计系统',
-                methodology: '基于多维度指标的综合分析模型',
-                limitations: [
-                    '数据基于历史趋势，未来预测存在不确定性',
-                    '部分指标可能受季节性因素影响',
-                    '外部市场环境变化可能影响分析结果'
-                ]
-            }
-        };
-    });
+async function generatePlatformReport(days = 30) {
+    const dashboardData = await getPlatformDashboardData();
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // 生成执行摘要
+    const executiveSummary = {
+        healthScore: dashboardData.healthAnalysis.healthScore,
+        healthLevel: dashboardData.healthAnalysis.healthLevel,
+        keyMetrics: [
+            `总订单数: ${dashboardData.overview.summary.total_orders.toLocaleString()}`,
+            `总GMV: ¥${(dashboardData.overview.summary.total_gmv / 100).toLocaleString()}`,
+            `完成率: ${dashboardData.overview.summary.completion_rate.toFixed(1)}%`,
+            `活跃商户: ${dashboardData.overview.summary.active_merchants.toLocaleString()}`,
+            `活跃骑手: ${dashboardData.overview.summary.active_riders.toLocaleString()}`
+        ],
+        majorAlerts: dashboardData.healthAnalysis.alerts
+            .filter(alert => alert.level === 'error')
+            .map(alert => alert.message)
+    };
+    // 生成行动项
+    const actionItems = generateReportActionItems(dashboardData);
+    return {
+        reportTitle: '平台运营分析报告',
+        reportPeriod: `${startDate} 至 ${endDate}`,
+        executiveSummary,
+        detailedAnalysis: {
+            healthAnalysis: dashboardData.healthAnalysis,
+            growthAnalysis: dashboardData.growthAnalysis,
+            regionalAnalysis: dashboardData.regionalAnalysis
+        },
+        actionItems,
+        appendix: {
+            dataSource: '平台实时数据库和统计系统',
+            methodology: '基于多维度指标的综合分析模型',
+            limitations: [
+                '数据基于历史趋势，未来预测存在不确定性',
+                '部分指标可能受季节性因素影响',
+                '外部市场环境变化可能影响分析结果'
+            ]
+        }
+    };
 }
 /**
  * 生成报告行动项

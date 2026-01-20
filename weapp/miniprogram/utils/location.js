@@ -3,15 +3,6 @@
  * 位置服务工具类
  * 通过后端接口调用腾讯LBS获取用户位置信息
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.locationService = void 0;
 exports.getDeviceId = getDeviceId;
@@ -24,26 +15,24 @@ class LocationService {
     /**
      * 获取当前位置（经纬度）
      */
-    getCurrentLocation() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve, reject) => {
-                wx.getLocation({
-                    type: 'gcj02', // 返回可以用于wx.openLocation的坐标
-                    success: (res) => {
-                        logger_1.logger.info('获取位置成功', {
-                            latitude: res.latitude,
-                            longitude: res.longitude
-                        }, 'LocationService.getCurrentLocation');
-                        resolve({
-                            latitude: res.latitude,
-                            longitude: res.longitude
-                        });
-                    },
-                    fail: (err) => {
-                        logger_1.logger.warn('获取位置失败', err, 'LocationService.getCurrentLocation');
-                        reject(err);
-                    }
-                });
+    async getCurrentLocation() {
+        return new Promise((resolve, reject) => {
+            wx.getLocation({
+                type: 'gcj02', // 返回可以用于wx.openLocation的坐标
+                success: (res) => {
+                    logger_1.logger.info('获取位置成功', {
+                        latitude: res.latitude,
+                        longitude: res.longitude
+                    }, 'LocationService.getCurrentLocation');
+                    resolve({
+                        latitude: res.latitude,
+                        longitude: res.longitude
+                    });
+                },
+                fail: (err) => {
+                    logger_1.logger.warn('获取位置失败', err, 'LocationService.getCurrentLocation');
+                    reject(err);
+                }
             });
         });
     }
@@ -51,89 +40,86 @@ class LocationService {
      * 逆地理编码 - 通过后端接口将经纬度转换为地址
      * 后端接口: GET /v1/location/reverse-geocode?latitude=xxx&longitude=xxx
      */
-    reverseGeocode(latitude, longitude) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const response = yield (0, request_1.request)({
-                    url: '/v1/location/reverse-geocode',
-                    method: 'GET',
-                    data: {
-                        latitude,
-                        longitude
-                    }
-                });
-                logger_1.logger.info('逆地理编码成功', response, 'LocationService.reverseGeocode');
-                // 补充经纬度信息（后端可能不返回）
-                if (!response.latitude)
-                    response.latitude = latitude;
-                if (!response.longitude)
-                    response.longitude = longitude;
-                return response;
-            }
-            catch (err) {
-                logger_1.logger.error('逆地理编码失败', err, 'LocationService.reverseGeocode');
-                // 即使逆地理编码失败，也返回基本的位置信息
-                return {
+    async reverseGeocode(latitude, longitude) {
+        try {
+            const response = await (0, request_1.request)({
+                url: '/v1/location/reverse-geocode',
+                method: 'GET',
+                data: {
                     latitude,
-                    longitude,
-                    address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
-                    province: '',
-                    city: '',
-                    district: ''
-                };
-            }
-        });
+                    longitude
+                }
+            });
+            logger_1.logger.info('逆地理编码成功', response, 'LocationService.reverseGeocode');
+            // 补充经纬度信息（后端可能不返回）
+            if (!response.latitude)
+                response.latitude = latitude;
+            if (!response.longitude)
+                response.longitude = longitude;
+            return response;
+        }
+        catch (err) {
+            logger_1.logger.error('逆地理编码失败', err, 'LocationService.reverseGeocode');
+            // 即使逆地理编码失败，也返回基本的位置信息
+            return {
+                latitude,
+                longitude,
+                address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+                province: '',
+                city: '',
+                district: ''
+            };
+        }
     }
     /**
      * 打开位置选择器（用于getLocation失败时的兜底方案）
      * 注意：这个方法不会自动调用，需要用户主动触发
      */
-    chooseLocation() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => {
-                wx.chooseLocation({
-                    success: (res) => __awaiter(this, void 0, void 0, function* () {
-                        try {
-                            // 使用后端逆地理编码获取详细地址信息
-                            const locationInfo = yield this.reverseGeocode(res.latitude, res.longitude);
-                            // 合并用户选择的信息和逆地理编码结果
-                            const finalInfo = Object.assign(Object.assign({}, locationInfo), { address: res.address || locationInfo.address });
-                            logger_1.logger.info('用户选择位置成功', finalInfo, 'LocationService.chooseLocation');
-                            resolve(finalInfo);
-                        }
-                        catch (err) {
-                            // 逆地理编码失败，使用用户选择的基本信息
-                            logger_1.logger.warn('逆地理编码失败，使用用户选择的信息', err, 'LocationService.chooseLocation');
-                            resolve({
-                                latitude: res.latitude,
-                                longitude: res.longitude,
-                                address: res.address || res.name,
-                                province: '',
-                                city: '',
-                                district: '',
-                                street: res.name
-                            });
-                        }
-                    }),
-                    fail: (err) => {
-                        logger_1.logger.warn('用户取消选择位置', err, 'LocationService.chooseLocation');
-                        resolve(null);
+    async chooseLocation() {
+        return new Promise((resolve) => {
+            wx.chooseLocation({
+                success: async (res) => {
+                    try {
+                        // 使用后端逆地理编码获取详细地址信息
+                        const locationInfo = await this.reverseGeocode(res.latitude, res.longitude);
+                        // 合并用户选择的信息和逆地理编码结果
+                        const finalInfo = {
+                            ...locationInfo,
+                            address: res.address || locationInfo.address
+                        };
+                        logger_1.logger.info('用户选择位置成功', finalInfo, 'LocationService.chooseLocation');
+                        resolve(finalInfo);
                     }
-                });
+                    catch (err) {
+                        // 逆地理编码失败，使用用户选择的基本信息
+                        logger_1.logger.warn('逆地理编码失败，使用用户选择的信息', err, 'LocationService.chooseLocation');
+                        resolve({
+                            latitude: res.latitude,
+                            longitude: res.longitude,
+                            address: res.address || res.name,
+                            province: '',
+                            city: '',
+                            district: '',
+                            street: res.name
+                        });
+                    }
+                },
+                fail: (err) => {
+                    logger_1.logger.warn('用户取消选择位置', err, 'LocationService.chooseLocation');
+                    resolve(null);
+                }
             });
         });
     }
     /**
      * 获取完整的位置信息（位置+地址）
      */
-    getFullLocationInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 1. 获取经纬度
-            const location = yield this.getCurrentLocation();
-            // 2. 逆地理编码
-            const locationInfo = yield this.reverseGeocode(location.latitude, location.longitude);
-            return locationInfo;
-        });
+    async getFullLocationInfo() {
+        // 1. 获取经纬度
+        const location = await this.getCurrentLocation();
+        // 2. 逆地理编码
+        const locationInfo = await this.reverseGeocode(location.latitude, location.longitude);
+        return locationInfo;
     }
     /**
      * 保存位置到全局状态
@@ -185,69 +171,63 @@ class LocationService {
     /**
      * 检查位置权限
      */
-    checkLocationPermission() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => {
-                wx.getSetting({
-                    success: (res) => {
-                        const hasPermission = res.authSetting['scope.userLocation'] === true;
-                        logger_1.logger.debug('位置权限检查', { hasPermission }, 'LocationService.checkLocationPermission');
-                        resolve(hasPermission);
-                    },
-                    fail: () => {
-                        resolve(false);
-                    }
-                });
+    async checkLocationPermission() {
+        return new Promise((resolve) => {
+            wx.getSetting({
+                success: (res) => {
+                    const hasPermission = res.authSetting['scope.userLocation'] === true;
+                    logger_1.logger.debug('位置权限检查', { hasPermission }, 'LocationService.checkLocationPermission');
+                    resolve(hasPermission);
+                },
+                fail: () => {
+                    resolve(false);
+                }
             });
         });
     }
     /**
      * 请求位置权限
      */
-    requestLocationPermission() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => {
-                wx.authorize({
-                    scope: 'scope.userLocation',
-                    success: () => {
-                        logger_1.logger.info('用户授予位置权限', undefined, 'LocationService.requestLocationPermission');
-                        resolve(true);
-                    },
-                    fail: () => {
-                        logger_1.logger.warn('用户拒绝位置权限', undefined, 'LocationService.requestLocationPermission');
-                        resolve(false);
-                    }
-                });
+    async requestLocationPermission() {
+        return new Promise((resolve) => {
+            wx.authorize({
+                scope: 'scope.userLocation',
+                success: () => {
+                    logger_1.logger.info('用户授予位置权限', undefined, 'LocationService.requestLocationPermission');
+                    resolve(true);
+                },
+                fail: () => {
+                    logger_1.logger.warn('用户拒绝位置权限', undefined, 'LocationService.requestLocationPermission');
+                    resolve(false);
+                }
             });
         });
     }
     /**
      * 获取位置信息（带权限检查）
      */
-    getLocationWithPermission() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // 1. 检查权限
-                const hasPermission = yield this.checkLocationPermission();
-                if (!hasPermission) {
-                    // 2. 请求权限
-                    const granted = yield this.requestLocationPermission();
-                    if (!granted) {
-                        logger_1.logger.warn('用户未授予位置权限', undefined, 'LocationService.getLocationWithPermission');
-                        return null;
-                    }
+    async getLocationWithPermission() {
+        try {
+            // 1. 检查权限
+            const hasPermission = await this.checkLocationPermission();
+            if (!hasPermission) {
+                // 2. 请求权限
+                const granted = await this.requestLocationPermission();
+                if (!granted) {
+                    logger_1.logger.warn('用户未授予位置权限', undefined, 'LocationService.getLocationWithPermission');
+                    return null;
                 }
-                // 3. 获取位置信息
-                const locationInfo = yield this.getFullLocationInfo();
-                // 4. 保存到全局
-                this.saveToGlobal(locationInfo);
-                return locationInfo;
             }
-            catch (err) {
-                logger_1.logger.error('获取位置信息失败', err, 'LocationService.getLocationWithPermission');
-                return null;
-            }
-        });
+            // 3. 获取位置信息
+            const locationInfo = await this.getFullLocationInfo();
+            // 4. 保存到全局
+            this.saveToGlobal(locationInfo);
+            return locationInfo;
+        }
+        catch (err) {
+            logger_1.logger.error('获取位置信息失败', err, 'LocationService.getLocationWithPermission');
+            return null;
+        }
     }
 }
 // 导出单例

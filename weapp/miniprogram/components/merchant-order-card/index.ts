@@ -1,37 +1,41 @@
 import { OrderManagementAdapter } from '../../api/order-management'
 
+type MerchantOrder = {
+    id?: number
+}
+
 Component({
     properties: {
         order: {
             type: Object,
-            value: null
+            value: undefined
         }
     },
 
     methods: {
         onAccept() {
-            const order: any = this.properties.order;
+            const order = this.properties.order as unknown as MerchantOrder | undefined
             if (order) {
                 this.triggerEvent('metric-action', { action: 'accept', orderId: order.id })
             }
         },
 
         onReject() {
-            const order: any = this.properties.order;
+            const order = this.properties.order as unknown as MerchantOrder | undefined
             if (order) {
                 this.triggerEvent('metric-action', { action: 'reject', orderId: order.id })
             }
         },
 
         onMarkReady() {
-            const order: any = this.properties.order;
+            const order = this.properties.order as unknown as MerchantOrder | undefined
             if (order) {
                 this.triggerEvent('metric-action', { action: 'ready', orderId: order.id })
             }
         },
 
         onComplete() {
-            const order: any = this.properties.order;
+            const order = this.properties.order as unknown as MerchantOrder | undefined
             if (order) {
                 this.triggerEvent('metric-action', { action: 'complete', orderId: order.id })
             }

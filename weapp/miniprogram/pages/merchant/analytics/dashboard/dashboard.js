@@ -4,15 +4,6 @@
  * 包含销售统计、财务分析、客户分析等
  * 使用TDesign组件库实现统一的UI风格
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const merchant_analytics_1 = require("@/api/merchant-analytics");
 const responsive_1 = require("@/utils/responsive");
@@ -59,55 +50,51 @@ Page({
     /**
      * 初始化页面
      */
-    initPage() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 设置默认日期范围（最近30天）
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setDate(startDate.getDate() - 30);
-            this.setData({
-                dateRange: {
-                    start_date: this.formatDate(startDate),
-                    end_date: this.formatDate(endDate)
-                }
-            });
-            try {
-                this.setData({ loading: true });
-                yield this.loadData();
-            }
-            catch (error) {
-                console.error('初始化页面失败:', error);
-                wx.showToast({
-                    title: error.message || '加载失败',
-                    icon: 'error'
-                });
-            }
-            finally {
-                this.setData({ loading: false });
+    async initPage() {
+        // 设置默认日期范围（最近30天）
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+        this.setData({
+            dateRange: {
+                start_date: this.formatDate(startDate),
+                end_date: this.formatDate(endDate)
             }
         });
+        try {
+            this.setData({ loading: true });
+            await this.loadData();
+        }
+        catch (error) {
+            console.error('初始化页面失败:', error);
+            wx.showToast({
+                title: error.message || '加载失败',
+                icon: 'error'
+            });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     /**
      * 加载数据
      */
-    loadData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { currentTab } = this.data;
-            switch (currentTab) {
-                case 'overview':
-                    yield this.loadOverviewData();
-                    break;
-                case 'sales':
-                    yield this.loadSalesData();
-                    break;
-                case 'finance':
-                    yield this.loadFinanceData();
-                    break;
-                case 'customer':
-                    yield this.loadCustomerData();
-                    break;
-            }
-        });
+    async loadData() {
+        const { currentTab } = this.data;
+        switch (currentTab) {
+            case 'overview':
+                await this.loadOverviewData();
+                break;
+            case 'sales':
+                await this.loadSalesData();
+                break;
+            case 'finance':
+                await this.loadFinanceData();
+                break;
+            case 'customer':
+                await this.loadCustomerData();
+                break;
+        }
     },
     /**
      * 切换Tab
@@ -121,99 +108,98 @@ Page({
     /**
      * 加载概览数据
      */
-    loadOverviewData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { dateRange } = this.data;
-                const [statsOverview, dailyStats] = yield Promise.all([
-                    merchant_analytics_1.MerchantStatsService.getStatsOverview(dateRange),
-                    merchant_analytics_1.MerchantStatsService.getDailyStats(dateRange)
-                ]);
-                this.setData({
-                    statsOverview,
-                    dailyStats
-                });
-            }
-            catch (error) {
-                console.error('加载概览数据失败:', error);
-                wx.showToast({
-                    title: '加载概览数据失败',
-                    icon: 'error'
-                });
-            }
-        });
+    async loadOverviewData() {
+        try {
+            const { dateRange } = this.data;
+            const [statsOverview, dailyStats] = await Promise.all([
+                merchant_analytics_1.MerchantStatsService.getStatsOverview(dateRange),
+                merchant_analytics_1.MerchantStatsService.getDailyStats(dateRange)
+            ]);
+            this.setData({
+                statsOverview,
+                dailyStats
+            });
+        }
+        catch (error) {
+            console.error('加载概览数据失败:', error);
+            wx.showToast({
+                title: '加载概览数据失败',
+                icon: 'error'
+            });
+        }
     },
     // ==================== 销售数据 ====================
     /**
      * 加载销售数据
      */
-    loadSalesData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { dateRange } = this.data;
-                const [topDishes, categoryStats] = yield Promise.all([
-                    merchant_analytics_1.MerchantStatsService.getTopDishes(Object.assign(Object.assign({}, dateRange), { limit: 10 })),
-                    merchant_analytics_1.MerchantStatsService.getCategoryStats(dateRange)
-                ]);
-                this.setData({
-                    topDishes,
-                    categoryStats
-                });
-            }
-            catch (error) {
-                console.error('加载销售数据失败:', error);
-                wx.showToast({
-                    title: '加载销售数据失败',
-                    icon: 'error'
-                });
-            }
-        });
+    async loadSalesData() {
+        try {
+            const { dateRange } = this.data;
+            const [topDishes, categoryStats] = await Promise.all([
+                merchant_analytics_1.MerchantStatsService.getTopDishes({
+                    ...dateRange,
+                    limit: 10
+                }),
+                merchant_analytics_1.MerchantStatsService.getCategoryStats(dateRange)
+            ]);
+            this.setData({
+                topDishes,
+                categoryStats
+            });
+        }
+        catch (error) {
+            console.error('加载销售数据失败:', error);
+            wx.showToast({
+                title: '加载销售数据失败',
+                icon: 'error'
+            });
+        }
     },
     // ==================== 财务数据 ====================
     /**
      * 加载财务数据
      */
-    loadFinanceData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { dateRange } = this.data;
-                const financeOverview = yield merchant_analytics_1.MerchantFinanceService.getFinanceOverview(dateRange);
-                this.setData({ financeOverview });
-            }
-            catch (error) {
-                console.error('加载财务数据失败:', error);
-                wx.showToast({
-                    title: '加载财务数据失败',
-                    icon: 'error'
-                });
-            }
-        });
+    async loadFinanceData() {
+        try {
+            const { dateRange } = this.data;
+            const financeOverview = await merchant_analytics_1.MerchantFinanceService.getFinanceOverview(dateRange);
+            this.setData({ financeOverview });
+        }
+        catch (error) {
+            console.error('加载财务数据失败:', error);
+            wx.showToast({
+                title: '加载财务数据失败',
+                icon: 'error'
+            });
+        }
     },
     // ==================== 客户数据 ====================
     /**
      * 加载客户数据
      */
-    loadCustomerData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { dateRange, customerPage, customerPageSize } = this.data;
-                const [customerStats, repurchaseStats] = yield Promise.all([
-                    merchant_analytics_1.MerchantStatsService.getCustomerStats(Object.assign(Object.assign({}, dateRange), { page_id: customerPage, page_size: customerPageSize })),
-                    merchant_analytics_1.MerchantStatsService.getRepurchaseStats(dateRange)
-                ]);
-                this.setData({
-                    customerStats,
-                    repurchaseStats
-                });
-            }
-            catch (error) {
-                console.error('加载客户数据失败:', error);
-                wx.showToast({
-                    title: '加载客户数据失败',
-                    icon: 'error'
-                });
-            }
-        });
+    async loadCustomerData() {
+        try {
+            const { dateRange, customerPage, customerPageSize } = this.data;
+            const [customerStats, repurchaseStats] = await Promise.all([
+                merchant_analytics_1.MerchantStatsService.getCustomerStats({
+                    ...dateRange,
+                    page_id: customerPage,
+                    page_size: customerPageSize
+                }),
+                merchant_analytics_1.MerchantStatsService.getRepurchaseStats(dateRange)
+            ]);
+            this.setData({
+                customerStats,
+                repurchaseStats
+            });
+        }
+        catch (error) {
+            console.error('加载客户数据失败:', error);
+            wx.showToast({
+                title: '加载客户数据失败',
+                icon: 'error'
+            });
+        }
     },
     // ==================== 日期选择 ====================
     /**
@@ -271,27 +257,25 @@ Page({
     /**
      * 下拉刷新
      */
-    onPullDownRefresh() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                this.setData({ refreshing: true });
-                yield this.loadData();
-                wx.showToast({
-                    title: '刷新成功',
-                    icon: 'success'
-                });
-            }
-            catch (error) {
-                wx.showToast({
-                    title: '刷新失败',
-                    icon: 'error'
-                });
-            }
-            finally {
-                this.setData({ refreshing: false });
-                wx.stopPullDownRefresh();
-            }
-        });
+    async onPullDownRefresh() {
+        try {
+            this.setData({ refreshing: true });
+            await this.loadData();
+            wx.showToast({
+                title: '刷新成功',
+                icon: 'success'
+            });
+        }
+        catch (error) {
+            wx.showToast({
+                title: '刷新失败',
+                icon: 'error'
+            });
+        }
+        finally {
+            this.setData({ refreshing: false });
+            wx.stopPullDownRefresh();
+        }
     },
     // ==================== 工具方法 ====================
     /**

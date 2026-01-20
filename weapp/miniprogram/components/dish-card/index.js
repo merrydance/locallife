@@ -9,8 +9,9 @@ Component({
             value: {},
             observer(newVal) {
                 // 当dish数据更新时，优化图片URL
-                if (newVal && newVal.imageUrl && !newVal._imageOptimized) {
-                    const optimizedUrl = (0, image_1.formatImageUrl)(newVal.imageUrl, image_1.ImageSize.CARD);
+                const dishVal = newVal;
+                if (dishVal && dishVal.imageUrl && !dishVal._imageOptimized) {
+                    const optimizedUrl = (0, image_1.formatImageUrl)(dishVal.imageUrl, image_1.ImageSize.CARD);
                     this.setData({
                         'dish.imageUrl': optimizedUrl,
                         'dish._imageOptimized': true

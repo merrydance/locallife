@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 /**
  * 满减活动管理页面
@@ -49,12 +40,12 @@ Page({
             this.loadRules();
         }
         else {
-            app.userInfoReadyCallback = () => __awaiter(this, void 0, void 0, function* () {
+            app.userInfoReadyCallback = async () => {
                 if (app.globalData.merchantId) {
                     this.merchantId = Number(app.globalData.merchantId);
                     this.loadRules();
                 }
-            });
+            };
         }
     },
     onShow() {
@@ -66,19 +57,17 @@ Page({
         this.setData({ sidebarCollapsed: e.detail.collapsed });
     },
     // ==================== 数据加载 ====================
-    loadRules() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const rules = yield marketing_management_1.DiscountRuleManagementService.getDiscountRuleList(this.merchantId, { page_id: 1, page_size: 50 });
-                this.setData({ rules, loading: false });
-            }
-            catch (err) {
-                console.error('[Discount] Load failed:', err);
-                this.setData({ loading: false });
-                wx.showToast({ title: '加载失败', icon: 'none' });
-            }
-        });
+    async loadRules() {
+        this.setData({ loading: true });
+        try {
+            const rules = await marketing_management_1.DiscountRuleManagementService.getDiscountRuleList(this.merchantId, { page_id: 1, page_size: 50 });
+            this.setData({ rules, loading: false });
+        }
+        catch (err) {
+            console.error('[Discount] Load failed:', err);
+            this.setData({ loading: false });
+            wx.showToast({ title: '加载失败', icon: 'none' });
+        }
     },
     // ==================== 表单操作 ====================
     showCreateModal() {
@@ -134,98 +123,94 @@ Page({
         const key = 'formData.' + field;
         this.setData({ [key]: !current });
     },
-    handleSubmit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { formData, editingRule } = this.data;
-            if (!formData.name.trim()) {
-                wx.showToast({ title: '请输入活动名称', icon: 'none' });
-                return;
+    async handleSubmit() {
+        const { formData, editingRule } = this.data;
+        if (!formData.name.trim()) {
+            wx.showToast({ title: '请输入活动名称', icon: 'none' });
+            return;
+        }
+        const minAmount = parseFloat(formData.minOrderAmount);
+        const discountAmount = parseFloat(formData.discountAmount);
+        if (isNaN(minAmount) || minAmount <= 0) {
+            wx.showToast({ title: '请输入有效的满减门槛', icon: 'none' });
+            return;
+        }
+        if (isNaN(discountAmount) || discountAmount <= 0) {
+            wx.showToast({ title: '请输入有效的减免金额', icon: 'none' });
+            return;
+        }
+        if (discountAmount >= minAmount) {
+            wx.showToast({ title: '减免金额必须小于满减门槛', icon: 'none' });
+            return;
+        }
+        if (!formData.validFrom || !formData.validUntil) {
+            wx.showToast({ title: '请选择有效期', icon: 'none' });
+            return;
+        }
+        if (formData.validUntil < formData.validFrom) {
+            wx.showToast({ title: '结束时间必须晚于开始时间', icon: 'none' });
+            return;
+        }
+        this.setData({ submitting: true });
+        try {
+            if (editingRule) {
+                const updateData = {
+                    id: editingRule.id,
+                    name: formData.name.trim(),
+                    description: formData.description.trim() || undefined,
+                    min_order_amount: Math.round(minAmount * 100),
+                    discount_amount: Math.round(discountAmount * 100),
+                    can_stack_with_voucher: formData.canStackWithVoucher,
+                    can_stack_with_membership: formData.canStackWithMembership,
+                    valid_from: new Date(formData.validFrom + 'T00:00:00').toISOString(),
+                    valid_until: new Date(formData.validUntil + 'T23:59:59').toISOString()
+                };
+                await marketing_management_1.DiscountRuleManagementService.updateDiscountRule(this.merchantId, editingRule.id, updateData);
+                wx.showToast({ title: '更新成功', icon: 'success' });
             }
-            const minAmount = parseFloat(formData.minOrderAmount);
-            const discountAmount = parseFloat(formData.discountAmount);
-            if (isNaN(minAmount) || minAmount <= 0) {
-                wx.showToast({ title: '请输入有效的满减门槛', icon: 'none' });
-                return;
+            else {
+                const createData = {
+                    name: formData.name.trim(),
+                    description: formData.description.trim() || undefined,
+                    min_order_amount: Math.round(minAmount * 100),
+                    discount_amount: Math.round(discountAmount * 100),
+                    can_stack_with_voucher: formData.canStackWithVoucher,
+                    can_stack_with_membership: formData.canStackWithMembership,
+                    valid_from: new Date(formData.validFrom + 'T00:00:00').toISOString(),
+                    valid_until: new Date(formData.validUntil + 'T23:59:59').toISOString()
+                };
+                await marketing_management_1.DiscountRuleManagementService.createDiscountRule(this.merchantId, createData);
+                wx.showToast({ title: '创建成功', icon: 'success' });
             }
-            if (isNaN(discountAmount) || discountAmount <= 0) {
-                wx.showToast({ title: '请输入有效的减免金额', icon: 'none' });
-                return;
-            }
-            if (discountAmount >= minAmount) {
-                wx.showToast({ title: '减免金额必须小于满减门槛', icon: 'none' });
-                return;
-            }
-            if (!formData.validFrom || !formData.validUntil) {
-                wx.showToast({ title: '请选择有效期', icon: 'none' });
-                return;
-            }
-            if (formData.validUntil < formData.validFrom) {
-                wx.showToast({ title: '结束时间必须晚于开始时间', icon: 'none' });
-                return;
-            }
-            this.setData({ submitting: true });
-            try {
-                if (editingRule) {
-                    const updateData = {
-                        id: editingRule.id,
-                        name: formData.name.trim(),
-                        description: formData.description.trim() || undefined,
-                        min_order_amount: Math.round(minAmount * 100),
-                        discount_amount: Math.round(discountAmount * 100),
-                        can_stack_with_voucher: formData.canStackWithVoucher,
-                        can_stack_with_membership: formData.canStackWithMembership,
-                        valid_from: new Date(formData.validFrom + 'T00:00:00').toISOString(),
-                        valid_until: new Date(formData.validUntil + 'T23:59:59').toISOString()
-                    };
-                    yield marketing_management_1.DiscountRuleManagementService.updateDiscountRule(this.merchantId, editingRule.id, updateData);
-                    wx.showToast({ title: '更新成功', icon: 'success' });
-                }
-                else {
-                    const createData = {
-                        name: formData.name.trim(),
-                        description: formData.description.trim() || undefined,
-                        min_order_amount: Math.round(minAmount * 100),
-                        discount_amount: Math.round(discountAmount * 100),
-                        can_stack_with_voucher: formData.canStackWithVoucher,
-                        can_stack_with_membership: formData.canStackWithMembership,
-                        valid_from: new Date(formData.validFrom + 'T00:00:00').toISOString(),
-                        valid_until: new Date(formData.validUntil + 'T23:59:59').toISOString()
-                    };
-                    yield marketing_management_1.DiscountRuleManagementService.createDiscountRule(this.merchantId, createData);
-                    wx.showToast({ title: '创建成功', icon: 'success' });
-                }
-                this.setData({ showModal: false, submitting: false });
-                this.loadRules();
-            }
-            catch (err) {
-                console.error('[Discount] Submit failed:', err);
-                this.setData({ submitting: false });
-                wx.showToast({ title: '操作失败', icon: 'none' });
-            }
-        });
+            this.setData({ showModal: false, submitting: false });
+            this.loadRules();
+        }
+        catch (err) {
+            console.error('[Discount] Submit failed:', err);
+            this.setData({ submitting: false });
+            wx.showToast({ title: '操作失败', icon: 'none' });
+        }
     },
     // ==================== 活动操作 ====================
-    handleToggleActive(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { id, active } = e.currentTarget.dataset;
-            const newActive = !active;
-            wx.showModal({
-                title: newActive ? '启用活动' : '停用活动',
-                content: newActive ? '确定启用此满减活动吗？' : '确定停用此满减活动吗？',
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
-                    if (res.confirm) {
-                        try {
-                            yield marketing_management_1.DiscountRuleManagementService.updateDiscountRule(this.merchantId, id, { is_active: newActive });
-                            wx.showToast({ title: newActive ? '已启用' : '已停用', icon: 'success' });
-                            this.loadRules();
-                        }
-                        catch (err) {
-                            console.error('[Discount] Toggle failed:', err);
-                            wx.showToast({ title: '操作失败', icon: 'none' });
-                        }
+    async handleToggleActive(e) {
+        const { id, active } = e.currentTarget.dataset;
+        const newActive = !active;
+        wx.showModal({
+            title: newActive ? '启用活动' : '停用活动',
+            content: newActive ? '确定启用此满减活动吗？' : '确定停用此满减活动吗？',
+            success: async (res) => {
+                if (res.confirm) {
+                    try {
+                        await marketing_management_1.DiscountRuleManagementService.updateDiscountRule(this.merchantId, id, { is_active: newActive });
+                        wx.showToast({ title: newActive ? '已启用' : '已停用', icon: 'success' });
+                        this.loadRules();
                     }
-                })
-            });
+                    catch (err) {
+                        console.error('[Discount] Toggle failed:', err);
+                        wx.showToast({ title: '操作失败', icon: 'none' });
+                    }
+                }
+            }
         });
     },
     handleDelete(e) {
@@ -234,10 +219,10 @@ Page({
             title: '删除活动',
             content: '确定删除此满减活动吗？删除后无法恢复。',
             confirmColor: '#ff4d4f',
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 if (res.confirm) {
                     try {
-                        yield marketing_management_1.DiscountRuleManagementService.deleteDiscountRule(this.merchantId, id);
+                        await marketing_management_1.DiscountRuleManagementService.deleteDiscountRule(this.merchantId, id);
                         wx.showToast({ title: '已删除', icon: 'success' });
                         this.loadRules();
                     }
@@ -246,7 +231,7 @@ Page({
                         wx.showToast({ title: '删除失败', icon: 'none' });
                     }
                 }
-            })
+            }
         });
     },
     // ==================== 日历选择器 ====================

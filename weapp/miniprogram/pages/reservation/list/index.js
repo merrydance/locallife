@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -61,33 +52,36 @@ Page({
         });
         this.loadReservations(true);
     },
-    loadReservations(reset) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (this.data.loading && !reset)
-                return;
-            this.setData({ loading: true });
-            try {
-                const page = reset ? 1 : this.data.page;
-                const status = this.data.currentTab === 'all' ? undefined : this.data.currentTab;
-                const res = yield reservation_1.ReservationService.getReservations({
-                    page_id: page,
-                    page_size: this.data.pageSize,
-                    status
-                });
-                const formattedReservations = res.reservations.map(r => (Object.assign(Object.assign({}, r), { _statusText: reservation_2.default.formatStatus(r.status), _statusTheme: reservation_2.default.getStatusTheme(r.status), _timeText: reservation_2.default.formatDateTime(r.reservation_time) })));
-                this.setData({
-                    reservations: reset ? formattedReservations : [...this.data.reservations, ...formattedReservations],
-                    page: page + 1,
-                    hasMore: formattedReservations.length === this.data.pageSize,
-                    loading: false
-                });
-            }
-            catch (error) {
-                console.error(error);
-                this.setData({ loading: false });
-                wx.showToast({ title: '加载失败', icon: 'none' });
-            }
-        });
+    async loadReservations(reset) {
+        if (this.data.loading && !reset)
+            return;
+        this.setData({ loading: true });
+        try {
+            const page = reset ? 1 : this.data.page;
+            const status = this.data.currentTab === 'all' ? undefined : this.data.currentTab;
+            const res = await reservation_1.ReservationService.getUserReservations({
+                page_id: page,
+                page_size: this.data.pageSize,
+                status
+            });
+            const formattedReservations = res.reservations.map((r) => ({
+                ...r,
+                _statusText: reservation_2.default.formatStatus(r.status),
+                _statusTheme: reservation_2.default.getStatusTheme(r.status),
+                _timeText: reservation_2.default.formatDateTime(r.reservation_time)
+            }));
+            this.setData({
+                reservations: reset ? formattedReservations : [...this.data.reservations, ...formattedReservations],
+                page: page + 1,
+                hasMore: formattedReservations.length === this.data.pageSize,
+                loading: false
+            });
+        }
+        catch (error) {
+            console.error(error);
+            this.setData({ loading: false });
+            wx.showToast({ title: '加载失败', icon: 'none' });
+        }
     },
     onToDetail(e) {
         const id = e.currentTarget.dataset.id;

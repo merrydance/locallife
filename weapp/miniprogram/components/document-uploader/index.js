@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Component({
     properties: {
         value: {
@@ -39,26 +30,24 @@ Component({
         maxRetries: 2
     },
     methods: {
-        onUpload() {
-            return __awaiter(this, void 0, void 0, function* () {
-                if (this.data.disabled || this.data.value)
-                    return;
-                try {
-                    const res = yield wx.chooseMedia({
-                        count: 1,
-                        mediaType: ['image'],
-                        sourceType: ['album', 'camera'],
-                        sizeType: ['compressed']
-                    });
-                    const tempFilePath = res.tempFiles[0].tempFilePath;
-                    // Emit event for parent to handle upload (or just display)
-                    this.triggerEvent('change', { file: res.tempFiles[0], path: tempFilePath });
-                }
-                catch (err) {
-                    // User cancelled or error
-                    console.debug('Choose media cancelled/failed', err);
-                }
-            });
+        async onUpload() {
+            if (this.data.disabled || this.data.value)
+                return;
+            try {
+                const res = await wx.chooseMedia({
+                    count: 1,
+                    mediaType: ['image'],
+                    sourceType: ['album', 'camera'],
+                    sizeType: ['compressed']
+                });
+                const tempFilePath = res.tempFiles[0].tempFilePath;
+                // Emit event for parent to handle upload (or just display)
+                this.triggerEvent('change', { file: res.tempFiles[0], path: tempFilePath });
+            }
+            catch (err) {
+                // User cancelled or error
+                console.debug('Choose media cancelled/failed', err);
+            }
         },
         onRemove() {
             if (this.data.disabled)

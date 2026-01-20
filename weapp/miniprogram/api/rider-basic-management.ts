@@ -460,7 +460,7 @@ export async function smartOnlineManagement(action: 'online' | 'offline'): Promi
  */
 export class LocationReportManager {
     private reportInterval: number = 30000 // 30秒上报一次
-    private intervalId: NodeJS.Timeout | null = null
+    private intervalId: ReturnType<typeof setInterval> | null = null
     private lastLocation: LocationPoint | null = null
 
     /**
@@ -518,13 +518,14 @@ export class LocationReportManager {
             wx.getLocation({
                 type: 'gcj02',
                 success: (res) => {
+                    const heading = (res as unknown as { heading?: number }).heading
                     resolve({
                         latitude: res.latitude,
                         longitude: res.longitude,
                         recorded_at: new Date().toISOString(),
                         accuracy: res.accuracy,
                         speed: res.speed,
-                        heading: res.heading
+                        heading
                     })
                 },
                 fail: () => {

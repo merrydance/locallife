@@ -32,20 +32,11 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const responsive_1 = require("@/utils/responsive");
-const echarts = __importStar(require("../../libs/echarts"));
-const merchant_1 = require("../../../api/merchant");
-const error_handler_1 = require("../../../utils/error-handler");
+const echarts = __importStar(require("@/libs/echarts"));
+const merchant_1 = require("@/api/merchant");
+const error_handler_1 = require("@/utils/error-handler");
 const app = getApp();
 let chartLine = null;
 let chartPie = null;
@@ -179,36 +170,38 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },
-    loadData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const merchantId = app.globalData.merchantId;
-                const res = yield (0, merchant_1.getMerchantDashboard)(merchantId);
-                // Update Metrics
-                const metrics = [
-                    { label: '今日GMV', value: `¥${(res.today_sales / 100).toFixed(2)}`, change: '-', trend: 'up' },
-                    { label: '今日订单', value: String(res.today_orders), change: '-', trend: 'up' },
-                    { label: '待处理', value: String(res.pending_orders), change: '-', trend: 'down' }, // Assuming lower is better or just trend
-                    { label: '近7日', value: '趋势图', change: '-', trend: 'up' }
-                ];
-                this.setData({ metrics });
-                // Update Line Chart
-                if (chartLine && res.seven_days_sales) {
-                    const dates = res.seven_days_sales.map((d) => d.date.slice(5)); // MM-DD
-                    const sales = res.seven_days_sales.map((d) => d.amount / 100); // Yuan
-                    chartLine.setOption({
-                        xAxis: {
-                            data: dates
-                        },
-                        series: [{
-                                data: sales
-                            }]
-                    });
-                }
+    async loadData() {
+        var _a, _b, _c;
+        try {
+            const merchantId = Number(app.globalData.merchantId);
+            const res = await (0, merchant_1.getMerchantDashboard)(merchantId);
+            const todaySales = (_a = res.today_sales) !== null && _a !== void 0 ? _a : 0;
+            const todayOrders = (_b = res.today_orders) !== null && _b !== void 0 ? _b : 0;
+            const pendingOrders = (_c = res.pending_orders) !== null && _c !== void 0 ? _c : 0;
+            // Update Metrics
+            const metrics = [
+                { label: '今日GMV', value: `¥${(todaySales / 100).toFixed(2)}`, change: '-', trend: 'up' },
+                { label: '今日订单', value: String(todayOrders), change: '-', trend: 'up' },
+                { label: '待处理', value: String(pendingOrders), change: '-', trend: 'down' }, // Assuming lower is better or just trend
+                { label: '近7日', value: '趋势图', change: '-', trend: 'up' }
+            ];
+            this.setData({ metrics });
+            // Update Line Chart
+            if (chartLine && res.seven_days_sales) {
+                const dates = res.seven_days_sales.map((d) => d.date.slice(5)); // MM-DD
+                const sales = res.seven_days_sales.map((d) => d.amount / 100); // Yuan
+                chartLine.setOption({
+                    xAxis: {
+                        data: dates
+                    },
+                    series: [{
+                            data: sales
+                        }]
+                });
             }
-            catch (error) {
-                error_handler_1.ErrorHandler.handle(error, 'Analytics.loadData');
-            }
-        });
+        }
+        catch (error) {
+            error_handler_1.ErrorHandler.handle(error, 'Analytics.loadData');
+        }
     }
 });

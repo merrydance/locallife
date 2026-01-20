@@ -3,64 +3,45 @@
  * 员工管理页面
  * 对接后端 /v1/merchant/staff 接口
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const request_1 = require("@/utils/request");
 // 员工管理服务
 const StaffService = {
     // 获取员工列表
-    listStaff() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/staff',
-                method: 'GET'
-            });
+    async listStaff() {
+        return (0, request_1.request)({
+            url: '/v1/merchant/staff',
+            method: 'GET'
         });
     },
     // 添加员工
-    addStaff(userId, role) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/staff',
-                method: 'POST',
-                data: { user_id: userId, role }
-            });
+    async addStaff(userId, role) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/staff',
+            method: 'POST',
+            data: { user_id: userId, role }
         });
     },
     // 更新员工角色
-    updateStaffRole(staffId, role) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/staff/${staffId}/role`,
-                method: 'PATCH',
-                data: { role }
-            });
+    async updateStaffRole(staffId, role) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/staff/${staffId}/role`,
+            method: 'PATCH',
+            data: { role }
         });
     },
     // 删除员工
-    deleteStaff(staffId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/staff/${staffId}`,
-                method: 'DELETE'
-            });
+    async deleteStaff(staffId) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/staff/${staffId}`,
+            method: 'DELETE'
         });
     },
     // 生成邀请码
-    generateInviteCode() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/staff/invite-code',
-                method: 'POST'
-            });
+    async generateInviteCode() {
+        return (0, request_1.request)({
+            url: '/v1/merchant/staff/invite-code',
+            method: 'POST'
         });
     }
 };
@@ -106,53 +87,47 @@ Page({
         this.loadStaffList();
     },
     // 加载员工列表
-    loadStaffList() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ loading: true });
-            try {
-                const result = yield StaffService.listStaff();
-                this.setData({
-                    staffList: result.staff || [],
-                    loading: false
-                });
-            }
-            catch (error) {
-                console.error('加载员工列表失败:', error);
-                wx.showToast({ title: error.message || '加载失败', icon: 'none' });
-                this.setData({ loading: false });
-            }
-        });
+    async loadStaffList() {
+        this.setData({ loading: true });
+        try {
+            const result = await StaffService.listStaff();
+            this.setData({
+                staffList: result.staff || [],
+                loading: false
+            });
+        }
+        catch (error) {
+            console.error('加载员工列表失败:', error);
+            wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+            this.setData({ loading: false });
+        }
     },
     // 刷新员工列表
-    onRefresh() {
-        return __awaiter(this, void 0, void 0, function* () {
-            wx.showLoading({ title: '刷新中...', mask: true });
-            yield this.loadStaffList();
-            wx.hideLoading();
-            wx.showToast({ title: '已刷新', icon: 'success', duration: 1000 });
-        });
+    async onRefresh() {
+        wx.showLoading({ title: '刷新中...', mask: true });
+        await this.loadStaffList();
+        wx.hideLoading();
+        wx.showToast({ title: '已刷新', icon: 'success', duration: 1000 });
     },
     // 打开邀请码弹窗
-    onGenerateInviteCode() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ showInviteModal: true, generating: true, inviteCode: '', inviteCodeUrl: '' });
-            try {
-                const result = yield StaffService.generateInviteCode();
-                // 生成包含页面路径的完整URL，扫码后直接跳转
-                const inviteCodeUrl = `/pages/user/bind-merchant/index?code=${result.invite_code}`;
-                this.setData({
-                    inviteCode: result.invite_code,
-                    inviteCodeUrl: inviteCodeUrl,
-                    inviteExpiresAt: result.expires_at,
-                    generating: false
-                });
-            }
-            catch (error) {
-                console.error('生成邀请码失败:', error);
-                wx.showToast({ title: error.message || '生成失败', icon: 'none' });
-                this.setData({ generating: false });
-            }
-        });
+    async onGenerateInviteCode() {
+        this.setData({ showInviteModal: true, generating: true, inviteCode: '', inviteCodeUrl: '' });
+        try {
+            const result = await StaffService.generateInviteCode();
+            // 生成包含页面路径的完整URL，扫码后直接跳转
+            const inviteCodeUrl = `/pages/user/bind-merchant/index?code=${result.invite_code}`;
+            this.setData({
+                inviteCode: result.invite_code,
+                inviteCodeUrl: inviteCodeUrl,
+                inviteExpiresAt: result.expires_at,
+                generating: false
+            });
+        }
+        catch (error) {
+            console.error('生成邀请码失败:', error);
+            wx.showToast({ title: error.message || '生成失败', icon: 'none' });
+            this.setData({ generating: false });
+        }
     },
     // 关闭邀请码弹窗
     onCloseInviteModal() {
@@ -222,26 +197,24 @@ Page({
         this.setData({ selectedRole: role });
     },
     // 提交角色修改
-    onSubmitRoleChange() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { editingStaff, selectedRole } = this.data;
-            if (!editingStaff)
-                return;
-            this.setData({ updating: true });
-            try {
-                yield StaffService.updateStaffRole(editingStaff.id, selectedRole);
-                wx.showToast({ title: '修改成功', icon: 'success' });
-                this.setData({ showEditModal: false, editingStaff: null });
-                this.loadStaffList();
-            }
-            catch (error) {
-                console.error('修改角色失败:', error);
-                wx.showToast({ title: error.message || '修改失败', icon: 'none' });
-            }
-            finally {
-                this.setData({ updating: false });
-            }
-        });
+    async onSubmitRoleChange() {
+        const { editingStaff, selectedRole } = this.data;
+        if (!editingStaff)
+            return;
+        this.setData({ updating: true });
+        try {
+            await StaffService.updateStaffRole(editingStaff.id, selectedRole);
+            wx.showToast({ title: '修改成功', icon: 'success' });
+            this.setData({ showEditModal: false, editingStaff: null });
+            this.loadStaffList();
+        }
+        catch (error) {
+            console.error('修改角色失败:', error);
+            wx.showToast({ title: error.message || '修改失败', icon: 'none' });
+        }
+        finally {
+            this.setData({ updating: false });
+        }
     },
     // 打开删除确认弹窗
     onDeleteStaff(e) {
@@ -259,26 +232,24 @@ Page({
         this.setData({ showDeleteModal: false, deletingStaff: null });
     },
     // 确认删除
-    onConfirmDelete() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { deletingStaff } = this.data;
-            if (!deletingStaff)
-                return;
-            this.setData({ deleting: true });
-            try {
-                yield StaffService.deleteStaff(deletingStaff.id);
-                wx.showToast({ title: '已移除', icon: 'success' });
-                this.setData({ showDeleteModal: false, deletingStaff: null });
-                this.loadStaffList();
-            }
-            catch (error) {
-                console.error('移除员工失败:', error);
-                wx.showToast({ title: error.message || '移除失败', icon: 'none' });
-            }
-            finally {
-                this.setData({ deleting: false });
-            }
-        });
+    async onConfirmDelete() {
+        const { deletingStaff } = this.data;
+        if (!deletingStaff)
+            return;
+        this.setData({ deleting: true });
+        try {
+            await StaffService.deleteStaff(deletingStaff.id);
+            wx.showToast({ title: '已移除', icon: 'success' });
+            this.setData({ showDeleteModal: false, deletingStaff: null });
+            this.loadStaffList();
+        }
+        catch (error) {
+            console.error('移除员工失败:', error);
+            wx.showToast({ title: error.message || '移除失败', icon: 'none' });
+        }
+        finally {
+            this.setData({ deleting: false });
+        }
     },
     // 格式化日期
     formatDate(dateStr) {

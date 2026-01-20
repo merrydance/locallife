@@ -16,8 +16,8 @@ Page({
         const { order_id, amount, merchant_name, table_number } = options;
 
         this.setData({
-            orderId: parseInt(order_id) || 0,
-            paymentAmount: parseFloat(amount) || 0,
+            orderId: parseInt(order_id || '0', 10) || 0,
+            paymentAmount: parseFloat(amount || '0') || 0,
             merchantInfo: { name: merchant_name || '' },
             tableInfo: { table_number: table_number || '' }
         });

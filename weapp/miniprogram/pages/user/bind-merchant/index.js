@@ -3,17 +3,11 @@
  * 员工绑定商户页面
  * 用户扫描邀请码二维码或手动输入邀请码加入商户
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const request_1 = require("@/utils/request");
+const personal_1 = require("../../../api/personal");
+const isBindMerchantError = (error) => {
+    return !!error && typeof error === 'object';
+};
 Page({
     data: {
         inviteCode: '',
@@ -55,45 +49,39 @@ Page({
         });
     },
     // 绑定商户
-    bindMerchant() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const { inviteCode } = this.data;
-            if (!inviteCode.trim()) {
-                wx.showToast({ title: '请输入邀请码', icon: 'none' });
-                return;
-            }
-            this.setData({ loading: true });
-            try {
-                const result = yield (0, request_1.request)({
-                    url: '/v1/bind-merchant',
-                    method: 'POST',
-                    data: { invite_code: inviteCode.trim() }
+    async bindMerchant() {
+        var _a;
+        const { inviteCode } = this.data;
+        if (!inviteCode.trim()) {
+            wx.showToast({ title: '请输入邀请码', icon: 'none' });
+            return;
+        }
+        this.setData({ loading: true });
+        try {
+            const result = await (0, personal_1.bindMerchant)(inviteCode.trim());
+            this.setData({
+                success: true,
+                result,
+                loading: false
+            });
+            wx.showToast({ title: '加入成功', icon: 'success' });
+        }
+        catch (error) {
+            console.error('绑定失败:', error);
+            this.setData({ loading: false });
+            // 友好提示已入职情况
+            if (isBindMerchantError(error) && (error.statusCode === 409 || ((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('already')))) {
+                wx.showModal({
+                    title: '已入职',
+                    content: '您已经是该商户的员工，无需重复绑定',
+                    showCancel: false,
+                    confirmText: '我知道了'
                 });
-                this.setData({
-                    success: true,
-                    result,
-                    loading: false
-                });
-                wx.showToast({ title: '加入成功', icon: 'success' });
             }
-            catch (error) {
-                console.error('绑定失败:', error);
-                this.setData({ loading: false });
-                // 友好提示已入职情况
-                if (error.statusCode === 409 || ((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('already'))) {
-                    wx.showModal({
-                        title: '已入职',
-                        content: '您已经是该商户的员工，无需重复绑定',
-                        showCancel: false,
-                        confirmText: '我知道了'
-                    });
-                }
-                else {
-                    wx.showToast({ title: error.message || '绑定失败', icon: 'none' });
-                }
+            else {
+                wx.showToast({ title: error instanceof Error ? error.message : '绑定失败', icon: 'none' });
             }
-        });
+        }
     },
     // 前往商户工作台
     goToMerchant() {

@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -16,6 +7,8 @@ const dish_1 = require("../../adapters/dish");
 const dish_2 = require("../../api/dish");
 const cart_1 = __importDefault(require("../../services/cart"));
 const cart_2 = require("../../api/cart");
+const merchant_1 = require("../../api/merchant");
+const combo_1 = require("../../api/combo");
 const navigation_1 = __importDefault(require("../../utils/navigation"));
 const logger_1 = require("../../utils/logger");
 const error_handler_1 = require("../../utils/error-handler");
@@ -55,6 +48,7 @@ Page({
     _prefetchedRestaurants: [],
     _prefetchedPackages: [],
     _prefetchHasMore: true,
+    _unsubscribeLocation: undefined,
     onLoad() {
         // 设置导航栏高度和滚动区域高度
         const { navBarHeight } = (0, responsive_1.getStableBarHeights)();
@@ -99,7 +93,7 @@ Page({
         // 导航栏已经处理位置获取，这里只需要响应位置变化事件
         // 如果用户点击页面内的位置，可以打开位置选择器
         wx.chooseLocation({
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 const app = getApp();
                 // 更新全局位置
                 app.globalData.latitude = res.latitude;
@@ -113,7 +107,7 @@ Page({
                 // 重新加载基于新位置的推荐
                 this.onLocationChange();
                 wx.showToast({ title: '已更新位置推荐', icon: 'success', duration: 1500 });
-            }),
+            },
             fail: () => {
                 // 用户取消选择
             }
@@ -144,51 +138,49 @@ Page({
         }
     },
     // 尝试加载数据，等待 token 准备好，位置未授权则直接引导
-    tryLoadData() {
-        return __awaiter(this, arguments, void 0, function* (retryCount = 0) {
-            var _a;
-            const MAX_TOKEN_RETRIES = 10; // Token 最多等待 5 秒
-            const RETRY_INTERVAL = 500;
-            const { getToken } = require('../../utils/auth');
-            const app = getApp();
-            const token = getToken();
-            const hasLocation = !!(app.globalData.latitude && app.globalData.longitude);
-            // 1. 先等待 Token（登录通常很快）
-            if (!token) {
-                if (retryCount >= MAX_TOKEN_RETRIES) {
-                    logger_1.logger.error('❌ 登录超时', { waitedTime: `${(retryCount * RETRY_INTERVAL) / 1000}秒` }, 'Takeout.tryLoadData');
-                    wx.showModal({
-                        title: '登录超时',
-                        content: '请检查网络连接后重试',
-                        confirmText: '重新加载',
-                        success: (res) => {
-                            if (res.confirm) {
-                                wx.reLaunch({ url: '/pages/takeout/index' });
-                            }
+    async tryLoadData(retryCount = 0) {
+        var _a;
+        const MAX_TOKEN_RETRIES = 10; // Token 最多等待 5 秒
+        const RETRY_INTERVAL = 500;
+        const { getToken } = require('../../utils/auth');
+        const app = getApp();
+        const token = getToken();
+        const hasLocation = !!(app.globalData.latitude && app.globalData.longitude);
+        // 1. 先等待 Token（登录通常很快）
+        if (!token) {
+            if (retryCount >= MAX_TOKEN_RETRIES) {
+                logger_1.logger.error('❌ 登录超时', { waitedTime: `${(retryCount * RETRY_INTERVAL) / 1000}秒` }, 'Takeout.tryLoadData');
+                wx.showModal({
+                    title: '登录超时',
+                    content: '请检查网络连接后重试',
+                    confirmText: '重新加载',
+                    success: (res) => {
+                        if (res.confirm) {
+                            wx.reLaunch({ url: '/pages/takeout/index' });
                         }
-                    });
-                    return;
-                }
-                if (retryCount === 0) {
-                    logger_1.logger.info('等待登录...', undefined, 'Takeout.tryLoadData');
-                }
-                setTimeout(() => this.tryLoadData(retryCount + 1), RETRY_INTERVAL);
+                    }
+                });
                 return;
             }
-            // 2. Token 已就绪，检查位置
-            if (!hasLocation) {
-                // 位置未授权，直接显示引导，不再疯狂重试
-                logger_1.logger.info('位置未授权，显示引导界面', undefined, 'Takeout.tryLoadData');
-                this.showLocationGuide();
-                return;
+            if (retryCount === 0) {
+                logger_1.logger.info('等待登录...', undefined, 'Takeout.tryLoadData');
             }
-            // 3. Token 和位置都准备好，加载数据
-            logger_1.logger.info('✅ Token 和位置都已准备好，开始加载数据', {
-                tokenLength: token.length,
-                locationName: ((_a = app.globalData.location) === null || _a === void 0 ? void 0 : _a.name) || '未知'
-            }, 'Takeout.tryLoadData');
-            this.loadData();
-        });
+            setTimeout(() => this.tryLoadData(retryCount + 1), RETRY_INTERVAL);
+            return;
+        }
+        // 2. Token 已就绪，检查位置
+        if (!hasLocation) {
+            // 位置未授权，直接显示引导，不再疯狂重试
+            logger_1.logger.info('位置未授权，显示引导界面', undefined, 'Takeout.tryLoadData');
+            this.showLocationGuide();
+            return;
+        }
+        // 3. Token 和位置都准备好，加载数据
+        logger_1.logger.info('✅ Token 和位置都已准备好，开始加载数据', {
+            tokenLength: token.length,
+            locationName: ((_a = app.globalData.location) === null || _a === void 0 ? void 0 : _a.name) || '未知'
+        }, 'Takeout.tryLoadData');
+        this.loadData();
     },
     /**
      * 显示位置引导（页面内提示，不弹窗）
@@ -223,7 +215,7 @@ Page({
      */
     openLocationPicker() {
         wx.chooseLocation({
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 const app = getApp();
                 // 更新全局位置
                 app.globalData.latitude = res.latitude;
@@ -245,7 +237,7 @@ Page({
                 // 重新加载数据
                 this.loadData();
                 wx.showToast({ title: '位置已更新', icon: 'success', duration: 1500 });
-            }),
+            },
             fail: (err) => {
                 logger_1.logger.warn('用户取消选择位置', err, 'Takeout.openLocationPicker');
                 // 用户取消，再次提示
@@ -293,306 +285,291 @@ Page({
         this.loadCategories();
         this.loadData();
     },
-    loadCategories() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 根据当前 Tab 获取对应类型的标签
+    async loadCategories() {
+        // 根据当前 Tab 获取对应类型的标签
+        const { activeTab } = this.data;
+        let tagType = 'dish'; // 默认菜品标签
+        if (activeTab === 'packages') {
+            tagType = 'combo';
+        }
+        else if (activeTab === 'restaurants') {
+            tagType = 'merchant';
+        }
+        try {
+            const tags = await (0, dish_2.getTags)(tagType);
+            const tagList = tags.map(tag => ({ id: String(tag.id), name: tag.name }));
+            // 添加"全部"选项作为第一个
+            const categories = [
+                { id: '', name: '全部' },
+                ...tagList
+            ];
+            this.setData({
+                categories,
+                activeCategoryId: '' // 默认选中"全部"
+            });
+        }
+        catch (error) {
+            console.error('加载标签失败', error);
+            // 后备：硬编码标签
+            const categories = [
+                { id: '', name: '全部' },
+                { id: '1', name: '热销' },
+                { id: '2', name: '主食' },
+                { id: '3', name: '小吃' }
+            ];
+            this.setData({ categories, activeCategoryId: '' });
+        }
+    },
+    async loadData() {
+        if (this.data.loading)
+            return;
+        this.setData({ loading: true });
+        try {
             const { activeTab } = this.data;
-            let tagType = 'dish'; // 默认菜品标签
-            if (activeTab === 'packages') {
-                tagType = 'combo';
+            if (activeTab === 'dishes') {
+                await this.loadDishes(this.data.page === 1);
             }
             else if (activeTab === 'restaurants') {
-                tagType = 'merchant';
+                await this.loadRestaurants(this.data.page === 1);
             }
-            try {
-                const tags = yield (0, dish_2.getTags)(tagType);
-                const tagList = tags.map(tag => ({ id: String(tag.id), name: tag.name }));
-                // 添加"全部"选项作为第一个
-                const categories = [
-                    { id: '', name: '全部' },
-                    ...tagList
-                ];
-                this.setData({
-                    categories,
-                    activeCategoryId: '' // 默认选中"全部"
-                });
+            else {
+                await this.loadPackages(this.data.page === 1);
             }
-            catch (error) {
-                console.error('加载标签失败', error);
-                // 后备：硬编码标签
-                const categories = [
-                    { id: '', name: '全部' },
-                    { id: '1', name: '热销' },
-                    { id: '2', name: '主食' },
-                    { id: '3', name: '小吃' }
-                ];
-                this.setData({ categories, activeCategoryId: '' });
-            }
-        });
+        }
+        catch (error) {
+            error_handler_1.ErrorHandler.handle(error, 'Takeout.loadData');
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
-    loadData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (this.data.loading)
-                return;
-            this.setData({ loading: true });
-            try {
-                const { activeTab } = this.data;
-                if (activeTab === 'dishes') {
-                    yield this.loadDishes(this.data.page === 1);
-                }
-                else if (activeTab === 'restaurants') {
-                    yield this.loadRestaurants(this.data.page === 1);
-                }
-                else {
-                    yield this.loadPackages(this.data.page === 1);
-                }
+    async loadDishes(reset = false) {
+        if (reset) {
+            // 重置时清空缓存和数据
+            this._prefetchedDishes = [];
+            this._prefetchHasMore = true;
+            this.setData({
+                page: 1,
+                dishes: [],
+                hasMore: true
+            });
+        }
+        try {
+            const app = getApp();
+            const currentPage = reset ? 1 : this.data.page;
+            let newDishes = [];
+            let hasMore = true;
+            // 1. 优先使用预加载的缓存数据（无延迟）
+            if (!reset && this._prefetchedDishes.length > 0) {
+                newDishes = this._prefetchedDishes;
+                hasMore = this._prefetchHasMore;
+                this._prefetchedDishes = []; // 清空缓存
             }
-            catch (error) {
-                error_handler_1.ErrorHandler.handle(error, 'Takeout.loadData');
+            else {
+                // 2. 没有缓存则请求当前页
+                // 获取选中的标签ID用于过滤（空字符串表示"全部"，不传 tag_id）
+                const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null;
+                const params = {
+                    user_latitude: app.globalData.latitude || undefined,
+                    user_longitude: app.globalData.longitude || undefined,
+                    limit: PAGE_SIZE,
+                    page: currentPage
+                };
+                // 只有选择了具体标签时才传 tag_id
+                if (tagId && !isNaN(tagId)) {
+                    params.tag_id = tagId;
+                }
+                const result = await (0, dish_2.searchDishes)(params);
+                newDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
+                hasMore = result.has_more;
             }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
-    },
-    loadDishes() {
-        return __awaiter(this, arguments, void 0, function* (reset = false) {
+            // 更新视图
             if (reset) {
-                // 重置时清空缓存和数据
-                this._prefetchedDishes = [];
-                this._prefetchHasMore = true;
                 this.setData({
-                    page: 1,
-                    dishes: [],
-                    hasMore: true
+                    dishes: newDishes,
+                    hasMore
                 });
             }
-            try {
-                const app = getApp();
-                const currentPage = reset ? 1 : this.data.page;
-                let newDishes = [];
-                let hasMore = true;
-                // 1. 优先使用预加载的缓存数据（无延迟）
-                if (!reset && this._prefetchedDishes.length > 0) {
-                    newDishes = this._prefetchedDishes;
-                    hasMore = this._prefetchHasMore;
-                    this._prefetchedDishes = []; // 清空缓存
-                }
-                else {
-                    // 2. 没有缓存则请求当前页
-                    // 获取选中的标签ID用于过滤（空字符串表示"全部"，不传 tag_id）
-                    const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null;
-                    const params = {
-                        user_latitude: app.globalData.latitude || undefined,
-                        user_longitude: app.globalData.longitude || undefined,
-                        limit: PAGE_SIZE,
-                        page: currentPage
-                    };
-                    // 只有选择了具体标签时才传 tag_id
-                    if (tagId && !isNaN(tagId)) {
-                        params.tag_id = tagId;
-                    }
-                    const result = yield (0, dish_2.searchDishes)(params);
-                    newDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
-                    hasMore = result.has_more;
-                }
-                // 更新视图
-                if (reset) {
-                    this.setData({
-                        dishes: newDishes,
-                        hasMore
-                    });
-                }
-                else {
-                    this.setData({
-                        dishes: [...this.data.dishes, ...newDishes],
-                        hasMore
-                    });
-                }
-                // 3. 异步预加载下一页（不阻塞当前渲染）
-                if (hasMore) {
-                    this.prefetchNextDishes(currentPage + 1);
-                }
-                // 预加载图片
-                const { preloadImages } = require('../../utils/image');
-                const imageUrls = newDishes.map((dish) => dish.imageUrl).filter(Boolean);
-                setTimeout(() => {
-                    preloadImages(imageUrls, false);
-                }, 100);
+            else {
+                this.setData({
+                    dishes: [...this.data.dishes, ...newDishes],
+                    hasMore
+                });
             }
-            catch (error) {
-                logger_1.logger.error('加载菜品失败', error, 'Takeout.loadDishes');
-                throw error;
+            // 3. 异步预加载下一页（不阻塞当前渲染）
+            if (hasMore) {
+                this.prefetchNextDishes(currentPage + 1);
             }
-        });
+            // 预加载图片
+            const { preloadImages } = require('../../utils/image');
+            const imageUrls = newDishes.map((dish) => dish.imageUrl).filter(Boolean);
+            setTimeout(() => {
+                preloadImages(imageUrls, false);
+            }, 100);
+        }
+        catch (error) {
+            logger_1.logger.error('加载菜品失败', error, 'Takeout.loadDishes');
+            throw error;
+        }
     },
     /**
      * 预加载下一页菜品（后台静默执行）
      */
-    prefetchNextDishes(nextPage) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (this.data.isPrefetching || this._prefetchedDishes.length > 0)
-                return;
-            this.setData({ isPrefetching: true });
-            try {
-                const app = getApp();
-                const result = yield (0, dish_2.searchDishes)({
-                    user_latitude: app.globalData.latitude || undefined,
-                    user_longitude: app.globalData.longitude || undefined,
-                    limit: PAGE_SIZE,
-                    page: nextPage
-                });
-                this._prefetchedDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
-                this._prefetchHasMore = result.has_more;
-            }
-            catch (error) {
-                logger_1.logger.debug('预加载下一页失败', error, 'Takeout.prefetchNextDishes');
-            }
-            finally {
-                this.setData({ isPrefetching: false });
-            }
-        });
+    async prefetchNextDishes(nextPage) {
+        if (this.data.isPrefetching || this._prefetchedDishes.length > 0)
+            return;
+        this.setData({ isPrefetching: true });
+        try {
+            const app = getApp();
+            const result = await (0, dish_2.searchDishes)({
+                user_latitude: app.globalData.latitude || undefined,
+                user_longitude: app.globalData.longitude || undefined,
+                limit: PAGE_SIZE,
+                page: nextPage
+            });
+            this._prefetchedDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
+            this._prefetchHasMore = result.has_more;
+        }
+        catch (error) {
+            logger_1.logger.debug('预加载下一页失败', error, 'Takeout.prefetchNextDishes');
+        }
+        finally {
+            this.setData({ isPrefetching: false });
+        }
     },
-    loadRestaurants() {
-        return __awaiter(this, arguments, void 0, function* (reset = false) {
+    async loadRestaurants(reset = false) {
+        if (reset) {
+            this.setData({ page: 1, restaurants: [], hasMore: true });
+        }
+        try {
+            // 使用搜索商户接口
+            const app = getApp();
+            const currentPage = reset ? 1 : this.data.page;
+            const merchants = await (0, merchant_1.searchMerchants)({
+                keyword: this.data.searchKeyword, // 使用当前搜索词，如果是空字符串则返回默认列表
+                page_id: currentPage,
+                page_size: PAGE_SIZE,
+                user_latitude: app.globalData.latitude || undefined,
+                user_longitude: app.globalData.longitude || undefined
+            });
+            // Backend returns array directly for searchMerchants in some versions, 
+            // but wrapper in api/merchant.ts returns MerchantSummary[]
+            // We need to handle total/hasMore if possible, but searchMerchants wrapper currently swallows it?
+            // Checking api/merchant.ts, it returns response.merchants || []. 
+            // Logic for hasMore might be missing in client wrapper if total isn't returned.
+            // Assuming hasMore = length === PAGE_SIZE for now or update wrapper later.
+            const hasMore = merchants.length === PAGE_SIZE;
+            const restaurantViewModels = merchants.map((m) => {
+                var _a, _b, _c, _d;
+                return ({
+                    id: m.id,
+                    name: m.name,
+                    imageUrl: m.logo_url,
+                    cuisineType: m.tags ? m.tags.slice(0, 2) : [],
+                    avgPrice: 0,
+                    avgPriceDisplay: '人均未知',
+                    distance: dish_1.DishAdapter.formatDistance((_a = m.distance) !== null && _a !== void 0 ? _a : 0),
+                    address: m.address || '',
+                    businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
+                    isOpen: (_b = m.is_open) !== null && _b !== void 0 ? _b : true, // 商户营业状态（搜索接口未返回时默认营业）
+                    availableRooms: 0,
+                    availableRoomsBadge: '',
+                    tags: m.tags ? m.tags.slice(0, 3) : [],
+                    // New fields
+                    monthlySales: (_d = (_c = m.total_orders) !== null && _c !== void 0 ? _c : m.monthly_sales) !== null && _d !== void 0 ? _d : 0,
+                    deliveryFee: m.estimated_delivery_fee,
+                    deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
+                        ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
+                        : ''
+                });
+            });
             if (reset) {
-                this.setData({ page: 1, restaurants: [], hasMore: true });
-            }
-            try {
-                // 使用搜索商户接口
-                const app = getApp();
-                const currentPage = reset ? 1 : this.data.page;
-                const { searchMerchants } = require('../../api/merchant');
-                const merchants = yield searchMerchants({
-                    keyword: this.data.searchKeyword, // 使用当前搜索词，如果是空字符串则返回默认列表
-                    page_id: currentPage,
-                    page_size: PAGE_SIZE,
-                    user_latitude: app.globalData.latitude || undefined,
-                    user_longitude: app.globalData.longitude || undefined
+                this.setData({
+                    restaurants: restaurantViewModels,
+                    hasMore
                 });
-                // Backend returns array directly for searchMerchants in some versions, 
-                // but wrapper in api/merchant.ts returns MerchantSummary[]
-                // We need to handle total/hasMore if possible, but searchMerchants wrapper currently swallows it?
-                // Checking api/merchant.ts, it returns response.merchants || []. 
-                // Logic for hasMore might be missing in client wrapper if total isn't returned.
-                // Assuming hasMore = length === PAGE_SIZE for now or update wrapper later.
-                const hasMore = merchants.length === PAGE_SIZE;
-                const restaurantViewModels = merchants.map((m) => {
-                    var _a;
-                    return ({
-                        id: m.id,
-                        name: m.name,
-                        imageUrl: m.logo_url,
-                        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
-                        avgPrice: 0,
-                        avgPriceDisplay: '人均未知',
-                        distance: dish_1.DishAdapter.formatDistance(m.distance),
-                        address: m.address,
-                        businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
-                        isOpen: (_a = m.is_open) !== null && _a !== void 0 ? _a : true, // 商户营业状态
-                        availableRooms: 0,
-                        availableRoomsBadge: '',
-                        tags: m.tags ? m.tags.slice(0, 3) : [],
-                        // New fields
-                        monthlySales: m.monthly_sales || 0,
-                        deliveryFee: m.estimated_delivery_fee,
-                        deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
-                            ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
-                            : ''
-                    });
+            }
+            else {
+                this.setData({
+                    restaurants: [...this.data.restaurants, ...restaurantViewModels],
+                    hasMore
                 });
-                if (reset) {
-                    this.setData({
-                        restaurants: restaurantViewModels,
-                        hasMore
-                    });
-                }
-                else {
-                    this.setData({
-                        restaurants: [...this.data.restaurants, ...restaurantViewModels],
-                        hasMore
-                    });
-                }
-                // 预加载图片
-                const { preloadImages } = require('../../utils/image');
-                const imageUrls = restaurantViewModels.map((r) => r.imageUrl).filter(Boolean);
-                setTimeout(() => {
-                    preloadImages(imageUrls, false);
-                }, 100);
             }
-            catch (error) {
-                logger_1.logger.error('加载商户失败', error, 'Takeout.loadRestaurants');
-                throw error;
-            }
-        });
+            // 预加载图片
+            const { preloadImages } = require('../../utils/image');
+            const imageUrls = restaurantViewModels.map((r) => r.imageUrl).filter(Boolean);
+            setTimeout(() => {
+                preloadImages(imageUrls, false);
+            }, 100);
+        }
+        catch (error) {
+            logger_1.logger.error('加载商户失败', error, 'Takeout.loadRestaurants');
+            throw error;
+        }
     },
-    loadPackages() {
-        return __awaiter(this, arguments, void 0, function* (reset = false) {
+    async loadPackages(reset = false) {
+        if (reset) {
+            this.setData({ page: 1, packages: [], hasMore: true });
+        }
+        try {
+            // 使用搜索套餐接口
+            const app = getApp();
+            const currentPage = reset ? 1 : this.data.page;
+            // 构造搜索参数
+            // 注意：getTags 返回的 id 是数字转字符串，searchCombos 可能需要数字？
+            // 当前 backend searchCombos 只接受 keyword。Category 过滤暂不支持？
+            // 如果 activeCategoryId 存在，可能需要作为 keyword 或者后续支持 category_id
+            // 目前主要支持 keyword 搜索。
+            const result = await (0, combo_1.searchCombos)({
+                keyword: this.data.searchKeyword,
+                page_id: currentPage,
+                page_size: PAGE_SIZE,
+                user_latitude: app.globalData.latitude || undefined,
+                user_longitude: app.globalData.longitude || undefined
+            });
+            const hasMore = result.combos.length === PAGE_SIZE; // 简单分页逻辑，或使用 result.total
+            const packageViewModels = result.combos.map((combo) => {
+                var _a;
+                return ({
+                    id: combo.id,
+                    name: combo.name,
+                    merchantId: combo.merchant_id,
+                    merchantName: combo.merchant_name || '',
+                    imageUrl: (0, image_1.getPublicImageUrl)(combo.image_url) || '/assets/placeholder_food.png',
+                    price: combo.combo_price,
+                    priceDisplay: (0, util_1.formatPrice)(combo.combo_price),
+                    originalPrice: combo.original_price,
+                    originalPriceDisplay: (0, util_1.formatPrice)(combo.original_price),
+                    savingsPercent: combo.savings_percent || 0,
+                    monthlySales: combo.monthly_sales || 0,
+                    salesBadge: `月售${combo.monthly_sales || 0}`,
+                    distance: dish_1.DishAdapter.formatDistance(combo.distance),
+                    deliveryFee: combo.estimated_delivery_fee,
+                    deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
+                        ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
+                        : '',
+                    tags: [], // search combos doesn't return tags yet
+                    merchantIsOpen: (_a = combo.merchant_is_open) !== null && _a !== void 0 ? _a : true,
+                    estimatedDeliveryTime: combo.estimated_delivery_time
+                });
+            });
             if (reset) {
-                this.setData({ page: 1, packages: [], hasMore: true });
-            }
-            try {
-                // 使用搜索套餐接口
-                const app = getApp();
-                const currentPage = reset ? 1 : this.data.page;
-                const { searchCombos } = require('../../api/combo');
-                // 构造搜索参数
-                // 注意：getTags 返回的 id 是数字转字符串，searchCombos 可能需要数字？
-                // 当前 backend searchCombos 只接受 keyword。Category 过滤暂不支持？
-                // 如果 activeCategoryId 存在，可能需要作为 keyword 或者后续支持 category_id
-                // 目前主要支持 keyword 搜索。
-                const result = yield searchCombos({
-                    keyword: this.data.searchKeyword,
-                    page_id: currentPage,
-                    page_size: PAGE_SIZE,
-                    user_latitude: app.globalData.latitude || undefined,
-                    user_longitude: app.globalData.longitude || undefined
+                this.setData({
+                    packages: packageViewModels,
+                    hasMore
                 });
-                const hasMore = result.combos.length === PAGE_SIZE; // 简单分页逻辑，或使用 result.total
-                const packageViewModels = result.combos.map((combo) => {
-                    var _a;
-                    return ({
-                        id: combo.id,
-                        name: combo.name,
-                        merchantId: combo.merchant_id,
-                        merchantName: combo.merchant_name || '',
-                        imageUrl: (0, image_1.getPublicImageUrl)(combo.image_url) || '/assets/placeholder_food.png',
-                        price: combo.combo_price,
-                        priceDisplay: (0, util_1.formatPrice)(combo.combo_price),
-                        originalPrice: combo.original_price,
-                        originalPriceDisplay: (0, util_1.formatPrice)(combo.original_price),
-                        savingsPercent: combo.savings_percent || 0,
-                        monthlySales: combo.monthly_sales || 0,
-                        salesBadge: `月售${combo.monthly_sales || 0}`,
-                        distance: dish_1.DishAdapter.formatDistance(combo.distance),
-                        deliveryFee: combo.estimated_delivery_fee,
-                        deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
-                            ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
-                            : '',
-                        tags: [], // search combos doesn't return tags yet? 
-                        is_online: true,
-                        merchantIsOpen: (_a = combo.merchant_is_open) !== null && _a !== void 0 ? _a : true,
-                        estimatedDeliveryTime: combo.estimated_delivery_time
-                    });
+            }
+            else {
+                this.setData({
+                    packages: [...this.data.packages, ...packageViewModels],
+                    hasMore
                 });
-                if (reset) {
-                    this.setData({
-                        packages: packageViewModels,
-                        hasMore
-                    });
-                }
-                else {
-                    this.setData({
-                        packages: [...this.data.packages, ...packageViewModels],
-                        hasMore
-                    });
-                }
             }
-            catch (error) {
-                logger_1.logger.error('加载套餐失败', error, 'Takeout.loadPackages');
-                throw error;
-            }
-        });
+        }
+        catch (error) {
+            logger_1.logger.error('加载套餐失败', error, 'Takeout.loadPackages');
+            throw error;
+        }
     },
     onTabCategoryChange(e) {
         const { id } = e.detail;
@@ -603,75 +580,69 @@ Page({
         // 切换标签时重新加载数据（带标签过滤）
         this.loadData();
     },
-    onAddCart(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { id } = e.detail;
-            const dish = this.data.dishes.find((d) => d.id === id);
-            if (dish) {
-                const success = yield cart_1.default.addItem({
-                    merchantId: String(dish.merchantId),
-                    dishId: String(dish.id)
-                });
-                if (success) {
-                    yield this.updateCartDisplay();
-                    wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 });
-                }
+    async onAddCart(e) {
+        const { id } = e.detail;
+        const dish = this.data.dishes.find((d) => d.id === id);
+        if (dish) {
+            const success = await cart_1.default.addItem({
+                merchantId: String(dish.merchantId),
+                dishId: String(dish.id)
+            });
+            if (success) {
+                await this.updateCartDisplay();
+                wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 });
             }
-        });
+        }
     },
     /**
      * 套餐加购物车
      */
-    onAddComboToCart(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { id, merchantId } = e.currentTarget.dataset;
-            if (!id || !merchantId) {
-                wx.showToast({ title: '套餐信息错误', icon: 'error' });
-                return;
-            }
-            const success = yield cart_1.default.addItem({
-                merchantId: String(merchantId),
-                comboId: String(id)
-            });
-            if (success) {
-                yield this.updateCartDisplay();
-                wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 });
-            }
+    async onAddComboToCart(e) {
+        const { id, merchantId } = e.currentTarget.dataset;
+        if (!id || !merchantId) {
+            wx.showToast({ title: '套餐信息错误', icon: 'error' });
+            return;
+        }
+        const success = await cart_1.default.addItem({
+            merchantId: String(merchantId),
+            comboId: String(id)
         });
+        if (success) {
+            await this.updateCartDisplay();
+            wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 });
+        }
     },
-    updateCartDisplay() {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            try {
-                console.log('[updateCartDisplay] 开始调用API');
-                // 直接从后端获取最新购物车汇总，确保数据准确
-                const userCarts = yield (0, cart_2.getUserCarts)('takeout');
-                console.log('[updateCartDisplay] API返回:', JSON.stringify(userCarts));
-                const totalCount = ((_a = userCarts.summary) === null || _a === void 0 ? void 0 : _a.total_items) || 0;
-                const totalPrice = ((_b = userCarts.summary) === null || _b === void 0 ? void 0 : _b.total_amount) || 0;
-                console.log('[updateCartDisplay] 设置数据:', { totalCount, totalPrice, activeTab: this.data.activeTab });
-                this.setData({
-                    cartTotalCount: totalCount,
-                    cartTotalPrice: totalPrice
-                });
-                // 同时更新 globalStore 供其他组件使用
-                global_store_1.globalStore.set('cart', {
-                    items: [],
-                    totalCount: totalCount,
-                    totalPrice: totalPrice,
-                    totalPriceDisplay: (0, util_1.formatPrice)(totalPrice)
-                });
-            }
-            catch (error) {
-                // API 调用失败时重置为 0
-                console.error('[updateCartDisplay] 错误:', error);
-                logger_1.logger.warn('获取购物车汇总失败', error, 'Takeout.updateCartDisplay');
-                this.setData({
-                    cartTotalCount: 0,
-                    cartTotalPrice: 0
-                });
-            }
-        });
+    async updateCartDisplay() {
+        var _a, _b;
+        try {
+            console.log('[updateCartDisplay] 开始调用API');
+            // 直接从后端获取最新购物车汇总，确保数据准确
+            const userCarts = await (0, cart_2.getUserCarts)('takeout');
+            console.log('[updateCartDisplay] API返回:', JSON.stringify(userCarts));
+            const totalCount = ((_a = userCarts.summary) === null || _a === void 0 ? void 0 : _a.total_items) || 0;
+            const totalPrice = ((_b = userCarts.summary) === null || _b === void 0 ? void 0 : _b.total_amount) || 0;
+            console.log('[updateCartDisplay] 设置数据:', { totalCount, totalPrice, activeTab: this.data.activeTab });
+            this.setData({
+                cartTotalCount: totalCount,
+                cartTotalPrice: totalPrice
+            });
+            // 同时更新 globalStore 供其他组件使用
+            global_store_1.globalStore.set('cart', {
+                items: [],
+                totalCount: totalCount,
+                totalPrice: totalPrice,
+                totalPriceDisplay: (0, util_1.formatPrice)(totalPrice)
+            });
+        }
+        catch (error) {
+            // API 调用失败时重置为 0
+            console.error('[updateCartDisplay] 错误:', error);
+            logger_1.logger.warn('获取购物车汇总失败', error, 'Takeout.updateCartDisplay');
+            this.setData({
+                cartTotalCount: 0,
+                cartTotalPrice: 0
+            });
+        }
     },
     // ==================== 导航方法 ====================
     /**
@@ -680,12 +651,16 @@ Page({
     onDishClick(e) {
         const { id } = e.detail;
         // 查找对应菜品
-        const dish = this.data.dishes.find((d) => d.id == id);
+        const dish = this.data.dishes.find((d) => String(d.id) === String(id));
         if (dish) {
+            const monthSales = dish.salesBadge
+                ? Number(dish.salesBadge.replace(/[^0-9]/g, ''))
+                : undefined;
+            const distanceMeters = dish.distance_meters;
             navigation_1.default.toDishDetail(id, {
-                shopName: dish.shop_name || dish.merchant_name,
-                monthSales: dish.month_sales,
-                distance: dish.distance,
+                shopName: dish.shopName,
+                monthSales: monthSales,
+                distance: distanceMeters,
                 estimatedDeliveryTime: Math.ceil((dish.estimated_delivery_time || 0) / 60) // 转换为分钟传递
             });
         }
@@ -721,72 +696,70 @@ Page({
     /**
        * 搜索功能 - 内联搜索，直接在当前页面显示结果
        */
-    onSearch(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const keyword = ((_a = e.detail.value) === null || _a === void 0 ? void 0 : _a.trim()) || '';
-            // 如果关键词为空，恢复原列表
-            if (!keyword) {
-                this.setData({ searchKeyword: '' });
-                this.loadData();
-                return;
-            }
-            this.setData({
-                searchKeyword: keyword,
-                loading: true
-            });
-            try {
-                yield this.searchInline(keyword);
-            }
-            catch (error) {
-                console.error('搜索失败:', error);
-                wx.showToast({ title: '搜索失败', icon: 'error' });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
+    async onSearch(e) {
+        var _a;
+        const keyword = ((_a = e.detail.value) === null || _a === void 0 ? void 0 : _a.trim()) || '';
+        // 如果关键词为空，恢复原列表
+        if (!keyword) {
+            this.setData({ searchKeyword: '' });
+            this.loadData();
+            return;
+        }
+        this.setData({
+            searchKeyword: keyword,
+            loading: true
         });
+        try {
+            await this.searchInline(keyword);
+        }
+        catch (error) {
+            console.error('搜索失败:', error);
+            wx.showToast({ title: '搜索失败', icon: 'error' });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     /**
      * 内联搜索 - 根据当前 Tab 搜索对应内容
      */
-    searchInline(keyword) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b;
-            const { activeTab } = this.data;
-            const app = getApp();
-            if (activeTab === 'dishes') {
-                // 搜索菜品 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
-                const result = yield (0, dish_2.searchDishes)({
-                    keyword,
-                    page: 1,
-                    limit: 20,
-                    user_latitude: (_a = app.globalData.latitude) !== null && _a !== void 0 ? _a : undefined,
-                    user_longitude: (_b = app.globalData.longitude) !== null && _b !== void 0 ? _b : undefined
-                });
-                // 使用 DishAdapter 转换为卡片展示格式（与列表加载保持一致）
-                const adaptedDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
-                this.setData({
-                    dishes: adaptedDishes,
-                    hasMore: result.has_more,
-                    page: 1
-                });
-                if (result.dishes.length === 0) {
-                    wx.showToast({ title: '未找到相关菜品', icon: 'none' });
-                }
+    async searchInline(keyword) {
+        var _a, _b;
+        const { activeTab } = this.data;
+        const app = getApp();
+        if (activeTab === 'dishes') {
+            // 搜索菜品 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
+            const result = await (0, dish_2.searchDishes)({
+                keyword,
+                page: 1,
+                limit: 20,
+                user_latitude: (_a = app.globalData.latitude) !== null && _a !== void 0 ? _a : undefined,
+                user_longitude: (_b = app.globalData.longitude) !== null && _b !== void 0 ? _b : undefined
+            });
+            // 使用 DishAdapter 转换为卡片展示格式（与列表加载保持一致）
+            const adaptedDishes = result.dishes.map((dish) => dish_1.DishAdapter.fromSummaryDTO(dish));
+            this.setData({
+                dishes: adaptedDishes,
+                hasMore: result.has_more,
+                page: 1
+            });
+            if (result.dishes.length === 0) {
+                wx.showToast({ title: '未找到相关菜品', icon: 'none' });
             }
-            else if (activeTab === 'restaurants') {
-                // 搜索餐厅 - 复用现有 searchMerchants API
-                const { searchMerchants } = require('../../api/merchant');
-                const result = yield searchMerchants({
-                    keyword,
-                    page_id: 1,
-                    page_size: 20,
-                    user_latitude: app.globalData.latitude || undefined,
-                    user_longitude: app.globalData.longitude || undefined
-                });
-                // 转换为与列表一致的展示格式（与 loadRestaurants 保持一致）
-                const restaurants = (result || []).map((m) => ({
+        }
+        else if (activeTab === 'restaurants') {
+            // 搜索餐厅 - 复用现有 searchMerchants API
+            const result = await (0, merchant_1.searchMerchants)({
+                keyword,
+                page_id: 1,
+                page_size: 20,
+                user_latitude: app.globalData.latitude || undefined,
+                user_longitude: app.globalData.longitude || undefined
+            });
+            // 转换为与列表一致的展示格式（与 loadRestaurants 保持一致）
+            const restaurants = (result || []).map((m) => {
+                var _a;
+                return ({
                     id: m.id,
                     name: m.name,
                     imageUrl: m.logo_url,
@@ -794,56 +767,71 @@ Page({
                     avgPrice: 0,
                     avgPriceDisplay: '人均未知',
                     distance: dish_1.DishAdapter.formatDistance(m.distance),
-                    address: m.address,
-                    businessHoursDisplay: '营业中',
+                    address: m.address || '',
+                    businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
+                    isOpen: (_a = m.is_open) !== null && _a !== void 0 ? _a : true,
                     availableRooms: 0,
                     availableRoomsBadge: '',
-                    tags: m.tags ? m.tags.slice(0, 3) : []
-                }));
-                this.setData({
-                    restaurants,
-                    hasMore: false,
-                    page: 1
+                    tags: m.tags ? m.tags.slice(0, 3) : [],
+                    monthlySales: m.monthly_sales || 0,
+                    deliveryFee: m.estimated_delivery_fee,
+                    deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
+                        ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
+                        : ''
                 });
-                if (restaurants.length === 0) {
-                    wx.showToast({ title: '未找到相关餐厅', icon: 'none' });
-                }
+            });
+            this.setData({
+                restaurants,
+                hasMore: false,
+                page: 1
+            });
+            if (restaurants.length === 0) {
+                wx.showToast({ title: '未找到相关餐厅', icon: 'none' });
             }
-            else if (activeTab === 'packages') {
-                // 搜索套餐 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
-                const { getRecommendedCombos } = require('../../api/dish');
-                const result = yield getRecommendedCombos({
-                    keyword,
-                    page: 1,
-                    limit: 20
-                });
-                // 转换为与列表一致的展示格式（与 loadPackages 保持一致）
-                const combos = result.combos || [];
-                const packageViewModels = combos.map((combo) => ({
+        }
+        else if (activeTab === 'packages') {
+            // 搜索套餐 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
+            const result = await (0, dish_2.getRecommendedCombos)({
+                keyword,
+                page: 1,
+                limit: 20
+            });
+            // 转换为与列表一致的展示格式（与 loadPackages 保持一致）
+            const combos = result.combos || [];
+            const packageViewModels = combos.map((combo) => {
+                var _a;
+                return ({
                     id: combo.id,
                     name: combo.name,
-                    description: combo.description || '',
+                    merchantId: combo.merchant_id,
+                    merchantName: combo.merchant_name || '',
                     price: combo.combo_price,
-                    priceDisplay: (combo.combo_price / 100).toFixed(2),
-                    original_price: combo.original_price || combo.combo_price,
-                    originalPriceDisplay: ((combo.original_price || combo.combo_price) / 100).toFixed(2),
-                    image_url: combo.image_url || '',
-                    is_online: combo.is_online,
-                    // 新增的丰富字段
-                    shopName: combo.merchant_name || '',
-                    distance: combo.distance,
-                    monthlySales: combo.monthly_sales || 0
-                }));
-                this.setData({
-                    packages: packageViewModels,
-                    hasMore: result.has_more || false,
-                    page: 1
+                    priceDisplay: (0, util_1.formatPrice)(combo.combo_price),
+                    originalPrice: combo.original_price || combo.combo_price,
+                    originalPriceDisplay: (0, util_1.formatPrice)(combo.original_price || combo.combo_price),
+                    imageUrl: (0, image_1.getPublicImageUrl)(combo.image_url) || '/assets/placeholder_food.png',
+                    savingsPercent: combo.savings_percent || 0,
+                    monthlySales: combo.monthly_sales || 0,
+                    salesBadge: `月售${combo.monthly_sales || 0}`,
+                    distance: dish_1.DishAdapter.formatDistance(combo.distance),
+                    deliveryFee: combo.estimated_delivery_fee,
+                    deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
+                        ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
+                        : '',
+                    tags: combo.tags || [],
+                    merchantIsOpen: (_a = combo.merchant_is_open) !== null && _a !== void 0 ? _a : true,
+                    estimatedDeliveryTime: combo.estimated_delivery_time
                 });
-                if (combos.length === 0) {
-                    wx.showToast({ title: '未找到相关套餐', icon: 'none' });
-                }
+            });
+            this.setData({
+                packages: packageViewModels,
+                hasMore: result.has_more || false,
+                page: 1
+            });
+            if (combos.length === 0) {
+                wx.showToast({ title: '未找到相关套餐', icon: 'none' });
             }
-        });
+        }
     },
     onReachBottom() {
         // 防抖：防止快速滚动触发多次请求
@@ -870,20 +858,18 @@ Page({
      * scroll-view 下拉刷新事件处理
      * 在 Skyline 模式下替代 onPullDownRefresh
      */
-    onRefresh() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 刷新时清空搜索框，恢复推荐列表
-            this.setData({ refresherTriggered: true, page: 1, searchKeyword: '' });
-            try {
-                yield this.loadData();
-            }
-            finally {
-                // 延迟关闭刷新动画，给用户视觉反馈
-                setTimeout(() => {
-                    this.setData({ refresherTriggered: false });
-                }, 300);
-            }
-        });
+    async onRefresh() {
+        // 刷新时清空搜索框，恢复推荐列表
+        this.setData({ refresherTriggered: true, page: 1, searchKeyword: '' });
+        try {
+            await this.loadData();
+        }
+        finally {
+            // 延迟关闭刷新动画，给用户视觉反馈
+            setTimeout(() => {
+                this.setData({ refresherTriggered: false });
+            }, 300);
+        }
     },
     /**
      * 页面下拉刷新事件（WebView 兼容）

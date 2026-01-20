@@ -3,17 +3,9 @@
  * 商户基础管理接口
  * 基于swagger.json完全重构，仅保留后端支持的接口
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getMerchants = exports.MerchantManagementAdapter = exports.MerchantManagementService = void 0;
+exports.getMerchantDashboard = getMerchantDashboard;
 exports.searchMerchants = searchMerchants;
 exports.getRecommendedMerchants = getRecommendedMerchants;
 exports.getPublicMerchantDetail = getPublicMerchantDetail;
@@ -38,14 +30,12 @@ class MerchantManagementService {
      * 获取当前商户信息
      * GET /v1/merchants/me
      */
-    static getMerchantInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me',
-                method: 'GET',
-                useCache: true,
-                cacheTTL: 5 * 60 * 1000 // 5分钟缓存
-            });
+    static async getMerchantInfo() {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me',
+            method: 'GET',
+            useCache: true,
+            cacheTTL: 5 * 60 * 1000 // 5分钟缓存
         });
     }
     /**
@@ -53,14 +43,12 @@ class MerchantManagementService {
      * GET /v1/merchants/my
      * 用于多店铺切换功能
      */
-    static getMyMerchants() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/my',
-                method: 'GET',
-                useCache: true,
-                cacheTTL: 5 * 60 * 1000 // 5分钟缓存
-            });
+    static async getMyMerchants() {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/my',
+            method: 'GET',
+            useCache: true,
+            cacheTTL: 5 * 60 * 1000 // 5分钟缓存
         });
     }
     /**
@@ -68,63 +56,53 @@ class MerchantManagementService {
      * PATCH /v1/merchants/me
      * 使用乐观锁防止并发冲突
      */
-    static updateMerchantInfo(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me',
-                method: 'PATCH',
-                data
-            });
+    static async updateMerchantInfo(data) {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me',
+            method: 'PATCH',
+            data
         });
     }
     /**
      * 获取商户营业状态
      * GET /v1/merchants/me/status
      */
-    static getMerchantStatus() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me/status',
-                method: 'GET'
-            });
+    static async getMerchantStatus() {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me/status',
+            method: 'GET'
         });
     }
     /**
      * 更新商户营业状态
      * PATCH /v1/merchants/me/status
      */
-    static updateMerchantStatus(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me/status',
-                method: 'PATCH',
-                data
-            });
+    static async updateMerchantStatus(data) {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me/status',
+            method: 'PATCH',
+            data
         });
     }
     /**
      * 获取商户营业时间
      * GET /v1/merchants/me/business-hours
      */
-    static getBusinessHours() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me/business-hours',
-                method: 'GET'
-            });
+    static async getBusinessHours() {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me/business-hours',
+            method: 'GET'
         });
     }
     /**
      * 设置商户营业时间
      * PUT /v1/merchants/me/business-hours
      */
-    static setBusinessHours(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/merchants/me/business-hours',
-                method: 'PUT',
-                data
-            });
+    static async setBusinessHours(data) {
+        return await (0, request_1.request)({
+            url: '/v1/merchants/me/business-hours',
+            method: 'PUT',
+            data
         });
     }
     /**
@@ -132,172 +110,183 @@ class MerchantManagementService {
      * POST /v1/merchants/images/upload
      * 支持营业执照、身份证、Logo等图片上传
      */
-    static uploadImage(filePath, category) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const token = (0, auth_1.getToken)();
-            return new Promise((resolve, reject) => {
-                wx.uploadFile({
-                    url: `${request_1.API_BASE}/v1/merchants/images/upload`,
-                    filePath: filePath,
-                    name: 'image',
-                    formData: { category },
-                    header: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    success: (res) => {
-                        if (res.statusCode === 200) {
-                            try {
-                                const data = JSON.parse(res.data);
-                                logger_1.logger.debug('Upload Response Raw', data, 'Merchant'); // DEBUG
-                                // Helper to normalize
-                                const normalize = (url) => {
-                                    if (url && !url.startsWith('http')) {
-                                        if (url.startsWith('/'))
-                                            url = url.substring(1);
-                                        return `${request_1.API_BASE}/${url}`;
-                                    }
-                                    return url;
-                                };
-                                if (data.code === 0 && data.data) {
-                                    // Envelope format
-                                    if (data.data.image_url) {
-                                        data.data.image_url = normalize(data.data.image_url);
-                                    }
-                                    resolve(data.data);
+    static async uploadImage(filePath, category) {
+        const token = (0, auth_1.getToken)();
+        return new Promise((resolve, reject) => {
+            wx.uploadFile({
+                url: `${request_1.API_BASE}/v1/merchants/images/upload`,
+                filePath: filePath,
+                name: 'image',
+                formData: { category },
+                header: {
+                    'Authorization': `Bearer ${token}`
+                },
+                success: (res) => {
+                    if (res.statusCode === 200) {
+                        try {
+                            const data = JSON.parse(res.data);
+                            logger_1.logger.debug('Upload Response Raw', data, 'Merchant'); // DEBUG
+                            // Helper to normalize
+                            const normalize = (url) => {
+                                if (url && !url.startsWith('http')) {
+                                    if (url.startsWith('/'))
+                                        url = url.substring(1);
+                                    return `${request_1.API_BASE}/${url}`;
                                 }
-                                else if (data.image_url) {
-                                    // Direct format (Unwrapped)
-                                    data.image_url = normalize(data.image_url);
-                                    resolve(data);
+                                return url;
+                            };
+                            if (data.code === 0 && data.data) {
+                                // Envelope format
+                                if (data.data.image_url) {
+                                    data.data.image_url = normalize(data.data.image_url);
                                 }
-                                else {
-                                    // Fallback
-                                    resolve(data);
-                                }
+                                resolve(data.data);
                             }
-                            catch (e) {
-                                reject(new Error('Parse upload response failed'));
+                            else if (data.image_url) {
+                                // Direct format (Unwrapped)
+                                data.image_url = normalize(data.image_url);
+                                resolve(data);
+                            }
+                            else {
+                                // Fallback
+                                resolve(data);
                             }
                         }
-                        else {
-                            logger_1.logger.error('Upload failed', res, 'Merchant');
-                            reject(new Error(`HTTP ${res.statusCode}`));
+                        catch (e) {
+                            reject(new Error('Parse upload response failed'));
                         }
-                    },
-                    fail: (err) => {
-                        logger_1.logger.error('Upload network error', err, 'Merchant');
-                        reject(err);
                     }
-                });
+                    else {
+                        logger_1.logger.error('Upload failed', res, 'Merchant');
+                        reject(new Error(`HTTP ${res.statusCode}`));
+                    }
+                },
+                fail: (err) => {
+                    logger_1.logger.error('Upload network error', err, 'Merchant');
+                    reject(err);
+                }
             });
         });
     }
 }
 exports.MerchantManagementService = MerchantManagementService;
+/**
+ * 获取商户经营概览
+ */
+async function getMerchantDashboard(merchantId) {
+    return (0, request_1.request)({
+        url: '/v1/merchants/me/dashboard',
+        method: 'GET'
+    });
+}
 // ==================== 顾客端商户接口 ====================
 /**
  * 搜索商户 - 基于 /v1/search/merchants
  * 注意：后端要求 keyword, page_id, page_size 为必填参数
  */
-function searchMerchants(params) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // 后端要求必填参数，提供默认值
-        const requestParams = {
-            keyword: params.keyword || '', // 空字符串表示搜索全部
-            page_id: params.page_id || 1,
-            page_size: params.page_size || 20
-        };
-        // 仅添加有效的经纬度
-        if (params.user_latitude !== undefined && params.user_latitude !== null) {
-            requestParams.user_latitude = params.user_latitude;
-        }
-        if (params.user_longitude !== undefined && params.user_longitude !== null) {
-            requestParams.user_longitude = params.user_longitude;
-        }
-        const response = yield (0, request_1.request)({
-            url: '/v1/search/merchants',
-            method: 'GET',
-            data: requestParams,
-            useCache: true,
-            cacheTTL: 2 * 60 * 1000 // 2分钟缓存
-        });
-        // 后端返回 { merchants: [...], total, page_id, page_size }，解包返回数组
-        return response.merchants || [];
+async function searchMerchants(params) {
+    // 后端要求必填参数，提供默认值
+    const requestParams = {
+        keyword: params.keyword || '', // 空字符串表示搜索全部
+        page_id: params.page_id || 1,
+        page_size: params.page_size || 20
+    };
+    // 仅添加有效的经纬度
+    if (params.user_latitude !== undefined && params.user_latitude !== null) {
+        requestParams.user_latitude = params.user_latitude;
+    }
+    if (params.user_longitude !== undefined && params.user_longitude !== null) {
+        requestParams.user_longitude = params.user_longitude;
+    }
+    if (params.region_id !== undefined && params.region_id !== null) {
+        requestParams.region_id = params.region_id;
+    }
+    const response = await (0, request_1.request)({
+        url: '/v1/search/merchants',
+        method: 'GET',
+        data: requestParams,
+        useCache: true,
+        cacheTTL: 2 * 60 * 1000 // 2分钟缓存
     });
+    // 后端返回 { merchants: [...], total, page_id, page_size }，转换到 MerchantSummary
+    return (response.merchants || []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        address: item.address || '',
+        description: item.description || '',
+        logo_url: item.logo_url || '',
+        distance: item.distance,
+        estimated_delivery_fee: item.estimated_delivery_fee,
+        total_orders: item.total_orders,
+        region_id: item.region_id,
+        status: item.status,
+    }));
 }
 /**
  * 获取推荐商户 - 基于 /v1/search/merchants
  * 支持分页，返回包含 has_more 的完整响应
  */
-function getRecommendedMerchants(params) {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c;
-        const page = (_a = params === null || params === void 0 ? void 0 : params.page) !== null && _a !== void 0 ? _a : 1;
-        const pageSize = (_b = params === null || params === void 0 ? void 0 : params.limit) !== null && _b !== void 0 ? _b : 20;
-        const response = yield (0, request_1.request)({
-            url: '/v1/search/merchants',
-            method: 'GET',
-            data: {
-                keyword: '',
-                region_id: params === null || params === void 0 ? void 0 : params.region_id,
-                user_latitude: params === null || params === void 0 ? void 0 : params.user_latitude,
-                user_longitude: params === null || params === void 0 ? void 0 : params.user_longitude,
-                page_id: page,
-                page_size: pageSize
-            },
-            useCache: page === 1,
-            cacheTTL: 3 * 60 * 1000 // 3分钟缓存
-        });
-        const total = (_c = response.total_count) !== null && _c !== void 0 ? _c : ((_b = response.total) !== null && _b !== void 0 ? _b : ((response.merchants || []).length));
-        return {
-            merchants: response.merchants || [],
-            has_more: page * pageSize < total,
-            page,
-            total_count: total
-        };
+async function getRecommendedMerchants(params) {
+    var _a, _b, _c, _d, _e, _f;
+    const page = (_a = params === null || params === void 0 ? void 0 : params.page) !== null && _a !== void 0 ? _a : 1;
+    const pageSize = (_b = params === null || params === void 0 ? void 0 : params.limit) !== null && _b !== void 0 ? _b : 20;
+    const response = await (0, request_1.request)({
+        url: '/v1/search/merchants',
+        method: 'GET',
+        data: {
+            keyword: '',
+            region_id: params === null || params === void 0 ? void 0 : params.region_id,
+            user_latitude: params === null || params === void 0 ? void 0 : params.user_latitude,
+            user_longitude: params === null || params === void 0 ? void 0 : params.user_longitude,
+            page_id: page,
+            page_size: pageSize
+        },
+        useCache: page === 1,
+        cacheTTL: 3 * 60 * 1000 // 3分钟缓存
     });
+    const total = (_f = (_d = (_c = response.total_count) !== null && _c !== void 0 ? _c : response.total) !== null && _d !== void 0 ? _d : (_e = response.merchants) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0;
+    return {
+        merchants: response.merchants || [],
+        has_more: page * pageSize < total,
+        page,
+        total_count: total
+    };
 }
 /**
  * 获取商户详情（消费者端）
  * GET /v1/public/merchants/:id
  * 返回包含标签、营业时间、证照等完整信息
  */
-function getPublicMerchantDetail(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return yield (0, request_1.request)({
-            url: `/v1/public/merchants/${merchantId}`,
-            method: 'GET',
-            useCache: true,
-            cacheTTL: 5 * 60 * 1000 // 5分钟缓存
-        });
+async function getPublicMerchantDetail(merchantId) {
+    return await (0, request_1.request)({
+        url: `/v1/public/merchants/${merchantId}`,
+        method: 'GET',
+        useCache: true,
+        cacheTTL: 5 * 60 * 1000 // 5分钟缓存
     });
 }
 /**
  * 获取商户菜品列表（消费者端）
  * GET /v1/public/merchants/:id/dishes
  */
-function getPublicMerchantDishes(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return yield (0, request_1.request)({
-            url: `/v1/public/merchants/${merchantId}/dishes`,
-            method: 'GET',
-            useCache: true,
-            cacheTTL: 5 * 60 * 1000
-        });
+async function getPublicMerchantDishes(merchantId) {
+    return await (0, request_1.request)({
+        url: `/v1/public/merchants/${merchantId}/dishes`,
+        method: 'GET',
+        useCache: true,
+        cacheTTL: 5 * 60 * 1000
     });
 }
 /**
  * 获取商户套餐列表（消费者端）
  * GET /v1/public/merchants/:id/combos
  */
-function getPublicMerchantCombos(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return yield (0, request_1.request)({
-            url: `/v1/public/merchants/${merchantId}/combos`,
-            method: 'GET',
-            useCache: true,
-            cacheTTL: 5 * 60 * 1000
-        });
+async function getPublicMerchantCombos(merchantId) {
+    return await (0, request_1.request)({
+        url: `/v1/public/merchants/${merchantId}/combos`,
+        method: 'GET',
+        useCache: true,
+        cacheTTL: 5 * 60 * 1000
     });
 }
 // ==================== 商户基础管理适配器 ====================

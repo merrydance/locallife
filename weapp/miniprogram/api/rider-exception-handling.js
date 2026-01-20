@@ -7,15 +7,6 @@
  * 注意：申诉和索赔的基础接口已在appeals-customer-service.ts中定义
  * 这里主要扩展骑手特有的异常处理功能
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.riderExceptionHandlingService = exports.RiderExceptionHandlingAdapter = exports.ExceptionHandlingUtils = exports.RiderExceptionHandlingService = void 0;
 exports.getRiderExceptionDashboard = getRiderExceptionDashboard;
@@ -39,13 +30,11 @@ class RiderExceptionHandlingService {
      * @param orderId 订单ID
      * @param exceptionData 异常数据
      */
-    reportException(orderId, exceptionData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/rider/orders/${orderId}/exception`,
-                method: 'POST',
-                data: exceptionData
-            });
+    async reportException(orderId, exceptionData) {
+        return (0, request_1.request)({
+            url: `/rider/orders/${orderId}/exception`,
+            method: 'POST',
+            data: exceptionData
         });
     }
     /**
@@ -53,59 +42,47 @@ class RiderExceptionHandlingService {
      * @param orderId 订单ID
      * @param delayData 延迟数据
      */
-    reportDelay(orderId, delayData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/rider/orders/${orderId}/delay`,
-                method: 'POST',
-                data: delayData
-            });
+    async reportDelay(orderId, delayData) {
+        return (0, request_1.request)({
+            url: `/rider/orders/${orderId}/delay`,
+            method: 'POST',
+            data: delayData
         });
     }
     /**
      * 获取骑手申诉列表
      * @param params 查询参数
      */
-    getRiderAppeals(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return appeals_customer_service_1.appealManagementService.getRiderAppeals(params);
-        });
+    async getRiderAppeals(params) {
+        return appeals_customer_service_1.appealManagementService.getRiderAppeals(params);
     }
     /**
      * 获取骑手申诉详情
      * @param appealId 申诉ID
      */
-    getRiderAppealDetail(appealId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return appeals_customer_service_1.appealManagementService.getRiderAppealDetail(appealId);
-        });
+    async getRiderAppealDetail(appealId) {
+        return appeals_customer_service_1.appealManagementService.getRiderAppealDetail(appealId);
     }
     /**
      * 创建骑手申诉
      * @param appealData 申诉数据
      */
-    createRiderAppeal(appealData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return appeals_customer_service_1.appealManagementService.createRiderAppeal(appealData);
-        });
+    async createRiderAppeal(appealData) {
+        return appeals_customer_service_1.appealManagementService.createRiderAppeal(appealData);
     }
     /**
      * 获取骑手索赔列表
      * @param params 查询参数
      */
-    getRiderClaims(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return appeals_customer_service_1.claimManagementService.getRiderClaims(params);
-        });
+    async getRiderClaims(params) {
+        return appeals_customer_service_1.claimManagementService.getRiderClaims(params);
     }
     /**
      * 获取骑手索赔详情
      * @param claimId 索赔ID
      */
-    getRiderClaimDetail(claimId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return appeals_customer_service_1.claimManagementService.getRiderClaimDetail(claimId);
-        });
+    async getRiderClaimDetail(claimId) {
+        return appeals_customer_service_1.claimManagementService.getRiderClaimDetail(claimId);
     }
 }
 exports.RiderExceptionHandlingService = RiderExceptionHandlingService;
@@ -328,26 +305,24 @@ exports.riderExceptionHandlingService = new RiderExceptionHandlingService();
 /**
  * 获取骑手异常处理工作台数据
  */
-function getRiderExceptionDashboard() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [appealsResult, claimsResult] = yield Promise.all([
-            exports.riderExceptionHandlingService.getRiderAppeals({ page_id: 1, page_size: 10, status: 'pending' }),
-            exports.riderExceptionHandlingService.getRiderClaims({ page_id: 1, page_size: 10, status: 'pending' })
-        ]);
-        // 异常记录需要根据实际接口调整
-        const recentExceptions = [];
-        return {
-            pendingAppeals: appealsResult.appeals,
-            pendingClaims: claimsResult.claims,
-            recentExceptions,
-            stats: {
-                totalAppeals: appealsResult.total,
-                totalClaims: claimsResult.total,
-                totalExceptions: recentExceptions.length,
-                resolutionRate: 0 // 需要根据实际数据计算
-            }
-        };
-    });
+async function getRiderExceptionDashboard() {
+    const [appealsResult, claimsResult] = await Promise.all([
+        exports.riderExceptionHandlingService.getRiderAppeals({ page_id: 1, page_size: 10, status: 'pending' }),
+        exports.riderExceptionHandlingService.getRiderClaims({ page_id: 1, page_size: 10, status: 'pending' })
+    ]);
+    // 异常记录需要根据实际接口调整
+    const recentExceptions = [];
+    return {
+        pendingAppeals: appealsResult.appeals,
+        pendingClaims: claimsResult.claims,
+        recentExceptions,
+        stats: {
+            totalAppeals: appealsResult.total,
+            totalClaims: claimsResult.total,
+            totalExceptions: recentExceptions.length,
+            resolutionRate: 0 // 需要根据实际数据计算
+        }
+    };
 }
 /**
  * 智能异常处理建议
@@ -399,28 +374,26 @@ function getSmartExceptionSuggestion(orderId, currentStatus, issueDescription) {
  * 批量处理异常上报
  * @param reports 异常上报列表
  */
-function batchReportExceptions(reports) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const promises = reports.map((_a) => __awaiter(this, [_a], void 0, function* ({ orderId, exceptionData }) {
-            try {
-                const result = yield exports.riderExceptionHandlingService.reportException(orderId, exceptionData);
-                return {
-                    orderId,
-                    success: true,
-                    message: '上报成功',
-                    reportId: result.id
-                };
-            }
-            catch (error) {
-                return {
-                    orderId,
-                    success: false,
-                    message: (error === null || error === void 0 ? void 0 : error.message) || '上报失败'
-                };
-            }
-        }));
-        return Promise.all(promises);
+async function batchReportExceptions(reports) {
+    const promises = reports.map(async ({ orderId, exceptionData }) => {
+        try {
+            const result = await exports.riderExceptionHandlingService.reportException(orderId, exceptionData);
+            return {
+                orderId,
+                success: true,
+                message: '上报成功',
+                reportId: result.id
+            };
+        }
+        catch (error) {
+            return {
+                orderId,
+                success: false,
+                message: (error === null || error === void 0 ? void 0 : error.message) || '上报失败'
+            };
+        }
     });
+    return Promise.all(promises);
 }
 /**
  * 格式化异常类型显示

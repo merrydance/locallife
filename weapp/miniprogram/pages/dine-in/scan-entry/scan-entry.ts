@@ -133,7 +133,7 @@ Page({
                     table_no: detail.table_no,
                     merchant_id: detail.merchant_id,
                     capacity: detail.capacity,
-                    status: detail.status
+                    status: detail.status as TableStatus
                 },
                 merchantInfo: scanResult.merchant
             });
@@ -305,9 +305,9 @@ Page({
         const { tableInfo, merchantInfo } = this.data;
 
         return {
-            title: `${merchantInfo?.name || '餐厅'}的${tableInfo?.table_number || ''}号桌`,
+            title: `${merchantInfo?.name || '餐厅'}的${tableInfo?.table_no || ''}号桌`,
             path: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableInfo?.id}`,
-            imageUrl: merchantInfo?.cover_image || merchantInfo?.logo_url
+            imageUrl: merchantInfo?.logo_url
         };
     },
 
@@ -320,7 +320,7 @@ Page({
         return {
             title: `在${merchantInfo?.name || '餐厅'}用餐`,
             query: `table_id=${tableInfo?.id}`,
-            imageUrl: merchantInfo?.cover_image || merchantInfo?.logo_url
+            imageUrl: merchantInfo?.logo_url
         };
     },
 

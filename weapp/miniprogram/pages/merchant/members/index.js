@@ -3,47 +3,32 @@
  * 会员管理页面
  * 使用新的 /merchants/:id/members API 展示会员余额和交易记录
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const request_1 = require("@/utils/request");
 const util_1 = require("@/utils/util");
 // 会员管理服务
 const MemberService = {
     // 获取会员列表
-    listMembers(merchantId, pageId, pageSize) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/members`,
-                method: 'GET',
-                data: { page_id: pageId, page_size: pageSize }
-            });
+    async listMembers(merchantId, pageId, pageSize) {
+        return (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/members`,
+            method: 'GET',
+            data: { page_id: pageId, page_size: pageSize }
         });
     },
     // 获取会员详情
-    getMemberDetail(merchantId, userId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/members/${userId}`,
-                method: 'GET'
-            });
+    async getMemberDetail(merchantId, userId) {
+        return (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/members/${userId}`,
+            method: 'GET'
         });
     },
     // 调整余额
-    adjustBalance(merchantId, userId, amount, notes) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/members/${userId}/balance`,
-                method: 'POST',
-                data: { amount, notes }
-            });
+    async adjustBalance(merchantId, userId, amount, notes) {
+        return (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/members/${userId}/balance`,
+            method: 'POST',
+            data: { amount, notes }
         });
     }
 };
@@ -73,51 +58,53 @@ Page({
     onLoad() {
         this.initData();
     },
-    initData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const app = getApp();
-            const merchantId = app.globalData.merchantId;
-            if (merchantId) {
-                this.setData({ merchantId: Number(merchantId) });
-                yield this.loadMembers();
-            }
-            else {
-                app.userInfoReadyCallback = () => __awaiter(this, void 0, void 0, function* () {
-                    if (app.globalData.merchantId) {
-                        this.setData({ merchantId: Number(app.globalData.merchantId) });
-                        yield this.loadMembers();
-                    }
-                });
-            }
-        });
+    async initData() {
+        const app = getApp();
+        const merchantId = app.globalData.merchantId;
+        if (merchantId) {
+            this.setData({ merchantId: Number(merchantId) });
+            await this.loadMembers();
+        }
+        else {
+            app.userInfoReadyCallback = async () => {
+                if (app.globalData.merchantId) {
+                    this.setData({ merchantId: Number(app.globalData.merchantId) });
+                    await this.loadMembers();
+                }
+            };
+        }
     },
     onSidebarCollapse(e) {
         this.setData({ sidebarCollapsed: e.detail.collapsed });
     },
     // 加载会员列表
-    loadMembers() {
-        return __awaiter(this, arguments, void 0, function* (loadMore = false) {
-            const { merchantId, pageId, pageSize, members } = this.data;
-            if (!loadMore) {
-                this.setData({ loading: true, pageId: 1, members: [] });
-            }
-            try {
-                const result = yield MemberService.listMembers(merchantId, loadMore ? pageId : 1, pageSize);
-                // 预处理价格
-                const processedMembers = result.map(m => (Object.assign(Object.assign({}, m), { balance_display: (0, util_1.formatPriceNoSymbol)(m.balance || 0), total_recharged_display: (0, util_1.formatPriceNoSymbol)(m.total_recharged || 0), total_consumed_display: (0, util_1.formatPriceNoSymbol)(m.total_consumed || 0), created_date: m.created_at ? m.created_at.slice(0, 10) : '-' })));
-                this.setData({
-                    members: loadMore ? [...members, ...processedMembers] : processedMembers,
-                    hasMore: result.length === pageSize,
-                    pageId: loadMore ? pageId + 1 : 2,
-                    loading: false
-                });
-            }
-            catch (error) {
-                console.error('加载会员列表失败:', error);
-                wx.showToast({ title: error.message || '加载失败', icon: 'none' });
-                this.setData({ loading: false });
-            }
-        });
+    async loadMembers(loadMore = false) {
+        const { merchantId, pageId, pageSize, members } = this.data;
+        if (!loadMore) {
+            this.setData({ loading: true, pageId: 1, members: [] });
+        }
+        try {
+            const result = await MemberService.listMembers(merchantId, loadMore ? pageId : 1, pageSize);
+            // 预处理价格
+            const processedMembers = result.map(m => ({
+                ...m,
+                balance_display: (0, util_1.formatPriceNoSymbol)(m.balance || 0),
+                total_recharged_display: (0, util_1.formatPriceNoSymbol)(m.total_recharged || 0),
+                total_consumed_display: (0, util_1.formatPriceNoSymbol)(m.total_consumed || 0),
+                created_date: m.created_at ? m.created_at.slice(0, 10) : '-'
+            }));
+            this.setData({
+                members: loadMore ? [...members, ...processedMembers] : processedMembers,
+                hasMore: result.length === pageSize,
+                pageId: loadMore ? pageId + 1 : 2,
+                loading: false
+            });
+        }
+        catch (error) {
+            console.error('加载会员列表失败:', error);
+            wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+            this.setData({ loading: false });
+        }
     },
     // 加载更多
     onLoadMore() {
@@ -126,23 +113,33 @@ Page({
         }
     },
     // 查看会员详情
-    onViewMember(e) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const userId = e.currentTarget.dataset.userId;
-            const { merchantId } = this.data;
-            this.setData({ showDetailModal: true, detailLoading: true, selectedMember: null });
-            try {
-                const detail = yield MemberService.getMemberDetail(merchantId, userId);
-                // 预处理详情价格
-                const processedDetail = Object.assign(Object.assign({}, detail), { balance_display: (0, util_1.formatPriceNoSymbol)(detail.balance || 0), total_recharged_display: (0, util_1.formatPriceNoSymbol)(detail.total_recharged || 0), total_consumed_display: (0, util_1.formatPriceNoSymbol)(detail.total_consumed || 0), transactions: (detail.transactions || []).map(tx => (Object.assign(Object.assign({}, tx), { amount_display: (0, util_1.formatPriceNoSymbol)(Math.abs(tx.amount || 0)), amount_sign: tx.amount >= 0 ? '+' : '-', created_date: tx.created_at ? tx.created_at.slice(0, 10) : '-', type_display: this.formatTxType(tx.type) }))) });
-                this.setData({ selectedMember: processedDetail, detailLoading: false });
-            }
-            catch (error) {
-                console.error('加载会员详情失败:', error);
-                wx.showToast({ title: error.message || '加载失败', icon: 'none' });
-                this.setData({ detailLoading: false });
-            }
-        });
+    async onViewMember(e) {
+        const userId = e.currentTarget.dataset.userId;
+        const { merchantId } = this.data;
+        this.setData({ showDetailModal: true, detailLoading: true, selectedMember: null });
+        try {
+            const detail = await MemberService.getMemberDetail(merchantId, userId);
+            // 预处理详情价格
+            const processedDetail = {
+                ...detail,
+                balance_display: (0, util_1.formatPriceNoSymbol)(detail.balance || 0),
+                total_recharged_display: (0, util_1.formatPriceNoSymbol)(detail.total_recharged || 0),
+                total_consumed_display: (0, util_1.formatPriceNoSymbol)(detail.total_consumed || 0),
+                transactions: (detail.transactions || []).map(tx => ({
+                    ...tx,
+                    amount_display: (0, util_1.formatPriceNoSymbol)(Math.abs(tx.amount || 0)),
+                    amount_sign: tx.amount >= 0 ? '+' : '-',
+                    created_date: tx.created_at ? tx.created_at.slice(0, 10) : '-',
+                    type_display: this.formatTxType(tx.type)
+                }))
+            };
+            this.setData({ selectedMember: processedDetail, detailLoading: false });
+        }
+        catch (error) {
+            console.error('加载会员详情失败:', error);
+            wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+            this.setData({ detailLoading: false });
+        }
     },
     // 关闭详情弹窗
     onCloseDetail() {
@@ -176,37 +173,35 @@ Page({
         this.setData({ 'adjustForm.notes': e.detail.value });
     },
     // 提交余额调整
-    onSubmitAdjust() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const { merchantId, selectedMember, adjustForm } = this.data;
-            if (!selectedMember)
-                return;
-            const amountYuan = parseFloat(adjustForm.amount);
-            if (isNaN(amountYuan) || amountYuan <= 0) {
-                wx.showToast({ title: '请输入有效金额', icon: 'none' });
-                return;
-            }
-            if (!adjustForm.notes.trim()) {
-                wx.showToast({ title: '请输入调整原因', icon: 'none' });
-                return;
-            }
-            const amountFen = Math.round(amountYuan * 100);
-            const finalAmount = adjustForm.type === 'add' ? amountFen : -amountFen;
-            this.setData({ adjusting: true });
-            try {
-                yield MemberService.adjustBalance(merchantId, selectedMember.user_id, finalAmount, adjustForm.notes);
-                wx.showToast({ title: '调整成功', icon: 'success' });
-                this.setData({ showAdjustModal: false });
-                this.loadMembers(); // 刷新列表
-            }
-            catch (error) {
-                console.error('余额调整失败:', error);
-                wx.showToast({ title: error.message || '调整失败', icon: 'none' });
-            }
-            finally {
-                this.setData({ adjusting: false });
-            }
-        });
+    async onSubmitAdjust() {
+        const { merchantId, selectedMember, adjustForm } = this.data;
+        if (!selectedMember)
+            return;
+        const amountYuan = parseFloat(adjustForm.amount);
+        if (isNaN(amountYuan) || amountYuan <= 0) {
+            wx.showToast({ title: '请输入有效金额', icon: 'none' });
+            return;
+        }
+        if (!adjustForm.notes.trim()) {
+            wx.showToast({ title: '请输入调整原因', icon: 'none' });
+            return;
+        }
+        const amountFen = Math.round(amountYuan * 100);
+        const finalAmount = adjustForm.type === 'add' ? amountFen : -amountFen;
+        this.setData({ adjusting: true });
+        try {
+            await MemberService.adjustBalance(merchantId, selectedMember.user_id, finalAmount, adjustForm.notes);
+            wx.showToast({ title: '调整成功', icon: 'success' });
+            this.setData({ showAdjustModal: false });
+            this.loadMembers(); // 刷新列表
+        }
+        catch (error) {
+            console.error('余额调整失败:', error);
+            wx.showToast({ title: error.message || '调整失败', icon: 'none' });
+        }
+        finally {
+            this.setData({ adjusting: false });
+        }
     },
     // 格式化金额 - 使用统一的 formatPriceNoSymbol
     formatAmount(fen) {

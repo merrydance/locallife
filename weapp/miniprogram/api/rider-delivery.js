@@ -3,15 +3,6 @@
  * 骑手配送管理接口
  * 基于swagger.json完全重构，包含配送任务、异常处理、财务管理等
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeliveryAdapter = exports.RiderFinanceService = exports.ExceptionHandlingService = exports.RiderInfoService = exports.DeliveryTaskService = void 0;
 const request_1 = require("../utils/request");
@@ -24,121 +15,101 @@ class DeliveryTaskService {
      * 获取推荐配送任务
      * GET /v1/delivery/recommend
      */
-    static getRecommendedTasks() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/delivery/recommend',
-                method: 'GET'
-            });
+    static async getRecommendedTasks() {
+        return await (0, request_1.request)({
+            url: '/v1/delivery/recommend',
+            method: 'GET'
         });
     }
     /**
      * 抢单
      * POST /v1/delivery/grab/:order_id
      */
-    static grabOrder(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/delivery/grab/${orderId}`,
-                method: 'POST'
-            });
+    static async grabOrder(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/delivery/grab/${orderId}`,
+            method: 'POST'
         });
     }
     /**
      * 获取当前配送任务
      * GET /v1/delivery/active
      */
-    static getActiveTasks() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/delivery/active',
-                method: 'GET'
-            });
+    static async getActiveTasks() {
+        return await (0, request_1.request)({
+            url: '/v1/delivery/active',
+            method: 'GET'
         });
     }
     /**
      * 获取配送历史
      * GET /v1/delivery/history
      */
-    static getDeliveryHistory(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/delivery/history',
-                method: 'GET',
-                data: params
-            });
+    static async getDeliveryHistory(params) {
+        return await (0, request_1.request)({
+            url: '/v1/delivery/history',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取订单详情
      * GET /v1/delivery/order/:order_id
      */
-    static getOrderDetail(orderId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/delivery/order/${orderId}`,
-                method: 'GET'
-            });
+    static async getOrderDetail(orderId) {
+        return await (0, request_1.request)({
+            url: `/v1/delivery/order/${orderId}`,
+            method: 'GET'
         });
     }
     /**
      * 开始取餐
      * POST /v1/delivery/:delivery_id/start-pickup
      */
-    static startPickup(deliveryId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/start-pickup`,
-                method: 'POST'
-            });
+    static async startPickup(deliveryId) {
+        return await (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/start-pickup`,
+            method: 'POST'
         });
     }
     /**
      * 确认取餐
      * POST /v1/delivery/:delivery_id/confirm-pickup
      */
-    static confirmPickup(deliveryId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/confirm-pickup`,
-                method: 'POST'
-            });
+    static async confirmPickup(deliveryId) {
+        return await (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/confirm-pickup`,
+            method: 'POST'
         });
     }
     /**
      * 开始配送
      * POST /v1/delivery/:delivery_id/start-delivery
      */
-    static startDelivery(deliveryId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/start-delivery`,
-                method: 'POST'
-            });
+    static async startDelivery(deliveryId) {
+        return await (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/start-delivery`,
+            method: 'POST'
         });
     }
     /**
      * 确认送达
      * POST /v1/delivery/:delivery_id/confirm-delivery
      */
-    static confirmDelivery(deliveryId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/confirm-delivery`,
-                method: 'POST'
-            });
+    static async confirmDelivery(deliveryId) {
+        return await (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/confirm-delivery`,
+            method: 'POST'
         });
     }
     /**
      * 获取骑手位置
      * GET /v1/delivery/:delivery_id/rider-location
      */
-    static getRiderLocation(deliveryId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/delivery/${deliveryId}/rider-location`,
-                method: 'GET'
-            });
+    static async getRiderLocation(deliveryId) {
+        return await (0, request_1.request)({
+            url: `/v1/delivery/${deliveryId}/rider-location`,
+            method: 'GET'
         });
     }
 }
@@ -152,86 +123,72 @@ class RiderInfoService {
      * 获取骑手信息
      * GET /v1/rider/me
      */
-    static getRiderInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/me',
-                method: 'GET'
-            });
+    static async getRiderInfo() {
+        return await (0, request_1.request)({
+            url: '/v1/rider/me',
+            method: 'GET'
         });
     }
     /**
      * 获取骑手状态
      * GET /v1/rider/status
      */
-    static getRiderStatus() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/status',
-                method: 'GET'
-            });
+    static async getRiderStatus() {
+        return await (0, request_1.request)({
+            url: '/v1/rider/status',
+            method: 'GET'
         });
     }
     /**
      * 上线
      * POST /v1/rider/online
      */
-    static goOnline() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/online',
-                method: 'POST'
-            });
+    static async goOnline() {
+        return await (0, request_1.request)({
+            url: '/v1/rider/online',
+            method: 'POST'
         });
     }
     /**
      * 下线
      * POST /v1/rider/offline
      */
-    static goOffline() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/offline',
-                method: 'POST'
-            });
+    static async goOffline() {
+        return await (0, request_1.request)({
+            url: '/v1/rider/offline',
+            method: 'POST'
         });
     }
     /**
      * 上报位置
      * POST /v1/rider/location
      */
-    static reportLocation(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/location',
-                method: 'POST',
-                data
-            });
+    static async reportLocation(data) {
+        return await (0, request_1.request)({
+            url: '/v1/rider/location',
+            method: 'POST',
+            data
         });
     }
     /**
      * 获取信用分
      * GET /v1/rider/score
      */
-    static getScore() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/score',
-                method: 'GET'
-            });
+    static async getScore() {
+        return await (0, request_1.request)({
+            url: '/v1/rider/score',
+            method: 'GET'
         });
     }
     /**
      * 获取信用分历史
      * GET /v1/rider/score/history
      */
-    static getScoreHistory(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/score/history',
-                method: 'GET',
-                data: params
-            });
+    static async getScoreHistory(params) {
+        return await (0, request_1.request)({
+            url: '/v1/rider/score/history',
+            method: 'GET',
+            data: params
         });
     }
 }
@@ -245,26 +202,22 @@ class ExceptionHandlingService {
      * 上报异常
      * POST /rider/orders/{id}/exception
      */
-    static reportException(orderId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/rider/orders/${orderId}/exception`,
-                method: 'POST',
-                data
-            });
+    static async reportException(orderId, data) {
+        return await (0, request_1.request)({
+            url: `/rider/orders/${orderId}/exception`,
+            method: 'POST',
+            data
         });
     }
     /**
      * 上报延迟
      * POST /rider/orders/{id}/delay
      */
-    static reportDelay(orderId, data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/rider/orders/${orderId}/delay`,
-                method: 'POST',
-                data
-            });
+    static async reportDelay(orderId, data) {
+        return await (0, request_1.request)({
+            url: `/rider/orders/${orderId}/delay`,
+            method: 'POST',
+            data
         });
     }
 }
@@ -278,38 +231,32 @@ class RiderFinanceService {
      * 获取保证金信息
      * GET /v1/rider/deposit
      */
-    static getDeposit() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/deposit',
-                method: 'GET'
-            });
+    static async getDeposit() {
+        return await (0, request_1.request)({
+            url: '/v1/rider/deposit',
+            method: 'GET'
         });
     }
     /**
      * 获取保证金记录
      * GET /v1/rider/deposits
      */
-    static getDepositRecords(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/deposits',
-                method: 'GET',
-                data: params
-            });
+    static async getDepositRecords(params) {
+        return await (0, request_1.request)({
+            url: '/v1/rider/deposits',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 提现
      * POST /v1/rider/withdraw
      */
-    static withdraw(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/rider/withdraw',
-                method: 'POST',
-                data
-            });
+    static async withdraw(data) {
+        return await (0, request_1.request)({
+            url: '/v1/rider/withdraw',
+            method: 'POST',
+            data
         });
     }
 }

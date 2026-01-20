@@ -1,4 +1,4 @@
-import { getAvailableOrders, acceptOrder, RiderOrderDTO } from '../../api/rider'
+import { getAvailableOrders, acceptOrder, RiderOrderDTO } from '../../../api/rider'
 import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
 

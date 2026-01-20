@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -73,6 +64,22 @@ const CANCEL_REASONS = [
     "配送时间太长",
     "其他原因",
 ];
+const VALID_ORDER_TYPES = ["takeout", "reservation", "dine_in", "takeaway"];
+const normalizeOrderType = (value) => {
+    if (value && VALID_ORDER_TYPES.includes(value)) {
+        return value;
+    }
+    return "";
+};
+const getDatasetId = (event) => {
+    const dataset = event.currentTarget.dataset;
+    const id = dataset.id;
+    const numericId = typeof id === "number" ? id : Number(id);
+    return Number.isFinite(numericId) ? numericId : null;
+};
+const isOrderResponse = (value) => {
+    return !!value && typeof value === "object" && "id" in value && "order_no" in value;
+};
 Page({
     data: {
         orders: [],
@@ -87,14 +94,15 @@ Page({
         pageTitle: "我的订单",
     },
     onLoad(options) {
-        const orderType = (options === null || options === void 0 ? void 0 : options.order_type) || "";
+        const orderType = normalizeOrderType(options === null || options === void 0 ? void 0 : options.order_type);
         const titleMap = {
             takeout: "外卖订单",
             reservation: "预订订单",
             dine_in: "堂食订单",
+            takeaway: "自取订单",
         };
         this.setData({
-            orderType: orderType,
+            orderType,
             pageTitle: titleMap[orderType] || "我的订单",
             statusTabs: STATUS_TABS_MAP[orderType] || STATUS_TABS_MAP.default,
         });
@@ -115,78 +123,72 @@ Page({
             this.loadOrders(false);
         }
     },
-    loadOrders() {
-        return __awaiter(this, arguments, void 0, function* (reset = false) {
-            if (this.data.loading)
-                return;
-            this.setData({ loading: true });
-            if (reset) {
-                this.setData({ page: 1, orders: [], hasMore: true });
-            }
-            try {
-                const { currentStatus, page, pageSize, orderType } = this.data;
-                // API Call with status filter
-                const params = currentStatus
-                    ? {
-                        status: currentStatus,
-                        page_id: page,
-                        page_size: pageSize,
-                        order_type: orderType || undefined,
-                    }
-                    : {
-                        page_id: page,
-                        page_size: pageSize,
-                        order_type: orderType || undefined,
-                    };
-                const result = yield (0, order_1.getOrders)(params);
-                // 兼容不同返回结构：数组 / {orders} / {list} / {items} / {data: {...}}
-                const unwrap = (payload) => {
-                    if (Array.isArray(payload))
-                        return payload;
-                    if (payload && typeof payload === 'object') {
-                        if (Array.isArray(payload.orders))
-                            return payload.orders;
-                        if (Array.isArray(payload.list))
-                            return payload.list;
-                        if (Array.isArray(payload.items))
-                            return payload.items;
-                        if (payload.data)
-                            return unwrap(payload.data);
-                    }
-                    return [];
-                };
-                const orderDTOsRaw = unwrap(result);
-                // 过滤掉空值或非对象；并在 map 阶段做单条 try/catch，避免坏数据导致整页崩溃
-                const orderDTOs = orderDTOsRaw
-                    .filter(item => item && typeof item === 'object')
-                    .map((item) => {
-                    try {
-                        return order_card_1.OrderCardAdapter.toCardViewModel(item);
-                    }
-                    catch (err) {
-                        logger_1.logger.error('Order map failed:', err, item);
-                        return null;
-                    }
-                })
-                    .filter(Boolean);
-                // Sort by priority (preparing > delivering > completed)
-                const sortedOrders = order_card_1.OrderCardAdapter.sortByPriority(orderDTOs);
-                const orders = reset
-                    ? sortedOrders
-                    : [...this.data.orders, ...sortedOrders];
-                this.setData({
-                    orders,
-                    hasMore: orderDTOs.length >= pageSize,
-                });
-            }
-            catch (error) {
-                logger_1.logger.error("Load orders failed:", error, "List");
-                wx.showToast({ title: "加载失败", icon: "error" });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+    async loadOrders(reset = false) {
+        if (this.data.loading)
+            return;
+        this.setData({ loading: true });
+        if (reset) {
+            this.setData({ page: 1, orders: [], hasMore: true });
+        }
+        try {
+            const { currentStatus, page, pageSize, orderType } = this.data;
+            // API Call with status filter
+            const params = {
+                page_id: page,
+                page_size: pageSize,
+                ...(currentStatus ? { status: currentStatus } : {}),
+                ...(orderType ? { order_type: orderType } : {}),
+            };
+            const result = await (0, order_1.getOrders)(params);
+            // 兼容不同返回结构：数组 / {orders} / {list} / {items} / {data: {...}}
+            const unwrap = (payload) => {
+                if (Array.isArray(payload))
+                    return payload;
+                if (payload && typeof payload === "object") {
+                    const record = payload;
+                    if (Array.isArray(record.orders))
+                        return record.orders;
+                    if (Array.isArray(record.list))
+                        return record.list;
+                    if (Array.isArray(record.items))
+                        return record.items;
+                    if (record.data)
+                        return unwrap(record.data);
+                }
+                return [];
+            };
+            const orderDTOsRaw = unwrap(result);
+            // 过滤掉空值或非对象；并在 map 阶段做单条 try/catch，避免坏数据导致整页崩溃
+            const orderDTOs = orderDTOsRaw
+                .filter(isOrderResponse)
+                .map((item) => {
+                try {
+                    return order_card_1.OrderCardAdapter.toCardViewModel(item);
+                }
+                catch (err) {
+                    logger_1.logger.error("Order map failed", { err, item }, "Orders.List");
+                    return null;
+                }
+            })
+                .filter(Boolean);
+            // Sort by priority (preparing > delivering > completed)
+            const sortedOrders = order_card_1.OrderCardAdapter.sortByPriority(orderDTOs);
+            const orders = reset
+                ? sortedOrders
+                : [...this.data.orders, ...sortedOrders];
+            const totalCount = typeof result.total_count === 'number' ? result.total_count : orders.length;
+            this.setData({
+                orders,
+                hasMore: page * pageSize < totalCount,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error("Load orders failed:", error, "List");
+            wx.showToast({ title: "加载失败", icon: "error" });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     // 状态筛选切换
     onStatusChange(e) {
@@ -197,41 +199,41 @@ Page({
         this.loadOrders(true);
     },
     onViewOrder(e) {
-        const { id } = e.currentTarget.dataset;
+        const id = getDatasetId(e);
+        if (!id)
+            return;
         wx.navigateTo({ url: `/pages/orders/detail/index?id=${id}` });
     },
     // 快速取消订单
     onCancelOrder(e) {
-        const { id } = e.currentTarget.dataset;
+        const id = getDatasetId(e);
         if (!id)
             return;
         wx.showActionSheet({
             itemList: CANCEL_REASONS,
-            success: (res) => __awaiter(this, void 0, void 0, function* () {
+            success: async (res) => {
                 const reason = CANCEL_REASONS[res.tapIndex];
-                yield this.doCancelOrder(Number(id), reason);
-            }),
+                await this.doCancelOrder(Number(id), reason);
+            },
         });
     },
-    doCancelOrder(orderId, reason) {
-        return __awaiter(this, void 0, void 0, function* () {
-            wx.showLoading({ title: "取消中..." });
-            try {
-                yield (0, order_1.cancelOrder)(orderId, { reason });
-                wx.hideLoading();
-                wx.showToast({ title: "已取消", icon: "success" });
-                setTimeout(() => this.loadOrders(true), 1500);
-            }
-            catch (error) {
-                wx.hideLoading();
-                logger_1.logger.error("取消订单失败", error, "List.doCancelOrder");
-                wx.showToast({ title: "取消失败", icon: "error" });
-            }
-        });
+    async doCancelOrder(orderId, reason) {
+        wx.showLoading({ title: "取消中..." });
+        try {
+            await (0, order_1.cancelOrder)(orderId, { reason });
+            wx.hideLoading();
+            wx.showToast({ title: "已取消", icon: "success" });
+            setTimeout(() => this.loadOrders(true), 1500);
+        }
+        catch (error) {
+            wx.hideLoading();
+            logger_1.logger.error("取消订单失败", error, "List.doCancelOrder");
+            wx.showToast({ title: "取消失败", icon: "error" });
+        }
     },
     // 去支付
     onPayOrder(e) {
-        const { id } = e.currentTarget.dataset;
+        const id = getDatasetId(e);
         if (!id) {
             wx.showToast({ title: "订单信息缺失", icon: "none" });
             return;
@@ -241,18 +243,17 @@ Page({
         });
     },
     onReorder(e) {
-        const { id } = e.currentTarget.dataset;
-        const orderId = Number(id);
+        const orderId = getDatasetId(e);
         if (!orderId) {
             wx.showToast({ title: "订单信息缺失", icon: "none" });
             return;
         }
         wx.showLoading({ title: "再次购买中..." });
-        (() => __awaiter(this, void 0, void 0, function* () {
+        (async () => {
             try {
-                const orderDTO = yield (0, order_1.getOrderDetail)(orderId);
+                const orderDTO = await (0, order_1.getOrderDetail)(orderId);
                 const orderDetail = order_2.OrderAdapter.toDetailViewModel(orderDTO);
-                const orderType = orderDetail.type || 'takeout';
+                const orderType = orderDetail.type || "takeout";
                 const cartContext = { orderType };
                 // 根据订单类型只传递对应的上下文，避免不相关字段干扰
                 if (orderType === 'dine_in' && orderDetail.tableId) {
@@ -261,9 +262,9 @@ Page({
                 if (orderType === 'reservation' && orderDetail.reservationId) {
                     cartContext.reservationId = orderDetail.reservationId;
                 }
-                yield cart_1.default.loadCart(orderDetail.merchantId, cartContext);
+                await cart_1.default.loadCart(orderDetail.merchantId, cartContext);
                 // 直接累加到当前购物车，避免覆盖已有商品
-                const addResults = yield Promise.all(orderDetail.items.map((item) => cart_1.default.addItem({
+                const addResults = await Promise.all(orderDetail.items.map((item) => cart_1.default.addItem({
                     merchantId: orderDetail.merchantId,
                     dishId: item.dishId,
                     comboId: item.comboId,
@@ -285,6 +286,6 @@ Page({
                 logger_1.logger.error("再次购买失败", error, "List.onReorder");
                 wx.showToast({ title: "操作失败", icon: "error" });
             }
-        }))();
+        })();
     },
 });

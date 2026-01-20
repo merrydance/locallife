@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：申诉管理、索赔处理、评价回复
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.operatorAppealReviewService = exports.reviewReplyService = exports.claimManagementService = exports.appealManagementService = exports.AppealsCustomerServiceAdapter = exports.OperatorAppealReviewService = exports.ReviewReplyService = exports.ClaimManagementService = exports.AppealManagementService = void 0;
 exports.getMerchantCustomerServiceDashboard = getMerchantCustomerServiceDashboard;
@@ -35,76 +26,64 @@ class AppealManagementService {
      * 获取商户申诉列表
      * @param params 查询参数
      */
-    getMerchantAppeals(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/appeals',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantAppeals(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/appeals',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取申诉详情
      * @param appealId 申诉ID
      */
-    getAppealDetail(appealId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/appeals/${appealId}`,
-                method: 'GET'
-            });
+    async getAppealDetail(appealId) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/appeals/${appealId}`,
+            method: 'GET'
         });
     }
     /**
      * 创建申诉
      * @param appealData 申诉数据
      */
-    createAppeal(appealData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/appeals',
-                method: 'POST',
-                data: appealData
-            });
+    async createAppeal(appealData) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/appeals',
+            method: 'POST',
+            data: appealData
         });
     }
     /**
      * 获取骑手申诉列表
      * @param params 查询参数
      */
-    getRiderAppeals(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/appeals',
-                method: 'GET',
-                data: params
-            });
+    async getRiderAppeals(params) {
+        return (0, request_1.request)({
+            url: '/v1/rider/appeals',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取骑手申诉详情
      * @param appealId 申诉ID
      */
-    getRiderAppealDetail(appealId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/rider/appeals/${appealId}`,
-                method: 'GET'
-            });
+    async getRiderAppealDetail(appealId) {
+        return (0, request_1.request)({
+            url: `/v1/rider/appeals/${appealId}`,
+            method: 'GET'
         });
     }
     /**
      * 骑手创建申诉
      * @param appealData 申诉数据
      */
-    createRiderAppeal(appealData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/appeals',
-                method: 'POST',
-                data: appealData
-            });
+    async createRiderAppeal(appealData) {
+        return (0, request_1.request)({
+            url: '/v1/rider/appeals',
+            method: 'POST',
+            data: appealData
         });
     }
 }
@@ -119,75 +98,63 @@ class ClaimManagementService {
      * 获取用户索赔列表
      * @param params 查询参数
      */
-    getUserClaims(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/claims',
-                method: 'GET',
-                data: params
-            });
+    async getUserClaims(params) {
+        return (0, request_1.request)({
+            url: '/v1/claims',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取索赔详情
      * @param claimId 索赔ID
      */
-    getClaimDetail(claimId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/claims/${claimId}`,
-                method: 'GET'
-            });
+    async getClaimDetail(claimId) {
+        return (0, request_1.request)({
+            url: `/v1/claims/${claimId}`,
+            method: 'GET'
         });
     }
     /**
      * 获取商户收到的索赔列表
      * @param params 查询参数
      */
-    getMerchantClaims(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/merchant/claims',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantClaims(params) {
+        return (0, request_1.request)({
+            url: '/v1/merchant/claims',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取商户索赔详情
      * @param claimId 索赔ID
      */
-    getMerchantClaimDetail(claimId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchant/claims/${claimId}`,
-                method: 'GET'
-            });
+    async getMerchantClaimDetail(claimId) {
+        return (0, request_1.request)({
+            url: `/v1/merchant/claims/${claimId}`,
+            method: 'GET'
         });
     }
     /**
      * 获取骑手索赔列表
      * @param params 查询参数
      */
-    getRiderClaims(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/rider/claims',
-                method: 'GET',
-                data: params
-            });
+    async getRiderClaims(params) {
+        return (0, request_1.request)({
+            url: '/v1/rider/claims',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取骑手索赔详情
      * @param claimId 索赔ID
      */
-    getRiderClaimDetail(claimId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/rider/claims/${claimId}`,
-                method: 'GET'
-            });
+    async getRiderClaimDetail(claimId) {
+        return (0, request_1.request)({
+            url: `/v1/rider/claims/${claimId}`,
+            method: 'GET'
         });
     }
 }
@@ -203,25 +170,21 @@ class ReviewReplyService {
      * @param merchantId 商户ID
      * @param params 查询参数
      */
-    getMerchantReviews(merchantId, params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/reviews/merchants/${merchantId}`,
-                method: 'GET',
-                data: params
-            });
+    async getMerchantReviews(merchantId, params) {
+        return (0, request_1.request)({
+            url: `/v1/reviews/merchants/${merchantId}`,
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取评价详情
      * @param reviewId 评价ID
      */
-    getReviewDetail(reviewId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/reviews/${reviewId}`,
-                method: 'GET'
-            });
+    async getReviewDetail(reviewId) {
+        return (0, request_1.request)({
+            url: `/v1/reviews/${reviewId}`,
+            method: 'GET'
         });
     }
     /**
@@ -229,13 +192,11 @@ class ReviewReplyService {
      * @param reviewId 评价ID
      * @param replyData 回复内容
      */
-    replyToReview(reviewId, replyData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/reviews/${reviewId}/reply`,
-                method: 'POST',
-                data: replyData
-            });
+    async replyToReview(reviewId, replyData) {
+        return (0, request_1.request)({
+            url: `/v1/reviews/${reviewId}/reply`,
+            method: 'POST',
+            data: replyData
         });
     }
 }
@@ -250,25 +211,21 @@ class OperatorAppealReviewService {
      * 获取待审核申诉列表
      * @param params 查询参数
      */
-    getPendingAppeals(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/appeals',
-                method: 'GET',
-                data: params
-            });
+    async getPendingAppeals(params) {
+        return (0, request_1.request)({
+            url: '/v1/operator/appeals',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取申诉详情
      * @param appealId 申诉ID
      */
-    getAppealDetailForReview(appealId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/appeals/${appealId}`,
-                method: 'GET'
-            });
+    async getAppealDetailForReview(appealId) {
+        return (0, request_1.request)({
+            url: `/v1/operator/appeals/${appealId}`,
+            method: 'GET'
         });
     }
     /**
@@ -276,13 +233,11 @@ class OperatorAppealReviewService {
      * @param appealId 申诉ID
      * @param reviewData 审核数据
      */
-    reviewAppeal(appealId, reviewData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/appeals/${appealId}/review`,
-                method: 'POST',
-                data: reviewData
-            });
+    async reviewAppeal(appealId, reviewData) {
+        return (0, request_1.request)({
+            url: `/v1/operator/appeals/${appealId}/review`,
+            method: 'POST',
+            data: reviewData
         });
     }
 }
@@ -375,87 +330,81 @@ exports.operatorAppealReviewService = new OperatorAppealReviewService();
  * 获取商户客服工作台数据
  * @param merchantId 商户ID
  */
-function getMerchantCustomerServiceDashboard(merchantId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [appealsResult, claimsResult, reviewsResult] = yield Promise.all([
-            exports.appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 10, status: 'pending' }),
-            exports.claimManagementService.getMerchantClaims({ page_id: 1, page_size: 10, status: 'pending' }),
-            exports.reviewReplyService.getMerchantReviews(merchantId, { page_id: 1, page_size: 10, has_reply: false })
-        ]);
-        const pendingCount = appealsResult.appeals.length + claimsResult.claims.length + reviewsResult.reviews.length;
-        return {
-            pendingAppeals: appealsResult.appeals,
-            pendingClaims: claimsResult.claims,
-            unrepliedReviews: reviewsResult.reviews,
-            stats: {
-                totalAppeals: appealsResult.total,
-                totalClaims: claimsResult.total,
-                totalReviews: reviewsResult.total,
-                pendingCount
-            }
-        };
-    });
+async function getMerchantCustomerServiceDashboard(merchantId) {
+    const [appealsResult, claimsResult, reviewsResult] = await Promise.all([
+        exports.appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 10, status: 'pending' }),
+        exports.claimManagementService.getMerchantClaims({ page_id: 1, page_size: 10, status: 'pending' }),
+        exports.reviewReplyService.getMerchantReviews(merchantId, { page_id: 1, page_size: 10, has_reply: false })
+    ]);
+    const pendingCount = appealsResult.appeals.length + claimsResult.claims.length + reviewsResult.reviews.length;
+    return {
+        pendingAppeals: appealsResult.appeals,
+        pendingClaims: claimsResult.claims,
+        unrepliedReviews: reviewsResult.reviews,
+        stats: {
+            totalAppeals: appealsResult.total,
+            totalClaims: claimsResult.total,
+            totalReviews: reviewsResult.total,
+            pendingCount
+        }
+    };
 }
 /**
  * 批量回复评价
  * @param replies 回复列表
  */
-function batchReplyReviews(replies) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const promises = replies.map((_a) => __awaiter(this, [_a], void 0, function* ({ reviewId, reply }) {
-            try {
-                yield exports.reviewReplyService.replyToReview(reviewId, { reply });
-                return { reviewId, success: true, message: '回复成功' };
-            }
-            catch (error) {
-                return {
-                    reviewId,
-                    success: false,
-                    message: (error === null || error === void 0 ? void 0 : error.message) || '回复失败'
-                };
-            }
-        }));
-        return Promise.all(promises);
+async function batchReplyReviews(replies) {
+    const promises = replies.map(async ({ reviewId, reply }) => {
+        try {
+            await exports.reviewReplyService.replyToReview(reviewId, { reply });
+            return { reviewId, success: true, message: '回复成功' };
+        }
+        catch (error) {
+            return {
+                reviewId,
+                success: false,
+                message: (error === null || error === void 0 ? void 0 : error.message) || '回复失败'
+            };
+        }
     });
+    return Promise.all(promises);
 }
 /**
  * 获取申诉统计信息
  * @param startDate 开始日期
  * @param endDate 结束日期
  */
-function getAppealStatistics(startDate, endDate) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // 这里需要根据实际的统计接口来实现
-        // 目前swagger中没有专门的统计接口，可能需要通过查询所有数据来计算
-        const appealsResult = yield exports.appealManagementService.getMerchantAppeals({
-            page_id: 1,
-            page_size: 1000 // 获取大量数据用于统计
-        });
-        const appeals = appealsResult.appeals;
-        const totalAppeals = appeals.length;
-        const approvedAppeals = appeals.filter(a => a.status === 'approved').length;
-        const rejectedAppeals = appeals.filter(a => a.status === 'rejected').length;
-        const pendingAppeals = appeals.filter(a => a.status === 'pending').length;
-        const approvalRate = totalAppeals > 0 ? (approvedAppeals / totalAppeals) * 100 : 0;
-        // 计算平均处理时间（天）
-        const processedAppeals = appeals.filter(a => a.reviewed_at);
-        const avgProcessingTime = processedAppeals.length > 0
-            ? processedAppeals.reduce((sum, appeal) => {
-                const created = new Date(appeal.created_at);
-                const reviewed = new Date(appeal.reviewed_at);
-                const diffDays = (reviewed.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
-                return sum + diffDays;
-            }, 0) / processedAppeals.length
-            : 0;
-        return {
-            totalAppeals,
-            approvedAppeals,
-            rejectedAppeals,
-            pendingAppeals,
-            approvalRate,
-            avgProcessingTime
-        };
+async function getAppealStatistics(startDate, endDate) {
+    // 这里需要根据实际的统计接口来实现
+    // 目前swagger中没有专门的统计接口，可能需要通过查询所有数据来计算
+    const appealsResult = await exports.appealManagementService.getMerchantAppeals({
+        page_id: 1,
+        page_size: 1000 // 获取大量数据用于统计
     });
+    const appeals = appealsResult.appeals;
+    const totalAppeals = appeals.length;
+    const approvedAppeals = appeals.filter(a => a.status === 'approved').length;
+    const rejectedAppeals = appeals.filter(a => a.status === 'rejected').length;
+    const pendingAppeals = appeals.filter(a => a.status === 'pending').length;
+    const approvalRate = totalAppeals > 0 ? (approvedAppeals / totalAppeals) * 100 : 0;
+    // 计算平均处理时间（天）
+    const processedAppeals = appeals.filter(a => a.reviewed_at);
+    const avgProcessingTime = processedAppeals.length > 0
+        ? processedAppeals.reduce((sum, appeal) => {
+            const created = new Date(appeal.created_at);
+            const reviewed = new Date(appeal.reviewed_at);
+            const diffDays = (reviewed.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+            return sum + diffDays;
+        }, 0) / processedAppeals.length
+        : 0;
+    return {
+        totalAppeals,
+        approvedAppeals,
+        rejectedAppeals,
+        pendingAppeals,
+        approvalRate,
+        avgProcessingTime
+    };
 }
 /**
  * 验证申诉理由

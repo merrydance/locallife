@@ -1,8 +1,8 @@
 import { isLargeScreen } from '@/utils/responsive'
-import * as echarts from '../../libs/echarts'
-import { getMerchantDashboard } from '../../../api/merchant'
-import { logger } from '../../../utils/logger'
-import { ErrorHandler } from '../../../utils/error-handler'
+import * as echarts from '@/libs/echarts'
+import { getMerchantDashboard } from '@/api/merchant'
+import { logger } from '@/utils/logger'
+import { ErrorHandler } from '@/utils/error-handler'
 
 const app = getApp<IAppOption>()
 let chartLine: any = null
@@ -149,22 +149,25 @@ Page({
 
   async loadData() {
     try {
-      const merchantId = app.globalData.merchantId!
+      const merchantId = Number(app.globalData.merchantId)
       const res = await getMerchantDashboard(merchantId)
+      const todaySales = res.today_sales ?? 0
+      const todayOrders = res.today_orders ?? 0
+      const pendingOrders = res.pending_orders ?? 0
 
       // Update Metrics
       const metrics = [
-        { label: '今日GMV', value: `¥${(res.today_sales / 100).toFixed(2)}`, change: '-', trend: 'up' },
-        { label: '今日订单', value: String(res.today_orders), change: '-', trend: 'up' },
-        { label: '待处理', value: String(res.pending_orders), change: '-', trend: 'down' }, // Assuming lower is better or just trend
+        { label: '今日GMV', value: `¥${(todaySales / 100).toFixed(2)}`, change: '-', trend: 'up' },
+        { label: '今日订单', value: String(todayOrders), change: '-', trend: 'up' },
+        { label: '待处理', value: String(pendingOrders), change: '-', trend: 'down' }, // Assuming lower is better or just trend
         { label: '近7日', value: '趋势图', change: '-', trend: 'up' }
       ]
       this.setData({ metrics })
 
       // Update Line Chart
       if (chartLine && res.seven_days_sales) {
-        const dates = res.seven_days_sales.map((d) => d.date.slice(5)) // MM-DD
-        const sales = res.seven_days_sales.map((d) => d.amount / 100) // Yuan
+        const dates = res.seven_days_sales.map((d: { date: string }) => d.date.slice(5)) // MM-DD
+        const sales = res.seven_days_sales.map((d: { amount: number }) => d.amount / 100) // Yuan
 
         chartLine.setOption({
           xAxis: {

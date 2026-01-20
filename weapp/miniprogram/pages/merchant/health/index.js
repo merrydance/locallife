@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const responsive_1 = require("../../../utils/responsive");
 const app = getApp();
@@ -32,18 +23,16 @@ Page({
     onNavHeight(e) {
         this.setData({ navBarHeight: e.detail.navBarHeight });
     },
-    loadHealthInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({
-                score: 0,
-                level: '已下线',
-                levelDesc: '信用分功能已下线',
-                metrics: [],
-                violations: [],
-                loading: false
-            });
-            wx.showToast({ title: '信用分功能已下线', icon: 'none' });
+    async loadHealthInfo() {
+        this.setData({
+            score: 0,
+            level: '已下线',
+            levelDesc: '信用分功能已下线',
+            metrics: [],
+            violations: [],
+            loading: false
         });
+        wx.showToast({ title: '信用分功能已下线', icon: 'none' });
     },
     calculateLevelInfo(score) {
         if (score >= 90) {

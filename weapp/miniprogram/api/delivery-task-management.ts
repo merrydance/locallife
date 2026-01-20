@@ -595,7 +595,7 @@ export function calculateDeliveryEfficiency(deliveries: DeliveryResponse[]): {
  * 配送任务提醒管理器
  */
 export class DeliveryReminderManager {
-    private reminders: Map<number, NodeJS.Timeout> = new Map()
+    private reminders: Map<number, ReturnType<typeof setTimeout>> = new Map()
 
     /**
      * 设置配送提醒

@@ -3,15 +3,6 @@
  * 运营商入驻申请接口
  * 基于swagger.json完全重构，包含OCR识别和数据回填功能
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OperatorApplicationFlow = exports.RegionService = exports.OperatorApplicationAdapter = exports.OperatorApplicationService = void 0;
 const request_1 = require("../utils/request");
@@ -79,50 +70,44 @@ class OperatorApplicationService {
      * 获取或创建运营商申请
      * GET/POST /v1/operator/application
      */
-    static getOrCreateApplication(regionId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (regionId) {
-                // 创建新申请
-                const request_data = { region_id: regionId };
-                return yield (0, request_1.request)({
-                    url: '/v1/operator/application',
-                    method: 'POST',
-                    data: request_data
-                });
-            }
-            else {
-                // 获取现有申请
-                return yield (0, request_1.request)({
-                    url: '/v1/operator/application',
-                    method: 'GET'
-                });
-            }
-        });
+    static async getOrCreateApplication(regionId) {
+        if (regionId) {
+            // 创建新申请
+            const request_data = { region_id: regionId };
+            return await (0, request_1.request)({
+                url: '/v1/operator/application',
+                method: 'POST',
+                data: request_data
+            });
+        }
+        else {
+            // 获取现有申请
+            return await (0, request_1.request)({
+                url: '/v1/operator/application',
+                method: 'GET'
+            });
+        }
     }
     /**
      * 更新运营商申请基本信息
      * PUT /v1/operator/application/basic
      */
-    static updateBasicInfo(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/operator/application/basic',
-                method: 'PUT',
-                data
-            });
+    static async updateBasicInfo(data) {
+        return await (0, request_1.request)({
+            url: '/v1/operator/application/basic',
+            method: 'PUT',
+            data
         });
     }
     /**
      * 更新运营商申请区域
      * PUT /v1/operator/application/region
      */
-    static updateRegion(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/operator/application/region',
-                method: 'PUT',
-                data
-            });
+    static async updateRegion(data) {
+        return await (0, request_1.request)({
+            url: '/v1/operator/application/region',
+            method: 'PUT',
+            data
         });
     }
     /**
@@ -132,10 +117,8 @@ class OperatorApplicationService {
      * @param filePath 本地文件路径（wxfile:// 或 http://tmp/...）
      * @param side 正面 "Front" 或背面 "Back"
      */
-    static recognizeIDCard(filePath, side) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return uploadOperatorFile('/v1/operator/application/idcard/ocr', filePath, { side });
-        });
+    static async recognizeIDCard(filePath, side) {
+        return uploadOperatorFile('/v1/operator/application/idcard/ocr', filePath, { side });
     }
     /**
      * 营业执照OCR识别（企业运营商）
@@ -143,58 +126,48 @@ class OperatorApplicationService {
      * 使用 multipart/form-data 上传图片文件
      * @param filePath 本地文件路径
      */
-    static recognizeBusinessLicense(filePath) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return uploadOperatorFile('/v1/operator/application/license/ocr', filePath);
-        });
+    static async recognizeBusinessLicense(filePath) {
+        return uploadOperatorFile('/v1/operator/application/license/ocr', filePath);
     }
     /**
      * 提交运营商申请
      * POST /v1/operator/application/submit
      */
-    static submitApplication() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/operator/application/submit',
-                method: 'POST'
-            });
+    static async submitApplication() {
+        return await (0, request_1.request)({
+            url: '/v1/operator/application/submit',
+            method: 'POST'
         });
     }
     /**
      * 重置运营商申请
      * POST /v1/operator/application/reset
      */
-    static resetApplication() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/operator/application/reset',
-                method: 'POST'
-            });
+    static async resetApplication() {
+        return await (0, request_1.request)({
+            url: '/v1/operator/application/reset',
+            method: 'POST'
         });
     }
     /**
      * 绑定银行账户
      * POST /v1/operator/applyment/bindbank
      */
-    static bindBank(data) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/operator/applyment/bindbank',
-                method: 'POST',
-                data
-            });
+    static async bindBank(data) {
+        return await (0, request_1.request)({
+            url: '/v1/operator/applyment/bindbank',
+            method: 'POST',
+            data
         });
     }
     /**
      * 获取申请状态
      * GET /v1/operator/applyment/status
      */
-    static getApplymentStatus() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/operator/applyment/status',
-                method: 'GET'
-            });
+    static async getApplymentStatus() {
+        return await (0, request_1.request)({
+            url: '/v1/operator/applyment/status',
+            method: 'GET'
         });
     }
 }
@@ -284,75 +257,63 @@ class RegionService {
      * 获取区域列表
      * GET /v1/regions
      */
-    static getRegions(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/regions',
-                method: 'GET',
-                data: params
-            });
+    static async getRegions(params) {
+        return await (0, request_1.request)({
+            url: '/v1/regions',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取可申请的区县列表（未被运营商绑定的区域）
      * GET /v1/regions/available
      */
-    static getAvailableRegions(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/regions/available',
-                method: 'GET',
-                data: params
-            });
+    static async getAvailableRegions(params) {
+        return await (0, request_1.request)({
+            url: '/v1/regions/available',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 搜索区域
      * GET /v1/regions/search
      */
-    static searchRegions(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: '/v1/regions/search',
-                method: 'GET',
-                data: params
-            });
+    static async searchRegions(params) {
+        return await (0, request_1.request)({
+            url: '/v1/regions/search',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取区域详情
      * GET /v1/regions/{id}
      */
-    static getRegionById(id) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/regions/${id}`,
-                method: 'GET'
-            });
+    static async getRegionById(id) {
+        return await (0, request_1.request)({
+            url: `/v1/regions/${id}`,
+            method: 'GET'
         });
     }
     /**
      * 检查区域是否可申请
      * GET /v1/regions/{id}/check
      */
-    static checkRegionAvailable(id) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/regions/${id}/check`,
-                method: 'GET'
-            });
+    static async checkRegionAvailable(id) {
+        return await (0, request_1.request)({
+            url: `/v1/regions/${id}/check`,
+            method: 'GET'
         });
     }
     /**
      * 获取区域的下级区域列表
      * GET /v1/regions/{id}/children
      */
-    static getRegionChildren(id) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, request_1.request)({
-                url: `/v1/regions/${id}/children`,
-                method: 'GET'
-            });
+    static async getRegionChildren(id) {
+        return await (0, request_1.request)({
+            url: `/v1/regions/${id}/children`,
+            method: 'GET'
         });
     }
 }
@@ -366,43 +327,37 @@ class OperatorApplicationFlow {
     /**
      * 获取省份列表
      */
-    static getProvinces() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield RegionService.getRegions({
-                level: 1,
-                page_id: 1,
-                page_size: 50
-            });
+    static async getProvinces() {
+        return await RegionService.getRegions({
+            level: 1,
+            page_id: 1,
+            page_size: 50
         });
     }
     /**
      * 获取城市列表
      */
-    static getCities(provinceId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield RegionService.getRegions({
-                level: 2,
-                parent_id: provinceId,
-                page_id: 1,
-                page_size: 100
-            });
+    static async getCities(provinceId) {
+        return await RegionService.getRegions({
+            level: 2,
+            parent_id: provinceId,
+            page_id: 1,
+            page_size: 100
         });
     }
     /**
      * 获取可申请的区县列表
      */
-    static getAvailableDistricts(cityId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const params = {
-                level: 3,
-                page_id: 1,
-                page_size: 100
-            };
-            if (cityId) {
-                params.parent_id = cityId;
-            }
-            return yield RegionService.getAvailableRegions(params);
-        });
+    static async getAvailableDistricts(cityId) {
+        const params = {
+            level: 3,
+            page_id: 1,
+            page_size: 100
+        };
+        if (cityId) {
+            params.parent_id = cityId;
+        }
+        return await RegionService.getAvailableRegions(params);
     }
     /**
      * 完整的运营商申请流程
@@ -411,16 +366,14 @@ class OperatorApplicationFlow {
      * 3. 填写基本信息
      * 4. 提交申请
      */
-    static createApplicationWithRegion(regionId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            // 1. 检查区域是否可申请
-            const checkResult = yield RegionService.checkRegionAvailable(regionId);
-            if (!checkResult.available) {
-                throw new Error(checkResult.message || '该区域不可申请');
-            }
-            // 2. 创建申请
-            return yield OperatorApplicationService.getOrCreateApplication(regionId);
-        });
+    static async createApplicationWithRegion(regionId) {
+        // 1. 检查区域是否可申请
+        const checkResult = await RegionService.checkRegionAvailable(regionId);
+        if (!checkResult.available) {
+            throw new Error(checkResult.message || '该区域不可申请');
+        }
+        // 2. 创建申请
+        return await OperatorApplicationService.getOrCreateApplication(regionId);
     }
     /**
      * 自动填充OCR识别的数据
@@ -428,31 +381,32 @@ class OperatorApplicationFlow {
      * @param idCardFilePath 身份证正面本地文件路径
      * @param businessLicenseFilePath 营业执照本地文件路径（可选）
      */
-    static autoFillFromOCR(idCardFilePath, businessLicenseFilePath) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const results = {};
-            // 识别身份证正面
-            if (idCardFilePath) {
-                const idCardResult = yield OperatorApplicationService.recognizeIDCard(idCardFilePath, 'Front');
-                results.idCardData = idCardResult.id_card_front_ocr;
-            }
-            // 识别营业执照（如果是企业运营商）
-            if (businessLicenseFilePath) {
-                const licenseResult = yield OperatorApplicationService.recognizeBusinessLicense(businessLicenseFilePath);
-                results.businessLicenseData = licenseResult.business_license_ocr;
-            }
-            // 生成建议的表单数据
-            const suggestedFormData = {};
-            if (results.idCardData) {
-                const idCardFill = OperatorApplicationAdapter.fillIDCardData(results.idCardData);
-                Object.assign(suggestedFormData, idCardFill);
-            }
-            if (results.businessLicenseData) {
-                const licenseFill = OperatorApplicationAdapter.fillBusinessLicenseData(results.businessLicenseData);
-                Object.assign(suggestedFormData, licenseFill);
-            }
-            return Object.assign(Object.assign({}, results), { suggestedFormData });
-        });
+    static async autoFillFromOCR(idCardFilePath, businessLicenseFilePath) {
+        const results = {};
+        // 识别身份证正面
+        if (idCardFilePath) {
+            const idCardResult = await OperatorApplicationService.recognizeIDCard(idCardFilePath, 'Front');
+            results.idCardData = idCardResult.id_card_front_ocr;
+        }
+        // 识别营业执照（如果是企业运营商）
+        if (businessLicenseFilePath) {
+            const licenseResult = await OperatorApplicationService.recognizeBusinessLicense(businessLicenseFilePath);
+            results.businessLicenseData = licenseResult.business_license_ocr;
+        }
+        // 生成建议的表单数据
+        const suggestedFormData = {};
+        if (results.idCardData) {
+            const idCardFill = OperatorApplicationAdapter.fillIDCardData(results.idCardData);
+            Object.assign(suggestedFormData, idCardFill);
+        }
+        if (results.businessLicenseData) {
+            const licenseFill = OperatorApplicationAdapter.fillBusinessLicenseData(results.businessLicenseData);
+            Object.assign(suggestedFormData, licenseFill);
+        }
+        return {
+            ...results,
+            suggestedFormData
+        };
     }
 }
 exports.OperatorApplicationFlow = OperatorApplicationFlow;

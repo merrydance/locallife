@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：区域管理、财务概览、佣金管理
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.regionAnalyticsService = exports.operatorBasicManagementService = exports.OperatorBasicManagementAdapter = exports.RegionAnalyticsService = exports.OperatorBasicManagementService = void 0;
 exports.getOperatorDashboard = getOperatorDashboard;
@@ -36,13 +27,11 @@ class OperatorBasicManagementService {
      * 获取运营商管理的区域列表
      * @param params 查询参数
      */
-    getOperatorRegions(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operator/regions',
-                method: 'GET',
-                data: params
-            });
+    async getOperatorRegions(params) {
+        return (0, request_1.request)({
+            url: '/v1/operator/regions',
+            method: 'GET',
+            data: params
         });
     }
     /**
@@ -51,16 +40,14 @@ class OperatorBasicManagementService {
      * @param startDate 开始日期
      * @param endDate 结束日期
      */
-    getRegionStats(regionId, startDate, endDate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/operator/regions/${regionId}/stats`,
-                method: 'GET',
-                data: {
-                    start_date: startDate,
-                    end_date: endDate
-                }
-            });
+    async getRegionStats(regionId, startDate, endDate) {
+        return (0, request_1.request)({
+            url: `/v1/operator/regions/${regionId}/stats`,
+            method: 'GET',
+            data: {
+                start_date: startDate,
+                end_date: endDate
+            }
         });
     }
     /**
@@ -68,53 +55,45 @@ class OperatorBasicManagementService {
      * @param startDate 开始日期
      * @param endDate 结束日期
      */
-    getFinanceOverview(startDate, endDate) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operators/me/finance/overview',
-                method: 'GET',
-                data: {
-                    start_date: startDate,
-                    end_date: endDate
-                }
-            });
+    async getFinanceOverview(startDate, endDate) {
+        return (0, request_1.request)({
+            url: '/v1/operators/me/finance/overview',
+            method: 'GET',
+            data: {
+                start_date: startDate,
+                end_date: endDate
+            }
         });
     }
     /**
      * 获取佣金明细列表
      * @param params 查询参数
      */
-    getCommissionList(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operators/me/commission',
-                method: 'GET',
-                data: params
-            });
+    async getCommissionList(params) {
+        return (0, request_1.request)({
+            url: '/v1/operators/me/commission',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取运营商信息
      */
-    getOperatorInfo() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operators/me',
-                method: 'GET'
-            });
+    async getOperatorInfo() {
+        return (0, request_1.request)({
+            url: '/v1/operators/me',
+            method: 'GET'
         });
     }
     /**
      * 更新运营商信息
      * @param updateData 更新数据
      */
-    updateOperatorInfo(updateData) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/operators/me',
-                method: 'PATCH',
-                data: updateData
-            });
+    async updateOperatorInfo(updateData) {
+        return (0, request_1.request)({
+            url: '/v1/operators/me',
+            method: 'PATCH',
+            data: updateData
         });
     }
 }
@@ -130,12 +109,17 @@ class RegionAnalyticsService {
      * @param stats 区域统计数据
      */
     calculateRegionPerformance(stats) {
-        const merchantDensity = stats.active_merchant_count / Math.max(stats.merchant_count, 1);
-        const riderDensity = stats.active_rider_count / Math.max(stats.rider_count, 1);
-        const orderDensity = stats.completed_order_count / Math.max(stats.order_count, 1);
-        const avgOrderValue = stats.total_gmv / Math.max(stats.completed_order_count, 1);
-        const completionRate = stats.completion_rate;
-        const commissionRate = stats.total_commission / Math.max(stats.total_gmv, 1);
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        const activeMerchantCount = (_a = stats.active_merchant_count) !== null && _a !== void 0 ? _a : 0;
+        const activeRiderCount = (_b = stats.active_rider_count) !== null && _b !== void 0 ? _b : 0;
+        const completedOrderCount = (_c = stats.completed_order_count) !== null && _c !== void 0 ? _c : 0;
+        const orderCount = (_e = (_d = stats.order_count) !== null && _d !== void 0 ? _d : stats.total_orders) !== null && _e !== void 0 ? _e : 0;
+        const completionRate = (_f = stats.completion_rate) !== null && _f !== void 0 ? _f : 0;
+        const merchantDensity = activeMerchantCount / Math.max((_g = stats.merchant_count) !== null && _g !== void 0 ? _g : 0, 1);
+        const riderDensity = activeRiderCount / Math.max((_h = stats.rider_count) !== null && _h !== void 0 ? _h : 0, 1);
+        const orderDensity = completedOrderCount / Math.max(orderCount, 1);
+        const avgOrderValue = stats.total_gmv / Math.max(completedOrderCount, 1);
+        const commissionRate = stats.total_commission / Math.max((_j = stats.total_gmv) !== null && _j !== void 0 ? _j : 0, 1);
         // 计算综合绩效分数 (0-100)
         const performanceScore = Math.min(100, Math.round(merchantDensity * 20 +
             riderDensity * 20 +
@@ -182,7 +166,7 @@ class RegionAnalyticsService {
             rank: 0
         }))
             .sort((a, b) => b.performance.performanceScore - a.performance.performanceScore)
-            .map((item, index) => (Object.assign(Object.assign({}, item), { rank: index + 1 })));
+            .map((item, index) => ({ ...item, rank: index + 1 }));
         const avgPerformance = regionRankings.reduce((sum, item) => sum + item.performance.performanceScore, 0) / regionRankings.length;
         return {
             bestRegion: ((_a = regionRankings[0]) === null || _a === void 0 ? void 0 : _a.region) || null,
@@ -197,11 +181,12 @@ class RegionAnalyticsService {
      * @param previousStats 上期统计数据
      */
     analyzeRegionGrowth(currentStats, previousStats) {
-        const merchantGrowth = this.calculateGrowthRate(currentStats.active_merchant_count, previousStats.active_merchant_count);
-        const riderGrowth = this.calculateGrowthRate(currentStats.active_rider_count, previousStats.active_rider_count);
-        const orderGrowth = this.calculateGrowthRate(currentStats.completed_order_count, previousStats.completed_order_count);
-        const gmvGrowth = this.calculateGrowthRate(currentStats.total_gmv, previousStats.total_gmv);
-        const commissionGrowth = this.calculateGrowthRate(currentStats.total_commission, previousStats.total_commission);
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        const merchantGrowth = this.calculateGrowthRate((_a = currentStats.active_merchant_count) !== null && _a !== void 0 ? _a : 0, (_b = previousStats.active_merchant_count) !== null && _b !== void 0 ? _b : 0);
+        const riderGrowth = this.calculateGrowthRate((_c = currentStats.active_rider_count) !== null && _c !== void 0 ? _c : 0, (_d = previousStats.active_rider_count) !== null && _d !== void 0 ? _d : 0);
+        const orderGrowth = this.calculateGrowthRate((_e = currentStats.completed_order_count) !== null && _e !== void 0 ? _e : 0, (_f = previousStats.completed_order_count) !== null && _f !== void 0 ? _f : 0);
+        const gmvGrowth = this.calculateGrowthRate((_g = currentStats.total_gmv) !== null && _g !== void 0 ? _g : 0, (_h = previousStats.total_gmv) !== null && _h !== void 0 ? _h : 0);
+        const commissionGrowth = this.calculateGrowthRate((_j = currentStats.total_commission) !== null && _j !== void 0 ? _j : 0, (_k = previousStats.total_commission) !== null && _k !== void 0 ? _k : 0);
         const overallGrowth = (merchantGrowth + riderGrowth + orderGrowth + gmvGrowth + commissionGrowth) / 5;
         let growthTrend = 'stable';
         if (overallGrowth > 5)
@@ -240,71 +225,75 @@ class OperatorBasicManagementAdapter {
      * 适配区域响应数据
      */
     static adaptRegionResponse(data) {
+        var _a, _b, _c;
         return {
             id: data.id,
             name: data.name,
             code: data.code,
             parentId: data.parent_id,
             level: data.level,
-            status: data.status,
+            status: (_a = data.status) !== null && _a !== void 0 ? _a : 'pending',
             operatorId: data.operator_id,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at
+            createdAt: (_b = data.created_at) !== null && _b !== void 0 ? _b : '',
+            updatedAt: (_c = data.updated_at) !== null && _c !== void 0 ? _c : ''
         };
     }
     /**
      * 适配区域统计响应数据
      */
     static adaptRegionStatsResponse(data) {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
         return {
             regionId: data.region_id,
             regionName: data.region_name,
-            merchantCount: data.merchant_count,
-            activeMerchantCount: data.active_merchant_count,
-            riderCount: data.rider_count,
-            activeRiderCount: data.active_rider_count,
-            orderCount: data.order_count,
-            completedOrderCount: data.completed_order_count,
-            totalGmv: data.total_gmv,
-            totalCommission: data.total_commission,
-            avgOrderValue: data.avg_order_value,
-            completionRate: data.completion_rate,
-            createdAt: data.created_at
+            merchantCount: (_a = data.merchant_count) !== null && _a !== void 0 ? _a : 0,
+            activeMerchantCount: (_b = data.active_merchant_count) !== null && _b !== void 0 ? _b : 0,
+            riderCount: (_c = data.rider_count) !== null && _c !== void 0 ? _c : 0,
+            activeRiderCount: (_d = data.active_rider_count) !== null && _d !== void 0 ? _d : 0,
+            orderCount: (_f = (_e = data.order_count) !== null && _e !== void 0 ? _e : data.total_orders) !== null && _f !== void 0 ? _f : 0,
+            completedOrderCount: (_g = data.completed_order_count) !== null && _g !== void 0 ? _g : 0,
+            totalGmv: (_h = data.total_gmv) !== null && _h !== void 0 ? _h : 0,
+            totalCommission: (_j = data.total_commission) !== null && _j !== void 0 ? _j : 0,
+            avgOrderValue: (_k = data.avg_order_value) !== null && _k !== void 0 ? _k : 0,
+            completionRate: (_l = data.completion_rate) !== null && _l !== void 0 ? _l : 0,
+            createdAt: (_m = data.created_at) !== null && _m !== void 0 ? _m : ''
         };
     }
     /**
      * 适配财务概览响应数据
      */
     static adaptFinanceOverviewResponse(data) {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         return {
-            totalCommission: data.total_commission,
-            todayCommission: data.today_commission,
-            weekCommission: data.week_commission,
-            monthCommission: data.month_commission,
-            pendingSettlement: data.pending_settlement,
-            settledAmount: data.settled_amount,
-            commissionRate: data.commission_rate,
-            merchantCount: data.merchant_count,
-            activeMerchantCount: data.active_merchant_count,
-            orderCount: data.order_count,
-            gmv: data.gmv
+            totalCommission: (_a = data.total_commission) !== null && _a !== void 0 ? _a : 0,
+            todayCommission: (_b = data.today_commission) !== null && _b !== void 0 ? _b : 0,
+            weekCommission: (_c = data.week_commission) !== null && _c !== void 0 ? _c : 0,
+            monthCommission: (_d = data.month_commission) !== null && _d !== void 0 ? _d : 0,
+            pendingSettlement: (_e = data.pending_settlement) !== null && _e !== void 0 ? _e : 0,
+            settledAmount: (_f = data.settled_amount) !== null && _f !== void 0 ? _f : 0,
+            commissionRate: (_g = data.commission_rate) !== null && _g !== void 0 ? _g : 0,
+            merchantCount: (_h = data.merchant_count) !== null && _h !== void 0 ? _h : 0,
+            activeMerchantCount: (_j = data.active_merchant_count) !== null && _j !== void 0 ? _j : 0,
+            orderCount: (_k = data.order_count) !== null && _k !== void 0 ? _k : 0,
+            gmv: (_l = data.gmv) !== null && _l !== void 0 ? _l : 0
         };
     }
     /**
      * 适配佣金响应数据
      */
     static adaptCommissionResponse(data) {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         return {
-            id: data.id,
-            operatorId: data.operator_id,
-            orderId: data.order_id,
-            merchantId: data.merchant_id,
-            commissionAmount: data.commission_amount,
-            commissionRate: data.commission_rate,
-            orderAmount: data.order_amount,
-            settlementStatus: data.settlement_status,
+            id: (_a = data.id) !== null && _a !== void 0 ? _a : 0,
+            operatorId: (_b = data.operator_id) !== null && _b !== void 0 ? _b : 0,
+            orderId: (_c = data.order_id) !== null && _c !== void 0 ? _c : 0,
+            merchantId: (_d = data.merchant_id) !== null && _d !== void 0 ? _d : 0,
+            commissionAmount: (_e = data.commission_amount) !== null && _e !== void 0 ? _e : 0,
+            commissionRate: (_f = data.commission_rate) !== null && _f !== void 0 ? _f : 0,
+            orderAmount: (_g = data.order_amount) !== null && _g !== void 0 ? _g : 0,
+            settlementStatus: (_h = data.settlement_status) !== null && _h !== void 0 ? _h : 'pending',
             settlementDate: data.settlement_date,
-            createdAt: data.created_at
+            createdAt: (_j = data.created_at) !== null && _j !== void 0 ? _j : ''
         };
     }
     /**
@@ -333,73 +322,69 @@ exports.regionAnalyticsService = new RegionAnalyticsService();
 /**
  * 获取运营商工作台数据
  */
-function getOperatorDashboard() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [operatorInfo, financeOverview, regions] = yield Promise.all([
-            exports.operatorBasicManagementService.getOperatorInfo(),
-            exports.operatorBasicManagementService.getFinanceOverview(),
-            exports.operatorBasicManagementService.getOperatorRegions({ limit: 100 })
-        ]);
-        // 获取各区域统计数据
-        const regionStatsPromises = regions.regions.map(region => exports.operatorBasicManagementService.getRegionStats(region.id));
-        const regionStats = yield Promise.all(regionStatsPromises);
-        // 分析区域绩效
-        const regionPerformance = exports.regionAnalyticsService.compareRegionPerformance(regionStats);
-        // 获取最近的佣金记录
-        const commissionResult = yield exports.operatorBasicManagementService.getCommissionList({
-            page: 1,
-            limit: 10
-        });
-        return {
-            operatorInfo,
-            financeOverview,
-            regionStats,
-            regionPerformance,
-            recentCommissions: commissionResult.commissions
-        };
+async function getOperatorDashboard() {
+    const [operatorInfo, financeOverview, regions] = await Promise.all([
+        exports.operatorBasicManagementService.getOperatorInfo(),
+        exports.operatorBasicManagementService.getFinanceOverview(),
+        exports.operatorBasicManagementService.getOperatorRegions({ limit: 100 })
+    ]);
+    // 获取各区域统计数据
+    const regionStatsPromises = regions.regions.map(region => exports.operatorBasicManagementService.getRegionStats(region.id));
+    const regionStats = await Promise.all(regionStatsPromises);
+    // 分析区域绩效
+    const regionPerformance = exports.regionAnalyticsService.compareRegionPerformance(regionStats);
+    // 获取最近的佣金记录
+    const commissionResult = await exports.operatorBasicManagementService.getCommissionList({
+        page: 1,
+        limit: 10
     });
+    return {
+        operatorInfo,
+        financeOverview,
+        regionStats,
+        regionPerformance,
+        recentCommissions: commissionResult.commissions
+    };
 }
 /**
  * 获取区域详细分析报告
  * @param regionId 区域ID
  * @param days 分析天数
  */
-function getRegionAnalysisReport(regionId_1) {
-    return __awaiter(this, arguments, void 0, function* (regionId, days = 30) {
-        const endDate = new Date().toISOString().split('T')[0];
-        const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const previousEndDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const previousStartDate = new Date(Date.now() - days * 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const [regions, currentStats] = yield Promise.all([
-            exports.operatorBasicManagementService.getOperatorRegions({ limit: 1000 }),
-            exports.operatorBasicManagementService.getRegionStats(regionId, startDate, endDate)
-        ]);
-        const regionInfo = regions.regions.find(r => r.id === regionId);
-        if (!regionInfo) {
-            throw new Error('区域不存在');
-        }
-        const performance = exports.regionAnalyticsService.calculateRegionPerformance(currentStats);
-        // 尝试获取上期数据进行对比
-        let previousStats;
-        let growth;
-        try {
-            previousStats = yield exports.operatorBasicManagementService.getRegionStats(regionId, previousStartDate, previousEndDate);
-            growth = exports.regionAnalyticsService.analyzeRegionGrowth(currentStats, previousStats);
-        }
-        catch (error) {
-            console.warn('无法获取上期数据:', error);
-        }
-        // 生成改进建议
-        const recommendations = generateRegionRecommendations(performance, growth);
-        return {
-            regionInfo,
-            currentStats,
-            previousStats,
-            performance,
-            growth,
-            recommendations
-        };
-    });
+async function getRegionAnalysisReport(regionId, days = 30) {
+    const endDate = new Date().toISOString().split('T')[0];
+    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const previousEndDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const previousStartDate = new Date(Date.now() - days * 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const [regions, currentStats] = await Promise.all([
+        exports.operatorBasicManagementService.getOperatorRegions({ limit: 1000 }),
+        exports.operatorBasicManagementService.getRegionStats(regionId, startDate, endDate)
+    ]);
+    const regionInfo = regions.regions.find(r => r.id === regionId);
+    if (!regionInfo) {
+        throw new Error('区域不存在');
+    }
+    const performance = exports.regionAnalyticsService.calculateRegionPerformance(currentStats);
+    // 尝试获取上期数据进行对比
+    let previousStats;
+    let growth;
+    try {
+        previousStats = await exports.operatorBasicManagementService.getRegionStats(regionId, previousStartDate, previousEndDate);
+        growth = exports.regionAnalyticsService.analyzeRegionGrowth(currentStats, previousStats);
+    }
+    catch (error) {
+        console.warn('无法获取上期数据:', error);
+    }
+    // 生成改进建议
+    const recommendations = generateRegionRecommendations(performance, growth);
+    return {
+        regionInfo,
+        currentStats,
+        previousStats,
+        performance,
+        growth,
+        recommendations
+    };
 }
 /**
  * 生成区域改进建议

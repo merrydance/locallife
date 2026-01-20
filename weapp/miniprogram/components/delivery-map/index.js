@@ -3,15 +3,15 @@ Component({
     properties: {
         merchant: {
             type: Object,
-            value: null // { latitude, longitude, name }
+            value: undefined // { latitude, longitude, name }
         },
         customer: {
             type: Object,
-            value: null // { latitude, longitude, name }
+            value: undefined // { latitude, longitude, name }
         },
         rider: {
             type: Object,
-            value: null // { latitude, longitude }
+            value: undefined // { latitude, longitude }
         },
         showRoute: {
             type: Boolean,
@@ -30,7 +30,7 @@ Component({
     },
     methods: {
         updateMap() {
-            const { merchant, customer, rider } = this.properties;
+            const { merchant, customer, rider, showRoute } = this.properties;
             const markers = [];
             const includePoints = [];
             if (merchant && merchant.latitude) {
@@ -86,7 +86,7 @@ Component({
             }
             // Simple straight line for polyline if route API is not used
             let polyline = [];
-            if (this.properties.showRoute && merchant && customer) {
+            if (showRoute && merchant && customer) {
                 polyline = [{
                         points: [
                             { latitude: merchant.latitude, longitude: merchant.longitude },

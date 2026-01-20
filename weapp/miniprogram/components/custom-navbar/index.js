@@ -1,14 +1,5 @@
 "use strict";
 // / <reference path="../../../typings/index.d.ts" />
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const global_store_1 = require("../../utils/global-store");
 Component({
@@ -115,11 +106,11 @@ Component({
             this.setData({ displayLocation: '正在定位...' });
             wx.getLocation({
                 type: 'gcj02',
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
+                success: async (res) => {
                     try {
                         // 使用后端逆地理编码接口
                         const { locationService } = require('../../utils/location');
-                        const locationInfo = yield locationService.reverseGeocode(res.latitude, res.longitude);
+                        const locationInfo = await locationService.reverseGeocode(res.latitude, res.longitude);
                         const name = locationInfo.street || locationInfo.district || locationInfo.address || '当前位置';
                         // 更新全局状态
                         const app = getApp();
@@ -156,7 +147,7 @@ Component({
                         this.setData({ displayLocation });
                         this.triggerEvent('locationchange', res);
                     }
-                }),
+                },
                 fail: (err) => {
                     // getLocation失败，显示"定位失败"让用户点击重试（会触发chooseLocation）
                     this.setData({ displayLocation: '定位失败' });
@@ -183,11 +174,11 @@ Component({
          */
         openChooseLocation() {
             wx.chooseLocation({
-                success: (res) => __awaiter(this, void 0, void 0, function* () {
+                success: async (res) => {
                     try {
                         // 使用后端逆地理编码接口获取详细地址
                         const { locationService } = require('../../utils/location');
-                        const locationInfo = yield locationService.reverseGeocode(res.latitude, res.longitude);
+                        const locationInfo = await locationService.reverseGeocode(res.latitude, res.longitude);
                         const name = res.name || locationInfo.street || locationInfo.district || '选择的位置';
                         // 更新全局状态
                         const app = getApp();
@@ -224,7 +215,7 @@ Component({
                         this.setData({ displayLocation: name });
                         this.triggerEvent('locationchange', res);
                     }
-                }),
+                },
                 fail: () => {
                     // 用户取消选择，恢复之前的显示
                     this.updateLocationDisplay();

@@ -9,8 +9,9 @@ Component({
             value: {},
             observer(newVal) {
                 // 当restaurant数据更新时，优化图片URL
-                if (newVal && newVal.imageUrl && !newVal._imageOptimized) {
-                    const optimizedUrl = (0, image_1.formatImageUrl)(newVal.imageUrl, image_1.ImageSize.MEDIUM);
+                const restaurantVal = newVal;
+                if (restaurantVal && restaurantVal.imageUrl && !restaurantVal._imageOptimized) {
+                    const optimizedUrl = (0, image_1.formatImageUrl)(restaurantVal.imageUrl, image_1.ImageSize.MEDIUM);
                     this.setData({
                         'restaurant.imageUrl': optimizedUrl,
                         'restaurant._imageOptimized': true
@@ -21,9 +22,10 @@ Component({
     },
     methods: {
         onTap() {
-            if (this.data.restaurant) {
+            const restaurant = this.data.restaurant;
+            if (restaurant === null || restaurant === void 0 ? void 0 : restaurant.id) {
                 wx.navigateTo({
-                    url: `/pages/takeout/restaurant-detail/index?id=${this.data.restaurant.id}`
+                    url: `/pages/takeout/restaurant-detail/index?id=${restaurant.id}`
                 });
             }
         }

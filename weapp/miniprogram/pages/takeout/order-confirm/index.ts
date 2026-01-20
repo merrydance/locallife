@@ -2,7 +2,7 @@ import * as CartAPI from '../../../api/cart'
 import { CartItemResponse } from '../../../api/cart'
 import { logger } from '../../../utils/logger'
 import AddressService, { Address } from '../../../api/address'
-import { createOrder, CreateOrderRequest, OrderType } from '../../../api/order'
+import { createOrder, CreateOrderRequest, OrderItemRequest, OrderType } from '../../../api/order'
 import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
@@ -67,7 +67,7 @@ Page({
   onShow() {
     // If returning from address selection, we might have a selectedAddressId
     const pages = getCurrentPages()
-    const currPage = pages[pages.length - 1] as WechatMiniprogram.Page.Instance & {
+    const currPage = pages[pages.length - 1] as WechatMiniprogram.Page.Instance<WechatMiniprogram.IAnyObject, WechatMiniprogram.IAnyObject> & {
       data: { selectedAddressId?: number | string | null }
     }
     if (currPage.data?.selectedAddressId) {
@@ -351,6 +351,18 @@ Page({
     return `${hh}:${mm}`
   },
 
+  normalizeCustomizations(customizations: Record<string, unknown>): Record<string, number | string> {
+    const normalized: Record<string, number | string> = {}
+    Object.entries(customizations).forEach(([key, value]) => {
+      if (typeof value === 'number' || typeof value === 'string') {
+        normalized[key] = value
+      } else if (value !== null && value !== undefined) {
+        normalized[key] = String(value)
+      }
+    })
+    return normalized
+  },
+
   async onSubmitOrder() {
     const { carts, address, remarks } = this.data
 
@@ -373,12 +385,14 @@ Page({
         const requestData: CreateOrderRequest = {
           merchant_id: cart.merchantId,
           items: cart.items.map((item) => {
-            const orderItem: { dish_id?: number; combo_id?: number; quantity: number; customizations?: Record<string, unknown> } = {
+            const orderItem: OrderItemRequest = {
               quantity: item.quantity
             }
             if (item.dishId) orderItem.dish_id = item.dishId
             if (item.comboId) orderItem.combo_id = item.comboId
-            if (item.customizations) orderItem.customizations = item.customizations
+            if (item.customizations) {
+              orderItem.customizations = this.normalizeCustomizations(item.customizations as Record<string, unknown>)
+            }
             return orderItem
           }),
           order_type: cart.orderType,
@@ -460,3 +474,16 @@ Page({
     })
   }
 })
+
+function showDebugModal(title: string, error: unknown) {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : JSON.stringify(error)
+  wx.showModal({
+    title,
+    content: message || '未知错误',
+    showCancel: false
+  })
+}

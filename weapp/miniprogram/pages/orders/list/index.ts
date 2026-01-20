@@ -185,7 +185,7 @@ Page({
           try {
             return OrderCardAdapter.toCardViewModel(item);
           } catch (err) {
-            logger.error("Order map failed:", err, item);
+            logger.error("Order map failed", { err, item }, "Orders.List");
             return null;
           }
         })

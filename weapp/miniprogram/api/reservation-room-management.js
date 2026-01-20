@@ -4,15 +4,6 @@
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
  * 包含：预定管理、包间管理、预定操作
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.roomManagementService = exports.reservationManagementService = exports.ReservationRoomAdapter = exports.RoomManagementService = exports.ReservationManagementService = void 0;
 exports.getTodayReservations = getTodayReservations;
@@ -38,48 +29,40 @@ class ReservationManagementService {
      * 获取商户预定列表
      * @param params 查询参数
      */
-    getMerchantReservations(params) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/reservations/merchant',
-                method: 'GET',
-                data: params
-            });
+    async getMerchantReservations(params) {
+        return (0, request_1.request)({
+            url: '/v1/reservations/merchant',
+            method: 'GET',
+            data: params
         });
     }
     /**
      * 获取预定统计
      */
-    getReservationStats() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: '/v1/reservations/merchant/stats',
-                method: 'GET'
-            });
+    async getReservationStats() {
+        return (0, request_1.request)({
+            url: '/v1/reservations/merchant/stats',
+            method: 'GET'
         });
     }
     /**
      * 确认预定
      * @param reservationId 预定ID
      */
-    confirmReservation(reservationId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/reservations/${reservationId}/confirm`,
-                method: 'POST'
-            });
+    async confirmReservation(reservationId) {
+        return (0, request_1.request)({
+            url: `/v1/reservations/${reservationId}/confirm`,
+            method: 'POST'
         });
     }
     /**
      * 标记未到店
      * @param reservationId 预定ID
      */
-    markNoShow(reservationId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/reservations/${reservationId}/no-show`,
-                method: 'POST'
-            });
+    async markNoShow(reservationId) {
+        return (0, request_1.request)({
+            url: `/v1/reservations/${reservationId}/no-show`,
+            method: 'POST'
         });
     }
 }
@@ -94,24 +77,20 @@ class RoomManagementService {
      * 获取商户可用包间列表
      * @param merchantId 商户ID
      */
-    getAvailableRooms(merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/rooms`,
-                method: 'GET'
-            });
+    async getAvailableRooms(merchantId) {
+        return (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/rooms`,
+            method: 'GET'
         });
     }
     /**
      * 获取商户全部包间列表
      * @param merchantId 商户ID
      */
-    getAllRooms(merchantId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return (0, request_1.request)({
-                url: `/v1/merchants/${merchantId}/rooms/all`,
-                method: 'GET'
-            });
+    async getAllRooms(merchantId) {
+        return (0, request_1.request)({
+            url: `/v1/merchants/${merchantId}/rooms/all`,
+            method: 'GET'
         });
     }
 }
@@ -196,90 +175,80 @@ exports.roomManagementService = new RoomManagementService();
 /**
  * 获取今日预定列表
  */
-function getTodayReservations() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const today = new Date().toISOString().split('T')[0];
-        const result = yield exports.reservationManagementService.getMerchantReservations({
-            date: today,
-            page_id: 1,
-            page_size: 50
-        });
-        return result.reservations;
+async function getTodayReservations() {
+    const today = new Date().toISOString().split('T')[0];
+    const result = await exports.reservationManagementService.getMerchantReservations({
+        date: today,
+        page_id: 1,
+        page_size: 50
     });
+    return result.reservations;
 }
 /**
  * 获取待处理预定列表
  */
-function getPendingReservations() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const result = yield exports.reservationManagementService.getMerchantReservations({
-            status: 'paid',
-            page_id: 1,
-            page_size: 50
-        });
-        return result.reservations;
+async function getPendingReservations() {
+    const result = await exports.reservationManagementService.getMerchantReservations({
+        status: 'paid',
+        page_id: 1,
+        page_size: 50
     });
+    return result.reservations;
 }
 /**
  * 获取预定概览数据
  */
-function getReservationOverview() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const [stats, todayReservations, pendingReservations] = yield Promise.all([
-            exports.reservationManagementService.getReservationStats(),
-            getTodayReservations(),
-            getPendingReservations()
-        ]);
-        return {
-            stats,
-            todayReservations,
-            pendingReservations
-        };
-    });
+async function getReservationOverview() {
+    const [stats, todayReservations, pendingReservations] = await Promise.all([
+        exports.reservationManagementService.getReservationStats(),
+        getTodayReservations(),
+        getPendingReservations()
+    ]);
+    return {
+        stats,
+        todayReservations,
+        pendingReservations
+    };
 }
 /**
  * 批量确认预定
  * @param reservationIds 预定ID列表
  */
-function batchConfirmReservations(reservationIds) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const promises = reservationIds.map((reservationId) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const reservation = yield exports.reservationManagementService.confirmReservation(reservationId);
-                return { reservationId, success: true, message: '确认成功', reservation };
-            }
-            catch (error) {
-                return {
-                    reservationId,
-                    success: false,
-                    message: (error === null || error === void 0 ? void 0 : error.message) || '确认失败'
-                };
-            }
-        }));
-        return Promise.all(promises);
+async function batchConfirmReservations(reservationIds) {
+    const promises = reservationIds.map(async (reservationId) => {
+        try {
+            const reservation = await exports.reservationManagementService.confirmReservation(reservationId);
+            return { reservationId, success: true, message: '确认成功', reservation };
+        }
+        catch (error) {
+            return {
+                reservationId,
+                success: false,
+                message: (error === null || error === void 0 ? void 0 : error.message) || '确认失败'
+            };
+        }
     });
+    return Promise.all(promises);
 }
 /**
  * 批量标记未到店
  * @param reservationIds 预定ID列表
  */
-function batchMarkNoShow(reservationIds) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const promises = reservationIds.map((reservationId) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const reservation = yield exports.reservationManagementService.markNoShow(reservationId);
-                return { reservationId, success: true, message: '标记成功', reservation };
-            }
-            catch (error) {
-                return {
-                    reservationId,
-                    success: false,
-                    message: (error === null || error === void 0 ? void 0 : error.message) || '标记失败'
-                };
-            }
-        }));
-        return Promise.all(promises);
+async function batchMarkNoShow(reservationIds) {
+    const promises = reservationIds.map(async (reservationId) => {
+        try {
+            const reservation = await exports.reservationManagementService.markNoShow(reservationId);
+            return { reservationId, success: true, message: '标记成功', reservation };
+        }
+        catch (error) {
+            return {
+                reservationId,
+                success: false,
+                message: (error === null || error === void 0 ? void 0 : error.message) || '标记失败'
+            };
+        }
     });
+    return Promise.all(promises);
 }
 /**
  * 计算预定统计指标

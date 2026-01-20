@@ -3,15 +3,6 @@
  * 超管平台管理大屏
  * 提供实时数据监控、平台概览、排行榜、快捷管理入口
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const platform_dashboard_1 = require("@/api/platform-dashboard");
 const platform_management_1 = require("@/api/platform-management");
@@ -64,49 +55,45 @@ Page({
     /**
      * 加载大屏数据
      */
-    loadDashboardData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                this.setData({ loading: true });
-                // 并行加载所有数据
-                const [dashboardData, managementData] = yield Promise.all([
-                    (0, platform_dashboard_1.getPlatformDashboardData)(),
-                    (0, platform_management_1.getPlatformManagementDashboard)()
-                ]);
-                this.setData({
-                    realtimeData: dashboardData.realtime,
-                    overviewData: dashboardData.overview,
-                    merchantRanking: dashboardData.merchantRanking.slice(0, 10),
-                    riderRanking: dashboardData.riderRanking.slice(0, 10),
-                    pendingMerchants: managementData.merchantApplications.pending.length,
-                    pendingRiders: managementData.riderApplications.pending.length
-                });
-            }
-            catch (error) {
-                console.error('加载大屏数据失败:', error);
-                wx.showToast({
-                    title: '加载失败',
-                    icon: 'none'
-                });
-            }
-            finally {
-                this.setData({ loading: false });
-            }
-        });
+    async loadDashboardData() {
+        try {
+            this.setData({ loading: true });
+            // 并行加载所有数据
+            const [dashboardData, managementData] = await Promise.all([
+                (0, platform_dashboard_1.getPlatformDashboardData)(),
+                (0, platform_management_1.getPlatformManagementDashboard)()
+            ]);
+            this.setData({
+                realtimeData: dashboardData.realtime,
+                overviewData: dashboardData.overview,
+                merchantRanking: dashboardData.merchantRanking.slice(0, 10),
+                riderRanking: dashboardData.riderRanking.slice(0, 10),
+                pendingMerchants: managementData.merchantApplications.pending.length,
+                pendingRiders: managementData.riderApplications.pending.length
+            });
+        }
+        catch (error) {
+            console.error('加载大屏数据失败:', error);
+            wx.showToast({
+                title: '加载失败',
+                icon: 'none'
+            });
+        }
+        finally {
+            this.setData({ loading: false });
+        }
     },
     /**
      * 下拉刷新
      */
-    onRefresh() {
-        return __awaiter(this, void 0, void 0, function* () {
-            this.setData({ refreshing: true });
-            try {
-                yield this.loadDashboardData();
-            }
-            finally {
-                this.setData({ refreshing: false });
-            }
-        });
+    async onRefresh() {
+        this.setData({ refreshing: true });
+        try {
+            await this.loadDashboardData();
+        }
+        finally {
+            this.setData({ refreshing: false });
+        }
     },
     /**
      * 切换日期范围
