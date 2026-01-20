@@ -714,7 +714,7 @@ Page({
     try {
       console.log('[updateCartDisplay] 开始调用API')
       // 直接从后端获取最新购物车汇总，确保数据准确
-      const userCarts = await getUserCarts('takeout')
+      const userCarts = await getUserCarts('takeout', { loading: false })
 
       console.log('[updateCartDisplay] API返回:', JSON.stringify(userCarts))
 

@@ -269,17 +269,20 @@ Page({
                     address_id: address.id,
                     latitude: address.latitude ? Number(address.latitude) : undefined,
                     longitude: address.longitude ? Number(address.longitude) : undefined
-                });
+                }, { loading: false });
                 const deliveryFee = result.delivery_fee || 0;
                 const deliveryFeeDiscount = result.delivery_fee_discount || 0;
+                const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount);
                 const deliveryDistance = result.delivery_distance || 0;
-                const orderTotal = (cart.subtotal || 0) + deliveryFee;
+                const orderTotal = typeof result.total_amount === 'number'
+                    ? result.total_amount
+                    : (cart.subtotal || 0) + finalDeliveryFee - (result.discount_amount || 0);
                 const deliveryEtaMinutes = result.delivery_eta_minutes || 0;
                 const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes);
                 updated.push({
                     ...cart,
                     deliveryFee,
-                    deliveryFeeDisplay: deliveryFee > 0 ? '¥' + (0, util_1.formatPriceNoSymbol)(deliveryFee) : '免配送费',
+                    deliveryFeeDisplay: finalDeliveryFee > 0 ? '¥' + (0, util_1.formatPriceNoSymbol)(finalDeliveryFee) : '免配送费',
                     deliveryFeeDiscount,
                     deliveryDistance,
                     orderTotal,
@@ -289,8 +292,8 @@ Page({
                 });
             }
             const summarySubtotal = updated.reduce((sum, c) => sum + (c.subtotal || 0), 0);
-            const summaryDelivery = updated.reduce((sum, c) => sum + (c.deliveryFee || 0), 0);
-            const orderTotal = summarySubtotal + summaryDelivery;
+            const summaryDelivery = updated.reduce((sum, c) => sum + Math.max(0, (c.deliveryFee || 0) - (c.deliveryFeeDiscount || 0)), 0);
+            const orderTotal = updated.reduce((sum, c) => sum + (c.orderTotal || 0), 0);
             this.setData({
                 carts: updated,
                 summarySubtotalDisplay: (0, util_1.formatPriceNoSymbol)(summarySubtotal),

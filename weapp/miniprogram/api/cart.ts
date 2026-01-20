@@ -195,11 +195,15 @@ export async function getCartSummary(orderType?: string): Promise<CartSummaryRes
  * 获取用户所有商户的购物车（完整信息）
  * @param orderType 订单类型过滤
  */
-export async function getUserCarts(orderType?: string): Promise<UserCartsResponse> {
+export async function getUserCarts(
+    orderType?: string,
+    options?: { loading?: boolean; loadingText?: string }
+): Promise<UserCartsResponse> {
     return request({
         url: '/v1/cart/summary',
         method: 'GET',
-        data: orderType ? { order_type: orderType } : undefined
+        data: orderType ? { order_type: orderType } : undefined,
+        ...(options || {})
     })
 }
 

@@ -8,7 +8,7 @@
 
   <!-- 购物车列表（按商户分组） -->
   <view wx:elif="{{merchantGroups.length > 0}}" class="cart-groups">
-    <view wx:for="{{merchantGroups}}" wx:key="cartId" class="merchant-group">
+    <view wx:for="{{merchantGroups || []}}" wx:key="cartId" class="merchant-group">
       <!-- 商户头部 -->
       <view class="merchant-header">
         <view class="merchant-info" bindtap="onToggleMerchant" data-cart-id="{{item.cartId}}">
@@ -27,7 +27,7 @@
 
       <!-- 商品列表 -->
       <view class="cart-items">
-        <view wx:for="{{item.items}}" wx:for-item="cartItem" wx:key="id" class="cart-item {{!cartItem.isAvailable ? 'unavailable' : ''}}">
+        <view wx:for="{{item.items || []}}" wx:for-item="cartItem" wx:key="id" class="cart-item {{!cartItem.isAvailable ? 'unavailable' : ''}}">
           <image class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" />
           
           <view class="item-info">

@@ -108,8 +108,8 @@ class CartService {
     /**
      * Add item to backend cart
      */
-    async addItem(item) {
-        var _a, _b, _c, _d;
+    async addItem(item, options) {
+        var _a, _b, _c, _d, _e;
         try {
             const merchantId = Number(item.merchantId);
             const quantity = item.quantity || 1;
@@ -126,7 +126,7 @@ class CartService {
                 customizations: item.customizations
             };
             logger_1.logger.info('Adding item to backend cart', req, 'CartService.addItem');
-            const updatedCart = await CartAPI.addToCart(req);
+            const updatedCart = await CartAPI.addToCart(req, { loading: (_e = options === null || options === void 0 ? void 0 : options.loading) !== null && _e !== void 0 ? _e : false });
             // Update local state
             this.currentMerchantId = merchantId;
             this.currentCart = updatedCart;
@@ -146,9 +146,10 @@ class CartService {
     /**
      * Update item quantity or specs
      */
-    async updateItem(itemId, updates) {
+    async updateItem(itemId, updates, options) {
+        var _a;
         try {
-            const updatedCart = await CartAPI.updateCartItem(itemId, updates);
+            const updatedCart = await CartAPI.updateCartItem(itemId, updates, { loading: (_a = options === null || options === void 0 ? void 0 : options.loading) !== null && _a !== void 0 ? _a : false });
             this.currentCart = updatedCart;
             this.notifyListeners();
             return true;
@@ -161,9 +162,10 @@ class CartService {
     /**
      * Remove item from cart
      */
-    async removeItem(itemId) {
+    async removeItem(itemId, options) {
+        var _a;
         try {
-            const updatedCart = await CartAPI.removeFromCart(itemId);
+            const updatedCart = await CartAPI.removeFromCart(itemId, { loading: (_a = options === null || options === void 0 ? void 0 : options.loading) !== null && _a !== void 0 ? _a : false });
             this.currentCart = updatedCart;
             this.notifyListeners();
             return true;

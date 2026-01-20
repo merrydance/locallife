@@ -86,7 +86,7 @@ class CartService {
     comboId?: string | number,
     quantity?: number,
     customizations?: Record<string, unknown>
-  }): Promise<boolean> {
+  }, options?: { loading?: boolean }): Promise<boolean> {
     try {
       const merchantId = Number(item.merchantId)
       const quantity = item.quantity || 1
@@ -106,7 +106,7 @@ class CartService {
       }
 
       logger.info('Adding item to backend cart', req, 'CartService.addItem')
-      const updatedCart = await CartAPI.addToCart(req)
+      const updatedCart = await CartAPI.addToCart(req, { loading: options?.loading ?? false })
 
       // Update local state
       this.currentMerchantId = merchantId
@@ -129,9 +129,9 @@ class CartService {
   /**
    * Update item quantity or specs
    */
-  async updateItem(itemId: number, updates: UpdateCartItemRequest): Promise<boolean> {
+  async updateItem(itemId: number, updates: UpdateCartItemRequest, options?: { loading?: boolean }): Promise<boolean> {
     try {
-      const updatedCart = await CartAPI.updateCartItem(itemId, updates)
+      const updatedCart = await CartAPI.updateCartItem(itemId, updates, { loading: options?.loading ?? false })
       this.currentCart = updatedCart
       this.notifyListeners()
       return true
@@ -144,9 +144,9 @@ class CartService {
   /**
    * Remove item from cart
    */
-  async removeItem(itemId: number): Promise<boolean> {
+  async removeItem(itemId: number, options?: { loading?: boolean }): Promise<boolean> {
     try {
-      const updatedCart = await CartAPI.removeFromCart(itemId)
+      const updatedCart = await CartAPI.removeFromCart(itemId, { loading: options?.loading ?? false })
       this.currentCart = updatedCart
       this.notifyListeners()
       return true

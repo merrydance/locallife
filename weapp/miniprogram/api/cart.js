@@ -47,11 +47,12 @@ async function getCartSummary(orderType) {
  * 获取用户所有商户的购物车（完整信息）
  * @param orderType 订单类型过滤
  */
-async function getUserCarts(orderType) {
+async function getUserCarts(orderType, options) {
     return (0, request_1.request)({
         url: '/v1/cart/summary',
         method: 'GET',
-        data: orderType ? { order_type: orderType } : undefined
+        data: orderType ? { order_type: orderType } : undefined,
+        ...(options || {})
     });
 }
 /**
