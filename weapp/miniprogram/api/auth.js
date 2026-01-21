@@ -5,6 +5,8 @@ exports.wechatLogin = wechatLogin;
 exports.renewAccessToken = renewAccessToken;
 exports.getUserInfo = getUserInfo;
 exports.updateUserInfo = updateUserInfo;
+exports.getWebLoginSessionStatus = getWebLoginSessionStatus;
+exports.confirmWebLoginSession = confirmWebLoginSession;
 const request_1 = require("../utils/request");
 const location_1 = require("../utils/location");
 Object.defineProperty(exports, "getDeviceId", { enumerable: true, get: function () { return location_1.getDeviceId; } });
@@ -28,7 +30,7 @@ function wechatLogin(data) {
         method: 'POST',
         data,
         skipAuth: true // 登录接口不需要认证，跳过 token 验证和刷新
-    }).then(res => {
+    }).then((res) => {
         if (res.user) {
             normalizeUser(res.user);
         }
@@ -65,6 +67,26 @@ function updateUserInfo(data) {
         method: 'PATCH',
         data
     }).then(normalizeUser);
+}
+/**
+ * 查询 Web 登录会话状态
+ */
+function getWebLoginSessionStatus(code) {
+    return (0, request_1.request)({
+        url: `/v1/auth/web-login/sessions/${encodeURIComponent(code)}`,
+        method: 'GET',
+        skipAuth: true
+    });
+}
+/**
+ * 小程序确认 Web 登录
+ */
+function confirmWebLoginSession(code) {
+    return (0, request_1.request)({
+        url: '/v1/auth/web-login/confirm',
+        method: 'POST',
+        data: { code }
+    });
 }
 // 兼容性：保留旧接口名称，但使用新的实现
 exports.login = wechatLogin;

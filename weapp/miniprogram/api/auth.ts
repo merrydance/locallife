@@ -108,6 +108,17 @@ export interface RoleAccessResponse {
   generated_at: string  // 生成时间
 }
 
+/**
+ * Web 登录会话状态 - 对齐 api.webLoginSessionStatusResponse
+ */
+export interface WebLoginSessionStatus {
+  code: string,
+  status: string,
+  expires_at: string,
+  confirmed_at?: string,
+  consumed_at?: string,
+}
+
 // 兼容性别名
 export type RefreshTokenRequest = RenewAccessTokenRequest
 
@@ -121,7 +132,7 @@ export function wechatLogin(data: WechatLoginRequest) {
     method: 'POST',
     data,
     skipAuth: true // 登录接口不需要认证，跳过 token 验证和刷新
-  }).then(res => {
+  }).then((res) => {
     if (res.user) {
       normalizeUser(res.user)
     }
@@ -155,12 +166,34 @@ export function getUserInfo() {
 /**
  * 更新用户信息 - 基于 PATCH /v1/users/me
  */
-export function updateUserInfo(data: { avatar_url?: string; full_name?: string }) {
+export function updateUserInfo(data: { avatar_url?: string, full_name?: string }) {
   return request<UserResponse>({
     url: '/v1/users/me',
     method: 'PATCH',
     data
   }).then(normalizeUser)
+}
+
+/**
+ * 查询 Web 登录会话状态
+ */
+export function getWebLoginSessionStatus(code: string) {
+  return request<WebLoginSessionStatus>({
+    url: `/v1/auth/web-login/sessions/${encodeURIComponent(code)}`,
+    method: 'GET',
+    skipAuth: true
+  })
+}
+
+/**
+ * 小程序确认 Web 登录
+ */
+export function confirmWebLoginSession(code: string) {
+  return request<WebLoginSessionStatus>({
+    url: '/v1/auth/web-login/confirm',
+    method: 'POST',
+    data: { code }
+  })
 }
 
 // 兼容性：保留旧接口名称，但使用新的实现

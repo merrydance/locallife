@@ -2218,6 +2218,194 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/auth/web-login/confirm": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "小程序扫码确认 Web 登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "小程序确认 Web 登录",
+                "parameters": [
+                    {
+                        "description": "确认请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.webLoginConfirmRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.webLoginSessionStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/auth/web-login/consume": {
+            "post": {
+                "description": "Web 端用 code 换取 token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "Web 端消费登录会话",
+                "parameters": [
+                    {
+                        "description": "消费请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.webLoginConsumeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.webLoginConsumeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/auth/web-login/sessions": {
+            "post": {
+                "description": "Web 端生成扫码登录会话",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "创建 Web 登录会话",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.webLoginSessionStatusResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/auth/web-login/sessions/{code}": {
+            "get": {
+                "description": "Web 端轮询登录会话状态",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "查询 Web 登录会话状态",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "登录码",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.webLoginSessionStatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/auth/wechat-login": {
             "post": {
                 "description": "Authenticate user with WeChat code, create user if not exists",
@@ -4886,6 +5074,89 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/api.diningSessionPrecheckResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/dining-sessions/{id}/transfer-table": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "将开放用餐会话从一个桌台转移到另一个桌台，支持商户与C端扫码",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用餐会话"
+                ],
+                "summary": "转台（换桌）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "用餐会话ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "转台请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.transferDiningSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.transferDiningSessionResponse"
                         }
                     },
                     "400": {
@@ -31614,6 +31885,41 @@ const docTemplate = `{
                 }
             }
         },
+        "api.transferDiningSessionRequest": {
+            "type": "object",
+            "required": [
+                "to_table_id"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "table_code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 4
+                },
+                "to_table_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            }
+        },
+        "api.transferDiningSessionResponse": {
+            "type": "object",
+            "properties": {
+                "from_table": {
+                    "$ref": "#/definitions/api.tableResponse"
+                },
+                "session": {
+                    "$ref": "#/definitions/api.diningSessionResponse"
+                },
+                "to_table": {
+                    "$ref": "#/definitions/api.tableResponse"
+                }
+            }
+        },
         "api.unreadCountResponse": {
             "type": "object",
             "properties": {
@@ -32614,6 +32920,75 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "valid_until": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.webLoginConfirmRequest": {
+            "type": "object",
+            "required": [
+                "code"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                }
+            }
+        },
+        "api.webLoginConsumeRequest": {
+            "type": "object",
+            "required": [
+                "code"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1
+                }
+            }
+        },
+        "api.webLoginConsumeResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "access_token_expires_at": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "refresh_token_expires_at": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "integer"
+                },
+                "user": {
+                    "$ref": "#/definitions/api.userResponse"
+                }
+            }
+        },
+        "api.webLoginSessionStatusResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "confirmed_at": {
+                    "type": "string"
+                },
+                "consumed_at": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

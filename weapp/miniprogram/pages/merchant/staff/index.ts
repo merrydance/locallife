@@ -3,7 +3,7 @@
  * 对接后端 /v1/merchant/staff 接口
  */
 
-import { request } from '@/utils/request'
+import { request, API_BASE } from '@/utils/request'
 
 // 员工响应类型
 interface StaffResponse {
@@ -146,8 +146,9 @@ Page({
         this.setData({ showInviteModal: true, generating: true, inviteCode: '', inviteCodeUrl: '' })
         try {
             const result = await StaffService.generateInviteCode()
-            // 生成包含页面路径的完整URL，扫码后直接跳转
-            const inviteCodeUrl = `/pages/user/bind-merchant/index?code=${result.invite_code}`
+            // 生成完整 URL，保证扫码可识别
+            const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE
+            const inviteCodeUrl = `${base}/bind-merchant?code=${result.invite_code}`
             this.setData({
                 inviteCode: result.invite_code,
                 inviteCodeUrl: inviteCodeUrl,

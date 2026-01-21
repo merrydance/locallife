@@ -53,6 +53,9 @@ type Config struct {
 	// Web前端配置
 	WebBaseURL string `mapstructure:"WEB_BASE_URL"` // H5页面基础URL，用于分享功能
 
+	// Web 登录扫码会话
+	WebLoginSessionTTL time.Duration `mapstructure:"WEB_LOGIN_SESSION_TTL"`
+
 	// 上传文件安全访问（签名URL）
 	UploadURLSigningKey string        `mapstructure:"UPLOAD_URL_SIGNING_KEY"` // HMAC签名密钥（建议随机长字符串）
 	UploadURLTTL        time.Duration `mapstructure:"UPLOAD_URL_TTL"`         // 签名URL有效期（例如 10m, 1h）
@@ -91,6 +94,8 @@ func LoadConfig(path string) (config Config, err error) {
 	viper.SetDefault("GEOFENCE_AUTO_ADVANCE_ENABLED", false)
 	viper.SetDefault("GEOFENCE_AUTO_PICKUP_ENABLED", false)
 	viper.SetDefault("GEOFENCE_AUTO_DELIVER_ENABLED", false)
+	// Web 登录默认过期时间
+	viper.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
 
 	err = viper.ReadInConfig()
 	if err != nil {

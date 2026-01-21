@@ -48,7 +48,7 @@ sync_regions_test:
 	go run ./cmd/sync_regions_tencent -config . -db "$(DB_URL)"
 
 swagger:
-	swag init -g main.go -o docs --parseDependency --parseInternal
+	$(HOME)/go/bin/swag init -g main.go -o docs --parseDependency --parseInternal
 
 server:
 	go run main.go

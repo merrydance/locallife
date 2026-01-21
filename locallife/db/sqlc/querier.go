@@ -77,8 +77,6 @@ type Querier interface {
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
-	// 清除 Boss 认领码
-	ClearMerchantBossBindCode(ctx context.Context, id int64) error
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error
@@ -86,6 +84,8 @@ type Querier interface {
 	ConfirmFraudPattern(ctx context.Context, arg ConfirmFraudPatternParams) error
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
+	ConfirmWebLoginSession(ctx context.Context, arg ConfirmWebLoginSessionParams) (WebLoginSession, error)
+	ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	CountActiveDiscountRules(ctx context.Context, merchantID int64) (int64, error)
 	// 商户查看所有评价数量（包含不可见的）
 	CountAllReviewsByMerchant(ctx context.Context, merchantID int64) (int64, error)
@@ -388,6 +388,7 @@ type Querier interface {
 	// Vouchers (代金券模板)
 	CreateVoucher(ctx context.Context, arg CreateVoucherParams) (Voucher, error)
 	CreateWeatherCoefficient(ctx context.Context, arg CreateWeatherCoefficientParams) (WeatherCoefficient, error)
+	CreateWebLoginSession(ctx context.Context, arg CreateWebLoginSessionParams) (WebLoginSession, error)
 	CreateWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (WechatNotification, error)
 	DecrementMembershipBalance(ctx context.Context, arg DecrementMembershipBalanceParams) (MerchantMembership, error)
 	DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
@@ -450,6 +451,7 @@ type Querier interface {
 	DeleteUserRoleByUserAndRole(ctx context.Context, arg DeleteUserRoleByUserAndRoleParams) error
 	// 软删除代金券模板
 	DeleteVoucher(ctx context.Context, id int64) error
+	ExpireWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	// 探索附近包间（无需指定预订日期时段），用于本地包间浏览流
 	// 返回包间信息 + 商户信息 + 主图 + 近30天预订量
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
@@ -625,8 +627,6 @@ type Querier interface {
 	GetMerchantBrand(ctx context.Context, id int64) (MerchantBrand, error)
 	// 通过邀请码获取商户
 	GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Text) (Merchant, error)
-	// 通过 Boss 认领码获取商户
-	GetMerchantByBossBindCode(ctx context.Context, bossBindCode pgtype.Text) (Merchant, error)
 	// 获取用户关联的商户（支持店主和员工）
 	// 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
 	GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Merchant, error)
@@ -917,6 +917,7 @@ type Querier interface {
 	GetVoucherForUpdate(ctx context.Context, id int64) (Voucher, error)
 	GetVoucherUsageStats(ctx context.Context, id int64) (GetVoucherUsageStatsRow, error)
 	GetWeatherCoefficient(ctx context.Context, id int64) (WeatherCoefficient, error)
+	GetWebLoginSessionByCode(ctx context.Context, code string) (WebLoginSession, error)
 	GetWechatAccessToken(ctx context.Context, appType string) (WechatAccessToken, error)
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
@@ -1367,8 +1368,6 @@ type Querier interface {
 	UpdateMerchantApplicationStatus(ctx context.Context, arg UpdateMerchantApplicationStatusParams) (MerchantApplication, error)
 	// 更新商户邀请码
 	UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchantBindCodeParams) (Merchant, error)
-	// 更新 Boss 认领码
-	UpdateMerchantBossBindCode(ctx context.Context, arg UpdateMerchantBossBindCodeParams) (Merchant, error)
 	UpdateMerchantBossStatus(ctx context.Context, arg UpdateMerchantBossStatusParams) (MerchantBoss, error)
 	UpdateMerchantDishCategoryOrder(ctx context.Context, arg UpdateMerchantDishCategoryOrderParams) (MerchantDishCategory, error)
 	UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGroupParams) (MerchantGroup, error)

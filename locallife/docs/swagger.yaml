@@ -3795,30 +3795,6 @@ definitions:
       session:
         $ref: '#/definitions/api.diningSessionResponse'
     type: object
-  api.transferDiningSessionRequest:
-    properties:
-      reason:
-        maxLength: 200
-        type: string
-      table_code:
-        maxLength: 32
-        minLength: 4
-        type: string
-      to_table_id:
-        minimum: 1
-        type: integer
-    required:
-    - to_table_id
-    type: object
-  api.transferDiningSessionResponse:
-    properties:
-      from_table:
-        $ref: '#/definitions/api.tableResponse'
-      session:
-        $ref: '#/definitions/api.diningSessionResponse'
-      to_table:
-        $ref: '#/definitions/api.tableResponse'
-    type: object
   api.operatorApplicationResponse:
     properties:
       business_license_number:
@@ -6018,6 +5994,30 @@ definitions:
       type:
         type: string
     type: object
+  api.transferDiningSessionRequest:
+    properties:
+      reason:
+        maxLength: 200
+        type: string
+      table_code:
+        maxLength: 32
+        minLength: 4
+        type: string
+      to_table_id:
+        minimum: 1
+        type: integer
+    required:
+    - to_table_id
+    type: object
+  api.transferDiningSessionResponse:
+    properties:
+      from_table:
+        $ref: '#/definitions/api.tableResponse'
+      session:
+        $ref: '#/definitions/api.diningSessionResponse'
+      to_table:
+        $ref: '#/definitions/api.tableResponse'
+    type: object
   api.unreadCountResponse:
     properties:
       count:
@@ -6719,6 +6719,52 @@ definitions:
       valid_from:
         type: string
       valid_until:
+        type: string
+    type: object
+  api.webLoginConfirmRequest:
+    properties:
+      code:
+        maxLength: 128
+        minLength: 1
+        type: string
+    required:
+    - code
+    type: object
+  api.webLoginConsumeRequest:
+    properties:
+      code:
+        maxLength: 128
+        minLength: 1
+        type: string
+    required:
+    - code
+    type: object
+  api.webLoginConsumeResponse:
+    properties:
+      access_token:
+        type: string
+      access_token_expires_at:
+        type: string
+      refresh_token:
+        type: string
+      refresh_token_expires_at:
+        type: string
+      session_id:
+        type: integer
+      user:
+        $ref: '#/definitions/api.userResponse'
+    type: object
+  api.webLoginSessionStatusResponse:
+    properties:
+      code:
+        type: string
+      confirmed_at:
+        type: string
+      consumed_at:
+        type: string
+      expires_at:
+        type: string
+      status:
         type: string
     type: object
   api.wechatLoginRequest:
@@ -8230,6 +8276,128 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: 刷新访问令牌
+      tags:
+      - 认证
+  /v1/auth/web-login/confirm:
+    post:
+      consumes:
+      - application/json
+      description: 小程序扫码确认 Web 登录
+      parameters:
+      - description: 确认请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.webLoginConfirmRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.webLoginSessionStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 小程序确认 Web 登录
+      tags:
+      - 认证
+  /v1/auth/web-login/consume:
+    post:
+      consumes:
+      - application/json
+      description: Web 端用 code 换取 token
+      parameters:
+      - description: 消费请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.webLoginConsumeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.webLoginConsumeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Web 端消费登录会话
+      tags:
+      - 认证
+  /v1/auth/web-login/sessions:
+    post:
+      description: Web 端生成扫码登录会话
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.webLoginSessionStatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 创建 Web 登录会话
+      tags:
+      - 认证
+  /v1/auth/web-login/sessions/{code}:
+    get:
+      description: Web 端轮询登录会话状态
+      parameters:
+      - description: 登录码
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.webLoginSessionStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 查询 Web 登录会话状态
       tags:
       - 认证
   /v1/auth/wechat-login:
@@ -9888,6 +10056,60 @@ paths:
       summary: 获取推荐订单
       tags:
       - 配送管理-骑手
+  /v1/dining-sessions/{id}/transfer-table:
+    post:
+      consumes:
+      - application/json
+      description: 将开放用餐会话从一个桌台转移到另一个桌台，支持商户与C端扫码
+      parameters:
+      - description: 用餐会话ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 转台请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.transferDiningSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.transferDiningSessionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 转台（换桌）
+      tags:
+      - 用餐会话
   /v1/dining-sessions/open:
     post:
       consumes:
@@ -9934,59 +10156,6 @@ paths:
       security:
       - BearerAuth: []
       summary: 开启用餐会话（堂食/预订到店）
-      tags:
-      - 用餐会话
-  /v1/dining-sessions/{id}/transfer-table:
-    post:
-      consumes:
-      - application/json
-      description: 将开放用餐会话从一个桌台转移到另一个桌台，支持商户与C端扫码
-      parameters:
-      - description: 用餐会话ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 转台请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.transferDiningSessionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.transferDiningSessionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 转台（换桌）
       tags:
       - 用餐会话
   /v1/dining-sessions/precheck:

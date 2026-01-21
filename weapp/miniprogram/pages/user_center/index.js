@@ -179,11 +179,139 @@ Page({
     onScanToJoin() {
         wx.scanCode({
             onlyFromCamera: true,
+            scanType: ['qrCode', 'wxCode'],
             success: (res) => {
-                logger_1.logger.info('Scan success', res, 'UserCenter.scan');
+                void this.handleScanResult(res);
             },
             fail: (err) => {
                 logger_1.logger.warn('Scan cancelled', err, 'UserCenter.scan');
+            }
+        });
+    },
+    async handleScanResult(res) {
+        const payload = this.extractRawPayload(res);
+        const raw = payload.raw;
+        const code = this.extractCode(payload.codeCandidate);
+        if (!code) {
+            logger_1.logger.warn('Scan empty payload', res, 'UserCenter.scan');
+            const system = wx.getSystemInfoSync();
+            if (system.platform === 'devtools') {
+                wx.showModal({
+                    title: '扫码结果为空',
+                    content: '开发者工具中扫码可能不会返回内容，请使用真机扫码或手动输入。',
+                    confirmText: '手动输入',
+                    showCancel: false,
+                    success: () => this.promptManualCode()
+                });
+                return;
+            }
+            this.promptManualCode();
+            return;
+        }
+        await this.handleCodeCandidate(raw, code);
+    },
+    async handleCodeCandidate(raw, code) {
+        // 先识别是否为入职码（小程序路径）
+        if (raw.includes('bind-merchant') || raw.includes('code=')) {
+            this.confirmInviteCode(code);
+            return;
+        }
+        // 尝试识别 Web 登录码
+        try {
+            const session = await (0, auth_1.getWebLoginSessionStatus)(code);
+            if (session === null || session === void 0 ? void 0 : session.code) {
+                this.confirmWebLogin(code);
+                return;
+            }
+        }
+        catch (error) {
+            logger_1.logger.warn('Scan not web login', error, 'UserCenter.scan');
+        }
+        // 无法识别为登录码时，按入职码处理
+        this.confirmInviteCode(code);
+    },
+    extractCode(raw) {
+        if (!raw)
+            return '';
+        const decoded = decodeURIComponent(raw);
+        const match = decoded.match(/code=([^&]+)/);
+        if (match)
+            return match[1];
+        const webLoginMatch = decoded.match(/web-login:([0-9a-fA-F]{32})/);
+        if (webLoginMatch)
+            return webLoginMatch[1];
+        const hexMatch = decoded.match(/[0-9a-fA-F]{32}/);
+        if (hexMatch)
+            return hexMatch[0];
+        return decoded;
+    },
+    extractRawPayload(res) {
+        const anyRes = res;
+        const path = anyRes.path || '';
+        const result = anyRes.result || '';
+        const rawData = anyRes.rawData || '';
+        const scene = anyRes.scene || '';
+        const query = anyRes.query || {};
+        const codeFromQuery = query.code || '';
+        const candidate = [path, result, rawData, scene, codeFromQuery].find((val) => !!val) || '';
+        return {
+            raw: String(candidate),
+            codeCandidate: String(codeFromQuery || candidate || ''),
+        };
+    },
+    promptManualCode() {
+        wx.showModal({
+            title: '输入扫码内容',
+            content: '未识别到二维码内容，请粘贴登录码或入职码',
+            editable: true,
+            placeholderText: 'web-login:xxxx 或 邀请码',
+            confirmText: '继续',
+            success: async (res) => {
+                if (!res.confirm || !res.content)
+                    return;
+                const raw = String(res.content);
+                const code = this.extractCode(raw);
+                if (!code) {
+                    wx.showToast({ title: '内容无效', icon: 'none' });
+                    return;
+                }
+                await this.handleCodeCandidate(raw, code);
+            }
+        });
+    },
+    confirmInviteCode(code) {
+        wx.showModal({
+            title: '员工入职',
+            content: '检测到员工入职码，是否确认加入商户？',
+            confirmText: '确认入职',
+            cancelText: '取消',
+            success: (modal) => {
+                if (!modal.confirm)
+                    return;
+                wx.navigateTo({ url: `/pages/user/bind-merchant/index?code=${encodeURIComponent(code)}` });
+            }
+        });
+    },
+    confirmWebLogin(code) {
+        wx.showModal({
+            title: 'Web 登录确认',
+            content: '检测到 Web 登录码，是否确认登录网页端？',
+            confirmText: '确认登录',
+            cancelText: '取消',
+            success: async (modal) => {
+                if (!modal.confirm)
+                    return;
+                wx.showLoading({ title: '确认中...' });
+                try {
+                    await (0, auth_1.confirmWebLoginSession)(code);
+                    wx.showToast({ title: '已确认登录', icon: 'success' });
+                }
+                catch (error) {
+                    wx.showToast({ title: (error === null || error === void 0 ? void 0 : error.message) || '确认失败', icon: 'none' });
+                }
+                finally {
+                    wx.hideLoading();
+                }
             }
         });
     },

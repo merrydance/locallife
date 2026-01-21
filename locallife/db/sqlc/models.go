@@ -666,12 +666,8 @@ type Merchant struct {
 	BindCode pgtype.Text `json:"bind_code"`
 	// 绑定码过期时间
 	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
-	// Boss 认领码
-	BossBindCode pgtype.Text `json:"boss_bind_code"`
-	// Boss 认领码过期时间
-	BossBindCodeExpiresAt pgtype.Timestamptz `json:"boss_bind_code_expires_at"`
-	GroupID               pgtype.Int8        `json:"group_id"`
-	BrandID               pgtype.Int8        `json:"brand_id"`
+	GroupID           pgtype.Int8        `json:"group_id"`
+	BrandID           pgtype.Int8        `json:"brand_id"`
 }
 
 type MerchantApplication struct {
@@ -1524,6 +1520,18 @@ type TableTag struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type TableTransferLog struct {
+	ID              int64       `json:"id"`
+	MerchantID      int64       `json:"merchant_id"`
+	DiningSessionID int64       `json:"dining_session_id"`
+	ReservationID   pgtype.Int8 `json:"reservation_id"`
+	FromTableID     int64       `json:"from_table_id"`
+	ToTableID       int64       `json:"to_table_id"`
+	OperatorUserID  int64       `json:"operator_user_id"`
+	Reason          pgtype.Text `json:"reason"`
+	CreatedAt       time.Time   `json:"created_at"`
+}
+
 type Tag struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
@@ -1734,6 +1742,21 @@ type WeatherCoefficient struct {
 	DeliverySuspended bool        `json:"delivery_suspended"`
 	SuspendReason     pgtype.Text `json:"suspend_reason"`
 	CreatedAt         time.Time   `json:"created_at"`
+}
+
+type WebLoginSession struct {
+	ID              int64              `json:"id"`
+	Code            string             `json:"code"`
+	Status          string             `json:"status"`
+	UserID          pgtype.Int8        `json:"user_id"`
+	ExpiresAt       time.Time          `json:"expires_at"`
+	ConfirmedAt     pgtype.Timestamptz `json:"confirmed_at"`
+	ConsumedAt      pgtype.Timestamptz `json:"consumed_at"`
+	WebUserAgent    pgtype.Text        `json:"web_user_agent"`
+	WebClientIp     pgtype.Text        `json:"web_client_ip"`
+	ConfirmClientIp pgtype.Text        `json:"confirm_client_ip"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
 type WechatAccessToken struct {

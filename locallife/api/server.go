@@ -295,6 +295,9 @@ func (server *Server) setupRouter() {
 	authPublicGroup.Use(rateLimiter.SensitiveAPIMiddleware(10)) // 敏感 API 更严格限制：每分钟 10 次
 	authPublicGroup.POST("/wechat-login", server.wechatLogin)
 	authPublicGroup.POST("/refresh", server.renewAccessToken)
+	authPublicGroup.POST("/web-login/sessions", server.createWebLoginSession)
+	authPublicGroup.GET("/web-login/sessions/:code", server.getWebLoginSessionStatus)
+	authPublicGroup.POST("/web-login/consume", server.consumeWebLoginSession)
 
 	// 微信支付回调路由（无需认证，微信服务器调用）
 	webhooksGroup := v1.Group("/webhooks")
@@ -375,6 +378,7 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/users/me", server.getCurrentUser)
 	authGroup.PATCH("/users/me", server.updateCurrentUser)
 	authGroup.POST("/auth/bind-phone", server.bindPhone)
+	authGroup.POST("/auth/web-login/confirm", server.confirmWebLoginSession)
 
 	// M2: 用户地址路由
 	authGroup.POST("/addresses", server.createUserAddress)
