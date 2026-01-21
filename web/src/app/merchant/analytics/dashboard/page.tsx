@@ -19,71 +19,70 @@ import {
   apiGet,
   formatAmount,
   formatDate,
-  formatGrowthRate,
   formatPercentage,
-  getGrowthColor,
 } from "@/lib/api";
 
 type StatsOverview = {
   total_orders: number;
-  total_revenue: number;
-  total_customers: number;
-  avg_order_value: number;
-  completion_rate: number;
-  growth_rate: number;
+  total_sales: number;
+  total_days: number;
+  total_commission: number;
+  avg_daily_sales: number;
 };
 
 type DailyStat = {
   date: string;
-  orders: number;
-  revenue: number;
-  customers: number;
-  avg_order_value: number;
+  order_count: number;
+  total_sales: number;
+  commission: number;
+  dine_in_orders: number;
+  takeout_orders: number;
 };
 
 type HourlyStat = {
   hour: number;
-  orders: number;
-  revenue: number;
+  order_count: number;
+  avg_order_amount: number;
 };
 
 type TopDish = {
   dish_id: number;
   dish_name: string;
-  sales_count: number;
-  revenue: number;
-  rank: number;
+  dish_price: number;
+  total_revenue: number;
+  total_sold: number;
 };
 
 type CategoryStat = {
-  category_id: number;
   category_name: string;
-  sales_count: number;
-  revenue: number;
-  percentage: number;
+  order_count: number;
+  total_quantity: number;
+  total_sales: number;
 };
 
 type OrderSourceStat = {
-  source: string;
-  orders: number;
-  revenue: number;
-  percentage: number;
+  order_type: string;
+  order_count: number;
+  total_sales: number;
 };
 
 type CustomerStat = {
   user_id: number;
-  username: string;
+  full_name: string;
+  phone: string;
+  avatar_url: string;
   total_orders: number;
-  total_spent: number;
-  avg_order_value: number;
-  last_order_date: string;
+  total_amount: number;
+  avg_order_amount: number;
+  first_order_at: string;
+  last_order_at: string;
 };
 
 type RepurchaseStat = {
-  total_customers: number;
-  repurchase_customers: number;
+  total_users: number;
+  repeat_users: number;
   repurchase_rate: number;
-  avg_repurchase_interval: number;
+  avg_orders_per_user: number;
 };
 
 type FinanceOverview = {
@@ -102,11 +101,10 @@ type FinanceOverview = {
 
 const fallbackOverview: StatsOverview = {
   total_orders: 0,
-  total_revenue: 0,
-  total_customers: 0,
-  avg_order_value: 0,
-  completion_rate: 0,
-  growth_rate: 0,
+  total_sales: 0,
+  total_days: 0,
+  total_commission: 0,
+  avg_daily_sales: 0,
 };
 
 const fallbackDaily: DailyStat[] = [];
@@ -118,10 +116,10 @@ const fallbackCategories: CategoryStat[] = [];
 const fallbackCustomers: CustomerStat[] = [];
 
 const fallbackRepurchase: RepurchaseStat = {
-  total_customers: 0,
-  repurchase_customers: 0,
+  total_users: 0,
+  repeat_users: 0,
   repurchase_rate: 0,
-  avg_repurchase_interval: 0,
+  avg_orders_per_user: 0,
 };
 
 const fallbackFinance: FinanceOverview = {
@@ -154,6 +152,15 @@ type SalesData = {
 type FinanceData = { finance: FinanceOverview };
 type CustomerData = { customers: CustomerStat[]; repurchase: RepurchaseStat };
 type DashboardData = OverviewData | SalesData | FinanceData | CustomerData;
+
+type CustomersResponse = CustomerStat[] | { data?: CustomerStat[] };
+
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  takeout: "外卖",
+  dine_in: "堂食",
+  takeaway: "自取",
+  reservation: "预订",
+};
 
 function getDefaultRange() {
   const end = new Date();
@@ -196,7 +203,7 @@ async function loadDashboardData(
       apiGet<CategoryStat[]>("/merchant/stats/categories", range).catch(
         () => fallbackCategories
       ),
-      apiGet<HourlyStat[]>("/merchant/stats/hourly", { date: range.end_date }).catch(
+      apiGet<HourlyStat[]>("/merchant/stats/hourly", range).catch(
         () => fallbackHourly
       ),
       apiGet<OrderSourceStat[]>("/merchant/stats/sources", range).catch(
@@ -216,16 +223,20 @@ async function loadDashboardData(
     return { finance };
   }
 
-  const [customers, repurchase] = await Promise.all([
-    apiGet<CustomerStat[]>("/merchant/stats/customers", {
-      ...range,
-      page_id: 1,
-      page_size: 20,
+  const [customersRaw, repurchase] = await Promise.all([
+    apiGet<CustomersResponse>("/merchant/stats/customers", {
+      order_by: "last_order_at",
+      page: 1,
+      limit: 20,
     }).catch(() => fallbackCustomers),
     apiGet<RepurchaseStat>("/merchant/stats/repurchase", range).catch(
       () => fallbackRepurchase
     ),
   ]);
+
+  const customers = Array.isArray(customersRaw)
+    ? customersRaw
+    : customersRaw?.data ?? fallbackCustomers;
 
   return { customers, repurchase };
 }
@@ -246,19 +257,15 @@ export default async function AnalyticsDashboardPage({
   const salesData = tab === "sales" ? (data as SalesData) : null;
   const financeData = tab === "finance" ? (data as FinanceData) : null;
   const customerData = tab === "customer" ? (data as CustomerData) : null;
+  const categoryTotalSales = salesData
+    ? salesData.categories.reduce((sum, item) => sum + item.total_sales, 0)
+    : 0;
+  const sourceTotalSales = salesData
+    ? salesData.sources.reduce((sum, item) => sum + item.total_sales, 0)
+    : 0;
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-card p-6 lg:hidden">
-        <div className="text-center text-lg font-semibold">数据分析中心</div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          建议在平板或电脑端查看完整报表。
-        </p>
-        <Button variant="outline" className="mt-4 w-full" asChild>
-          <a href="/merchant/dashboard">返回工作台</a>
-        </Button>
-      </div>
-
-      <div className="hidden space-y-6 lg:block">
+      <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4">
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" asChild>
@@ -307,45 +314,41 @@ export default async function AnalyticsDashboardPage({
                     {overviewData.overview.total_orders}
                   </CardTitle>
                 </CardHeader>
-                <CardContent
-                  className={`text-xs ${getGrowthColor(overviewData.overview.growth_rate)}`}
-                >
-                  {formatGrowthRate(overviewData.overview.growth_rate)}
+                <CardContent className="text-xs text-muted-foreground">
+                  统计天数 {overviewData.overview.total_days}
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription>总营收</CardDescription>
                   <CardTitle className="text-2xl">
-                    ¥{formatAmount(overviewData.overview.total_revenue)}
+                    ¥{formatAmount(overviewData.overview.total_sales)}
                   </CardTitle>
                 </CardHeader>
-                <CardContent
-                  className={`text-xs ${getGrowthColor(overviewData.overview.growth_rate)}`}
-                >
-                  {formatGrowthRate(overviewData.overview.growth_rate)}
+                <CardContent className="text-xs text-muted-foreground">
+                  总佣金 ¥{formatAmount(overviewData.overview.total_commission)}
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>客单价</CardDescription>
+                  <CardDescription>日均营收</CardDescription>
                   <CardTitle className="text-2xl">
-                    ¥{formatAmount(overviewData.overview.avg_order_value)}
+                    ¥{formatAmount(overviewData.overview.avg_daily_sales)}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground">
-                  客户 {overviewData.overview.total_customers}
+                  日期区间 {start_date} - {end_date}
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>完成率</CardDescription>
+                  <CardDescription>统计天数</CardDescription>
                   <CardTitle className="text-2xl">
-                    {formatPercentage(overviewData.overview.completion_rate)}
+                    {overviewData.overview.total_days}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground">
-                  指标区间 {start_date} - {end_date}
+                  总佣金 ¥{formatAmount(overviewData.overview.total_commission)}
                 </CardContent>
               </Card>
             </section>
@@ -361,21 +364,21 @@ export default async function AnalyticsDashboardPage({
                     <TableRow>
                       <TableHead>日期</TableHead>
                       <TableHead>订单</TableHead>
-                      <TableHead>营收</TableHead>
-                      <TableHead>客户数</TableHead>
-                      <TableHead className="text-right">客单价</TableHead>
+                      <TableHead>销售额</TableHead>
+                      <TableHead>佣金</TableHead>
+                      <TableHead>堂食</TableHead>
+                      <TableHead className="text-right">外卖</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {overviewData.daily.map((item) => (
                       <TableRow key={item.date}>
                         <TableCell className="font-medium">{item.date}</TableCell>
-                        <TableCell>{item.orders}</TableCell>
-                        <TableCell>¥{formatAmount(item.revenue)}</TableCell>
-                        <TableCell>{item.customers}</TableCell>
-                        <TableCell className="text-right">
-                          ¥{formatAmount(item.avg_order_value)}
-                        </TableCell>
+                        <TableCell>{item.order_count}</TableCell>
+                        <TableCell>¥{formatAmount(item.total_sales)}</TableCell>
+                        <TableCell>¥{formatAmount(item.commission)}</TableCell>
+                        <TableCell>{item.dine_in_orders}</TableCell>
+                        <TableCell className="text-right">{item.takeout_orders}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -403,17 +406,17 @@ export default async function AnalyticsDashboardPage({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesData.topDishes.map((dish) => (
+                    {salesData.topDishes.map((dish, index) => (
                       <TableRow key={dish.dish_id}>
                         <TableCell>
-                          <Badge variant="secondary">#{dish.rank}</Badge>
+                          <Badge variant="secondary">#{index + 1}</Badge>
                         </TableCell>
                         <TableCell className="font-medium">
                           {dish.dish_name}
                         </TableCell>
-                        <TableCell>{dish.sales_count}</TableCell>
+                        <TableCell>{dish.total_sold}</TableCell>
                         <TableCell className="text-right">
-                          ¥{formatAmount(dish.revenue)}
+                          ¥{formatAmount(dish.total_revenue)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -428,26 +431,31 @@ export default async function AnalyticsDashboardPage({
                 <CardDescription>对应 /v1/merchant/stats/categories</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {salesData.categories.map((category) => (
-                  <div key={category.category_id} className="space-y-1">
+                {salesData.categories.map((category) => {
+                  const percentage = categoryTotalSales
+                    ? category.total_sales / categoryTotalSales
+                    : 0;
+                  return (
+                  <div key={category.category_name} className="space-y-1">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{category.category_name}</span>
                       <span className="text-muted-foreground">
-                        ¥{formatAmount(category.revenue)}
+                        ¥{formatAmount(category.total_sales)}
                       </span>
                     </div>
                     <div className="h-2 w-full rounded-full bg-muted">
                       <div
                         className="h-2 rounded-full bg-primary"
-                        style={{ width: `${category.percentage * 100}%` }}
+                        style={{ width: `${percentage * 100}%` }}
                       />
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>销量 {category.sales_count}</span>
-                      <span>{formatPercentage(category.percentage)}</span>
+                      <span>订单 {category.order_count}</span>
+                      <span>{formatPercentage(percentage)}</span>
                     </div>
                   </div>
-                ))}
+                );
+                })}
               </CardContent>
             </Card>
 
@@ -463,16 +471,16 @@ export default async function AnalyticsDashboardPage({
                       <TableRow>
                         <TableHead>时段</TableHead>
                         <TableHead>订单</TableHead>
-                        <TableHead className="text-right">营收</TableHead>
+                        <TableHead className="text-right">均单价</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {salesData.hourly.map((item) => (
                         <TableRow key={item.hour}>
                           <TableCell className="font-medium">{item.hour}:00</TableCell>
-                          <TableCell>{item.orders}</TableCell>
+                          <TableCell>{item.order_count}</TableCell>
                           <TableCell className="text-right">
-                            ¥{formatAmount(item.revenue)}
+                            ¥{formatAmount(item.avg_order_amount)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -497,16 +505,23 @@ export default async function AnalyticsDashboardPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {salesData.sources.map((item) => (
-                        <TableRow key={item.source}>
-                          <TableCell className="font-medium">{item.source}</TableCell>
-                          <TableCell>{item.orders}</TableCell>
-                          <TableCell>{formatPercentage(item.percentage)}</TableCell>
+                      {salesData.sources.map((item) => {
+                        const percentage = sourceTotalSales
+                          ? item.total_sales / sourceTotalSales
+                          : 0;
+                        return (
+                        <TableRow key={item.order_type}>
+                          <TableCell className="font-medium">
+                            {ORDER_TYPE_LABELS[item.order_type] || item.order_type}
+                          </TableCell>
+                          <TableCell>{item.order_count}</TableCell>
+                          <TableCell>{formatPercentage(percentage)}</TableCell>
                           <TableCell className="text-right">
-                            ¥{formatAmount(item.revenue)}
+                            ¥{formatAmount(item.total_sales)}
                           </TableCell>
                         </TableRow>
-                      ))}
+                      );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -580,12 +595,12 @@ export default async function AnalyticsDashboardPage({
               <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">总客户数</span>
-                  <span className="font-medium">{customerData.repurchase.total_customers}</span>
+                  <span className="font-medium">{customerData.repurchase.total_users}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">复购客户</span>
                   <span className="font-medium">
-                    {customerData.repurchase.repurchase_customers}
+                    {customerData.repurchase.repeat_users}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -595,9 +610,9 @@ export default async function AnalyticsDashboardPage({
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">平均复购间隔</span>
+                  <span className="text-muted-foreground">人均订单数</span>
                   <span className="font-medium">
-                    {customerData.repurchase.avg_repurchase_interval} 天
+                    {customerData.repurchase.avg_orders_per_user}
                   </span>
                 </div>
               </CardContent>
@@ -615,7 +630,7 @@ export default async function AnalyticsDashboardPage({
                       <TableHead>客户</TableHead>
                       <TableHead>订单数</TableHead>
                       <TableHead>总消费</TableHead>
-                      <TableHead>客单价</TableHead>
+                      <TableHead>平均订单额</TableHead>
                       <TableHead className="text-right">最近下单</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -623,15 +638,15 @@ export default async function AnalyticsDashboardPage({
                     {customerData.customers.map((customer) => (
                       <TableRow key={customer.user_id}>
                         <TableCell className="font-medium">
-                          {customer.username}
+                          {customer.full_name || customer.phone || `用户 ${customer.user_id}`}
                         </TableCell>
                         <TableCell>{customer.total_orders}</TableCell>
-                        <TableCell>¥{formatAmount(customer.total_spent)}</TableCell>
+                        <TableCell>¥{formatAmount(customer.total_amount)}</TableCell>
                         <TableCell>
-                          ¥{formatAmount(customer.avg_order_value)}
+                          ¥{formatAmount(customer.avg_order_amount)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {customer.last_order_date}
+                          {customer.last_order_at}
                         </TableCell>
                       </TableRow>
                     ))}

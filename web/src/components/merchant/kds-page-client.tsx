@@ -124,27 +124,35 @@ export function KdsPageClient({ initialData }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="page-header">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-semibold">🍳 厨房显示系统</h1>
+          <h1 className="text-xl font-semibold">🍳 厨房显示系统</h1>
           <div
             className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm ${
-              connected ? "bg-emerald-500/20 text-emerald-200" : "bg-rose-500/20 text-rose-200"
+              connected ? "bg-emerald-500/10 text-emerald-700" : "bg-rose-500/10 text-rose-700"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-rose-400"}`} />
+            <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-rose-500"}`} />
             {connected ? "已连接" : "离线"}
           </div>
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 text-sm">
-            <span className="rounded-full bg-slate-800 px-3 py-1">待制作 {stats.new_count ?? 0}</span>
-            <span className="rounded-full bg-slate-800 px-3 py-1">制作中 {stats.preparing_count ?? 0}</span>
-            <span className="rounded-full bg-slate-800 px-3 py-1">待取餐 {stats.ready_count ?? 0}</span>
-            <span className="rounded-full bg-slate-800 px-3 py-1">今日完成 {stats.completed_today_count ?? 0}</span>
+            <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+              待制作 {stats.new_count ?? 0}
+            </span>
+            <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+              制作中 {stats.preparing_count ?? 0}
+            </span>
+            <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+              待取餐 {stats.ready_count ?? 0}
+            </span>
+            <span className="rounded-full bg-muted px-3 py-1 text-muted-foreground">
+              今日完成 {stats.completed_today_count ?? 0}
+            </span>
           </div>
-          <div className="text-xl font-semibold">{currentTime}</div>
+          <div className="text-base font-semibold">{currentTime}</div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant={voiceEnabled ? "default" : "outline"} onClick={toggleVoice}>
               🔊
@@ -163,40 +171,42 @@ export function KdsPageClient({ initialData }: Props) {
       </header>
 
       {loading ? (
-        <div className="flex h-[60vh] items-center justify-center text-white/70">加载中...</div>
+        <div className="page-content flex items-center justify-center text-muted-foreground">
+          加载中...
+        </div>
       ) : (
-        <div className="grid gap-4 p-6 lg:grid-cols-3">
+        <div className="page-content grid gap-4 lg:grid-cols-3">
           {COLUMNS.map((column) => (
-            <div key={column.key} className="rounded-xl border border-white/10 bg-slate-900/60">
-              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <div key={column.key} className="panel">
+              <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${column.color}`} />
                   <span className="font-semibold">{column.title}</span>
                 </div>
-                <Badge variant="outline" className="border-white/20 text-white">
+                <Badge variant="outline" className="border-border text-foreground">
                   {processed[column.key].length}
                 </Badge>
               </div>
               <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
                 {processed[column.key].length === 0 ? (
-                  <div className="text-center text-sm text-white/60">暂无{column.title}</div>
+                  <div className="text-center text-sm text-muted-foreground">暂无{column.title}</div>
                 ) : (
                   processed[column.key].map((order) => (
                     <div
                       key={order.id}
-                      className={`rounded-lg border border-white/10 bg-slate-900 p-4 ${
+                      className={`rounded-lg border border-border bg-card p-4 ${
                         order.is_urged ? "ring-2 ring-rose-500" : ""
                       }`}
                       onClick={() => setDetailOrder(order)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="text-lg font-semibold">#{order.order_no}</div>
-                        <span className="rounded-full bg-slate-800 px-2 py-1 text-xs">
+                        <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
                           {order.order_type_text}
                         </span>
                       </div>
                       {order.table_no ? (
-                        <div className="mt-2 text-sm text-white/70">
+                        <div className="mt-2 text-sm text-muted-foreground">
                           桌号 {order.table_no}
                         </div>
                       ) : null}
@@ -209,9 +219,9 @@ export function KdsPageClient({ initialData }: Props) {
                         ))}
                       </div>
                       {order.notes ? (
-                        <div className="mt-3 text-xs text-white/60">📝 {order.notes}</div>
+                        <div className="mt-3 text-xs text-muted-foreground">📝 {order.notes}</div>
                       ) : null}
-                      <div className="mt-3 flex items-center justify-between text-xs text-white/60">
+                      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                         <span>{order.paid_time || order.created_time}</span>
                         <span>等待 {order.waiting_minutes} 分</span>
                       </div>
@@ -251,7 +261,7 @@ export function KdsPageClient({ initialData }: Props) {
 
       {detailOrder ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-xl rounded-xl bg-slate-900 p-6 text-white">
+          <div className="w-full max-w-xl rounded-xl bg-card p-6 text-foreground">
             <div className="flex items-center justify-between">
               <div className="text-lg font-semibold">订单详情</div>
               <button onClick={() => setDetailOrder(null)}>✕</button>
@@ -259,31 +269,31 @@ export function KdsPageClient({ initialData }: Props) {
             <div className="mt-4 space-y-4 text-sm">
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-white/60">订单号</span>
+                  <span className="text-muted-foreground">订单号</span>
                   <span>{detailOrder.order_no}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-white/60">订单类型</span>
+                  <span className="text-muted-foreground">订单类型</span>
                   <span>{detailOrder.order_type_text}</span>
                 </div>
                 {detailOrder.table_no ? (
                   <div className="flex items-center justify-between">
-                    <span className="text-white/60">桌号</span>
+                    <span className="text-muted-foreground">桌号</span>
                     <span>{detailOrder.table_no}</span>
                   </div>
                 ) : null}
                 {detailOrder.pickup_number ? (
                   <div className="flex items-center justify-between">
-                    <span className="text-white/60">取餐号</span>
+                    <span className="text-muted-foreground">取餐号</span>
                     <span>{detailOrder.pickup_number}</span>
                   </div>
                 ) : null}
                 <div className="flex items-center justify-between">
-                  <span className="text-white/60">下单时间</span>
+                  <span className="text-muted-foreground">下单时间</span>
                   <span>{detailOrder.created_time}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-white/60">等待时间</span>
+                  <span className="text-muted-foreground">等待时间</span>
                   <span>{detailOrder.waiting_minutes} 分钟</span>
                 </div>
               </div>
@@ -298,10 +308,13 @@ export function KdsPageClient({ initialData }: Props) {
                         <span>×{item.quantity}</span>
                       </div>
                       {item.customizations?.length ? (
-                        <div className="flex flex-wrap gap-2 text-xs text-white/60">
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                           {item.customizations.map((custom) => (
-                            <span key={custom.option_name} className="rounded-full bg-white/10 px-2 py-0.5">
-                              {custom.option_name}
+                            <span
+                              key={`${custom.name}-${custom.value}`}
+                              className="rounded-full bg-muted px-2 py-0.5"
+                            >
+                              {custom.name}:{custom.value}
                             </span>
                           ))}
                         </div>
@@ -314,7 +327,7 @@ export function KdsPageClient({ initialData }: Props) {
               {detailOrder.notes ? (
                 <div>
                   <div className="text-base font-semibold">订单备注</div>
-                  <div className="mt-2 rounded-md bg-white/10 p-3 text-sm">
+                  <div className="mt-2 rounded-md bg-muted/40 p-3 text-sm">
                     {detailOrder.notes}
                   </div>
                 </div>

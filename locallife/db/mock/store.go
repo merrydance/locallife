@@ -8795,6 +8795,21 @@ func (mr *MockStoreMockRecorder) GetWebLoginSessionByCode(ctx, code any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWebLoginSessionByCode", reflect.TypeOf((*MockStore)(nil).GetWebLoginSessionByCode), ctx, code)
 }
 
+// GetWebLoginSessionByPollToken mocks base method.
+func (m *MockStore) GetWebLoginSessionByPollToken(ctx context.Context, pollToken pgtype.Text) (db.WebLoginSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWebLoginSessionByPollToken", ctx, pollToken)
+	ret0, _ := ret[0].(db.WebLoginSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWebLoginSessionByPollToken indicates an expected call of GetWebLoginSessionByPollToken.
+func (mr *MockStoreMockRecorder) GetWebLoginSessionByPollToken(ctx, pollToken any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWebLoginSessionByPollToken", reflect.TypeOf((*MockStore)(nil).GetWebLoginSessionByPollToken), ctx, pollToken)
+}
+
 // GetWechatAccessToken mocks base method.
 func (m *MockStore) GetWechatAccessToken(ctx context.Context, appType string) (db.WechatAccessToken, error) {
 	m.ctrl.T.Helper()

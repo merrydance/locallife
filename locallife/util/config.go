@@ -55,6 +55,7 @@ type Config struct {
 
 	// Web 登录扫码会话
 	WebLoginSessionTTL time.Duration `mapstructure:"WEB_LOGIN_SESSION_TTL"`
+	WebLoginQRSigningKey string       `mapstructure:"WEB_LOGIN_QR_SIGNING_KEY"`
 
 	// 上传文件安全访问（签名URL）
 	UploadURLSigningKey string        `mapstructure:"UPLOAD_URL_SIGNING_KEY"` // HMAC签名密钥（建议随机长字符串）

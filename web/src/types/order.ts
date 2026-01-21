@@ -1,7 +1,7 @@
 export type OrderItemCustomization = {
-  group_name: string;
-  option_name: string;
-  price_adjustment: number;
+  name: string;
+  value: string;
+  extra_price?: number;
 };
 
 export type OrderItemResponse = {
@@ -25,7 +25,11 @@ export type OrderResponse = {
     | "paid"
     | "preparing"
     | "ready"
+    | "courier_accepted"
+    | "picked"
     | "delivering"
+    | "rider_delivered"
+    | "user_delivered"
     | "completed"
     | "cancelled";
   user_id: number;
@@ -52,10 +56,11 @@ export type OrderResponse = {
 };
 
 export type OrderStatsResponse = {
-  total_orders: number;
-  total_revenue: number;
-  avg_order_value: number;
-  completed_orders: number;
-  cancelled_orders: number;
-  completion_rate: number;
+  pending_count: number;
+  paid_count: number;
+  preparing_count: number;
+  ready_count: number;
+  delivering_count: number;
+  completed_count: number;
+  cancelled_count: number;
 };

@@ -414,6 +414,59 @@ func newOrderResponse(o db.Order) orderResponse {
 	return resp
 }
 
+func (server *Server) buildOrderSnapshotWithItems(ctx *gin.Context, order db.Order) (orderResponse, error) {
+	items, err := server.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+	if err != nil {
+		return orderResponse{}, err
+	}
+
+	resp := newOrderResponse(order)
+	resp.Items = make([]orderItemResponse, len(items))
+	for i, item := range items {
+		resp.Items[i] = orderItemResponse{
+			ID:        item.ID,
+			Name:      item.Name,
+			UnitPrice: item.UnitPrice,
+			Quantity:  item.Quantity,
+			Subtotal:  item.Subtotal,
+		}
+		if item.DishID.Valid {
+			resp.Items[i].DishID = &item.DishID.Int64
+		}
+		if item.ComboID.Valid {
+			resp.Items[i].ComboID = &item.ComboID.Int64
+		}
+		if item.DishImageUrl.Valid {
+			img := normalizeUploadURLForClient(item.DishImageUrl.String)
+			resp.Items[i].ImageURL = &img
+		}
+		if item.Customizations != nil {
+			json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
+		}
+	}
+
+	return resp, nil
+}
+
+func (server *Server) pushMerchantOrderSnapshot(ctx *gin.Context, merchantID int64, order db.Order, msgType string) {
+	if server.wsHub == nil {
+		return
+	}
+
+	resp, err := server.buildOrderSnapshotWithItems(ctx, order)
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", order.ID).Msg("build order snapshot failed")
+		resp = newOrderResponse(order)
+	}
+
+	payload, _ := json.Marshal(resp)
+	server.wsHub.SendToMerchant(merchantID, websocket.Message{
+		Type:      msgType,
+		Data:      payload,
+		Timestamp: time.Now(),
+	})
+}
+
 // newOrderWithDetailsResponse 用于订单详情，包含商户信息和配送地址
 func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 	resp := orderResponse{
@@ -2033,6 +2086,8 @@ func (server *Server) cancelOrder(ctx *gin.Context) {
 		}
 	}
 
+	server.pushMerchantOrderSnapshot(ctx, result.Order.MerchantID, result.Order, "order_update")
+
 	ctx.JSON(http.StatusOK, newOrderResponse(result.Order))
 }
 
@@ -2796,6 +2851,8 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 		ExpiresAt: &expiresAt,
 	})
 
+	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
+
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
 }
 
@@ -2907,6 +2964,8 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 		},
 		ExpiresAt: &expiresAt,
 	})
+
+	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
 
 	// 自动退款：获取支付订单并发起退款
 	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
@@ -3053,6 +3112,8 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 		ExpiresAt: &expiresAt,
 	})
 
+	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
+
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
 }
 
@@ -3152,6 +3213,8 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 		},
 		ExpiresAt: &expiresAt,
 	})
+
+	server.pushMerchantOrderSnapshot(ctx, merchant.ID, completedOrder, "order_update")
 
 	ctx.JSON(http.StatusOK, newOrderResponse(completedOrder))
 }

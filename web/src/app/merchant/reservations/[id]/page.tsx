@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ReservationActions } from "@/components/merchant/reservation-actions";
-import { apiGet, apiPut } from "@/lib/api";
+import { apiGet, apiPut, formatAmount } from "@/lib/api";
 
 type Reservation = {
   id: number;
@@ -146,11 +146,11 @@ export default async function ReservationDetailPage({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">预付</span>
-                <span className="font-medium">¥{detail.prepaid_amount ?? 0}</span>
+                <span className="font-medium">¥{formatAmount(detail.prepaid_amount)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">定金</span>
-                <span className="font-medium">¥{detail.deposit_amount ?? 0}</span>
+                <span className="font-medium">¥{formatAmount(detail.deposit_amount)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">创建时间</span>

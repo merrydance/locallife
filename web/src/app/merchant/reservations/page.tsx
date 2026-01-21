@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiGet, formatDate } from "@/lib/api";
+import { apiGet, formatAmount, formatDate } from "@/lib/api";
 
 type Reservation = {
   id: number;
@@ -41,7 +41,6 @@ type ReservationStats = {
   pending_count: number;
   paid_count: number;
   confirmed_count: number;
-  checked_in_count: number;
   completed_count: number;
   cancelled_count: number;
   expired_count: number;
@@ -54,7 +53,6 @@ const fallbackStats: ReservationStats = {
   pending_count: 0,
   paid_count: 0,
   confirmed_count: 0,
-  checked_in_count: 0,
   completed_count: 0,
   cancelled_count: 0,
   expired_count: 0,
@@ -77,17 +75,22 @@ const statusTabs = [
   { label: "待确认", value: "pending" },
   { label: "已支付", value: "paid" },
   { label: "已确认", value: "confirmed" },
-  { label: "已到店", value: "checked_in" },
   { label: "已完成", value: "completed" },
   { label: "爽约", value: "no_show" },
 ];
 
 function normalizeReservations(
-  value: Reservation[] | { items?: Reservation[] } | undefined
+  value:
+    | Reservation[]
+    | { items?: Reservation[]; reservations?: Reservation[] }
+    | undefined
 ) {
   if (!value) return fallbackReservations;
   if (Array.isArray(value)) return value;
   if (value.items && Array.isArray(value.items)) return value.items;
+  if (value.reservations && Array.isArray(value.reservations)) {
+    return value.reservations;
+  }
   return fallbackReservations;
 }
 
@@ -103,7 +106,7 @@ export default async function ReservationsPage({
     apiGet<ReservationStats>("/reservations/merchant/stats").catch(
       () => fallbackStats
     ),
-    apiGet<Reservation[] | { items?: Reservation[] }>(
+    apiGet<Reservation[] | { items?: Reservation[]; reservations?: Reservation[] }>(
       "/reservations/merchant",
       {
         page_id: 1,
@@ -168,8 +171,8 @@ export default async function ReservationsPage({
           </Card>
           <Card className="panel">
             <CardHeader className="pb-2">
-              <CardDescription>已到店</CardDescription>
-              <CardTitle className="text-2xl">{stats.checked_in_count}</CardTitle>
+              <CardDescription>已完成</CardDescription>
+              <CardTitle className="text-2xl">{stats.completed_count}</CardTitle>
             </CardHeader>
           </Card>
           <Card className="panel">
@@ -220,8 +223,8 @@ export default async function ReservationsPage({
                     <TableCell>
                       {item.payment_mode || "-"}
                       <div className="text-xs text-muted-foreground">
-                        预付 ¥{item.prepaid_amount ?? 0} / 定金 ¥
-                        {item.deposit_amount ?? 0}
+                        预付 ¥{formatAmount(item.prepaid_amount)} / 定金 ¥
+                        {formatAmount(item.deposit_amount)}
                       </div>
                     </TableCell>
                     <TableCell>

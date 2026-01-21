@@ -20,14 +20,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiGet, apiPost, formatAmount } from "@/lib/api";
-import type { OrderResponse, OrderStatsResponse } from "@/types/order";
+import type { OrderResponse } from "@/types/order";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "待支付",
   paid: "待接单",
   preparing: "制作中",
   ready: "待出餐",
+  courier_accepted: "骑手已接单",
+  picked: "已取餐",
   delivering: "配送中",
+  rider_delivered: "骑手送达",
+  user_delivered: "用户确认送达",
   completed: "已完成",
   cancelled: "已取消",
 };
@@ -58,7 +62,7 @@ const TYPE_OPTIONS = [
 
 type Props = {
   initialOrders: OrderResponse[];
-  stats: OrderStatsResponse | null;
+  todayOrders: number;
   statusCounts: {
     paid: number;
     preparing: number;
@@ -85,7 +89,7 @@ function buildItemsSummary(order: OrderResponse) {
 
 export function OrdersPageClient({
   initialOrders,
-  stats,
+  todayOrders,
   statusCounts,
   todayRevenue,
   page,
@@ -213,20 +217,7 @@ export function OrdersPageClient({
       </header>
 
       <div className="page-content">
-        <div className="block max-[1599px]:block min-[1600px]:hidden">
-          <div className="rounded-lg border bg-card p-6 text-center">
-            <div className="text-3xl">🖥️</div>
-            <div className="mt-3 text-lg font-semibold">此功能需要在电脑端使用</div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              请使用 1600px 以上分辨率的显示器访问订单管理系统
-            </p>
-            <Button variant="outline" className="mt-4" asChild>
-              <a href="/merchant/dashboard">返回工作台</a>
-            </Button>
-          </div>
-        </div>
-
-        <div className="hidden min-[1600px]:block">
+        <div>
           <div className="space-y-6">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <Card
@@ -274,7 +265,7 @@ export function OrdersPageClient({
                 <CardTitle className="text-2xl">¥{formatAmount(todayRevenue)}</CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
-                今日订单 {stats?.total_orders ?? 0}
+                今日订单 {todayOrders}
               </CardContent>
             </Card>
           </section>
@@ -618,7 +609,7 @@ export function OrdersPageClient({
                         {item.customizations?.length ? (
                           <div className="text-xs text-muted-foreground">
                             {item.customizations
-                              .map((custom) => custom.option_name)
+                              .map((custom) => `${custom.name}:${custom.value}`)
                               .join("、")}
                           </div>
                         ) : null}

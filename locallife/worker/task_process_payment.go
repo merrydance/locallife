@@ -393,6 +393,123 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 			Str("order_no", order.OrderNo).
 			Msg("✅ merchant new order notification task distributed")
 	}
+
+	items, itemsErr := processor.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+	if itemsErr != nil {
+		log.Warn().Err(itemsErr).Int64("order_id", order.ID).Msg("load order items for ws snapshot failed")
+	}
+	orderSnapshot := buildOrderSnapshotPayload(order, items)
+	payload, _ := json.Marshal(orderSnapshot)
+	wsMessage := websocket.Message{
+		Type:      "new_order",
+		Data:      json.RawMessage(payload),
+		Timestamp: time.Now(),
+	}
+	pushMsg := websocket.NotificationPushMessage{
+		EntityType: "merchant",
+		EntityID:   merchant.ID,
+		Message:    wsMessage,
+	}
+	wsMessageJSON, _ := json.Marshal(pushMsg)
+	channel := fmt.Sprintf("notification:merchant:%d", merchant.ID)
+	if err := processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err(); err != nil {
+		log.Error().Err(err).Int64("merchant_id", merchant.ID).Msg("publish new order ws message failed")
+	}
+}
+
+type orderItemSnapshot struct {
+	ID             int64       `json:"id"`
+	Name           string      `json:"name"`
+	UnitPrice      int64       `json:"unit_price"`
+	Quantity       int16       `json:"quantity"`
+	Subtotal       int64       `json:"subtotal"`
+	DishID         *int64      `json:"dish_id,omitempty"`
+	ComboID        *int64      `json:"combo_id,omitempty"`
+	ImageURL       *string     `json:"image_url,omitempty"`
+	Customizations interface{} `json:"customizations,omitempty"`
+}
+
+func buildOrderSnapshotPayload(order db.Order, items []db.ListOrderItemsWithDishByOrderRow) map[string]any {
+	payload := map[string]any{
+		"id":                    order.ID,
+		"order_no":              order.OrderNo,
+		"user_id":               order.UserID,
+		"merchant_id":           order.MerchantID,
+		"order_type":            order.OrderType,
+		"delivery_fee":          order.DeliveryFee,
+		"subtotal":              order.Subtotal,
+		"discount_amount":       order.DiscountAmount,
+		"delivery_fee_discount": order.DeliveryFeeDiscount,
+		"total_amount":          order.TotalAmount,
+		"status":                order.Status,
+		"fulfillment_status":    order.FulfillmentStatus,
+		"created_at":            order.CreatedAt,
+	}
+
+	if order.AddressID.Valid {
+		payload["address_id"] = order.AddressID.Int64
+	}
+	if order.DeliveryDistance.Valid {
+		payload["delivery_distance"] = order.DeliveryDistance.Int32
+	}
+	if order.TableID.Valid {
+		payload["table_id"] = order.TableID.Int64
+	}
+	if order.ReservationID.Valid {
+		payload["reservation_id"] = order.ReservationID.Int64
+	}
+	if order.PaymentMethod.Valid {
+		payload["payment_method"] = order.PaymentMethod.String
+	}
+	if order.Notes.Valid {
+		payload["notes"] = order.Notes.String
+	}
+	if order.PaidAt.Valid {
+		payload["paid_at"] = order.PaidAt.Time
+	}
+	if order.CompletedAt.Valid {
+		payload["completed_at"] = order.CompletedAt.Time
+	}
+	if order.CancelledAt.Valid {
+		payload["cancelled_at"] = order.CancelledAt.Time
+	}
+	if order.CancelReason.Valid {
+		payload["cancel_reason"] = order.CancelReason.String
+	}
+	if order.UpdatedAt.Valid {
+		payload["updated_at"] = order.UpdatedAt.Time
+	}
+
+	if len(items) > 0 {
+		respItems := make([]orderItemSnapshot, len(items))
+		for i, item := range items {
+			respItems[i] = orderItemSnapshot{
+				ID:        item.ID,
+				Name:      item.Name,
+				UnitPrice: item.UnitPrice,
+				Quantity:  item.Quantity,
+				Subtotal:  item.Subtotal,
+			}
+			if item.DishID.Valid {
+				respItems[i].DishID = &item.DishID.Int64
+			}
+			if item.ComboID.Valid {
+				respItems[i].ComboID = &item.ComboID.Int64
+			}
+			if item.DishImageUrl.Valid {
+				img := item.DishImageUrl.String
+				respItems[i].ImageURL = &img
+			}
+			if item.Customizations != nil {
+				var customizations interface{}
+				_ = json.Unmarshal(item.Customizations, &customizations)
+				respItems[i].Customizations = customizations
+			}
+		}
+		payload["items"] = respItems
+	}
+
+	return payload
 }
 
 // notifyRidersNewDelivery 通知附近骑手有新配送订单

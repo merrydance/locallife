@@ -177,6 +177,11 @@ func ResponseEnvelopeMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		if strings.Contains(c.GetHeader("Accept"), "text/event-stream") {
+			c.Next()
+			return
+		}
+
 		if isWebSocketUpgrade(c) {
 			c.Next()
 			return

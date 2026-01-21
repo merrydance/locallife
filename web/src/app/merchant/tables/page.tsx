@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TableStatusActions } from "@/components/merchant/table-status-actions";
-import { apiGet } from "@/lib/api";
+import { apiGet, formatAmount } from "@/lib/api";
 
 type TableItem = {
   id: number;
@@ -40,17 +40,20 @@ const statusLabels: Record<string, string> = {
   disabled: "停用",
 };
 
-function normalizeTables(value: TableItem[] | { items?: TableItem[] } | undefined) {
+function normalizeTables(
+  value: TableItem[] | { items?: TableItem[]; tables?: TableItem[] } | undefined
+) {
   if (!value) return fallbackTables;
   if (Array.isArray(value)) return value;
   if (value.items && Array.isArray(value.items)) return value.items;
+  if (value.tables && Array.isArray(value.tables)) return value.tables;
   return fallbackTables;
 }
 
 export default async function TablesPage() {
-  const tables = await apiGet<TableItem[] | { items?: TableItem[] }>("/tables").catch(
-    () => fallbackTables
-  );
+  const tables = await apiGet<
+    TableItem[] | { items?: TableItem[]; tables?: TableItem[] }
+  >("/tables").catch(() => fallbackTables);
 
   const list = normalizeTables(tables);
 
@@ -94,7 +97,7 @@ export default async function TablesPage() {
                     <TableCell className="font-medium">{table.table_no}</TableCell>
                     <TableCell>{table.table_type}</TableCell>
                     <TableCell>{table.capacity} 人</TableCell>
-                    <TableCell>¥{table.minimum_spend ?? 0}</TableCell>
+                    <TableCell>¥{formatAmount(table.minimum_spend)}</TableCell>
                     <TableCell>
                       <Badge variant="outline">
                         {statusLabels[table.status] || table.status}

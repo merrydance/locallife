@@ -13,8 +13,11 @@ type MerchantStatus = {
 };
 
 type StatsOverview = {
-  total_revenue: number;
   total_orders: number;
+  total_revenue: number;
+  total_days: number;
+  total_commission: number;
+  avg_daily_sales: number;
 };
 
 type TableItem = {
@@ -37,16 +40,23 @@ const fallbackStatus: MerchantStatus = {
 };
 
 const fallbackStats: StatsOverview = {
-  total_revenue: 0,
   total_orders: 0,
+  total_revenue: 0,
+  total_days: 0,
+  total_commission: 0,
+  avg_daily_sales: 0,
 };
 
 function normalizeOrders(
-  data: OrderResponse[] | { items?: OrderResponse[] } | undefined
+  data:
+    | OrderResponse[]
+    | { items?: OrderResponse[]; orders?: OrderResponse[] }
+    | undefined
 ) {
   if (!data) return [] as OrderResponse[];
   if (Array.isArray(data)) return data;
   if (data.items && Array.isArray(data.items)) return data.items;
+  if (data.orders && Array.isArray(data.orders)) return data.orders;
   return [] as OrderResponse[];
 }
 
@@ -91,7 +101,7 @@ export default async function DashboardPage() {
         start_date: today,
         end_date: today,
       }).catch(() => fallbackStats),
-      apiGet<OrderResponse[] | { items?: OrderResponse[] }>(
+      apiGet<OrderResponse[] | { items?: OrderResponse[]; orders?: OrderResponse[] }>(
         "/merchant/orders",
         { page_id: 1, page_size: 50 }
       ).catch(() => []),

@@ -188,11 +188,11 @@ export function getWebLoginSessionStatus(code: string) {
 /**
  * 小程序确认 Web 登录
  */
-export function confirmWebLoginSession(code: string) {
+export function confirmWebLoginSession(code: string, sig?: string, ts?: number) {
   return request<WebLoginSessionStatus>({
     url: '/v1/auth/web-login/confirm',
     method: 'POST',
-    data: { code }
+    data: { code, sig, ts }
   })
 }
 

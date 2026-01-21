@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 
 const navItems = [
   { label: "工作台", href: "/merchant/dashboard", activePrefix: "/merchant/dashboard" },
@@ -26,7 +28,15 @@ const navItems = [
 
 export function MerchantSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const session = useMerchantSession();
+
+  const handleLogout = () => {
+    if (!window.confirm("确认退出登录？")) return;
+    session?.logout();
+    router.replace("/merchant/login");
+  };
 
   return (
     <aside
@@ -71,8 +81,13 @@ export function MerchantSidebar() {
           );
         })}
       </nav>
+      <div className={`mt-auto ${collapsed ? "hidden" : "block"}`}>
+        <Button variant="destructive" className="w-full" onClick={handleLogout}>
+          退出登录
+        </Button>
+      </div>
       <div
-        className={`mt-6 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground ${
+        className={`mt-3 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground ${
           collapsed ? "hidden" : "block"
         }`}
       >

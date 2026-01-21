@@ -20,7 +20,7 @@ SET status = 'confirmed',
     confirm_client_ip = $3,
     updated_at = NOW()
 WHERE id = $1 AND status = 'pending'
-RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at
+RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token
 `
 
 type ConfirmWebLoginSessionParams struct {
@@ -45,6 +45,7 @@ func (q *Queries) ConfirmWebLoginSession(ctx context.Context, arg ConfirmWebLogi
 		&i.ConfirmClientIp,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PollToken,
 	)
 	return i, err
 }
@@ -55,7 +56,7 @@ SET status = 'consumed',
     consumed_at = NOW(),
     updated_at = NOW()
 WHERE id = $1 AND status = 'confirmed'
-RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at
+RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token
 `
 
 func (q *Queries) ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error) {
@@ -74,6 +75,7 @@ func (q *Queries) ConsumeWebLoginSession(ctx context.Context, id int64) (WebLogi
 		&i.ConfirmClientIp,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PollToken,
 	)
 	return i, err
 }
@@ -84,10 +86,11 @@ INSERT INTO web_login_sessions (
   status,
   expires_at,
   web_user_agent,
-  web_client_ip
+  web_client_ip,
+  poll_token
 ) VALUES (
-  $1, 'pending', $2, $3, $4
-) RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at
+  $1, 'pending', $2, $3, $4, $5
+) RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token
 `
 
 type CreateWebLoginSessionParams struct {
@@ -95,6 +98,7 @@ type CreateWebLoginSessionParams struct {
 	ExpiresAt    time.Time   `json:"expires_at"`
 	WebUserAgent pgtype.Text `json:"web_user_agent"`
 	WebClientIp  pgtype.Text `json:"web_client_ip"`
+	PollToken    pgtype.Text `json:"poll_token"`
 }
 
 func (q *Queries) CreateWebLoginSession(ctx context.Context, arg CreateWebLoginSessionParams) (WebLoginSession, error) {
@@ -103,6 +107,7 @@ func (q *Queries) CreateWebLoginSession(ctx context.Context, arg CreateWebLoginS
 		arg.ExpiresAt,
 		arg.WebUserAgent,
 		arg.WebClientIp,
+		arg.PollToken,
 	)
 	var i WebLoginSession
 	err := row.Scan(
@@ -118,6 +123,7 @@ func (q *Queries) CreateWebLoginSession(ctx context.Context, arg CreateWebLoginS
 		&i.ConfirmClientIp,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PollToken,
 	)
 	return i, err
 }
@@ -127,7 +133,7 @@ UPDATE web_login_sessions
 SET status = 'expired',
     updated_at = NOW()
 WHERE id = $1 AND status <> 'consumed'
-RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at
+RETURNING id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token
 `
 
 func (q *Queries) ExpireWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error) {
@@ -146,12 +152,13 @@ func (q *Queries) ExpireWebLoginSession(ctx context.Context, id int64) (WebLogin
 		&i.ConfirmClientIp,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PollToken,
 	)
 	return i, err
 }
 
 const getWebLoginSessionByCode = `-- name: GetWebLoginSessionByCode :one
-SELECT id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at FROM web_login_sessions
+SELECT id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token FROM web_login_sessions
 WHERE code = $1
 LIMIT 1
 `
@@ -172,6 +179,34 @@ func (q *Queries) GetWebLoginSessionByCode(ctx context.Context, code string) (We
 		&i.ConfirmClientIp,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PollToken,
+	)
+	return i, err
+}
+
+const getWebLoginSessionByPollToken = `-- name: GetWebLoginSessionByPollToken :one
+SELECT id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token FROM web_login_sessions
+WHERE poll_token = $1
+LIMIT 1
+`
+
+func (q *Queries) GetWebLoginSessionByPollToken(ctx context.Context, pollToken pgtype.Text) (WebLoginSession, error) {
+	row := q.db.QueryRow(ctx, getWebLoginSessionByPollToken, pollToken)
+	var i WebLoginSession
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Status,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.ConfirmedAt,
+		&i.ConsumedAt,
+		&i.WebUserAgent,
+		&i.WebClientIp,
+		&i.ConfirmClientIp,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PollToken,
 	)
 	return i, err
 }

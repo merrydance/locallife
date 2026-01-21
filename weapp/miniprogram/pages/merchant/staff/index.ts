@@ -147,8 +147,7 @@ Page({
         try {
             const result = await StaffService.generateInviteCode()
             // 生成完整 URL，保证扫码可识别
-            const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE
-            const inviteCodeUrl = `${base}/bind-merchant?code=${result.invite_code}`
+            const inviteCodeUrl = `invite-merchant:${result.invite_code}`
             this.setData({
                 inviteCode: result.invite_code,
                 inviteCodeUrl: inviteCodeUrl,

@@ -94,6 +94,8 @@ Page({
         if (match) return match[1]
         const webLoginMatch = decoded.match(/web-login:([0-9a-fA-F]{32})/)
         if (webLoginMatch) return webLoginMatch[1]
+        const inviteMatch = decoded.match(/invite-merchant:([A-Za-z0-9_-]+)/)
+        if (inviteMatch) return inviteMatch[1]
         const hexMatch = decoded.match(/[0-9a-fA-F]{32}/)
         if (hexMatch) return hexMatch[0]
         return decoded

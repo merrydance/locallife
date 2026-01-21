@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { DiningSessionActions } from "@/components/merchant/dining-session-actions";
 import { TableStatusActions } from "@/components/merchant/table-status-actions";
-import { apiGet } from "@/lib/api";
+import { apiGet, formatAmount } from "@/lib/api";
 
 type TableItem = {
   id: number;
@@ -39,29 +39,36 @@ const statusLabels: Record<string, string> = {
   disabled: "停用",
 };
 
-function normalizeTables(value: TableItem[] | { items?: TableItem[] } | undefined) {
+function normalizeTables(
+  value: TableItem[] | { items?: TableItem[]; tables?: TableItem[] } | undefined
+) {
   if (!value) return fallbackTables;
   if (Array.isArray(value)) return value;
   if (value.items && Array.isArray(value.items)) return value.items;
+  if (value.tables && Array.isArray(value.tables)) return value.tables;
   return fallbackTables;
 }
 
 export default async function DineInPage() {
-  const tables = await apiGet<TableItem[] | { items?: TableItem[] }>("/tables", {
+  const tables = await apiGet<
+    TableItem[] | { items?: TableItem[]; tables?: TableItem[] }
+  >("/tables", {
     table_type: "table",
   }).catch(() => fallbackTables);
 
   const list = normalizeTables(tables);
 
   return (
-    <div className="page-content">
-      <div className="flex items-center justify-between">
+    <>
+      <header className="page-header">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold">堂食管理</h1>
           <p className="text-sm text-muted-foreground">对应 /v1/tables</p>
         </div>
         <Badge variant="secondary">桌台数 {list.length}</Badge>
-      </div>
+      </header>
+
+      <div className="page-content">
 
       <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card className="panel">
@@ -86,7 +93,7 @@ export default async function DineInPage() {
                   <TableRow key={table.id}>
                     <TableCell className="font-medium">{table.table_no}</TableCell>
                     <TableCell>{table.capacity} 人</TableCell>
-                    <TableCell>¥{table.minimum_spend ?? 0}</TableCell>
+                    <TableCell>¥{formatAmount(table.minimum_spend)}</TableCell>
                     <TableCell>
                       <Badge variant="outline">
                         {statusLabels[table.status] || table.status}
@@ -136,6 +143,7 @@ export default async function DineInPage() {
           <Button variant="outline">堂食订单</Button>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   );
 }

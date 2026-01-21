@@ -57,6 +57,10 @@ func authMiddleware(tokenMaker token.Maker) gin.HandlerFunc {
 // 防止慢查询、外部API卡死导致goroutine泄漏
 func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if strings.Contains(c.GetHeader("Accept"), "text/event-stream") {
+			c.Next()
+			return
+		}
 		// ⚠️ 注意：不要在 goroutine 里调用 c.Next()。
 		// Gin 的 Context/ResponseWriter 不是并发安全的；并发写响应会导致
 		// "Headers were already written" 以及在压力下的异常行为。

@@ -918,6 +918,7 @@ type Querier interface {
 	GetVoucherUsageStats(ctx context.Context, id int64) (GetVoucherUsageStatsRow, error)
 	GetWeatherCoefficient(ctx context.Context, id int64) (WeatherCoefficient, error)
 	GetWebLoginSessionByCode(ctx context.Context, code string) (WebLoginSession, error)
+	GetWebLoginSessionByPollToken(ctx context.Context, pollToken pgtype.Text) (WebLoginSession, error)
 	GetWechatAccessToken(ctx context.Context, appType string) (WechatAccessToken, error)
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)

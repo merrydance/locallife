@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiPatch, apiPost, formatAmount } from "@/lib/api";
+import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import type { OrderResponse } from "@/types/order";
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   paid: "待接单",
@@ -106,36 +108,197 @@ export function DashboardPageClient({
   tableGroups,
   tableStats,
 }: Props) {
+  const session = useMerchantSession();
   const [orderTab, setOrderTab] = useState<OrderTab>("all");
   const [activeTable, setActiveTable] = useState<DashboardTable | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [loadingTableStatus, setLoadingTableStatus] = useState<string | null>(null);
+  const reloadGuardRef = useRef(0);
+
+  const [ordersState, setOrdersState] = useState<DashboardOrder[]>(orders);
+  const [statusCountsState, setStatusCountsState] = useState(statusCounts);
+  const [tableGroupsState, setTableGroupsState] = useState(tableGroups);
+  const [tableStatsState, setTableStatsState] = useState(tableStats);
+  const [revenueState, setRevenueState] = useState(revenue);
+  const [todayOrdersState, setTodayOrdersState] = useState(todayOrders);
+
+  const effectiveIsOpen = session?.isOpen ?? isOpen;
+  const effectiveWsConnected = session?.wsConnected ?? wsConnected;
 
   const filteredOrders = useMemo(() => {
-    if (orderTab === "all") return orders;
-    return orders.filter((order) => order.status === orderTab);
-  }, [orders, orderTab]);
+    if (orderTab === "all") return ordersState;
+    return ordersState.filter((order) => order.status === orderTab);
+  }, [ordersState, orderTab]);
+
+  const mapOrderSnapshot = useCallback(
+    (payload?: Partial<OrderResponse>, fallback?: DashboardOrder) => {
+      if (!payload?.id || !payload.order_no) return null;
+      const createdTime = payload.created_at
+        ? new Date(payload.created_at)
+        : fallback?.created_at
+        ? new Date(fallback.created_at)
+        : null;
+      const timeText = createdTime
+        ? `${String(createdTime.getHours()).padStart(2, "0")}:${String(
+            createdTime.getMinutes()
+          ).padStart(2, "0")}`
+        : fallback?.created_time || "";
+      const summary = payload.items?.length
+        ? payload.items.slice(0, 2).map((i) => i.name).join("、")
+        : fallback?.items_summary;
+      const totalAmount =
+        typeof payload.total_amount === "number"
+          ? payload.total_amount
+          : fallback?.total_amount ?? 0;
+
+      return {
+        id: payload.id,
+        order_no: payload.order_no,
+        status: payload.status || fallback?.status || "paid",
+        status_text: payload.status || fallback?.status_text || "paid",
+        order_type: payload.order_type || fallback?.order_type || "takeout",
+        order_type_text:
+          payload.order_type || fallback?.order_type_text || "takeout",
+        total_amount: totalAmount,
+        amount_display: formatAmount(totalAmount),
+        items_summary: summary || "订单商品",
+        table_no: payload.table_id
+          ? String(payload.table_id)
+          : fallback?.table_no,
+        created_at: payload.created_at || fallback?.created_at,
+        created_time: timeText,
+      } satisfies DashboardOrder;
+    },
+    []
+  );
+
+  const recomputeCounts = useCallback((nextOrders: DashboardOrder[]) => {
+    setStatusCountsState({
+      paid: nextOrders.filter((o) => o.status === "paid").length,
+      preparing: nextOrders.filter((o) => o.status === "preparing").length,
+      ready: nextOrders.filter((o) => o.status === "ready").length,
+    });
+  }, []);
+
+  const applyOrderSnapshot = useCallback(
+    (payload?: Partial<OrderResponse>, options?: { isNew?: boolean }) => {
+      if (!payload) return;
+      setOrdersState((prev) => {
+        const existing = prev.find((order) => order.id === payload.id);
+        const mapped = mapOrderSnapshot(payload, existing || undefined);
+        if (!mapped) return prev;
+
+        const shouldInclude = ["paid", "preparing", "ready"].includes(
+          mapped.status
+        );
+        let next = prev.filter((order) => order.id !== mapped.id);
+        if (shouldInclude) {
+          next = [mapped, ...next];
+        }
+
+        if (options?.isNew && !existing && shouldInclude) {
+          setTodayOrdersState((value) => value + 1);
+          setRevenueState((value) => value + mapped.total_amount);
+        }
+
+        recomputeCounts(next);
+        return next;
+      });
+    },
+    [mapOrderSnapshot, recomputeCounts]
+  );
+
+  const applyTableSnapshot = useCallback(
+    (payload?: { id?: number; status?: string; table_no?: string }) => {
+      if (!payload?.id) return;
+      setTableGroupsState((prev) => {
+        let updated = false;
+        const next = prev.map((group) => ({
+          ...group,
+          tables: group.tables.map((table) => {
+            if (table.id !== payload.id) return table;
+            updated = true;
+            return {
+              ...table,
+              status: payload.status ?? table.status,
+              table_no: payload.table_no ?? table.table_no,
+            };
+          }),
+        }));
+
+        if (updated) {
+          const allTables = next.flatMap((group) => group.tables);
+          setTableStatsState({
+            total: allTables.length,
+            available: allTables.filter((t) => t.status === "available").length,
+            occupied: allTables.filter((t) => t.status === "occupied").length,
+          });
+        }
+
+        return next;
+      });
+    },
+    []
+  );
 
   const toggleStatus = async () => {
+    if (session && !session.isAuthenticated) {
+      window.alert("未登录，无法切换营业状态");
+      return;
+    }
     setLoadingStatus(true);
     try {
-      await apiPatch("/merchants/me/status", { is_open: !isOpen });
-
-      window.location.reload();
+      if (session?.setOpen) {
+        await session.setOpen(!effectiveIsOpen);
+      } else {
+        await apiPatch("/merchants/me/status", { is_open: !effectiveIsOpen });
+      }
     } catch {
-      window.alert("更新营业状态失败，请稍后重试");
+      window.alert("更新营业状态失败，请确认已登录");
     } finally {
       setLoadingStatus(false);
     }
   };
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const detail = customEvent.detail as { type?: string } | string | undefined;
+      const messageType = typeof detail === "string" ? detail : detail?.type;
+
+      if (
+        messageType === "new_order" ||
+        messageType === "order_update" ||
+        messageType === "table_status_change"
+      ) {
+        const now = Date.now();
+        if (now - reloadGuardRef.current < 3000) return;
+        reloadGuardRef.current = now;
+        if (messageType === "table_status_change") {
+          applyTableSnapshot((detail as { data?: any })?.data);
+        } else {
+          applyOrderSnapshot((detail as { data?: any })?.data, {
+            isNew: messageType === "new_order",
+          });
+        }
+      }
+    };
+
+    window.addEventListener("merchant-realtime", handler as EventListener);
+    return () => {
+      window.removeEventListener("merchant-realtime", handler as EventListener);
+    };
+  }, [applyOrderSnapshot, applyTableSnapshot]);
+
   const updateTableStatus = async (status: string) => {
     if (!activeTable) return;
     setLoadingTableStatus(status);
     try {
-      await apiPatch(`/tables/${activeTable.id}/status`, { status });
-
-      window.location.reload();
+      const updated = await apiPatch<DashboardTable>(
+        `/tables/${activeTable.id}/status`,
+        { status }
+      );
+      applyTableSnapshot(updated);
     } catch {
       window.alert("更新桌台状态失败，请稍后重试");
     } finally {
@@ -146,61 +309,41 @@ export function DashboardPageClient({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="block min-[1600px]:hidden">
-        <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#667eea_0%,#764ba2_100%)] px-6">
-          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-2xl">
-            <div className="text-5xl">🏪</div>
-            <div className="mt-4 text-lg font-semibold text-slate-900">
-              请使用电脑端访问工作台
-            </div>
-            <div className="mt-2 text-sm text-slate-500">
-              工作台为大屏优化设计，建议使用 1600px 以上显示器
-            </div>
-            <Link
-              href="/merchant/orders"
-              className="mt-6 inline-flex items-center justify-center rounded-lg bg-[linear-gradient(135deg,#667eea_0%,#764ba2_100%)] px-6 py-3 text-sm font-medium text-white"
-            >
-              进入订单管理
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="hidden min-[1600px]:block">
+      <div>
         <div className="flex min-h-screen flex-col">
-          <header className="flex h-16 items-center justify-between bg-[linear-gradient(135deg,#667eea_0%,#764ba2_100%)] px-8 text-white shadow-lg">
+          <header className="page-header">
             <div className="flex items-center gap-4">
               <div className="text-lg font-semibold">
                 {merchantName || "商户工作台"}
               </div>
               <button
                 className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs transition-colors ${
-                  isOpen
-                    ? "bg-emerald-500/20"
-                    : "bg-rose-500/20"
+                  effectiveIsOpen
+                    ? "bg-emerald-500/15 text-emerald-700"
+                    : "bg-rose-500/15 text-rose-700"
                 }`}
                 onClick={toggleStatus}
-                disabled={loadingStatus}
+                disabled={loadingStatus || (session ? !session.isAuthenticated : false)}
               >
                 <span
                   className={`h-2 w-2 rounded-full ${
-                    isOpen ? "bg-emerald-400" : "bg-rose-400"
+                    effectiveIsOpen ? "bg-emerald-500" : "bg-rose-500"
                   }`}
                 />
-                {isOpen ? "营业中" : "已打烊"}
+                {effectiveIsOpen ? "营业中" : "已打烊"}
               </button>
-              {wsConnected ? (
-                <div className="flex items-center gap-2 rounded-full bg-emerald-500/20 px-3 py-1 text-xs">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />
+              {effectiveWsConnected ? (
+                <div className="flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-700">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
                   实时
                 </div>
               ) : null}
             </div>
-            <div className="text-sm opacity-90">{currentDate}</div>
+            <div className="text-sm text-muted-foreground">{currentDate}</div>
             <div />
           </header>
 
-          <main className="grid flex-1 grid-cols-[1fr_2fr_1fr] gap-5 bg-muted/50 p-5">
+          <main className="page-content grid grid-cols-[1fr_2fr_1fr] gap-5">
             <section className="flex flex-col overflow-hidden rounded-xl bg-card shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div className="text-base font-semibold">📋 订单流</div>
@@ -213,12 +356,12 @@ export function DashboardPageClient({
                   const active = orderTab === tab.key;
                   const count =
                     tab.key === "paid"
-                      ? statusCounts.paid
+                      ? statusCountsState.paid
                       : tab.key === "preparing"
-                      ? statusCounts.preparing
+                      ? statusCountsState.preparing
                       : tab.key === "ready"
-                      ? statusCounts.ready
-                      : orders.length;
+                      ? statusCountsState.ready
+                      : ordersState.length;
                   return (
                     <button
                       key={tab.key}
@@ -293,8 +436,10 @@ export function DashboardPageClient({
                               size="sm"
                               className="flex-1"
                               onClick={async () => {
-                                await apiPost(`/merchant/orders/${order.id}/accept`);
-                                window.location.reload();
+                                const updated = await apiPost<OrderResponse>(
+                                  `/merchant/orders/${order.id}/accept`
+                                );
+                                applyOrderSnapshot(updated);
                               }}
                             >
                               接单
@@ -306,10 +451,11 @@ export function DashboardPageClient({
                               onClick={async () => {
                                 const reason = window.prompt("拒单原因");
                                 if (!reason) return;
-                                await apiPost(`/merchant/orders/${order.id}/reject`, {
-                                  reason,
-                                });
-                                window.location.reload();
+                                const updated = await apiPost<OrderResponse>(
+                                  `/merchant/orders/${order.id}/reject`,
+                                  { reason }
+                                );
+                                applyOrderSnapshot(updated);
                               }}
                             >
                               拒绝
@@ -321,8 +467,10 @@ export function DashboardPageClient({
                             size="sm"
                             className="flex-1"
                             onClick={async () => {
-                              await apiPost(`/merchant/orders/${order.id}/ready`);
-                              window.location.reload();
+                              const updated = await apiPost<OrderResponse>(
+                                `/merchant/orders/${order.id}/ready`
+                              );
+                              applyOrderSnapshot(updated);
                             }}
                           >
                             已出餐
@@ -339,18 +487,18 @@ export function DashboardPageClient({
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div className="text-base font-semibold">🪑 桌台状态</div>
                 <div className="flex gap-4 text-xs text-muted-foreground">
-                  <span>空闲 {tableStats.available}</span>
-                  <span>就餐 {tableStats.occupied}</span>
-                  <span>共 {tableStats.total}</span>
+                  <span>空闲 {tableStatsState.available}</span>
+                  <span>就餐 {tableStatsState.occupied}</span>
+                  <span>共 {tableStatsState.total}</span>
                 </div>
               </div>
               <div className="flex-1 space-y-6 overflow-y-auto p-4">
-                {tableGroups.length === 0 ? (
+                {tableGroupsState.length === 0 ? (
                   <div className="py-10 text-center text-sm text-muted-foreground">
                     暂无桌台数据
                   </div>
                 ) : (
-                  tableGroups.map((group) => (
+                  tableGroupsState.map((group) => (
                     <div key={group.type}>
                       <div className="mb-3 border-l-4 border-primary pl-3 text-sm font-medium text-slate-700">
                         {group.name}
@@ -388,44 +536,44 @@ export function DashboardPageClient({
               <div className="bg-[linear-gradient(135deg,#667eea_0%,#764ba2_100%)] p-6 text-white">
                 <div className="text-sm opacity-90">今日营业</div>
                 <div className="mt-2 text-xs opacity-80">营业额</div>
-                <div className="mt-1 text-3xl font-bold">¥{formatAmount(revenue)}</div>
-                <div className="mt-3 text-xs opacity-80">订单 {todayOrders} 单</div>
+                <div className="mt-1 text-3xl font-bold">¥{formatAmount(revenueState)}</div>
+                <div className="mt-3 text-xs opacity-80">订单 {todayOrdersState} 单</div>
               </div>
               <div className="grid gap-4 p-5 text-sm">
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-xs text-muted-foreground">待接单</div>
                   <div className="mt-1 text-lg font-semibold text-rose-500">
-                    {statusCounts.paid}
+                    {statusCountsState.paid}
                   </div>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-xs text-muted-foreground">制作中</div>
                   <div className="mt-1 text-lg font-semibold text-amber-500">
-                    {statusCounts.preparing}
+                    {statusCountsState.preparing}
                   </div>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-xs text-muted-foreground">待取餐</div>
                   <div className="mt-1 text-lg font-semibold text-emerald-500">
-                    {statusCounts.ready}
+                    {statusCountsState.ready}
                   </div>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-xs text-muted-foreground">空闲桌台</div>
                   <div className="mt-1 text-lg font-semibold text-slate-700">
-                    {tableStats.available}
+                    {tableStatsState.available}
                   </div>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-xs text-muted-foreground">就餐桌台</div>
                   <div className="mt-1 text-lg font-semibold text-slate-700">
-                    {tableStats.occupied}
+                    {tableStatsState.occupied}
                   </div>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3">
                   <div className="text-xs text-muted-foreground">桌台总数</div>
                   <div className="mt-1 text-lg font-semibold text-slate-700">
-                    {tableStats.total}
+                    {tableStatsState.total}
                   </div>
                 </div>
               </div>

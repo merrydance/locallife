@@ -1,10 +1,50 @@
 import Navigation from '../../utils/navigation'
 import { updateUserInfo, getUserInfo, getWebLoginSessionStatus, confirmWebLoginSession } from '../../api/auth'
+import { bindMerchant } from '../../api/personal'
 import { logger } from '../../utils/logger'
 import { UploadService } from '../../api/upload'
 import { getStableBarHeights } from '../../utils/responsive'
 
 const app = getApp<IAppOption>()
+
+function toFriendlyMessage(error: any, fallback: string) {
+  const raw = error?.userMessage || error?.message || ''
+  const text = String(raw || '').trim()
+  if (!text) return fallback
+  if (/[\u4e00-\u9fa5]/.test(text)) return text
+  const lower = text.toLowerCase()
+  if (lower.includes("sig") && lower.includes("required")) {
+    return '二维码签名缺失，请刷新二维码后重试'
+  }
+  if ((lower.includes("ts") || lower.includes("timestamp")) && lower.includes("required")) {
+    return '二维码时间戳缺失，请刷新二维码后重试'
+  }
+  if (lower.includes('signature') || lower.includes('sig') || lower.includes('mismatch')) {
+    return '二维码校验失败，请刷新二维码后重试'
+  }
+  if (lower.includes('expired')) {
+    return '二维码已过期，请刷新二维码'
+  }
+  if (lower.includes('session not found') || lower.includes('not found')) {
+    return '登录码不存在或已失效，请刷新二维码'
+  }
+  if (lower.includes('already consumed')) {
+    return '该登录码已被使用，请刷新二维码'
+  }
+  if (lower.includes('not confirmed')) {
+    return '请先在小程序确认登录'
+  }
+  if (lower.includes('merchant account') || lower.includes('merchant')) {
+    return '当前账号暂无商户权限'
+  }
+  if (lower.includes('too many') || lower.includes('429')) {
+    return '操作太频繁，请稍后再试'
+  }
+  if (lower.includes('network') || lower.includes('timeout')) {
+    return '网络异常，请稍后重试'
+  }
+  return fallback
+}
 
 Page({
   data: {
@@ -229,7 +269,8 @@ Page({
   async handleScanResult(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
     const payload = this.extractRawPayload(res)
     const raw = payload.raw
-    const code = this.extractCode(payload.codeCandidate)
+    const webLoginMeta = this.extractWebLoginMeta(raw)
+    const code = webLoginMeta.code || this.extractCode(payload.codeCandidate)
 
     if (!code) {
       logger.warn('Scan empty payload', res, 'UserCenter.scan')
@@ -248,25 +289,31 @@ Page({
       return
     }
 
-    await this.handleCodeCandidate(raw, code)
+    await this.handleCodeCandidate(raw, code, webLoginMeta)
   },
 
-  async handleCodeCandidate(raw: string, code: string) {
-    // 先识别是否为入职码（小程序路径）
-    if (raw.includes('bind-merchant') || raw.includes('code=')) {
-      this.confirmInviteCode(code)
-      return
+  async handleCodeCandidate(raw: string, code: string, webLoginMeta?: { code?: string, sig?: string, ts?: number }) {
+    const isWebLoginHint = raw.includes('web-login') || raw.includes('/merchant/login') || raw.includes('sig=') || raw.includes('ts=')
+    const isInviteHint = raw.includes('invite-merchant') || raw.includes('bind-merchant')
+
+    // 优先识别 Web 登录码
+    if (isWebLoginHint) {
+      try {
+        const loginCode = webLoginMeta?.code || code
+        const session = await getWebLoginSessionStatus(loginCode)
+        if (session?.code) {
+          this.confirmWebLogin(loginCode, webLoginMeta?.sig, webLoginMeta?.ts)
+          return
+        }
+      } catch (error) {
+        logger.warn('Scan not web login', error, 'UserCenter.scan')
+      }
     }
 
-    // 尝试识别 Web 登录码
-    try {
-      const session = await getWebLoginSessionStatus(code)
-      if (session?.code) {
-        this.confirmWebLogin(code)
-        return
-      }
-    } catch (error) {
-      logger.warn('Scan not web login', error, 'UserCenter.scan')
+    // 识别为入职码
+    if (isInviteHint || (!isWebLoginHint && raw.includes('code='))) {
+      this.confirmInviteCode(code)
+      return
     }
 
     // 无法识别为登录码时，按入职码处理
@@ -280,9 +327,27 @@ Page({
     if (match) return match[1]
     const webLoginMatch = decoded.match(/web-login:([0-9a-fA-F]{32})/)
     if (webLoginMatch) return webLoginMatch[1]
+    const inviteMatch = decoded.match(/invite-merchant:([A-Za-z0-9_-]+)/)
+    if (inviteMatch) return inviteMatch[1]
     const hexMatch = decoded.match(/[0-9a-fA-F]{32}/)
     if (hexMatch) return hexMatch[0]
     return decoded
+  },
+
+  extractWebLoginMeta(raw: string) {
+    if (!raw) return { code: '', sig: '', ts: undefined }
+    const decoded = decodeURIComponent(raw)
+    const queryCodeMatch = decoded.match(/code=([^&]+)/)
+    const webLoginMatch = decoded.match(/web-login:([0-9a-fA-F]{32})/)
+    const code = queryCodeMatch ? queryCodeMatch[1] : webLoginMatch ? webLoginMatch[1] : ''
+    if (!code) return { code: '', sig: '', ts: undefined }
+    const sigMatch = decoded.match(/sig=([0-9a-fA-F]+)/)
+    const tsMatch = decoded.match(/ts=(\d+)/)
+    return {
+      code,
+      sig: sigMatch ? sigMatch[1] : '',
+      ts: tsMatch ? Number(tsMatch[1]) : undefined
+    }
   },
 
   extractRawPayload(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
@@ -328,12 +393,23 @@ Page({
       cancelText: '取消',
       success: (modal) => {
         if (!modal.confirm) return
-        wx.navigateTo({ url: `/pages/user/bind-merchant/index?code=${encodeURIComponent(code)}` })
+        wx.showLoading({ title: '处理中...' })
+        bindMerchant(code)
+          .then(() => {
+            wx.showToast({ title: '加入成功', icon: 'success' })
+          })
+          .catch((error: any) => {
+            const message = toFriendlyMessage(error, '加入失败，请稍后重试')
+            wx.showToast({ title: message, icon: 'none' })
+          })
+          .finally(() => {
+            wx.hideLoading()
+          })
       }
     })
   },
 
-  confirmWebLogin(code: string) {
+  confirmWebLogin(code: string, sig?: string, ts?: number) {
     wx.showModal({
       title: 'Web 登录确认',
       content: '检测到 Web 登录码，是否确认登录网页端？',
@@ -341,12 +417,27 @@ Page({
       cancelText: '取消',
       success: async (modal) => {
         if (!modal.confirm) return
+        if (!sig || !ts) {
+          wx.showModal({
+            title: '二维码无效',
+            content: '当前二维码缺少校验信息，请在网页端刷新二维码后重试。',
+            showCancel: false,
+            confirmText: '我知道了'
+          })
+          return
+        }
         wx.showLoading({ title: '确认中...' })
         try {
-          await confirmWebLoginSession(code)
+          await confirmWebLoginSession(code, sig, ts)
           wx.showToast({ title: '已确认登录', icon: 'success' })
         } catch (error: any) {
-          wx.showToast({ title: error?.message || '确认失败', icon: 'none' })
+          const message = toFriendlyMessage(error, '确认失败，请稍后重试')
+          wx.showModal({
+            title: '无法登录网页端',
+            content: message,
+            showCancel: false,
+            confirmText: '我知道了'
+          })
         } finally {
           wx.hideLoading()
         }

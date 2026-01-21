@@ -4,14 +4,20 @@ INSERT INTO web_login_sessions (
   status,
   expires_at,
   web_user_agent,
-  web_client_ip
+  web_client_ip,
+  poll_token
 ) VALUES (
-  $1, 'pending', $2, $3, $4
+  $1, 'pending', $2, $3, $4, $5
 ) RETURNING *;
 
 -- name: GetWebLoginSessionByCode :one
 SELECT * FROM web_login_sessions
 WHERE code = $1
+LIMIT 1;
+
+-- name: GetWebLoginSessionByPollToken :one
+SELECT * FROM web_login_sessions
+WHERE poll_token = $1
 LIMIT 1;
 
 -- name: ConfirmWebLoginSession :one

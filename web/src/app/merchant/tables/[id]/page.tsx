@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { TableStatusActions } from "@/components/merchant/table-status-actions";
 import { TableDeleteButton } from "@/components/merchant/table-delete-button";
-import { apiGet, apiPatch } from "@/lib/api";
+import { apiGet, apiPatch, formatAmount } from "@/lib/api";
 
 type TableItem = {
   id: number;
@@ -55,10 +55,13 @@ const fallbackDetail: TableItem = {
 
 const fallbackImages: TableImage[] = [];
 
-function normalizeImages(value: TableImage[] | { items?: TableImage[] } | undefined) {
+function normalizeImages(
+  value: TableImage[] | { items?: TableImage[]; images?: TableImage[] } | undefined
+) {
   if (!value) return fallbackImages;
   if (Array.isArray(value)) return value;
   if (value.items && Array.isArray(value.items)) return value.items;
+  if (value.images && Array.isArray(value.images)) return value.images;
   return fallbackImages;
 }
 
@@ -69,7 +72,7 @@ export default async function TableDetailPage({
 }) {
   const [detail, images] = await Promise.all([
     apiGet<TableItem>(`/tables/${params.id}`).catch(() => fallbackDetail),
-    apiGet<TableImage[] | { items?: TableImage[] }>(
+    apiGet<TableImage[] | { items?: TableImage[]; images?: TableImage[] }>(
       `/tables/${params.id}/images`
     ).catch(() => fallbackImages),
   ]);
@@ -126,7 +129,7 @@ export default async function TableDetailPage({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">最低消费</span>
-                <span className="font-medium">¥{detail.minimum_spend ?? 0}</span>
+                <span className="font-medium">¥{formatAmount(detail.minimum_spend)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">标签</span>

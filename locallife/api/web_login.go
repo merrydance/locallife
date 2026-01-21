@@ -1,11 +1,15 @@
 package api
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +18,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 )
+
 
 const defaultWebLoginSessionTTL = 5 * time.Minute
 
@@ -25,6 +30,8 @@ type webLoginSessionStatusResponse struct {
 	ExpiresAt   time.Time  `json:"expires_at"`
 	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
 	ConsumedAt  *time.Time `json:"consumed_at,omitempty"`
+	QRPayload   string     `json:"qr_payload,omitempty"`
+	PollToken   string     `json:"poll_token,omitempty"`
 }
 
 type webLoginConsumeResponse struct {
@@ -38,10 +45,12 @@ type webLoginConsumeResponse struct {
 
 type webLoginConfirmRequest struct {
 	Code string `json:"code" binding:"required,min=1,max=128"`
+	Sig  string `json:"sig" binding:"required,min=1,max=128"`
+	TS   int64  `json:"ts" binding:"required"`
 }
 
 type webLoginConsumeRequest struct {
-	Code string `json:"code" binding:"required,min=1,max=128"`
+	PollToken string `json:"poll_token" binding:"required,min=1,max=256"`
 }
 
 func (server *Server) webLoginSessionTTL() time.Duration {
@@ -51,8 +60,23 @@ func (server *Server) webLoginSessionTTL() time.Duration {
 	return defaultWebLoginSessionTTL
 }
 
+func (server *Server) webLoginQRSigningKey() string {
+	if server.config.WebLoginQRSigningKey != "" {
+		return server.config.WebLoginQRSigningKey
+	}
+	return server.config.TokenSymmetricKey
+}
+
 func generateWebLoginCode() (string, error) {
 	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func generateWebLoginPollToken() (string, error) {
+	bytes := make([]byte, 24)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
@@ -67,6 +91,55 @@ func newWebLoginSessionStatusResponse(session db.WebLoginSession) webLoginSessio
 		ConfirmedAt: pgTimeToPtr(session.ConfirmedAt),
 		ConsumedAt:  pgTimeToPtr(session.ConsumedAt),
 	}
+}
+
+func newWebLoginSessionStatusResponseWithPollToken(session db.WebLoginSession, payload string, pollToken string) webLoginSessionStatusResponse {
+	resp := newWebLoginSessionStatusResponse(session)
+	resp.QRPayload = payload
+	resp.PollToken = pollToken
+	return resp
+}
+
+func signWebLoginQRCode(code string, ts int64, secret string) (string, error) {
+	if secret == "" {
+		return "", errors.New("signing key is required")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(code))
+	_, _ = mac.Write([]byte("|"))
+	_, _ = mac.Write([]byte(strconv.FormatInt(ts, 10)))
+	return hex.EncodeToString(mac.Sum(nil)), nil
+}
+
+func (server *Server) buildWebLoginQRPayload(code string, issuedAt time.Time) (string, error) {
+	ts := issuedAt.Unix()
+	sig, err := signWebLoginQRCode(code, ts, server.webLoginQRSigningKey())
+	if err != nil {
+		return "", err
+	}
+	if server.config.WebBaseURL != "" {
+		base := strings.TrimRight(server.config.WebBaseURL, "/")
+		return fmt.Sprintf("%s/merchant/login?code=%s&ts=%d&sig=%s", base, code, ts, sig), nil
+	}
+	return fmt.Sprintf("web-login:%s?ts=%d&sig=%s", code, ts, sig), nil
+}
+
+func (server *Server) verifyWebLoginQRSignature(code string, ts int64, sig string) error {
+	if sig == "" || ts == 0 {
+		return errors.New("signature is required")
+	}
+	issuedAt := time.Unix(ts, 0)
+	if time.Since(issuedAt) > server.webLoginSessionTTL() || time.Until(issuedAt) > server.webLoginSessionTTL() {
+		return errors.New("signature expired")
+	}
+	expected, err := signWebLoginQRCode(code, ts, server.webLoginQRSigningKey())
+	if err != nil {
+		return err
+	}
+	if !hmac.Equal([]byte(expected), []byte(sig)) {
+		return errors.New("signature mismatch")
+	}
+	return nil
 }
 
 // createWebLoginSession godoc
@@ -90,11 +163,18 @@ func (server *Server) createWebLoginSession(ctx *gin.Context) {
 			return
 		}
 
+		pollToken, err := generateWebLoginPollToken()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
 		session, err := server.store.CreateWebLoginSession(ctx, db.CreateWebLoginSessionParams{
 			Code:         code,
 			ExpiresAt:    expiresAt,
 			WebUserAgent: pgtype.Text{String: ua, Valid: ua != ""},
 			WebClientIp:  pgtype.Text{String: ip, Valid: ip != ""},
+			PollToken:    pgtype.Text{String: pollToken, Valid: pollToken != ""},
 		})
 		if err != nil {
 			lastErr = err
@@ -105,7 +185,12 @@ func (server *Server) createWebLoginSession(ctx *gin.Context) {
 			return
 		}
 
-		ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponse(session))
+		payload, err := server.buildWebLoginQRPayload(session.Code, time.Now())
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponseWithPollToken(session, payload, pollToken))
 		return
 	}
 
@@ -132,6 +217,21 @@ func (server *Server) getWebLoginSessionStatus(ctx *gin.Context) {
 		return
 	}
 
+	pollToken := strings.TrimSpace(ctx.Query("poll_token"))
+	lastStatus := strings.TrimSpace(ctx.Query("last_status"))
+	waitSeconds := int64(0)
+	if rawWait := strings.TrimSpace(ctx.Query("wait")); rawWait != "" {
+		if parsed, err := strconv.ParseInt(rawWait, 10, 64); err == nil {
+			waitSeconds = parsed
+		}
+	}
+	if waitSeconds < 0 {
+		waitSeconds = 0
+	}
+	if waitSeconds > 30 {
+		waitSeconds = 30
+	}
+
 	session, err := server.store.GetWebLoginSessionByCode(ctx, code)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -139,6 +239,17 @@ func (server *Server) getWebLoginSessionStatus(ctx *gin.Context) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if pollToken != "" {
+		if !session.PollToken.Valid || session.PollToken.String != pollToken {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("invalid poll token")))
+			return
+		}
+	}
+	if waitSeconds > 0 && pollToken == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("poll token required")))
 		return
 	}
 
@@ -151,7 +262,43 @@ func (server *Server) getWebLoginSessionStatus(ctx *gin.Context) {
 		session = updated
 	}
 
-	ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponse(session))
+	if waitSeconds == 0 || lastStatus == "" || session.Status != lastStatus || session.Status == "consumed" || session.Status == "expired" {
+		ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponse(session))
+		return
+	}
+
+	deadline := time.Now().Add(time.Duration(waitSeconds) * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Request.Context().Done():
+			return
+		case <-ticker.C:
+		}
+
+		current, err := server.store.GetWebLoginSessionByCode(ctx, code)
+		if err != nil {
+			return
+		}
+
+		if time.Now().After(current.ExpiresAt) && current.Status != "consumed" && current.Status != "expired" {
+			updated, err := server.store.ExpireWebLoginSession(ctx, current.ID)
+			if err == nil {
+				current = updated
+			}
+		}
+
+		if current.Status != lastStatus || current.Status == "consumed" || current.Status == "expired" {
+			ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponse(current))
+			return
+		}
+
+		if time.Now().After(deadline) {
+			ctx.Status(http.StatusNoContent)
+			return
+		}
+	}
 }
 
 // confirmWebLoginSession godoc
@@ -171,6 +318,10 @@ func (server *Server) getWebLoginSessionStatus(ctx *gin.Context) {
 func (server *Server) confirmWebLoginSession(ctx *gin.Context) {
 	var req webLoginConfirmRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if err := server.verifyWebLoginQRSignature(req.Code, req.TS, req.Sig); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -204,6 +355,14 @@ func (server *Server) confirmWebLoginSession(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, err := server.resolveMerchantForUser(ctx, authPayload.UserID); err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant account required")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	if session.Status == "confirmed" {
 		if session.UserID.Valid && session.UserID.Int64 == authPayload.UserID {
 			ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponse(session))
@@ -229,7 +388,7 @@ func (server *Server) confirmWebLoginSession(ctx *gin.Context) {
 
 // consumeWebLoginSession godoc
 // @Summary Web 端消费登录会话
-// @Description Web 端用 code 换取 token
+// @Description Web 端用 poll_token 换取 token
 // @Tags 认证
 // @Accept json
 // @Produce json
@@ -247,7 +406,7 @@ func (server *Server) consumeWebLoginSession(ctx *gin.Context) {
 		return
 	}
 
-	session, err := server.store.GetWebLoginSessionByCode(ctx, req.Code)
+	session, err := server.store.GetWebLoginSessionByPollToken(ctx, pgtype.Text{String: req.PollToken, Valid: req.PollToken != ""})
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("session not found")))

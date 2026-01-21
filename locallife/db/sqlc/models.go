@@ -1757,6 +1757,7 @@ type WebLoginSession struct {
 	ConfirmClientIp pgtype.Text        `json:"confirm_client_ip"`
 	CreatedAt       time.Time          `json:"created_at"`
 	UpdatedAt       time.Time          `json:"updated_at"`
+	PollToken       pgtype.Text        `json:"poll_token"`
 }
 
 type WechatAccessToken struct {

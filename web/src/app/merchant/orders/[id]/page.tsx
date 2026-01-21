@@ -16,14 +16,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OrderActions } from "@/components/merchant/order-actions";
-import { apiGet } from "@/lib/api";
+import { apiGet, formatAmount } from "@/lib/api";
 
 type OrderItem = {
   name: string;
   quantity: number;
   unit_price: number;
   subtotal: number;
-  customizations?: string[];
+  customizations?: { name: string; value: string }[];
 };
 
 type OrderDetail = {
@@ -166,14 +166,16 @@ export default async function OrderDetailPage({
                     <div className="font-medium">{item.name}</div>
                     {item.customizations && item.customizations.length > 0 ? (
                       <div className="text-xs text-muted-foreground">
-                        {item.customizations.join("、")}
+                        {item.customizations
+                          .map((custom) => `${custom.name}:${custom.value}`)
+                          .join("、")}
                       </div>
                     ) : null}
                   </TableCell>
                   <TableCell>{item.quantity}</TableCell>
-                  <TableCell>¥{item.unit_price.toFixed(2)}</TableCell>
+                  <TableCell>¥{formatAmount(item.unit_price)}</TableCell>
                   <TableCell className="text-right">
-                    ¥{item.subtotal.toFixed(2)}
+                    ¥{formatAmount(item.subtotal)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -189,25 +191,25 @@ export default async function OrderDetailPage({
         <CardContent className="space-y-2 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">商品小计</span>
-            <span className="font-medium">¥{detail.subtotal.toFixed(2)}</span>
+            <span className="font-medium">¥{formatAmount(detail.subtotal)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">配送费</span>
-            <span className="font-medium">¥{detail.delivery_fee.toFixed(2)}</span>
+            <span className="font-medium">¥{formatAmount(detail.delivery_fee)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">配送减免</span>
             <span className="font-medium">
-              -¥{detail.delivery_fee_discount.toFixed(2)}
+              -¥{formatAmount(detail.delivery_fee_discount)}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">优惠金额</span>
-            <span className="font-medium">-¥{detail.discount_amount.toFixed(2)}</span>
+            <span className="font-medium">-¥{formatAmount(detail.discount_amount)}</span>
           </div>
           <div className="flex items-center justify-between text-base">
             <span className="font-semibold">应付总计</span>
-            <span className="font-semibold">¥{detail.total_amount.toFixed(2)}</span>
+            <span className="font-semibold">¥{formatAmount(detail.total_amount)}</span>
           </div>
         </CardContent>
       </Card>

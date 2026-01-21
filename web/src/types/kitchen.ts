@@ -1,8 +1,8 @@
 export type KitchenOrderItem = {
   customizations?: {
-    group_name: string;
-    option_name: string;
-    price_adjustment: number;
+    name: string;
+    value: string;
+    extra_price?: number;
   }[];
   id: number;
   image_url: string;
