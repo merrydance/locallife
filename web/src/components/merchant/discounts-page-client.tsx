@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import {
-  Ticket,
+  Tag,
   Search,
   Plus,
   Trash2,
@@ -33,82 +33,75 @@ import { cn } from "@/lib/utils";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 
-import type { VoucherResponse, CreateVoucherRequest, UpdateVoucherRequest } from "@/types/voucher";
+import type { DiscountResponse, CreateDiscountRequest, UpdateDiscountRequest, ListDiscountsResponse } from "@/types/discount";
 
-const ORDER_TYPE_OPTIONS = [
-  { label: "堂食", value: "dine_in" },
-  { label: "外卖", value: "takeout" },
-  { label: "打包自取", value: "takeaway" },
-  { label: "预订", value: "reservation" },
-];
-
-export function VouchersPageClient() {
+export function DiscountsPageClient() {
   const session = useMerchantSession();
   const router = useRouter();
-  const [vouchers, setVouchers] = useState<VoucherResponse[]>([]);
+  const [discounts, setDiscounts] = useState<DiscountResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   
   // Selection & Editing
-  const [selectedVoucher, setSelectedVoucher] = useState<VoucherResponse | null>(null);
+  const [selectedDiscount, setSelectedDiscount] = useState<DiscountResponse | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Form Data
-  const [formData, setFormData] = useState<Partial<VoucherResponse>>({});
+  const [formData, setFormData] = useState<Partial<DiscountResponse>>({});
   
   // Delete Confirm Dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const loadVouchers = useCallback(async () => {
+  const loadDiscounts = useCallback(async () => {
     if (!session?.merchant?.id) return;
     setLoading(true);
     try {
-      const response = await apiGet<{ vouchers: VoucherResponse[] }>(`/merchants/${session.merchant.id}/vouchers`, { 
+      const response = await apiGet<ListDiscountsResponse>(`/merchants/${session.merchant.id}/discounts`, { 
         page_id: 1, 
         page_size: 50 
       });
-      const list = response.vouchers || [];
-      setVouchers(list);
+      const rules = response.rules || [];
+      setDiscounts(rules);
       
-      // 同步更新当前选中的数据
-      if (selectedVoucher) {
-        const updated = list.find(v => v.id === selectedVoucher.id);
+      // 同步更新当前选中的数据，确保重置逻辑能拿到最新保存的值
+      if (selectedDiscount) {
+        const updated = rules.find(r => r.id === selectedDiscount.id);
         if (updated) {
-          setSelectedVoucher(updated);
+          setSelectedDiscount(updated);
         }
       }
     } catch (error) {
-      console.error("Failed to load vouchers", error);
+      console.error("Failed to load discounts", error);
     } finally {
       setLoading(false);
     }
-  }, [session?.merchant?.id, selectedVoucher?.id]);
+  }, [session?.merchant?.id, selectedDiscount?.id]);
 
   useEffect(() => {
-    loadVouchers();
-  }, [loadVouchers]);
+    loadDiscounts();
+  }, [loadDiscounts]);
 
-  const filteredVouchers = useMemo(() => {
-    if (!searchQuery) return vouchers;
-    return vouchers.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [vouchers, searchQuery]);
+  const filteredDiscounts = useMemo(() => {
+    if (!searchQuery) return discounts;
+    return discounts.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [discounts, searchQuery]);
 
-  // Select Voucher handler
-  const handleSelectVoucher = (voucher: VoucherResponse) => {
-    setSelectedVoucher(voucher);
+  // Select Discount handler
+  const handleSelectDiscount = (discount: DiscountResponse) => {
+    setSelectedDiscount(discount);
     setIsAdding(false);
     setFormData({
-        ...voucher,
-        valid_from: voucher.valid_from.slice(0, 10),
-        valid_until: voucher.valid_until.slice(0, 10),
+        ...discount,
+        valid_from: discount.valid_from.slice(0, 10),
+        valid_until: discount.valid_until.slice(0, 10),
     });
   };
 
-  // Add Voucher handler
-  const handleAddVoucher = () => {
+  // Add Discount handler
+  const handleAddDiscount = () => {
     setIsAdding(true);
-    setSelectedVoucher(null);
+    setSelectedDiscount(null);
     const today = new Date();
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
@@ -116,13 +109,13 @@ export function VouchersPageClient() {
     const initialData = {
       name: "",
       description: "",
-      amount: 0,
       min_order_amount: 0,
-      total_quantity: 100,
+      discount_amount: 0,
       valid_from: today.toISOString().slice(0, 10),
       valid_until: nextMonth.toISOString().slice(0, 10),
+      can_stack_with_voucher: false,
+      can_stack_with_membership: true,
       is_active: true,
-      allowed_order_types: ["dine_in", "takeout", "takeaway", "reservation"]
     };
     setFormData(initialData);
   };
@@ -130,12 +123,12 @@ export function VouchersPageClient() {
   // Reset Logic
   const handleReset = () => {
     if (isAdding) {
-      handleAddVoucher();
-    } else if (selectedVoucher) {
+      handleAddDiscount(); // 如果是新增，重置为初始状态
+    } else if (selectedDiscount) {
       setFormData({
-        ...selectedVoucher,
-        valid_from: selectedVoucher.valid_from.slice(0, 10),
-        valid_until: selectedVoucher.valid_until.slice(0, 10),
+        ...selectedDiscount,
+        valid_from: selectedDiscount.valid_from.slice(0, 10),
+        valid_until: selectedDiscount.valid_until.slice(0, 10),
       });
     }
     toast.info("表单已重置");
@@ -145,16 +138,16 @@ export function VouchersPageClient() {
   const handleSave = async () => {
     if (!session?.merchant?.id) return;
     if (!formData.name?.trim()) {
-      toast.error("请输入代金券名称");
+      toast.error("请输入满减活动名称");
       return;
     }
-    if ((formData.amount || 0) <= 0) {
+    if ((formData.discount_amount || 0) <= 0) {
       toast.error("请输入有效优惠金额");
       return;
     }
-    if ((formData.total_quantity || 0) <= 0) {
-      toast.error("请输入有效发行数量");
-      return;
+    if ((formData.min_order_amount || 0) <= (formData.discount_amount || 0)) {
+        toast.error("最低消费金额必须大于优惠金额");
+        return;
     }
     if (!formData.valid_from || !formData.valid_until) {
       toast.error("请选择有效期");
@@ -164,44 +157,41 @@ export function VouchersPageClient() {
       toast.error("结束日期应晚于开始日期");
       return;
     }
-    if (!formData.allowed_order_types || formData.allowed_order_types.length === 0) {
-      toast.error("请至少选择一个适用场景");
-      return;
-    }
 
     setSaving(true);
     try {
       if (isAdding) {
-        const payload: CreateVoucherRequest = {
+        const payload: CreateDiscountRequest = {
           name: formData.name!,
           description: formData.description,
-          amount: formData.amount!, // cents
-          min_order_amount: formData.min_order_amount || 0,
-          total_quantity: formData.total_quantity!,
+          min_order_amount: formData.min_order_amount!,
+          discount_amount: formData.discount_amount!,
+          can_stack_with_voucher: !!formData.can_stack_with_voucher,
+          can_stack_with_membership: !!formData.can_stack_with_membership,
           valid_from: formData.valid_from + "T00:00:00Z",
           valid_until: formData.valid_until + "T23:59:59Z",
-          allowed_order_types: formData.allowed_order_types!,
         };
-        await apiPost(`/merchants/${session.merchant.id}/vouchers`, payload as any);
-        toast.success("代金券创建成功");
+        await apiPost(`/merchants/${session.merchant.id}/discounts`, payload as any);
+        toast.success("满减活动创建成功");
         setIsAdding(false);
-      } else if (selectedVoucher) {
-        const payload: UpdateVoucherRequest = {
+      } else if (selectedDiscount) {
+        const payload: UpdateDiscountRequest = {
+          id: selectedDiscount.id,
           name: formData.name,
           description: formData.description,
-          amount: formData.amount,
           min_order_amount: formData.min_order_amount,
-          total_quantity: formData.total_quantity,
+          discount_amount: formData.discount_amount,
+          can_stack_with_voucher: formData.can_stack_with_voucher,
+          can_stack_with_membership: formData.can_stack_with_membership,
           valid_from: formData.valid_from + "T00:00:00Z",
           valid_until: formData.valid_until + "T23:59:59Z",
           is_active: formData.is_active,
-          allowed_order_types: formData.allowed_order_types,
         };
-        await apiPatch(`/merchants/${session.merchant.id}/vouchers/${selectedVoucher.id}`, payload as any);
-        toast.success("代金券更新成功");
+        await apiPatch(`/merchants/${session.merchant.id}/discounts/${selectedDiscount.id}`, payload as any);
+        toast.success("满减活动更新成功");
       }
       
-      loadVouchers();
+      loadDiscounts();
     } catch (error: any) {
       toast.error(error.message || "保存失败");
     } finally {
@@ -211,39 +201,28 @@ export function VouchersPageClient() {
 
   // Delete Logic
   const handleDeleteClick = () => {
-    if (!selectedVoucher) return;
+    if (!selectedDiscount) return;
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!selectedVoucher || !session?.merchant?.id) return;
+    if (!selectedDiscount || !session?.merchant?.id) return;
     try {
-      await apiDelete(`/merchants/${session.merchant.id}/vouchers/${selectedVoucher.id}`);
-      toast.success("代金券已删除");
-      setSelectedVoucher(null);
+      await apiDelete(`/merchants/${session.merchant.id}/discounts/${selectedDiscount.id}`);
+      toast.success("满减活动已删除");
+      setSelectedDiscount(null);
       setIsAdding(false);
-      loadVouchers();
+      loadDiscounts();
     } catch (error: any) {
       toast.error(error.message || "删除失败");
     }
   };
 
-  const toggleOrderType = (type: string) => {
-    setFormData(prev => {
-        const current = prev.allowed_order_types || [];
-        if (current.includes(type)) {
-            return { ...prev, allowed_order_types: current.filter(t => t !== type) };
-        } else {
-            return { ...prev, allowed_order_types: [...current, type] };
-        }
-    });
-  };
-
   return (
     <PageShell>
       <PageHeader 
-        title="代金券管理" 
-        description="创建和管理商户代金券，吸引客户到店或下单"
+        title="限时满减管理" 
+        description="创建和管理满减促销活动，提高客单价和订单量"
         actions={
           <Button variant="outline" size="sm" onClick={() => router.push("/merchant/marketing")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -254,14 +233,14 @@ export function VouchersPageClient() {
 
       <PageContent>
         <div className="flex h-[calc(100vh-12rem)] gap-6">
-          {/* Left Panel: Voucher List */}
+          {/* Left Panel: Discount List */}
           <div className="w-1/3 min-w-[320px] flex flex-col bg-white rounded-xl border shadow-sm">
             <div className="p-4 border-b space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-medium">代金券列表 ({vouchers.length})</h3>
-                <Button size="sm" onClick={handleAddVoucher}>
+                <h3 className="font-medium">活动列表 ({discounts.length})</h3>
+                <Button size="sm" onClick={handleAddDiscount}>
                   <Plus className="h-4 w-4 mr-2" />
-                  新建券
+                  新建活动
                 </Button>
               </div>
               <div className="relative">
@@ -277,60 +256,63 @@ export function VouchersPageClient() {
 
             <ScrollArea className="flex-1 p-2">
               <div className="space-y-2">
-                {filteredVouchers.map(voucher => {
-                    const isExpired = new Date(voucher.valid_until) < new Date();
-                    const isSoldOut = voucher.claimed_quantity >= voucher.total_quantity;
+                {filteredDiscounts.map(discount => {
+                    const isExpired = new Date(discount.valid_until) < new Date();
                     
                     return (
                         <div 
-                          key={voucher.id}
-                          onClick={() => handleSelectVoucher(voucher)}
+                          key={discount.id}
+                          onClick={() => handleSelectDiscount(discount)}
                           className={cn(
                             "p-4 rounded-lg border transition-all cursor-pointer hover:border-primary/50 hover:bg-slate-50 group",
-                            selectedVoucher?.id === voucher.id && !isAdding ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-slate-100"
+                            selectedDiscount?.id === discount.id && !isAdding ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-slate-100"
                           )}
                         >
                           <div className="flex justify-between items-start mb-2">
                             <div className="flex flex-col gap-1">
-                                <span className="font-medium text-slate-900 line-clamp-1 group-hover:text-primary transition-colors">{voucher.name}</span>
+                                <span className="font-medium text-slate-900 line-clamp-1 group-hover:text-primary transition-colors">{discount.name}</span>
                                 <div className="flex items-center gap-2">
-                                    <Badge variant={voucher.is_active ? "default" : "secondary"} className="text-[10px] h-4 px-1">
-                                        {voucher.is_active ? "进行中" : "已停用"}
+                                    <Badge variant={discount.is_active ? "default" : "secondary"} className="text-[10px] h-4 px-1">
+                                        {discount.is_active ? "进行中" : "已停用"}
                                     </Badge>
                                     {isExpired && <Badge variant="outline" className="text-[10px] h-4 px-1 text-rose-500 border-rose-200 bg-rose-50">已过期</Badge>}
-                                    {isSoldOut && <Badge variant="outline" className="text-[10px] h-4 px-1 text-amber-500 border-amber-200 bg-amber-50">已领完</Badge>}
                                 </div>
                             </div>
-                            <span className="text-lg font-bold text-primary shrink-0">
-                              <span className="text-xs font-normal mr-0.5">¥</span>
-                              {formatAmount(voucher.amount)}
-                            </span>
+                            <div className="text-right">
+                                <div className="text-lg font-bold text-primary">
+                                    <span className="text-xs font-normal mr-0.5">减</span>
+                                    {formatAmount(discount.discount_amount)}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">
+                                    满{formatAmount(discount.min_order_amount)}可用
+                                </div>
+                            </div>
                           </div>
                           
-                          <div className="space-y-2 mt-3">
-                            <div className="flex justify-between text-[11px] text-muted-foreground">
-                                <span>领取进度: {voucher.claimed_quantity}/{voucher.total_quantity}</span>
-                                <span>使用: {voucher.used_quantity}</span>
+                          <div className="mt-3 pt-3 border-t border-slate-50 space-y-2">
+                            <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                    <div className={cn("size-1.5 rounded-full", discount.can_stack_with_voucher ? "bg-green-500" : "bg-slate-300")} />
+                                    <span>叠加代金券</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <div className={cn("size-1.5 rounded-full", discount.can_stack_with_membership ? "bg-green-500" : "bg-slate-300")} />
+                                    <span>叠加强制会员</span>
+                                </div>
                             </div>
-                            <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                                <div 
-                                    className="bg-primary h-full transition-all" 
-                                    style={{ width: `${Math.min(100, (voucher.claimed_quantity / voucher.total_quantity) * 100)}%` }}
-                                />
-                            </div>
-                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-1">
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                 <Calendar className="h-3 w-3" />
-                                <span>{voucher.valid_from.slice(0, 10)} 至 {voucher.valid_until.slice(0, 10)}</span>
+                                <span>{discount.valid_from.slice(0, 10)} 至 {discount.valid_until.slice(0, 10)}</span>
                             </div>
                           </div>
                         </div>
                     );
                 })}
                 
-                {filteredVouchers.length === 0 && !loading && (
+                {filteredDiscounts.length === 0 && !loading && (
                   <div className="text-center py-10 text-muted-foreground text-sm flex flex-col items-center gap-2">
-                    <Ticket className="h-8 w-8 text-slate-200" />
-                    <span>暂无代金券数据</span>
+                    <Tag className="h-8 w-8 text-slate-200" />
+                    <span>暂无满减活动数据</span>
                   </div>
                 )}
                 
@@ -345,13 +327,13 @@ export function VouchersPageClient() {
 
           {/* Right Panel: Editor */}
           <div className="flex-1 bg-white rounded-xl border shadow-sm flex flex-col">
-            {!selectedVoucher && !isAdding ? (
+            {!selectedDiscount && !isAdding ? (
               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-12 text-center">
                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                  <Ticket className="w-10 h-10 text-slate-300" />
+                  <Tag className="w-10 h-10 text-slate-300" />
                 </div>
-                <h4 className="text-slate-900 font-medium mb-2">欢迎管理代金券</h4>
-                <p className="max-w-xs text-sm">选择左侧的代金券进行编辑，或者点击“新建券”开始创建您的营销活动。</p>
+                <h4 className="text-slate-900 font-medium mb-2">欢迎管理满减活动</h4>
+                <p className="max-w-xs text-sm">选择左侧的活动进行编辑，或者点击“新建活动”开始您的促销计划。</p>
               </div>
             ) : (
               <>
@@ -359,10 +341,10 @@ export function VouchersPageClient() {
                 <div className="flex items-center justify-between p-4 border-b bg-slate-50/50">
                   <div className="flex items-center gap-4">
                     <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                        <Ticket className="size-4" />
+                        <Tag className="size-4" />
                     </div>
                     <h2 className="text-lg font-semibold">
-                      {isAdding ? "新建代金券" : "编辑代金券"}
+                      {isAdding ? "新建满减活动" : "编辑满减活动"}
                     </h2>
                     <div className="flex gap-2 ml-4">
                       {isAdding ? (
@@ -384,14 +366,14 @@ export function VouchersPageClient() {
                             重置
                           </Button>
                         </>
-                      ) : selectedVoucher ? (
+                      ) : selectedDiscount ? (
                         <>
                           <Button 
                             variant="ghost" 
                             size="sm" 
                             className="h-8 text-muted-foreground" 
                             onClick={() => {
-                              setSelectedVoucher(null);
+                              setSelectedDiscount(null);
                               setFormData({});
                             }}
                           >
@@ -429,9 +411,9 @@ export function VouchersPageClient() {
                       
                       <div className="grid gap-6">
                         <div className="grid gap-2">
-                          <Label className="text-slate-700">代金券名称 <span className="text-rose-500">*</span></Label>
+                          <Label className="text-slate-700">满减名称 <span className="text-rose-500">*</span></Label>
                           <Input 
-                            placeholder="例如：10元午餐通用券" 
+                            placeholder="例如：午间满减、周末满30减5" 
                             className="bg-slate-50/50 focus:bg-white transition-all shadow-sm"
                             value={formData.name || ""}
                             onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
@@ -439,70 +421,52 @@ export function VouchersPageClient() {
                         </div>
                         
                         <div className="grid grid-cols-2 gap-6">
-                             <div className="grid gap-2">
-                                <Label className="text-slate-700">面额 (元) <span className="text-rose-500">*</span></Label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">¥</span>
-                                    <Input 
-                                        type="number"
-                                        className="pl-7 bg-slate-50/50 focus:bg-white shadow-sm"
-                                        placeholder="0.00"
-                                        value={formData.amount ? (formData.amount / 100).toString() : ""}
-                                        onChange={(e) => {
-                                            const val = parseFloat(e.target.value);
-                                            setFormData(p => ({ ...p, amount: isNaN(val) ? 0 : Math.round(val * 100) }));
-                                        }}
-                                        disabled={!isAdding}
-                                    />
-                                </div>
-                                {!isAdding && <p className="text-[11px] text-amber-600 flex items-center gap-1"><AlertCircle className="size-3" /> 发布后不可修改金额</p>}
-                            </div>
-
                             <div className="grid gap-2">
-                                <Label className="text-slate-700">最低消费 (元)</Label>
+                                <Label className="text-slate-700">最低消费 (元) <span className="text-rose-500">*</span></Label>
                                 <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">¥</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">满</span>
                                     <Input 
                                         type="number"
-                                        className="pl-7 bg-slate-50/50 focus:bg-white shadow-sm"
-                                        placeholder="0.00 (选填)"
+                                        className="pl-8 bg-slate-50/50 focus:bg-white shadow-sm"
+                                        placeholder="0.00"
                                         value={formData.min_order_amount ? (formData.min_order_amount / 100).toString() : ""}
                                         onChange={(e) => {
                                             const val = parseFloat(e.target.value);
                                             setFormData(p => ({ ...p, min_order_amount: isNaN(val) ? 0 : Math.round(val * 100) }));
                                         }}
-                                        disabled={!isAdding}
                                     />
                                 </div>
-                                {!isAdding && <p className="text-[11px] text-amber-600 flex items-center gap-1"><AlertCircle className="size-3" /> 发布后不可修改门槛</p>}
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label className="text-slate-700">减免金额 (元) <span className="text-rose-500">*</span></Label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">减</span>
+                                    <Input 
+                                        type="number"
+                                        className="pl-8 bg-slate-50/50 focus:bg-white shadow-sm"
+                                        placeholder="0.00"
+                                        value={formData.discount_amount ? (formData.discount_amount / 100).toString() : ""}
+                                        onChange={(e) => {
+                                            const val = parseFloat(e.target.value);
+                                            setFormData(p => ({ ...p, discount_amount: isNaN(val) ? 0 : Math.round(val * 100) }));
+                                        }}
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-6">
-                            <div className="grid gap-2">
-                                <Label className="text-slate-700">发行总量 <span className="text-rose-500">*</span></Label>
-                                <Input 
-                                    type="number"
-                                    className="bg-slate-50/50 focus:bg-white shadow-sm"
-                                    placeholder="数量"
-                                    value={formData.total_quantity?.toString() || ""}
-                                    onChange={(e) => setFormData(p => ({ ...p, total_quantity: parseInt(e.target.value) || 0 }))}
+                        <div className="grid gap-2">
+                            <Label className="text-slate-700">状态控制</Label>
+                            <div className="flex items-center gap-3 h-10 px-1">
+                                <Switch 
+                                    id="discount-active"
+                                    checked={formData.is_active}
+                                    onCheckedChange={(c) => setFormData(p => ({ ...p, is_active: c }))}
                                 />
-                                <p className="text-[11px] text-muted-foreground flex items-center gap-1"><Info className="size-3" /> 已领取 {selectedVoucher?.claimed_quantity || 0}</p>
-                            </div>
-                            
-                            <div className="grid gap-2">
-                                <Label className="text-slate-700">状态控制</Label>
-                                <div className="flex items-center gap-3 h-10 px-1">
-                                    <Switch 
-                                        id="voucher-active"
-                                        checked={formData.is_active}
-                                        onCheckedChange={(c) => setFormData(p => ({ ...p, is_active: c }))}
-                                    />
-                                    <Label htmlFor="voucher-active" className="cursor-pointer font-medium text-sm">
-                                        {formData.is_active ? "处于发放中" : "已下架停发"}
-                                    </Label>
-                                </div>
+                                <Label htmlFor="discount-active" className="cursor-pointer font-medium text-sm">
+                                    {formData.is_active ? "处于活动中" : "已下架停用"}
+                                </Label>
                             </div>
                         </div>
                       </div>
@@ -546,29 +510,47 @@ export function VouchersPageClient() {
 
                     <Separator className="opacity-50" />
 
-                    {/* Usage Scenes */}
+                    {/* Stacking Options */}
                     <section className="space-y-6">
                       <div className="flex items-center gap-2">
                         <div className="h-4 w-1 bg-primary rounded-full"></div>
-                        <h3 className="text-sm font-semibold text-slate-900">适用范围</h3>
+                        <h3 className="text-sm font-semibold text-slate-900">叠加规则</h3>
                       </div>
                       
-                      <div className="p-4 rounded-xl border bg-slate-50/30 grid grid-cols-2 gap-y-4 gap-x-8">
-                        {ORDER_TYPE_OPTIONS.map((option) => (
-                           <div key={option.value} className="flex items-center space-x-3 py-1">
-                                <Checkbox 
-                                    id={`type-${option.value}`} 
-                                    checked={formData.allowed_order_types?.includes(option.value)}
-                                    onCheckedChange={() => toggleOrderType(option.value)}
-                                />
+                      <div className="p-4 rounded-xl border bg-slate-50/30 space-y-4">
+                        <div className="flex items-center space-x-3 py-1">
+                            <Checkbox 
+                                id="stack-voucher" 
+                                checked={formData.can_stack_with_voucher}
+                                onCheckedChange={(c) => setFormData(p => ({ ...p, can_stack_with_voucher: !!c }))}
+                            />
+                            <div className="grid gap-0.5 leading-none">
                                 <label
-                                    htmlFor={`type-${option.value}`}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                    htmlFor="stack-voucher"
+                                    className="text-sm font-medium cursor-pointer"
                                 >
-                                    {option.label}
+                                    可与代金券叠加使用
                                 </label>
-                           </div>
-                        ))}
+                                <p className="text-[11px] text-muted-foreground">勾选后，用户在结算时可同时使用代金券和满减活动</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-3 py-1">
+                            <Checkbox 
+                                id="stack-membership" 
+                                checked={formData.can_stack_with_membership}
+                                onCheckedChange={(c) => setFormData(p => ({ ...p, can_stack_with_membership: !!c }))}
+                            />
+                            <div className="grid gap-0.5 leading-none">
+                                <label
+                                    htmlFor="stack-membership"
+                                    className="text-sm font-medium cursor-pointer"
+                                >
+                                    可与会员折扣叠加使用
+                                </label>
+                                <p className="text-[11px] text-muted-foreground">勾选后，满减金额将在会员折扣价基础上进一步扣减</p>
+                            </div>
+                        </div>
                       </div>
                     </section>
 
@@ -578,11 +560,11 @@ export function VouchersPageClient() {
                     <section className="space-y-4">
                       <div className="flex items-center gap-2">
                         <div className="h-4 w-1 bg-primary rounded-full"></div>
-                        <h3 className="text-sm font-semibold text-slate-900">更多描述</h3>
+                        <h3 className="text-sm font-semibold text-slate-900">活动描述</h3>
                       </div>
                       <div className="grid gap-2">
                         <Textarea 
-                          placeholder="例如代金券不可与其他优惠同享，或仅限某些节假日不可用等细则..." 
+                          placeholder="例如：本满减活动仅限正餐时段使用，不与特价套餐同享等备注信息..." 
                           className="min-h-[120px] bg-slate-50/50 focus:bg-white p-4 resize-none shadow-sm"
                           value={formData.description || ""}
                           onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
@@ -603,8 +585,8 @@ export function VouchersPageClient() {
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="确认删除代金券"
-        description={`确定要删除 "${selectedVoucher?.name}" 吗？注意：删除会导致已领取但未使用的代金券也将无法使用。`}
+        title="确认删除满减活动"
+        description={`确定要删除 "${selectedDiscount?.name}" 吗？此操作不可撤销。`}
         confirmText="确认删除"
         variant="destructive"
         onConfirm={handleDeleteConfirm}

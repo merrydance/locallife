@@ -15,12 +15,12 @@ const marketingTools = [
     status: "已上线"
   },
   {
-    title: "限时折扣",
-    description: "设置菜品限时优惠，提升高峰或低谷段销量。",
+    title: "限时满减",
+    description: "设置商户满减促销活动，提高客单价和订单量。",
     icon: Tag,
     href: "/merchant/marketing/discounts",
     color: "bg-amber-50 text-amber-600",
-    status: "开发中"
+    status: "已上线"
   },
   {
     title: "由于运费减免",
