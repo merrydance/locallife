@@ -102,7 +102,7 @@ func newWebLoginSessionStatusResponseWithPollToken(session db.WebLoginSession, p
 
 func signWebLoginQRCode(code string, ts int64, secret string) (string, error) {
 	if secret == "" {
-		return "", errors.New("signing key is required")
+		return "", errors.New("缺少签名密钥")
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(code))
@@ -126,18 +126,18 @@ func (server *Server) buildWebLoginQRPayload(code string, issuedAt time.Time) (s
 
 func (server *Server) verifyWebLoginQRSignature(code string, ts int64, sig string) error {
 	if sig == "" || ts == 0 {
-		return errors.New("signature is required")
+		return errors.New("缺少签名信息")
 	}
 	issuedAt := time.Unix(ts, 0)
 	if time.Since(issuedAt) > server.webLoginSessionTTL() || time.Until(issuedAt) > server.webLoginSessionTTL() {
-		return errors.New("signature expired")
+		return errors.New("签名已过期，请刷新二维码")
 	}
 	expected, err := signWebLoginQRCode(code, ts, server.webLoginQRSigningKey())
 	if err != nil {
 		return err
 	}
 	if !hmac.Equal([]byte(expected), []byte(sig)) {
-		return errors.New("signature mismatch")
+		return errors.New("签名校验失败")
 	}
 	return nil
 }
@@ -213,7 +213,7 @@ func (server *Server) createWebLoginSession(ctx *gin.Context) {
 func (server *Server) getWebLoginSessionStatus(ctx *gin.Context) {
 	code := ctx.Param("code")
 	if code == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("code is required")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("缺少登录码")))
 		return
 	}
 
@@ -235,7 +235,7 @@ func (server *Server) getWebLoginSessionStatus(ctx *gin.Context) {
 	session, err := server.store.GetWebLoginSessionByCode(ctx, code)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("session not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("登录会话不存在")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -244,12 +244,12 @@ func (server *Server) getWebLoginSessionStatus(ctx *gin.Context) {
 
 	if pollToken != "" {
 		if !session.PollToken.Valid || session.PollToken.String != pollToken {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("invalid poll token")))
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("轮询凭证无效")))
 			return
 		}
 	}
 	if waitSeconds > 0 && pollToken == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("poll token required")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("缺少轮询凭证")))
 		return
 	}
 
@@ -329,7 +329,7 @@ func (server *Server) confirmWebLoginSession(ctx *gin.Context) {
 	session, err := server.store.GetWebLoginSessionByCode(ctx, req.Code)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("session not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("登录会话不存在")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -345,19 +345,19 @@ func (server *Server) confirmWebLoginSession(ctx *gin.Context) {
 			}
 			session = updated
 		}
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("session expired")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("登录会话已过期")))
 		return
 	}
 
 	if session.Status == "consumed" {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("session already consumed")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("登录会话已被使用")))
 		return
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	if _, err := server.resolveMerchantForUser(ctx, authPayload.UserID); err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant account required")))
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("需要商家账号才能确认")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -368,7 +368,7 @@ func (server *Server) confirmWebLoginSession(ctx *gin.Context) {
 			ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponse(session))
 			return
 		}
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("session already confirmed")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("登录会话已被其他账号确认")))
 		return
 	}
 
@@ -409,7 +409,7 @@ func (server *Server) consumeWebLoginSession(ctx *gin.Context) {
 	session, err := server.store.GetWebLoginSessionByPollToken(ctx, pgtype.Text{String: req.PollToken, Valid: req.PollToken != ""})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("session not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("登录会话不存在")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -425,20 +425,20 @@ func (server *Server) consumeWebLoginSession(ctx *gin.Context) {
 			}
 			session = updated
 		}
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("session expired")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("登录会话已过期")))
 		return
 	}
 
 	if session.Status == "consumed" {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("session already consumed")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("登录会话已被使用")))
 		return
 	}
 	if session.Status != "confirmed" {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("session not confirmed")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("登录会话尚未确认")))
 		return
 	}
 	if !session.UserID.Valid {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("session missing user")))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("登录会话缺少用户信息")))
 		return
 	}
 
@@ -451,7 +451,7 @@ func (server *Server) consumeWebLoginSession(ctx *gin.Context) {
 	user, err := server.store.GetUser(ctx, consumed.UserID.Int64)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("user not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("用户不存在")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
