@@ -365,6 +365,7 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		ReservationDate: pgDate,
 		Column3:         pgTime,
 		Column4:         pgDuration,
+		ID:              0, // 新创建，无需排除任何ID
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1969,6 +1970,7 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 		ReservationDate: pgDate,
 		Column3:         pgTime,
 		Column4:         pgDuration,
+		ID:              0, // 新创建，无需排除任何ID
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -2317,15 +2319,14 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 			ReservationDate: checkDate,
 			Column3:         checkTime,
 			Column4:         checkDuration,
+			ID:              reservation.ID, // 排除正在修改的预定本身
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		// 排除自己
-		if count > 0 && (checkTableID != reservation.TableID ||
-			checkDate.Time != reservation.ReservationDate.Time ||
-			checkTime.Microseconds != reservation.ReservationTime.Microseconds) {
+
+		if count > 0 {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
 			return
 		}

@@ -89,8 +89,9 @@ const checkTableAvailability = `-- name: CheckTableAvailability :one
 SELECT COUNT(*) FROM table_reservations
 WHERE table_id = $1 
   AND reservation_date = $2
-  AND status IN ('pending', 'paid', 'confirmed')
+  AND status IN ('pending', 'paid', 'confirmed', 'checked_in')
   AND ($3::time, $4::interval) OVERLAPS (reservation_time, $4::interval)
+  AND (id != $5 OR $5 IS NULL)
 `
 
 type CheckTableAvailabilityParams struct {
@@ -98,6 +99,7 @@ type CheckTableAvailabilityParams struct {
 	ReservationDate pgtype.Date     `json:"reservation_date"`
 	Column3         pgtype.Time     `json:"column_3"`
 	Column4         pgtype.Interval `json:"column_4"`
+	ID              int64           `json:"id"`
 }
 
 // Check if table has any active reservation for given date and time
@@ -107,6 +109,7 @@ func (q *Queries) CheckTableAvailability(ctx context.Context, arg CheckTableAvai
 		arg.ReservationDate,
 		arg.Column3,
 		arg.Column4,
+		arg.ID,
 	)
 	var count int64
 	err := row.Scan(&count)
