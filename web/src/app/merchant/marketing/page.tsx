@@ -23,12 +23,12 @@ const marketingTools = [
     status: "已上线"
   },
   {
-    title: "由于运费减免",
+    title: "运费满返",
     description: "满额免运费或返还运费，激励客户凑单提升客单价。",
     icon: Truck,
     href: "/merchant/marketing/delivery",
     color: "bg-blue-50 text-blue-600",
-    status: "开发中"
+    status: "已上线"
   }
 ];
 

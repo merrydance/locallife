@@ -565,6 +565,15 @@ type createDeliveryPromotionRequest struct {
 	ValidUntil     string `json:"valid_until" binding:"required"`
 }
 
+type updateDeliveryPromotionRequest struct {
+	Name           *string `json:"name"`
+	MinOrderAmount *int64  `json:"min_order_amount"`
+	DiscountAmount *int64  `json:"discount_amount"`
+	ValidFrom      *string `json:"valid_from"`
+	ValidUntil     *string `json:"valid_until"`
+	IsActive       *bool   `json:"is_active"`
+}
+
 type deliveryPromotionResponse struct {
 	ID             int64      `json:"id"`
 	MerchantID     int64      `json:"merchant_id"`
@@ -794,6 +803,105 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusNoContent, nil)
+}
+
+// updateDeliveryPromotion godoc
+// @Summary Update delivery promotion (Merchant)
+// @Description Update a delivery fee promotion. Only the merchant owner can update their own promotions.
+// @Tags delivery-fee
+// @Accept json
+// @Produce json
+// @Param merchant_id path int true "Merchant ID"
+// @Param id path int true "Promotion ID"
+// @Param request body updateDeliveryPromotionRequest true "Update fields"
+// @Success 200 {object} deliveryPromotionResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
+// @Failure 404 {object} ErrorResponse "Promotion not found"
+// @Failure 500 {object} ErrorResponse
+// @Router /delivery-fee/merchants/{merchant_id}/promotions/{id} [patch]
+// @Security BearerAuth
+func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
+	var uri deleteDeliveryPromotionURI
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 验证商户权限
+	merchant, exists := GetMerchantFromContext(ctx)
+	if !exists {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		return
+	}
+
+	if merchant.ID != uri.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only update your own merchant's promotions")))
+		return
+	}
+
+	var req updateDeliveryPromotionRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 先获取促销活动，验证归属
+	existingPromo, err := server.store.GetDeliveryPromotion(ctx, uri.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery promotion not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if existingPromo.MerchantID != uri.MerchantID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("promotion does not belong to this merchant")))
+		return
+	}
+
+	arg := db.UpdateDeliveryPromotionParams{
+		ID: uri.ID,
+	}
+
+	if req.Name != nil {
+		arg.Name = pgtype.Text{String: *req.Name, Valid: true}
+	}
+	if req.MinOrderAmount != nil {
+		arg.MinOrderAmount = pgtype.Int8{Int64: *req.MinOrderAmount, Valid: true}
+	}
+	if req.DiscountAmount != nil {
+		arg.DiscountAmount = pgtype.Int8{Int64: *req.DiscountAmount, Valid: true}
+	}
+	if req.ValidFrom != nil {
+		t, err := time.Parse(time.RFC3339, *req.ValidFrom)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_from format")))
+			return
+		}
+		arg.ValidFrom = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	if req.ValidUntil != nil {
+		t, err := time.Parse(time.RFC3339, *req.ValidUntil)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_until format")))
+			return
+		}
+		arg.ValidUntil = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	if req.IsActive != nil {
+		arg.IsActive = pgtype.Bool{Bool: *req.IsActive, Valid: true}
+	}
+
+	promo, err := server.store.UpdateDeliveryPromotion(ctx, arg)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newDeliveryPromotionResponse(promo))
 }
 
 // ============================================================================

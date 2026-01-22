@@ -557,6 +557,7 @@ func (server *Server) setupRouter() {
 		{
 			deliveryFeeMerchantGroup.POST("/promotions", server.createDeliveryPromotion)
 			deliveryFeeMerchantGroup.GET("/promotions", server.listDeliveryPromotions)
+			deliveryFeeMerchantGroup.PATCH("/promotions/:id", server.updateDeliveryPromotion)
 			deliveryFeeMerchantGroup.DELETE("/promotions/:id", server.deleteDeliveryPromotion)
 		}
 
