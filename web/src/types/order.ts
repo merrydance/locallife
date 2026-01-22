@@ -21,17 +21,24 @@ export type OrderResponse = {
   order_no: string;
   order_type: "takeout" | "dine_in" | "takeaway" | "reservation";
   status:
-    | "pending"
-    | "paid"
-    | "preparing"
-    | "ready"
-    | "courier_accepted"
-    | "picked"
-    | "delivering"
-    | "rider_delivered"
-    | "user_delivered"
-    | "completed"
-    | "cancelled";
+  | "pending"
+  | "paid"
+  | "preparing"
+  | "ready"
+  | "courier_accepted"
+  | "picked"
+  | "delivering"
+  | "rider_delivered"
+  | "user_delivered"
+  | "completed"
+  | "cancelled";
+  fulfillment_status:
+  | "scheduled"
+  | "pending_kitchen"
+  | "preparing"
+  | "ready"
+  | "completed"
+  | "cancelled";
   user_id: number;
   merchant_id: number;
   merchant_name: string;
@@ -53,6 +60,19 @@ export type OrderResponse = {
   cancelled_at?: string;
   cancel_reason?: string;
   updated_at: string;
+  // 新增字段
+  pickup_code?: string;
+  pickup_code_masked?: string;
+  status_hint?: string;
+  badges?: { text: string; type: string; locale: string }[];
+  actions?: string[];
+  exception_state?: string;
+  claim_channel?: string;
+  overtime: boolean;
+  merchant_phone?: string;
+  delivery_contact_name?: string;
+  delivery_contact_phone?: string;
+  delivery_address?: string;
 };
 
 export type OrderStatsResponse = {

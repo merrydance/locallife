@@ -21,25 +21,10 @@ const fallbackStats: OrderStatsResponse = {
   cancelled_count: 0,
 };
 
-const fallbackOverview: StatsOverview = {
-  total_orders: 0,
-  total_sales: 0,
-  total_days: 0,
-  total_commission: 0,
-  avg_daily_sales: 0,
-};
-
-function normalizeOrders(
-  data:
-    | OrderResponse[]
-    | { items?: OrderResponse[]; orders?: OrderResponse[] }
-    | undefined
-) {
-  if (!data) return fallbackOrders;
-  if (Array.isArray(data)) return data;
-  if (data.items && Array.isArray(data.items)) return data.items;
-  if (data.orders && Array.isArray(data.orders)) return data.orders;
-  return fallbackOrders;
+interface MerchantOrdersResponse {
+  orders: OrderResponse[];
+  total_count: number;
+  total: number;
 }
 
 export default async function OrdersPage({
@@ -55,40 +40,32 @@ export default async function OrdersPage({
 
   const today = formatDate(new Date());
 
-  const [stats, overview, orders] = await Promise.all([
+  const [stats, ordersRes, overview] = await Promise.all([
     apiGet<OrderStatsResponse>("/merchant/orders/stats", {
       start_date: today,
       end_date: today,
     }).catch(() => fallbackStats),
-    apiGet<StatsOverview>("/merchant/stats/overview", {
-      start_date: today,
-      end_date: today,
-    }).catch(() => fallbackOverview),
-    apiGet<OrderResponse[] | { items?: OrderResponse[]; orders?: OrderResponse[] }>("/merchant/orders", {
+    apiGet<MerchantOrdersResponse>("/merchant/orders", {
       page_id: page,
       page_size: pageSize,
       status: status || undefined,
-    }).catch(() => fallbackOrders),
+    }).catch(() => ({ orders: [], total_count: 0, total: 0 })),
+    apiGet<{ total_sales: number; total_orders: number }>("/merchant/stats/overview", {
+      start_date: today,
+      end_date: today,
+    }).catch(() => ({ total_sales: 0, total_orders: 0 })),
   ]);
 
-  const list = normalizeOrders(orders);
-
-  const statusCounts = {
-    paid: stats.paid_count || 0,
-    preparing: stats.preparing_count || 0,
-    ready: stats.ready_count || 0,
-    completed: stats.completed_count || 0,
-  };
-
-  const todayRevenue = overview.total_sales;
-  const todayOrders = overview.total_orders;
+  const orders = ordersRes.orders || [];
+  const totalCount = ordersRes.total_count || 0;
 
   return (
     <OrdersPageClient
-      initialOrders={list}
-      todayOrders={todayOrders}
-      statusCounts={statusCounts}
-      todayRevenue={todayRevenue}
+      initialOrders={orders}
+      totalCount={totalCount}
+      statusCounts={stats}
+      todayRevenue={overview.total_sales}
+      todayOrders={overview.total_orders}
       page={page}
       pageSize={pageSize}
       status={status}
