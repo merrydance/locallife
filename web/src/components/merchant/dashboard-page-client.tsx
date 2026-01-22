@@ -2,12 +2,30 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { 
+  AlertCircle,
+  Armchair,
+  CheckCircle2,
+  ChevronRight,
+  Filter,
+  Home,
+  Loader2,
+  MoreVertical,
+  Plus,
+  QrCode,
+  RefreshCw,
+  Search,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { apiPatch, apiPost, formatAmount } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { apiGet, apiPatch, apiPost, formatAmount } from "@/lib/api";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import type { OrderResponse } from "@/types/order";
+import { cn } from "@/lib/utils";
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   paid: "待接单",
@@ -22,20 +40,17 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   reservation: "预订",
 };
 
-const TABLE_STATUS_LABELS: Record<string, string> = {
-  available: "空闲",
-  occupied: "就餐中",
-  reserved: "已预订",
-  cleaning: "清洁中",
-  disabled: "停用",
+const TABLE_STATUS_MAP: Record<string, { label: string, variant: "default" | "secondary" | "destructive" | "outline", icon: any, colorClass: string }> = {
+  available: { label: "空闲", variant: "secondary", icon: CheckCircle2, colorClass: "bg-emerald-500" },
+  occupied: { label: "就餐中", variant: "default", icon: Armchair, colorClass: "bg-primary" },
+  reserved: { label: "已预订", variant: "outline", icon: AlertCircle, colorClass: "bg-amber-500" },
+  cleaning: { label: "清洁中", variant: "outline", icon: RefreshCw, colorClass: "bg-slate-400" },
+  disabled: { label: "停用", variant: "destructive", icon: XCircle, colorClass: "bg-muted-foreground" },
 };
 
-const TABLE_STATUS_CLASS: Record<string, string> = {
-  available: "from-emerald-50 to-emerald-100 border-emerald-200",
-  occupied: "from-amber-50 to-amber-100 border-amber-200",
-  reserved: "from-blue-50 to-blue-100 border-blue-200",
-  cleaning: "from-slate-50 to-slate-100 border-slate-200",
-  disabled: "from-gray-50 to-gray-100 border-gray-200 opacity-60",
+const TABLE_TYPE_MAP: Record<string, { label: string, icon: any }> = {
+  table: { label: "大厅桌台", icon: Armchair },
+  room: { label: "包间", icon: Home },
 };
 
 export type DashboardOrder = {
@@ -60,6 +75,15 @@ export type DashboardTable = {
   status: string;
   capacity?: number;
   current_reservation_id?: number;
+  current_reservation?: {
+    id: number;
+    contact_name: string;
+    contact_phone: string;
+    guest_count: number;
+    reservation_time: string;
+    notes?: string;
+  };
+  tags?: Array<{ id: number; name: string }>;
 };
 
 export type DashboardTableGroup = {
@@ -115,14 +139,61 @@ export function DashboardPageClient({
   const [activeTable, setActiveTable] = useState<DashboardTable | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [loadingTableStatus, setLoadingTableStatus] = useState<string | null>(null);
+  const [loadingTables, setLoadingTables] = useState(false);
   const reloadGuardRef = useRef(0);
-
   const [ordersState, setOrdersState] = useState<DashboardOrder[]>(orders);
   const [statusCountsState, setStatusCountsState] = useState(statusCounts);
   const [tableGroupsState, setTableGroupsState] = useState(tableGroups);
   const [tableStatsState, setTableStatsState] = useState(tableStats);
   const [revenueState, setRevenueState] = useState(revenue);
   const [todayOrdersState, setTodayOrdersState] = useState(todayOrders);
+
+  const loadTables = useCallback(async () => {
+    setLoadingTables(true);
+    try {
+      const response = await apiGet<{ tables: DashboardTable[] }>("/tables");
+      const tables = response.tables || [];
+      
+      // Update stats
+      setTableStatsState({
+        total: tables.length,
+        available: tables.filter((t) => t.status === "available").length,
+        occupied: tables.filter((t) => t.status === "occupied").length,
+      });
+
+      // Group tables
+      const grouped = new Map<string, DashboardTable[]>();
+      tables.forEach((table) => {
+        const type = table.table_type || "table";
+        if (!grouped.has(type)) grouped.set(type, []);
+        grouped.get(type)!.push(table);
+      });
+
+      const nextGroups = [] as DashboardTableGroup[];
+      if (grouped.has("table")) {
+        nextGroups.push({ name: "散台", type: "table", tables: grouped.get("table")! });
+      }
+      if (grouped.has("room")) {
+        nextGroups.push({ name: "包间", type: "room", tables: grouped.get("room")! });
+      }
+      grouped.forEach((value, key) => {
+        if (key !== "table" && key !== "room") {
+          nextGroups.push({ name: "其他", type: key, tables: value });
+        }
+      });
+      
+      setTableGroupsState(nextGroups);
+    } catch (error) {
+      console.error("Failed to load tables", error);
+    } finally {
+      setLoadingTables(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Initial client-side fetch to ensure data is visible and up to date
+    loadTables();
+  }, [loadTables]);
 
   const effectiveIsOpen = session?.isReady ? session.isOpen : isOpen;
   const effectiveWsConnected = session?.isReady ? session.wsConnected : wsConnected;
@@ -342,7 +413,7 @@ export function DashboardPageClient({
         }
       />
 
-      <PageContent className="grid grid-cols-1 lg:grid-cols-[1.1fr_1.8fr_1.1fr] gap-6">
+      <PageContent className="grid grid-cols-1 lg:grid-cols-[0.9fr_2.2fr_0.9fr] gap-6">
             <section className="flex flex-col overflow-hidden rounded-xl bg-white border shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div className="text-base font-semibold">📋 订单流</div>
@@ -365,18 +436,17 @@ export function DashboardPageClient({
                     <button
                       key={tab.key}
                       onClick={() => setOrderTab(tab.key)}
-                      className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs transition-colors ${
+                      className={`flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-xl transition-all border ${
                         active
-                          ? "bg-[linear-gradient(135deg,#667eea_0%,#764ba2_100%)] text-white"
-                          : "text-muted-foreground hover:bg-muted"
+                          ? "bg-primary/5 border-primary text-primary font-bold shadow-xs"
+                          : "border-transparent text-muted-foreground hover:bg-muted"
                       }`}
                     >
-                      {tab.label}
-                      <span
-                        className={`rounded-full px-2 text-[10px] ${
-                          active ? "bg-white/30" : "bg-black/10"
-                        }`}
-                      >
+                      <span className="text-[10px] opacity-70 mb-0.5">{tab.label}</span>
+                      <span className={cn(
+                        "text-sm",
+                        active ? "text-primary" : "text-slate-900"
+                      )}>
                         {count}
                       </span>
                     </button>
@@ -484,46 +554,118 @@ export function DashboardPageClient({
 
             <section className="flex flex-col overflow-hidden rounded-xl bg-white border shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-4">
-                <div className="text-base font-semibold">🪑 桌台状态</div>
-                <div className="flex gap-4 text-xs text-muted-foreground">
-                  <span>空闲 {tableStatsState.available}</span>
-                  <span>就餐 {tableStatsState.occupied}</span>
-                  <span>共 {tableStatsState.total}</span>
+                <div className="flex items-center gap-3">
+                  <div className="text-base font-semibold">桌台状态</div>
+                  <div className="flex gap-2">
+                    <Badge variant="outline" className="text-[10px] font-normal border-slate-200">
+                      空闲 {tableStatsState.available}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] font-normal border-slate-200">
+                      就餐 {tableStatsState.occupied}
+                    </Badge>
+                  </div>
                 </div>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={loadTables} disabled={loadingTables}>
+                  <RefreshCw className={cn("h-4 w-4", loadingTables && "animate-spin")} />
+                </Button>
               </div>
-              <div className="flex-1 space-y-6 overflow-y-auto p-4">
-                {tableGroupsState.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-muted-foreground">
+              <div className="flex-1 space-y-6 overflow-y-auto p-4 bg-slate-50/50">
+                {loadingTables && tableGroupsState.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <p className="text-sm">正在加载桌台...</p>
+                  </div>
+                ) : tableGroupsState.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                      <Armchair className="h-6 w-6 opacity-20" />
+                    </div>
                     暂无桌台数据
                   </div>
                 ) : (
                   tableGroupsState.map((group) => (
-                    <div key={group.type}>
-                      <div className="mb-3 border-l-4 border-primary pl-3 text-sm font-medium text-slate-700">
-                        {group.name}
+                    <div key={group.type} className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 bg-primary rounded-full" />
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          {group.name} ({group.tables.length})
+                        </span>
                       </div>
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
-                        {group.tables.map((table) => (
-                          <button
-                            key={table.id}
-                            className={`rounded-xl border bg-linear-to-br p-3 text-center text-xs transition hover:-translate-y-0.5 hover:shadow-lg ${
-                              TABLE_STATUS_CLASS[table.status] || "from-slate-50 to-slate-100"
-                            }`}
-                            onClick={() => setActiveTable(table)}
-                          >
-                            <div className="text-base font-bold text-slate-900">
-                              {table.table_no}
-                            </div>
-                            <div className="text-[11px] text-slate-500">
-                              {TABLE_STATUS_LABELS[table.status] || table.status}
-                            </div>
-                            {table.capacity ? (
-                              <div className="text-[11px] text-slate-400">
-                                {table.capacity}人座
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-3">
+                        {group.tables.map((table) => {
+                          const statusInfo = TABLE_STATUS_MAP[table.status] || TABLE_STATUS_MAP.available;
+                          const typeInfo = TABLE_TYPE_MAP[table.table_type || "table"] || TABLE_TYPE_MAP.table;
+                          const StatusIcon = statusInfo.icon;
+                          const TypeIcon = typeInfo.icon;
+
+                          return (
+                            <div
+                              key={table.id}
+                              className={cn(
+                                "group bg-white rounded-xl border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-primary/30 cursor-pointer overflow-hidden relative",
+                                table.status === 'disabled' && "opacity-60 grayscale-[0.5]"
+                              )}
+                              onClick={() => setActiveTable(table)}
+                            >
+                              {/* Top status bar */}
+                              <div className={cn("absolute top-0 left-0 right-0 h-1", statusInfo.colorClass)} />
+                              
+                              <div className="p-3 pt-4">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xl font-black text-slate-900 tracking-tighter">
+                                        {table.table_no}
+                                      </span>
+                                      <Badge 
+                                        variant={statusInfo.variant} 
+                                        className={cn(
+                                          "text-[9px] px-1.5 h-4 font-bold border-none",
+                                          table.status === 'available' ? "bg-emerald-500 text-white" :
+                                          table.status === 'occupied' ? "bg-primary text-white" :
+                                          table.status === 'reserved' ? "bg-amber-500 text-white" :
+                                          "bg-slate-400 text-white"
+                                        )}
+                                      >
+                                        {statusInfo.label}
+                                      </Badge>
+                                    </div>
+                                    <div className="flex items-center text-[10px] text-slate-400 gap-2">
+                                      <span className="flex items-center gap-1">
+                                        <TypeIcon className="h-2.5 w-2.5" />
+                                        {typeInfo.label}
+                                      </span>
+                                      <span>•</span>
+                                      <span className="flex items-center gap-1">
+                                        <Users className="h-2.5 w-2.5" />
+                                        {table.capacity}人
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {table.current_reservation ? (
+                                  <div className="mt-2 p-2 bg-amber-50/50 rounded-lg border border-amber-100">
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-amber-700">
+                                      <span className="flex items-center gap-1">
+                                        <AlertCircle className="h-2.5 w-2.5" />
+                                        近期预约
+                                      </span>
+                                      <span>{table.current_reservation.reservation_time}</span>
+                                    </div>
+                                    <div className="text-[10px] text-amber-600/80 truncate mt-0.5">
+                                      {table.current_reservation.contact_name} ({table.current_reservation.guest_count}人)
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 h-[38px] flex items-center justify-center border border-dashed border-slate-200 rounded-lg opacity-40">
+                                     <span className="text-[9px] text-slate-400">目前无预约</span>
+                                  </div>
+                                )}
                               </div>
-                            ) : null}
-                          </button>
-                        ))}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ))
@@ -589,7 +731,7 @@ export function DashboardPageClient({
               </button>
             </div>
             <div className="border-b px-5 py-4 text-sm text-slate-600">
-              <div>当前状态：{TABLE_STATUS_LABELS[activeTable.status] || activeTable.status}</div>
+              <div>当前状态：{TABLE_STATUS_MAP[activeTable.status]?.label || activeTable.status}</div>
               {activeTable.capacity ? (
                 <div className="mt-1">容量：{activeTable.capacity}人</div>
               ) : null}
