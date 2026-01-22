@@ -264,9 +264,9 @@ export default async function AnalyticsDashboardPage({
     ? salesData.sources.reduce((sum, item) => sum + item.total_sales, 0)
     : 0;
   return (
-    <div className="space-y-6">
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4">
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4">
+        {/* ... Date range content ... */}
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" asChild>
               <a
@@ -656,7 +656,6 @@ export default async function AnalyticsDashboardPage({
             </Card>
           </div>
         ) : null}
-      </div>
-    </div>
+    </>
   );
 }

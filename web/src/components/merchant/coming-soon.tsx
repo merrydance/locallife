@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 
 export function ComingSoon({
   title,
@@ -15,16 +16,11 @@ export function ComingSoon({
   description: string;
 }) {
   return (
-    <>
-      <header className="page-header">
-        <div>
-          <h1 className="text-xl font-semibold">{title}</h1>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-      </header>
-      <div className="page-content">
-        <div className="flex flex-1 items-center justify-center">
-          <Card className="panel w-full max-w-xl">
+    <PageShell>
+      <PageHeader title={title} description={description} />
+      <PageContent>
+        <div className="flex flex-1 items-center justify-center py-12">
+          <Card className="w-full max-w-xl shadow-sm">
             <CardHeader>
               <CardTitle>{title}</CardTitle>
               <CardDescription>{description}</CardDescription>
@@ -37,7 +33,7 @@ export function ComingSoon({
             </CardContent>
           </Card>
         </div>
-      </div>
-    </>
+      </PageContent>
+    </PageShell>
   );
 }

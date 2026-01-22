@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { ChevronLeft, ChevronRight, LayoutDashboard, LogOut, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "工作台", href: "/merchant/dashboard", activePrefix: "/merchant/dashboard" },
+  { label: "工作台", href: "/merchant/dashboard", activePrefix: "/merchant/dashboard", icon: LayoutDashboard },
   {
     label: "经营分析",
     href: "/merchant/analytics/dashboard?tab=overview",
@@ -40,59 +43,97 @@ export function MerchantSidebar() {
 
   return (
     <aside
-      className={`hidden flex-col border-r bg-card py-6 transition-all duration-200 lg:flex ${
-        collapsed ? "w-16 px-2" : "w-60 px-4"
-      }`}
+      className={cn(
+        "hidden flex-col border-r bg-card transition-all duration-300 lg:flex",
+        collapsed ? "w-16" : "w-64"
+      )}
     >
-      <div className="mb-6 flex items-center justify-between">
-        <div className={`text-lg font-semibold ${collapsed ? "sr-only" : ""}`}>
-          本地生活商户
-        </div>
-        <Badge className={`bg-primary text-primary-foreground ${collapsed ? "sr-only" : ""}`}>
-          营业中
-        </Badge>
-        <button
-          type="button"
-          className="ml-auto rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
-          onClick={() => setCollapsed((prev) => !prev)}
-          aria-label={collapsed ? "展开导航" : "折叠导航"}
+      <div className="flex h-16 items-center px-4">
+        {!collapsed && (
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Store className="size-5" />
+            </div>
+            <span className="truncate text-base font-semibold">本地生活商户</span>
+          </div>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("ml-auto", collapsed && "mx-auto")}
+          onClick={() => setCollapsed(!collapsed)}
         >
-          {collapsed ? "»" : "«"}
-        </button>
+          {collapsed ? <ChevronRight /> : <ChevronLeft />}
+        </Button>
       </div>
-      <nav className="flex flex-1 flex-col gap-1">
+
+      <div className="px-3 py-2">
+        {!collapsed && session?.isReady && (
+          <div className="mb-2 px-4">
+            {session.isOpen ? (
+              <Badge
+                variant="secondary"
+                className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400"
+              >
+                ● 营业中
+              </Badge>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="bg-rose-50 text-rose-700 hover:bg-rose-50 dark:bg-rose-500/10 dark:text-rose-400"
+              >
+                ● 已打烊
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
+
+      <nav className="flex-1 space-y-1 px-3 py-2">
         {navItems.map((item) => {
           const active = pathname.startsWith(item.activePrefix);
           return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={`flex items-center rounded-md px-3 py-2 text-sm transition-colors ${
-                active
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-              title={item.label}
-            >
-              <span className={collapsed ? "text-xs" : ""}>
-                {collapsed ? item.label.slice(0, 1) : item.label}
+            <Link key={item.label} href={item.href} title={item.label}>
+              <span
+                className={cn(
+                  "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
+              >
+                <span className={cn("flex-1 truncate", collapsed && "text-center")}>
+                  {collapsed ? item.label.slice(0, 1) : item.label}
+                </span>
               </span>
             </Link>
           );
         })}
       </nav>
-      <div className={`mt-auto ${collapsed ? "hidden" : "block"}`}>
-        <Button variant="destructive" className="w-full" onClick={handleLogout}>
-          退出登录
+
+      <div className="mt-auto p-4">
+        <Separator className="mb-4" />
+        <Button
+          variant="ghost"
+          size={collapsed ? "icon" : "default"}
+          className={cn(
+            "w-full justify-start text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
+            collapsed && "justify-center"
+          )}
+          onClick={handleLogout}
+        >
+          <LogOut className={cn("size-4", !collapsed && "mr-2")} />
+          {!collapsed && <span>退出登录</span>}
         </Button>
       </div>
-      <div
-        className={`mt-3 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground ${
-          collapsed ? "hidden" : "block"
-        }`}
-      >
-        数据以实时接口为准
-      </div>
+
+      {!collapsed && (
+        <div className="p-4 pt-0">
+          <div className="rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed text-muted-foreground">
+            数据更新可能有延迟，请以实时接口返回为准。
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

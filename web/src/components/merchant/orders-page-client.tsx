@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Search, RefreshCw, Download, Filter, Printer, MoreVertical, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
+import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { apiGet, apiPost, formatAmount } from "@/lib/api";
 import type { OrderResponse } from "@/types/order";
 
@@ -198,27 +217,25 @@ export function OrdersPageClient({
   const hasNext = initialOrders.length === pageSize;
 
   return (
-    <div className="space-y-6">
-      <header className="page-header">
-        <div>
-          <h1 className="text-xl font-semibold">订单管理</h1>
-          <p className="text-sm text-muted-foreground">
-            管理所有订单的接单、制作和完成流程
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => window.location.reload()}>
-            刷新
-          </Button>
-          <Button variant="outline" onClick={() => window.alert("导出功能开发中")}>
-            导出
-          </Button>
-        </div>
-      </header>
+    <PageShell>
+      <PageHeader
+        title="订单管理"
+        description="管理全渠道订单流转与履约状态"
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              <RefreshCw className="size-4 mr-2" />
+              刷新
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => window.alert("导出功能开发中")}>
+              <Download className="size-4 mr-2" />
+              导出
+            </Button>
+          </>
+        }
+      />
 
-      <div className="page-content">
-        <div>
-          <div className="space-y-6">
+      <PageContent className="space-y-6">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <Card
               className="cursor-pointer border-l-4 border-l-amber-400"
@@ -270,61 +287,58 @@ export function OrdersPageClient({
             </Card>
           </section>
 
-          <section className="rounded-lg border bg-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {STATUS_TABS.map((tab) => {
-                  const active = status === tab.value;
-                  return (
-                    <button
-                      key={tab.value || "all"}
-                      onClick={() => updateQuery({ status: tab.value, page: 1 })}
-                      className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                        active
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-muted/70"
-                      }`}
-                    >
-                      {tab.label}
-                      {tab.value === "paid" && statusCounts.paid > 0 ? (
-                        <span className="ml-1 rounded-full bg-white/20 px-2 text-xs">
-                          {statusCounts.paid}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  value={orderType}
-                  onChange={(event) =>
-                    updateQuery({ order_type: event.target.value, page: 1 })
-                  }
-                >
+          <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              {STATUS_TABS.map((tab) => {
+                const active = status === tab.value;
+                return (
+                  <Button
+                    key={tab.value || "all"}
+                    variant={active ? "default" : "secondary"}
+                    size="sm"
+                    onClick={() => updateQuery({ status: tab.value, page: 1 })}
+                    className="h-8 rounded-full px-4"
+                  >
+                    {tab.label}
+                    {tab.value === "paid" && statusCounts.paid > 0 && (
+                      <Badge variant="secondary" className="ml-1.5 h-4 min-w-4 bg-white/20 px-1 text-[10px] text-white">
+                        {statusCounts.paid}
+                      </Badge>
+                    )}
+                  </Button>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={orderType}
+                onValueChange={(value) => updateQuery({ order_type: value, page: 1 })}
+              >
+                <SelectTrigger className="h-8 w-[120px] rounded-full">
+                  <SelectValue placeholder="所有类型" />
+                </SelectTrigger>
+                <SelectContent>
                   {TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value || "all"}>
                       {option.label}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-                <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3">
-                  <span className="text-sm">🔍</span>
-                  <input
-                    className="h-9 w-52 bg-transparent text-sm outline-none"
-                    placeholder="搜索订单号/备注"
-                    value={searchValue}
-                    onChange={(event) => setSearchValue(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") handleSearch();
-                    }}
-                  />
-                </div>
-                <Button size="sm" variant="outline" onClick={handleSearch}>
-                  搜索
-                </Button>
+                </SelectContent>
+              </Select>
+              
+              <div className="relative flex items-center">
+                <Search className="absolute left-2.5 size-4 text-muted-foreground" />
+                <input
+                  className="h-8 w-48 rounded-full border border-input bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="搜索订单/备注"
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                />
               </div>
+              <Button size="sm" variant="ghost" className="h-8 w-8 rounded-full p-0" onClick={handleSearch}>
+                <Filter className="size-4" />
+              </Button>
             </div>
           </section>
 
@@ -338,12 +352,10 @@ export function OrdersPageClient({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-10">
-                        <button
-                          className={`h-4 w-4 rounded border ${
-                            allSelected ? "bg-primary" : "bg-white"
-                          }`}
-                          onClick={toggleSelectAll}
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={toggleSelectAll}
                         />
                       </TableHead>
                       <TableHead>订单号</TableHead>
@@ -374,13 +386,9 @@ export function OrdersPageClient({
                         return (
                           <TableRow key={order.id}>
                             <TableCell>
-                              <button
-                                className={`h-4 w-4 rounded border ${
-                                  selectedIds.has(order.id)
-                                    ? "bg-primary"
-                                    : "bg-white"
-                                }`}
-                                onClick={() => toggleSelect(order.id)}
+                              <Checkbox
+                                checked={selectedIds.has(order.id)}
+                                onCheckedChange={() => toggleSelect(order.id)}
                               />
                             </TableCell>
                             <TableCell>
@@ -538,149 +546,145 @@ export function OrdersPageClient({
                 </Button>
               </div>
             ) : null}
-          </div>
-        </div>
-      </div>
+      </PageContent>
 
-      <div className={`fixed inset-0 z-40 ${detailOrder ? "" : "pointer-events-none"}`}>
-        <div
-          className={`absolute inset-0 bg-black/50 transition-opacity ${
-            detailOrder ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={() => setDetailOrder(null)}
-        />
-        <div
-          className={`absolute right-0 top-0 h-full w-105 bg-background p-6 shadow-xl transition-transform ${
-            detailOrder ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">订单详情</h2>
-            <button onClick={() => setDetailOrder(null)}>✕</button>
-          </div>
-          {loadingDetail ? (
-            <div className="mt-6 text-sm text-muted-foreground">加载中...</div>
-          ) : detailOrder ? (
-            <div className="mt-6 space-y-6 text-sm">
-              <section className="space-y-3">
-                <div className="text-base font-semibold">订单信息</div>
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">订单号</span>
-                    <span>#{detailOrder.order_no}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">订单类型</span>
-                    <span>{TYPE_LABELS[detailOrder.order_type]}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">订单状态</span>
-                    <Badge variant="outline">
-                      {STATUS_LABELS[detailOrder.status]}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">下单时间</span>
-                    <span>{detailOrder.created_at}</span>
-                  </div>
-                  {detailOrder.paid_at ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">支付时间</span>
-                      <span>{detailOrder.paid_at}</span>
+      <Sheet open={!!detailOrder} onOpenChange={(open) => !open && setDetailOrder(null)}>
+        <SheetContent className="flex flex-col sm:max-w-md md:max-w-lg">
+          <SheetHeader className="border-b pb-4">
+            <SheetTitle>订单详情</SheetTitle>
+            <SheetDescription>对应接口 /v1/merchant/orders/{detailOrder?.id}</SheetDescription>
+          </SheetHeader>
+          
+          <div className="flex-1 overflow-y-auto py-6 space-y-8">
+            {loadingDetail ? (
+              <div className="flex h-40 flex-col items-center justify-center gap-2 text-muted-foreground">
+                <RefreshCw className="size-6 animate-spin" />
+                <span>正在加载数据...</span>
+              </div>
+            ) : detailOrder ? (
+              <>
+                <section>
+                  <h3 className="mb-3 font-semibold">基本信息</h3>
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">订单号</span>
+                      <span className="font-medium">#{detailOrder.order_no}</span>
                     </div>
-                  ) : null}
-                  {detailOrder.table_id ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">桌台</span>
-                      <span>{detailOrder.table_id}</span>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">订单类型</span>
+                      <Badge variant="secondary">{TYPE_LABELS[detailOrder.order_type]}</Badge>
                     </div>
-                  ) : null}
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <div className="text-base font-semibold">商品明细</div>
-                <div className="space-y-3">
-                  {detailOrder.items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-md bg-muted" />
-                      <div className="flex-1">
-                        <div className="font-medium">{item.name}</div>
-                        {item.customizations?.length ? (
-                          <div className="text-xs text-muted-foreground">
-                            {item.customizations
-                              .map((custom) => `${custom.name}:${custom.value}`)
-                              .join("、")}
-                          </div>
-                        ) : null}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">状态</span>
+                      <Badge>{STATUS_LABELS[detailOrder.status]}</Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">下单时间</span>
+                      <span>{detailOrder.created_at}</span>
+                    </div>
+                    {detailOrder.table_id && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">桌台</span>
+                        <span>{detailOrder.table_id}</span>
                       </div>
-                      <div className="text-xs text-muted-foreground">x{item.quantity}</div>
-                      <div className="text-sm">¥{formatAmount(item.subtotal)}</div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className="space-y-2">
-                <div className="text-base font-semibold">金额明细</div>
-                <div className="flex items-center justify-between">
-                  <span>商品小计</span>
-                  <span>¥{formatAmount(detailOrder.subtotal)}</span>
-                </div>
-                {detailOrder.delivery_fee > 0 ? (
-                  <div className="flex items-center justify-between">
-                    <span>配送费</span>
-                    <span>¥{formatAmount(detailOrder.delivery_fee)}</span>
-                  </div>
-                ) : null}
-                {detailOrder.discount_amount > 0 ? (
-                  <div className="flex items-center justify-between text-rose-500">
-                    <span>优惠</span>
-                    <span>-¥{formatAmount(detailOrder.discount_amount)}</span>
-                  </div>
-                ) : null}
-                <div className="flex items-center justify-between text-base font-semibold">
-                  <span>实付金额</span>
-                  <span>¥{formatAmount(detailOrder.total_amount)}</span>
-                </div>
-              </section>
-
-              {detailOrder.notes ? (
-                <section className="space-y-2">
-                  <div className="text-base font-semibold">订单备注</div>
-                  <div className="rounded-md border bg-muted/40 p-2">
-                    {detailOrder.notes}
+                    )}
                   </div>
                 </section>
-              ) : null}
-            </div>
-          ) : null}
 
-          {detailOrder ? (
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => window.alert("打印功能开发中")}>
-                打印小票
-              </Button>
-              {detailOrder.status === "paid" ? (
-                <>
-                  <Button
-                    variant="destructive"
-                    onClick={() =>
-                      runAction(detailOrder.id, "reject", { reason: "商户拒单" })
-                    }
-                  >
-                    拒单
+                <section>
+                  <h3 className="mb-3 font-semibold">商品明细</h3>
+                  <div className="space-y-4">
+                    {detailOrder.items.map((item) => (
+                      <div key={item.id} className="flex gap-4">
+                        <div className="size-16 shrink-0 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
+                          <Store className="size-8 opacity-20" />
+                        </div>
+                        <div className="flex flex-1 flex-col justify-between">
+                          <div className="flex justify-between gap-2">
+                            <span className="font-medium leading-none">{item.name}</span>
+                            <span className="text-sm whitespace-nowrap">¥{formatAmount(item.subtotal)}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {item.customizations?.map(c => `${c.name}:${c.value}`).join("、") || "默认口味"}
+                          </div>
+                          <div className="text-xs font-medium">x{item.quantity}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section>
+                  <Separator className="my-6" />
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">商品小计</span>
+                      <span>¥{formatAmount(detailOrder.subtotal)}</span>
+                    </div>
+                    {detailOrder.delivery_fee > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">配送费</span>
+                        <span>¥{formatAmount(detailOrder.delivery_fee)}</span>
+                      </div>
+                    )}
+                    {detailOrder.discount_amount > 0 && (
+                      <div className="flex justify-between text-sm text-destructive">
+                        <span>优惠金额</span>
+                        <span>-¥{formatAmount(detailOrder.discount_amount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t pt-3 text-lg font-bold">
+                      <span>实付金额</span>
+                      <span className="text-primary">¥{formatAmount(detailOrder.total_amount)}</span>
+                    </div>
+                  </div>
+                </section>
+
+                {detailOrder.notes && (
+                  <section>
+                    <h3 className="mb-2 font-semibold">订单备注</h3>
+                    <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/10 dark:text-amber-400">
+                      {detailOrder.notes}
+                    </div>
+                  </section>
+                )}
+              </>
+            ) : null}
+          </div>
+
+          <SheetFooter className="border-t pt-4 sm:flex-col sm:space-x-0 gap-2">
+            {detailOrder && (
+              <>
+                <div className="flex gap-2 w-full">
+                  <Button variant="outline" className="flex-1" onClick={() => window.alert("打印功能开发中")}>
+                    <Printer className="size-4 mr-2" />
+                    打印小票
                   </Button>
-                  <Button onClick={() => runAction(detailOrder.id, "accept")}>接单</Button>
-                </>
-              ) : null}
-              {detailOrder.status === "preparing" ? (
-                <Button onClick={() => runAction(detailOrder.id, "ready")}>出餐完成</Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
+                  <Button variant="outline" className="flex-1">
+                    <MoreVertical className="size-4 mr-2" />
+                    更多
+                  </Button>
+                </div>
+                {detailOrder.status === "paid" && (
+                  <div className="flex gap-2 w-full">
+                    <Button variant="destructive" className="flex-1" onClick={() => runAction(detailOrder.id, "reject")}>
+                      拒单
+                    </Button>
+                    <Button className="flex-1" onClick={() => runAction(detailOrder.id, "accept")}>
+                      接单
+                    </Button>
+                  </div>
+                )}
+                {detailOrder.status === "preparing" && (
+                  <Button className="w-full" onClick={() => runAction(detailOrder.id, "ready")}>
+                    出餐完成
+                  </Button>
+                )}
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </PageShell>
   );
 }

@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import { cn } from "@/lib/utils";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE?.trim() || "/v1").replace(
   /\/$/,
@@ -181,7 +183,7 @@ export function WebLoginPageClient() {
       creatingRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [logInfo, logWarn]);
 
   const consumeSession = useCallback(async (pollToken: string) => {
     try {
@@ -234,7 +236,7 @@ export function WebLoginPageClient() {
       }
       consumingRef.current = false;
     }
-  }, [router, merchantSession]);
+  }, [router, merchantSession, logInfo, logWarn]);
 
   const handleStatus = useCallback(async (status: WebLoginSessionStatus) => {
     logInfo("status:update", {
@@ -355,8 +357,8 @@ export function WebLoginPageClient() {
         try {
           logInfo("poll:long_start", { code: session.code, last_status: lastStatus });
           const status = await longPollStatus(
-            session.code,
-            session.poll_token,
+            session.code!,
+            session.poll_token!,
             lastStatus
           );
           if (!active) return;
@@ -406,7 +408,7 @@ export function WebLoginPageClient() {
         consumeRetryTimerRef.current = null;
       }
     };
-  }, [session?.code, session?.poll_token, handleStatus, longPollStatus, logInfo, logWarn]);
+  }, [session?.code, session?.poll_token, session?.status, handleStatus, longPollStatus, logInfo, logWarn]);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -471,17 +473,42 @@ export function WebLoginPageClient() {
           </div>
 
           <div className="flex flex-col items-center justify-center gap-4 rounded-xl border bg-slate-50 p-6">
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt="Web 登录二维码"
-                className="h-60 w-60 rounded-xl bg-white p-3 shadow"
-              />
-            ) : (
-              <div className="flex h-60 w-60 items-center justify-center rounded-xl bg-white text-sm text-slate-400">
-                {loading ? "生成二维码..." : "二维码加载失败"}
-              </div>
-            )}
+            <div className="relative group overflow-hidden rounded-xl bg-white shadow">
+              {qrDataUrl ? (
+                <>
+                  <img
+                    src={qrDataUrl}
+                    alt="Web 登录二维码"
+                    className={cn(
+                      "h-60 w-60 p-3 transition-all duration-300",
+                      session?.status === "expired" && "blur-[6px] opacity-40 scale-105"
+                    )}
+                  />
+                  {session?.status === "expired" && (
+                    <div
+                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-black/5 hover:bg-black/10 transition-colors"
+                      onClick={() => void createSession()}
+                    >
+                      <div className="rounded-full bg-white/90 p-3 shadow-lg text-primary hover:scale-110 transition-transform">
+                        <RefreshCw className={cn("h-8 w-8", loading && "animate-spin")} />
+                      </div>
+                      <span className="mt-4 text-sm font-medium text-slate-800 bg-white/80 px-3 py-1 rounded-full shadow-sm">
+                        二维码已过期，点击刷新
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex h-60 w-60 items-center justify-center text-sm text-slate-400">
+                  {loading ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <RefreshCw className="h-6 w-6 animate-spin text-primary/50" />
+                      <span>正在生成...</span>
+                    </div>
+                  ) : "二维码加载失败"}
+                </div>
+              )}
+            </div>
             <div className="text-xs text-slate-400">登录码：{session?.code ?? "-"}</div>
             <div className="text-xs text-slate-400">
               状态：{session?.status ?? "pending"}

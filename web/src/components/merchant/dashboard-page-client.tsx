@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiPatch, apiPost, formatAmount } from "@/lib/api";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import type { OrderResponse } from "@/types/order";
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
@@ -122,8 +123,8 @@ export function DashboardPageClient({
   const [revenueState, setRevenueState] = useState(revenue);
   const [todayOrdersState, setTodayOrdersState] = useState(todayOrders);
 
-  const effectiveIsOpen = session?.isOpen ?? isOpen;
-  const effectiveWsConnected = session?.wsConnected ?? wsConnected;
+  const effectiveIsOpen = session?.isReady ? session.isOpen : isOpen;
+  const effectiveWsConnected = session?.isReady ? session.wsConnected : wsConnected;
 
   const filteredOrders = useMemo(() => {
     if (orderTab === "all") return ordersState;
@@ -275,9 +276,9 @@ export function DashboardPageClient({
         if (now - reloadGuardRef.current < 3000) return;
         reloadGuardRef.current = now;
         if (messageType === "table_status_change") {
-          applyTableSnapshot((detail as { data?: any })?.data);
+          applyTableSnapshot((detail as { data?: Record<string, unknown> })?.data);
         } else {
-          applyOrderSnapshot((detail as { data?: any })?.data, {
+          applyOrderSnapshot((detail as { data?: Partial<OrderResponse> })?.data, {
             isNew: messageType === "new_order",
           });
         }
@@ -308,42 +309,39 @@ export function DashboardPageClient({
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div>
-        <div className="flex min-h-screen flex-col">
-          <header className="page-header">
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold">
-                {merchantName || "商户工作台"}
-              </div>
-              <button
-                className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs transition-colors ${
-                  effectiveIsOpen
-                    ? "bg-emerald-500/15 text-emerald-700"
-                    : "bg-rose-500/15 text-rose-700"
+    <PageShell>
+      <PageHeader
+        title={merchantName || "商户工作台"}
+        description={currentDate}
+        actions={
+          <>
+            <button
+              className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs transition-colors ${
+                effectiveIsOpen
+                  ? "bg-emerald-500/15 text-emerald-700"
+                  : "bg-rose-500/15 text-rose-700"
+              }`}
+              onClick={toggleStatus}
+              disabled={loadingStatus || (session ? !session.isAuthenticated : false)}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  effectiveIsOpen ? "bg-emerald-500" : "bg-rose-500"
                 }`}
-                onClick={toggleStatus}
-                disabled={loadingStatus || (session ? !session.isAuthenticated : false)}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    effectiveIsOpen ? "bg-emerald-500" : "bg-rose-500"
-                  }`}
-                />
-                {effectiveIsOpen ? "营业中" : "已打烊"}
-              </button>
-              {effectiveWsConnected ? (
-                <div className="flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-700">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                  实时
-                </div>
-              ) : null}
-            </div>
-            <div className="text-sm text-muted-foreground">{currentDate}</div>
-            <div />
-          </header>
+              />
+              {effectiveIsOpen ? "营业中" : "已打烊"}
+            </button>
+            {effectiveWsConnected ? (
+              <div className="flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-700">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                实时
+              </div>
+            ) : null}
+          </>
+        }
+      />
 
-          <main className="page-content grid grid-cols-[1fr_2fr_1fr] gap-5">
+      <PageContent className="grid grid-cols-1 lg:grid-cols-[1.1fr_1.8fr_1.1fr] gap-6">
             <section className="flex flex-col overflow-hidden rounded-xl bg-card shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div className="text-base font-semibold">📋 订单流</div>
@@ -578,9 +576,7 @@ export function DashboardPageClient({
                 </div>
               </div>
             </section>
-          </main>
-        </div>
-      </div>
+        </PageContent>
 
       {activeTable ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -636,6 +632,6 @@ export function DashboardPageClient({
           </div>
         </div>
       ) : null}
-    </div>
+    </PageShell>
   );
 }

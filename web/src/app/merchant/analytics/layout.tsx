@@ -1,5 +1,6 @@
 import { AnalyticsTabs } from "@/components/merchant/analytics-tabs";
 import { Badge } from "@/components/ui/badge";
+import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 
 export default function AnalyticsLayout({
   children,
@@ -7,18 +8,19 @@ export default function AnalyticsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
-      <header className="page-header flex-col items-start gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold">数据分析</h1>
-            <Badge variant="secondary">经营看板</Badge>
-          </div>
-          <div className="text-xs text-muted-foreground">数据来源 /v1/merchant/stats/*</div>
+    <PageShell>
+      <PageHeader
+        title="数据分析"
+        description="查看店铺经营数据与趋势分析"
+        actions={<Badge variant="secondary">经营看板</Badge>}
+      >
+        <div className="mt-4 w-full border-t pt-4">
+          <AnalyticsTabs />
         </div>
-        <AnalyticsTabs />
-      </header>
-      <main className="page-content">{children}</main>
-    </>
+      </PageHeader>
+      <PageContent className="space-y-6">
+        {children}
+      </PageContent>
+    </PageShell>
   );
 }

@@ -191,7 +191,18 @@ export function MerchantSessionProvider({
   }, [isAuthenticated, isOpen, connectWebSocket, closeWebSocket]);
 
   useEffect(() => {
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const detail = customEvent.detail as RealtimeMessage;
+      
+      if (detail?.type === "merchant_status_update" && detail.data) {
+        setStatus(detail.data as MerchantStatus);
+      }
+    };
+
+    window.addEventListener("merchant-realtime", handler);
     return () => {
+      window.removeEventListener("merchant-realtime", handler);
       closeWebSocket();
     };
   }, [closeWebSocket]);
