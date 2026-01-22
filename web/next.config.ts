@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
         source: "/v1/:path*",
         destination: `${target.replace(/\/$/, "")}/v1/:path*`,
       },
+      {
+        source: "/uploads/:path*",
+        destination: `${target.replace(/\/$/, "")}/uploads/:path*`,
+      },
     ];
   },
 };
