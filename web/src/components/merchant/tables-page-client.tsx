@@ -19,6 +19,7 @@ import {
   ImagePlus,
   X
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,17 +57,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete, apiUpload, getMediaUrl, getAuthToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { TableResponse, TableType, TableStatus, TableTag, CreateTableRequest, TableImageResponse } from "@/types/table";
-
-// Simple toast mock since sonner is not installed
-const toast = {
-  success: (msg: string) => alert(msg),
-  error: (msg: string) => alert("错误: " + msg),
-};
 
 const STATUS_MAP: Record<TableStatus, { label: string, variant: "default" | "secondary" | "destructive" | "outline", icon: any }> = {
   available: { label: "空闲", variant: "secondary", icon: CheckCircle2 },
@@ -113,6 +109,11 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
 
   // Image state
   const [tableImages, setTableImages] = useState<TableImageResponse[]>([]);
+
+  // Confirm Dialog States
+  const [deleteTableDialog, setDeleteTableDialog] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [deleteImageDialog, setDeleteImageDialog] = useState<{ open: boolean; imageId: number | null }>({ open: false, imageId: null });
+  const [deleteTagDialog, setDeleteTagDialog] = useState<{ open: boolean; tag: TableTag | null }>({ open: false, tag: null });
 
   const loadTables = async () => {
     setLoading(true);
@@ -172,9 +173,14 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
   };
 
   const handleDeleteImage = async (imageId: number) => {
-    if (!editingTable || !confirm("确定要删除这张图片吗？")) return;
+    if (!editingTable) return;
+    setDeleteImageDialog({ open: true, imageId });
+  };
+
+  const confirmDeleteImage = async () => {
+    if (!editingTable || !deleteImageDialog.imageId) return;
     try {
-      await apiDelete(`/tables/${editingTable.id}/images/${imageId}`);
+      await apiDelete(`/tables/${editingTable.id}/images/${deleteImageDialog.imageId}`);
       toast.success("图片已删除");
       loadTableImages(editingTable.id);
     } catch (error: any) {
@@ -262,9 +268,13 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
   };
 
   const handleDeleteTable = async (id: number) => {
-    if (!confirm("确定要删除此桌台吗？")) return;
+    setDeleteTableDialog({ open: true, id });
+  };
+
+  const confirmDeleteTable = async () => {
+    if (!deleteTableDialog.id) return;
     try {
-      await apiDelete(`/tables/${id}`);
+      await apiDelete(`/tables/${deleteTableDialog.id}`);
       toast.success("桌台已删除");
       loadTables();
     } catch (error: any) {
@@ -310,13 +320,13 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
       <PageContent>
         <div className="space-y-4">
           {/* Filters and Search */}
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-4 rounded-xl border border-muted/50 shadow-sm">
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border shadow-sm">
             <div className="flex items-center gap-2 w-full md:w-auto">
               <div className="relative w-full md:w-80">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
                   placeholder="搜索桌号..." 
-                  className="pl-9 bg-muted/50 border-none focus-visible:ring-1"
+                  className="pl-9 bg-slate-50 border-slate-200"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -731,15 +741,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={async () => {
-                        if (!confirm(`确定要删除标签 "${tag.name}" 吗？`)) return;
-                        try {
-                          await apiDelete(`/tags/${tag.id}`);
-                          loadTags();
-                        } catch (error) {
-                          toast.error("删除失败");
-                        }
-                      }}
+                      onClick={() => setDeleteTagDialog({ open: true, tag })}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -756,6 +758,44 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Dialogs */}
+      <ConfirmDialog
+        open={deleteTableDialog.open}
+        onOpenChange={(open) => setDeleteTableDialog({ open, id: open ? deleteTableDialog.id : null })}
+        title="删除桌台"
+        description="确定要删除此桌台吗？此操作不可撤销。"
+        confirmText="删除"
+        variant="destructive"
+        onConfirm={confirmDeleteTable}
+      />
+      <ConfirmDialog
+        open={deleteImageDialog.open}
+        onOpenChange={(open) => setDeleteImageDialog({ open, imageId: open ? deleteImageDialog.imageId : null })}
+        title="删除图片"
+        description="确定要删除这张图片吗？"
+        confirmText="删除"
+        variant="destructive"
+        onConfirm={confirmDeleteImage}
+      />
+      <ConfirmDialog
+        open={deleteTagDialog.open}
+        onOpenChange={(open) => setDeleteTagDialog({ open, tag: open ? deleteTagDialog.tag : null })}
+        title="删除标签"
+        description={`确定要删除标签 "${deleteTagDialog.tag?.name}" 吗？`}
+        confirmText="删除"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!deleteTagDialog.tag) return;
+          try {
+            await apiDelete(`/tags/${deleteTagDialog.tag.id}`);
+            loadTags();
+            toast.success("标签已删除");
+          } catch (error) {
+            toast.error("删除失败");
+          }
+        }}
+      />
     </PageShell>
   );
 }

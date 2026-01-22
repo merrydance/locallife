@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { MerchantSessionProvider } from "@/components/providers/merchant-session-provider";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="antialiased">
         <MerchantSessionProvider>{children}</MerchantSessionProvider>
+        <Toaster />
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiPatch } from "@/lib/api";
 
@@ -27,7 +28,7 @@ export function TableStatusActions({ tableId, currentStatus }: Props) {
 
       window.location.reload();
     } catch {
-      window.alert("操作失败，请稍后重试");
+      toast.error("操作失败，请稍后重试");
     } finally {
       setLoading(false);
     }

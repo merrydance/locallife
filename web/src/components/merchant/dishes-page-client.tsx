@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Search, MoreHorizontal, Edit, Trash2, ChevronRight, Upload, GripVertical, Check, X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +80,10 @@ export function DishesPageClient() {
   // Category Manager
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCatName, setNewCatName] = useState("");
+
+  // Confirm Dialog States
+  const [deleteDishDialog, setDeleteDishDialog] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [deleteCategoryDialog, setDeleteCategoryDialog] = useState<{ open: boolean; id: number | null; name: string }>({ open: false, id: null, name: "" });
 
   // --- Effects ---
   const loadCategories = useCallback(async () => {
@@ -206,11 +212,17 @@ export function DishesPageClient() {
   };
 
   const handleDeleteDish = async (id: number) => {
-    if (!confirm("确定要删除此菜品吗？")) return;
+    setDeleteDishDialog({ open: true, id });
+  };
+
+  const confirmDeleteDish = async () => {
+    if (!deleteDishDialog.id) return;
     try {
-      await apiDelete(`/dishes/${id}`);
+      await apiDelete(`/dishes/${deleteDishDialog.id}`);
+      toast.success("菜品已删除");
       loadDishes();
     } catch (err) {
+      toast.error("删除失败");
       console.error("Failed to delete dish", err);
     }
   };
@@ -304,44 +316,74 @@ export function DishesPageClient() {
       <PageContent>
         <div className="flex gap-6 h-[calc(100vh-12rem)]">
           {/* Categories Sidebar */}
-          <div className="w-60 border-r pr-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">分类</h3>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsAddingCategory(true)}><Plus className="h-4 w-4" /></Button>
-            </div>
-            <div className="space-y-1">
-              <Button variant={activeCategoryId === "all" ? "secondary" : "ghost"} className="w-full justify-start font-normal" onClick={() => setActiveCategoryId("all")}>
-                全部菜品 <Badge variant="outline" className="ml-auto bg-background/50">{dishes.length}</Badge>
-              </Button>
-              {categories.map(cat => (
-                <div key={cat.id} className="group flex items-center gap-1">
-                  <Button variant={activeCategoryId === cat.id ? "secondary" : "ghost"} className="flex-1 justify-start font-normal truncate" onClick={() => setActiveCategoryId(cat.id)}>
-                    <span className="truncate">{cat.name}</span>
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleDeleteCategory(cat.id, cat.name)}>
-                    <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-            {isAddingCategory && (
-              <div className="mt-4 p-2 border rounded-lg space-y-2 bg-muted/30">
-                <Input placeholder="新分类名称" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} className="h-8 text-sm" autoFocus />
-                <div className="flex gap-2">
-                  <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleCreateCategory}>确认</Button>
-                  <Button size="sm" variant="ghost" className="flex-1 h-7 text-xs" onClick={() => setIsAddingCategory(false)}>取消</Button>
-                </div>
+          <div className="w-60 flex flex-col bg-white rounded-xl border shadow-sm">
+            {/* 分类面板头部 */}
+            <div className="p-4 border-b">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">菜品分类</h3>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsAddingCategory(true)}><Plus className="h-4 w-4" /></Button>
               </div>
-            )}
+            </div>
+            {/* 分类列表 */}
+            <ScrollArea className="flex-1 p-2">
+              <div className="space-y-1">
+                <div 
+                  onClick={() => setActiveCategoryId("all")}
+                  className={cn(
+                    "px-3 py-2 rounded-lg cursor-pointer transition-all flex items-center justify-between",
+                    activeCategoryId === "all" 
+                      ? "bg-primary/5 border border-primary text-primary" 
+                      : "hover:bg-slate-50 border border-transparent"
+                  )}
+                >
+                  <span className="font-medium">全部菜品</span>
+                  <Badge variant="outline" className="h-5 text-xs">{dishes.length}</Badge>
+                </div>
+                {categories.map(cat => (
+                  <div 
+                    key={cat.id} 
+                    onClick={() => setActiveCategoryId(cat.id)}
+                    className={cn(
+                      "px-3 py-2 rounded-lg cursor-pointer transition-all flex items-center justify-between group",
+                      activeCategoryId === cat.id 
+                        ? "bg-primary/5 border border-primary text-primary" 
+                        : "hover:bg-slate-50 border border-transparent"
+                    )}
+                  >
+                    <span className="font-medium truncate">{cat.name}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive" 
+                      onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat.id, cat.name); }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              {isAddingCategory && (
+                <div className="mt-3 p-3 border rounded-lg space-y-2 bg-slate-50">
+                  <Input placeholder="新分类名称" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} className="h-8 text-sm bg-white" autoFocus />
+                  <div className="flex gap-2">
+                    <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleCreateCategory}>确认</Button>
+                    <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => setIsAddingCategory(false)}>取消</Button>
+                  </div>
+                </div>
+              )}
+            </ScrollArea>
           </div>
 
           {/* Main Dish View */}
-          <div className="flex-1 flex flex-col gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="搜索菜品名称..." className="pl-10" value={searchKeyword} onChange={(e) => setSearchKeyword(e.target.value)} />
+          <div className="flex-1 flex flex-col bg-white rounded-xl border shadow-sm">
+            {/* 搜索栏 */}
+            <div className="p-4 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="搜索菜品名称..." className="pl-9 bg-slate-50 border-slate-200" value={searchKeyword} onChange={(e) => setSearchKeyword(e.target.value)} />
+              </div>
             </div>
-            <ScrollArea className="flex-1 rounded-md border p-4">
+            <ScrollArea className="flex-1 p-4">
               {loading ? (
                 <div className="flex items-center justify-center h-40 text-muted-foreground">加载中...</div>
               ) : filteredDishes.length === 0 ? (
@@ -624,6 +666,38 @@ export function DishesPageClient() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Confirm Dialogs */}
+      <ConfirmDialog
+        open={deleteDishDialog.open}
+        onOpenChange={(open) => setDeleteDishDialog({ open, id: open ? deleteDishDialog.id : null })}
+        title="删除菜品"
+        description="确定要删除此菜品吗？此操作不可撤销。"
+        confirmText="删除"
+        variant="destructive"
+        onConfirm={confirmDeleteDish}
+      />
+      <ConfirmDialog
+        open={deleteCategoryDialog.open}
+        onOpenChange={(open) => setDeleteCategoryDialog({ open, id: open ? deleteCategoryDialog.id : null, name: open ? deleteCategoryDialog.name : "" })}
+        title="删除分类"
+        description={`确定要删除分类「${deleteCategoryDialog.name}」吗？菜品将变为未分类。`}
+        confirmText="删除"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!deleteCategoryDialog.id) return;
+          try {
+            await apiDelete(`/dishes/categories/${deleteCategoryDialog.id}`);
+            if (activeCategoryId === deleteCategoryDialog.id) setActiveCategoryId("all");
+            toast.success("分类已删除");
+            loadCategories();
+            loadDishes();
+          } catch (err) {
+            toast.error("删除失败");
+            console.error(err);
+          }
+        }}
+      />
     </PageShell>
   );
 
@@ -639,13 +713,7 @@ export function DishesPageClient() {
   }
 
   async function handleDeleteCategory(id: number, name: string) {
-    if (!confirm(`确定要删除分类「${name}」吗？菜品将变为未分类。`)) return;
-    try {
-      await apiDelete(`/dishes/categories/${id}`);
-      if (activeCategoryId === id) setActiveCategoryId("all");
-      loadCategories();
-      loadDishes();
-    } catch (err) { console.error(err); }
+    setDeleteCategoryDialog({ open: true, id, name });
   }
 
   async function handleBatchToggleVisibility(is_online: boolean) {

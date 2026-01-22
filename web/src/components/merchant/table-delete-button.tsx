@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiDelete } from "@/lib/api";
 
@@ -14,7 +15,7 @@ export function TableDeleteButton({ tableId }: { tableId: number | string }) {
 
       window.location.href = "/merchant/tables";
     } catch {
-      window.alert("删除失败，请稍后重试");
+      toast.error("删除失败，请稍后重试");
     } finally {
       setLoading(false);
     }

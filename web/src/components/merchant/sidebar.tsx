@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, LayoutDashboard, LogOut, Store } from "lucid
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { cn } from "@/lib/utils";
 
@@ -34,10 +35,14 @@ export function MerchantSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const session = useMerchantSession();
 
-  const handleLogout = () => {
-    if (!window.confirm("确认退出登录？")) return;
+  const handleLogoutClick = () => {
+    setLogoutDialogOpen(true);
+  };
+
+  const confirmLogout = () => {
     session?.logout();
     router.replace("/merchant/login");
   };
@@ -121,7 +126,7 @@ export function MerchantSidebar() {
             "w-full justify-start text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
             collapsed && "justify-center"
           )}
-          onClick={handleLogout}
+          onClick={handleLogoutClick}
         >
           <LogOut className={cn("size-4", !collapsed && "mr-2")} />
           {!collapsed && <span>退出登录</span>}
@@ -135,6 +140,16 @@ export function MerchantSidebar() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={logoutDialogOpen}
+        onOpenChange={setLogoutDialogOpen}
+        title="退出登录"
+        description="确认要退出登录吗？"
+        confirmText="退出"
+        variant="destructive"
+        onConfirm={confirmLogout}
+      />
     </aside>
   );
 }

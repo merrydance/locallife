@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, RefreshCw, Download, Filter, Printer, MoreVertical, Store } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -185,7 +186,7 @@ export function OrdersPageClient({
       await apiPost(`/merchant/orders/${orderId}/${action}`, payload);
       window.location.reload();
     } catch {
-      window.alert("操作失败，请稍后重试");
+      toast.error("操作失败，请稍后重试");
     }
   };
 
@@ -196,7 +197,7 @@ export function OrdersPageClient({
       const data = await apiGet<OrderResponse>(`/merchant/orders/${orderId}`);
       setDetailOrder(data);
     } catch {
-      window.alert("加载失败，请稍后重试");
+      toast.error("加载失败，请稍后重试");
     } finally {
       setLoadingDetail(false);
     }
@@ -227,7 +228,7 @@ export function OrdersPageClient({
               <RefreshCw className="size-4 mr-2" />
               刷新
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.alert("导出功能开发中")}>
+            <Button variant="outline" size="sm" onClick={() => toast.info("导出功能开发中")}>
               <Download className="size-4 mr-2" />
               导出
             </Button>
@@ -287,7 +288,7 @@ export function OrdersPageClient({
             </Card>
           </section>
 
-          <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm">
+          <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-2">
               {STATUS_TABS.map((tab) => {
                 const active = status === tab.value;
@@ -327,9 +328,9 @@ export function OrdersPageClient({
               </Select>
               
               <div className="relative flex items-center">
-                <Search className="absolute left-2.5 size-4 text-muted-foreground" />
+                <Search className="absolute left-3 size-4 text-muted-foreground" />
                 <input
-                  className="h-8 w-48 rounded-full border border-input bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="h-8 w-48 rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                   placeholder="搜索订单/备注"
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
@@ -476,7 +477,7 @@ export function OrdersPageClient({
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => window.alert("打印功能开发中")}
+                                  onClick={() => toast.info("打印功能开发中")}
                                 >
                                   打印
                                 </Button>
@@ -534,11 +535,11 @@ export function OrdersPageClient({
               <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4">
                 <span>已选择 {selectedCount} 项</span>
                 {canBatchAccept ? (
-                  <Button size="sm" onClick={() => window.alert("批量接单开发中")}>
+                  <Button size="sm" onClick={() => toast.info("批量接单开发中")}>
                     批量接单
                   </Button>
                 ) : null}
-                <Button size="sm" variant="outline" onClick={() => window.alert("批量打印开发中")}>
+                <Button size="sm" variant="outline" onClick={() => toast.info("批量打印开发中")}>
                   批量打印
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
@@ -656,7 +657,7 @@ export function OrdersPageClient({
             {detailOrder && (
               <>
                 <div className="flex gap-2 w-full">
-                  <Button variant="outline" className="flex-1" onClick={() => window.alert("打印功能开发中")}>
+                  <Button variant="outline" className="flex-1" onClick={() => toast.info("打印功能开发中")}>
                     <Printer className="size-4 mr-2" />
                     打印小票
                   </Button>

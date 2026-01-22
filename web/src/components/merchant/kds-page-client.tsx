@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost } from "@/lib/api";
@@ -100,7 +101,7 @@ export function KdsPageClient({ initialData }: Props) {
       const next = await apiGet<KitchenOrdersResponse>("/kitchen/orders");
       setData(next);
     } catch {
-      window.alert("加载失败，请稍后重试");
+      toast.error("加载失败，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -119,7 +120,7 @@ export function KdsPageClient({ initialData }: Props) {
       await apiPost(`/kitchen/orders/${orderId}/${action}`);
       refresh();
     } catch {
-      window.alert("操作失败，请稍后重试");
+      toast.error("操作失败，请稍后重试");
     }
   };
 

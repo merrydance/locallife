@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Utensils
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,18 +22,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { getAuthToken, apiGet, apiPost, apiPatch, apiPut, apiDelete, formatAmount, getMediaUrl, formatImageUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 
 import type { ComboSetResponse, ComboDishInfo, CreateComboRequest } from "@/types/combo";
 import type { DishResponse, TagInfo } from "@/types/dish";
-
-// Mock toast
-const toast = {
-  success: (msg: string) => alert(msg),
-  error: (msg: string) => alert("错误: " + msg),
-};
 
 interface CombosPageClientProps {
   initialData: ComboSetResponse[];
@@ -60,6 +56,9 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
   // Dish Picker State
   const [isDishPickerOpen, setIsDishPickerOpen] = useState(false);
   const [dishPickerSearch, setDishPickerSearch] = useState("");
+
+  // Delete Confirm Dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const loadCombos = async () => {
     setLoading(true);
@@ -209,10 +208,13 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
   };
 
   // Delete Logic
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
     if (!selectedCombo) return;
-    if (!confirm(`确定要删除套餐 "${selectedCombo.name}" 吗？`)) return;
+    setDeleteDialogOpen(true);
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!selectedCombo) return;
     try {
       await apiDelete(`/combos/${selectedCombo.id}`);
       toast.success("套餐已删除");
@@ -323,7 +325,7 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
                           <RefreshCw className="h-3 w-3 mr-1" />
                           重置
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={handleDelete}>
+                        <Button variant="destructive" size="sm" onClick={handleDeleteClick}>
                           <Trash2 className="h-3 w-3 mr-1" />
                           删除
                         </Button>
@@ -583,6 +585,16 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
           </div>
         </div>
       )}
+      {/* Delete Confirm Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="删除套餐"
+        description={`确定要删除套餐 "${selectedCombo?.name}" 吗？此操作不可撤销。`}
+        confirmText="删除"
+        variant="destructive"
+        onConfirm={handleDeleteConfirm}
+      />
     </PageShell>
   );
 }

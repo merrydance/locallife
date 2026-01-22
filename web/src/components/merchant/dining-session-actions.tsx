@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiPost } from "@/lib/api";
@@ -20,7 +21,7 @@ export function DiningSessionActions() {
 
       window.location.reload();
     } catch {
-      window.alert("操作失败，请稍后重试");
+      toast.error("操作失败，请稍后重试");
     } finally {
       setLoading(null);
     }

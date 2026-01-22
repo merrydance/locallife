@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiPatch, apiPost, formatAmount } from "@/lib/api";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
@@ -244,7 +245,7 @@ export function DashboardPageClient({
 
   const toggleStatus = async () => {
     if (session && !session.isAuthenticated) {
-      window.alert("未登录，无法切换营业状态");
+      toast.error("未登录，无法切换营业状态");
       return;
     }
     setLoadingStatus(true);
@@ -255,7 +256,7 @@ export function DashboardPageClient({
         await apiPatch("/merchants/me/status", { is_open: !effectiveIsOpen });
       }
     } catch {
-      window.alert("更新营业状态失败，请确认已登录");
+      toast.error("更新营业状态失败，请确认已登录");
     } finally {
       setLoadingStatus(false);
     }
@@ -301,7 +302,7 @@ export function DashboardPageClient({
       );
       applyTableSnapshot(updated);
     } catch {
-      window.alert("更新桌台状态失败，请稍后重试");
+      toast.error("更新桌台状态失败，请稍后重试");
     } finally {
       setLoadingTableStatus(null);
       setActiveTable(null);
@@ -342,7 +343,7 @@ export function DashboardPageClient({
       />
 
       <PageContent className="grid grid-cols-1 lg:grid-cols-[1.1fr_1.8fr_1.1fr] gap-6">
-            <section className="flex flex-col overflow-hidden rounded-xl bg-card shadow-sm">
+            <section className="flex flex-col overflow-hidden rounded-xl bg-white border shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div className="text-base font-semibold">📋 订单流</div>
                 <Link href="/merchant/orders" className="text-sm text-primary">
@@ -481,7 +482,7 @@ export function DashboardPageClient({
               </div>
             </section>
 
-            <section className="flex flex-col overflow-hidden rounded-xl bg-card shadow-sm">
+            <section className="flex flex-col overflow-hidden rounded-xl bg-white border shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-4">
                 <div className="text-base font-semibold">🪑 桌台状态</div>
                 <div className="flex gap-4 text-xs text-muted-foreground">
@@ -530,7 +531,7 @@ export function DashboardPageClient({
               </div>
             </section>
 
-            <section className="flex flex-col overflow-hidden rounded-xl bg-card shadow-sm">
+            <section className="flex flex-col overflow-hidden rounded-xl bg-white border shadow-sm">
               <div className="bg-[linear-gradient(135deg,#667eea_0%,#764ba2_100%)] p-6 text-white">
                 <div className="text-sm opacity-90">今日营业</div>
                 <div className="mt-2 text-xs opacity-80">营业额</div>
