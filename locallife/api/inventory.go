@@ -29,18 +29,18 @@ func calculateAvailable(totalQuantity, soldQuantity, reservedQuantity int32) int
 type createDailyInventoryRequest struct {
 	DishID        int64  `json:"dish_id" binding:"required,min=1"`
 	Date          string `json:"date" binding:"required"`                  // 日期 YYYY-MM-DD
-	TotalQuantity int32  `json:"total_quantity" binding:"required,gte=-1"` // -1表示无限库存
+	TotalQuantity *int32 `json:"total_quantity" binding:"required,gte=-1"` // -1表示无限库存，使用指针以支持0
 }
 
 type dailyInventoryResponse struct {
-	ID            int64  `json:"id"`
-	MerchantID    int64  `json:"merchant_id"`
-	DishID        int64  `json:"dish_id"`
-	Date          string `json:"date"`
-	TotalQuantity int32  `json:"total_quantity"`
-	SoldQuantity  int32  `json:"sold_quantity"`
-	ReservedQuantity int32 `json:"reserved_quantity"`
-	Available        int32 `json:"available"` // 计算字段: total - sold - reserved
+	ID               int64  `json:"id"`
+	MerchantID       int64  `json:"merchant_id"`
+	DishID           int64  `json:"dish_id"`
+	Date             string `json:"date"`
+	TotalQuantity    int32  `json:"total_quantity"`
+	SoldQuantity     int32  `json:"sold_quantity"`
+	ReservedQuantity int32  `json:"reserved_quantity"`
+	Available        int32  `json:"available"` // 计算字段: total - sold - reserved
 }
 
 // createDailyInventory godoc
@@ -90,7 +90,7 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 		MerchantID:    merchant.ID,
 		DishID:        req.DishID,
 		Date:          pgtype.Date{Time: date, Valid: true},
-		TotalQuantity: req.TotalQuantity,
+		TotalQuantity: *req.TotalQuantity,
 		SoldQuantity:  0,
 	})
 	if err != nil {
@@ -99,12 +99,12 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, dailyInventoryResponse{
-		ID:            inventory.ID,
-		MerchantID:    inventory.MerchantID,
-		DishID:        inventory.DishID,
-		Date:          inventory.Date.Time.Format("2006-01-02"),
-		TotalQuantity: inventory.TotalQuantity,
-		SoldQuantity:  inventory.SoldQuantity,
+		ID:               inventory.ID,
+		MerchantID:       inventory.MerchantID,
+		DishID:           inventory.DishID,
+		Date:             inventory.Date.Time.Format("2006-01-02"),
+		TotalQuantity:    inventory.TotalQuantity,
+		SoldQuantity:     inventory.SoldQuantity,
 		ReservedQuantity: inventory.ReservedQuantity,
 		Available:        calculateAvailable(inventory.TotalQuantity, inventory.SoldQuantity, inventory.ReservedQuantity),
 	})
@@ -119,16 +119,16 @@ type listDailyInventoryResponse struct {
 }
 
 type dailyInventoryWithDishResponse struct {
-	ID            int64  `json:"id"`
-	MerchantID    int64  `json:"merchant_id"`
-	DishID        int64  `json:"dish_id"`
-	DishName      string `json:"dish_name"`
-	DishPrice     int64  `json:"dish_price"`
-	Date          string `json:"date"`
-	TotalQuantity int32  `json:"total_quantity"`
-	SoldQuantity  int32  `json:"sold_quantity"`
-	ReservedQuantity int32 `json:"reserved_quantity"`
-	Available        int32 `json:"available"`
+	ID               int64  `json:"id"`
+	MerchantID       int64  `json:"merchant_id"`
+	DishID           int64  `json:"dish_id"`
+	DishName         string `json:"dish_name"`
+	DishPrice        int64  `json:"dish_price"`
+	Date             string `json:"date"`
+	TotalQuantity    int32  `json:"total_quantity"`
+	SoldQuantity     int32  `json:"sold_quantity"`
+	ReservedQuantity int32  `json:"reserved_quantity"`
+	Available        int32  `json:"available"`
 }
 
 // listDailyInventory godoc
@@ -186,14 +186,14 @@ func (server *Server) listDailyInventory(ctx *gin.Context) {
 	result := make([]dailyInventoryWithDishResponse, len(inventories))
 	for i, inv := range inventories {
 		result[i] = dailyInventoryWithDishResponse{
-			ID:            inv.ID,
-			MerchantID:    inv.MerchantID,
-			DishID:        inv.DishID,
-			DishName:      inv.DishName,
-			DishPrice:     inv.DishPrice,
-			Date:          inv.Date.Time.Format("2006-01-02"),
-			TotalQuantity: inv.TotalQuantity,
-			SoldQuantity:  inv.SoldQuantity,
+			ID:               inv.ID,
+			MerchantID:       inv.MerchantID,
+			DishID:           inv.DishID,
+			DishName:         inv.DishName,
+			DishPrice:        inv.DishPrice,
+			Date:             inv.Date.Time.Format("2006-01-02"),
+			TotalQuantity:    inv.TotalQuantity,
+			SoldQuantity:     inv.SoldQuantity,
 			ReservedQuantity: inv.ReservedQuantity,
 			Available:        calculateAvailable(inv.TotalQuantity, inv.SoldQuantity, inv.ReservedQuantity),
 		}
@@ -305,12 +305,12 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, dailyInventoryResponse{
-		ID:            updated.ID,
-		MerchantID:    updated.MerchantID,
-		DishID:        updated.DishID,
-		Date:          updated.Date.Time.Format("2006-01-02"),
-		TotalQuantity: updated.TotalQuantity,
-		SoldQuantity:  updated.SoldQuantity,
+		ID:               updated.ID,
+		MerchantID:       updated.MerchantID,
+		DishID:           updated.DishID,
+		Date:             updated.Date.Time.Format("2006-01-02"),
+		TotalQuantity:    updated.TotalQuantity,
+		SoldQuantity:     updated.SoldQuantity,
 		ReservedQuantity: updated.ReservedQuantity,
 		Available:        calculateAvailable(updated.TotalQuantity, updated.SoldQuantity, updated.ReservedQuantity),
 	})
@@ -585,12 +585,12 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, dailyInventoryResponse{
-		ID:            updated.ID,
-		MerchantID:    updated.MerchantID,
-		DishID:        updated.DishID,
-		Date:          updated.Date.Time.Format("2006-01-02"),
-		TotalQuantity: updated.TotalQuantity,
-		SoldQuantity:  updated.SoldQuantity,
+		ID:               updated.ID,
+		MerchantID:       updated.MerchantID,
+		DishID:           updated.DishID,
+		Date:             updated.Date.Time.Format("2006-01-02"),
+		TotalQuantity:    updated.TotalQuantity,
+		SoldQuantity:     updated.SoldQuantity,
 		ReservedQuantity: updated.ReservedQuantity,
 		Available:        calculateAvailable(updated.TotalQuantity, updated.SoldQuantity, updated.ReservedQuantity),
 	})

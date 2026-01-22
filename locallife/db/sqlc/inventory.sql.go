@@ -195,12 +195,16 @@ func (q *Queries) GetDailyInventoryForUpdate(ctx context.Context, arg GetDailyIn
 
 const getInventoryStats = `-- name: GetInventoryStats :one
 SELECT 
-  COUNT(*) as total_dishes,
-  COUNT(*) FILTER (WHERE total_quantity = -1) as unlimited_dishes,
-  COUNT(*) FILTER (WHERE total_quantity > 0 AND sold_quantity >= total_quantity) as sold_out_dishes,
-  COUNT(*) FILTER (WHERE total_quantity > 0 AND sold_quantity < total_quantity) as available_dishes
-FROM daily_inventory
-WHERE merchant_id = $1 AND date = $2
+  COUNT(d.id) as total_dishes,
+  COUNT(d.id) FILTER (WHERE di.total_quantity = -1 OR di.id IS NULL) as unlimited_dishes,
+  COUNT(d.id) FILTER (WHERE di.total_quantity = 0 OR (di.total_quantity > 0 AND di.sold_quantity >= di.total_quantity)) as sold_out_dishes,
+  COUNT(d.id) FILTER (
+    WHERE (di.total_quantity = -1 OR di.id IS NULL) -- 无限库存
+    OR (di.total_quantity > 0 AND di.sold_quantity < di.total_quantity) -- 有限库存且未卖完
+  ) as available_dishes
+FROM dishes d
+LEFT JOIN daily_inventory di ON d.id = di.dish_id AND di.date = $2
+WHERE d.merchant_id = $1 AND d.is_online = true
 `
 
 type GetInventoryStatsParams struct {

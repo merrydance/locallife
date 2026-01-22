@@ -21,6 +21,7 @@ const navItems = [
   { label: "订单", href: "/merchant/orders", activePrefix: "/merchant/orders" },
   { label: "菜品", href: "/merchant/dishes", activePrefix: "/merchant/dishes" },
   { label: "套餐", href: "/merchant/combos", activePrefix: "/merchant/combos" },
+  { label: "库存", href: "/merchant/inventory", activePrefix: "/merchant/inventory" },
   { label: "桌台", href: "/merchant/tables", activePrefix: "/merchant/tables" },
   { label: "堂食", href: "/merchant/dinein", activePrefix: "/merchant/dinein" },
   { label: "后厨", href: "/merchant/kds", activePrefix: "/merchant/kds" },
