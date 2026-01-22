@@ -239,7 +239,7 @@ SELECT
   ) as tags
 FROM combo_sets cs
 LEFT JOIN combo_dishes cd ON cs.id = cd.combo_id
-LEFT JOIN dishes d ON cd.dish_id = d.id
+LEFT JOIN dishes d ON cd.dish_id = d.id AND d.deleted_at IS NULL
 LEFT JOIN combo_tags ct ON cs.id = ct.combo_id
 LEFT JOIN tags t ON ct.tag_id = t.id
 WHERE cs.id = $1 AND cs.deleted_at IS NULL
@@ -354,6 +354,7 @@ SELECT
          WHERE cd.combo_id = cs.id 
            AND d.image_url IS NOT NULL 
            AND d.image_url != ''
+           AND d.deleted_at IS NULL
          ORDER BY cd.id ASC 
          LIMIT 1)
     ) AS image_url,
@@ -520,7 +521,7 @@ SELECT
   cd.quantity
 FROM dishes d
 JOIN combo_dishes cd ON d.id = cd.dish_id
-WHERE cd.combo_id = $1
+WHERE cd.combo_id = $1 AND d.deleted_at IS NULL
 ORDER BY cd.id ASC
 `
 
@@ -787,6 +788,16 @@ func (q *Queries) RemoveComboTag(ctx context.Context, arg RemoveComboTagParams) 
 	return err
 }
 
+const removeDishFromAllCombos = `-- name: RemoveDishFromAllCombos :exec
+DELETE FROM combo_dishes
+WHERE dish_id = $1
+`
+
+func (q *Queries) RemoveDishFromAllCombos(ctx context.Context, dishID int64) error {
+	_, err := q.db.Exec(ctx, removeDishFromAllCombos, dishID)
+	return err
+}
+
 const searchComboIDsGlobal = `-- name: SearchComboIDsGlobal :many
 SELECT cs.id FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
@@ -858,6 +869,7 @@ LEFT JOIN LATERAL (
     WHERE cd.combo_id = cs.id
       AND d.image_url IS NOT NULL
       AND d.image_url != ''
+      AND d.deleted_at IS NULL
     ORDER BY cd.id ASC
     LIMIT 1
 ) AS dish_img ON TRUE

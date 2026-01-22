@@ -45,7 +45,7 @@ SELECT
   ) as tags
 FROM combo_sets cs
 LEFT JOIN combo_dishes cd ON cs.id = cd.combo_id
-LEFT JOIN dishes d ON cd.dish_id = d.id
+LEFT JOIN dishes d ON cd.dish_id = d.id AND d.deleted_at IS NULL
 LEFT JOIN combo_tags ct ON cs.id = ct.combo_id
 LEFT JOIN tags t ON ct.tag_id = t.id
 WHERE cs.id = $1 AND cs.deleted_at IS NULL
@@ -110,12 +110,16 @@ SELECT
   cd.quantity
 FROM dishes d
 JOIN combo_dishes cd ON d.id = cd.dish_id
-WHERE cd.combo_id = $1
+WHERE cd.combo_id = $1 AND d.deleted_at IS NULL
 ORDER BY cd.id ASC;
 
 -- name: RemoveComboDish :exec
 DELETE FROM combo_dishes
 WHERE combo_id = $1 AND dish_id = $2;
+
+-- name: RemoveDishFromAllCombos :exec
+DELETE FROM combo_dishes
+WHERE dish_id = $1;
 
 -- name: RemoveAllComboDishes :exec
 DELETE FROM combo_dishes
@@ -214,6 +218,7 @@ SELECT
          WHERE cd.combo_id = cs.id 
            AND d.image_url IS NOT NULL 
            AND d.image_url != ''
+           AND d.deleted_at IS NULL
          ORDER BY cd.id ASC 
          LIMIT 1)
     ) AS image_url,
@@ -313,6 +318,7 @@ LEFT JOIN LATERAL (
     WHERE cd.combo_id = cs.id
       AND d.image_url IS NOT NULL
       AND d.image_url != ''
+      AND d.deleted_at IS NULL
     ORDER BY cd.id ASC
     LIMIT 1
 ) AS dish_img ON TRUE

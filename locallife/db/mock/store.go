@@ -12364,6 +12364,20 @@ func (mr *MockStoreMockRecorder) RemoveComboTag(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveComboTag", reflect.TypeOf((*MockStore)(nil).RemoveComboTag), ctx, arg)
 }
 
+// RemoveDishFromAllCombos mocks base method.
+func (m *MockStore) RemoveDishFromAllCombos(ctx context.Context, dishID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveDishFromAllCombos", ctx, dishID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveDishFromAllCombos indicates an expected call of RemoveDishFromAllCombos.
+func (mr *MockStoreMockRecorder) RemoveDishFromAllCombos(ctx, dishID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveDishFromAllCombos", reflect.TypeOf((*MockStore)(nil).RemoveDishFromAllCombos), ctx, dishID)
+}
+
 // RemoveDishIngredient mocks base method.
 func (m *MockStore) RemoveDishIngredient(ctx context.Context, arg db.RemoveDishIngredientParams) error {
 	m.ctrl.T.Helper()

@@ -1117,11 +1117,18 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 		return
 	}
 
-	// 删除菜品（CASCADE 会自动删除关联的食材、标签、定制选项等）
+	// 删除菜品（软删除）
 	err = server.store.DeleteDish(ctx, req.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("delete dish: %w", err)))
 		return
+	}
+
+	// 从所有套餐中移除该菜品（物理删除关联关系，因为菜品已被软删除）
+	err = server.store.RemoveDishFromAllCombos(ctx, req.ID)
+	if err != nil {
+		// 这里如果失败，我们只记日志，不影响主流程响应，因为菜品本身已经标记删除了
+		fmt.Printf("failed to remove dish %d from combos: %v\n", req.ID, err)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "dish deleted successfully"})

@@ -38,8 +38,8 @@ SELECT
     )::json AS items
 FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND c.merchant_id = $2 AND c.order_type = $3 AND c.table_id IS NOT DISTINCT FROM $4 AND c.reservation_id IS NOT DISTINCT FROM $5
 GROUP BY c.id;
 
@@ -80,8 +80,8 @@ SELECT
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_available
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.id = $1;
 
 -- name: ListCartItems :many
@@ -98,8 +98,8 @@ SELECT
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_available
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.cart_id = $1
 ORDER BY ci.created_at;
 
@@ -141,8 +141,8 @@ SELECT
     ), 0)::bigint AS total_amount
 FROM carts c
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL);
 
 -- name: GetUserCartsWithDetails :many
@@ -177,8 +177,8 @@ FROM carts c
 JOIN merchants m ON m.id = c.merchant_id
 LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
 LEFT JOIN cart_items ci ON ci.cart_id = c.id
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE c.user_id = $1 AND (c.order_type = sqlc.narg('order_type') OR sqlc.narg('order_type') IS NULL)
 GROUP BY c.id, c.merchant_id, c.order_type, c.table_id, c.reservation_id, m.id, mpc.sub_mch_id
 HAVING COUNT(ci.id) > 0  -- 只返回有商品的购物车
@@ -214,8 +214,8 @@ SELECT
     cs.is_online AS combo_is_online,
     cs.merchant_id AS combo_merchant_id
 FROM cart_items ci
-LEFT JOIN dishes d ON d.id = ci.dish_id
-LEFT JOIN combo_sets cs ON cs.id = ci.combo_id
+LEFT JOIN dishes d ON d.id = ci.dish_id AND d.deleted_at IS NULL
+LEFT JOIN combo_sets cs ON cs.id = ci.combo_id AND cs.deleted_at IS NULL
 WHERE ci.cart_id = ANY($1::bigint[])
 ORDER BY ci.cart_id, ci.created_at;
 

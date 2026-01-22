@@ -1225,6 +1225,7 @@ type Querier interface {
 	RemoveAllTableTags(ctx context.Context, tableID int64) error
 	RemoveComboDish(ctx context.Context, arg RemoveComboDishParams) error
 	RemoveComboTag(ctx context.Context, arg RemoveComboTagParams) error
+	RemoveDishFromAllCombos(ctx context.Context, dishID int64) error
 	RemoveDishIngredient(ctx context.Context, arg RemoveDishIngredientParams) error
 	RemoveDishTag(ctx context.Context, arg RemoveDishTagParams) error
 	// 清理已过期订单池项（用于订单取消等情况，expires_at不再用于可见性过滤）
