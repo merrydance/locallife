@@ -257,7 +257,7 @@ export function ReservationsPageClient({
   const TableCard = ({ table }: { table: TableResponse }) => {
     return (
       <Card className={cn(
-        "group relative overflow-hidden transition-all hover:shadow-lg border-muted/60 flex flex-col h-full",
+        "group relative overflow-hidden transition-all hover:shadow-lg border-muted/60 flex flex-col",
         table.status === 'disabled' && "opacity-80 grayscale-[0.2] bg-muted/20"
       )}>
         <div className={cn(
@@ -267,13 +267,13 @@ export function ReservationsPageClient({
           table.status === 'reserved' ? "bg-amber-500" : "bg-muted-foreground"
         )} />
 
-        <CardHeader className="p-4 pb-2 shrink-0">
+        <CardHeader className="p-3 pb-1 shrink-0">
           <div className="flex items-start justify-between">
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex items-center gap-2">
-                <h3 className="text-2xl font-bold tracking-tight">{table.table_no}</h3>
+                <h3 className="text-xl font-bold tracking-tight">{table.table_no}</h3>
                 <Badge className={cn(
-                  "text-[10px] px-1.5 h-4 font-normal text-white border-0", 
+                  "text-[9px] px-1 h-3.5 font-normal text-white border-0", 
                   table.status === 'available' ? "bg-emerald-500" : 
                   table.status === 'occupied' ? "bg-primary" : 
                   table.status === 'reserved' ? "bg-amber-500" : "bg-muted-foreground"
@@ -281,12 +281,12 @@ export function ReservationsPageClient({
                   {table.status === 'available' ? '空闲' : table.status === 'occupied' ? '用餐中' : table.status === 'reserved' ? '已预定' : '停用'}
                 </Badge>
               </div>
-              <div className="flex items-center text-[11px] text-muted-foreground gap-2">
-                <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> 容纳 {table.capacity} 人</span>
+              <div className="flex items-center text-[10px] text-muted-foreground gap-2">
+                <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {table.capacity} 人</span>
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div className="flex flex-wrap gap-1 mt-1.5">
              {table.tags?.map(tag => (
                <Badge key={tag.id} variant="secondary" className="text-[10px] h-4 bg-muted text-muted-foreground px-1.5 font-normal">
                  {tag.name}
@@ -295,12 +295,12 @@ export function ReservationsPageClient({
           </div>
         </CardHeader>
 
-        <CardContent className="p-4 pt-2 grow flex flex-col">
-          <Separator className="my-2 opacity-50" />
-          <div className="mt-1">
-             <div className="text-xs font-semibold text-muted-foreground mb-3 flex items-center justify-between">
+        <CardContent className="p-3 pt-1 flex flex-col">
+          <Separator className="my-1.5 opacity-50" />
+          <div className="mt-0.5">
+             <div className="text-[11px] font-semibold text-muted-foreground mb-2 flex items-center justify-between">
                 <span>接单预报 (6 日内)</span>
-                <span className="text-[9px] font-normal opacity-60">点击时段查看详情</span>
+                <span className="text-[8px] font-normal opacity-60">点击时段详情</span>
              </div>
              <div className="grid grid-cols-3 gap-2">
                 {next6Days.map(day => {
@@ -314,10 +314,10 @@ export function ReservationsPageClient({
 
                    return (
                      <div key={day.dateStr} className={cn(
-                       "flex flex-col items-center justify-center py-3 rounded-xl border transition-all bg-emerald-50/30 border-emerald-100/50 group/day",
+                       "flex flex-col items-center justify-center py-2 rounded-xl border transition-all bg-emerald-50/30 border-emerald-100/50 group/day",
                        (hasLunch || hasDinner) && "bg-amber-50 border-amber-200"
                      )}>
-                       <span className="text-sm font-extrabold leading-none mb-3 text-slate-700">{day.label}</span>
+                       <span className="text-xs font-bold leading-none mb-2 text-slate-700">{day.label}</span>
                        <div className="flex justify-between w-full px-2">
                           <div className="flex flex-col items-center gap-1.5 cursor-pointer hover:scale-110 active:scale-95 transition-transform" onClick={() => openCreateDialog(table.id, day.dateStr, "11:00")}>
                             <span className="text-[9px] font-black text-slate-400 leading-none">午</span>
@@ -333,14 +333,14 @@ export function ReservationsPageClient({
                 })}
              </div>
           </div>
-          <div className="grow min-h-[40px] mt-4">
+          <div className="mt-3">
              {table.current_reservation && (
-                <div className="p-2 bg-primary/5 rounded-lg border border-primary/10">
-                   <div className="flex items-center justify-between text-xs font-bold text-primary mb-1">
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {table.current_reservation.reservation_time} 到访</span>
+                <div className="p-1.5 bg-primary/5 rounded-lg border border-primary/10">
+                   <div className="flex items-center justify-between text-[11px] font-bold text-primary mb-0.5">
+                    <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> {table.current_reservation.reservation_time} 到访</span>
                    </div>
                    <div className="text-[10px] text-muted-foreground flex items-center justify-between">
-                    <span className="truncate">{table.current_reservation.contact_name}</span>
+                    <span className="truncate max-w-[60px]">{table.current_reservation.contact_name}</span>
                     <span className="flex items-center gap-1 shrink-0"><Users className="h-2.5 w-2.5" /> {table.current_reservation.guest_count}人</span>
                   </div>
                 </div>
