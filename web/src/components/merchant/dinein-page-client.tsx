@@ -232,9 +232,7 @@ export function DineInPageClient() {
     setActionLoading(table.id);
     try {
       if (type === 'close') {
-        if (table.activeOrder) {
-          await apiPost(`/merchant/orders/${table.activeOrder.id}/complete`);
-        }
+        // 商户不再手动调用订单完成接口，直接释放桌台即可触发后端的关闭会话事务
         await apiPatch(`/tables/${table.id}/status`, { status: 'available' });
         toast.success(`桌台 ${table.table_no} 结账完成并释放`);
       } else if (type === 'reset') {
