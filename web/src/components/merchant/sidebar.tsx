@@ -23,6 +23,7 @@ import {
   CalendarCheck,
   UserCog,
   Boxes,
+  Building2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,6 +144,19 @@ const navGroups = [
     ],
   },
   {
+    label: "集团协同",
+    description: "多门店管理",
+    shouldShow: (session: any) => !!session?.merchant?.group_id,
+    items: [
+      {
+        label: "集团中心",
+        href: "/merchant/group",
+        activePrefix: "/merchant/group",
+        icon: Building2,
+      },
+    ],
+  },
+  {
     label: "店铺配置",
     description: "基础设置",
     items: [
@@ -246,47 +260,52 @@ export function MerchantSidebar() {
 
       {/* 导航分组 */}
       <nav className="flex-1 overflow-y-auto px-3 py-1">
-        {navGroups.map((group, groupIndex) => (
-          <div key={group.label} className={cn(groupIndex > 0 && "mt-4")}>
-            {/* 分组标题 */}
-            {!collapsed && (
-              <div className="px-2 mb-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {group.label}
-                </span>
-              </div>
-            )}
-            {collapsed && groupIndex > 0 && (
-              <Separator className="my-2" />
-            )}
+        {navGroups.map((group, groupIndex) => {
+          if ((group as any).shouldShow && !(group as any).shouldShow(session)) {
+            return null;
+          }
+          return (
+            <div key={group.label} className={cn(groupIndex > 0 && "mt-4")}>
+              {/* 分组标题 */}
+              {!collapsed && (
+                <div className="px-2 mb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {group.label}
+                  </span>
+                </div>
+              )}
+              {collapsed && groupIndex > 0 && (
+                <Separator className="my-2" />
+              )}
 
-            {/* 分组内的导航项 */}
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const active = pathname.startsWith(item.activePrefix);
-                const Icon = item.icon;
-                return (
-                  <Link key={item.label} href={item.href} title={item.label}>
-                    <span
-                      className={cn(
-                        "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                        collapsed && "justify-center px-2"
-                      )}
-                    >
-                      <Icon className={cn("size-4 shrink-0", active && "text-primary")} />
-                      {!collapsed && (
-                        <span className="truncate">{item.label}</span>
-                      )}
-                    </span>
-                  </Link>
-                );
-              })}
+              {/* 分组内的导航项 */}
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active = pathname.startsWith(item.activePrefix);
+                  const Icon = item.icon;
+                  return (
+                    <Link key={item.label} href={item.href} title={item.label}>
+                      <span
+                        className={cn(
+                          "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                          active
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                          collapsed && "justify-center px-2"
+                        )}
+                      >
+                        <Icon className={cn("size-4 shrink-0", active && "text-primary")} />
+                        {!collapsed && (
+                          <span className="truncate">{item.label}</span>
+                        )}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* 底部：退出登录 */}

@@ -5720,6 +5720,21 @@ func (mr *MockStoreMockRecorder) GetGroupMemberRole(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGroupMemberRole", reflect.TypeOf((*MockStore)(nil).GetGroupMemberRole), ctx, arg)
 }
 
+// GetGroupPolicies mocks base method.
+func (m *MockStore) GetGroupPolicies(ctx context.Context, groupID int64) (db.GroupPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGroupPolicies", ctx, groupID)
+	ret0, _ := ret[0].(db.GroupPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGroupPolicies indicates an expected call of GetGroupPolicies.
+func (mr *MockStoreMockRecorder) GetGroupPolicies(ctx, groupID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGroupPolicies", reflect.TypeOf((*MockStore)(nil).GetGroupPolicies), ctx, groupID)
+}
+
 // GetHotSellingDishIDs mocks base method.
 func (m *MockStore) GetHotSellingDishIDs(ctx context.Context, quantity int16) ([]int64, error) {
 	m.ctrl.T.Helper()
@@ -10169,6 +10184,21 @@ func (m *MockStore) ListMerchantApplications(ctx context.Context, arg db.ListMer
 func (mr *MockStoreMockRecorder) ListMerchantApplications(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantApplications", reflect.TypeOf((*MockStore)(nil).ListMerchantApplications), ctx, arg)
+}
+
+// ListMerchantBrandsByGroup mocks base method.
+func (m *MockStore) ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]db.MerchantBrand, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantBrandsByGroup", ctx, groupID)
+	ret0, _ := ret[0].([]db.MerchantBrand)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantBrandsByGroup indicates an expected call of ListMerchantBrandsByGroup.
+func (mr *MockStoreMockRecorder) ListMerchantBrandsByGroup(ctx, groupID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantBrandsByGroup", reflect.TypeOf((*MockStore)(nil).ListMerchantBrandsByGroup), ctx, groupID)
 }
 
 // ListMerchantBusinessHours mocks base method.

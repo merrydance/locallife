@@ -375,6 +375,23 @@ func (q *Queries) GetGroupMemberRole(ctx context.Context, arg GetGroupMemberRole
 	return role, err
 }
 
+const getGroupPolicies = `-- name: GetGroupPolicies :one
+SELECT group_id, pricing_mode, menu_mode, inventory_mode, promotion_mode FROM group_policies WHERE group_id = $1
+`
+
+func (q *Queries) GetGroupPolicies(ctx context.Context, groupID int64) (GroupPolicy, error) {
+	row := q.db.QueryRow(ctx, getGroupPolicies, groupID)
+	var i GroupPolicy
+	err := row.Scan(
+		&i.GroupID,
+		&i.PricingMode,
+		&i.MenuMode,
+		&i.InventoryMode,
+		&i.PromotionMode,
+	)
+	return i, err
+}
+
 const getLatestGroupApplicationByApplicant = `-- name: GetLatestGroupApplicationByApplicant :one
 SELECT id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at FROM merchant_group_applications
 WHERE applicant_user_id = $1
@@ -532,6 +549,39 @@ func (q *Queries) ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) (
 			&i.Address,
 			&i.Phone,
 			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMerchantBrandsByGroup = `-- name: ListMerchantBrandsByGroup :many
+SELECT id, group_id, name, logo_url, description, status, created_at, updated_at FROM merchant_brands WHERE group_id = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]MerchantBrand, error) {
+	rows, err := q.db.Query(ctx, listMerchantBrandsByGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MerchantBrand{}
+	for rows.Next() {
+		var i MerchantBrand
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.Name,
+			&i.LogoUrl,
+			&i.Description,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

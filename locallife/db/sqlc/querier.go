@@ -589,6 +589,7 @@ type Querier interface {
 	GetGroupApplication(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	GetGroupJoinRequest(ctx context.Context, id int64) (MerchantGroupJoinRequest, error)
 	GetGroupMemberRole(ctx context.Context, arg GetGroupMemberRoleParams) (string, error)
+	GetGroupPolicies(ctx context.Context, groupID int64) (GroupPolicy, error)
 	// 获取热卖菜品ID列表（近7天销量 >= 指定阈值）
 	GetHotSellingDishIDs(ctx context.Context, quantity int16) ([]int64, error)
 	// 订单时段分布
@@ -1037,6 +1038,7 @@ type Querier interface {
 	// 商户查询自己的申诉列表
 	ListMerchantAppealsForMerchant(ctx context.Context, arg ListMerchantAppealsForMerchantParams) ([]ListMerchantAppealsForMerchantRow, error)
 	ListMerchantApplications(ctx context.Context, arg ListMerchantApplicationsParams) ([]MerchantApplication, error)
+	ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]MerchantBrand, error)
 	ListMerchantBusinessHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
 	ListMerchantClaims(ctx context.Context, arg ListMerchantClaimsParams) ([]Claim, error)
 	// 获取商户在指定时间窗口内特定类型的索赔列表

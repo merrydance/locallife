@@ -1,0 +1,576 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { 
+  Building2, 
+  Users, 
+  GitPullRequest, 
+  Settings2, 
+  Plus, 
+  Search,
+  Loader2,
+  RefreshCw,
+  MapPin,
+  Phone,
+  LayoutDashboard,
+  Store,
+  Tag,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  ChevronRight
+} from "lucide-react";
+import { toast } from "sonner";
+import { 
+  apiGet, 
+  apiPost, 
+  apiPatch, 
+  apiPut, 
+  getMediaUrl,
+  formatAmount 
+} from "@/lib/api";
+import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter,
+  DialogDescription 
+} from "@/components/ui/dialog";
+import { 
+  GroupResponse, 
+  GroupMerchantResponse, 
+  GroupJoinRequestResponse, 
+  GroupPoliciesResponse,
+  BrandResponse,
+  GroupApplicationResponse
+} from "@/types/group";
+import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import { cn } from "@/lib/utils";
+
+export function GroupPageClient() {
+  const session = useMerchantSession();
+  const [activeTab, setActiveTab] = useState("overview");
+  
+  // Data States
+  const [group, setGroup] = useState<GroupResponse | null>(null);
+  const [merchants, setMerchants] = useState<GroupMerchantResponse[]>([]);
+  const [joinRequests, setJoinRequests] = useState<GroupJoinRequestResponse[]>([]);
+  const [brands, setBrands] = useState<BrandResponse[]>([]);
+  const [policies, setPolicies] = useState<GroupPoliciesResponse | null>(null);
+  const [application, setApplication] = useState<GroupApplicationResponse | null>(null);
+  
+  // Loading States
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  const groupId = session?.merchant?.group_id;
+
+  const fetchGroupData = useCallback(async () => {
+    if (!groupId) {
+      // Check for group application
+      try {
+        const app = await apiGet<GroupApplicationResponse>("/groups/applications/me");
+        setApplication(app);
+      } catch (err) {
+        console.error("Failed to fetch group application", err);
+      }
+      setLoading(false);
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      const [groupInfo, groupMerchants, groupRequests, groupPolicies, groupBrands] = await Promise.all([
+        apiGet<GroupResponse>(`/groups/${groupId}`),
+        apiGet<GroupMerchantResponse[]>(`/groups/${groupId}/merchants`),
+        apiGet<GroupJoinRequestResponse[]>(`/groups/${groupId}/join-requests`).catch(() => []),
+        apiGet<GroupPoliciesResponse>(`/groups/${groupId}/policies`).catch(() => null),
+        apiGet<BrandResponse[]>(`/groups/${groupId}/brands`).catch(() => []),
+      ]);
+      
+      setGroup(groupInfo);
+      setMerchants(groupMerchants);
+      setJoinRequests(groupRequests);
+      setPolicies(groupPolicies);
+      setBrands(groupBrands); 
+      
+    } catch (error) {
+      console.error("Failed to fetch group data", error);
+      toast.error("加载集团数据失败");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [groupId]);
+
+  useEffect(() => {
+    if (session?.isReady) {
+      fetchGroupData();
+    }
+  }, [session?.isReady, fetchGroupData]);
+
+  if (loading) {
+    return (
+      <PageShell>
+        <div className="flex h-[60vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </PageShell>
+    );
+  }
+
+  // If not in a group and no application or rejected application
+  if (!groupId && (!application || application.status === "rejected")) {
+    return (
+      <PageShell>
+        <PageHeader 
+          title="集团管理" 
+          description="创建或加入集团以实现多门店协同管理"
+        />
+        <PageContent>
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 py-12">
+            <Card className="border-2 hover:border-primary/50 transition-all cursor-pointer group">
+              <CardHeader>
+                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <Plus className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>创建并入驻集团</CardTitle>
+                <CardDescription>
+                  如果您拥有多个品牌或门店，可以申请创建集团，统一管理各门店的菜单、库存和营销。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" onClick={() => toast.info("完善中...")}>开始申请</Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 hover:border-primary/50 transition-all cursor-pointer group">
+              <CardHeader>
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <Search className="w-6 h-6 text-blue-600" />
+                </div>
+                <CardTitle>加入现有集团</CardTitle>
+                <CardDescription>
+                  如果您是连锁加盟店或希望加入某个集团，可以搜索集团并提交加入申请。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" className="w-full" onClick={() => window.location.href='/merchant/settings?tab=group'}>前往搜索</Button>
+              </CardContent>
+            </Card>
+          </div>
+        </PageContent>
+      </PageShell>
+    );
+  }
+
+  // If application is pending
+  if (!groupId && application && (application.status === "draft" || application.status === "submitted")) {
+    return (
+      <PageShell>
+        <PageHeader title="集团入驻申请" description="您的集团入驻申请正在处理中" />
+        <PageContent>
+          <div className="max-w-2xl mx-auto bg-white rounded-xl border shadow-sm p-8 text-center space-y-6">
+            <div className="mx-auto w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center">
+              <RefreshCw className="h-10 w-10 text-amber-500 animate-spin-slow" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold">申请审核中</h3>
+              <p className="text-muted-foreground">
+                您申请的集团：<strong>{application.group_name}</strong>
+              </p>
+              <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                {application.status === "submitted" ? "已提交，等待审核" : "草稿状态"}
+              </Badge>
+            </div>
+            <div className="pt-6 border-t text-sm text-muted-foreground">
+              审核通常需要 1-3 个工作日。通过后，您将看到更加完整的集团管理视图。
+            </div>
+            {application.status === "draft" && (
+              <Button onClick={() => toast.info("完善中...")}>继续完善资料</Button>
+            )}
+          </div>
+        </PageContent>
+      </PageShell>
+    );
+  }
+
+  // Main Group Management View
+  return (
+    <PageShell>
+      <PageHeader 
+        title={group?.name || "集团管理"} 
+        description="统一管理您的品牌、门店、政策和协同办公"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={fetchGroupData} disabled={refreshing}>
+              <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
+              刷新数据
+            </Button>
+          </div>
+        }
+      />
+      
+      <PageContent>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-2 rounded-xl border border-muted/50 shadow-sm">
+            <TabsList className="bg-transparent border-none">
+              <TabsTrigger value="overview" className="gap-2">
+                <LayoutDashboard className="h-4 w-4" /> 概览
+              </TabsTrigger>
+              <TabsTrigger value="merchants" className="gap-2">
+                <Store className="h-4 w-4" /> 门店列表
+                {merchants.length > 0 && <Badge variant="secondary" className="ml-1 px-1.5 h-4 min-w-4 text-[10px]">{merchants.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="requests" className="gap-2">
+                <GitPullRequest className="h-4 w-4" /> 加入申请
+                {joinRequests.filter(r => r.status === 'pending').length > 0 && (
+                  <Badge variant="destructive" className="ml-1 px-1.5 h-4 min-w-4 text-[10px]">
+                    {joinRequests.filter(r => r.status === 'pending').length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="brands" className="gap-2">
+                <Tag className="h-4 w-4" /> 品牌库
+              </TabsTrigger>
+              <TabsTrigger value="policies" className="gap-2">
+                <Settings2 className="h-4 w-4" /> 集团政策
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="overview" className="m-0 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">集团资料</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wider">集团名称</Label>
+                    <p className="font-medium">{group?.name}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wider">状态</Label>
+                    <div>
+                      <Badge variant={group?.status === 'active' ? "default" : "secondary"}>
+                        {group?.status === 'active' ? "正常经营" : "非活跃"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wider">联系电话</Label>
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-3.5 w-3.5 text-slate-400" />
+                      <p className="font-medium">{group?.contact_phone || "未设置"}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wider">地址信息</Label>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                      <p className="font-medium text-sm">{group?.address || "未设置"}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wider">统计概览</Label>
+                    <div className="grid grid-cols-3 gap-4 pt-2">
+                      <div className="bg-slate-50 p-3 rounded-lg border">
+                        <p className="text-xs text-muted-foreground mb-1">直营/加盟店</p>
+                        <p className="text-xl font-bold">{merchants.length}</p>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-lg border">
+                        <p className="text-xs text-muted-foreground mb-1">合作品牌</p>
+                        <p className="text-xl font-bold">{brands.length}</p>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-lg border">
+                        <p className="text-xs text-muted-foreground mb-1">待审申请</p>
+                        <p className="text-xl font-bold">{joinRequests.filter(r => r.status === 'pending').length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">运营中心</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button variant="outline" className="w-full justify-between" onClick={() => setActiveTab('merchants')}>
+                    管理下属门店
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" className="w-full justify-between" onClick={() => setActiveTab('requests')}>
+                    处理加入申请
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" className="w-full justify-between" onClick={() => setActiveTab('policies')}>
+                    配置全局政策
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Separator />
+                  <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 text-xs text-primary leading-relaxed">
+                    <strong>提示：</strong> 您当前的身份为集团管理员，所做的修改将同步并影响到所有授权门店。
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="merchants" className="m-0 space-y-6">
+            <div className="bg-white rounded-xl border shadow-sm">
+              <div className="p-4 border-b flex items-center justify-between bg-white sticky top-0 z-10">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">门店列表</h3>
+                  <p className="text-xs text-muted-foreground">管理集团下属的所有商户和门店</p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="搜索门店名称/地址..." className="pl-9 h-9 w-[260px]" />
+                  </div>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-1" />
+                    邀请新门店
+                  </Button>
+                </div>
+              </div>
+              <div className="divide-y">
+                {merchants.map(merchant => (
+                  <div key={merchant.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-lg border overflow-hidden bg-slate-100 shrink-0">
+                        {merchant.logo_url ? (
+                          <img src={getMediaUrl(merchant.logo_url)} alt={merchant.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-400">
+                            <Store className="h-6 w-6" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-slate-900 truncate">{merchant.name}</h4>
+                          <Badge variant={merchant.status === 'active' ? "default" : "secondary"} className="h-5 text-[10px]">
+                            {merchant.status === 'active' ? "正常" : "注销/冻结"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {merchant.address}</span>
+                          <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {merchant.phone}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => toast.info("完善中...")}>数据统计</Button>
+                      <Button variant="outline" size="sm" onClick={() => toast.info("完善中...")}>配置项</Button>
+                    </div>
+                  </div>
+                ))}
+                {merchants.length === 0 && (
+                  <div className="py-20 text-center text-muted-foreground flex flex-col items-center">
+                    <Store className="h-12 w-12 text-slate-200 mb-3" />
+                    <p className="text-sm">暂无关联门店</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="requests" className="m-0 space-y-6">
+             <div className="bg-white rounded-xl border shadow-sm">
+                <div className="p-4 border-b">
+                  <h3 className="text-sm font-semibold text-slate-900">入驻申请管理</h3>
+                  <p className="text-xs text-muted-foreground">审核来自外部门店的加入申请</p>
+                </div>
+                <div className="divide-y">
+                  {joinRequests.map(req => (
+                    <div key={req.id} className="p-6 flex flex-col gap-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
+                            <Users className="h-5 w-5 text-slate-500" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <h4 className="font-bold">店铺 ID: {req.merchant_id}</h4>
+                              <Badge variant={req.status === 'pending' ? 'outline' : 'secondary'} className={cn(
+                                req.status === 'pending' && "border-amber-500 text-amber-600 bg-amber-50",
+                                req.status === 'approved' && "border-emerald-500 text-emerald-600 bg-emerald-50",
+                                req.status === 'rejected' && "border-rose-500 text-rose-600 bg-rose-50",
+                              )}>
+                                {req.status === 'pending' ? '待审核' : 
+                                 req.status === 'approved' ? '已通过' : 
+                                 req.status === 'rejected' ? '已驳回' : '已撤回'}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              申请人 ID: {req.applicant_user_id} · 提交于 {new Date(req.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {req.status === 'pending' && (
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" className="text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => handleReviewRequest(req, 'rejected')}>
+                              驳回
+                            </Button>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleReviewRequest(req, 'approved')}>
+                              准许加入
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm italic text-slate-600">
+                        " {req.reason || "申请人未填写申请理由"} "
+                      </div>
+                    </div>
+                  ))}
+                  {joinRequests.length === 0 && (
+                    <div className="py-20 text-center text-muted-foreground flex flex-col items-center">
+                      <GitPullRequest className="h-12 w-12 text-slate-200 mb-3" />
+                      <p className="text-sm">暂无待处理申请</p>
+                    </div>
+                  )}
+                </div>
+             </div>
+          </TabsContent>
+
+          <TabsContent value="brands" className="m-0 space-y-6">
+            <div className="bg-white rounded-xl border shadow-sm">
+                <div className="p-4 border-b flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">品牌库</h3>
+                    <p className="text-xs text-muted-foreground">维护集团旗下的子品牌和联名品牌</p>
+                  </div>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-1" />
+                    创建品牌
+                  </Button>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {brands.map(brand => (
+                      <div key={brand.id} className="border rounded-xl p-4 space-y-3 hover:shadow-md transition-shadow">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border overflow-hidden">
+                            {brand.logo_url ? <img src={getMediaUrl(brand.logo_url)} className="w-full h-full object-cover" /> : <Tag className="h-5 w-5 text-slate-400" />}
+                          </div>
+                          <h4 className="font-bold">{brand.name}</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{brand.description || "暂无描述"}</p>
+                        <div className="pt-2 flex justify-end">
+                           <Button variant="ghost" size="sm">编辑</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {brands.length === 0 && (
+                    <div className="py-12 border-2 border-dashed rounded-xl text-center text-muted-foreground">
+                      暂无品牌信息，点击右上角添加。
+                    </div>
+                  )}
+                </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="policies" className="m-0 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">集团协同策略</CardTitle>
+                <CardDescription>配置集团与各个门店之间的数据同步和权限策略</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between group">
+                    <div className="space-y-1">
+                      <Label className="text-base">菜品/菜单管理模式</Label>
+                      <p className="text-xs text-muted-foreground font-normal">
+                        选择是由于集团统一分发菜单，还是由各门店自行维护。
+                      </p>
+                    </div>
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                      <Button variant={policies?.menu_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('menu_mode', 'central')}>统一分发</Button>
+                      <Button variant={policies?.menu_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('menu_mode', 'store')}>门店控制</Button>
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between group">
+                    <div className="space-y-1">
+                      <Label className="text-base">价格同步模式</Label>
+                      <p className="text-xs text-muted-foreground font-normal">
+                        选择是否锁定全国统一售价，或者允许门店根据地域差异微调价格。
+                      </p>
+                    </div>
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                      <Button variant={policies?.pricing_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('pricing_mode', 'central')}>强力一致</Button>
+                      <Button variant={policies?.pricing_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('pricing_mode', 'store')}>允许差异</Button>
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between group">
+                    <div className="space-y-1">
+                      <Label className="text-base">库存共享策略</Label>
+                      <p className="text-xs text-muted-foreground font-normal">
+                        集团是否干预核心原材料库存阈值提醒或供应链分配。
+                      </p>
+                    </div>
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                      <Button variant={policies?.inventory_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('inventory_mode', 'central')}>集团统筹</Button>
+                      <Button variant={policies?.inventory_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('inventory_mode', 'store')}>门店自主</Button>
+                    </div>
+                  </div>
+                </section>
+                
+                <div className="pt-4 flex justify-end">
+                   <Button size="lg" className="px-10" onClick={handleSavePolicies}>保存全局策略</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </PageContent>
+    </PageShell>
+  );
+
+  async function handleReviewRequest(req: GroupJoinRequestResponse, status: 'approved' | 'rejected') {
+    try {
+      if (status === 'approved') {
+        await apiPost(`/groups/${groupId}/join-requests/${req.id}/approve`);
+        toast.success("已准许门店加入集团");
+      } else {
+        await apiPost(`/groups/${groupId}/join-requests/${req.id}/reject`, { reason: "集团管理员拒绝" });
+        toast.success("已驳回申请");
+      }
+      fetchGroupData();
+    } catch (err: any) {
+      toast.error(err.message || "操作失败");
+    }
+  }
+
+  async function handleUpdatePolicy(key: keyof GroupPoliciesResponse, value: string) {
+     if (!policies) return;
+     setPolicies({ ...policies, [key]: value });
+  }
+
+  async function handleSavePolicies() {
+    if (!policies || !groupId) return;
+    try {
+      await apiPut(`/groups/${groupId}/policies`, policies as any);
+      toast.success("集团策略已更新");
+    } catch (err: any) {
+      toast.error(err.message || "更新政策失败");
+    }
+  }
+}

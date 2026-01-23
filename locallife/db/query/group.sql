@@ -105,6 +105,9 @@ INSERT INTO merchant_brands (
 -- name: GetMerchantBrand :one
 SELECT * FROM merchant_brands WHERE id = $1;
 
+-- name: ListMerchantBrandsByGroup :many
+SELECT * FROM merchant_brands WHERE group_id = $1 ORDER BY created_at DESC;
+
 -- Group members
 -- name: CreateGroupMember :one
 INSERT INTO merchant_group_members (
@@ -162,6 +165,9 @@ DO UPDATE SET
   inventory_mode = EXCLUDED.inventory_mode,
   promotion_mode = EXCLUDED.promotion_mode
 RETURNING *;
+
+-- name: GetGroupPolicies :one
+SELECT * FROM group_policies WHERE group_id = $1;
 
 -- Templates
 -- name: CreateGroupMenuTemplate :one

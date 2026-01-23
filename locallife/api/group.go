@@ -35,17 +35,17 @@ type groupApplicationResponse struct {
 }
 
 type groupResponse struct {
-	ID              int64      `json:"id"`
-	Name            string     `json:"name"`
-	OwnerUserID     int64      `json:"owner_user_id"`
-	Status          string     `json:"status"`
-	ContactPhone    *string    `json:"contact_phone,omitempty"`
-	LicenseNumber   *string    `json:"license_number,omitempty"`
-	LicenseImageURL *string    `json:"license_image_url,omitempty"`
-	Address         *string    `json:"address,omitempty"`
-	RegionID        *int64     `json:"region_id,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID              int64     `json:"id"`
+	Name            string    `json:"name"`
+	OwnerUserID     int64     `json:"owner_user_id"`
+	Status          string    `json:"status"`
+	ContactPhone    *string   `json:"contact_phone,omitempty"`
+	LicenseNumber   *string   `json:"license_number,omitempty"`
+	LicenseImageURL *string   `json:"license_image_url,omitempty"`
+	Address         *string   `json:"address,omitempty"`
+	RegionID        *int64    `json:"region_id,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type groupMerchantResponse struct {
@@ -58,12 +58,12 @@ type groupMerchantResponse struct {
 }
 
 type brandResponse struct {
-	ID          int64   `json:"id"`
-	GroupID     int64   `json:"group_id"`
-	Name        string  `json:"name"`
-	LogoURL     *string `json:"logo_url,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Status      string  `json:"status"`
+	ID          int64     `json:"id"`
+	GroupID     int64     `json:"group_id"`
+	Name        string    `json:"name"`
+	LogoURL     *string   `json:"logo_url,omitempty"`
+	Description *string   `json:"description,omitempty"`
+	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -593,7 +593,7 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 	switch req.Status {
 	case "approved":
 		result, err := server.store.ApproveGroupApplicationTx(ctx, db.ApproveGroupApplicationTxParams{
-			ApplicationID: app.ID,
+			ApplicationID:  app.ID,
 			ReviewerUserID: authPayload.UserID,
 		})
 		if err != nil {
@@ -640,13 +640,13 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 // ==================== Groups & Brands ====================
 
 type createGroupRequest struct {
-	Name            string  `json:"name" binding:"required"`
-	OwnerUserID     int64   `json:"owner_user_id" binding:"required"`
-	ContactPhone    *string `json:"contact_phone,omitempty"`
-	LicenseNumber   *string `json:"license_number,omitempty"`
-	LicenseImageURL *string `json:"license_image_url,omitempty"`
-	Address         *string `json:"address,omitempty"`
-	RegionID        *int64  `json:"region_id,omitempty"`
+	Name            string          `json:"name" binding:"required"`
+	OwnerUserID     int64           `json:"owner_user_id" binding:"required"`
+	ContactPhone    *string         `json:"contact_phone,omitempty"`
+	LicenseNumber   *string         `json:"license_number,omitempty"`
+	LicenseImageURL *string         `json:"license_image_url,omitempty"`
+	Address         *string         `json:"address,omitempty"`
+	RegionID        *int64          `json:"region_id,omitempty"`
 	ApplicationData json.RawMessage `json:"application_data,omitempty"`
 }
 
@@ -918,6 +918,43 @@ func (server *Server) listGroupMerchants(ctx *gin.Context) {
 			Phone:   m.Phone,
 			Status:  m.Status,
 		})
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// listGroupBrands godoc
+// @Summary 获取集团品牌列表
+// @Description 获取集团下所有品牌（需为集团成员）
+// @Tags 品牌管理
+// @Produce json
+// @Param id path int true "集团ID"
+// @Success 200 {array} brandResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/groups/{id}/brands [get]
+// @Security BearerAuth
+func (server *Server) listGroupBrands(ctx *gin.Context) {
+	groupID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid group id")))
+		return
+	}
+
+	if _, ok := server.requireGroupRole(ctx, groupID); !ok {
+		return
+	}
+
+	brands, err := server.store.ListMerchantBrandsByGroup(ctx, groupID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := make([]brandResponse, 0, len(brands))
+	for _, b := range brands {
+		resp = append(resp, newBrandResponse(b))
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -1423,6 +1460,49 @@ func (server *Server) upsertGroupPolicies(ctx *gin.Context) {
 		PromotionMode: req.PromotionMode,
 	})
 	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newGroupPoliciesResponse(policy))
+}
+
+// getGroupPolicies godoc
+// @Summary 获取集团策略
+// @Description 获取集团策略信息（需为集团成员）
+// @Tags 集团管理
+// @Produce json
+// @Param id path int true "集团ID"
+// @Success 200 {object} groupPoliciesResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/groups/{id}/policies [get]
+// @Security BearerAuth
+func (server *Server) getGroupPolicies(ctx *gin.Context) {
+	groupID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid group id")))
+		return
+	}
+
+	if _, ok := server.requireGroupRole(ctx, groupID); !ok {
+		return
+	}
+
+	policy, err := server.store.GetGroupPolicies(ctx, groupID)
+	if err != nil {
+		if isNotFoundError(err) {
+			// If not found, return default policies
+			ctx.JSON(http.StatusOK, groupPoliciesResponse{
+				GroupID:       groupID,
+				PricingMode:   "store",
+				MenuMode:      "store",
+				InventoryMode: "store",
+				PromotionMode: "store",
+			})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

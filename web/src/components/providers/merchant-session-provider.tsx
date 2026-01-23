@@ -15,6 +15,8 @@ type MerchantInfo = {
   id: number;
   name: string;
   is_open?: boolean;
+  group_id?: number;
+  brand_id?: number;
 };
 
 type User = {
