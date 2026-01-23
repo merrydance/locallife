@@ -3,35 +3,163 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, LayoutDashboard, LogOut, Store } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  LayoutDashboard,
+  LogOut,
+  Store,
+  ShoppingBag,
+  ChefHat,
+  UtensilsCrossed,
+  TrendingUp,
+  Wallet,
+  Package,
+  Settings,
+  Star,
+  Users,
+  Tag,
+  Armchair,
+  CalendarCheck,
+  UserCog,
+  Boxes,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { label: "工作台", href: "/merchant/dashboard", activePrefix: "/merchant/dashboard", icon: LayoutDashboard },
+// 导航分组
+const navGroups = [
   {
-    label: "经营分析",
-    href: "/merchant/analytics",
-    activePrefix: "/merchant/analytics",
+    label: "日常运营",
+    description: "每天开门使用",
+    items: [
+      {
+        label: "工作台",
+        href: "/merchant/dashboard",
+        activePrefix: "/merchant/dashboard",
+        icon: LayoutDashboard,
+      },
+      {
+        label: "订单管理",
+        href: "/merchant/orders",
+        activePrefix: "/merchant/orders",
+        icon: ShoppingBag,
+      },
+      {
+        label: "后厨看板",
+        href: "/merchant/kds",
+        activePrefix: "/merchant/kds",
+        icon: ChefHat,
+      },
+      {
+        label: "堂食点餐",
+        href: "/merchant/dinein",
+        activePrefix: "/merchant/dinein",
+        icon: UtensilsCrossed,
+      },
+      {
+        label: "预订管理",
+        href: "/merchant/reservations",
+        activePrefix: "/merchant/reservations",
+        icon: CalendarCheck,
+      },
+    ],
   },
-  { label: "订单", href: "/merchant/orders", activePrefix: "/merchant/orders" },
-  { label: "菜品", href: "/merchant/dishes", activePrefix: "/merchant/dishes" },
-  { label: "套餐", href: "/merchant/combos", activePrefix: "/merchant/combos" },
-  { label: "库存", href: "/merchant/inventory", activePrefix: "/merchant/inventory" },
-  { label: "桌台", href: "/merchant/tables", activePrefix: "/merchant/tables" },
-  { label: "堂食", href: "/merchant/dinein", activePrefix: "/merchant/dinein" },
-  { label: "后厨", href: "/merchant/kds", activePrefix: "/merchant/kds" },
-  { label: "财务", href: "/merchant/finance", activePrefix: "/merchant/finance" },
-  { label: "营销", href: "/merchant/marketing", activePrefix: "/merchant/marketing" },
-  { label: "会员", href: "/merchant/members", activePrefix: "/merchant/members" },
-  { label: "员工", href: "/merchant/staff", activePrefix: "/merchant/staff" },
-  { label: "评价", href: "/merchant/reviews", activePrefix: "/merchant/reviews" },
-  { label: "预订", href: "/merchant/reservations", activePrefix: "/merchant/reservations" },
-  { label: "店铺设置", href: "/merchant/settings", activePrefix: "/merchant/settings" },
+  {
+    label: "数据与财务",
+    description: "经营分析和财务",
+    items: [
+      {
+        label: "经营分析",
+        href: "/merchant/analytics",
+        activePrefix: "/merchant/analytics",
+        icon: TrendingUp,
+      },
+      {
+        label: "财务管理",
+        href: "/merchant/finance",
+        activePrefix: "/merchant/finance",
+        icon: Wallet,
+      },
+      {
+        label: "评价管理",
+        href: "/merchant/reviews",
+        activePrefix: "/merchant/reviews",
+        icon: Star,
+      },
+    ],
+  },
+  {
+    label: "商品配置",
+    description: "菜品、套餐和库存",
+    items: [
+      {
+        label: "桌台管理",
+        href: "/merchant/tables",
+        activePrefix: "/merchant/tables",
+        icon: Armchair,
+      },
+      {
+        label: "菜品管理",
+        href: "/merchant/dishes",
+        activePrefix: "/merchant/dishes",
+        icon: Package,
+      },
+      {
+        label: "套餐管理",
+        href: "/merchant/combos",
+        activePrefix: "/merchant/combos",
+        icon: Boxes,
+      },
+      {
+        label: "库存管理",
+        href: "/merchant/inventory",
+        activePrefix: "/merchant/inventory",
+        icon: Package,
+      },
+    ],
+  },
+  {
+    label: "营销与会员",
+    description: "促销和客户管理",
+    items: [
+      {
+        label: "营销活动",
+        href: "/merchant/marketing",
+        activePrefix: "/merchant/marketing",
+        icon: Tag,
+      },
+      {
+        label: "会员管理",
+        href: "/merchant/members",
+        activePrefix: "/merchant/members",
+        icon: Users,
+      },
+    ],
+  },
+  {
+    label: "店铺配置",
+    description: "基础设置",
+    items: [
+      {
+        label: "员工管理",
+        href: "/merchant/staff",
+        activePrefix: "/merchant/staff",
+        icon: UserCog,
+      },
+      {
+        label: "店铺设置",
+        href: "/merchant/settings",
+        activePrefix: "/merchant/settings",
+        icon: Settings,
+      },
+    ],
+  },
 ];
 
 export function MerchantSidebar() {
@@ -50,6 +178,9 @@ export function MerchantSidebar() {
     router.replace("/merchant/login");
   };
 
+  // 商户名称：优先使用API返回的名称，否则显示加载中或默认值
+  const merchantName = session?.merchant?.name || (session?.isReady ? "我的店铺" : null);
+
   return (
     <aside
       className={cn(
@@ -57,28 +188,43 @@ export function MerchantSidebar() {
         collapsed ? "w-16" : "w-64"
       )}
     >
-      <div className="flex h-16 items-center px-4">
+      {/* 顶部：店铺名称 */}
+      <div className="flex h-16 items-center px-4 border-b">
         {!collapsed && (
-          <div className="flex items-center gap-2 overflow-hidden">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0">
               <Store className="size-5" />
             </div>
-            <span className="truncate text-base font-semibold">本地生活商户</span>
+            <div className="flex flex-col min-w-0">
+              {merchantName ? (
+                <span className="truncate text-sm font-semibold text-slate-900">
+                  {merchantName}
+                </span>
+              ) : (
+                <Skeleton className="h-4 w-24" />
+              )}
+              {session?.isReady && (
+                <span className="text-[10px] text-muted-foreground">
+                  商户后台
+                </span>
+              )}
+            </div>
           </div>
         )}
         <Button
           variant="ghost"
           size="icon"
-          className={cn("ml-auto", collapsed && "mx-auto")}
+          className={cn("shrink-0", collapsed && "mx-auto")}
           onClick={() => setCollapsed(!collapsed)}
         >
-          {collapsed ? <ChevronRight /> : <ChevronLeft />}
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
       </div>
 
+      {/* 营业状态 */}
       <div className="px-3 py-2">
         {!collapsed && session?.isReady && (
-          <div className="mb-2 px-4">
+          <div className="px-2">
             {session.isOpen ? (
               <Badge
                 variant="secondary"
@@ -98,28 +244,52 @@ export function MerchantSidebar() {
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-2">
-        {navItems.map((item) => {
-          const active = pathname.startsWith(item.activePrefix);
-          return (
-            <Link key={item.label} href={item.href} title={item.label}>
-              <span
-                className={cn(
-                  "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                )}
-              >
-                <span className={cn("flex-1 truncate", collapsed && "text-center")}>
-                  {collapsed ? item.label.slice(0, 1) : item.label}
+      {/* 导航分组 */}
+      <nav className="flex-1 overflow-y-auto px-3 py-1">
+        {navGroups.map((group, groupIndex) => (
+          <div key={group.label} className={cn(groupIndex > 0 && "mt-4")}>
+            {/* 分组标题 */}
+            {!collapsed && (
+              <div className="px-2 mb-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
                 </span>
-              </span>
-            </Link>
-          );
-        })}
+              </div>
+            )}
+            {collapsed && groupIndex > 0 && (
+              <Separator className="my-2" />
+            )}
+
+            {/* 分组内的导航项 */}
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = pathname.startsWith(item.activePrefix);
+                const Icon = item.icon;
+                return (
+                  <Link key={item.label} href={item.href} title={item.label}>
+                    <span
+                      className={cn(
+                        "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                        collapsed && "justify-center px-2"
+                      )}
+                    >
+                      <Icon className={cn("size-4 shrink-0", active && "text-primary")} />
+                      {!collapsed && (
+                        <span className="truncate">{item.label}</span>
+                      )}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
+      {/* 底部：退出登录 */}
       <div className="mt-auto p-4">
         <Separator className="mb-4" />
         <Button
@@ -136,6 +306,7 @@ export function MerchantSidebar() {
         </Button>
       </div>
 
+      {/* 提示信息 */}
       {!collapsed && (
         <div className="p-4 pt-0">
           <div className="rounded-lg bg-muted/50 p-3 text-[11px] leading-relaxed text-muted-foreground">
