@@ -480,188 +480,288 @@ export function DishesPageClient() {
       </PageContent>
 
       <Sheet open={isEditing} onOpenChange={setIsEditing}>
-        <SheetContent className="sm:max-w-2xl overflow-y-auto">
-          <SheetHeader className="mb-6">
-            <SheetTitle>{editDish.id ? "编辑菜品" : "新增菜品"}</SheetTitle>
+        <SheetContent className="sm:max-w-2xl p-0 flex flex-col h-full overflow-hidden">
+          <SheetHeader className="p-6 border-b shrink-0 bg-white/80 backdrop-blur-md z-20">
+            <SheetTitle className="text-xl font-bold">{editDish.id ? "编辑菜品" : "新增菜品"}</SheetTitle>
             <SheetDescription>管理菜品的基础信息、属性标签和定制规格。</SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-8 py-4 pb-20">
-            {/* Image Section */}
-            <div className="space-y-3">
-              <Label>菜品图片</Label>
-              <div className="flex gap-4 items-start">
+          <ScrollArea className="flex-1 overflow-y-auto px-6">
+            <div className="space-y-10 py-8">
+              {/* Image Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">菜品图片</Label>
+                  {editDish.image_url && (
+                    <Button variant="ghost" size="sm" className="text-destructive h-7 px-2 hover:bg-destructive/10" onClick={() => setEditDish({...editDish, image_url: ""})}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5"/>移除图片
+                    </Button>
+                  )}
+                </div>
                 <div 
-                  className="w-32 h-32 rounded-lg border-2 border-dashed border-muted flex flex-col items-center justify-center relative bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer overflow-hidden"
+                  className="w-full aspect-video rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center relative bg-slate-50/50 hover:bg-slate-50 hover:border-primary/50 transition-all cursor-pointer overflow-hidden group/img"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {editDish.image_url ? (
-                    <img src={formatImageUrl(getMediaUrl(editDish.image_url))} className="w-full h-full object-cover" />
-                  ) : (
                     <>
-                      {uploadingImage ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /> : <Upload className="h-8 w-8 text-muted-foreground mb-1" />}
-                      <span className="text-[10px] text-muted-foreground text-center px-2">点击上传图片</span>
+                      <img src={formatImageUrl(getMediaUrl(editDish.image_url))} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+                        <span className="text-white text-sm font-medium flex items-center gap-2">
+                          <Upload className="h-4 w-4" /> 更换图片
+                        </span>
+                      </div>
                     </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-1">
+                        {uploadingImage ? <Loader2 className="h-6 w-6 animate-spin" /> : <Upload className="h-6 w-6" />}
+                      </div>
+                      <span className="text-sm font-medium text-slate-500">点击上传菜品主图</span>
+                      <span className="text-xs text-slate-400">推荐比例 16:9，支持 JPG/PNG</span>
+                    </div>
                   )}
                 </div>
-                {editDish.image_url && (
-                  <Button variant="ghost" size="sm" className="text-destructive h-8 px-2" onClick={() => setEditDish({...editDish, image_url: ""})}><Trash2 className="h-4 w-4 mr-1"/>移除</Button>
-                )}
                 <input type="file" className="hidden" ref={fileInputRef} accept="image/*" onChange={handleImageUpload} />
               </div>
-            </div>
 
-            {/* Basic Info */}
-            <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label>菜品名称 *</Label>
-                <Input value={editDish.name} onChange={(e) => setEditDish({...editDish, name: e.target.value})} placeholder="例如: 招牌红烧肉" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              {/* Basic Info */}
+              <div className="grid gap-6">
                 <div className="grid gap-2">
-                  <Label>价格 (¥) *</Label>
-                  <Input type="number" step="0.01" value={editDish.price !== undefined ? editDish.price / 100 : ""} onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    setEditDish({...editDish, price: isNaN(val) ? 0 : Math.round(val * 100)});
-                  }} placeholder="0.00" />
+                  <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">菜品名称 *</Label>
+                  <Input 
+                    value={editDish.name} 
+                    onChange={(e) => setEditDish({...editDish, name: e.target.value})} 
+                    placeholder="例如: 招牌红烧肉" 
+                    className="h-11 text-base font-medium border-slate-200 focus:border-primary transition-colors"
+                  />
                 </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="grid gap-2">
+                    <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">销售价格 (¥) *</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">¥</span>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        value={editDish.price !== undefined ? editDish.price / 100 : ""} 
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setEditDish({...editDish, price: isNaN(val) ? 0 : Math.round(val * 100)});
+                        }} 
+                        placeholder="0.00" 
+                        className="pl-7 h-11 text-lg font-bold border-slate-200"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">会员尊享价 (¥)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 font-bold">¥</span>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        value={editDish.member_price !== undefined ? editDish.member_price / 100 : ""} 
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setEditDish({...editDish, member_price: isNaN(val) ? undefined : Math.round(val * 100)});
+                        }} 
+                        placeholder="选填" 
+                        className="pl-7 h-11 text-lg font-bold border-slate-200 text-amber-600 focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid gap-2">
-                  <Label>会员价 (¥)</Label>
-                  <Input type="number" step="0.01" value={editDish.member_price !== undefined ? editDish.member_price / 100 : ""} onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    setEditDish({...editDish, member_price: isNaN(val) ? undefined : Math.round(val * 100)});
-                  }} placeholder="如果不设置则不启用" />
+                  <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">所属分类</Label>
+                  <Select value={editDish.category_id?.toString()} onValueChange={(val) => setEditDish({...editDish, category_id: parseInt(val)})}>
+                    <SelectTrigger className="h-11 border-slate-200">
+                      <SelectValue placeholder="选择菜品主分类" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map(cat => <SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">菜品描述</Label>
+                  <Textarea 
+                    value={editDish.description} 
+                    onChange={(e) => setEditDish({...editDish, description: e.target.value})} 
+                    placeholder="描述一下这个菜品的食材、口感或制作工艺..." 
+                    rows={4} 
+                    className="border-slate-200 resize-none transition-all focus:bg-slate-50/50"
+                  />
                 </div>
               </div>
 
-              <div className="grid gap-2">
-                <Label>所属分类</Label>
-                <Select value={editDish.category_id?.toString()} onValueChange={(val) => setEditDish({...editDish, category_id: parseInt(val)})}>
-                  <SelectTrigger><SelectValue placeholder="选择分类" /></SelectTrigger>
-                  <SelectContent>{categories.map(cat => <SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>)}</SelectContent>
-                </Select>
+              <Separator className="bg-slate-100" />
+
+              {/* Tags Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">属性标签</Label>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">多选</span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {availableTags.map(tag => (
+                    <Button
+                      key={tag.id}
+                      variant={selectedTagIds.includes(tag.id) ? "default" : "outline"}
+                      size="sm"
+                      className={cn(
+                        "rounded-full h-8 px-4 font-medium transition-all",
+                        selectedTagIds.includes(tag.id) 
+                          ? "bg-primary text-white shadow-md shadow-primary/20 scale-105" 
+                          : "hover:bg-slate-100 border-slate-200"
+                      )}
+                      onClick={() => setSelectedTagIds(prev => prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id])}
+                    >
+                      {tag.name}
+                    </Button>
+                  ))}
+                  {availableTags.length === 0 && <span className="text-xs text-muted-foreground italic">暂无可用标签</span>}
+                </div>
               </div>
 
-              <div className="grid gap-2">
-                <Label>菜品描述</Label>
-                <Textarea value={editDish.description} onChange={(e) => setEditDish({...editDish, description: e.target.value})} placeholder="向顾客介绍您的美味佳肴..." rows={3} />
-              </div>
-            </div>
+              <Separator className="bg-slate-100" />
 
-            <Separator />
-
-            {/* Tags Section */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-base">属性标签</Label>
-                <span className="text-xs text-muted-foreground">如：辣度、口味等</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {availableTags.map(tag => (
-                  <Button
-                    key={tag.id}
-                    variant={selectedTagIds.includes(tag.id) ? "default" : "outline"}
-                    size="sm"
-                    className="rounded-full h-8"
-                    onClick={() => setSelectedTagIds(prev => prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id])}
-                  >
-                    {tag.name}
+              {/* Customizations Section */}
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">规格与加料定制</Label>
+                    <p className="text-[10px] text-slate-400 font-medium tracking-tight">配置辣度、甜度、配料等可选属性</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="h-8 border-primary text-primary hover:bg-primary/10" onClick={addGroup}>
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />添加属性组
                   </Button>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Customizations Section */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-base">规格/加料定制</Label>
-                <Button variant="outline" size="sm" onClick={addGroup}><Plus className="h-4 w-4 mr-1" />添加分组</Button>
-              </div>
-              
-              {customizationGroups.length === 0 ? (
-                <div className="text-sm text-muted-foreground italic border rounded-lg p-6 text-center bg-muted/10">暂无定制选项。可以添加如“冷热”、“加料”等分组。</div>
-              ) : (
-                <div className="space-y-4">
-                  {customizationGroups.map((group, gidx) => (
-                    <div key={gidx} className="border rounded-lg p-4 space-y-4 relative bg-muted/5">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 absolute top-2 right-2 text-muted-foreground hover:text-destructive" onClick={() => removeGroup(gidx)}><X className="h-4 w-4" /></Button>
-                      
-                      <div className="grid grid-cols-[1fr_auto] gap-4 pr-6">
-                        <div className="space-y-2">
-                          <Label className="text-xs">分组名称</Label>
-                          <Input value={group.name} onChange={(e) => {
-                            const newGroups = [...customizationGroups];
-                            newGroups[gidx] = { ...group, name: e.target.value };
-                            setCustomizationGroups(newGroups);
-                          }} placeholder="例如: 辣度, 加料" className="h-8" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">必选</Label>
-                          <div className="flex items-center h-8"><Checkbox checked={group.is_required} onCheckedChange={(val) => {
-                            const newGroups = [...customizationGroups];
-                            newGroups[gidx] = { ...group, is_required: !!val };
-                            setCustomizationGroups(newGroups);
-                          }} /></div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-xs">选项内容</Label>
-                        <div className="space-y-2">
-                          {group.options?.map((opt, oidx) => (
-                            <div key={oidx} className="flex items-center gap-2 bg-background p-2 rounded border group/opt">
-                              <span className="text-sm font-medium flex-1 pl-1">{opt.tag_name}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">+¥</span>
-                                <Input 
-                                  type="number" 
-                                  step="0.01" 
-                                  className="w-20 h-7 text-xs" 
-                                  value={opt.extra_price / 100} 
-                                  onChange={(e) => updateOptionPrice(gidx, oidx, Math.round(parseFloat(e.target.value) * 100))}
-                                />
-                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover/opt:opacity-100" onClick={() => removeOption(gidx, oidx)}><X className="h-3 w-3" /></Button>
-                              </div>
+                </div>
+                
+                {customizationGroups.length === 0 ? (
+                  <div className="text-xs text-slate-400 italic border-2 border-dashed rounded-xl p-8 text-center bg-slate-50/50">
+                    目前还没有设置任何定制选项。
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {customizationGroups.map((group, gidx) => (
+                      <div key={gidx} className="border border-slate-200 rounded-xl p-5 space-y-5 relative bg-white shadow-sm hover:shadow-md transition-shadow">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 absolute top-3 right-3 text-slate-300 hover:text-destructive hover:bg-destructive/10 rounded-full" 
+                          onClick={() => removeGroup(gidx)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                        
+                        <div className="grid grid-cols-[1fr_auto] gap-6 items-end">
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">组名称</Label>
+                            <Input 
+                              value={group.name} 
+                              onChange={(e) => {
+                                const newGroups = [...customizationGroups];
+                                newGroups[gidx] = { ...group, name: e.target.value };
+                                setCustomizationGroups(newGroups);
+                              }} 
+                              placeholder="例如: 辣度, 加料" 
+                              className="h-9 font-bold bg-slate-50/50 border-transparent focus:border-slate-300 transition-all"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">用户必选</Label>
+                            <div className="flex items-center justify-center h-9 px-4 bg-slate-50/50 rounded-md">
+                              <Checkbox 
+                                checked={group.is_required} 
+                                onCheckedChange={(val) => {
+                                  const newGroups = [...customizationGroups];
+                                  newGroups[gidx] = { ...group, is_required: !!val };
+                                  setCustomizationGroups(newGroups);
+                                }} 
+                                className="h-5 w-5 border-2"
+                              />
                             </div>
-                          ))}
-                          
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            <Select onValueChange={(val) => addOption(gidx, parseInt(val))}>
-                              <SelectTrigger className="h-7 w-auto min-w-24 text-[10px]"><SelectValue placeholder="+ 添加选项" /></SelectTrigger>
-                              <SelectContent>
-                                {availableCustomizationTags.map(tag => <SelectItem key={tag.id} value={tag.id.toString()}>{tag.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 pt-2">
+                          <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">选项与加价</Label>
+                          <div className="grid gap-2">
+                            {group.options?.map((opt, oidx) => (
+                              <div key={oidx} className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100 group/opt hover:bg-slate-100 transition-colors">
+                                <span className="text-sm font-bold text-slate-700 flex-1 pl-1 truncate">{opt.tag_name}</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="relative">
+                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">¥</span>
+                                    <Input 
+                                      type="number" 
+                                      step="0.01" 
+                                      className="w-24 h-8 pl-6 text-xs font-black border-slate-200" 
+                                      value={opt.extra_price / 100} 
+                                      onChange={(e) => updateOptionPrice(gidx, oidx, Math.round(parseFloat(e.target.value) * 100))}
+                                    />
+                                  </div>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 opacity-20 group-hover/opt:opacity-100 text-slate-400 hover:text-destructive transition-all" onClick={() => removeOption(gidx, oidx)}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                            
+                            <div className="pt-1">
+                              <Select onValueChange={(val) => addOption(gidx, parseInt(val))}>
+                                <SelectTrigger className="h-9 w-full bg-background border-dashed border-2 hover:bg-slate-50 transition-all text-xs text-slate-500 font-medium">
+                                  <SelectValue placeholder="+ 添加定制选项 (如: 加香菜, 大份)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableCustomizationTags.map(tag => (
+                                    <SelectItem key={tag.id} value={tag.id.toString()}>{tag.name}</SelectItem>
+                                  ))}
+                                  {availableCustomizationTags.length === 0 && <span className="text-[10px] p-2 text-center block text-slate-400 italic">请先在标签中心创建定制标签</span>}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Separator className="bg-slate-100" />
+
+              {/* Status Section */}
+              <div className="grid grid-cols-2 gap-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <div className="flex items-start gap-3">
+                  <div className="pt-1">
+                    <Checkbox id="is_online" checked={editDish.is_online} onCheckedChange={(val) => setEditDish({...editDish, is_online: !!val})} className="h-5 w-5 border-2" />
+                  </div>
+                  <div className="grid gap-1.5 cursor-pointer select-none" onClick={() => setEditDish({...editDish, is_online: !editDish.is_online})}>
+                    <Label className="text-sm font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">显示在菜单上 (上架)</Label>
+                    <p className="text-[10px] text-slate-500 font-medium">关闭后顾客将无法在小程序中看到该菜品</p>
+                  </div>
                 </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Availability */}
-            <div className="grid grid-cols-2 gap-6 pb-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox id="is_online" checked={editDish.is_online} onCheckedChange={(val) => setEditDish({...editDish, is_online: !!val})} />
-                <Label htmlFor="is_online" className="cursor-pointer">显示在菜单上 (上架)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="is_available" checked={editDish.is_available} onCheckedChange={(val) => setEditDish({...editDish, is_available: !!val})} />
-                <Label htmlFor="is_available" className="cursor-pointer">当前可售 (有货)</Label>
+                <div className="flex items-start gap-3">
+                  <div className="pt-1">
+                    <Checkbox id="is_available" checked={editDish.is_available} onCheckedChange={(val) => setEditDish({...editDish, is_available: !!val})} className="h-5 w-5 border-2" />
+                  </div>
+                  <div className="grid gap-1.5 cursor-pointer select-none" onClick={() => setEditDish({...editDish, is_available: !editDish.is_available})}>
+                    <Label className="text-sm font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">当前由于可售 (有货)</Label>
+                    <p className="text-[10px] text-slate-500 font-medium">关闭后菜品会显示“已售罄”标识</p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </ScrollArea>
 
-          <SheetFooter className="fixed bottom-0 right-0 left-0 bg-background border-t p-4 z-10 sm:relative sm:border-t-0 sm:bg-transparent sm:p-0">
-            <Button className="w-full flex-1" onClick={handleSaveDish} disabled={saving || uploadingImage}>
-              {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 保存中...</> : "完成并保存"}
+          <SheetFooter className="p-6 border-t bg-white/80 backdrop-blur-md shrink-0 flex items-center justify-end gap-3 z-20">
+            <Button variant="ghost" onClick={() => setIsEditing(false)} disabled={saving}>关闭</Button>
+            <Button className="min-w-[140px] font-bold shadow-lg shadow-primary/20" onClick={handleSaveDish} disabled={saving || uploadingImage}>
+              {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在提交...</> : "保存设置并发布"}
             </Button>
           </SheetFooter>
         </SheetContent>

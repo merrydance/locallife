@@ -109,6 +109,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
 
   // Image state
   const [tableImages, setTableImages] = useState<TableImageResponse[]>([]);
+  const [pendingImages, setPendingImages] = useState<string[]>([]); // URLs of images uploaded before table creation
 
   // Confirm Dialog States
   const [deleteTableDialog, setDeleteTableDialog] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
@@ -150,7 +151,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
   };
 
   const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !e.target.files[0] || !editingTable) return;
+    if (!e.target.files || !e.target.files[0]) return;
     
     const file = e.target.files[0];
     try {
@@ -158,16 +159,20 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
       // 1. Upload image to get URL
       const uploadRes = await apiUpload<{ image_url: string }>("/tables/images/upload", file);
       
-      // 2. Add image to table
-      await apiPost(`/tables/${editingTable.id}/images`, { image_url: uploadRes.image_url });
-      
-      toast.success("图片上传成功");
-      loadTableImages(editingTable.id);
+      if (editingTable) {
+        // 2. Add image to existing table
+        await apiPost(`/tables/${editingTable.id}/images`, { image_url: uploadRes.image_url });
+        toast.success("图片上传成功");
+        loadTableImages(editingTable.id);
+      } else {
+        // 2. Queue image for new table
+        setPendingImages(prev => [...prev, uploadRes.image_url]);
+        toast.success("图片已暂存，保存桌台后将生效");
+      }
     } catch (error: any) {
       toast.error(error.message || "上传失败");
     } finally {
       setLoading(false);
-      // Reset input
       e.target.value = "";
     }
   };
@@ -223,6 +228,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
     });
     setSelectedTagIds([]);
     setTableImages([]);
+    setPendingImages([]);
     setIsSheetOpen(true);
   };
 
@@ -255,8 +261,17 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
         await apiPatch(`/tables/${editingTable.id}`, data);
         toast.success("桌台已更新");
       } else {
-        await apiPost("/tables", data);
-        toast.success("桌台已添加");
+        const response = await apiPost<TableResponse>("/tables", data);
+        
+        // Handle pending images
+        if (pendingImages.length > 0 && response.id) {
+          toast.info(`正在关联 ${pendingImages.length} 张照片...`);
+          for (const imageUrl of pendingImages) {
+            await apiPost(`/tables/${response.id}/images`, { image_url: imageUrl });
+          }
+        }
+        
+        toast.success("桌台已创建");
       }
       setIsSheetOpen(false);
       loadTables();
@@ -486,181 +501,225 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
 
       {/* Edit/Add Sheet */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="sm:max-w-md md:max-w-lg overflow-y-auto">
-          <SheetHeader className="pb-4">
-            <SheetTitle>{editingTable ? "编辑桌台" : "添加桌台"}</SheetTitle>
+        <SheetContent className="w-full sm:max-w-3xl p-0 flex flex-col h-full overflow-hidden">
+          <SheetHeader className="p-6 border-b shrink-0 bg-white/80 backdrop-blur-md z-20">
+            <SheetTitle className="text-xl font-bold">{editingTable ? "编辑桌台详情" : "创建新桌台"}</SheetTitle>
             <SheetDescription>
-              填写桌台的基本信息、位置描述和配置详情
+              填写桌台的基本信息、位置描述和配置详情，以便顾客自助点餐。
             </SheetDescription>
           </SheetHeader>
 
-          <div className="space-y-6 py-4">
-            <div className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="table_no">桌号/房号 <span className="text-destructive">*</span></Label>
-                <Input 
-                  id="table_no" 
-                  placeholder="如：A01，大厅-05，VIP包间-1" 
-                  value={formData.table_no}
-                  onChange={(e) => setFormData({...formData, table_no: e.target.value})}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+          <ScrollArea className="flex-1">
+            <div className="space-y-10 py-8 px-8 mx-1">
+              {/* Basic Info */}
+              <div className="space-y-6">
                 <div className="grid gap-2">
-                  <Label htmlFor="table_type">类型</Label>
-                  <Select 
-                    value={formData.table_type} 
-                    onValueChange={(val: any) => setFormData({...formData, table_type: val})}
-                  >
-                    <SelectTrigger id="table_type">
-                      <SelectValue placeholder="选择类型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="table">大厅桌台</SelectItem>
-                      <SelectItem value="room">包间</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="capacity">容纳人数 <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="table_no" className="text-sm font-semibold text-slate-700 uppercase tracking-wider">桌号/房号 *</Label>
                   <Input 
-                    id="capacity" 
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={formData.capacity}
-                    onChange={(e) => setFormData({...formData, capacity: parseInt(e.target.value) || 1})}
+                    id="table_no" 
+                    placeholder="如：A01，大厅-05，VIP包间-1" 
+                    value={formData.table_no}
+                    onChange={(e) => setFormData({...formData, table_no: e.target.value})}
+                    className="h-11 text-base font-medium border-slate-200 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="grid gap-2">
+                    <Label htmlFor="table_type" className="text-sm font-semibold text-slate-700 uppercase tracking-wider">桌台类型</Label>
+                    <Select 
+                      value={formData.table_type} 
+                      onValueChange={(val: any) => setFormData({...formData, table_type: val})}
+                    >
+                      <SelectTrigger id="table_type" className="h-11 border-slate-200 bg-white">
+                        <SelectValue placeholder="选择类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="table">大厅桌台</SelectItem>
+                        <SelectItem value="room">包间</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="capacity" className="text-sm font-semibold text-slate-700 uppercase tracking-wider">最大容纳人数 *</Label>
+                    <div className="relative">
+                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input 
+                        id="capacity" 
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={formData.capacity}
+                        onChange={(e) => setFormData({...formData, capacity: parseInt(e.target.value) || 1})}
+                        className="pl-10 h-11 border-slate-200 font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="minimum_spend" className="text-sm font-semibold text-slate-700 uppercase tracking-wider">最低消费额度 (¥)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">¥</span>
+                    <Input 
+                      id="minimum_spend" 
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00 (不填则无最低消费)"
+                      className="pl-7 h-11 text-base font-bold border-slate-200"
+                      value={formData.minimum_spend !== undefined ? (formData.minimum_spend / 100).toString() : ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({...formData, minimum_spend: val === "" ? undefined : Math.round(parseFloat(val) * 100)});
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="description" className="text-sm font-semibold text-slate-700 uppercase tracking-wider">位置描述/备注</Label>
+                  <Textarea 
+                    id="description" 
+                    placeholder="描述该桌台的具体位置，如：靠近落落地窗、江景视野、靠近过道等..." 
+                    className="resize-none h-24 border-slate-200 focus:bg-slate-50/50"
+                    value={formData.description}
+                    onChange={(e) => setFormData({...formData, description: e.target.value})}
                   />
                 </div>
               </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="minimum_spend">最低消费 (元)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">¥</span>
-                  <Input 
-                    id="minimum_spend" 
-                    type="number"
-                    step="0.01"
-                    placeholder="不填则无最低消费"
-                    className="pl-7"
-                    value={formData.minimum_spend !== undefined ? (formData.minimum_spend / 100).toString() : ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormData({...formData, minimum_spend: val === "" ? undefined : Math.round(parseFloat(val) * 100)});
-                    }}
-                  />
+              <Separator className="bg-slate-100" />
+
+              {/* Photos Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">实景照片</Label>
+                    <p className="text-[10px] text-slate-400 font-medium">展示桌台或包间的真实环境</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="h-8 border-primary text-primary hover:bg-primary/10" asChild>
+                    <label className="cursor-pointer">
+                      <ImagePlus className="h-3.5 w-3.5 mr-1.5" />上传照片
+                      <input type="file" className="hidden" accept="image/*" onChange={handleUploadImage} disabled={loading} />
+                    </label>
+                  </Button>
                 </div>
-              </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="description">描述/备注</Label>
-                <Textarea 
-                  id="description" 
-                  placeholder="填写位置信息或特色描述，如：靠近窗户，江景位" 
-                  className="resize-none h-24"
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold">桌台图片</Label>
-              {editingTable ? (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Existing Images */}
                   {tableImages.map((img) => (
-                    <div key={img.id} className="relative aspect-square group rounded-lg overflow-hidden border bg-muted/20">
+                    <div key={img.id} className="relative aspect-4/3 group rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm transition-all hover:border-primary/50">
                       <img 
                         src={getMediaUrl(img.image_url)} 
-                        alt="Table" 
+                        alt="Table Environment" 
                         className="w-full h-full object-cover"
                       />
                       {img.is_primary && (
-                        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-bl-lg">
+                        <div className="absolute top-3 left-3 bg-primary/90 backdrop-blur-sm text-white text-[9px] px-2 py-1 rounded shadow-sm font-bold uppercase tracking-wider">
                           主图
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
                         {!img.is_primary && (
-                          <Button size="sm" variant="secondary" className="h-6 text-[10px] px-2" onClick={() => handleSetPrimaryImage(img.id)}>
+                          <Button size="sm" variant="secondary" className="h-8 text-[11px] px-3 font-bold" onClick={() => handleSetPrimaryImage(img.id)}>
                             设为主图
                           </Button>
                         )}
-                        <Button size="icon" variant="destructive" className="h-7 w-7" onClick={() => handleDeleteImage(img.id)}>
-                          <Trash2 className="h-3 w-3" />
+                        <Button size="icon" variant="destructive" className="h-9 w-9 rounded-full shadow-lg" onClick={() => handleDeleteImage(img.id)}>
+                          <Trash2 className="h-5 w-5" />
                         </Button>
                       </div>
                     </div>
                   ))}
-                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-lg aspect-square cursor-pointer hover:bg-muted/50 transition-colors">
-                    <ImagePlus className="h-6 w-6 text-muted-foreground mb-1" />
-                    <span className="text-[10px] text-muted-foreground">上传图片</span>
-                    <input type="file" className="hidden" accept="image/*" onChange={handleUploadImage} disabled={loading} />
-                  </label>
-                </div>
-              ) : (
-                <div className="p-4 border border-dashed rounded-lg text-center text-sm text-muted-foreground bg-muted/20">
-                  请先创建桌台，然后编辑以添加图片
-                </div>
-              )}
-            </div>
 
-            <Separator />
+                  {/* Pending Images (Creation mode) */}
+                  {!editingTable && pendingImages.map((url, idx) => (
+                    <div key={`pending-${idx}`} className="relative aspect-4/3 rounded-2xl overflow-hidden border-2 border-primary/30 bg-slate-50 shadow-sm group">
+                      <img 
+                        src={getMediaUrl(url)} 
+                        alt="Pending" 
+                        className="w-full h-full object-cover opacity-80"
+                      />
+                      <div className="absolute top-2 left-2 bg-primary/80 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase">
+                        待保存
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+                        <Button 
+                          size="icon" 
+                          variant="destructive" 
+                          className="h-8 w-8 rounded-full"
+                          onClick={() => setPendingImages(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-semibold">桌台标签</Label>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsTagDialogOpen(true)}>
-                  <Plus className="h-3 w-3 mr-1" />
-                  管理标签
-                </Button>
+                  <div 
+                    className={cn(
+                      "flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors",
+                      (tableImages.length === 0 && pendingImages.length === 0) ? "col-span-2 py-16" : "aspect-4/3"
+                    )}
+                    onClick={() => {
+                      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+                      if (input) input.click();
+                    }}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
+                      <ImagePlus className="h-6 w-6" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-500">点击上传桌台照片</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {availableTags.length > 0 ? (
-                  availableTags.map(tag => (
-                    <Badge 
-                      key={tag.id}
-                      variant={selectedTagIds.includes(tag.id) ? "default" : "outline"}
-                      className={cn(
-                        "cursor-pointer px-3 py-1 transition-colors hover:bg-muted",
-                        selectedTagIds.includes(tag.id) && "hover:bg-primary/90"
-                      )}
-                      onClick={() => toggleTag(tag.id)}
-                    >
-                      {tag.name}
-                      {selectedTagIds.includes(tag.id) && <CheckCircle2 className="ml-1 h-3 w-3 fill-white text-primary" />}
-                    </Badge>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">暂无可用标签，点击管理标签添加</p>
-                )}
-              </div>
-            </div>
-            
-            {editingTable && (
-              <>
-                <Separator />
-                <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-destructive">危险操作</Label>
-                  <Button variant="outline" className="w-full text-destructive hover:bg-destructive/10 border-destructive/20" onClick={() => handleDeleteTable(editingTable.id)}>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    删除此桌台
+
+              <Separator className="bg-slate-100" />
+
+              {/* Tags Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">桌台属性标签</Label>
+                    <p className="text-[10px] text-slate-400 font-medium">标注桌台特色，如江景、空调、靠近门口等</p>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs font-bold text-primary hover:bg-primary/5" onClick={() => setIsTagDialogOpen(true)}>
+                    管理标签库
                   </Button>
                 </div>
-              </>
-            )}
-          </div>
+                <div className="flex flex-wrap gap-2.5 pt-1">
+                  {availableTags.length > 0 ? (
+                    availableTags.map(tag => (
+                      <Badge 
+                        key={tag.id}
+                        variant={selectedTagIds.includes(tag.id) ? "default" : "outline"}
+                        className={cn(
+                          "cursor-pointer px-4 py-2 h-auto font-medium transition-all text-xs",
+                          selectedTagIds.includes(tag.id) 
+                            ? "bg-primary text-white shadow-md shadow-primary/20 scale-105" 
+                            : "hover:bg-slate-100 border-slate-200 bg-white"
+                        )}
+                        onClick={() => toggleTag(tag.id)}
+                      >
+                        {tag.name}
+                        {selectedTagIds.includes(tag.id) && <CheckCircle2 className="ml-2 h-4 w-4 fill-white text-primary" />}
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">暂无可用标签，请点击上方管理标签添加</p>
+                  )}
+                </div>
+              </div>
+              
 
-          <SheetFooter className="absolute bottom-0 left-0 right-0 p-6 bg-background border-t">
-            <div className="flex gap-2 w-full">
-              <Button variant="outline" className="flex-1" onClick={() => setIsSheetOpen(false)}>取消</Button>
-              <Button className="flex-1" onClick={handleSaveTable} disabled={loading}>
-                {loading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-                保存桌台
-              </Button>
             </div>
+          </ScrollArea>
+
+          <SheetFooter className="p-6 border-t bg-white/80 backdrop-blur-md shrink-0 flex items-center justify-end gap-3 z-20">
+            <Button variant="ghost" onClick={() => setIsSheetOpen(false)} disabled={loading}>取消操作</Button>
+            <Button className="min-w-[140px] font-bold shadow-lg shadow-primary/20" onClick={handleSaveTable} disabled={loading}>
+              {loading ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> 正在提交...</> : "保存设置并发布"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
