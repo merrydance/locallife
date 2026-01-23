@@ -132,49 +132,6 @@ page[data-theme="dark"] {
   box-sizing: border-box;
 }
 
-/* 
- * PC 端字体和间距锁定
- * 防止 rpx 在大屏上过度放大，保持视觉比例一致
- * 注意：仅锁定尺寸变量，不改变布局结构
- */
-@media (min-width: 750px) {
-  page {
-    /* 字号锁定 - 防止文字过大 */
-    --td-font-size-xs: 11px !important;
-    --td-font-size-s: 13px !important;
-    --td-font-size-m: 14px !important;
-    --td-font-size-l: 16px !important;
-    --td-font-size-xl: 18px !important;
-    --td-font-size-2xl: 24px !important;
-
-    /* 间距锁定 */
-    --td-spacer-1: 4px !important;
-    --td-spacer-2: 8px !important;
-    --td-spacer-3: 12px !important;
-    --td-spacer-4: 16px !important;
-    --td-spacer-5: 20px !important;
-    --td-spacer-6: 24px !important;
-
-    /* 圆角锁定 */
-    --td-radius-small: 4px !important;
-    --td-radius-default: 6px !important;
-    --td-radius-medium: 8px !important;
-    --td-radius-large: 12px !important;
-
-    /* TDesign 组件尺寸锁定 */
-    --td-button-medium-height: 40px !important;
-    --td-button-large-height: 48px !important;
-    --td-button-small-height: 32px !important;
-    --td-tag-medium-height: 24px !important;
-    --td-tag-large-height: 32px !important;
-  }
-
-  /* 基础字体锁定 */
-  text, view {
-    font-size: 14px;
-  }
-}
-
 /* 全局收紧表单分组标题与内容间距（影响 t-cell-group） */
 .t-cell-group {
   margin: 0 !important;

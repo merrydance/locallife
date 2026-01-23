@@ -1,14 +1,6 @@
 /// <reference path="./types/index.d.ts" />
 
-/** 设备平台信息（用于跨平台适配） */
-interface DevicePlatformInfo {
-    type: string          // platform 原始值：android, ios, ohos, windows, mac, ohos_pc, devtools
-    isAndroid: boolean    // Android 手机
-    isIos: boolean        // iOS 设备
-    isOhos: boolean       // 鸿蒙 Next 手机
-    isPc: boolean         // PC 端（Windows/Mac/鸿蒙PC）
-    isDevtools: boolean   // 开发者工具
-}
+
 
 interface IAppOption {
     globalData: {
@@ -36,8 +28,7 @@ interface IAppOption {
             is_open: boolean
             status: string
         }
-        // 设备平台信息（用于跨平台适配）
-        devicePlatform: DevicePlatformInfo | null
+
         // (内部使用) 上次定位上下文
         _lastLocationContext?: {
             lat: number
@@ -56,7 +47,7 @@ interface IAppOption {
     bootstrapDemoUser(): void
     reportErrorToMonitor(error: any, type: string): void
     clearApiCache(): void
-    initDevicePlatform(): void
+
 }
 
 // 微信小程序 Performance API 扩展

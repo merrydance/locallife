@@ -27,15 +27,6 @@ App<IAppOption>({
       is_open: boolean
       status: string
     } | undefined,
-    // 设备平台信息（用于跨平台适配）
-    devicePlatform: null as {
-      type: string          // platform 原始值
-      isAndroid: boolean    // Android 手机
-      isIos: boolean        // iOS 设备
-      isOhos: boolean       // 鸿蒙 Next 手机
-      isPc: boolean         // PC 端（Windows/Mac/鸿蒙PC）
-      isDevtools: boolean   // 开发者工具
-    } | null,
     // (内部使用) 上次定位上下文
     _lastLocationContext: null as {
       lat: number
@@ -49,8 +40,7 @@ App<IAppOption>({
   onLaunch() {
     logger.info('🚀 小程序启动', undefined, 'App.onLaunch')
 
-    // 初始化设备平台信息（用于跨平台适配）
-    this.initDevicePlatform()
+
 
     // 预初始化全局布局数据 (Phase 1)
     const { getGlobalLayoutData } = require('./utils/responsive')
@@ -560,35 +550,5 @@ App<IAppOption>({
     }
   },
 
-  /**
-   * 初始化设备平台信息
-   * 参考：https://mp.weixin.qq.com/s/3w1aZf86x2Im8jCy-CADBw
-   * 
-   * platform 可能的值：
-   * - 手机：android, ios, ohos (鸿蒙 Next)
-   * - 电脑：windows, mac, ohos_pc (鸿蒙 PC)
-   * - 开发工具：devtools
-   */
-  initDevicePlatform() {
-    try {
-      const info = wx.getDeviceInfo()
-      const platform = info.platform
 
-      this.globalData.devicePlatform = {
-        type: platform,
-        isAndroid: platform === 'android',
-        isIos: platform === 'ios',
-        isOhos: platform === 'ohos',  // 鸿蒙 Next 手机
-        isPc: platform === 'windows' || platform === 'mac' || platform === 'ohos_pc',
-        isDevtools: platform === 'devtools'
-      }
-
-      logger.info('📱 设备平台信息已初始化', {
-        platform,
-        ...this.globalData.devicePlatform
-      }, 'initDevicePlatform')
-    } catch (e) {
-      logger.warn('获取设备平台信息失败', e, 'initDevicePlatform')
-    }
-  }
 })

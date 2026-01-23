@@ -1,7 +1,0 @@
-{
-    "navigationBarTitleText": "商家工作台",
-    "navigationStyle": "custom",
-    "usingComponents": {
-        "custom-navbar": "../../../components/custom-navbar/index"
-    }
-}
