@@ -15,7 +15,7 @@ const navItems = [
   { label: "工作台", href: "/merchant/dashboard", activePrefix: "/merchant/dashboard", icon: LayoutDashboard },
   {
     label: "经营分析",
-    href: "/merchant/analytics/dashboard?tab=overview",
+    href: "/merchant/analytics",
     activePrefix: "/merchant/analytics",
   },
   { label: "订单", href: "/merchant/orders", activePrefix: "/merchant/orders" },
