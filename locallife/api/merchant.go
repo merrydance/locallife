@@ -182,6 +182,8 @@ type merchantResponse struct {
 	Status      string    `json:"status"`
 	IsOpen      bool      `json:"is_open"`
 	Version     int32     `json:"version"`
+	GroupID     *int64    `json:"group_id,omitempty"`
+	BrandID     *int64    `json:"brand_id,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -217,6 +219,13 @@ func newMerchantResponse(merchant db.Merchant) merchantResponse {
 		lng, _ := parseNumericToFloat(merchant.Longitude)
 		lngStr := fmt.Sprintf("%.6f", lng)
 		resp.Longitude = &lngStr
+	}
+
+	if merchant.GroupID.Valid {
+		resp.GroupID = &merchant.GroupID.Int64
+	}
+	if merchant.BrandID.Valid {
+		resp.BrandID = &merchant.BrandID.Int64
 	}
 
 	return resp
