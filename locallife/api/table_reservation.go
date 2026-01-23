@@ -996,6 +996,22 @@ func (server *Server) confirmReservation(ctx *gin.Context) {
 		return
 	}
 
+	// 创建未到店提醒任务 (预定时间后30分钟)
+	if server.taskDistributor != nil {
+		hours := result.Reservation.ReservationTime.Microseconds / 1000000 / 3600
+		minutes := (result.Reservation.ReservationTime.Microseconds / 1000000 % 3600) / 60
+		alertTime := time.Date(
+			result.Reservation.ReservationDate.Time.Year(), result.Reservation.ReservationDate.Time.Month(), result.Reservation.ReservationDate.Time.Day(),
+			int(hours), int(minutes), 0, 0, time.Local,
+		).Add(30 * time.Minute)
+
+		_ = server.taskDistributor.DistributeTaskReservationNoShowAlert(
+			ctx,
+			&worker.PayloadReservationNoShowAlert{ReservationID: result.Reservation.ID},
+			asynq.ProcessAt(alertTime),
+		)
+	}
+
 	ctx.JSON(http.StatusOK, newReservationResponse(result.Reservation))
 }
 

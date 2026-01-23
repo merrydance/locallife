@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { MerchantSidebar } from "@/components/merchant/sidebar";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import { RealtimeNotificationHandler } from "@/components/merchant/realtime-notification-handler";
 
 export function MerchantLayoutClient({
   children,
@@ -23,7 +24,12 @@ export function MerchantLayoutClient({
   }, [isLogin, router, session?.isAuthenticated, session?.isReady]);
 
   if (isLogin) {
-    return <div className="min-h-screen bg-background text-foreground">{children}</div>;
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        {children}
+        <RealtimeNotificationHandler />
+      </div>
+    );
   }
 
   if (!session?.isReady) {
@@ -48,6 +54,7 @@ export function MerchantLayoutClient({
           {children}
         </div>
       </div>
+      <RealtimeNotificationHandler />
     </div>
   );
 }

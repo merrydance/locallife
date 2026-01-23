@@ -24,6 +24,8 @@ type TaskProcessor interface {
 	ProcessTaskPaymentOrderTimeout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationPaymentTimeout 处理预定支付超时任务
 	ProcessTaskReservationPaymentTimeout(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskReservationNoShowAlert 处理预定未到店提醒任务
+	ProcessTaskReservationNoShowAlert(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskPaymentSuccess 处理支付成功任务
 	ProcessTaskPaymentSuccess(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskRefundResult 处理退款结果任务
@@ -72,9 +74,9 @@ func NewRedisTaskProcessor(
 
 	// 创建Redis客户端（用于Pub/Sub）
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: redisOpt.Addr,
+		Addr:     redisOpt.Addr,
 		Password: redisOpt.Password,
-		DB:   redisOpt.DB,
+		DB:       redisOpt.DB,
 	})
 
 	return &RedisTaskProcessor{
@@ -108,6 +110,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	// 注册任务处理器
 	mux.HandleFunc(TaskPaymentOrderTimeout, processor.ProcessTaskPaymentOrderTimeout)
 	mux.HandleFunc(TaskReservationPaymentTimeout, processor.ProcessTaskReservationPaymentTimeout)
+	mux.HandleFunc(TaskReservationNoShowAlert, processor.ProcessTaskReservationNoShowAlert)
 	mux.HandleFunc(TaskProcessPaymentSuccess, processor.ProcessTaskPaymentSuccess)
 	mux.HandleFunc(TaskProcessRefund, processor.ProcessTaskInitiateRefund)
 	mux.HandleFunc(TaskProcessRefundResult, processor.ProcessTaskRefundResult)

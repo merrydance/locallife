@@ -8,8 +8,8 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/websocket"
+	"github.com/merrydance/locallife/wechat"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -341,6 +341,26 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 				PaymentOrderID: paymentOrder.ID,
 				OrderID:        paymentOrder.OrderID.Int64,
 			})
+		}
+	}
+
+	// 预定支付成功后，创建未到店提醒任务 (预定时间后30分钟)
+	if paymentOrder.BusinessType == "reservation" && paymentOrder.ReservationID.Valid {
+		res, err := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
+		if err == nil {
+			// 计算提醒时间：预定日期 + 预定时间 + 30分钟
+			hours := res.ReservationTime.Microseconds / 1000000 / 3600
+			minutes := (res.ReservationTime.Microseconds / 1000000 % 3600) / 60
+			alertTime := time.Date(
+				res.ReservationDate.Time.Year(), res.ReservationDate.Time.Month(), res.ReservationDate.Time.Day(),
+				int(hours), int(minutes), 0, 0, time.Local,
+			).Add(30 * time.Minute)
+
+			_ = processor.distributor.DistributeTaskReservationNoShowAlert(
+				ctx,
+				&PayloadReservationNoShowAlert{ReservationID: res.ID},
+				asynq.ProcessAt(alertTime),
+			)
 		}
 	}
 

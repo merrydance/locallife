@@ -23,6 +23,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskReservationNoShowAlert 分发预定未到店提醒任务
+	DistributeTaskReservationNoShowAlert(
+		ctx context.Context,
+		payload *PayloadReservationNoShowAlert,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskProcessPaymentSuccess 分发支付成功处理任务
 	DistributeTaskProcessPaymentSuccess(
 		ctx context.Context,
