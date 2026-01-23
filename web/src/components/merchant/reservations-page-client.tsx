@@ -7,7 +7,10 @@ import {
   Calendar,
   Clock,
   Users,
-  Utensils
+  Utensils,
+  History,
+  Receipt,
+  AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -49,9 +52,9 @@ interface ReservationsPageClientProps {
 }
 
 export function ReservationsPageClient({
-  stats,
+  stats: initialStats,
   date,
-  totalCount,
+  totalCount: initialTotalCount,
 }: ReservationsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -63,7 +66,10 @@ export function ReservationsPageClient({
   const [actionLoading, setActionLoading] = useState(false);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
 
+  // 动态数据状态
   const [scheduleReservations, setScheduleReservations] = useState<ReservationResponse[]>([]);
+  const [statsState, setStatsState] = useState<ReservationStatsResponse>(initialStats);
+  const [totalCountState, setTotalCountState] = useState(initialTotalCount);
 
   const [formData, setFormData] = useState({
     table_id: "",
@@ -128,6 +134,7 @@ export function ReservationsPageClient({
   useEffect(() => {
     loadTables();
     loadScheduleReservations();
+    // 初始加载时不需要 loadStats，因为已经有了 initialStats
   }, []);
 
   const loadTables = async () => {
@@ -144,14 +151,30 @@ export function ReservationsPageClient({
 
   const loadScheduleReservations = async () => {
     try {
-      const data = await apiGet<{ reservations: ReservationResponse[] }>("/reservations/merchant", { 
+      const data = await apiGet<{ reservations: ReservationResponse[], total_count?: number }>("/reservations/merchant", { 
         page_id: 1,
         page_size: 200 
       });
       setScheduleReservations(data.reservations || []);
+      if (data.total_count !== undefined) {
+        setTotalCountState(data.total_count);
+      }
     } catch (error) {
       console.error("Failed to load schedule reservations:", error);
     }
+  };
+
+  const loadStats = async () => {
+    try {
+      const newStats = await apiGet<ReservationStatsResponse>("/reservations/merchant/stats");
+      setStatsState(newStats);
+    } catch (error) {
+      console.error("Failed to load stats:", error);
+    }
+  };
+
+  const refreshAll = async () => {
+    await Promise.all([loadTables(), loadScheduleReservations(), loadStats()]);
   };
 
   const updateQuery = (next: Record<string, string | number | undefined>) => {
@@ -168,7 +191,7 @@ export function ReservationsPageClient({
 
   const handleDateChange = (newDate: string) => {
     setFormData(f => ({ ...f, date: newDate }));
-    updateQuery({ date: newDate });
+    // updateQuery({ date: newDate }); // 不再变更 URL，既然去除了日期选择器
   };
 
   const openCreateDialog = (tableId: number, targetDate?: string, preferredTime?: string) => {
@@ -206,9 +229,18 @@ export function ReservationsPageClient({
         guest_count: parseInt(formData.guest_count),
         source: "merchant"
       });
+      setFormData(f => ({
+        ...f,
+        contact_name: "",
+        contact_phone: "",
+        guest_count: "2",
+        table_id: "", // Reset table selection
+        notes: "",
+      }));
       toast.success("预订成功");
       setIsCreateOpen(false);
-      loadScheduleReservations();
+      // 刷新所有数据
+      await refreshAll();
       router.refresh();
     } catch (error: any) {
       toast.error(error.message || "创建失败");
@@ -228,7 +260,8 @@ export function ReservationsPageClient({
       });
       toast.success("修改成功");
       setIsCreateOpen(false);
-      loadScheduleReservations();
+      // 刷新所有数据
+      await refreshAll();
       router.refresh();
     } catch (error: any) {
       toast.error(error.message || "修改失败");
@@ -245,7 +278,8 @@ export function ReservationsPageClient({
       toast.success("已取消预订");
       setIsCreateOpen(false);
       setIsCancelConfirmOpen(false);
-      loadScheduleReservations();
+      // 刷新所有数据
+      await refreshAll();
       router.refresh();
     } catch (error: any) {
       toast.error(error.message || "取消失败");
@@ -357,19 +391,19 @@ export function ReservationsPageClient({
         title="预订管理" 
         description="管理包间预订、签到及菜品预备状态"
         actions={
-          <Button variant="outline" size="sm" className="h-9 px-4 border-slate-200" onClick={() => { loadScheduleReservations(); loadTables(); }}>
+          <Button variant="outline" size="sm" className="h-9 px-4 border-slate-200" onClick={refreshAll}>
             <RefreshCw className="h-4 w-4 mr-2" />刷新
           </Button>
         }
       />
       <PageContent>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">待确认支付</div><div className="text-2xl font-bold text-blue-600">{stats.paid_count}</div></div></Card>
-          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">已确认预约</div><div className="text-2xl font-bold text-emerald-600">{stats.confirmed_count}</div></div></Card>
-          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">正在用餐</div><div className="text-2xl font-bold text-purple-600">{stats.checked_in_count || 0}</div></div></Card>
-          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">今日已结账</div><div className="text-2xl font-bold text-slate-600">{stats.completed_count}</div></div></Card>
-          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">未到店次数</div><div className="text-2xl font-bold text-rose-700">{stats.no_show_count}</div></div></Card>
-          <Card className="bg-primary/5 border-primary/20"><div className="p-4"><div className="text-xs text-primary/70 mb-1 font-semibold uppercase tracking-wider">总预订量</div><div className="text-2xl font-black text-primary">{totalCount}</div></div></Card>
+          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">待确认支付</div><div className="text-2xl font-bold text-blue-600">{statsState.paid_count}</div></div></Card>
+          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">已确认预约</div><div className="text-2xl font-bold text-emerald-600">{statsState.confirmed_count}</div></div></Card>
+          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">正在用餐</div><div className="text-2xl font-bold text-purple-600">{statsState.checked_in_count || 0}</div></div></Card>
+          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">今日已结账</div><div className="text-2xl font-bold text-slate-600">{statsState.completed_count}</div></div></Card>
+          <Card className="bg-white"><div className="p-4"><div className="text-xs text-muted-foreground mb-1 font-medium">未到店次数</div><div className="text-2xl font-bold text-rose-700">{statsState.no_show_count}</div></div></Card>
+          <Card className="bg-primary/5 border-primary/20"><div className="p-4"><div className="text-xs text-primary/70 mb-1 font-semibold uppercase tracking-wider">总预订量</div><div className="text-2xl font-black text-primary">{totalCountState}</div></div></Card>
         </div>
 
         <div className="bg-white rounded-2xl border shadow-xl p-6 min-h-[calc(100vh-16rem)] overflow-y-auto">
@@ -382,10 +416,7 @@ export function ReservationsPageClient({
                   <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-500"></span> 已预定</span>
                </div>
              </div>
-             <div className="flex items-center gap-3">
-                <Label className="text-xs font-bold text-slate-500">业务日期</Label>
-                <Input type="date" className="h-10 w-44 font-bold border-2" value={formData.date} onChange={(e) => handleDateChange(e.target.value)} />
-             </div>
+             {/* 日期选择器已移除 */}
           </div>
           {tableLoading ? (
              <div className="flex flex-col items-center justify-center py-32 gap-6">
