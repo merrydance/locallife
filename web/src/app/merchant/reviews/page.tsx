@@ -1,10 +1,11 @@
-import { ComingSoon } from "@/components/merchant/coming-soon";
+
+import { ReviewsPageClient } from "@/components/merchant/reviews-page-client";
+
+export const metadata = {
+  title: "评价管理 - 商家管理后台",
+  description: "查看并回复顾客对菜品和服务的评价，提升商户口碑与信用",
+};
 
 export default function ReviewsPage() {
-  return (
-    <ComingSoon
-      title="评价管理"
-      description="评价模块正在按小程序评价页面对齐中。"
-    />
-  );
+  return <ReviewsPageClient />;
 }
