@@ -17,6 +17,13 @@ type MerchantInfo = {
   is_open?: boolean;
 };
 
+type User = {
+  id: number;
+  full_name: string;
+  avatar_url?: string;
+  roles: string[];
+};
+
 type MerchantStatus = {
   is_open: boolean;
   auto_close_at?: string;
@@ -25,6 +32,8 @@ type MerchantStatus = {
 
 type MerchantSessionState = {
   merchant?: MerchantInfo;
+  user?: User;
+  roles?: string[];
   status?: MerchantStatus;
   isAuthenticated: boolean;
   isReady: boolean;
@@ -72,6 +81,7 @@ export function MerchantSessionProvider({
   children: React.ReactNode;
 }) {
   const [merchant, setMerchant] = useState<MerchantInfo | undefined>(undefined);
+  const [user, setUser] = useState<User | undefined>(undefined);
   const [status, setStatus] = useState<MerchantStatus | undefined>(undefined);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -94,12 +104,14 @@ export function MerchantSessionProvider({
     }
 
     setIsAuthenticated(true);
-    const [merchantInfo, merchantStatus] = await Promise.all([
+    const [merchantInfo, merchantStatus, userInfo] = await Promise.all([
       apiGet<MerchantInfo>("/merchants/me"),
       apiGet<MerchantStatus>("/merchants/me/status"),
+      apiGet<User>("/users/me"),
     ]);
     setMerchant(merchantInfo);
     setStatus(merchantStatus);
+    setUser(userInfo);
     setIsReady(true);
   }, []);
 
@@ -184,6 +196,7 @@ export function MerchantSessionProvider({
     closeWebSocket();
     setIsAuthenticated(false);
     setMerchant(undefined);
+    setUser(undefined);
     setStatus(undefined);
     setIsReady(true);
   }, [closeWebSocket]);
@@ -227,6 +240,8 @@ export function MerchantSessionProvider({
   const value = useMemo(
     () => ({
       merchant,
+      user,
+      roles: user?.roles,
       status,
       isAuthenticated,
       isReady,
@@ -238,6 +253,7 @@ export function MerchantSessionProvider({
     }),
     [
       merchant,
+      user,
       status,
       isAuthenticated,
       isReady,

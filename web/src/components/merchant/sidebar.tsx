@@ -28,6 +28,7 @@ const navItems = [
   { label: "财务", href: "/merchant/finance", activePrefix: "/merchant/finance" },
   { label: "营销", href: "/merchant/marketing", activePrefix: "/merchant/marketing" },
   { label: "会员", href: "/merchant/members", activePrefix: "/merchant/members" },
+  { label: "员工", href: "/merchant/staff", activePrefix: "/merchant/staff" },
   { label: "评价", href: "/merchant/reviews", activePrefix: "/merchant/reviews" },
   { label: "预订", href: "/merchant/reservations", activePrefix: "/merchant/reservations" },
   { label: "店铺设置", href: "/merchant/settings", activePrefix: "/merchant/settings" },
