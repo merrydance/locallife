@@ -17,16 +17,22 @@ import {
   Search,
   Users,
   XCircle,
+  ArrowRightLeft,
   Clock,
+  Receipt,
+  Sparkles,
+  Play,
+  LogOut,
+  TrendingUp,
   Calendar,
   Phone,
-  Sparkles,
-  ArrowRightLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { apiGet, apiPatch, apiPost, formatAmount } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import type { OrderResponse } from "@/types/order";
@@ -96,6 +102,12 @@ export type DashboardTable = {
     guest_count: number;
   };
   tags?: Array<{ id: number; name: string }>;
+  activeOrder?: OrderResponse;
+  kitchenProgress?: {
+    ready: number;
+    total: number;
+    percentage: number;
+  };
 };
 
 export type DashboardTableGroup = {
@@ -159,12 +171,29 @@ export function DashboardPageClient({
   const [tableStatsState, setTableStatsState] = useState(tableStats);
   const [revenueState, setRevenueState] = useState(revenue);
   const [todayOrdersState, setTodayOrdersState] = useState(todayOrders);
+  
+  // Dialogs
+  const [confirmConfig, setConfirmConfig] = useState<{ 
+    open: boolean; 
+    type: 'open' | 'close' | 'reset'; 
+    table: DashboardTable | null 
+  }>({ open: false, type: 'open', table: null });
 
   const loadTables = useCallback(async () => {
     setLoadingTables(true);
     try {
       const response = await apiGet<{ tables: DashboardTable[] }>("/tables");
       const tables = response.tables || [];
+
+      // 获取当前活跃的堂食订单
+      const activeOrdersResp = await apiGet<{ orders: OrderResponse[] }>("/merchant/orders", { 
+        page_id: 1, 
+        page_size: 50
+      });
+      // 手动筛选以防万一
+      const activeOrders = (activeOrdersResp.orders || []).filter(o => 
+        o.order_type === 'dine_in' && ["paid", "preparing", "ready"].includes(o.status)
+      );
       
       // Update stats
       setTableStatsState({
@@ -190,9 +219,24 @@ export function DashboardPageClient({
         
         const nextRes = tableDayRes.find(r => r.reservation_time >= nowTimeStr) || tableDayRes[0];
         
+        // Attach Active Order & Progress
+        const order = activeOrders.find(o => o.table_id === table.id);
+        let kitchenProgress = undefined;
+        if (order && order.items) {
+          const total = order.items.reduce((sum, item) => sum + item.quantity, 0);
+          const readyCount = order.status === 'ready' ? total : (order.status === 'preparing' ? Math.floor(total * 0.6) : 0);
+          kitchenProgress = {
+            ready: readyCount,
+            total,
+            percentage: total > 0 ? (readyCount / total) * 100 : 0
+          };
+        }
+
         grouped.get(type)!.push({
           ...table,
-          todayReservation: nextRes
+          todayReservation: nextRes,
+          activeOrder: order,
+          kitchenProgress
         });
       });
 
@@ -407,6 +451,67 @@ export function DashboardPageClient({
     } finally {
       setLoadingTableStatus(null);
       setActiveTable(null);
+    }
+  };
+
+  const executeAction = async () => {
+    if (!confirmConfig.table) return;
+    const { type, table } = confirmConfig;
+    
+    setLoadingTableStatus(table.id.toString());
+    try {
+      if (type === 'close') {
+        if (table.activeOrder) {
+          await apiPost(`/merchant/orders/${table.activeOrder.id}/complete`);
+        }
+        await apiPatch(`/tables/${table.id}/status`, { status: 'available' });
+        toast.success(`桌台 ${table.table_no} 结账完成并释放`);
+      } else if (type === 'reset') {
+        await apiPatch(`/tables/${table.id}/status`, { status: 'available' });
+        toast.success(`桌台 ${table.table_no} 已完成清扫`);
+      }
+      loadTables();
+    } catch (error: any) {
+      toast.error(error.message || "操作失败");
+    } finally {
+      setLoadingTableStatus(null);
+      setConfirmConfig(prev => ({ ...prev, open: false }));
+    }
+  };
+
+  const handleCloseTable = (table: DashboardTable) => {
+    setConfirmConfig({ open: true, type: 'close', table });
+  };
+
+  const handleResetTable = (table: DashboardTable) => {
+    setConfirmConfig({ open: true, type: 'reset', table });
+  };
+
+  // 判断预订是否在可签到时段
+  const isReservationCheckInReady = (reservationTime: string): boolean => {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const reservationDateTime = new Date(`${today}T${reservationTime}:00`);
+    const thirtyMinutes = 30 * 60 * 1000;
+    return now.getTime() >= reservationDateTime.getTime() - thirtyMinutes && 
+           now.getTime() <= reservationDateTime.getTime() + thirtyMinutes;
+  };
+
+  const handleCheckinReservation = async (table: DashboardTable) => {
+    const reservation = table.current_reservation || table.todayReservation;
+    if (!reservation) {
+      toast.error("该桌台没有预订信息");
+      return;
+    }
+    try {
+      await apiPost("/dining-sessions/open", {
+        table_id: table.id,
+        reservation_id: reservation.id
+      });
+      toast.success(`${reservation.contact_name} 的预订已签到入座`);
+      loadTables();
+    } catch (error: any) {
+      toast.error(error.message || "签到失败");
     }
   };
 
@@ -635,96 +740,96 @@ export function DashboardPageClient({
                               className={cn(
                                 "group bg-white rounded-xl border shadow-sm transition-all hover:shadow-md cursor-pointer overflow-hidden relative flex flex-col",
                                 table.status === 'disabled' && "opacity-60 grayscale-[0.5]",
-                                isOccupied ? "border-primary/30" : "border-slate-200 hover:border-primary/30"
+                                isOccupied ? "border-primary/30 ring-1 ring-primary/5" : "border-slate-200 hover:border-primary/30"
                               )}
                               onClick={() => setActiveTable(table)}
                             >
-                              {/* Top status bar */}
-                              <div className={cn("absolute top-0 left-0 right-0 h-1", statusInfo.colorClass)} />
+                              {/* Top status bar - aligned with DineIn style */}
+                              <div className={cn("h-1 w-full", statusInfo.colorClass.replace('bg-', 'bg-'))} />
                               
-                              <div className="p-3 pt-4 flex-1">
+                              <div className="p-3 pt-3 flex-1">
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="space-y-0.5">
                                     <div className="flex items-center gap-2">
                                       <span className="text-xl font-black text-slate-900 tracking-tighter">
                                         {table.table_no}
                                       </span>
-                                      <Badge 
-                                        variant={statusInfo.variant} 
-                                        className={cn(
-                                          "text-[9px] px-1.5 h-4 font-bold border-none",
-                                          table.status === 'available' ? "bg-emerald-500 text-white" :
-                                          table.status === 'occupied' ? "bg-primary text-white" :
-                                          table.status === 'reserved' ? "bg-amber-500 text-white" :
-                                          "bg-slate-400 text-white"
-                                        )}
-                                      >
-                                        {statusInfo.label}
-                                      </Badge>
-                                    </div>
-                                    <div className="flex items-center text-[10px] text-slate-400 gap-2">
-                                      <span className="flex items-center gap-1">
-                                        <TypeIcon className="h-2.5 w-2.5" />
-                                        {typeInfo.label}
-                                      </span>
-                                      <span>•</span>
-                                      <span className="flex items-center gap-1">
-                                        <Users className="h-2.5 w-2.5" />
+                                      <div className="flex items-center text-[10px] text-slate-400 gap-1 font-medium">
+                                        <Users className="size-3" />
                                         {table.capacity}人
-                                      </span>
+                                      </div>
                                     </div>
                                   </div>
+                                  <Badge 
+                                    variant={statusInfo.variant} 
+                                    className={cn(
+                                      "text-[9px] px-1.5 h-4 font-bold border-none",
+                                      table.status === 'available' ? "bg-emerald-50 text-emerald-600" :
+                                      table.status === 'occupied' ? "bg-primary/10 text-primary" :
+                                      table.status === 'reserved' ? "bg-amber-50 text-amber-600" :
+                                      "bg-slate-100 text-slate-500"
+                                    )}
+                                  >
+                                    {statusInfo.label}
+                                  </Badge>
                                 </div>
 
-                                {table.current_reservation ? (
-                                  <div className="mt-2 p-2 bg-amber-50/50 rounded-lg border border-amber-100">
-                                    <div className="flex items-center justify-between text-[10px] font-bold text-amber-700">
-                                      <span className="flex items-center gap-1">
-                                        <AlertCircle className="h-2.5 w-2.5" />
-                                        近期预约
-                                      </span>
-                                      <span>{table.current_reservation.reservation_time}</span>
+                                {/* Middle Content - Aligned with DineIn */}
+                                <div className="mt-2 min-h-[60px] flex flex-col justify-center">
+                                  {isOccupied ? (
+                                    <div className="space-y-2">
+                                       <div className="flex justify-between text-[10px] font-medium">
+                                          <span className="text-muted-foreground">出餐进度</span>
+                                          <span className="text-primary">{table.kitchenProgress?.ready || 0}/{table.kitchenProgress?.total || 0}</span>
+                                       </div>
+                                       <Progress value={table.kitchenProgress?.percentage || 0} className="h-1.5" indicatorClassName="bg-primary" />
+                                       <div className="flex items-center justify-between mt-1">
+                                          <span className="text-sm font-bold text-primary">
+                                             <span className="text-[10px] font-normal">¥</span>
+                                             {formatAmount(table.activeOrder?.total_amount || 0)}
+                                          </span>
+                                          <div className="flex items-center text-[9px] text-muted-foreground">
+                                             <Clock className="size-2.5 mr-1" />
+                                             {table.activeOrder && new Date(table.activeOrder.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </div>
+                                       </div>
                                     </div>
-                                    <div className="text-[10px] text-amber-600/80 truncate mt-0.5">
-                                      {table.current_reservation.contact_name} ({table.current_reservation.guest_count}人)
-                                    </div>
-                                  </div>
-                                ) : table.todayReservation ? (
-                                  <div className="mt-2 p-2 bg-slate-50 rounded-lg border border-slate-100 group-hover:border-primary/20 transition-colors">
-                                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 group-hover:text-primary/70">
-                                      <span className="flex items-center gap-1">
-                                        <Calendar className="h-2.5 w-2.5" />
-                                        今日预约
-                                      </span>
-                                      <span>{table.todayReservation.reservation_time}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between mt-0.5">
-                                      <div className="text-[10px] text-slate-600 font-bold truncate">
-                                        {table.todayReservation.contact_name} · {table.todayReservation.guest_count}人
+                                  ) : table.status === 'reserved' ? (
+                                    <div className="bg-amber-50/50 p-2 rounded-lg border border-amber-100/50">
+                                      <div className="flex items-center gap-1.5 text-amber-600 text-[10px] font-bold">
+                                         <Clock className="size-3" /> {table.current_reservation?.reservation_time}
                                       </div>
-                                      <div className="text-[9px] text-slate-400 font-medium">
-                                        {table.todayReservation.contact_phone}
-                                      </div>
+                                       <p className="text-[11px] font-black mt-0.5 truncate">{table.current_reservation?.contact_name}</p>
+                                       <p className="text-[9px] text-muted-foreground">{table.current_reservation?.guest_count}位 · {table.current_reservation?.contact_phone}</p>
                                     </div>
-                                  </div>
-                                ) : (
-                                  <div className="mt-2 h-[38px] flex items-center justify-center border border-dashed border-slate-200 rounded-lg opacity-40">
-                                     <span className="text-[9px] text-slate-400">今日暂无预订</span>
-                                  </div>
-                                )}
+                                  ) : table.todayReservation ? (
+                                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 relative overflow-hidden group/res">
+                                       <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold">
+                                          <Calendar className="size-3" /> 今日 {table.todayReservation.reservation_time}
+                                       </div>
+                                       <p className="text-[11px] font-bold mt-0.5 truncate text-slate-700">{table.todayReservation.contact_name}</p>
+                                       <p className="text-[9px] text-muted-foreground">{table.todayReservation.guest_count}人 · {table.todayReservation.contact_phone}</p>
+                                    </div>
+                                  ) : (
+                                    <div className="text-center opacity-30 py-1">
+                                       <Armchair className="size-8 mx-auto" />
+                                       <span className="text-[8px] font-bold uppercase tracking-widest mt-0.5 block">Ready</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
 
-                              {/* Actions Footer */}
+                              {/* Actions Footer - Aligned with DineIn */}
                               <div className="p-2 bg-slate-50 border-t flex gap-1.5">
-                                {isOccupied && (
+                                {isOccupied ? (
                                   <>
                                     <Button 
                                       variant="outline" 
                                       size="sm" 
                                       className="flex-1 h-7 text-[10px] font-bold rounded-md border-primary/20 text-primary hover:bg-primary/5"
-                                      onClick={(e) => { e.stopPropagation(); setActiveTable(table); }}
+                                      onClick={(e) => { e.stopPropagation(); handleCloseTable(table); }}
                                     >
-                                      清台
+                                      <Receipt className="size-3 mr-1" /> 结账
                                     </Button>
                                     <Button 
                                       variant="ghost" 
@@ -735,25 +840,26 @@ export function DashboardPageClient({
                                       <ArrowRightLeft className="size-3 mr-0.5" /> 换桌
                                     </Button>
                                   </>
-                                )}
+                                ) : (table.status === 'reserved' || table.todayReservation) && isReservationCheckInReady((table.current_reservation || table.todayReservation)?.reservation_time || "") ? (
+                                  <Button 
+                                    variant="default" 
+                                    size="sm" 
+                                    className="flex-1 h-7 text-[10px] font-bold rounded-md"
+                                    onClick={(e) => { e.stopPropagation(); handleCheckinReservation(table); }}
+                                  >
+                                    <Users className="size-3 mr-1" /> 签到
+                                  </Button>
+                                ) : null}
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
                                   className={cn(
                                     "h-7 px-2 text-[10px] font-medium rounded-md",
-                                    isOccupied 
+                                    isOccupied || ((table.status === 'reserved' || table.todayReservation) && isReservationCheckInReady((table.current_reservation || table.todayReservation)?.reservation_time || ""))
                                       ? "text-slate-400 hover:bg-slate-100" 
                                       : "flex-1 text-slate-500 hover:bg-slate-100"
                                   )}
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    apiPatch(`/tables/${table.id}/status`, { status: 'available' })
-                                      .then(() => {
-                                        toast.success(`桌台 ${table.table_no} 已完成清扫`);
-                                        loadTables();
-                                      })
-                                      .catch((err: any) => toast.error(err.message || "操作失败"));
-                                  }}
+                                  onClick={(e) => { e.stopPropagation(); handleResetTable(table); }}
                                 >
                                   <Sparkles className="size-3 mr-0.5" /> 清扫
                                 </Button>
@@ -873,6 +979,23 @@ export function DashboardPageClient({
           </div>
         </div>
       ) : null}
+      <ConfirmDialog 
+        open={confirmConfig.open}
+        onOpenChange={(open) => setConfirmConfig(prev => ({ ...prev, open }))}
+        title={
+          confirmConfig.type === 'close' ? "结账退台确认" : "清扫确认"
+        }
+        description={
+          confirmConfig.type === 'close'
+            ? `确定要为 ${confirmConfig.table?.table_no} 桌进行结账吗？结账后系统将清空当前账单并将桌态设为空闲。`
+            : `确定要将 ${confirmConfig.table?.table_no} 桌标记为已清扫吗？系统将重置桌态为空闲，准备迎接下一桌客人。`
+        }
+        confirmText={
+          confirmConfig.type === 'close' ? "确认结账" : "确认清扫"
+        }
+        variant={confirmConfig.type === 'close' ? "destructive" : "default"}
+        onConfirm={executeAction}
+      />
     </PageShell>
   );
 }
