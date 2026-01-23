@@ -416,7 +416,7 @@ export function ReviewsPageClient() {
           <div className="px-10 pb-10 flex gap-3">
              <Button variant="ghost" onClick={() => setReplyingReview(null)} className="flex-1 rounded-2xl h-14 font-black">取消</Button>
              <Button 
-               className="flex-[2] rounded-2xl h-14 font-black shadow-xl shadow-primary/20" 
+               className="flex-2 rounded-2xl h-14 font-black shadow-xl shadow-primary/20" 
                onClick={handleReply}
                disabled={!replyContent || submittingReply}
              >
