@@ -474,7 +474,7 @@ func (server *Server) isOriginAllowed(origin string) bool {
 	}
 	allowed := server.config.AllowedOrigins
 	if len(allowed) == 0 {
-		return false
+		return true
 	}
 	for _, item := range allowed {
 		if item == "*" || item == origin {

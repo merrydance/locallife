@@ -34,6 +34,7 @@ const (
 type kitchenOrderItem struct {
 	ID             int64                    `json:"id"`
 	Name           string                   `json:"name"`
+	CategoryName   string                   `json:"category_name,omitempty"`
 	Quantity       int16                    `json:"quantity"`
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
 	ImageURL       *string                  `json:"image_url,omitempty"`
@@ -485,6 +486,7 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 
 		var imageURL *string
 		var prepareTime int16 = DefaultAvgPrepareTimeMinutes // 默认值
+		var categoryName string
 
 		if item.DishID.Valid {
 			dish, err := server.store.GetDish(ctx, item.DishID.Int64)
@@ -494,6 +496,14 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 					imageURL = &img
 				}
 				prepareTime = dish.PrepareTime
+
+				// 获取分类名称
+				if dish.CategoryID.Valid {
+					category, err := server.store.GetDishCategory(ctx, dish.CategoryID.Int64)
+					if err == nil {
+						categoryName = category.Name
+					}
+				}
 			}
 		}
 
@@ -505,6 +515,7 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 		kitchenItems = append(kitchenItems, kitchenOrderItem{
 			ID:             item.ID,
 			Name:           item.Name,
+			CategoryName:   categoryName,
 			Quantity:       item.Quantity,
 			Customizations: customizations,
 			ImageURL:       imageURL,

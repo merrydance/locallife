@@ -78,6 +78,8 @@ export function MerchantSessionProvider({
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const isConnectingRef = useRef(false);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectDelayRef = useRef(1000);
 
   const isOpen = status?.is_open ?? merchant?.is_open ?? false;
 
@@ -120,13 +122,30 @@ export function MerchantSessionProvider({
     wsRef.current = socket;
 
     socket.onopen = () => {
+      console.log("WebSocket Connected");
       setWsConnected(true);
       isConnectingRef.current = false;
+      reconnectDelayRef.current = 1000; // Reset delay on success
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
 
     socket.onclose = () => {
+      console.log("WebSocket Disconnected");
       setWsConnected(false);
+      wsRef.current = null;
       isConnectingRef.current = false;
+      
+      // Automatic reconnection logic
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = setTimeout(() => {
+        console.log(`Attempting reconnect in ${reconnectDelayRef.current}ms...`);
+        connectWebSocket();
+        // Exponential backoff
+        reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 1.5, 30000);
+      }, reconnectDelayRef.current);
     };
 
     socket.onerror = () => {
@@ -141,9 +160,7 @@ export function MerchantSessionProvider({
           new CustomEvent("merchant-realtime", { detail: message })
         );
       } catch {
-        window.dispatchEvent(
-          new CustomEvent("merchant-realtime", { detail: event.data })
-        );
+        // Handle non-JSON or raw data if needed
       }
     };
   }, []);

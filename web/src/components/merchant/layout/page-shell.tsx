@@ -18,7 +18,7 @@ export function PageShell({ children, className }: PageShellProps) {
 
 interface PageHeaderProps {
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   actions?: React.ReactNode;
   children?: React.ReactNode;
   className?: string;
@@ -41,7 +41,7 @@ export function PageHeader({
       <div className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <div className="text-sm text-muted-foreground">{description}</div>
         )}
       </div>
       {actions && (

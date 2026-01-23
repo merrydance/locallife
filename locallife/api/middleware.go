@@ -23,12 +23,16 @@ func authMiddleware(tokenMaker token.Maker) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var accessToken string
 		authorizationHeader := ctx.GetHeader(authorizationHeaderKey)
-
 		if len(authorizationHeader) != 0 {
 			fields := strings.Fields(authorizationHeader)
 			if len(fields) >= 2 && strings.ToLower(fields[0]) == authorizationTypeBearer {
 				accessToken = fields[1]
 			}
+		}
+
+		// Support WebSocket upgrades where headers cannot be set easily
+		if len(accessToken) == 0 && (isWebSocketUpgrade(ctx) || strings.HasSuffix(ctx.Request.URL.Path, "/ws")) {
+			accessToken = ctx.Query("token")
 		}
 
 		if len(accessToken) == 0 {
