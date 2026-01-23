@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/util"
 )
 
 var (
@@ -88,65 +90,91 @@ func (store *SQLStore) TransferDiningSessionTableTx(ctx context.Context, arg Tra
 			return fmt.Errorf("check active dining session: %w", err)
 		}
 
-		var reservation *TableReservation
 		if session.ReservationID.Valid {
 			res, err := q.GetTableReservationForUpdate(ctx, session.ReservationID.Int64)
 			if err != nil {
 				return fmt.Errorf("get reservation for update: %w", err)
 			}
-			reservation = &res
 			if res.MerchantID != session.MerchantID {
 				return ErrReservationMismatch
 			}
 			if res.TableID != fromTable.ID {
 				return ErrReservationMismatch
 			}
+
+			// Check if target table has a conflicting reservation
 			if toTable.CurrentReservationID.Valid && toTable.CurrentReservationID.Int64 != res.ID {
-				return ErrTargetTableReserved
+				targetRes, err := q.GetTableReservation(ctx, toTable.CurrentReservationID.Int64)
+				if err == nil {
+					resStart := util.CombineDateAndTime(targetRes.ReservationDate.Time, targetRes.ReservationTime.Microseconds)
+					if util.IsConflictWithReservation(time.Now(), resStart) {
+						return ErrTargetTableReserved
+					}
+				} else {
+					return ErrTargetTableReserved
+				}
 			}
 			if toTable.Status == "reserved" && (!toTable.CurrentReservationID.Valid || toTable.CurrentReservationID.Int64 != res.ID) {
-				return ErrTargetTableReserved
+				// Similar check for status
+				if toTable.CurrentReservationID.Valid {
+					targetRes, err := q.GetTableReservation(ctx, toTable.CurrentReservationID.Int64)
+					if err == nil {
+						resStart := util.CombineDateAndTime(targetRes.ReservationDate.Time, targetRes.ReservationTime.Microseconds)
+						if util.IsConflictWithReservation(time.Now(), resStart) {
+							return ErrTargetTableReserved
+						}
+					} else {
+						return ErrTargetTableReserved
+					}
+				} else {
+					return ErrTargetTableReserved
+				}
 			}
 		} else {
 			if toTable.Status == "reserved" || toTable.CurrentReservationID.Valid {
-				return ErrTargetTableReserved
+				if toTable.CurrentReservationID.Valid {
+					targetRes, err := q.GetTableReservation(ctx, toTable.CurrentReservationID.Int64)
+					if err == nil {
+						resStart := util.CombineDateAndTime(targetRes.ReservationDate.Time, targetRes.ReservationTime.Microseconds)
+						if util.IsConflictWithReservation(time.Now(), resStart) {
+							return ErrTargetTableReserved
+						}
+					} else {
+						return ErrTargetTableReserved
+					}
+				} else {
+					return ErrTargetTableReserved
+				}
 			}
-		}
-
-		if toTable.Status == "occupied" {
-			return ErrTargetTableOccupied
 		}
 
 		if _, err := q.db.Exec(ctx, `UPDATE dining_sessions SET table_id = $1, updated_at = now() WHERE id = $2`, toTable.ID, session.ID); err != nil {
 			return fmt.Errorf("update dining session table: %w", err)
 		}
 
-		if reservation != nil {
-			if _, err := q.UpdateReservation(ctx, UpdateReservationParams{
-				ID:      reservation.ID,
-				TableID: pgtype.Int8{Int64: toTable.ID, Valid: true},
-			}); err != nil {
-				return fmt.Errorf("update reservation table: %w", err)
-			}
-		}
+		// [Change] We no longer update the reservation's table ID to maintain historical accuracy
+		// of what table was originally reserved. The session still points to the reservation.
 
 		updatedFrom, err := q.UpdateTableStatus(ctx, UpdateTableStatusParams{
 			ID:                   fromTable.ID,
 			Status:               "available",
-			CurrentReservationID: pgtype.Int8{},
+			CurrentReservationID: pgtype.Int8{Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("update from table status: %w", err)
 		}
 
-		var toReservationID pgtype.Int8
-		if reservation != nil {
-			toReservationID = pgtype.Int8{Int64: reservation.ID, Valid: true}
+		// [Change] The target table is now occupied, but it doesn't "adopt" the reservation record
+		// to avoid displaying information that was specific to the original reserved table.
+		newToResID := toTable.CurrentReservationID
+		if session.ReservationID.Valid {
+			newToResID = session.ReservationID
 		}
+
 		updatedTo, err := q.UpdateTableStatus(ctx, UpdateTableStatusParams{
 			ID:                   toTable.ID,
 			Status:               "occupied",
-			CurrentReservationID: toReservationID,
+			CurrentReservationID: newToResID,
 		})
 		if err != nil {
 			return fmt.Errorf("update to table status: %w", err)

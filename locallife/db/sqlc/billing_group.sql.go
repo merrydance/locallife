@@ -266,3 +266,33 @@ func (q *Queries) ListBillingGroupsBySession(ctx context.Context, diningSessionI
 	}
 	return items, nil
 }
+
+const updateBillingGroupStatus = `-- name: UpdateBillingGroupStatus :one
+UPDATE billing_groups
+SET status = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, dining_session_id, status, is_default, total_amount, paid_amount, created_at, updated_at, closed_at
+`
+
+type UpdateBillingGroupStatusParams struct {
+	ID     int64  `json:"id"`
+	Status string `json:"status"`
+}
+
+func (q *Queries) UpdateBillingGroupStatus(ctx context.Context, arg UpdateBillingGroupStatusParams) (BillingGroup, error) {
+	row := q.db.QueryRow(ctx, updateBillingGroupStatus, arg.ID, arg.Status)
+	var i BillingGroup
+	err := row.Scan(
+		&i.ID,
+		&i.DiningSessionID,
+		&i.Status,
+		&i.IsDefault,
+		&i.TotalAmount,
+		&i.PaidAmount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ClosedAt,
+	)
+	return i, err
+}

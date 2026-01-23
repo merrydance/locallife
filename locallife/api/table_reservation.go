@@ -9,6 +9,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
@@ -332,13 +333,13 @@ func (server *Server) createReservation(ctx *gin.Context) {
 
 	// 只有包间可以预定
 	if table.TableType != "room" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only rooms can be reserved")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只有包间可以预订")))
 		return
 	}
 
 	// 检查桌台状态
-	if table.Status != "available" {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("table is not available")))
+	if table.Status == "disabled" {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("table is disabled and cannot be reserved")))
 		return
 	}
 
@@ -348,32 +349,20 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		return
 	}
 
-	// 检查时间段是否已被预定
-	pgDate := pgtype.Date{Time: reservationDate, Valid: true}
-	pgTime := pgtype.Time{
-		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
-		Valid:        true,
-	}
-	// 用餐时段时长，用于检测时间段冲突
-	pgDuration := pgtype.Interval{
-		Microseconds: ReservationDurationHours * 60 * 60 * 1000000,
-		Valid:        true,
-	}
-
-	count, err := server.store.CheckTableAvailability(ctx, db.CheckTableAvailabilityParams{
-		TableID:         req.TableID,
-		ReservationDate: pgDate,
-		Column3:         pgTime,
-		Column4:         pgDuration,
-		ID:              0, // 新创建，无需排除任何ID
-	})
+	conflict, err := server.checkReservationConflict(ctx, req.TableID, reservationDate, reservationTime, 0)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if count > 0 {
+	if conflict {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
 		return
+	}
+
+	pgDate := pgtype.Date{Time: reservationDate, Valid: true}
+	pgTime := pgtype.Time{
+		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
+		Valid:        true,
 	}
 
 	// 计算金额和验证菜品
@@ -1155,7 +1144,7 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 
 	// 检查状态：只有 pending, paid, confirmed 可以取消
 	if !isReservationStatusAllowed(reservation.Status, reservationActionCancel) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation cannot be cancelled")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("预约状态不允许取消")))
 		return
 	}
 
@@ -1947,38 +1936,32 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 		return
 	}
 
+	// 检查桌台状态
+	if table.Status == "disabled" {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("table is disabled and cannot be reserved")))
+		return
+	}
+
 	// 检查人数是否超过容量
 	if req.GuestCount > table.Capacity {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("guest count exceeds table capacity")))
 		return
 	}
 
-	// 检查时间段是否已被预定
-	pgDate := pgtype.Date{Time: reservationDate, Valid: true}
-	pgTime := pgtype.Time{
-		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
-		Valid:        true,
-	}
-	// 用餐时段时长，用于检测时间段冲突
-	pgDuration := pgtype.Interval{
-		Microseconds: ReservationDurationHours * 60 * 60 * 1000000,
-		Valid:        true,
-	}
-
-	count, err := server.store.CheckTableAvailability(ctx, db.CheckTableAvailabilityParams{
-		TableID:         req.TableID,
-		ReservationDate: pgDate,
-		Column3:         pgTime,
-		Column4:         pgDuration,
-		ID:              0, // 新创建，无需排除任何ID
-	})
+	conflict, err := server.checkReservationConflict(ctx, req.TableID, reservationDate, reservationTime, 0)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if count > 0 {
+	if conflict {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
 		return
+	}
+
+	pgDate := pgtype.Date{Time: reservationDate, Valid: true}
+	pgTime := pgtype.Time{
+		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
+		Valid:        true,
 	}
 
 	// 来源默认为 merchant
@@ -2293,40 +2276,23 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 			checkTableID = *req.TableID
 		}
 
-		checkDate := reservation.ReservationDate
+		targetDate := reservation.ReservationDate.Time
 		if req.Date != nil {
 			date, _ := parseISODate(*req.Date, "invalid date format")
-			checkDate = pgtype.Date{Time: date, Valid: true}
+			targetDate = date
 		}
 
-		checkTime := reservation.ReservationTime
+		finalTime := time.Date(0, 1, 1, int(reservation.ReservationTime.Microseconds/1000000/3600), int((reservation.ReservationTime.Microseconds/1000000%3600)/60), 0, 0, time.UTC)
 		if req.Time != nil {
-			t, _ := time.Parse("15:04", *req.Time)
-			checkTime = pgtype.Time{
-				Microseconds: int64(t.Hour()*3600+t.Minute()*60) * 1000000,
-				Valid:        true,
-			}
+			finalTime, _ = time.Parse("15:04", *req.Time)
 		}
 
-		// 用餐时段时长，用于检测时间段冲突
-		checkDuration := pgtype.Interval{
-			Microseconds: ReservationDurationHours * 60 * 60 * 1000000,
-			Valid:        true,
-		}
-
-		count, err := server.store.CheckTableAvailability(ctx, db.CheckTableAvailabilityParams{
-			TableID:         checkTableID,
-			ReservationDate: checkDate,
-			Column3:         checkTime,
-			Column4:         checkDuration,
-			ID:              reservation.ID, // 排除正在修改的预定本身
-		})
+		conflict, err := server.checkReservationConflict(ctx, checkTableID, targetDate, finalTime, reservation.ID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-
-		if count > 0 {
+		if conflict {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
 			return
 		}
@@ -2401,4 +2367,36 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"reservations": resp})
+}
+
+func (server *Server) checkReservationConflict(ctx *gin.Context, tableID int64, date time.Time, newTime time.Time, excludeID int64) (bool, error) {
+	pgDate := pgtype.Date{Time: date, Valid: true}
+	reservations, err := server.store.ListReservationsByTableAndDate(ctx, db.ListReservationsByTableAndDateParams{
+		TableID:         tableID,
+		ReservationDate: pgDate,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	for _, r := range reservations {
+		if r.ID == excludeID {
+			continue
+		}
+		if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
+			continue
+		}
+		if !r.ReservationTime.Valid {
+			continue
+		}
+
+		existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+		newDateTime := time.Date(date.Year(), date.Month(), date.Day(), newTime.Hour(), newTime.Minute(), 0, 0, date.Location())
+
+		if util.AreReservationsConflicting(newDateTime, existingTime) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

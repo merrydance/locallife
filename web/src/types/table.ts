@@ -52,6 +52,7 @@ export interface CreateTableRequest {
 
 export interface UpdateTableRequest {
   table_no?: string;
+  table_type?: TableType;
   capacity?: number;
   description?: string;
   minimum_spend?: number;

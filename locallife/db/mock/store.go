@@ -728,6 +728,21 @@ func (mr *MockStoreMockRecorder) CloseDiningSession(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseDiningSession", reflect.TypeOf((*MockStore)(nil).CloseDiningSession), ctx, id)
 }
 
+// CloseDiningSessionTx mocks base method.
+func (m *MockStore) CloseDiningSessionTx(ctx context.Context, arg db.CloseDiningSessionTxParams) (db.CloseDiningSessionTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseDiningSessionTx", ctx, arg)
+	ret0, _ := ret[0].(db.CloseDiningSessionTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloseDiningSessionTx indicates an expected call of CloseDiningSessionTx.
+func (mr *MockStoreMockRecorder) CloseDiningSessionTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseDiningSessionTx", reflect.TypeOf((*MockStore)(nil).CloseDiningSessionTx), ctx, arg)
+}
+
 // CompleteDeliveryTx mocks base method.
 func (m *MockStore) CompleteDeliveryTx(ctx context.Context, arg db.CompleteDeliveryTxParams) (db.CompleteDeliveryTxResult, error) {
 	m.ctrl.T.Helper()
@@ -13297,6 +13312,21 @@ func (m *MockStore) UpdateBehaviorDecisionStatus(ctx context.Context, arg db.Upd
 func (mr *MockStoreMockRecorder) UpdateBehaviorDecisionStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBehaviorDecisionStatus", reflect.TypeOf((*MockStore)(nil).UpdateBehaviorDecisionStatus), ctx, arg)
+}
+
+// UpdateBillingGroupStatus mocks base method.
+func (m *MockStore) UpdateBillingGroupStatus(ctx context.Context, arg db.UpdateBillingGroupStatusParams) (db.BillingGroup, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateBillingGroupStatus", ctx, arg)
+	ret0, _ := ret[0].(db.BillingGroup)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateBillingGroupStatus indicates an expected call of UpdateBillingGroupStatus.
+func (mr *MockStoreMockRecorder) UpdateBillingGroupStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBillingGroupStatus", reflect.TypeOf((*MockStore)(nil).UpdateBillingGroupStatus), ctx, arg)
 }
 
 // UpdateBusinessHour mocks base method.

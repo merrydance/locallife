@@ -178,8 +178,21 @@ func (server *Server) precheckDiningSession(ctx *gin.Context) {
 		return
 	}
 
-	if activeReservation.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("table is reserved and unavailable")))
+	// 检查请求者是否为该桌商户/员工
+	isMerchant := false
+	if m, err := server.store.GetMerchant(ctx, table.MerchantID); err == nil && m.OwnerUserID == authPayload.UserID {
+		isMerchant = true
+	} else {
+		if hasAccess, err := server.store.CheckUserHasMerchantAccess(ctx, db.CheckUserHasMerchantAccessParams{
+			MerchantID: table.MerchantID,
+			UserID:     authPayload.UserID,
+		}); err == nil && hasAccess {
+			isMerchant = true
+		}
+	}
+
+	if activeReservation.UserID != authPayload.UserID && !isMerchant {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("桌位已被预约，暂时不可用")))
 		return
 	}
 
@@ -249,6 +262,19 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 		return
 	}
 
+	// 检查请求者是否为商户/员工
+	isMerchant := false
+	if m, err := server.store.GetMerchant(ctx, table.MerchantID); err == nil && m.OwnerUserID == authPayload.UserID {
+		isMerchant = true
+	} else {
+		if hasAccess, err := server.store.CheckUserHasMerchantAccess(ctx, db.CheckUserHasMerchantAccessParams{
+			MerchantID: table.MerchantID,
+			UserID:     authPayload.UserID,
+		}); err == nil && hasAccess {
+			isMerchant = true
+		}
+	}
+
 	activeReservation, err := server.findActiveReservationForTable(ctx, table.ID, now)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -273,14 +299,14 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 	}
 
 	if activeReservation != nil && (reservation == nil || activeReservation.ID != reservation.ID) {
-		if activeReservation.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("table is reserved and unavailable")))
+		if activeReservation.UserID != authPayload.UserID && !isMerchant {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该桌位已被预订，暂时不可用")))
 			return
 		}
 	}
 
 	if reservation != nil {
-		if reservation.UserID != authPayload.UserID {
+		if reservation.UserID != authPayload.UserID && !isMerchant {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
 			return
 		}
@@ -293,19 +319,28 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 			return
 		}
 
-		// 预订签到时间窗口：预订时间前后各30分钟
-		scheduledAt := combineDateAndTime(reservation.ReservationDate.Time, reservation.ReservationTime)
-		if now.Before(scheduledAt.Add(-30 * time.Minute)) {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("too early to check in for reservation")))
-			return
-		}
-		if now.After(scheduledAt.Add(30 * time.Minute)) {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation check-in window has passed")))
-			return
+		// 预订签到时间窗口：预订时间前后各30分钟 (商户操作不限制时间窗口)
+		if !isMerchant {
+			scheduledAt := util.CombineDateAndTime(reservation.ReservationDate.Time, reservation.ReservationTime.Microseconds)
+			if now.Before(scheduledAt.Add(-30 * time.Minute)) {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("too early to check in for reservation")))
+				return
+			}
+			if now.After(scheduledAt.Add(30 * time.Minute)) {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation check-in window has passed")))
+				return
+			}
 		}
 	}
 
-	if reservation == nil {
+	// 商户不能在没有预订的情况下代客开台
+	// 必须由用户扫码开台，以确保 UserID 关联到真实消费者
+	if reservation == nil && isMerchant {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("商户不能代客开台，请让客人扫码入座")))
+		return
+	}
+
+	if reservation == nil && !isMerchant {
 		if !table.AccessCodeHash.Valid || strings.TrimSpace(table.AccessCodeHash.String) == "" {
 			ctx.JSON(http.StatusConflict, errorResponse(errors.New("table access code is not configured")))
 			return
@@ -339,26 +374,40 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 		}
 	}
 	if existing, err := server.store.GetActiveDiningSessionByTable(ctx, req.TableID); err == nil {
-		// 若桌上已有开放会话但绑定的预订与请求不一致，视为冲突
-		if reservation != nil {
-			if !existing.ReservationID.Valid || existing.ReservationID.Int64 != reservation.ID {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("table already has an active session")))
+		// 自动清理当前用户未下单的残留会话
+		// 如果发现当前用户在该桌有打开的会话，但没有活动订单，视为"放弃/重开"，自动关闭旧会话以便创建新会话
+		if existing.UserID == authPayload.UserID && !existing.ActiveOrderID.Valid {
+			// 调用 CloseDiningSessionTx 关闭旧会话
+			// 注意：这里不需要检查商户权限，因为这是清理用户自己的残留
+			// 为了安全，我们还是传入 MerchantID
+			_, _ = server.store.CloseDiningSessionTx(ctx, db.CloseDiningSessionTxParams{
+				ID:         existing.ID,
+				MerchantID: existing.MerchantID,
+			})
+			// 不返回，继续执行后续创建逻辑
+		} else {
+			// 若桌上已有开放会话但绑定的预订与请求不一致，视为冲突
+			if reservation != nil {
+				if !existing.ReservationID.Valid || existing.ReservationID.Int64 != reservation.ID {
+					ctx.JSON(http.StatusConflict, errorResponse(errors.New("该桌台正有人用餐（已有活动会话）")))
+					return
+				}
+			} else if existing.ReservationID.Valid {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("该桌台正有人用餐（已有活动会话）")))
 				return
 			}
-		} else if existing.ReservationID.Valid {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("table already has an active session")))
+			// 恢复已有会话 (Resume)
+			billingGroup, err := server.getOrCreateDefaultBillingGroup(ctx, existing, authPayload.UserID)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			ctx.JSON(http.StatusOK, openDiningSessionResponse{
+				Session:      newDiningSessionResponse(existing),
+				BillingGroup: newBillingGroupResponse(billingGroup),
+			})
 			return
 		}
-		billingGroup, err := server.getOrCreateDefaultBillingGroup(ctx, existing, authPayload.UserID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		ctx.JSON(http.StatusOK, openDiningSessionResponse{
-			Session:      newDiningSessionResponse(existing),
-			BillingGroup: newBillingGroupResponse(billingGroup),
-		})
-		return
 	} else if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -421,8 +470,8 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 		})
 		if err == nil {
 			alertPayload, _ := json.Marshal(map[string]any{
-				"user_id":      authPayload.UserID,
-				"session_id":   session.ID,
+				"user_id":    authPayload.UserID,
+				"session_id": session.ID,
 				"reservation_id": func() *int64 {
 					if session.ReservationID.Valid {
 						id := session.ReservationID.Int64
@@ -430,10 +479,10 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 					}
 					return nil
 				}(),
-				"table_id":     session.TableID,
-				"merchant_id":  session.MerchantID,
-				"reason_code":  block.ReasonCode,
-				"message":      "该顾客有多次恶意索赔记录，谨慎服务",
+				"table_id":    session.TableID,
+				"merchant_id": session.MerchantID,
+				"reason_code": block.ReasonCode,
+				"message":     "该顾客有多次恶意索赔记录，谨慎服务",
 			})
 			server.wsHub.SendToMerchant(session.MerchantID, websocket.Message{
 				Type:      "merchant_user_risk_alert",
@@ -441,6 +490,17 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 				Timestamp: time.Now(),
 			})
 		}
+
+		// 推送桌台状态变更
+		tableData, _ := json.Marshal(map[string]any{
+			"id":     session.TableID,
+			"status": "occupied",
+		})
+		server.wsHub.SendToMerchant(session.MerchantID, websocket.Message{
+			Type:      "table_status_change",
+			Data:      tableData,
+			Timestamp: time.Now(),
+		})
 	}
 
 	ctx.JSON(http.StatusOK, openDiningSessionResponse{
@@ -515,25 +575,18 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 
 	isOwner := session.UserID == authPayload.UserID
 	isMerchant := false
-	if merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID); err == nil && merchant.ID == session.MerchantID {
+	// 鲁棒的商户/员工权限检查
+	if m, err := server.store.GetMerchant(ctx, session.MerchantID); err == nil && m.OwnerUserID == authPayload.UserID {
 		isMerchant = true
-	} else if err != nil && !isNotFoundError(err) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if !isMerchant {
-		if staff, err := server.store.GetMerchantStaff(ctx, db.GetMerchantStaffParams{
+	} else {
+		if hasAccess, err := server.store.CheckUserHasMerchantAccess(ctx, db.CheckUserHasMerchantAccessParams{
 			MerchantID: session.MerchantID,
 			UserID:     authPayload.UserID,
-		}); err == nil {
-			if staff.Status == "active" {
-				isMerchant = true
-			}
-		} else if !isNotFoundError(err) {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
+		}); err == nil && hasAccess {
+			isMerchant = true
 		}
 	}
+
 	if !isOwner && !isMerchant {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to transfer dining session")))
 		return
@@ -580,7 +633,7 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 	}
 	if activeReservation != nil {
 		if !session.ReservationID.Valid || activeReservation.ID != session.ReservationID.Int64 {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is reserved and unavailable")))
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("目标桌位已有其他时段的预约且不可用")))
 			return
 		}
 	}
@@ -614,22 +667,22 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, db.ErrDiningSessionNotFound):
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dining session not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("找不到就餐会话")))
 			return
 		case errors.Is(err, db.ErrDiningSessionNotOpen):
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session is not open")))
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("就餐会话未开启")))
 			return
 		case errors.Is(err, db.ErrTargetTableDisabled):
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is disabled")))
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("目标桌位已禁用")))
 			return
 		case errors.Is(err, db.ErrTargetTableOccupied):
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is occupied")))
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("目标桌台正有人用餐，请选择其他桌位")))
 			return
 		case errors.Is(err, db.ErrTargetTableReserved):
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("target table is reserved")))
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("目标桌台已被预约")))
 			return
 		case errors.Is(err, db.ErrReservationMismatch):
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation mismatch")))
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("预约记录不匹配")))
 			return
 		default:
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -661,7 +714,7 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 		})
 
 		transferPayload, _ := json.Marshal(map[string]any{
-			"session_id":   result.Session.ID,
+			"session_id":    result.Session.ID,
 			"from_table_id": result.FromTable.ID,
 			"to_table_id":   result.ToTable.ID,
 			"operator_id":   authPayload.UserID,
@@ -678,6 +731,76 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 		FromTable: newTableResponse(result.FromTable),
 		ToTable:   newTableResponse(result.ToTable),
 	})
+}
+
+type checkoutDiningSessionRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// checkoutDiningSession godoc
+// @Summary 结束就餐会话（结账离店）
+// @Description 商家手动结束就餐会话，关闭账单组并释放桌位。
+// @Tags 就餐会话
+// @Accept json
+// @Produce json
+// @Param id path int true "会话ID"
+// @Success 200 {object} diningSessionResponse "会话已关闭"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "权限不足"
+// @Failure 404 {object} ErrorResponse "找不到就餐会话"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/dining-sessions/{id}/checkout [post]
+// @Security BearerAuth
+func (server *Server) checkoutDiningSession(ctx *gin.Context) {
+	var req checkoutDiningSessionRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 获取商户信息
+	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("您不是商户，无法操作")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 调用事务关闭会话
+	result, err := server.store.CloseDiningSessionTx(ctx, db.CloseDiningSessionTxParams{
+		ID:         req.ID,
+		MerchantID: merchant.ID,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("找不到指定的就餐会话")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 推送 WebSocket 消息通知相关方桌位已释放
+	if server.wsHub != nil {
+		tableData, _ := json.Marshal(map[string]any{
+			"id":     result.Session.TableID,
+			"status": "available",
+			"event":  "session_closed",
+		})
+		server.wsHub.SendToMerchant(merchant.ID, websocket.Message{
+			Type:      "table_status_change",
+			Data:      tableData,
+			Timestamp: time.Now(),
+		})
+	}
+
+	ctx.JSON(http.StatusOK, newDiningSessionResponse(result.Session))
 }
 
 func (server *Server) getOrCreateDefaultBillingGroup(ctx *gin.Context, session db.DiningSession, userID int64) (db.BillingGroup, error) {
@@ -748,24 +871,17 @@ func (server *Server) findActiveReservationForTable(ctx *gin.Context, tableID in
 		if !r.ReservationTime.Valid {
 			continue
 		}
-		start := combineDateAndTime(r.ReservationDate.Time, r.ReservationTime)
-		windowStart := start.Add(-30 * time.Minute)
-		end := start.Add(time.Duration(ReservationDurationHours) * time.Hour)
-		if now.Before(windowStart) || now.After(end) {
+
+		resStart := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+
+		// 使用工具函数检查是否与当前时段冲突
+		if !util.IsConflictWithReservation(now, resStart) {
 			continue
 		}
+
 		res := r
 		return &res, nil
 	}
 
 	return nil, nil
-}
-
-func combineDateAndTime(d time.Time, t pgtype.Time) time.Time {
-	if !t.Valid {
-		return d
-	}
-	hours := t.Microseconds / int64(time.Microsecond) / int64(time.Hour)
-	minutes := (t.Microseconds / int64(time.Microsecond) % int64(time.Hour)) / int64(time.Minute)
-	return time.Date(d.Year(), d.Month(), d.Day(), int(hours), int(minutes), 0, 0, d.Location())
 }

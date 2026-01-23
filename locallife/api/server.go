@@ -633,6 +633,7 @@ func (server *Server) setupRouter() {
 		diningSessionsGroup.GET("/precheck", server.precheckDiningSession)
 		diningSessionsGroup.POST("/open", server.openDiningSession)
 		diningSessionsGroup.POST("/:id/transfer-table", server.transferDiningSessionTable)
+		diningSessionsGroup.POST("/:id/checkout", server.checkoutDiningSession)
 	}
 
 	// 账单组

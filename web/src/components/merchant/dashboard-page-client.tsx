@@ -17,6 +17,11 @@ import {
   Search,
   Users,
   XCircle,
+  Clock,
+  Calendar,
+  Phone,
+  Sparkles,
+  ArrowRightLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -82,6 +87,13 @@ export type DashboardTable = {
     guest_count: number;
     reservation_time: string;
     notes?: string;
+  };
+  todayReservation?: {
+    id: number;
+    contact_name: string;
+    contact_phone: string;
+    reservation_time: string;
+    guest_count: number;
   };
   tags?: Array<{ id: number; name: string }>;
 };
@@ -161,12 +173,27 @@ export function DashboardPageClient({
         occupied: tables.filter((t) => t.status === "occupied").length,
       });
 
+      const resResp = await apiGet<{ reservations: any[] }>("/reservations/merchant/today");
+      const dayReservations = resResp.reservations || [];
+      const nowTimeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
       // Group tables
       const grouped = new Map<string, DashboardTable[]>();
       tables.forEach((table) => {
         const type = table.table_type || "table";
         if (!grouped.has(type)) grouped.set(type, []);
-        grouped.get(type)!.push(table);
+        
+        // Find nearest upcoming reservation
+        const tableDayRes = dayReservations
+          .filter(r => r.table_id === table.id)
+          .sort((a, b) => a.reservation_time.localeCompare(b.reservation_time));
+        
+        const nextRes = tableDayRes.find(r => r.reservation_time >= nowTimeStr) || tableDayRes[0];
+        
+        grouped.get(type)!.push({
+          ...table,
+          todayReservation: nextRes
+        });
       });
 
       const nextGroups = [] as DashboardTableGroup[];
@@ -367,13 +394,16 @@ export function DashboardPageClient({
     if (!activeTable) return;
     setLoadingTableStatus(status);
     try {
+      // 注意：商户只能将桌台设为空闲（清台），不能开台
+      // 开台操作只能由用户扫码完成
       const updated = await apiPatch<DashboardTable>(
         `/tables/${activeTable.id}/status`,
         { status }
       );
       applyTableSnapshot(updated);
-    } catch {
-      toast.error("更新桌台状态失败，请稍后重试");
+      toast.success(`桌台状态已更新为 ${TABLE_STATUS_MAP[status]?.label || status}`);
+    } catch (error: any) {
+      toast.error(error.message || "操作失败，请重试");
     } finally {
       setLoadingTableStatus(null);
       setActiveTable(null);
@@ -597,20 +627,22 @@ export function DashboardPageClient({
                           const typeInfo = TABLE_TYPE_MAP[table.table_type || "table"] || TABLE_TYPE_MAP.table;
                           const StatusIcon = statusInfo.icon;
                           const TypeIcon = typeInfo.icon;
+                          const isOccupied = table.status === 'occupied';
 
                           return (
                             <div
                               key={table.id}
                               className={cn(
-                                "group bg-white rounded-xl border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-primary/30 cursor-pointer overflow-hidden relative",
-                                table.status === 'disabled' && "opacity-60 grayscale-[0.5]"
+                                "group bg-white rounded-xl border shadow-sm transition-all hover:shadow-md cursor-pointer overflow-hidden relative flex flex-col",
+                                table.status === 'disabled' && "opacity-60 grayscale-[0.5]",
+                                isOccupied ? "border-primary/30" : "border-slate-200 hover:border-primary/30"
                               )}
                               onClick={() => setActiveTable(table)}
                             >
                               {/* Top status bar */}
                               <div className={cn("absolute top-0 left-0 right-0 h-1", statusInfo.colorClass)} />
                               
-                              <div className="p-3 pt-4">
+                              <div className="p-3 pt-4 flex-1">
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="space-y-0.5">
                                     <div className="flex items-center gap-2">
@@ -657,11 +689,74 @@ export function DashboardPageClient({
                                       {table.current_reservation.contact_name} ({table.current_reservation.guest_count}人)
                                     </div>
                                   </div>
+                                ) : table.todayReservation ? (
+                                  <div className="mt-2 p-2 bg-slate-50 rounded-lg border border-slate-100 group-hover:border-primary/20 transition-colors">
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 group-hover:text-primary/70">
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="h-2.5 w-2.5" />
+                                        今日预约
+                                      </span>
+                                      <span>{table.todayReservation.reservation_time}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-0.5">
+                                      <div className="text-[10px] text-slate-600 font-bold truncate">
+                                        {table.todayReservation.contact_name} · {table.todayReservation.guest_count}人
+                                      </div>
+                                      <div className="text-[9px] text-slate-400 font-medium">
+                                        {table.todayReservation.contact_phone}
+                                      </div>
+                                    </div>
+                                  </div>
                                 ) : (
                                   <div className="mt-2 h-[38px] flex items-center justify-center border border-dashed border-slate-200 rounded-lg opacity-40">
-                                     <span className="text-[9px] text-slate-400">目前无预约</span>
+                                     <span className="text-[9px] text-slate-400">今日暂无预订</span>
                                   </div>
                                 )}
+                              </div>
+
+                              {/* Actions Footer */}
+                              <div className="p-2 bg-slate-50 border-t flex gap-1.5">
+                                {isOccupied && (
+                                  <>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm" 
+                                      className="flex-1 h-7 text-[10px] font-bold rounded-md border-primary/20 text-primary hover:bg-primary/5"
+                                      onClick={(e) => { e.stopPropagation(); setActiveTable(table); }}
+                                    >
+                                      清台
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      className="h-7 px-2 text-[10px] font-medium text-amber-600 hover:bg-amber-50 rounded-md"
+                                      onClick={(e) => { e.stopPropagation(); window.location.href = `/merchant/dinein?transfer=${table.id}`; }}
+                                    >
+                                      <ArrowRightLeft className="size-3 mr-0.5" /> 换桌
+                                    </Button>
+                                  </>
+                                )}
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className={cn(
+                                    "h-7 px-2 text-[10px] font-medium rounded-md",
+                                    isOccupied 
+                                      ? "text-slate-400 hover:bg-slate-100" 
+                                      : "flex-1 text-slate-500 hover:bg-slate-100"
+                                  )}
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    apiPatch(`/tables/${table.id}/status`, { status: 'available' })
+                                      .then(() => {
+                                        toast.success(`桌台 ${table.table_no} 已完成清扫`);
+                                        loadTables();
+                                      })
+                                      .catch((err: any) => toast.error(err.message || "操作失败"));
+                                  }}
+                                >
+                                  <Sparkles className="size-3 mr-0.5" /> 清扫
+                                </Button>
                               </div>
                             </div>
                           );
@@ -740,25 +835,28 @@ export function DashboardPageClient({
               ) : null}
             </div>
             <div className="flex flex-col gap-2 px-4 py-4">
-              {activeTable.status !== "available" ? (
+              {activeTable.status === "occupied" ? (
                 <Button
                   className="w-full"
                   onClick={() => updateTableStatus("available")}
                   disabled={loadingTableStatus !== null}
                 >
-                  设为空闲（离场）
+                  清台结账
                 </Button>
-              ) : null}
-              {activeTable.status !== "occupied" ? (
+              ) : activeTable.status !== "available" ? (
                 <Button
                   className="w-full"
-                  variant="outline"
-                  onClick={() => updateTableStatus("occupied")}
+                  variant="secondary"
+                  onClick={() => updateTableStatus("available")}
                   disabled={loadingTableStatus !== null}
                 >
-                  设为就餐中
+                  <Sparkles className="size-4 mr-2" /> 完成清扫
                 </Button>
-              ) : null}
+              ) : (
+                <div className="text-center text-sm text-muted-foreground py-2">
+                  桌台空闲，等待客人扫码入座
+                </div>
+              )}
               <Button asChild variant="outline" className="w-full">
                 <Link
                   href={`/merchant/reservations?tableId=${activeTable.id}&openAdd=true`}

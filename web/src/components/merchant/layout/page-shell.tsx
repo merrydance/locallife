@@ -34,7 +34,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b bg-card/80 px-6 py-4 backdrop-blur",
+        "sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b bg-card/80 px-6 py-4 backdrop-blur max-w-full",
         className
       )}
     >
@@ -61,7 +61,7 @@ interface PageContentProps {
 
 export function PageContent({ children, className }: PageContentProps) {
   return (
-    <main className={cn("flex-1 space-y-6 px-6 py-6", className)}>
+    <main className={cn("flex-1 space-y-6 px-6 py-6 min-w-0", className)}>
       {children}
     </main>
   );

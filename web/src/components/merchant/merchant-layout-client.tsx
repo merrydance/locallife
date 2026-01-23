@@ -41,10 +41,12 @@ export function MerchantLayoutClient({
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <div className="flex min-h-screen">
         <MerchantSidebar />
-        <div className="flex flex-1 flex-col">{children}</div>
+        <div className="flex flex-1 flex-col min-w-0">
+          {children}
+        </div>
       </div>
     </div>
   );

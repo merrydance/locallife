@@ -47,6 +47,7 @@ ORDER BY table_no;
 -- name: UpdateTable :one
 UPDATE tables
 SET table_no = COALESCE(sqlc.narg(table_no), table_no),
+    table_type = COALESCE(sqlc.narg(table_type), table_type),
     capacity = COALESCE(sqlc.narg(capacity), capacity),
     description = COALESCE(sqlc.narg(description), description),
     minimum_spend = COALESCE(sqlc.narg(minimum_spend), minimum_spend),

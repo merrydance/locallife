@@ -58,3 +58,10 @@ RETURNING *;
 SELECT * FROM billing_group_orders
 WHERE billing_group_id = $1
 ORDER BY id ASC;
+
+-- name: UpdateBillingGroupStatus :one
+UPDATE billing_groups
+SET status = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;

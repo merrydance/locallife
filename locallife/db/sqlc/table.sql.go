@@ -1380,19 +1380,21 @@ func (q *Queries) SetTableImagePrimary(ctx context.Context, id int64) (TableImag
 const updateTable = `-- name: UpdateTable :one
 UPDATE tables
 SET table_no = COALESCE($1, table_no),
-    capacity = COALESCE($2, capacity),
-    description = COALESCE($3, description),
-    minimum_spend = COALESCE($4, minimum_spend),
-    qr_code_url = COALESCE($5, qr_code_url),
-  access_code_hash = COALESCE($6, access_code_hash),
-    status = COALESCE($7, status),
+    table_type = COALESCE($2, table_type),
+    capacity = COALESCE($3, capacity),
+    description = COALESCE($4, description),
+    minimum_spend = COALESCE($5, minimum_spend),
+    qr_code_url = COALESCE($6, qr_code_url),
+  access_code_hash = COALESCE($7, access_code_hash),
+    status = COALESCE($8, status),
     updated_at = now()
-WHERE id = $8
+WHERE id = $9
 RETURNING id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash
 `
 
 type UpdateTableParams struct {
 	TableNo        pgtype.Text `json:"table_no"`
+	TableType      pgtype.Text `json:"table_type"`
 	Capacity       pgtype.Int2 `json:"capacity"`
 	Description    pgtype.Text `json:"description"`
 	MinimumSpend   pgtype.Int8 `json:"minimum_spend"`
@@ -1405,6 +1407,7 @@ type UpdateTableParams struct {
 func (q *Queries) UpdateTable(ctx context.Context, arg UpdateTableParams) (Table, error) {
 	row := q.db.QueryRow(ctx, updateTable,
 		arg.TableNo,
+		arg.TableType,
 		arg.Capacity,
 		arg.Description,
 		arg.MinimumSpend,

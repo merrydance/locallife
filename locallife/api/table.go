@@ -273,10 +273,10 @@ type listTablesRequest struct {
 }
 
 type listTablesResponse struct {
-	Tables []tableResponse `json:"tables"`
-	Count  int64           `json:"count"`
-	Total  int64           `json:"total"`
-	TotalCount int64       `json:"total_count"`
+	Tables     []tableResponse `json:"tables"`
+	Count      int64           `json:"count"`
+	Total      int64           `json:"total"`
+	TotalCount int64           `json:"total_count"`
 }
 
 // listTables godoc
@@ -328,9 +328,9 @@ func (server *Server) listTables(ctx *gin.Context) {
 	}
 
 	resp := listTablesResponse{
-		Tables: make([]tableResponse, len(tables)),
-		Count:  int64(len(tables)),
-		Total:  int64(len(tables)),
+		Tables:     make([]tableResponse, len(tables)),
+		Count:      int64(len(tables)),
+		Total:      int64(len(tables)),
 		TotalCount: int64(len(tables)),
 	}
 	for i, t := range tables {
@@ -488,6 +488,7 @@ func (server *Server) listMerchantRoomsForCustomer(ctx *gin.Context) {
 
 type updateTableRequest struct {
 	TableNo      *string `json:"table_no,omitempty" binding:"omitempty,max=50"`
+	TableType    *string `json:"table_type,omitempty" binding:"omitempty,oneof=table room"`
 	Capacity     *int16  `json:"capacity,omitempty" binding:"omitempty,min=1,max=100"`
 	Description  *string `json:"description,omitempty" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
@@ -562,6 +563,9 @@ func (server *Server) updateTable(ctx *gin.Context) {
 
 	if req.TableNo != nil {
 		arg.TableNo = pgtype.Text{String: *req.TableNo, Valid: true}
+	}
+	if req.TableType != nil {
+		arg.TableType = pgtype.Text{String: *req.TableType, Valid: true}
 	}
 	if req.Capacity != nil {
 		arg.Capacity = pgtype.Int2{Int16: *req.Capacity, Valid: true}
@@ -679,6 +683,41 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 	if table.MerchantID != merchant.ID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("table does not belong to your merchant")))
 		return
+	}
+
+	// 特殊处理：如果请求将桌台设为空闲(available)，尝试查找并关闭关联的就餐会话
+	// 这是为了修复前端可能直接调用此接口而没有调用 CloseDiningSessionTx 导致的会话残留问题
+	if req.Status == "available" {
+		session, err := server.store.GetActiveDiningSessionByTable(ctx, uriReq.ID)
+		if err == nil && session.MerchantID == merchant.ID {
+			// 找到活动会话，使用事务进行完整关闭（含释放桌台、结算）
+			_, err = server.store.CloseDiningSessionTx(ctx, db.CloseDiningSessionTxParams{
+				ID:         session.ID,
+				MerchantID: merchant.ID,
+			})
+			if err == nil {
+				// 成功关闭后，重新获取桌台信息返回
+				updatedTable, err := server.store.GetTable(ctx, uriReq.ID)
+				if err == nil {
+					// WebSocket 推送
+					if server.wsHub != nil {
+						tableData, _ := json.Marshal(map[string]any{
+							"id":       updatedTable.ID,
+							"table_no": updatedTable.TableNo,
+							"status":   updatedTable.Status,
+						})
+						server.wsHub.SendToMerchant(merchant.ID, websocket.Message{
+							Type:      "table_status_change",
+							Data:      tableData,
+							Timestamp: time.Now(),
+						})
+					}
+					ctx.JSON(http.StatusOK, newTableResponse(updatedTable))
+					return
+				}
+			}
+			// 如果关闭会话失败（例如已关闭），则继续执行后续的强制更新桌台状态逻辑作为兜底
+		}
 	}
 
 	// 构建更新参数

@@ -9,7 +9,6 @@ import { apiPost } from "@/lib/api";
 export function DiningSessionActions() {
   const [loading, setLoading] = useState<string | null>(null);
   const [precheckTableId, setPrecheckTableId] = useState("");
-  const [openTableId, setOpenTableId] = useState("");
   const [transferSessionId, setTransferSessionId] = useState("");
   const [transferTableId, setTransferTableId] = useState("");
   const [reason, setReason] = useState("");
@@ -52,28 +51,7 @@ export function DiningSessionActions() {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">开台</p>
-        <div className="flex flex-wrap gap-2">
-          <Input
-            placeholder="桌台 ID"
-            value={openTableId}
-            onChange={(event) => setOpenTableId(event.target.value)}
-            className="w-32"
-          />
-          <Button
-            size="sm"
-            disabled={!openTableId || !!loading}
-            onClick={() =>
-              call("/dining-sessions/open", {
-                table_id: Number(openTableId),
-              })
-            }
-          >
-            开台
-          </Button>
-        </div>
-      </div>
+      {/* 开台功能已移除 - 开台只能由用户扫码完成 */}
 
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">转台</p>

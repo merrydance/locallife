@@ -86,10 +86,10 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			}
 			reservationID := paymentOrder.ReservationID.Int64
 			if _, err := q.CreateReservationPayment(ctx, CreateReservationPaymentParams{
-				ReservationID: reservationID,
+				ReservationID:  reservationID,
 				PaymentOrderID: paymentOrder.ID,
-				Amount:        paymentOrder.Amount,
-				Type:          "reservation",
+				Amount:         paymentOrder.Amount,
+				Type:           "reservation",
 			}); err != nil {
 				if !errors.Is(err, ErrRecordNotFound) {
 					return fmt.Errorf("create reservation payment: %w", err)
@@ -113,10 +113,10 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			}
 			reservationID := paymentOrder.ReservationID.Int64
 			if _, err := q.CreateReservationPayment(ctx, CreateReservationPaymentParams{
-				ReservationID: reservationID,
+				ReservationID:  reservationID,
 				PaymentOrderID: paymentOrder.ID,
-				Amount:        paymentOrder.Amount,
-				Type:          "addon",
+				Amount:         paymentOrder.Amount,
+				Type:           "addon",
 			}); err != nil {
 				if !errors.Is(err, ErrRecordNotFound) {
 					return fmt.Errorf("create reservation addon payment: %w", err)
@@ -125,7 +125,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			}
 
 			if _, err := q.AddReservationPrepaidAmount(ctx, AddReservationPrepaidAmountParams{
-				ID:     reservationID,
+				ID:            reservationID,
 				PrepaidAmount: paymentOrder.Amount,
 			}); err != nil {
 				return fmt.Errorf("add reservation prepaid amount: %w", err)
@@ -192,8 +192,13 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 
 		case "order":
 			if !paymentOrder.OrderID.Valid {
-				return fmt.Errorf("order_id is required")
+				// 容错处理：如果 order_id 缺失，不返回错误以避免无限重试，直接跳过处理标记为已完成
+				return nil
 			}
+
+			// 如果是预定关联的订单，需要先确保关联的会话信息正确
+			// 某些情况下（如下单未支付时），会话可能未正确关联订单
+			// 这里不做强校验，由 processOrderPaymentWithQueries 处理业务逻辑
 
 			orderResult, err := processOrderPaymentWithQueries(ctx, q, paymentOrder.OrderID.Int64)
 			if err != nil {

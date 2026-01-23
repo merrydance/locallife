@@ -17,6 +17,17 @@ type OpenDiningSessionTxParams struct {
 	ActivateOrder          *ActivateOrderInput
 }
 
+// CloseDiningSessionTxParams bundles inputs for closing a dining session transactionally.
+type CloseDiningSessionTxParams struct {
+	ID         int64
+	MerchantID int64
+}
+
+// CloseDiningSessionTxResult captures the side effects of the transaction.
+type CloseDiningSessionTxResult struct {
+	Session DiningSession
+}
+
 // ActivateOrderInput describes an order update when binding to a session.
 type ActivateOrderInput struct {
 	OrderID              int64
@@ -148,8 +159,99 @@ func (store *SQLStore) OpenDiningSessionTx(ctx context.Context, arg OpenDiningSe
 			}
 		}
 
+		// 5) Update table status to occupied
+		_, err = q.UpdateTableStatus(ctx, UpdateTableStatusParams{
+			ID:                   arg.TableID,
+			Status:               "occupied",
+			CurrentReservationID: arg.ReservationID,
+		})
+		if err != nil {
+			return fmt.Errorf("update table status to occupied: %w", err)
+		}
+
 		return nil
 	})
 
 	return result, err
+}
+
+// CloseDiningSessionTx performs closure of the dining session, updates table status,
+// and closes all associated billing groups.
+func (store *SQLStore) CloseDiningSessionTx(ctx context.Context, arg CloseDiningSessionTxParams) (CloseDiningSessionTxResult, error) {
+	var result CloseDiningSessionTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		session, err := closeDiningSessionInternal(ctx, q, arg.ID, arg.MerchantID)
+		if err != nil {
+			return err
+		}
+		result.Session = session
+		return nil
+	})
+
+	return result, err
+}
+
+func closeDiningSessionInternal(ctx context.Context, q *Queries, sessionID int64, merchantID int64) (DiningSession, error) {
+	// 1) Get dining session
+	session, err := q.GetDiningSession(ctx, sessionID)
+	if err != nil {
+		return DiningSession{}, fmt.Errorf("get dining session: %w", err)
+	}
+
+	if session.MerchantID != merchantID {
+		return DiningSession{}, fmt.Errorf("dining session does not belong to this merchant")
+	}
+
+	if session.Status == "closed" {
+		return session, nil
+	}
+
+	// 2) Close dining session
+	session, err = q.CloseDiningSession(ctx, sessionID)
+	if err != nil {
+		return DiningSession{}, fmt.Errorf("close dining session: %w", err)
+	}
+
+	// 3) Close all billing groups associated with this session
+	groups, err := q.ListBillingGroupsBySession(ctx, sessionID)
+	if err != nil {
+		return DiningSession{}, fmt.Errorf("list billing groups: %w", err)
+	}
+
+	for _, group := range groups {
+		if group.Status != "closed" {
+			_, err = q.UpdateBillingGroupStatus(ctx, UpdateBillingGroupStatusParams{
+				ID:     group.ID,
+				Status: "closed",
+			})
+			if err != nil {
+				return DiningSession{}, fmt.Errorf("close billing group %d: %w", group.ID, err)
+			}
+		}
+	}
+
+	// 4) Update table status to available
+	table, err := q.GetTable(ctx, session.TableID)
+	if err != nil {
+		return DiningSession{}, fmt.Errorf("get table: %w", err)
+	}
+
+	// If the table was occupied for a specific reservation, and that reservation is now done,
+	// we should clear CurrentReservationID if it matches Session.ReservationID.
+	newReservationID := table.CurrentReservationID
+	if session.ReservationID.Valid && table.CurrentReservationID.Valid && session.ReservationID.Int64 == table.CurrentReservationID.Int64 {
+		newReservationID = pgtype.Int8{Valid: false}
+	}
+
+	_, err = q.UpdateTableStatus(ctx, UpdateTableStatusParams{
+		ID:                   session.TableID,
+		Status:               "available",
+		CurrentReservationID: newReservationID,
+	})
+	if err != nil {
+		return DiningSession{}, fmt.Errorf("update table status to available: %w", err)
+	}
+
+	return session, nil
 }

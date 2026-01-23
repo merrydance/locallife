@@ -1312,6 +1312,7 @@ type Querier interface {
 	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error
 	UpdateBehaviorBlocklistStatus(ctx context.Context, arg UpdateBehaviorBlocklistStatusParams) error
 	UpdateBehaviorDecisionStatus(ctx context.Context, arg UpdateBehaviorDecisionStatusParams) error
+	UpdateBillingGroupStatus(ctx context.Context, arg UpdateBillingGroupStatusParams) (BillingGroup, error)
 	UpdateBusinessHour(ctx context.Context, arg UpdateBusinessHourParams) (MerchantBusinessHour, error)
 	UpdateCartItem(ctx context.Context, arg UpdateCartItemParams) (CartItem, error)
 	UpdateClaimLookbackResult(ctx context.Context, arg UpdateClaimLookbackResultParams) error
