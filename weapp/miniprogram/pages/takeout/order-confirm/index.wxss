@@ -264,3 +264,27 @@
 .submit-btn {
   width: 260rpx; /* 适当收窄，比例更和谐 */
 }
+
+/* 套餐组合图 - Grid系统 */
+.combo-image-grid {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--td-bg-color-secondarycontainer);
+  display: grid;
+  gap: 1rpx;
+  flex-shrink: 0;
+}
+
+.grid-count-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.grid-count-2 { grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr; }
+.grid-count-3 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+.grid-count-3 .grid-img:first-child { grid-column: span 2; }
+.grid-count-4 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+
+.grid-img {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}

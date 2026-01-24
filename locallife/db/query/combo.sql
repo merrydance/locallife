@@ -315,7 +315,7 @@ SELECT
         ), 0
     )::int AS monthly_sales,
     -- Distance Calculation
-    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+    COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 9999999)::float8 AS distance,
     COALESCE(
       (SELECT json_agg(t.name)
        FROM combo_tags ct

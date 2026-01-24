@@ -4,7 +4,7 @@ import { Category } from '../../models/category'
 import { searchDishes, DishSummary, getTags, DishSearchParams, ComboSummary, getRecommendedCombos } from '../../api/dish'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
-import { searchMerchants, MerchantSummary } from '../../api/merchant'
+import { searchMerchants, MerchantSummary, getPublicMerchantCombos, getPublicMerchantDishes } from '../../api/merchant'
 import { searchCombos, SearchComboItem } from '../../api/combo'
 import { enrichMerchantsWithDistance } from '../../utils/geo'
 import Navigation from '../../utils/navigation'
@@ -57,6 +57,7 @@ interface PackageViewModel {
   tags: string[]
   merchantIsOpen: boolean
   estimatedDeliveryTime?: number
+  dishImages?: string[]
 }
 
 Page({
@@ -657,6 +658,10 @@ Page({
           hasMore
         })
       }
+
+      // 异步解析套餐组合图
+      this.resolveComboImages()
+
     } catch (error) {
       logger.error('加载套餐失败', error, 'Takeout.loadPackages')
       throw error
@@ -997,5 +1002,87 @@ Page({
     this.loadData().then(() => {
       wx.stopPullDownRefresh()
     })
+  },
+
+  /**
+   * 异步解析套餐组合图 (针对套餐列表)
+   */
+  async resolveComboImages() {
+    const { packages, activeTab } = this.data
+    if (activeTab !== 'packages' || packages.length === 0) return
+
+    const merchantIdsForCombos = new Set<number>()
+    const comboIdsToMap = new Set<number>()
+
+    // 1. 收集需要解析的 ID
+    packages.forEach(pkg => {
+      if (!pkg.dishImages) {
+        merchantIdsForCombos.add(pkg.merchantId)
+        comboIdsToMap.add(pkg.id)
+      }
+    })
+
+    if (merchantIdsForCombos.size === 0) return
+
+    // 2. 并行获取商户详情以提取菜品图
+    const comboCache = new Map<number, any>()
+    const fetchPromises: Promise<any>[] = []
+    
+    Array.from(merchantIdsForCombos).forEach(mid => {
+      fetchPromises.push(Promise.all([
+        getPublicMerchantCombos(mid),
+        getPublicMerchantDishes(mid)
+      ]).then(([combosRes, dishesRes]) => {
+        const merchantDishes = dishesRes.dishes || []
+        if (combosRes.combos) {
+          combosRes.combos.forEach((c: any) => {
+            if (comboIdsToMap.has(c.id)) {
+              // 注入菜品图片
+              const dishImages = (c.dishes || [])
+                .map((cd: any) => {
+                  const dish = merchantDishes.find((d: any) => d.id === cd.dish_id);
+                  return dish?.image_url;
+                })
+                .filter(Boolean)
+                .map((url: string) => getPublicImageUrl(url));
+              
+              comboCache.set(c.id, { ...c, dishImages });
+            }
+          })
+        }
+      }).catch((err: any) => {
+        logger.warn('Resolve packages failed for merchant', { mid, err })
+      }))
+    })
+
+    await Promise.all(fetchPromises)
+
+    // 3. 应用结果
+    let hasUpdates = false
+    const updatedPackages = packages.map(pkg => {
+      // 只有在还没有解析过或者是重新加载时才更新
+      if (comboCache.has(pkg.id)) {
+        const combo = comboCache.get(pkg.id)
+        let resolvedImages = (combo.dishImages || []) as string[]
+        
+        // 如果解析出来的菜品图太少，或者为了美观，把封面的套餐图也加进去
+        if (resolvedImages.length > 0 && resolvedImages.length < 4) {
+             // 检查封面图是否有效且不在列表中
+             if (pkg.imageUrl && !pkg.imageUrl.includes('placeholder') && !resolvedImages.includes(pkg.imageUrl)) {
+                 resolvedImages = [pkg.imageUrl, ...resolvedImages].slice(0, 4)
+             }
+        }
+
+        if (resolvedImages.length > 0) {
+          hasUpdates = true
+          return { ...pkg, dishImages: resolvedImages }
+        }
+      }
+      return pkg
+    })
+
+    if (hasUpdates) {
+      this.setData({ packages: updatedPackages })
+    }
   }
 })

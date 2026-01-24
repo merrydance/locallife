@@ -1,5 +1,19 @@
 <view class="package-card" bindtap="onTap">
-  <t-image class="package-image" src="{{package.imageUrl}}" mode="aspectFill" lazy />
+  <!-- 组合图系统 -->
+  <view wx:if="{{package.dishImages && package.dishImages.length > 0}}" class="combo-image-grid grid-count-{{package.dishImages.length > 4 ? 4 : package.dishImages.length}}">
+    <t-image 
+      wx:for="{{package.dishImages}}" 
+      wx:for-item="img" 
+      wx:for-index="imgIdx"
+      wx:if="{{imgIdx < 4}}"
+      wx:key="*this"
+      class="grid-img" 
+      src="{{img}}" 
+      mode="aspectFill" 
+      lazy 
+    />
+  </view>
+  <t-image wx:else class="package-image" src="{{package.imageUrl}}" mode="aspectFill" lazy />
   <view class="package-info">
     <view class="row-1">
       <text class="shop-dish-name">{{package.merchantName}}·{{package.name}}</text>

@@ -50,7 +50,21 @@
         <view class="items-list">
           <block wx:for="{{item.items || []}}" wx:key="id" wx:for-item="cartItem">
             <view class="item-row">
-              <t-image class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" lazy />
+              <!-- 组合图系统 -->
+              <view wx:if="{{cartItem.dishImages && cartItem.dishImages.length > 0}}" class="combo-image-grid grid-count-{{cartItem.dishImages.length > 4 ? 4 : cartItem.dishImages.length}}">
+                <t-image 
+                  wx:for="{{cartItem.dishImages}}" 
+                  wx:for-item="img" 
+                  wx:for-index="imgIdx"
+                  wx:if="{{imgIdx < 4}}"
+                  wx:key="*this"
+                  class="grid-img" 
+                  src="{{img}}" 
+                  mode="aspectFill" 
+                  lazy 
+                />
+              </view>
+              <t-image wx:else class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" lazy />
               <view class="item-info">
                 <text class="item-name">{{cartItem.name}}</text>
               </view>
