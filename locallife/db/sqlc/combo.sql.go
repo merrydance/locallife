@@ -682,15 +682,22 @@ func (q *Queries) ListComboTags(ctx context.Context, comboID int64) ([]Tag, erro
 
 const listOnlineCombosByMerchant = `-- name: ListOnlineCombosByMerchant :many
 SELECT 
-    id,
-    merchant_id,
-    name,
-    description,
-    image_url,
-    original_price,
-    combo_price AS price,
-    is_online
-FROM combo_sets
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_url,
+    cs.original_price,
+    cs.combo_price AS price,
+    cs.is_online,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
+FROM combo_sets cs
 WHERE merchant_id = $1
   AND deleted_at IS NULL
   AND is_online = true
@@ -706,6 +713,7 @@ type ListOnlineCombosByMerchantRow struct {
 	OriginalPrice int64       `json:"original_price"`
 	Price         int64       `json:"price"`
 	IsOnline      bool        `json:"is_online"`
+	Tags          interface{} `json:"tags"`
 }
 
 // 获取商户上架套餐（用于扫码点餐菜单展示）
@@ -727,6 +735,7 @@ func (q *Queries) ListOnlineCombosByMerchant(ctx context.Context, merchantID int
 			&i.OriginalPrice,
 			&i.Price,
 			&i.IsOnline,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -859,7 +868,14 @@ SELECT
         ), 0
     )::int AS monthly_sales,
     -- Distance Calculation
-    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
 FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
 LEFT JOIN LATERAL (
@@ -918,6 +934,7 @@ type SearchCombosGlobalRow struct {
 	MerchantIsOpen    bool           `json:"merchant_is_open"`
 	MonthlySales      int32          `json:"monthly_sales"`
 	Distance          float64        `json:"distance"`
+	Tags              interface{}    `json:"tags"`
 }
 
 // Consumer-Facing Global Combo Search
@@ -958,6 +975,7 @@ func (q *Queries) SearchCombosGlobal(ctx context.Context, arg SearchCombosGlobal
 			&i.MerchantIsOpen,
 			&i.MonthlySales,
 			&i.Distance,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}

@@ -1549,7 +1549,41 @@ SELECT
     d.price,
     d.member_price,
     d.is_available,
-    d.sort_order
+    d.sort_order,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM dish_tags dt
+       JOIN tags t ON dt.tag_id = t.id
+       WHERE dt.dish_id = d.id),
+      '[]'
+    ) as tags,
+    COALESCE(
+      (SELECT json_agg(
+        json_build_object(
+          'id', dcg.id,
+          'name', dcg.name,
+          'is_required', dcg.is_required,
+          'sort_order', dcg.sort_order,
+          'options', (
+            SELECT json_agg(
+              json_build_object(
+                'id', dco.id,
+                'tag_id', dco.tag_id,
+                'tag_name', opt_tag.name,
+                'extra_price', dco.extra_price,
+                'sort_order', dco.sort_order
+              ) ORDER BY dco.sort_order
+            )
+            FROM dish_customization_options dco
+            JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+            WHERE dco.group_id = dcg.id
+          )
+        ) ORDER BY dcg.sort_order
+       )
+       FROM dish_customization_groups dcg
+       WHERE dcg.dish_id = d.id),
+      '[]'
+    ) as customization_groups
 FROM dishes d
 WHERE d.merchant_id = $1
   AND d.is_online = true
@@ -1558,15 +1592,17 @@ ORDER BY d.category_id, d.sort_order ASC, d.id ASC
 `
 
 type ListDishesForMenuRow struct {
-	ID          int64       `json:"id"`
-	CategoryID  pgtype.Int8 `json:"category_id"`
-	Name        string      `json:"name"`
-	Description pgtype.Text `json:"description"`
-	ImageUrl    pgtype.Text `json:"image_url"`
-	Price       int64       `json:"price"`
-	MemberPrice pgtype.Int8 `json:"member_price"`
-	IsAvailable bool        `json:"is_available"`
-	SortOrder   int16       `json:"sort_order"`
+	ID                  int64       `json:"id"`
+	CategoryID          pgtype.Int8 `json:"category_id"`
+	Name                string      `json:"name"`
+	Description         pgtype.Text `json:"description"`
+	ImageUrl            pgtype.Text `json:"image_url"`
+	Price               int64       `json:"price"`
+	MemberPrice         pgtype.Int8 `json:"member_price"`
+	IsAvailable         bool        `json:"is_available"`
+	SortOrder           int16       `json:"sort_order"`
+	Tags                interface{} `json:"tags"`
+	CustomizationGroups interface{} `json:"customization_groups"`
 }
 
 // 获取商户上架菜品（用于扫码点餐菜单展示）
@@ -1589,6 +1625,8 @@ func (q *Queries) ListDishesForMenu(ctx context.Context, merchantID int64) ([]Li
 			&i.MemberPrice,
 			&i.IsAvailable,
 			&i.SortOrder,
+			&i.Tags,
+			&i.CustomizationGroups,
 		); err != nil {
 			return nil, err
 		}
@@ -1753,7 +1791,41 @@ SELECT
   m.region_id AS merchant_region_id,
   m.latitude AS merchant_latitude,
   m.longitude AS merchant_longitude,
-  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM dish_tags dt
+     JOIN tags t ON dt.tag_id = t.id
+     WHERE dt.dish_id = d.id),
+    '[]'
+  ) as tags,
+  COALESCE(
+    (SELECT json_agg(
+      json_build_object(
+        'id', dcg.id,
+        'name', dcg.name,
+        'is_required', dcg.is_required,
+        'sort_order', dcg.sort_order,
+        'options', (
+          SELECT json_agg(
+            json_build_object(
+              'id', dco.id,
+              'tag_id', dco.tag_id,
+              'tag_name', opt_tag.name,
+              'extra_price', dco.extra_price,
+              'sort_order', dco.sort_order
+            ) ORDER BY dco.sort_order
+          )
+          FROM dish_customization_options dco
+          JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+          WHERE dco.group_id = dcg.id
+        )
+      ) ORDER BY dcg.sort_order
+     )
+     FROM dish_customization_groups dcg
+     WHERE dcg.dish_id = d.id),
+    '[]'
+  ) as customization_groups
 FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
@@ -1789,30 +1861,32 @@ type SearchDishesGlobalParams struct {
 }
 
 type SearchDishesGlobalRow struct {
-	ID                int64              `json:"id"`
-	MerchantID        int64              `json:"merchant_id"`
-	CategoryID        pgtype.Int8        `json:"category_id"`
-	Name              string             `json:"name"`
-	Description       pgtype.Text        `json:"description"`
-	ImageUrl          pgtype.Text        `json:"image_url"`
-	Price             int64              `json:"price"`
-	MemberPrice       pgtype.Int8        `json:"member_price"`
-	IsAvailable       bool               `json:"is_available"`
-	IsOnline          bool               `json:"is_online"`
-	SortOrder         int16              `json:"sort_order"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	PrepareTime       int16              `json:"prepare_time"`
-	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
-	MonthlySales      int32              `json:"monthly_sales"`
-	RepurchaseRate    pgtype.Numeric     `json:"repurchase_rate"`
-	MerchantName      string             `json:"merchant_name"`
-	MerchantLogo      pgtype.Text        `json:"merchant_logo"`
-	MerchantIsOpen    bool               `json:"merchant_is_open"`
-	MerchantRegionID  int64              `json:"merchant_region_id"`
-	MerchantLatitude  pgtype.Numeric     `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric     `json:"merchant_longitude"`
-	Distance          float64            `json:"distance"`
+	ID                  int64              `json:"id"`
+	MerchantID          int64              `json:"merchant_id"`
+	CategoryID          pgtype.Int8        `json:"category_id"`
+	Name                string             `json:"name"`
+	Description         pgtype.Text        `json:"description"`
+	ImageUrl            pgtype.Text        `json:"image_url"`
+	Price               int64              `json:"price"`
+	MemberPrice         pgtype.Int8        `json:"member_price"`
+	IsAvailable         bool               `json:"is_available"`
+	IsOnline            bool               `json:"is_online"`
+	SortOrder           int16              `json:"sort_order"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	PrepareTime         int16              `json:"prepare_time"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales        int32              `json:"monthly_sales"`
+	RepurchaseRate      pgtype.Numeric     `json:"repurchase_rate"`
+	MerchantName        string             `json:"merchant_name"`
+	MerchantLogo        pgtype.Text        `json:"merchant_logo"`
+	MerchantIsOpen      bool               `json:"merchant_is_open"`
+	MerchantRegionID    int64              `json:"merchant_region_id"`
+	MerchantLatitude    pgtype.Numeric     `json:"merchant_latitude"`
+	MerchantLongitude   pgtype.Numeric     `json:"merchant_longitude"`
+	Distance            float64            `json:"distance"`
+	Tags                interface{}        `json:"tags"`
+	CustomizationGroups interface{}        `json:"customization_groups"`
 }
 
 // 全局菜品搜索（跨商户），只搜索已激活商户的上架菜品
@@ -1858,6 +1932,8 @@ func (q *Queries) SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobal
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
 			&i.Distance,
+			&i.Tags,
+			&i.CustomizationGroups,
 		); err != nil {
 			return nil, err
 		}

@@ -262,6 +262,11 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		attach = fmt.Sprintf("order_id:%d", order.ID)
 	}
 
+	if amount <= 0 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("支付金额必须大于0")))
+		return
+	}
+
 	var err error
 	// 检查是否已存在待支付的支付订单
 	var existingPayment db.PaymentOrder
@@ -272,8 +277,8 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		})
 	} else {
 		existingPayment, err = server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:       pgtype.Int8{Int64: req.OrderID, Valid: true},
-			BusinessType:  req.BusinessType,
+			OrderID:      pgtype.Int8{Int64: req.OrderID, Valid: true},
+			BusinessType: req.BusinessType,
 		})
 	}
 	if err == nil && existingPayment.Status == PaymentStatusPending {

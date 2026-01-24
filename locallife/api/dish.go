@@ -378,6 +378,7 @@ type dishResponse struct {
 	Description         string               `json:"description"`
 	ImageURL            string               `json:"image_url"`
 	Price               int64                `json:"price"`
+	OriginalPrice       int64                `json:"original_price"`
 	MemberPrice         *int64               `json:"member_price"`
 	IsAvailable         bool                 `json:"is_available"`
 	IsOnline            bool                 `json:"is_online"`
@@ -576,6 +577,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 		Description:         txResult.Dish.Description.String,
 		ImageURL:            normalizeUploadURLForClient(txResult.Dish.ImageUrl.String),
 		Price:               txResult.Dish.Price,
+		OriginalPrice:       txResult.Dish.Price,
 		MemberPrice:         toPtrInt64(txResult.Dish.MemberPrice),
 		IsAvailable:         txResult.Dish.IsAvailable,
 		IsOnline:            txResult.Dish.IsOnline,
@@ -684,17 +686,18 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 	result := make([]dishResponse, len(dishes))
 	for i, dish := range dishes {
 		result[i] = dishResponse{
-			ID:          dish.ID,
-			MerchantID:  dish.MerchantID,
-			CategoryID:  toPtrInt64(dish.CategoryID),
-			Name:        dish.Name,
-			Description: dish.Description.String,
-			ImageURL:    normalizeUploadURLForClient(dish.ImageUrl.String),
-			Price:       dish.Price,
-			MemberPrice: toPtrInt64(dish.MemberPrice),
-			IsAvailable: dish.IsAvailable,
-			IsOnline:    dish.IsOnline,
-			SortOrder:   dish.SortOrder,
+			ID:            dish.ID,
+			MerchantID:    dish.MerchantID,
+			CategoryID:    toPtrInt64(dish.CategoryID),
+			Name:          dish.Name,
+			Description:   dish.Description.String,
+			ImageURL:      normalizeUploadURLForClient(dish.ImageUrl.String),
+			Price:         dish.Price,
+			OriginalPrice: dish.Price,
+			MemberPrice:   toPtrInt64(dish.MemberPrice),
+			IsAvailable:   dish.IsAvailable,
+			IsOnline:      dish.IsOnline,
+			SortOrder:     dish.SortOrder,
 		}
 	}
 
@@ -791,6 +794,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 		Description:         dish.Description.String,
 		ImageURL:            normalizeUploadURLForClient(dish.ImageUrl.String),
 		Price:               dish.Price,
+		OriginalPrice:       dish.Price,
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
 		IsAvailable:         dish.IsAvailable,
 		IsOnline:            dish.IsOnline,

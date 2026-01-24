@@ -3,6 +3,7 @@
  */
 
 import { request } from '../utils/request'
+import type { CustomizationGroup } from './dish'
 
 // ==================== 数据类型定义 ====================
 
@@ -239,6 +240,7 @@ export interface PublicDish {
   monthly_sales: number
   prepare_time: number
   tags: string[]
+  customization_groups?: CustomizationGroup[]
 }
 
 /**
@@ -281,6 +283,7 @@ export interface PublicCombo {
   combo_price: number
   original_price: number
   dishes: ComboDishItem[]
+  tags?: string[]
 }
 
 /**
@@ -325,4 +328,5 @@ export class MerchantManagementAdapter {
   }
 }
 
+export const getMerchantDishes = getPublicMerchantDishes
 export const getMerchants = searchMerchants

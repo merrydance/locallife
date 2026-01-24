@@ -33,6 +33,7 @@ type scanTableMerchantInfo struct {
 	Phone       string  `json:"phone,omitempty"`
 	Address     string  `json:"address,omitempty"`
 	Status      string  `json:"status"`
+	IsOpen      bool    `json:"is_open"`
 }
 
 // scanTableTableInfo 桌台信息
@@ -48,16 +49,21 @@ type scanTableTableInfo struct {
 
 // scanTableDishInfo 菜品信息
 type scanTableDishInfo struct {
-	ID           int64   `json:"id"`
-	Name         string  `json:"name"`
-	Description  *string `json:"description,omitempty"`
-	ImageUrl     *string `json:"image_url,omitempty"`
-	Price        int64   `json:"price"`
-	MemberPrice  *int64  `json:"member_price,omitempty"`
-	CategoryID   int64   `json:"category_id"`
-	CategoryName string  `json:"category_name"`
-	IsAvailable  bool    `json:"is_available"`
-	SortOrder    int32   `json:"sort_order"`
+	ID                  int64                `json:"id"`
+	Name                string               `json:"name"`
+	Description         *string              `json:"description,omitempty"`
+	ImageUrl            *string              `json:"image_url,omitempty"`
+	Price               int64                `json:"price"`
+	OriginalPrice       int64                `json:"original_price"`
+	MemberPrice         *int64               `json:"member_price,omitempty"`
+	CategoryID          int64                `json:"category_id"`
+	CategoryName        string               `json:"category_name"`
+	IsAvailable         bool                 `json:"is_available"`
+	SortOrder           int32                `json:"sort_order"`
+	CustomizationGroups []customizationGroup `json:"customization_groups,omitempty"`
+	Tags                []string             `json:"tags,omitempty"`
+	MerchantID          int64                `json:"merchant_id"`
+	IsOnline            bool                 `json:"is_online"`
 }
 
 // scanTableCategoryInfo 分类信息
@@ -70,13 +76,14 @@ type scanTableCategoryInfo struct {
 
 // scanTableComboInfo 套餐信息
 type scanTableComboInfo struct {
-	ID            int64   `json:"id"`
-	Name          string  `json:"name"`
-	Description   *string `json:"description,omitempty"`
-	ImageUrl      *string `json:"image_url,omitempty"`
-	Price         int64   `json:"price"`
-	OriginalPrice *int64  `json:"original_price,omitempty"`
-	IsAvailable   bool    `json:"is_available"`
+	ID            int64    `json:"id"`
+	Name          string   `json:"name"`
+	Description   *string  `json:"description,omitempty"`
+	ImageUrl      *string  `json:"image_url,omitempty"`
+	Price         int64    `json:"price"`
+	OriginalPrice *int64   `json:"original_price,omitempty"`
+	IsAvailable   bool     `json:"is_available"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 // scanTablePromotionInfo 满返/满减优惠信息
@@ -190,12 +197,15 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		}
 
 		dishInfo := scanTableDishInfo{
-			ID:          dish.ID,
-			Name:        dish.Name,
-			Price:       dish.Price,
-			CategoryID:  categoryID,
-			IsAvailable: dish.IsAvailable,
-			SortOrder:   int32(dish.SortOrder),
+			ID:            dish.ID,
+			MerchantID:    req.MerchantID,
+			IsOnline:      true,
+			Name:          dish.Name,
+			Price:         dish.Price,
+			OriginalPrice: dish.Price,
+			CategoryID:    categoryID,
+			IsAvailable:   dish.IsAvailable,
+			SortOrder:     int32(dish.SortOrder),
 		}
 		if dish.Description.Valid {
 			dishInfo.Description = &dish.Description.String
@@ -206,6 +216,14 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		}
 		if dish.MemberPrice.Valid {
 			dishInfo.MemberPrice = &dish.MemberPrice.Int64
+		}
+
+		// 解析 Tags 和 CustomizationGroups
+		if dish.Tags != nil {
+			parseJSON(dish.Tags, &dishInfo.Tags)
+		}
+		if dish.CustomizationGroups != nil {
+			parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups)
 		}
 
 		// 找到分类名称
@@ -235,6 +253,9 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			Name:        combo.Name,
 			Price:       combo.Price,
 			IsAvailable: combo.IsOnline,
+		}
+		if combo.Tags != nil {
+			parseJSON(combo.Tags, &comboInfo.Tags)
 		}
 		if combo.Description.Valid {
 			comboInfo.Description = &combo.Description.String
@@ -284,6 +305,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			ID:     merchant.ID,
 			Name:   merchant.Name,
 			Status: merchant.Status,
+			IsOpen: merchant.IsOpen,
 		},
 		Table: scanTableTableInfo{
 			ID:        table.ID,
@@ -310,6 +332,23 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	}
 	if table.MinimumSpend.Valid {
 		response.Table.MinimumSpend = &table.MinimumSpend.Int64
+	}
+
+	// 为每个菜品填充定制化分组
+	for i := range response.Categories {
+		for j := range response.Categories[i].Dishes {
+			dishID := response.Categories[i].Dishes[j].ID
+			// 这种做法虽然有 N+1 问题，但在扫码点餐这种低频、单商户（菜品量通常 < 100）的场景下，
+			// 复用已有的 GetDishWithCustomizations 逻辑最为稳妥且开发效率最高。
+			// 如果后续性能成为瓶颈，可优化为批量查询。
+			dishWithCust, err := server.store.GetDishWithCustomizations(ctx, dishID)
+			if err == nil {
+				var groups []customizationGroup
+				if err := parseJSON(dishWithCust.CustomizationGroups, &groups); err == nil {
+					response.Categories[i].Dishes[j].CustomizationGroups = groups
+				}
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, response)

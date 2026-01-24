@@ -903,8 +903,8 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation does not belong to this merchant")))
 			return
 		}
-		if res.Status != ReservationStatusPaid && res.Status != ReservationStatusConfirmed && res.Status != ReservationStatusCheckedIn {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not ready for ordering")))
+		if res.Status != ReservationStatusPending && res.Status != ReservationStatusPaid && res.Status != ReservationStatusConfirmed && res.Status != ReservationStatusCheckedIn {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is in an invalid state for ordering")))
 			return
 		}
 		if req.TableID != nil && res.TableID != *req.TableID {
@@ -915,26 +915,24 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		reservation = &res
 
 		session, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: res.ID, Valid: true})
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for reservation")))
+		if err == nil {
+			if session.TableID != res.TableID {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session table mismatch")))
 				return
 			}
+			if session.MerchantID != req.MerchantID {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dining session merchant mismatch")))
+				return
+			}
+			diningSession = &session
+		} else if !isNotFoundError(err) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		if session.TableID != res.TableID {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session table mismatch")))
-			return
-		}
-		if session.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dining session merchant mismatch")))
-			return
-		}
+		// 如果是预订点餐且未到店（无会话），允许继续创建订单，后续到店核销时再绑定
 
 		tableID := res.TableID
 		req.TableID = &tableID
-		diningSession = &session
 
 	case OrderTypeDineIn:
 		if req.TableID == nil {
@@ -1287,9 +1285,9 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	var membership *db.MerchantMembership
 
 	if req.UseBalance {
-		// 验证订单类型是否支持余额支付（仅堂食和自提）
-		if req.OrderType != OrderTypeDineIn && req.OrderType != OrderTypeTakeaway {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("外卖和预定订单暂不支持余额支付")))
+		// 验证订单类型是否支持余额支付（仅堂食、自提和预定）
+		if req.OrderType != OrderTypeDineIn && req.OrderType != OrderTypeTakeaway && req.OrderType != OrderTypeReservation {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("外卖订单暂不支持余额支付")))
 			return
 		}
 
@@ -1451,6 +1449,19 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 如果是余额全额支付，则自动推进订单状态和后续流程（扣库存、发配送等）
+	if req.UseBalance && balancePaid >= totalAmount && txResult.Order.Status == OrderStatusPending {
+		paymentResult, err := server.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{
+			OrderID: txResult.Order.ID,
+		})
+		if err != nil {
+			log.Error().Err(err).Int64("order_id", txResult.Order.ID).Msg("failed to process automatic balance payment")
+			// 即使失败也继续，因为订单已创建且余额已扣，只是状态未同步更新，可以通过管理后台手动补推
+		} else {
+			txResult.Order = paymentResult.Order
+		}
 	}
 
 	resp := newOrderResponse(txResult.Order)
@@ -3384,13 +3395,13 @@ type orderCalculationItem struct {
 // @Security BearerAuth
 func (server *Server) calculateOrder(ctx *gin.Context) {
 	var req struct {
-		MerchantID  int64    `form:"merchant_id" binding:"required,min=1"`
-		OrderType   string   `form:"order_type" binding:"required,oneof=takeout dine_in takeaway"`
-		Latitude    *float64 `form:"latitude"`
-		Longitude   *float64 `form:"longitude"`
-		AddressID   *int64   `form:"address_id"`
-		UserVoucherID *int64 `form:"user_voucher_id"`
-		VoucherCode   string `form:"voucher_code"`
+		MerchantID    int64    `form:"merchant_id" binding:"required,min=1"`
+		OrderType     string   `form:"order_type" binding:"required,oneof=takeout dine_in takeaway"`
+		Latitude      *float64 `form:"latitude"`
+		Longitude     *float64 `form:"longitude"`
+		AddressID     *int64   `form:"address_id"`
+		UserVoucherID *int64   `form:"user_voucher_id"`
+		VoucherCode   string   `form:"voucher_code"`
 	}
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))

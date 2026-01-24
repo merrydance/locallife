@@ -289,6 +289,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessRefundResult(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessRefundResult", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessRefundResult), varargs...)
 }
 
+// DistributeTaskReservationNoShowAlert mocks base method.
+func (m *MockTaskDistributor) DistributeTaskReservationNoShowAlert(ctx context.Context, payload *worker.PayloadReservationNoShowAlert, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskReservationNoShowAlert", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskReservationNoShowAlert indicates an expected call of DistributeTaskReservationNoShowAlert.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskReservationNoShowAlert(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskReservationNoShowAlert", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskReservationNoShowAlert), varargs...)
+}
+
 // DistributeTaskReservationPaymentTimeout mocks base method.
 func (m *MockTaskDistributor) DistributeTaskReservationPaymentTimeout(ctx context.Context, payload *worker.PayloadReservationPaymentTimeout, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()
@@ -325,23 +344,4 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskSendNotification(ctx, p
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, payload}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskSendNotification", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskSendNotification), varargs...)
-}
-
-// DistributeTaskReservationNoShowAlert mocks base method.
-func (m *MockTaskDistributor) DistributeTaskReservationNoShowAlert(ctx context.Context, payload *worker.PayloadReservationNoShowAlert, opts ...asynq.Option) error {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, payload}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "DistributeTaskReservationNoShowAlert", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DistributeTaskReservationNoShowAlert indicates an expected call of DistributeTaskReservationNoShowAlert.
-func (mr *MockTaskDistributorMockRecorder) DistributeTaskReservationNoShowAlert(ctx, payload any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, payload}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskReservationNoShowAlert", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskReservationNoShowAlert), varargs...)
 }

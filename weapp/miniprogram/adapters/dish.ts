@@ -47,23 +47,24 @@ export class DishAdapter {
       priceDisplay: formatPrice(dto.price),
       shopName: dto.merchant_name || '未知商家',
       merchantId: dto.merchant_id,
-      attributes: [], // 摘要数据中没有配料信息
-      spicyLevel: 0, // 从tags中解析辣度
+      spicyLevel: 0,
       salesBadge: DishAdapter.formatSales(dto.monthly_sales || 0),
-      ratingDisplay: '0.0', // 摘要数据中没有评分
+      ratingDisplay: '0.0',
       distance: DishAdapter.formatDistance(dto.distance || 0),
       deliveryTimeDisplay: DishAdapter.formatDeliveryTimeSeconds(dto.estimated_delivery_time || 0),
       deliveryFeeDisplay: DishAdapter.formatDeliveryFee(dto.estimated_delivery_fee || 0),
       discountRule: '',
       tags: dto.tags || [],
       isPremade: dto.tags?.includes('预制') || false,
-      merchantIsOpen: dto.merchant_is_open ?? true, // 商户营业状态，默认营业
+      merchantIsOpen: dto.merchant_is_open ?? true,
       distance_meters: dto.distance || 0,
       member_price: dto.member_price,
       is_available: dto.is_available,
       repurchaseRate: dto.repurchase_rate,
       repurchaseRateDisplay: DishAdapter.formatRepurchaseRate(dto.repurchase_rate),
-      estimated_delivery_time: dto.estimated_delivery_time
+      estimated_delivery_time: dto.estimated_delivery_time,
+      attributes: dto.attributes || [],
+      customization_groups: dto.customization_groups || []
     }
   }
 

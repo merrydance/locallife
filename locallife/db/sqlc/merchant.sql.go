@@ -1727,7 +1727,14 @@ func (q *Queries) RemoveMerchantTag(ctx context.Context, arg RemoveMerchantTagPa
 }
 
 const searchMerchants = `-- name: SearchMerchants :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, COALESCE(mp.total_orders, 0)::int AS total_orders FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, COALESCE(mp.total_orders, 0)::int AS total_orders,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM tags t
+     INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+     WHERE mt.merchant_id = m.id
+    ), '[]'::json) AS tags
+FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
@@ -1778,6 +1785,7 @@ type SearchMerchantsRow struct {
 	GroupID           pgtype.Int8        `json:"group_id"`
 	BrandID           pgtype.Int8        `json:"brand_id"`
 	TotalOrders       int32              `json:"total_orders"`
+	Tags              interface{}        `json:"tags"`
 }
 
 func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]SearchMerchantsRow, error) {
@@ -1821,6 +1829,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.GroupID,
 			&i.BrandID,
 			&i.TotalOrders,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}

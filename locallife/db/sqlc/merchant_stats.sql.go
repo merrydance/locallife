@@ -390,6 +390,33 @@ SELECT
     '[]'::json
   ) as tags,
   COALESCE(
+    (SELECT json_agg(
+      json_build_object(
+        'id', dcg.id,
+        'name', dcg.name,
+        'is_required', dcg.is_required,
+        'sort_order', dcg.sort_order,
+        'options', (
+          SELECT json_agg(
+            json_build_object(
+              'id', dco.id,
+              'tag_id', dco.tag_id,
+              'tag_name', opt_tag.name,
+              'extra_price', dco.extra_price,
+              'sort_order', dco.sort_order
+            ) ORDER BY dco.sort_order
+          )
+          FROM dish_customization_options dco
+          JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+          WHERE dco.group_id = dcg.id
+        )
+      ) ORDER BY dcg.sort_order
+     )
+     FROM dish_customization_groups dcg
+     WHERE dcg.dish_id = d.id),
+    '[]'::json
+  ) as customization_groups,
+  COALESCE(
     (SELECT SUM(oi.quantity)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id 
     WHERE oi.dish_id = d.id AND o.status IN ('user_delivered', 'completed', 'delivered') 
      AND o.created_at > NOW() - INTERVAL '30 days'),
@@ -406,20 +433,21 @@ ORDER BY COALESCE(mdc.sort_order, 999), d.sort_order, d.id
 `
 
 type GetMerchantDishesWithCategoryRow struct {
-	ID                int64       `json:"id"`
-	Name              string      `json:"name"`
-	Description       pgtype.Text `json:"description"`
-	Price             int64       `json:"price"`
-	MemberPrice       pgtype.Int8 `json:"member_price"`
-	ImageUrl          pgtype.Text `json:"image_url"`
-	IsAvailable       bool        `json:"is_available"`
-	SortOrder         int16       `json:"sort_order"`
-	PrepareTime       int16       `json:"prepare_time"`
-	CategoryID        int64       `json:"category_id"`
-	CategoryName      string      `json:"category_name"`
-	CategorySortOrder int16       `json:"category_sort_order"`
-	Tags              interface{} `json:"tags"`
-	MonthlySales      interface{} `json:"monthly_sales"`
+	ID                  int64       `json:"id"`
+	Name                string      `json:"name"`
+	Description         pgtype.Text `json:"description"`
+	Price               int64       `json:"price"`
+	MemberPrice         pgtype.Int8 `json:"member_price"`
+	ImageUrl            pgtype.Text `json:"image_url"`
+	IsAvailable         bool        `json:"is_available"`
+	SortOrder           int16       `json:"sort_order"`
+	PrepareTime         int16       `json:"prepare_time"`
+	CategoryID          int64       `json:"category_id"`
+	CategoryName        string      `json:"category_name"`
+	CategorySortOrder   int16       `json:"category_sort_order"`
+	Tags                interface{} `json:"tags"`
+	CustomizationGroups interface{} `json:"customization_groups"`
+	MonthlySales        interface{} `json:"monthly_sales"`
 }
 
 // 获取商户所有在线菜品（含分类信息）- 消费者端使用
@@ -446,6 +474,7 @@ func (q *Queries) GetMerchantDishesWithCategory(ctx context.Context, merchantID 
 			&i.CategoryName,
 			&i.CategorySortOrder,
 			&i.Tags,
+			&i.CustomizationGroups,
 			&i.MonthlySales,
 		); err != nil {
 			return nil, err
@@ -534,7 +563,11 @@ SELECT
     FROM combo_dishes cd
     JOIN dishes d ON d.id = cd.dish_id
     WHERE cd.combo_id = cs.id
-  ) as dishes
+  ) as dishes,
+  COALESCE(
+    (SELECT json_agg(t.name) FROM combo_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.combo_id = cs.id),
+    '[]'::json
+  ) as tags
 FROM combo_sets cs
 WHERE cs.merchant_id = $1
   AND cs.is_online = true
@@ -551,6 +584,7 @@ type GetMerchantOnlineCombosRow struct {
 	OriginalPrice int64       `json:"original_price"`
 	IsOnline      bool        `json:"is_online"`
 	Dishes        []byte      `json:"dishes"`
+	Tags          interface{} `json:"tags"`
 }
 
 // 获取商户所有在线套餐 - 消费者端使用
@@ -572,6 +606,7 @@ func (q *Queries) GetMerchantOnlineCombos(ctx context.Context, merchantID int64)
 			&i.OriginalPrice,
 			&i.IsOnline,
 			&i.Dishes,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}

@@ -58,6 +58,7 @@ interface DishView {
   prepare_time: number
   tags: string[]
   is_available: boolean
+  hasCustomizations: boolean
 }
 
 interface ComboView {
@@ -238,7 +239,8 @@ Page({
         monthly_sales: dish.monthly_sales || 0,
         prepare_time: dish.prepare_time || 10,
         tags: dish.tags || [],
-        is_available: true
+        is_available: true,
+        hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0
       }))
       return { dishes, categories: result.categories || [] }
     } catch (error) {

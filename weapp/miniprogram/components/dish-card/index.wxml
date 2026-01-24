@@ -5,10 +5,9 @@
     <!-- 第1行: 店名·菜名 + 休息中标签 -->
     <view class="row-1">
       <text class="shop-dish-name">{{dish.shopName}}·{{dish.name}}</text>
-      <t-tag wx:if="{{dish.merchantIsOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
+      <t-tag wx:if="{{dish.merchantIsOpen === false}}" theme="danger" size="small" variant="light-outline">休息中</t-tag>
     </view>
 
-    
     <!-- 第2行: 价格 | 销量 -->
     <view class="row-2">
       <text class="price">{{dish.priceDisplay}}</text>
@@ -27,24 +26,37 @@
     </view>
     
     <!-- 第4行: 代取费 + 满返信息 -->
-    <view class="row-4">
-      <text wx:if="{{dish.deliveryFeeDisplay}}" class="delivery-fee">{{dish.deliveryFeeDisplay}}</text>
-      <text wx:if="{{dish.discountRule}}" class="discount">{{dish.discountRule}}</text>
+    <view class="row-4" wx:if="{{dish.deliveryFeeDisplay || dish.discountRule}}">
+      <t-tag wx:if="{{dish.deliveryFeeDisplay}}" size="small" variant="light" theme="default">{{dish.deliveryFeeDisplay}}</t-tag>
+      <t-tag wx:if="{{dish.discountRule}}" size="small" variant="light-outline" theme="warning">{{dish.discountRule}}</t-tag>
     </view>
     
     <!-- 第5行: 标签（条件显示）-->
-    <view wx:if="{{dish.isPremade || (dish.attributes && dish.attributes.length > 0)}}" class="row-5">
-      <t-tag wx:if="{{dish.isPremade}}" theme="warning" size="small" variant="light">预制菜</t-tag>
-      <t-tag wx:for="{{dish.attributes}}" wx:key="*this" size="small" variant="light">{{item}}</t-tag>
+    <view class="row-5" wx:if="{{dish.isPremade || (dish.attributes && dish.attributes.length > 0)}}">
+      <t-tag wx:if="{{dish.isPremade}}" theme="warning" size="small" variant="light-outline">预制菜</t-tag>
+      <t-tag wx:for="{{dish.attributes}}" wx:key="*this" size="small" variant="light-outline" theme="primary">{{item}}</t-tag>
     </view>
   </view>
   
-  <t-button
-    class="add-btn"
-    theme="primary"
-    size="small"
-    icon="add"
-    shape="circle"
-    catchtap="onAdd"
-  />
+  <!-- 加购按钮区域 -->
+  <view class="add-btn-wrapper">
+    <!-- 有定制选项：显示"选规格"按钮 -->
+    <t-button
+      wx:if="{{dish.customization_groups && dish.customization_groups.length > 0}}"
+      theme="primary"
+      size="small"
+      variant="outline"
+      shape="round"
+      catchtap="onSelectSpec"
+    >选规格</t-button>
+    <!-- 无定制选项：显示"+"按钮 -->
+    <t-button
+      wx:else
+      theme="primary"
+      size="small"
+      icon="add"
+      shape="circle"
+      catchtap="onAdd"
+    />
+  </view>
 </view>

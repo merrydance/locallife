@@ -145,6 +145,34 @@ Page({
         loadingSlots: false
       })
 
+      // 验证当前选中的时间是否有效
+      if (this.data.form.time) {
+        const isStillAvailable = availableTimeSlots.some(slot => slot.value === this.data.form.time)
+        if (!isStillAvailable) {
+          // 如果当前时间不可用，自动切换到第一个可用时段
+          if (availableTimeSlots.length > 0) {
+            const firstSlot = availableTimeSlots[0]
+            this.setData({
+              'form.time': firstSlot.value,
+              selectedTimeLabel: this.buildTimeLabel(firstSlot.value)
+            })
+            wx.showToast({ title: '已为您切换到最近可用时段', icon: 'none' })
+          } else {
+            this.setData({
+              'form.time': '',
+              selectedTimeLabel: ''
+            })
+          }
+        }
+      } else if (availableTimeSlots.length > 0) {
+        // 如果没选时间，默认选第一个
+        const firstSlot = availableTimeSlots[0]
+        this.setData({
+          'form.time': firstSlot.value,
+          selectedTimeLabel: this.buildTimeLabel(firstSlot.value)
+        })
+      }
+
       if (availableTimeSlots.length === 0) {
         wx.showToast({ title: '该日期暂无可用时段', icon: 'none' })
       }

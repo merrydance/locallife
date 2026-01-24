@@ -18,12 +18,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 24rpx;
+  gap: 12rpx;
 }
 
 .nav-left {
   flex: 1;
   display: flex;
   align-items: center;
+  gap: 16rpx;
 }
 
 /* 返回按钮 - 使用 flexbox 完美居中 */
@@ -46,6 +48,27 @@
 .back-icon {
   width: 28rpx;
   height: 28rpx;
+}
+
+/* 首页按钮 */
+.home-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background-color 0.3s;
+}
+
+.home-button:active {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.home-icon {
+  width: 32rpx;
+  height: 32rpx;
 }
 
 .location-wrapper {

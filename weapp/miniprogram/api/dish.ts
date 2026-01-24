@@ -20,8 +20,8 @@ export interface DishResponse {
     original_price?: number                      // 原价（分）
     member_price?: number                        // 会员价（分）
     image_url: string                            // 菜品图片URL
-    category_id: number                          // 分类ID
-    category_name: string                        // 分类名称
+    category_id?: number                         // 分类ID
+    category_name?: string                       // 分类名称
     is_online: boolean                           // 是否上架
     is_available: boolean                        // 是否可用
     prepare_time?: number                        // 预估制作时间（分钟）
@@ -54,6 +54,8 @@ export interface DishSummary {
     estimated_delivery_fee?: number              // 预估配送费（分）
     monthly_sales?: number                       // 近30天销量
     repurchase_rate?: number                     // 复购率 (0-1)
+    attributes?: string[]                        // 菜品属性/标签
+    customization_groups?: CustomizationGroup[]  // 定制化分组
 }
 
 /**
@@ -1015,6 +1017,8 @@ export interface SearchDishItem {
     distance: number
     estimated_delivery_fee: number // 分
     estimated_delivery_time: number // 秒
+    attributes?: string[]          // 菜品属性/标签
+    customization_groups?: CustomizationGroup[]   // 定制化分组
 }
 
 /**
@@ -1109,7 +1113,9 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
             distance: item.distance || 0,
             estimated_delivery_fee: item.estimated_delivery_fee || 0,
             estimated_delivery_time: item.estimated_delivery_time || 0,
-            tags: []
+            attributes: item.attributes || [],
+            customization_groups: item.customization_groups || [],
+            tags: item.attributes || []
         } as unknown as DishSummary)),
 
         has_more: hasMore,
@@ -1229,6 +1235,7 @@ export interface SearchComboItem {
     distance: number            // 米
     estimated_delivery_fee?: number // 分
     estimated_delivery_time: number // 秒
+    tags?: string[]                // 标签
 }
 
 export interface ComboSearchParams {

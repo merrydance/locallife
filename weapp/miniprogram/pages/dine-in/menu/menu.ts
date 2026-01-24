@@ -6,7 +6,7 @@
  * 3. 预订点菜：直接传 reservation_id 和 merchant_id
  */
 
-import { scanTable, getTableDetail, ScanTableResponse, ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo } from '../../../api/table'
+import { scanTable, getTableDetail, ScanTableResponse, ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo, ScanTableDishInfo } from '../../../api/table'
 import {
     getCart,
     addToCart,
@@ -17,14 +17,27 @@ import {
     CartItemResponse
 } from '../../../api/cart'
 import { getReservationDetail } from '../../../api/reservation'
-import { getMerchantDishes } from '../../../api/merchant'
+import { getMerchantDishes, PublicDish } from '../../../api/merchant'
 import type { DishResponse, CustomizationGroup, CustomizationOption } from '../../../api/dish'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getStableBarHeights } from '../../../utils/responsive'
 
-type MenuDish = DishResponse & {
+type MenuDish = {
+    id: number
+    merchant_id: number
+    name: string
+    description?: string
+    price: number
+    member_price?: number | null
     image_url: string
+    is_available: boolean
+    is_online: boolean
+    category_id?: number
+    category_name?: string
+    sort_order: number
+    tags: string[]
+    customization_groups: CustomizationGroup[]
     priceDisplay: string
     memberPriceDisplay: string | null
     hasCustomizations: boolean
@@ -96,7 +109,7 @@ Page({
         // 界面状态
         loading: true,
         cartVisible: false,
-        selectedDish: null as DishResponse | null,
+        selectedDish: null as MenuDish | null,
 
         // 定制 Drawer 状态
         drawerVisible: false,
@@ -227,7 +240,7 @@ Page({
             const [reservation, merchantDetail, dishesResponse] = await Promise.all([
                 getReservationDetail(reservationId),
                 getPublicMerchantDetail(merchantId),
-                getMerchantDishes(String(merchantId))
+                getMerchantDishes(merchantId)
             ])
 
             // 从预订详情提取桌号（预订必须有桌台）
@@ -237,14 +250,25 @@ Page({
             }
 
             // 从响应中提取菜品列表，并预处理价格、图片和定制标志
-            const dishes: MenuDish[] = (dishesResponse.dishes || []).map((dish) => {
-                const dishData = dish as unknown as DishResponse
+            const dishes: MenuDish[] = (dishesResponse.dishes || []).map((dish: PublicDish) => {
                 return {
-                    ...dishData,
-                    image_url: getPublicImageUrl(dishData.image_url || ''),
-                    priceDisplay: formatPriceNoSymbol(dishData.price || 0),
-                    memberPriceDisplay: dishData.member_price ? formatPriceNoSymbol(dishData.member_price) : null,
-                    hasCustomizations: Array.isArray(dishData.customization_groups) && dishData.customization_groups.length > 0,
+                    id: dish.id,
+                    merchant_id: merchantId, // 使用已知的 merchantId
+                    name: dish.name,
+                    description: dish.description,
+                    price: dish.price,
+                    member_price: dish.member_price,
+                    image_url: getPublicImageUrl(dish.image_url || ''),
+                    is_available: true, // PublicDish 没有此字段，默认可用
+                    is_online: true, // PublicDish 没有此字段，默认上架
+                    category_id: dish.category_id,
+                    category_name: dish.category_name,
+                    sort_order: 0, // PublicDish 没有此字段
+                    tags: dish.tags || [],
+                    customization_groups: dish.customization_groups || [],
+                    priceDisplay: formatPriceNoSymbol(dish.price || 0),
+                    memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
+                    hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
                     cartQty: 0
                 }
             })
@@ -325,14 +349,16 @@ Page({
             // 预处理菜品价格、图片和定制标志
             const allDishes: MenuDish[] = []
             const processedCategories: MenuCategory[] = (scanResult.categories || []).map((cat: ScanTableCategoryInfo) => {
-                const dishes = (cat.dishes || []).map((dish: DishResponse) => {
+                const dishes = (cat.dishes || []).map((dish: ScanTableDishInfo) => {
                     const processedDish: MenuDish = {
                         ...dish,
                         image_url: getPublicImageUrl(dish.image_url || ''),
                         priceDisplay: formatPriceNoSymbol(dish.price || 0),
                         memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
                         hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
-                        cartQty: 0
+                        cartQty: 0,
+                        tags: dish.tags || [],
+                        customization_groups: dish.customization_groups || []
                     }
                     allDishes.push(processedDish)
                     return processedDish
@@ -768,8 +794,8 @@ Page({
                 dish_id: dishId,
                 quantity: 1,
                 order_type: this.data.orderType,
-                table_id: this.data.tableId || 0,
-                reservation_id: this.data.reservationId || 0
+                table_id: this.data.tableId || undefined,
+                reservation_id: this.data.reservationId || undefined
             }, { loading: false })
             this.scheduleCartSync()
         } catch (error) {
@@ -892,8 +918,8 @@ Page({
                 quantity: drawerQty,
                 customizations,
                 order_type: this.data.orderType,
-                table_id: this.data.tableId || 0,
-                reservation_id: this.data.reservationId || 0
+                table_id: this.data.tableId || undefined,
+                reservation_id: this.data.reservationId || undefined
             }, { loading: false })
 
             this.setData({ drawerVisible: false, drawerDish: null })

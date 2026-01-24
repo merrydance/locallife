@@ -250,15 +250,22 @@ WHERE cs.id = ANY($1::bigint[])
 -- name: ListOnlineCombosByMerchant :many
 -- 获取商户上架套餐（用于扫码点餐菜单展示）
 SELECT 
-    id,
-    merchant_id,
-    name,
-    description,
-    image_url,
-    original_price,
-    combo_price AS price,
-    is_online
-FROM combo_sets
+    cs.id,
+    cs.merchant_id,
+    cs.name,
+    cs.description,
+    cs.image_url,
+    cs.original_price,
+    cs.combo_price AS price,
+    cs.is_online,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
+FROM combo_sets cs
 WHERE merchant_id = $1
   AND deleted_at IS NULL
   AND is_online = true
@@ -308,7 +315,14 @@ SELECT
         ), 0
     )::int AS monthly_sales,
     -- Distance Calculation
-    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM combo_tags ct
+       JOIN tags t ON ct.tag_id = t.id
+       WHERE ct.combo_id = cs.id),
+      '[]'
+    ) as tags
 FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
 LEFT JOIN LATERAL (

@@ -640,7 +640,7 @@ Page({
         deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
           ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
           : '',
-        tags: [], // search combos doesn't return tags yet
+        tags: combo.tags || [],
         merchantIsOpen: combo.merchant_is_open ?? true,
         estimatedDeliveryTime: combo.estimated_delivery_time
       }))

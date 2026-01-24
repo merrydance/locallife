@@ -110,7 +110,7 @@
           </view>
           <!-- 第5行: 标签 -->
           <view wx:if="{{item.tags.length > 0}}" class="row-5">
-            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light">{{tag}}</t-tag>
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light-outline" theme="primary">{{tag}}</t-tag>
           </view>
         </view>
         <!-- 加购按钮 -->

@@ -153,7 +153,41 @@ SELECT
   m.region_id AS merchant_region_id,
   m.latitude AS merchant_latitude,
   m.longitude AS merchant_longitude,
-  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance
+  earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))::float8 AS distance,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM dish_tags dt
+     JOIN tags t ON dt.tag_id = t.id
+     WHERE dt.dish_id = d.id),
+    '[]'
+  ) as tags,
+  COALESCE(
+    (SELECT json_agg(
+      json_build_object(
+        'id', dcg.id,
+        'name', dcg.name,
+        'is_required', dcg.is_required,
+        'sort_order', dcg.sort_order,
+        'options', (
+          SELECT json_agg(
+            json_build_object(
+              'id', dco.id,
+              'tag_id', dco.tag_id,
+              'tag_name', opt_tag.name,
+              'extra_price', dco.extra_price,
+              'sort_order', dco.sort_order
+            ) ORDER BY dco.sort_order
+          )
+          FROM dish_customization_options dco
+          JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+          WHERE dco.group_id = dcg.id
+        )
+      ) ORDER BY dcg.sort_order
+     )
+     FROM dish_customization_groups dcg
+     WHERE dcg.dish_id = d.id),
+    '[]'
+  ) as customization_groups
 FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
 WHERE 
@@ -641,7 +675,41 @@ SELECT
     d.price,
     d.member_price,
     d.is_available,
-    d.sort_order
+    d.sort_order,
+    COALESCE(
+      (SELECT json_agg(t.name)
+       FROM dish_tags dt
+       JOIN tags t ON dt.tag_id = t.id
+       WHERE dt.dish_id = d.id),
+      '[]'
+    ) as tags,
+    COALESCE(
+      (SELECT json_agg(
+        json_build_object(
+          'id', dcg.id,
+          'name', dcg.name,
+          'is_required', dcg.is_required,
+          'sort_order', dcg.sort_order,
+          'options', (
+            SELECT json_agg(
+              json_build_object(
+                'id', dco.id,
+                'tag_id', dco.tag_id,
+                'tag_name', opt_tag.name,
+                'extra_price', dco.extra_price,
+                'sort_order', dco.sort_order
+              ) ORDER BY dco.sort_order
+            )
+            FROM dish_customization_options dco
+            JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+            WHERE dco.group_id = dcg.id
+          )
+        ) ORDER BY dcg.sort_order
+       )
+       FROM dish_customization_groups dcg
+       WHERE dcg.dish_id = d.id),
+      '[]'
+    ) as customization_groups
 FROM dishes d
 WHERE d.merchant_id = $1
   AND d.is_online = true

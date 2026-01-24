@@ -58,7 +58,7 @@
           <view class="dish-info">
             <text class="dish-name">{{item.name}}</text>
             <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
-              <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light">{{tag}}</t-tag>
+              <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light-outline" theme="primary">{{tag}}</t-tag>
             </view>
             <view class="dish-meta">
               <text class="sales">月销 {{item.monthly_sales || 0}}</text>
@@ -69,6 +69,16 @@
             </view>
           </view>
           <t-button 
+            wx:if="{{item.hasCustomizations}}"
+            size="small" 
+            theme="primary"
+            variant="outline"
+            shape="round"
+            data-id="{{item.id}}"
+            catchtap="onDishTap"
+          >选规格</t-button>
+          <t-button 
+            wx:else
             class="add-btn" 
             size="small" 
             icon="add" 

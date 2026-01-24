@@ -17,6 +17,10 @@ Component({
       type: Boolean,
       value: false
     },
+    showHome: {
+      type: Boolean,
+      value: false
+    },
     showLocation: {
       type: Boolean,
       value: true
@@ -28,7 +32,8 @@ Component({
     navBarHeight: 0,
     navBarContentHeight: 44,
     capsuleWidth: 87,
-    displayLocation: '' // 内部管理的location显示值
+    displayLocation: '', // 内部管理的location显示值
+    innerShowHome: false // 内部计算的首页按钮显示状态
   },
 
   lifetimes: {
@@ -55,11 +60,15 @@ Component({
       const windowInfo = wx.getWindowInfo()
       const capsuleWidth = windowInfo.screenWidth - menuButton.left
 
+      const pages = getCurrentPages()
+      const isHomePage = pages.length > 0 && pages[pages.length - 1].route === 'pages/takeout/index'
+      
       this.setData({
         statusBarHeight,
         navBarHeight,
         navBarContentHeight,
-        capsuleWidth
+        capsuleWidth,
+        innerShowHome: this.properties.showHome || !isHomePage
       })
 
       // 同步到全局状态
@@ -285,6 +294,12 @@ Component({
           url: '/pages/takeout/index'
         })
       }
+    },
+
+    onHomeTap() {
+      wx.switchTab({
+        url: '/pages/takeout/index'
+      })
     }
   },
 
@@ -296,6 +311,13 @@ Component({
       if (newLocation) {
         this.setData({ displayLocation: newLocation })
       }
+    },
+    'showHome'(showHome: boolean) {
+      const pages = getCurrentPages()
+      const isHomePage = pages.length > 0 && pages[pages.length - 1].route === 'pages/takeout/index'
+      this.setData({
+        innerShowHome: showHome || !isHomePage
+      })
     }
   }
 })

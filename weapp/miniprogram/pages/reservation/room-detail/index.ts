@@ -152,10 +152,15 @@ Page({
   onBook() {
     const { room, selectedDate, selectedType } = this.data
     if (room) {
-      // 默认时间
+      // 查找该类别的第一个可用时段作为默认时间
       let time = ''
-      if (selectedType === 'lunch') time = '12:00'
-      if (selectedType === 'dinner') time = '18:00'
+      const day = this.data.calendarDays.find(d => d.date === selectedDate)
+      if (day) {
+        // 我们需要重新获取该日期的可用时段，或者在 calendarDays 中存储它们
+        // 为了简单起见，如果 12:00/18:00 不满足，我们在 confirm 页面会重新校验
+        if (selectedType === 'lunch') time = '12:00'
+        else if (selectedType === 'dinner') time = '18:00'
+      }
 
       const url = `/pages/reservation/confirm/index?roomId=${room.id}&merchantId=${room.merchant_id}&roomName=${encodeURIComponent(room.name)}&capacity=${room.capacity}&deposit=${room.deposit}&date=${selectedDate}&time=${time}`
       wx.navigateTo({ url })

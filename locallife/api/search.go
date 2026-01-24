@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -47,6 +48,7 @@ type searchDishResponse struct {
 	Description    string  `json:"description"`
 	ImageURL       string  `json:"image_url"`
 	Price          int64   `json:"price"`                  // Cents
+	OriginalPrice  int64   `json:"original_price"`         // Cents
 	MemberPrice    int64   `json:"member_price,omitempty"` // Cents
 	IsAvailable    bool    `json:"is_available"`
 	IsOnline       bool    `json:"is_online"`
@@ -54,46 +56,51 @@ type searchDishResponse struct {
 	MonthlySales   int32   `json:"monthly_sales"`
 	RepurchaseRate float64 `json:"repurchase_rate"`
 	// New fields for home feed
-	MerchantName          string `json:"merchant_name,omitempty"`
-	MerchantLogo          string `json:"merchant_logo,omitempty"`
-	MerchantIsOpen        *bool  `json:"merchant_is_open,omitempty"`
-	Distance              int    `json:"distance"`                // Meters
-	EstimatedDeliveryTime int    `json:"estimated_delivery_time"` // Seconds
-	EstimatedDeliveryFee  int    `json:"estimated_delivery_fee"`  // Cents
+	MerchantName          string               `json:"merchant_name,omitempty"`
+	MerchantLogo          string               `json:"merchant_logo,omitempty"`
+	MerchantIsOpen        *bool                `json:"merchant_is_open,omitempty"`
+	Distance              int                  `json:"distance"`                // Meters
+	EstimatedDeliveryTime int                  `json:"estimated_delivery_time"` // Seconds
+	EstimatedDeliveryFee  int                  `json:"estimated_delivery_fee"`  // Cents
+	Attributes            []string             `json:"attributes,omitempty"`
+	CustomizationGroups   []customizationGroup `json:"customization_groups,omitempty"`
 }
 
 type searchMerchantResponse struct {
-	ID                   int64   `json:"id"`
-	Name                 string  `json:"name"`
-	Description          string  `json:"description"`
-	Address              string  `json:"address,omitempty"`
-	Latitude             float64 `json:"-"`
-	Longitude            float64 `json:"-"`
-	Phone                string  `json:"phone,omitempty"`
-	LogoURL              string  `json:"logo_url"`
-	Status               string  `json:"status"`
-	RegionID             int64   `json:"region_id"`                        // 区域ID，用于运费计算
-	TotalOrders          int32   `json:"total_orders,omitempty"`           // 总销量
-	Distance             *int    `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
-	EstimatedDeliveryFee *int64  `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
+	ID                   int64    `json:"id"`
+	Name                 string   `json:"name"`
+	Description          string   `json:"description"`
+	Address              string   `json:"address,omitempty"`
+	Latitude             float64  `json:"-"`
+	Longitude            float64  `json:"-"`
+	Phone                string   `json:"phone,omitempty"`
+	LogoURL              string   `json:"logo_url"`
+	Status               string   `json:"status"`
+	IsOpen               bool     `json:"is_open"`
+	RegionID             int64    `json:"region_id"`                        // 区域ID，用于运费计算
+	TotalOrders          int32    `json:"total_orders,omitempty"`           // 总销量
+	Distance             *int     `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
+	EstimatedDeliveryFee *int64   `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
+	Tags                 []string `json:"tags,omitempty"`
 }
 
 type searchComboResponse struct {
-	ID                    int64  `json:"id"`
-	MerchantID            int64  `json:"merchant_id"`
-	Name                  string `json:"name"`
-	Description           string `json:"description"`
-	ImageURL              string `json:"image_url"`
-	OriginalPrice         int64  `json:"original_price"`  // Cents
-	ComboPrice            int64  `json:"combo_price"`     // Cents
-	SavingsPercent        int    `json:"savings_percent"` // 节省百分比
-	MonthlySales          int32  `json:"monthly_sales"`
-	MerchantName          string `json:"merchant_name"`
-	MerchantLogo          string `json:"merchant_logo"`
-	MerchantIsOpen        bool   `json:"merchant_is_open"`
-	Distance              int    `json:"distance"`
-	EstimatedDeliveryFee  *int64 `json:"estimated_delivery_fee,omitempty"`
-	EstimatedDeliveryTime int    `json:"estimated_delivery_time"`
+	ID                    int64    `json:"id"`
+	MerchantID            int64    `json:"merchant_id"`
+	Name                  string   `json:"name"`
+	Description           string   `json:"description"`
+	ImageURL              string   `json:"image_url"`
+	OriginalPrice         int64    `json:"original_price"`  // Cents
+	ComboPrice            int64    `json:"combo_price"`     // Cents
+	SavingsPercent        int      `json:"savings_percent"` // 节省百分比
+	MonthlySales          int32    `json:"monthly_sales"`
+	MerchantName          string   `json:"merchant_name"`
+	MerchantLogo          string   `json:"merchant_logo"`
+	MerchantIsOpen        bool     `json:"merchant_is_open"`
+	Distance              int      `json:"distance"`
+	EstimatedDeliveryFee  *int64   `json:"estimated_delivery_fee,omitempty"`
+	EstimatedDeliveryTime int      `json:"estimated_delivery_time"`
+	Tags                  []string `json:"tags,omitempty"`
 }
 
 // searchDishes godoc
@@ -138,11 +145,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{
-			"dishes":    response,
-			"total":     total,
+			"dishes":      response,
+			"total":       total,
 			"total_count": total,
-			"page_id":   req.PageID,
-			"page_size": req.PageSize,
+			"page_id":     req.PageID,
+			"page_size":   req.PageSize,
 		})
 		return
 	}
@@ -168,12 +175,12 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 	// 全局搜索 - 使用高效的单次数据库查询（仅搜索已批准商户的上架菜品）
 	dishes, err := server.store.SearchDishesGlobal(ctx, db.SearchDishesGlobalParams{
-		Column1: pgtype.Text{String: req.Keyword, Valid: true},
-		Limit:   req.PageSize,
-		Offset:  int32(offset),
-		Column4: userLat,
-		Column5: userLng,
-		TagID:   pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
+		Column1:  pgtype.Text{String: req.Keyword, Valid: true},
+		Limit:    req.PageSize,
+		Offset:   int32(offset),
+		Column4:  userLat,
+		Column5:  userLng,
+		TagID:    pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
 		RegionID: regionID,
 	})
 	if err != nil {
@@ -183,8 +190,8 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 	// 获取总数用于分页
 	total, err := server.store.CountSearchDishesGlobal(ctx, db.CountSearchDishesGlobalParams{
-		Column1: pgtype.Text{String: req.Keyword, Valid: true},
-		TagID:   pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
+		Column1:  pgtype.Text{String: req.Keyword, Valid: true},
+		TagID:    pgtype.Int8{Int64: tagIDVal, Valid: req.TagID != nil},
 		RegionID: regionID,
 	})
 	if err != nil {
@@ -224,11 +231,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"dishes":    response,
-		"total":     total,
+		"dishes":      response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 
@@ -271,11 +278,11 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	}
 
 	merchants, err := server.store.SearchMerchants(ctx, db.SearchMerchantsParams{
-		Offset:  int32(offset),
-		Limit:   req.PageSize,
-		Column3: req.Keyword,
-		Column4: userLat,
-		Column5: userLng,
+		Offset:   int32(offset),
+		Limit:    req.PageSize,
+		Column3:  req.Keyword,
+		Column4:  userLat,
+		Column5:  userLng,
 		RegionID: merchantRegionID,
 	})
 	if err != nil {
@@ -285,7 +292,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 
 	// 获取总数用于分页
 	total, err := server.store.CountSearchMerchants(ctx, db.CountSearchMerchantsParams{
-		Column1: pgtype.Text{String: req.Keyword, Valid: true},
+		Column1:  pgtype.Text{String: req.Keyword, Valid: true},
 		RegionID: merchantRegionID,
 	})
 	if err != nil {
@@ -303,11 +310,11 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"merchants": response,
-		"total":     total,
+		"merchants":   response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 
@@ -352,11 +359,11 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 
 	// 执行搜索
 	combos, err := server.store.SearchCombosGlobal(ctx, db.SearchCombosGlobalParams{
-		Column1: req.Keyword,
-		Limit:   req.PageSize,
-		Offset:  offset,
-		Column4: userLat,
-		Column5: userLng,
+		Column1:  req.Keyword,
+		Limit:    req.PageSize,
+		Offset:   offset,
+		Column4:  userLat,
+		Column5:  userLng,
 		RegionID: comboRegionID,
 	})
 	if err != nil {
@@ -366,7 +373,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 
 	// 获取总数
 	total, err := server.store.CountSearchCombosGlobal(ctx, db.CountSearchCombosGlobalParams{
-		Column1: req.Keyword,
+		Column1:  req.Keyword,
 		RegionID: comboRegionID,
 	})
 	if err != nil {
@@ -446,30 +453,35 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 			EstimatedDeliveryFee:  estimatedFee,
 			EstimatedDeliveryTime: deliveryTime,
 		}
+
+		if row.Tags != nil {
+			parseJSON(row.Tags, &response[i].Tags)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"combos":    response,
-		"total":     total,
+		"combos":      response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 
 // Helper for simple Dish (Merchant Search)
 func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 	resp := searchDishResponse{
-		ID:           dish.ID,
-		MerchantID:   dish.MerchantID,
-		Name:         dish.Name,
-		Description:  dish.Description.String,
-		ImageURL:     normalizeUploadURLForClient(dish.ImageUrl.String),
-		Price:        int64(dish.Price),
-		IsAvailable:  dish.IsAvailable,
-		IsOnline:     dish.IsOnline,
-		SortOrder:    dish.SortOrder,
-		MonthlySales: dish.MonthlySales,
+		ID:            dish.ID,
+		MerchantID:    dish.MerchantID,
+		Name:          dish.Name,
+		Description:   dish.Description.String,
+		ImageURL:      normalizeUploadURLForClient(dish.ImageUrl.String),
+		Price:         int64(dish.Price),
+		OriginalPrice: int64(dish.Price),
+		IsAvailable:   dish.IsAvailable,
+		IsOnline:      dish.IsOnline,
+		SortOrder:     dish.SortOrder,
+		MonthlySales:  dish.MonthlySales,
 	}
 	if dish.RepurchaseRate.Valid {
 		val, _ := dish.RepurchaseRate.Float64Value()
@@ -496,16 +508,17 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 	}
 
 	resp := searchDishResponse{
-		ID:           row.ID,
-		MerchantID:   row.MerchantID,
-		Name:         row.Name,
-		Description:  row.Description.String,
-		ImageURL:     normalizeUploadURLForClient(row.ImageUrl.String),
-		Price:        int64(row.Price),
-		IsAvailable:  row.IsAvailable,
-		IsOnline:     row.IsOnline,
-		SortOrder:    row.SortOrder,
-		MonthlySales: row.MonthlySales,
+		ID:            row.ID,
+		MerchantID:    row.MerchantID,
+		Name:          row.Name,
+		Description:   row.Description.String,
+		ImageURL:      normalizeUploadURLForClient(row.ImageUrl.String),
+		Price:         int64(row.Price),
+		OriginalPrice: int64(row.Price),
+		IsAvailable:   row.IsAvailable,
+		IsOnline:      row.IsOnline,
+		SortOrder:     row.SortOrder,
+		MonthlySales:  row.MonthlySales,
 		// Enriched Fields
 		MerchantName:   row.MerchantName,
 		MerchantLogo:   normalizeUploadURLForClient(row.MerchantLogo.String),
@@ -533,6 +546,15 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 	if row.MemberPrice.Valid {
 		resp.MemberPrice = int64(row.MemberPrice.Int64)
 	}
+
+	// 解析 Tags 和 CustomizationGroups
+	if row.Tags != nil {
+		parseJSON(row.Tags, &resp.Attributes)
+	}
+	if row.CustomizationGroups != nil {
+		parseJSON(row.CustomizationGroups, &resp.CustomizationGroups)
+	}
+
 	return resp
 }
 
@@ -543,9 +565,28 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 		Description: merchant.Description.String,
 		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
 		Status:      merchant.Status,
+		IsOpen:      merchant.IsOpen,
 		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
 		TotalOrders: merchant.TotalOrders,
 	}
+
+	// 处理标签
+	if merchant.Tags != nil {
+		if tagsBytes, ok := merchant.Tags.([]byte); ok {
+			var tags []string
+			if err := json.Unmarshal(tagsBytes, &tags); err == nil {
+				resp.Tags = tags
+			}
+		} else if tagsStrs, ok := merchant.Tags.([]interface{}); ok {
+			// 如果 sqlc 返回了解构后的数组
+			for _, t := range tagsStrs {
+				if s, ok := t.(string); ok {
+					resp.Tags = append(resp.Tags, s)
+				}
+			}
+		}
+	}
+
 	// 转换 pgtype.Numeric 到 float64
 	if merchant.Latitude.Valid {
 		lat, _ := merchant.Latitude.Float64Value()
@@ -722,11 +763,11 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"rooms":     rooms,
-		"total":     total,
+		"rooms":       rooms,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 

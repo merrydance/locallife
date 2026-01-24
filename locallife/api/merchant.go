@@ -1137,17 +1137,18 @@ type publicDishCategoryItem struct {
 }
 
 type publicDishItem struct {
-	ID           int64    `json:"id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description,omitempty"`
-	Price        int64    `json:"price"`
-	MemberPrice  *int64   `json:"member_price,omitempty"`
-	ImageURL     string   `json:"image_url,omitempty"`
-	CategoryID   int64    `json:"category_id"`
-	CategoryName string   `json:"category_name"`
-	MonthlySales int32    `json:"monthly_sales"`
-	PrepareTime  int16    `json:"prepare_time"`
-	Tags         []string `json:"tags"`
+	ID                  int64                `json:"id"`
+	Name                string               `json:"name"`
+	Description         string               `json:"description,omitempty"`
+	Price               int64                `json:"price"`
+	MemberPrice         *int64               `json:"member_price,omitempty"`
+	ImageURL            string               `json:"image_url,omitempty"`
+	CategoryID          int64                `json:"category_id"`
+	CategoryName        string               `json:"category_name"`
+	MonthlySales        int32                `json:"monthly_sales"`
+	PrepareTime         int16                `json:"prepare_time"`
+	Tags                []string             `json:"tags"`
+	CustomizationGroups []customizationGroup `json:"customization_groups,omitempty"`
 }
 
 type publicMerchantDishesResponse struct {
@@ -1197,9 +1198,7 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		// 解析标签
 		var tags []string
 		if d.Tags != nil {
-			if tagBytes, ok := d.Tags.([]byte); ok {
-				json.Unmarshal(tagBytes, &tags)
-			}
+			parseJSON(d.Tags, &tags)
 		}
 		if tags == nil {
 			tags = []string{}
@@ -1219,14 +1218,22 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		}
 
 		dish := publicDishItem{
-			ID:           d.ID,
-			Name:         d.Name,
-			Price:        d.Price,
-			CategoryID:   d.CategoryID,
-			CategoryName: d.CategoryName,
-			MonthlySales: monthlySales,
-			PrepareTime:  d.PrepareTime,
-			Tags:         tags,
+			ID:                  d.ID,
+			Name:                d.Name,
+			Price:               d.Price,
+			CategoryID:          d.CategoryID,
+			CategoryName:        d.CategoryName,
+			MonthlySales:        monthlySales,
+			PrepareTime:         d.PrepareTime,
+			Tags:                tags,
+			CustomizationGroups: []customizationGroup{},
+		}
+
+		if d.CustomizationGroups != nil {
+			parseJSON(d.CustomizationGroups, &dish.CustomizationGroups)
+		}
+		if dish.CustomizationGroups == nil {
+			dish.CustomizationGroups = []customizationGroup{}
 		}
 
 		if d.Description.Valid {
@@ -1270,6 +1277,7 @@ type publicComboItem struct {
 	ComboPrice    int64           `json:"combo_price"`
 	OriginalPrice int64           `json:"original_price"`
 	Dishes        []comboDishItem `json:"dishes"`
+	Tags          []string        `json:"tags"`
 }
 
 type publicMerchantCombosResponse struct {
@@ -1309,6 +1317,7 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 			ComboPrice:    c.ComboPrice,
 			OriginalPrice: c.OriginalPrice,
 			Dishes:        []comboDishItem{},
+			Tags:          []string{},
 		}
 
 		if c.Description.Valid {
@@ -1323,6 +1332,15 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 			var dishes []comboDishItem
 			if err := json.Unmarshal(c.Dishes, &dishes); err == nil {
 				combo.Dishes = dishes
+			}
+		}
+
+		// 解析标签
+		if c.Tags != nil {
+			var tags []string
+			if tagBytes, ok := c.Tags.([]byte); ok {
+				json.Unmarshal(tagBytes, &tags)
+				combo.Tags = tags
 			}
 		}
 

@@ -39,7 +39,7 @@ export interface CustomizationGroup {
     id: number
     name: string
     is_required: boolean
-    max_selections: number
+    sort_order: number
     options: CustomizationOption[]
 }
 
@@ -48,8 +48,10 @@ export interface CustomizationGroup {
  */
 export interface CustomizationOption {
     id: number
-    name: string
-    price_adjustment: number  // 价格调整（分）
+    tag_id: number
+    tag_name: string
+    extra_price: number
+    sort_order: number
 }
 
 /**

@@ -1545,21 +1545,6 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 		return
 	}
 
-	// 收集该日期的所有有效预约起始时间
-	var reservedStartMinutes []int
-	for _, r := range reservations {
-		// 考虑所有占用桌台的状态
-		if r.Status == ReservationStatusPending ||
-			r.Status == ReservationStatusPaid ||
-			r.Status == ReservationStatusConfirmed ||
-			r.Status == ReservationStatusCheckedIn {
-			if r.ReservationTime.Valid {
-				startMin := int(r.ReservationTime.Microseconds / 1000000 / 60)
-				reservedStartMinutes = append(reservedStartMinutes, startMin)
-			}
-		}
-	}
-
 	// 生成时间段列表：午餐 11:00-13:00，到店；晚餐 17:00-20:00，到店；间隔 30 分钟
 	allowedStarts := []int{}
 	for hour := 11; hour <= 13; hour++ {
@@ -1579,23 +1564,37 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 		}
 	}
 
+	now := time.Now()
 	slots := []timeSlot{}
-	durationMin := ReservationDurationHours * 60
 	for _, currentMin := range allowedStarts {
 		hour := currentMin / 60
 		minute := currentMin % 60
 		timeStr := fmt.Sprintf("%02d:%02d", hour, minute)
 
-		// 检查当前时段起始的 4 小时内是否与已有预约冲突
+		// 构造当前时段的时间对象进行比较
+		currentSlotTime := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, time.Local)
+
+		// 1. 检查是否是过去的时间
+		if currentSlotTime.Before(now) {
+			slots = append(slots, timeSlot{
+				Time:      timeStr,
+				Available: false,
+			})
+			continue
+		}
+
+		// 2. 检查冲突
 		available := true
-		for _, startMin := range reservedStartMinutes {
-			// 冲突条件：两个 4 小时时段有重叠
-			// 即：|currentMin - startMin| < durationMin
-			diff := currentMin - startMin
-			if diff < 0 {
-				diff = -diff
+		for _, r := range reservations {
+			if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
+				continue
 			}
-			if diff < durationMin {
+			if !r.ReservationTime.Valid {
+				continue
+			}
+
+			existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+			if util.AreReservationsConflicting(currentSlotTime, existingTime) {
 				available = false
 				break
 			}

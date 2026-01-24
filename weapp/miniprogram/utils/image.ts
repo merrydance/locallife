@@ -173,5 +173,7 @@ export function getPublicImageUrl(path: string | undefined | null): string {
     return `${baseUrl}${path}`
   }
 
-  return path
+  // 处理没有领先斜杠的相对路径 (如 "uploads/...")
+  const baseUrl = API_BASE.endsWith('/') ? API_BASE : `${API_BASE}/`
+  return `${baseUrl}${path}`
 }

@@ -130,7 +130,7 @@
         value="{{remark}}"
         maxlength="{{200}}"
         disableDefaultPadding="{{true}}"
-        indicator
+        autosize
         bind:change="onRemarkChange"
         t-class="remark-textarea"
       />

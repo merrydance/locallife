@@ -157,7 +157,14 @@ RETURNING *;
 UPDATE merchants SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: SearchMerchants :many
-SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders FROM merchants m
+SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM tags t
+     INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+     WHERE mt.merchant_id = m.id
+    ), '[]'::json) AS tags
+FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL

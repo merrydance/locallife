@@ -5,7 +5,7 @@
  */
 
 import { request } from '../utils/request'
-import type { DishResponse } from './dish'
+import type { DishResponse, CustomizationGroup } from './dish'
 
 // ==================== 数据类型定义 ====================
 
@@ -50,7 +50,7 @@ export interface ScanTableCategoryInfo {
     id: number
     name: string
     sort_order: number
-    dishes: DishResponse[]
+    dishes: ScanTableDishInfo[]
 }
 
 /** 扫码点餐套餐信息 - 对齐 api.scanTableComboInfo */
@@ -62,6 +62,7 @@ export interface ScanTableComboInfo {
     name: string
     original_price?: number
     price: number
+    tags?: string[]
 }
 
 /** 扫码点餐促销信息 - 对齐 api.scanTablePromotionInfo */
@@ -146,15 +147,19 @@ export interface GenerateTableQRCodeResponse {
 /** 扫码点餐菜品信息 - 对齐 api.scanTableDishInfo */
 export interface ScanTableDishInfo {
     id: number                                   // 菜品ID
+    merchant_id: number                          // 商户ID
     name: string                                 // 菜品名称
     description?: string                         // 菜品描述
     price: number                                // 价格（分）
     member_price?: number                        // 会员价（分）
     image_url?: string                           // 图片URL
     is_available: boolean                        // 是否可用
+    is_online: boolean                           // 是否上架
     category_id: number                          // 分类ID
-    category_name: string                        // 分类名称
+    category_name: string                        // 分入名称
     sort_order: number                           // 排序
+    tags?: string[]                              // 标签
+    customization_groups?: CustomizationGroup[]  // 定制化分组
 }
 
 // ==================== API接口函数 ====================
