@@ -26,16 +26,46 @@ const (
 	DinnerEndMin    = 0
 )
 
-// GetDiningTimeSlot returns the time slot for a given time
+// TimeSlotConfig defines the boundaries for lunch and dinner
+type TimeSlotConfig struct {
+	LunchStart  int // HHMM
+	LunchEnd    int // HHMM
+	DinnerStart int // HHMM
+	DinnerEnd   int // HHMM
+}
+
+var DefaultConfig = TimeSlotConfig{
+	LunchStart:  LunchStartHour*100 + LunchStartMin,
+	LunchEnd:    LunchEndHour*100 + LunchEndMin,
+	DinnerStart: DinnerStartHour*100 + DinnerStartMin,
+	DinnerEnd:   DinnerEndHour*100 + DinnerEndMin,
+}
+
+// GetDiningTimeSlot returns the time slot for a given time using default config
 func GetDiningTimeSlot(t time.Time) DiningTimeSlot {
+	return GetDiningTimeSlotWithConfig(t, DefaultConfig)
+}
+
+// GetDiningTimeSlotWithConfig returns the time slot for a given time using provided config
+func GetDiningTimeSlotWithConfig(t time.Time, config TimeSlotConfig) DiningTimeSlot {
 	h := t.Hour()
 	m := t.Minute()
 	timeVal := h*100 + m
 
-	if timeVal >= LunchStartHour*100+LunchStartMin && timeVal <= LunchEndHour*100+LunchEndMin {
+	// If dinner start is 0 and lunch end is late, split at 15:00
+	if config.DinnerStart == 0 && config.LunchEnd >= 1500 {
+		if timeVal >= config.LunchStart && timeVal < 1500 {
+			return TimeSlotLunch
+		}
+		if timeVal >= 1500 && timeVal <= config.LunchEnd {
+			return TimeSlotDinner
+		}
+	}
+
+	if timeVal >= config.LunchStart && timeVal <= config.LunchEnd {
 		return TimeSlotLunch
 	}
-	if timeVal >= DinnerStartHour*100+DinnerStartMin && timeVal <= DinnerEndHour*100+DinnerEndMin {
+	if timeVal >= config.DinnerStart && timeVal <= config.DinnerEnd {
 		return TimeSlotDinner
 	}
 
@@ -50,13 +80,18 @@ func CombineDateAndTime(date time.Time, microseconds int64) time.Time {
 	return time.Date(date.Year(), date.Month(), date.Day(), int(h), int(m), 0, 0, date.Location())
 }
 
-// IsSameDiningTimeSlot checks if two times are in the same time slot on the same day
+// IsSameDiningTimeSlot checks if two times are in the same time slot on the same day using default config
 func IsSameDiningTimeSlot(t1, t2 time.Time) bool {
+	return IsSameDiningTimeSlotWithConfig(t1, t2, DefaultConfig)
+}
+
+// IsSameDiningTimeSlotWithConfig checks if two times are in the same time slot on the same day using provided config
+func IsSameDiningTimeSlotWithConfig(t1, t2 time.Time, config TimeSlotConfig) bool {
 	if t1.Year() != t2.Year() || t1.Month() != t2.Month() || t1.Day() != t2.Day() {
 		return false
 	}
-	slot1 := GetDiningTimeSlot(t1)
-	slot2 := GetDiningTimeSlot(t2)
+	slot1 := GetDiningTimeSlotWithConfig(t1, config)
+	slot2 := GetDiningTimeSlotWithConfig(t2, config)
 
 	// If both are "other", we treat them as different unless they are the exact same time
 	// but basically, the user wants Lunch vs Dinner separation.
@@ -67,10 +102,15 @@ func IsSameDiningTimeSlot(t1, t2 time.Time) bool {
 	return slot1 == slot2
 }
 
-// IsConflictWithReservation checks if a dining session starting at 'now' would conflict with a reservation at 'resTime'
+// IsConflictWithReservation checks if a dining session starting at 'now' would conflict with a reservation at 'resTime' using default config
 func IsConflictWithReservation(now, resTime time.Time) bool {
+	return IsConflictWithReservationWithConfig(now, resTime, DefaultConfig)
+}
+
+// IsConflictWithReservationWithConfig checks if a dining session starting at 'now' would conflict with a reservation at 'resTime' using provided config
+func IsConflictWithReservationWithConfig(now, resTime time.Time, config TimeSlotConfig) bool {
 	// If same slot, it's a conflict
-	if IsSameDiningTimeSlot(now, resTime) {
+	if IsSameDiningTimeSlotWithConfig(now, resTime, config) {
 		return true
 	}
 
@@ -84,13 +124,18 @@ func IsConflictWithReservation(now, resTime time.Time) bool {
 	return false
 }
 
-// AreReservationsConflicting checks if two reservation times on the same day conflict
+// AreReservationsConflicting checks if two reservation times on the same day conflict using default config
 func AreReservationsConflicting(t1, t2 time.Time) bool {
+	return AreReservationsConflictingWithConfig(t1, t2, DefaultConfig)
+}
+
+// AreReservationsConflictingWithConfig checks if two reservation times on the same day conflict using provided config
+func AreReservationsConflictingWithConfig(t1, t2 time.Time, config TimeSlotConfig) bool {
 	if t1.Year() != t2.Year() || t1.Month() != t2.Month() || t1.Day() != t2.Day() {
 		return false
 	}
-	slot1 := GetDiningTimeSlot(t1)
-	slot2 := GetDiningTimeSlot(t2)
+	slot1 := GetDiningTimeSlotWithConfig(t1, config)
+	slot2 := GetDiningTimeSlotWithConfig(t2, config)
 
 	// If they are in different well-defined slots (one lunch, one dinner), no conflict
 	if (slot1 == TimeSlotLunch && slot2 == TimeSlotDinner) || (slot1 == TimeSlotDinner && slot2 == TimeSlotLunch) {

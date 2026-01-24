@@ -99,27 +99,25 @@ Page({
     try {
       const promises = calendarDays.map(d =>
         checkRoomAvailability(roomId, { date: d.date })
-          .catch(() => ({ time_slots: [] } as RoomAvailabilityResponse))
+          .catch((err) => {
+            console.error(`加载日期 ${d.date} 可用性失败:`, err)
+            return { time_slots: [] } as RoomAvailabilityResponse
+          })
       )
       const results = await Promise.all(promises)
 
       const updatedDays = calendarDays.map((day, i) => {
         const slots = results[i].time_slots || []
-        // 午餐时段: 11:00-14:00
-        const lunchSlots = slots.filter(s => {
-          const hour = parseInt(s.time.split(':')[0])
-          return hour >= 11 && hour < 14
-        })
-        // 晚餐时段: 17:00-21:00
-        const dinnerSlots = slots.filter(s => {
-          const hour = parseInt(s.time.split(':')[0])
-          return hour >= 17 && hour <= 21
-        })
+        
+        // 使用后端返回的 period 进行分类，不再硬编码 11:00/17:00
+        const lunchSlots = slots.filter(s => s.period === 'lunch')
+        const dinnerSlots = slots.filter(s => s.period === 'dinner')
+        const otherSlots = slots.filter(s => s.period === 'other')
 
         return {
           ...day,
           lunchAvailable: lunchSlots.some(s => s.available),
-          dinnerAvailable: dinnerSlots.some(s => s.available)
+          dinnerAvailable: dinnerSlots.some(s => s.available) || otherSlots.some(s => s.available)
         }
       })
 
@@ -130,6 +128,7 @@ Page({
     } catch (error) {
       console.error('加载日历数据失败:', error)
       this.setData({ loadingDates: false })
+      wx.showToast({ title: '加载排期失败，请重试', icon: 'none' })
     }
   },
 

@@ -17,7 +17,8 @@ import {
   RefreshCw,
   MoreVertical,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  XCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { 
@@ -36,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Dialog, 
   DialogContent, 
@@ -220,7 +222,8 @@ export function MerchantSettingsPageClient() {
         day_of_week: h.day_of_week,
         open_time: h.open_time,
         close_time: h.close_time,
-        is_closed: h.is_closed
+        is_closed: h.is_closed,
+        special_date: h.special_date || undefined
       }));
       
       const response = await apiPut<{ hours: BusinessHour[] }>("/merchants/me/business-hours", { 
@@ -540,70 +543,264 @@ export function MerchantSettingsPageClient() {
           </TabsContent>
 
           <TabsContent value="business" className="space-y-6 m-0">
-            <div className="bg-white rounded-xl border shadow-sm">
-              <div className="p-4 border-b flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900 border-l-4 border-primary pl-3">
-                  每周营业时间
-                </h3>
-                <Button variant="outline" size="sm" onClick={() => toast.info("完善中...")}>
-                  同步到所有天
-                </Button>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-6">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b">
+                    <div>
+                      <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">每周常规营业时间</CardTitle>
+                      <CardDescription className="pl-3 mt-1">设置每周一至周日的固定营业时间段</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      const firstDay = businessHours.find(h => !h.is_closed && !h.special_date);
+                      if (!firstDay) {
+                        toast.error("请先设置至少一个营业的时段");
+                        return;
+                      }
+                      const next = businessHours.map(h => h.special_date ? h : {
+                         ...h, 
+                         open_time: firstDay.open_time, 
+                         close_time: firstDay.close_time, 
+                         is_closed: firstDay.is_closed 
+                      });
+                      setBusinessHours(next);
+                      toast.success("已同步至所有工作日 (未保存)");
+                    }}>
+                      同步到所有天
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="divide-y divide-slate-100">
+                      {[1, 2, 3, 4, 5, 6, 0].map((dayNum) => {
+                        const daySlots = businessHours.filter(h => h.day_of_week === dayNum && !h.special_date);
+                        const dayName = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][dayNum];
+                        const isClosed = daySlots.some(s => s.is_closed) || daySlots.length === 0;
+
+                        return (
+                          <div key={dayNum} className="p-6 flex flex-col md:flex-row gap-6 hover:bg-slate-50/50 transition-colors">
+                            <div className="md:w-32 flex flex-row md:flex-col items-center md:items-start justify-between md:justify-start gap-2">
+                              <span className="font-bold text-slate-900">{dayName}</span>
+                              <div className="flex items-center gap-2">
+                                <Switch 
+                                  checked={!isClosed}
+                                  onCheckedChange={(val) => {
+                                    if (!val) {
+                                      // 设置为休息
+                                      const otherDays = businessHours.filter(h => h.day_of_week !== dayNum || h.special_date);
+                                      setBusinessHours([...otherDays, {
+                                        day_of_week: dayNum,
+                                        day_name: dayName,
+                                        open_time: "09:00",
+                                        close_time: "21:00",
+                                        is_closed: true
+                                      }]);
+                                    } else {
+                                      // 设置为营业
+                                      const otherDays = businessHours.filter(h => h.day_of_week !== dayNum || h.special_date);
+                                      setBusinessHours([...otherDays, {
+                                        day_of_week: dayNum,
+                                        day_name: dayName,
+                                        open_time: "09:00",
+                                        close_time: "21:00",
+                                        is_closed: false
+                                      }]);
+                                    }
+                                  }}
+                                />
+                                <Badge variant={isClosed ? "secondary" : "default"} className="text-[10px] px-1.5 py-0 h-5">
+                                  {isClosed ? "休息" : "营业"}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <div className="flex-1 space-y-3">
+                              {!isClosed && daySlots.map((slot, sIdx) => (
+                                <div key={sIdx} className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2">
+                                  <div className="flex items-center bg-white border rounded-md px-2 h-9">
+                                    <Clock className="h-3 w-3 text-slate-400 mr-2" />
+                                    <input 
+                                      type="time" 
+                                      className="border-none bg-transparent text-sm focus:ring-0 w-24 p-0"
+                                      value={slot.open_time}
+                                      onChange={(e) => {
+                                        const next = [...businessHours];
+                                        const globalIdx = businessHours.indexOf(slot);
+                                        next[globalIdx] = { ...slot, open_time: e.target.value };
+                                        setBusinessHours(next);
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-slate-400">至</span>
+                                  <div className="flex items-center bg-white border rounded-md px-2 h-9">
+                                    <Clock className="h-3 w-3 text-slate-400 mr-2" />
+                                    <input 
+                                      type="time" 
+                                      className="border-none bg-transparent text-sm focus:ring-0 w-24 p-0"
+                                      value={slot.close_time}
+                                      onChange={(e) => {
+                                        const next = [...businessHours];
+                                        const globalIdx = businessHours.indexOf(slot);
+                                        next[globalIdx] = { ...slot, close_time: e.target.value };
+                                        setBusinessHours(next);
+                                      }}
+                                    />
+                                  </div>
+                                  {daySlots.length > 1 && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 text-rose-500"
+                                      onClick={() => {
+                                        setBusinessHours(businessHours.filter(h => h !== slot));
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                              {!isClosed && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="text-primary hover:text-primary/80 hover:bg-primary/5 h-8 px-2"
+                                  onClick={() => {
+                                    setBusinessHours([...businessHours, {
+                                      day_of_week: dayNum,
+                                      day_name: dayName,
+                                      open_time: "17:00",
+                                      close_time: "21:00",
+                                      is_closed: false
+                                    }]);
+                                  }}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  添加时段
+                                </Button>
+                              )}
+                              {isClosed && <p className="text-sm text-slate-400 italic">本日全天不营业</p>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                  <div className="p-6 border-t flex justify-end gap-3 bg-slate-50/30">
+                    <Button variant="outline" onClick={fetchData}>重置更改</Button>
+                    <Button onClick={handleSaveBusinessHours} disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                      保存常规时间
+                    </Button>
+                  </div>
+                </Card>
               </div>
-              <div className="p-6">
-                <div className="rounded-lg border bg-slate-50/50 divide-y">
-                  {businessHours.map((hour, idx) => (
-                    <div key={idx} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4 min-w-[100px]">
-                        <span className="text-sm font-bold text-slate-900">{hour.day_name}</span>
-                        <Badge variant={hour.is_closed ? "secondary" : "default"}>
-                          {hour.is_closed ? "休息" : "营业"}
-                        </Badge>
-                      </div>
-                      
-                      {!hour.is_closed && (
-                        <div className="flex items-center gap-3">
-                          <Input 
-                            type="time" 
-                            className="w-32 h-9" 
-                            value={hour.open_time}
-                            onChange={(e) => handleUpdateHour(idx, { open_time: e.target.value })} 
-                          />
-                          <span className="text-muted-foreground text-sm">至</span>
-                          <Input 
-                            type="time" 
-                            className="w-32 h-9" 
-                            value={hour.close_time}
-                            onChange={(e) => handleUpdateHour(idx, { close_time: e.target.value })}
-                          />
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor={`close-${idx}`} className="text-xs cursor-pointer">整日打烊</Label>
-                        <Switch 
-                          id={`close-${idx}`} 
-                          checked={hour.is_closed} 
-                          onCheckedChange={(val) => handleUpdateHour(idx, { is_closed: val })} 
-                        />
-                      </div>
+
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader className="border-b">
+                    <CardTitle className="text-sm font-semibold border-l-4 border-amber-500 pl-3">特殊日期 (节假日/调休)</CardTitle>
+                    <CardDescription className="pl-3 mt-1">为特定日期单独配置营业时间，优先级高于常规时间</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    <div className="space-y-4">
+                      {businessHours.filter(h => h.special_date).map((hour, idx) => (
+                        <Card key={idx} className="border-amber-100 bg-amber-50/30 overflow-hidden">
+                          <div className="p-3 bg-amber-100/50 flex items-center justify-between">
+                            <span className="text-xs font-bold text-amber-900">{hour.special_date}</span>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6 text-amber-700 hover:bg-amber-200"
+                              onClick={() => setBusinessHours(businessHours.filter(h => h !== hour))}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-medium">是否营业</Label>
+                              <Switch 
+                                checked={!hour.is_closed} 
+                                onCheckedChange={(val) => {
+                                  const next = [...businessHours];
+                                  const globalIdx = businessHours.indexOf(hour);
+                                  next[globalIdx] = { ...hour, is_closed: !val };
+                                  setBusinessHours(next);
+                                }}
+                              />
+                            </div>
+                            {!hour.is_closed && (
+                              <div className="flex items-center gap-2">
+                                <Input 
+                                  type="time" 
+                                  className="h-8 text-xs px-2" 
+                                  value={hour.open_time}
+                                  onChange={(e) => {
+                                    const next = [...businessHours];
+                                    const globalIdx = businessHours.indexOf(hour);
+                                    next[globalIdx] = { ...hour, open_time: e.target.value };
+                                    setBusinessHours(next);
+                                  }}
+                                />
+                                <span className="text-[10px] text-slate-400">-</span>
+                                <Input 
+                                  type="time" 
+                                  className="h-8 text-xs px-2" 
+                                  value={hour.close_time}
+                                  onChange={(e) => {
+                                    const next = [...businessHours];
+                                    const globalIdx = businessHours.indexOf(hour);
+                                    next[globalIdx] = { ...hour, close_time: e.target.value };
+                                    setBusinessHours(next);
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {hour.is_closed && <p className="text-xs text-amber-700 italic">本日全天不营业</p>}
+                          </div>
+                        </Card>
+                      ))}
+
+                      <Button 
+                        variant="outline" 
+                        className="w-full border-dashed border-2 h-12"
+                        onClick={() => {
+                          const date = prompt("请输入日期 (YYYY-MM-DD)", new Date().toISOString().split('T')[0]);
+                          if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                            const d = new Date(date);
+                            setBusinessHours([...businessHours, {
+                              day_of_week: d.getDay(),
+                              day_name: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()],
+                              open_time: "09:00",
+                              close_time: "21:00",
+                              is_closed: false,
+                              special_date: date
+                            }]);
+                          } else if (date) {
+                            toast.error("日期格式不正确");
+                          }
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        添加特殊日期
+                      </Button>
                     </div>
-                  ))}
-                  {businessHours.length === 0 && (
-                    <div className="p-10 text-center text-muted-foreground text-sm">
-                      未拉取到营业时间配置
+                  </CardContent>
+                </Card>
+
+                <div className="bg-primary/5 rounded-xl border border-primary/20 p-6 space-y-4">
+                  <div className="flex items-center gap-3 text-primary">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <AlertCircle className="h-4 w-4" />
                     </div>
-                  )}
-                </div>
-                
-                <div className="mt-8 flex justify-end">
-                  <Button variant="outline" className="mr-3" onClick={fetchData}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    重置
-                  </Button>
-                  <Button onClick={handleSaveBusinessHours} disabled={saving}>
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    保存设置
-                  </Button>
+                    <span className="text-sm font-bold">后台管理小贴士</span>
+                  </div>
+                  <ul className="text-xs text-slate-600 space-y-2 leading-relaxed list-disc pl-4">
+                    <li>特殊日期的设置会覆盖对应日期的常规营业时间。</li>
+                    <li>如果某个时间段重叠，系统将以营业的时段为准。</li>
+                    <li>设置修改后，请务必点击“保存设置”以同步到云端。</li>
+                    <li>更改营业时间可能会影响到已有的外卖订单和预订。</li>
+                  </ul>
                 </div>
               </div>
             </div>

@@ -10216,6 +10216,21 @@ func (mr *MockStoreMockRecorder) ListMerchantBusinessHours(ctx, merchantID any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantBusinessHours", reflect.TypeOf((*MockStore)(nil).ListMerchantBusinessHours), ctx, merchantID)
 }
 
+// ListMerchantBusinessHoursAll mocks base method.
+func (m *MockStore) ListMerchantBusinessHoursAll(ctx context.Context, merchantID int64) ([]db.MerchantBusinessHour, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantBusinessHoursAll", ctx, merchantID)
+	ret0, _ := ret[0].([]db.MerchantBusinessHour)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantBusinessHoursAll indicates an expected call of ListMerchantBusinessHoursAll.
+func (mr *MockStoreMockRecorder) ListMerchantBusinessHoursAll(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantBusinessHoursAll", reflect.TypeOf((*MockStore)(nil).ListMerchantBusinessHoursAll), ctx, merchantID)
+}
+
 // ListMerchantClaims mocks base method.
 func (m *MockStore) ListMerchantClaims(ctx context.Context, arg db.ListMerchantClaimsParams) ([]db.Claim, error) {
 	m.ctrl.T.Helper()

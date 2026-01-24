@@ -1469,6 +1469,7 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 type timeSlot struct {
 	Time      string `json:"time"`      // 时间如 "11:00", "11:30"
 	Available bool   `json:"available"` // 是否可预约
+	Period    string `json:"period"`    // "lunch", "dinner", "other"
 }
 
 // roomAvailabilityResponse 包间可用性响应
@@ -1545,65 +1546,123 @@ func (server *Server) getRoomAvailability(ctx *gin.Context) {
 		return
 	}
 
-	// 生成时间段列表：午餐 11:00-13:00，到店；晚餐 17:00-20:00，到店；间隔 30 分钟
-	allowedStarts := []int{}
-	for hour := 11; hour <= 13; hour++ {
-		for _, minute := range []int{0, 30} {
-			if hour == 13 && minute > 0 {
-				continue // 午餐最晚 13:00 到店
-			}
-			allowedStarts = append(allowedStarts, hour*60+minute)
+	// 获取商户营业时间
+	businessHours, err := server.store.ListMerchantBusinessHours(ctx, room.MerchantID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 确定当天的营业时间
+	dayOfWeek := int32(date.Weekday())
+	var todayHours []db.MerchantBusinessHour
+	for _, bh := range businessHours {
+		// 优先检查特殊日期
+		if bh.SpecialDate.Valid && bh.SpecialDate.Time.Format("2006-01-02") == queryReq.Date {
+			todayHours = append(todayHours, bh)
 		}
 	}
-	for hour := 17; hour <= 20; hour++ {
-		for _, minute := range []int{0, 30} {
-			if hour == 20 && minute > 0 {
-				continue // 晚餐最晚 20:00 到店
+	if len(todayHours) == 0 {
+		// 如果没有特殊日期，使用周几的配置
+		for _, bh := range businessHours {
+			if !bh.SpecialDate.Valid && bh.DayOfWeek == dayOfWeek {
+				todayHours = append(todayHours, bh)
 			}
-			allowedStarts = append(allowedStarts, hour*60+minute)
+		}
+	}
+
+	// 如果没有配置营业时间，或者标记为关闭
+	isClosed := len(todayHours) == 0
+	for _, bh := range todayHours {
+		if bh.IsClosed {
+			isClosed = true
+			break
+		}
+	}
+
+	if isClosed {
+		ctx.JSON(http.StatusOK, roomAvailabilityResponse{
+			RoomID:    room.ID,
+			RoomNo:    room.TableNo,
+			Date:      queryReq.Date,
+			TimeSlots: []timeSlot{},
+		})
+		return
+	}
+
+	// 构造 TimeSlotConfig 用于冲突检测
+	config := util.DefaultConfig
+	if len(todayHours) > 0 {
+		h1 := todayHours[0]
+		config.LunchStart = int(h1.OpenTime.Microseconds/1000000/3600*100) + int(h1.OpenTime.Microseconds/1000000%3600/60)
+		config.LunchEnd = int(h1.CloseTime.Microseconds/1000000/3600*100) + int(h1.CloseTime.Microseconds/1000000%3600/60)
+		config.DinnerStart = 0
+		config.DinnerEnd = 0
+
+		if len(todayHours) > 1 {
+			h2 := todayHours[1]
+			config.DinnerStart = int(h2.OpenTime.Microseconds/1000000/3600*100) + int(h2.OpenTime.Microseconds/1000000%3600/60)
+			config.DinnerEnd = int(h2.CloseTime.Microseconds/1000000/3600*100) + int(h2.CloseTime.Microseconds/1000000%3600/60)
+		} else if config.LunchStart >= 1500 {
+			// 如果只有一个段，且是下午 15:00 之后开始，视为晚餐
+			config.DinnerStart = config.LunchStart
+			config.DinnerEnd = config.LunchEnd
+			config.LunchStart = 0
+			config.LunchEnd = 0
 		}
 	}
 
 	now := time.Now()
 	slots := []timeSlot{}
-	for _, currentMin := range allowedStarts {
-		hour := currentMin / 60
-		minute := currentMin % 60
-		timeStr := fmt.Sprintf("%02d:%02d", hour, minute)
 
-		// 构造当前时段的时间对象进行比较
-		currentSlotTime := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, time.Local)
+	// 生成时间段列表：基于真实的营业时间段，间隔 30 分钟
+	for _, bh := range todayHours {
+		startTotalMin := int(bh.OpenTime.Microseconds / 1000000 / 60)
+		endTotalMin := int(bh.CloseTime.Microseconds / 1000000 / 60)
 
-		// 1. 检查是否是过去的时间
-		if currentSlotTime.Before(now) {
+		// 间隔 30 分钟由于预约通常需要提前一点点，或者最后一单不能太晚
+		// 这里允许到 CloseTime 前 30 分钟
+		for currentMin := startTotalMin; currentMin <= endTotalMin-30; currentMin += 30 {
+			hour := currentMin / 60
+			minute := currentMin % 60
+			timeStr := fmt.Sprintf("%02d:%02d", hour, minute)
+
+			// 构造当前时段的时间对象进行比较
+			currentSlotTime := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, time.Local)
+
+			// 1. 检查是否是过去的时间
+			if currentSlotTime.Before(now) {
+				slots = append(slots, timeSlot{
+					Time:      timeStr,
+					Available: false,
+					Period:    string(util.GetDiningTimeSlotWithConfig(currentSlotTime, config)),
+				})
+				continue
+			}
+
+			// 2. 检查冲突
+			available := true
+			for _, r := range reservations {
+				if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
+					continue
+				}
+				if !r.ReservationTime.Valid {
+					continue
+				}
+
+				existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+				if util.AreReservationsConflictingWithConfig(currentSlotTime, existingTime, config) {
+					available = false
+					break
+				}
+			}
+
 			slots = append(slots, timeSlot{
 				Time:      timeStr,
-				Available: false,
+				Available: available,
+				Period:    string(util.GetDiningTimeSlotWithConfig(currentSlotTime, config)),
 			})
-			continue
 		}
-
-		// 2. 检查冲突
-		available := true
-		for _, r := range reservations {
-			if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
-				continue
-			}
-			if !r.ReservationTime.Valid {
-				continue
-			}
-
-			existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
-			if util.AreReservationsConflicting(currentSlotTime, existingTime) {
-				available = false
-				break
-			}
-		}
-
-		slots = append(slots, timeSlot{
-			Time:      timeStr,
-			Available: available,
-		})
 	}
 
 	ctx.JSON(http.StatusOK, roomAvailabilityResponse{

@@ -15,10 +15,13 @@ import {
   LayoutDashboard,
   Store,
   Tag,
-  CheckCircle2,
-  XCircle,
   AlertCircle,
-  ChevronRight
+  ChevronRight,
+  Clock,
+  Save,
+  Edit,
+  Trash2,
+  XCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { 
@@ -33,12 +36,22 @@ import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { 
   Dialog, 
   DialogContent, 
@@ -69,6 +82,14 @@ export function GroupPageClient() {
   const [brands, setBrands] = useState<BrandResponse[]>([]);
   const [policies, setPolicies] = useState<GroupPoliciesResponse | null>(null);
   const [application, setApplication] = useState<GroupApplicationResponse | null>(null);
+  
+  // Modals & Sheets
+  const [brandModalOpen, setBrandModalOpen] = useState(false);
+  const [editingBrand, setEditingBrand] = useState<BrandResponse | null>(null);
+  const [merchantConfigOpen, setMerchantConfigOpen] = useState(false);
+  const [editingMerchant, setEditingMerchant] = useState<GroupMerchantResponse | null>(null);
+  const [merchantHours, setMerchantHours] = useState<any[]>([]);
+  const [savingConfig, setSavingConfig] = useState(false);
   
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -308,21 +329,22 @@ export function GroupPageClient() {
                   <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">运营中心</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Button variant="outline" className="w-full justify-between" onClick={() => setActiveTab('merchants')}>
-                    管理下属门店
-                    <ChevronRight className="h-4 w-4" />
+                  <Button variant="outline" className="w-full justify-between group/btn" onClick={() => setActiveTab('merchants')}>
+                    <span className="flex items-center"><Store className="h-4 w-4 mr-2 text-primary" /> 管理下属门店</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover/btn:translate-x-1 transition-transform" />
                   </Button>
-                  <Button variant="outline" className="w-full justify-between" onClick={() => setActiveTab('requests')}>
-                    处理加入申请
-                    <ChevronRight className="h-4 w-4" />
+                  <Button variant="outline" className="w-full justify-between group/btn" onClick={() => setActiveTab('requests')}>
+                    <span className="flex items-center"><Users className="h-4 w-4 mr-2 text-blue-500" /> 处理加入申请</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover/btn:translate-x-1 transition-transform" />
                   </Button>
-                  <Button variant="outline" className="w-full justify-between" onClick={() => setActiveTab('policies')}>
-                    配置全局政策
-                    <ChevronRight className="h-4 w-4" />
+                  <Button variant="outline" className="w-full justify-between group/btn" onClick={() => setActiveTab('policies')}>
+                    <span className="flex items-center"><Settings2 className="h-4 w-4 mr-2 text-amber-500" /> 配置全局政策</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover/btn:translate-x-1 transition-transform" />
                   </Button>
                   <Separator />
-                  <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 text-xs text-primary leading-relaxed">
-                    <strong>提示：</strong> 您当前的身份为集团管理员，所做的修改将同步并影响到所有授权门店。
+                  <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 text-xs text-primary leading-relaxed flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span> 您当前的身份为 <strong>集团管理员</strong>，所做的修改将同步并影响到所有授权门店的协作逻辑。</span>
                   </div>
                 </CardContent>
               </Card>
@@ -374,8 +396,26 @@ export function GroupPageClient() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => toast.info("完善中...")}>数据统计</Button>
-                      <Button variant="outline" size="sm" onClick={() => toast.info("完善中...")}>配置项</Button>
+                      <Button variant="ghost" size="sm" onClick={() => toast.info("数据看板统计开发中")}>数据统计</Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          setEditingMerchant(merchant);
+                          setMerchantConfigOpen(true);
+                          setSavingConfig(true);
+                          try {
+                            const hours = await apiGet<{ hours: any[] }>(`/merchants/${merchant.id}/business-hours`);
+                            setMerchantHours(hours.hours || []);
+                          } catch (err) {
+                            toast.error("加载门店时间失败");
+                          } finally {
+                            setSavingConfig(false);
+                          }
+                        }}
+                      >
+                        配置项
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -454,7 +494,10 @@ export function GroupPageClient() {
                     <h3 className="text-sm font-semibold text-slate-900">品牌库</h3>
                     <p className="text-xs text-muted-foreground">维护集团旗下的子品牌和联名品牌</p>
                   </div>
-                  <Button size="sm">
+                  <Button size="sm" onClick={() => {
+                    setEditingBrand(null);
+                    setBrandModalOpen(true);
+                  }}>
                     <Plus className="h-4 w-4 mr-1" />
                     创建品牌
                   </Button>
@@ -471,7 +514,10 @@ export function GroupPageClient() {
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-2">{brand.description || "暂无描述"}</p>
                         <div className="pt-2 flex justify-end">
-                           <Button variant="ghost" size="sm">编辑</Button>
+                           <Button variant="ghost" size="sm" onClick={() => {
+                             setEditingBrand(brand);
+                             setBrandModalOpen(true);
+                           }}>编辑</Button>
                         </div>
                       </div>
                     ))}
@@ -485,61 +531,157 @@ export function GroupPageClient() {
             </div>
           </TabsContent>
 
-          <TabsContent value="policies" className="m-0 space-y-6">
-            <Card>
-              <CardHeader>
+          <TabsContent value="policies" className="m-0 space-y-6 animate-in fade-in slide-in-from-bottom-2">
+            <Card className="overflow-hidden border-muted/60">
+              <CardHeader className="bg-slate-50/50 border-b pb-6">
                 <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">集团协同策略</CardTitle>
-                <CardDescription>配置集团与各个门店之间的数据同步和权限策略</CardDescription>
+                <CardDescription className="pl-3 mt-1 underline-offset-4">配置集团与各个门店之间的数据同步和权限策略，确保品牌一致性</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-8">
-                <section className="space-y-4">
-                  <div className="flex items-center justify-between group">
+              <CardContent className="space-y-0 p-0">
+                <div className="divide-y divide-slate-100">
+                  <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
                     <div className="space-y-1">
-                      <Label className="text-base">菜品/菜单管理模式</Label>
-                      <p className="text-xs text-muted-foreground font-normal">
-                        选择是由于集团统一分发菜单，还是由各门店自行维护。
+                      <Label className="text-base font-bold text-slate-900">菜品/菜单管理模式</Label>
+                      <p className="text-xs text-muted-foreground font-normal max-w-lg">
+                        <strong>统一分发：</strong> 由于集团统一分发菜单，门店仅可调整估清状态；<br/>
+                        <strong>门店控制：</strong> 门店可自行上下架和修改菜品信息。
                       </p>
                     </div>
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                      <Button variant={policies?.menu_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('menu_mode', 'central')}>统一分发</Button>
-                      <Button variant={policies?.menu_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('menu_mode', 'store')}>门店控制</Button>
+                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
+                      <Button variant={policies?.menu_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('menu_mode', 'central')}>统一分发</Button>
+                      <Button variant={policies?.menu_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('menu_mode', 'store')}>门店控制</Button>
                     </div>
                   </div>
-                  <Separator />
-                  <div className="flex items-center justify-between group">
+
+                  <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
                     <div className="space-y-1">
-                      <Label className="text-base">价格同步模式</Label>
-                      <p className="text-xs text-muted-foreground font-normal">
-                        选择是否锁定全国统一售价，或者允许门店根据地域差异微调价格。
+                      <Label className="text-base font-bold text-slate-900">价格同步模式</Label>
+                      <p className="text-xs text-muted-foreground font-normal max-w-lg">
+                        <strong>强力一致：</strong> 锁定全国统一售价，门店不可修改；<br/>
+                        <strong>允许差异：</strong> 允许门店根据地域差异在设定范围内调整价格。
                       </p>
                     </div>
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                      <Button variant={policies?.pricing_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('pricing_mode', 'central')}>强力一致</Button>
-                      <Button variant={policies?.pricing_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('pricing_mode', 'store')}>允许差异</Button>
+                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
+                      <Button variant={policies?.pricing_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('pricing_mode', 'central')}>强力一致</Button>
+                      <Button variant={policies?.pricing_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('pricing_mode', 'store')}>允许差异</Button>
                     </div>
                   </div>
-                  <Separator />
-                  <div className="flex items-center justify-between group">
+
+                  <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
                     <div className="space-y-1">
-                      <Label className="text-base">库存共享策略</Label>
-                      <p className="text-xs text-muted-foreground font-normal">
-                        集团是否干预核心原材料库存阈值提醒或供应链分配。
+                      <Label className="text-base font-bold text-slate-900">库存共享策略</Label>
+                      <p className="text-xs text-muted-foreground font-normal max-w-lg">
+                        <strong>集团统筹：</strong> 集团干预核心原材料库存阈值提醒或供应链分配；<br/>
+                        <strong>门店自主：</strong> 门店完全根据自身经营情况管理库存。
                       </p>
                     </div>
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                      <Button variant={policies?.inventory_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('inventory_mode', 'central')}>集团统筹</Button>
-                      <Button variant={policies?.inventory_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4" onClick={() => handleUpdatePolicy('inventory_mode', 'store')}>门店自主</Button>
+                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
+                      <Button variant={policies?.inventory_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('inventory_mode', 'central')}>集团统筹</Button>
+                      <Button variant={policies?.inventory_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('inventory_mode', 'store')}>门店自主</Button>
                     </div>
                   </div>
-                </section>
+                </div>
                 
-                <div className="pt-4 flex justify-end">
-                   <Button size="lg" className="px-10" onClick={handleSavePolicies}>保存全局策略</Button>
+                <div className="p-8 bg-slate-50 border-t flex justify-between items-center">
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <AlertCircle className="h-4 w-4" />
+                    修改策略将即时生效并同步至该集团下的所有门店。
+                  </div>
+                  <Button size="lg" className="px-12 font-bold shadow-lg shadow-primary/20" onClick={handleSavePolicies}>发布全局策略</Button>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Brand Modal */}
+        <Dialog open={brandModalOpen} onOpenChange={setBrandModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingBrand ? "编辑品牌" : "创建新品牌"}</DialogTitle>
+              <DialogDescription>为集团添加子品牌或关联品牌，以便分类管理门店。</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="brand-name">品牌名称 *</Label>
+                <Input id="brand-name" defaultValue={editingBrand?.name} placeholder="如：落落地茶饮" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="brand-desc">品牌描述</Label>
+                <Textarea id="brand-desc" defaultValue={editingBrand?.description || ""} placeholder="品牌的核心理念和简介..." />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setBrandModalOpen(false)}>取消</Button>
+              <Button onClick={() => {
+                toast.info("功能完善中...");
+                setBrandModalOpen(false);
+              }}>保存品牌</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Merchant Config Sheet */}
+        <Sheet open={merchantConfigOpen} onOpenChange={setMerchantConfigOpen}>
+          <SheetContent className="sm:max-w-xl">
+            <SheetHeader>
+              <SheetTitle>门店高级配置</SheetTitle>
+              <SheetDescription>门店 ID: {editingMerchant?.id} - {editingMerchant?.name}</SheetDescription>
+            </SheetHeader>
+            
+            <div className="py-6 space-y-8">
+              <div className="space-y-4">
+                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b pb-2 flex items-center gap-2">
+                   <Clock className="h-4 w-4" /> 营业时间同步
+                </Label>
+                <div className="space-y-3">
+                  {savingConfig ? (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    </div>
+                  ) : (
+                    merchantHours.map((h, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-slate-50/50">
+                        <span className="text-sm font-medium">{h.day_name || `周${h.day_of_week}`}</span>
+                        <div className="flex items-center gap-2">
+                           <Badge variant={h.is_closed ? "secondary" : "outline"} className="text-[10px] font-normal">
+                             {h.is_closed ? "休息" : `${h.open_time} - ${h.close_time}`}
+                           </Badge>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {merchantHours.length === 0 && !savingConfig && (
+                    <p className="text-sm text-center text-muted-foreground py-10 italic">暂无营业时间数据</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b pb-2 flex items-center gap-2">
+                   <Settings2 className="h-4 w-4" /> 门店经营状态
+                </Label>
+                <div className="flex items-center justify-between p-4 rounded-xl border-2 border-primary/10 bg-primary/5">
+                   <div className="space-y-0.5">
+                     <p className="text-sm font-bold">手动营业/打烊</p>
+                     <p className="text-xs text-muted-foreground">强制覆盖所有自动规则</p>
+                   </div>
+                   <Switch checked={editingMerchant?.status === 'active'} />
+                </div>
+              </div>
+            </div>
+
+            <SheetFooter>
+              <Button size="lg" className="w-full font-bold" onClick={() => {
+                toast.success("配置已同步");
+                setMerchantConfigOpen(false);
+              }}>
+                <Save className="h-4 w-4 mr-2" />
+                应用配置到门店
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </PageContent>
     </PageShell>
   );

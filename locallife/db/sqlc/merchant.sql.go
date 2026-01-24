@@ -1165,11 +1165,47 @@ const listMerchantBusinessHours = `-- name: ListMerchantBusinessHours :many
 SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
 WHERE merchant_id = $1
   AND special_date IS NULL
-ORDER BY day_of_week
+ORDER BY day_of_week, open_time
 `
 
 func (q *Queries) ListMerchantBusinessHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error) {
 	rows, err := q.db.Query(ctx, listMerchantBusinessHours, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MerchantBusinessHour{}
+	for rows.Next() {
+		var i MerchantBusinessHour
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.DayOfWeek,
+			&i.OpenTime,
+			&i.CloseTime,
+			&i.IsClosed,
+			&i.SpecialDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMerchantBusinessHoursAll = `-- name: ListMerchantBusinessHoursAll :many
+SELECT id, merchant_id, day_of_week, open_time, close_time, is_closed, special_date, created_at, updated_at FROM merchant_business_hours
+WHERE merchant_id = $1
+ORDER BY special_date NULLS FIRST, day_of_week, open_time
+`
+
+func (q *Queries) ListMerchantBusinessHoursAll(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error) {
+	rows, err := q.db.Query(ctx, listMerchantBusinessHoursAll, merchantID)
 	if err != nil {
 		return nil, err
 	}

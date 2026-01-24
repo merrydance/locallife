@@ -1040,6 +1040,7 @@ type Querier interface {
 	ListMerchantApplications(ctx context.Context, arg ListMerchantApplicationsParams) ([]MerchantApplication, error)
 	ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]MerchantBrand, error)
 	ListMerchantBusinessHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
+	ListMerchantBusinessHoursAll(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
 	ListMerchantClaims(ctx context.Context, arg ListMerchantClaimsParams) ([]Claim, error)
 	// 获取商户在指定时间窗口内特定类型的索赔列表
 	ListMerchantClaimsByTypeInPeriod(ctx context.Context, arg ListMerchantClaimsByTypeInPeriodParams) ([]Claim, error)

@@ -573,23 +573,25 @@ func (server *Server) getMerchantOpenStatus(ctx *gin.Context) {
 // ==================== 商户营业时间管理 ====================
 
 type businessHourItem struct {
-	DayOfWeek int32  `json:"day_of_week" binding:"min=0,max=6"`   // 0=周日, 1=周一, ..., 6=周六
-	OpenTime  string `json:"open_time" binding:"required,len=5"`  // HH:MM 格式
-	CloseTime string `json:"close_time" binding:"required,len=5"` // HH:MM 格式
-	IsClosed  bool   `json:"is_closed"`                           // 是否休息
+	DayOfWeek   int32   `json:"day_of_week" binding:"min=0,max=6"`   // 0=周日, 1=周一, ..., 6=周六
+	OpenTime    string  `json:"open_time" binding:"required,len=5"`  // HH:MM 格式
+	CloseTime   string  `json:"close_time" binding:"required,len=5"` // HH:MM 格式
+	IsClosed    bool    `json:"is_closed"`                           // 是否休息
+	SpecialDate *string `json:"special_date,omitempty"`              // YYYY-MM-DD 格式
 }
 
 type setBusinessHoursRequest struct {
-	Hours []businessHourItem `json:"hours" binding:"required,min=1,max=7,dive"` // 一周的营业时间
+	Hours []businessHourItem `json:"hours" binding:"required,min=0,max=50,dive"` // 营业时间
 }
 
 type businessHourResponse struct {
-	ID        int64  `json:"id"`
-	DayOfWeek int32  `json:"day_of_week"`
-	DayName   string `json:"day_name"`
-	OpenTime  string `json:"open_time"`
-	CloseTime string `json:"close_time"`
-	IsClosed  bool   `json:"is_closed"`
+	ID          int64  `json:"id"`
+	DayOfWeek   int32  `json:"day_of_week"`
+	DayName     string `json:"day_name"`
+	OpenTime    string `json:"open_time"`
+	CloseTime   string `json:"close_time"`
+	IsClosed    bool   `json:"is_closed"`
+	SpecialDate string `json:"special_date,omitempty"` // YYYY-MM-DD
 }
 
 type businessHoursListResponse struct {
@@ -607,6 +609,9 @@ func getDayName(dayOfWeek int32) string {
 
 // parseTimeString 解析 HH:MM 格式的时间字符串
 func parseTimeString(s string) (pgtype.Time, error) {
+	if s == "" {
+		return pgtype.Time{}, nil
+	}
 	t, err := time.Parse("15:04", s)
 	if err != nil {
 		return pgtype.Time{}, fmt.Errorf("invalid time format, expected HH:MM")
@@ -616,6 +621,21 @@ func parseTimeString(s string) (pgtype.Time, error) {
 	return pgtype.Time{
 		Microseconds: microseconds,
 		Valid:        true,
+	}, nil
+}
+
+// parseDateString 解析 YYYY-MM-DD 格式的日期字符串
+func parseDateString(s string) (pgtype.Date, error) {
+	if s == "" {
+		return pgtype.Date{Valid: false}, nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return pgtype.Date{Valid: false}, fmt.Errorf("invalid date format, expected YYYY-MM-DD")
+	}
+	return pgtype.Date{
+		Time:  t,
+		Valid: true,
 	}, nil
 }
 
@@ -666,34 +686,26 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 		return
 	}
 
-	// 验证没有重复的星期
-	daySet := make(map[int32]bool)
-	for _, h := range req.Hours {
-		if daySet[h.DayOfWeek] {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("duplicate day_of_week: %d", h.DayOfWeek)))
-			return
-		}
-		daySet[h.DayOfWeek] = true
-	}
+	// 允许同一天有多个时段（移除重复星期校验）
+	// 但特殊日期如果设置了，DayOfWeek 应该与日期一致
 
 	// 预先解析所有时间，避免事务中途失败
 	hoursInput := make([]db.BusinessHourInput, 0, len(req.Hours))
 	for _, h := range req.Hours {
-		openTime, err := parseTimeString(h.OpenTime)
+		openTime, _ := parseTimeString(h.OpenTime)
+		closeTime, _ := parseTimeString(h.CloseTime)
+		specialDate, err := parseDateString(util.ValueOrDefault(h.SpecialDate, ""))
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid open_time for day %d: %v", h.DayOfWeek, err)))
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid special_date: %v", err)))
 			return
 		}
-		closeTime, err := parseTimeString(h.CloseTime)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid close_time for day %d: %v", h.DayOfWeek, err)))
-			return
-		}
+
 		hoursInput = append(hoursInput, db.BusinessHourInput{
-			DayOfWeek: h.DayOfWeek,
-			OpenTime:  openTime,
-			CloseTime: closeTime,
-			IsClosed:  h.IsClosed,
+			DayOfWeek:   h.DayOfWeek,
+			OpenTime:    openTime,
+			CloseTime:   closeTime,
+			IsClosed:    h.IsClosed,
+			SpecialDate: specialDate,
 		})
 	}
 
@@ -710,13 +722,18 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 	// 构建响应
 	var results []businessHourResponse
 	for _, bh := range result.Hours {
+		dateStr := ""
+		if bh.SpecialDate.Valid {
+			dateStr = bh.SpecialDate.Time.Format("2006-01-02")
+		}
 		results = append(results, businessHourResponse{
-			ID:        bh.ID,
-			DayOfWeek: bh.DayOfWeek,
-			DayName:   getDayName(bh.DayOfWeek),
-			OpenTime:  formatTimeFromPgtype(bh.OpenTime),
-			CloseTime: formatTimeFromPgtype(bh.CloseTime),
-			IsClosed:  bh.IsClosed,
+			ID:          bh.ID,
+			DayOfWeek:   bh.DayOfWeek,
+			DayName:     getDayName(bh.DayOfWeek),
+			OpenTime:    formatTimeFromPgtype(bh.OpenTime),
+			CloseTime:   formatTimeFromPgtype(bh.CloseTime),
+			IsClosed:    bh.IsClosed,
+			SpecialDate: dateStr,
 		})
 	}
 
@@ -749,22 +766,32 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 		return
 	}
 
-	// 获取营业时间列表
-	hours, err := server.store.ListMerchantBusinessHours(ctx, merchant.ID)
+	// 获取营业时间列表 (包括特殊日期)
+	hours, err := server.store.ListMerchantBusinessHoursAll(ctx, merchant.ID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		// 如果 ListMerchantBusinessHoursAll 不存在，退而求其次
+		hours, err = server.store.ListMerchantBusinessHours(ctx, merchant.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	var results []businessHourResponse
 	for _, h := range hours {
+		dateStr := ""
+		if h.SpecialDate.Valid {
+			dateStr = h.SpecialDate.Time.Format("2006-01-02")
+		}
+
 		results = append(results, businessHourResponse{
-			ID:        h.ID,
-			DayOfWeek: h.DayOfWeek,
-			DayName:   getDayName(h.DayOfWeek),
-			OpenTime:  formatTimeFromPgtype(h.OpenTime),
-			CloseTime: formatTimeFromPgtype(h.CloseTime),
-			IsClosed:  h.IsClosed,
+			ID:          h.ID,
+			DayOfWeek:   h.DayOfWeek,
+			DayName:     getDayName(h.DayOfWeek),
+			OpenTime:    formatTimeFromPgtype(h.OpenTime),
+			CloseTime:   formatTimeFromPgtype(h.CloseTime),
+			IsClosed:    h.IsClosed,
+			SpecialDate: dateStr,
 		})
 	}
 

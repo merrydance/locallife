@@ -242,7 +242,12 @@ WHERE id = $1 LIMIT 1;
 SELECT * FROM merchant_business_hours
 WHERE merchant_id = $1
   AND special_date IS NULL
-ORDER BY day_of_week;
+ORDER BY day_of_week, open_time;
+
+-- name: ListMerchantBusinessHoursAll :many
+SELECT * FROM merchant_business_hours
+WHERE merchant_id = $1
+ORDER BY special_date NULLS FIRST, day_of_week, open_time;
 
 -- name: ListMerchantSpecialHours :many
 SELECT * FROM merchant_business_hours

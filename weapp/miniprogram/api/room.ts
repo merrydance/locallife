@@ -64,6 +64,7 @@ export interface RoomAvailabilityResponse {
     time_slots?: Array<{                         // 时间段列表
         available: boolean                       // 是否可预约
         time: string                             // 时间如 "11:00", "11:30"
+        period?: 'lunch' | 'dinner' | 'other'    // 时段类型
     }>
 }
 
@@ -77,6 +78,7 @@ export interface ListRoomsResponse {
 export interface TimeSlot {
     time: string                                 // 时间如 "11:00", "11:30"
     available: boolean                           // 是否可预约
+    period?: 'lunch' | 'dinner' | 'other'        // 时段类型
 }
 
 /** 探索包间项 - 对齐 api.exploreRoomItem */

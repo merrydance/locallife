@@ -15,10 +15,11 @@ type SetBusinessHoursTxParams struct {
 
 // BusinessHourInput represents a business hour input
 type BusinessHourInput struct {
-	DayOfWeek int32
-	OpenTime  pgtype.Time
-	CloseTime pgtype.Time
-	IsClosed  bool
+	DayOfWeek   int32
+	OpenTime    pgtype.Time
+	CloseTime   pgtype.Time
+	IsClosed    bool
+	SpecialDate pgtype.Date
 }
 
 // SetBusinessHoursTxResult contains the result of setting business hours
@@ -42,11 +43,12 @@ func (store *SQLStore) SetBusinessHoursTx(ctx context.Context, arg SetBusinessHo
 		result.Hours = make([]MerchantBusinessHour, 0, len(arg.Hours))
 		for _, h := range arg.Hours {
 			bh, err := q.CreateBusinessHour(ctx, CreateBusinessHourParams{
-				MerchantID: arg.MerchantID,
-				DayOfWeek:  h.DayOfWeek,
-				OpenTime:   h.OpenTime,
-				CloseTime:  h.CloseTime,
-				IsClosed:   h.IsClosed,
+				MerchantID:  arg.MerchantID,
+				DayOfWeek:   h.DayOfWeek,
+				OpenTime:    h.OpenTime,
+				CloseTime:   h.CloseTime,
+				IsClosed:    h.IsClosed,
+				SpecialDate: h.SpecialDate,
 			})
 			if err != nil {
 				return fmt.Errorf("create business hour for day %d: %w", h.DayOfWeek, err)

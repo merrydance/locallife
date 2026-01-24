@@ -349,7 +349,7 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		return
 	}
 
-	conflict, err := server.checkReservationConflict(ctx, req.TableID, reservationDate, reservationTime, 0)
+	conflict, err := server.checkReservationConflict(ctx, req.TableID, table.MerchantID, reservationDate, reservationTime, 0)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -1964,7 +1964,7 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 		return
 	}
 
-	conflict, err := server.checkReservationConflict(ctx, req.TableID, reservationDate, reservationTime, 0)
+	conflict, err := server.checkReservationConflict(ctx, req.TableID, merchant.ID, reservationDate, reservationTime, 0)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -2303,7 +2303,7 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 			finalTime, _ = time.Parse("15:04", *req.Time)
 		}
 
-		conflict, err := server.checkReservationConflict(ctx, checkTableID, targetDate, finalTime, reservation.ID)
+		conflict, err := server.checkReservationConflict(ctx, checkTableID, reservation.MerchantID, targetDate, finalTime, reservation.ID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -2385,7 +2385,7 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"reservations": resp})
 }
 
-func (server *Server) checkReservationConflict(ctx *gin.Context, tableID int64, date time.Time, newTime time.Time, excludeID int64) (bool, error) {
+func (server *Server) checkReservationConflict(ctx *gin.Context, tableID int64, merchantID int64, date time.Time, newTime time.Time, excludeID int64) (bool, error) {
 	pgDate := pgtype.Date{Time: date, Valid: true}
 	reservations, err := server.store.ListReservationsByTableAndDate(ctx, db.ListReservationsByTableAndDateParams{
 		TableID:         tableID,
@@ -2393,6 +2393,46 @@ func (server *Server) checkReservationConflict(ctx *gin.Context, tableID int64, 
 	})
 	if err != nil {
 		return false, err
+	}
+
+	// 获取商户营业时间以确定冲突规则
+	businessHours, err := server.store.ListMerchantBusinessHours(ctx, merchantID)
+	config := util.DefaultConfig
+	if err == nil {
+		dayOfWeek := int32(date.Weekday())
+		var todayHours []db.MerchantBusinessHour
+		for _, bh := range businessHours {
+			if bh.SpecialDate.Valid && bh.SpecialDate.Time.Format("2006-01-02") == date.Format("2006-01-02") {
+				todayHours = append(todayHours, bh)
+			}
+		}
+		if len(todayHours) == 0 {
+			for _, bh := range businessHours {
+				if !bh.SpecialDate.Valid && bh.DayOfWeek == dayOfWeek {
+					todayHours = append(todayHours, bh)
+				}
+			}
+		}
+
+		if len(todayHours) > 0 {
+			h1 := todayHours[0]
+			config.LunchStart = int(h1.OpenTime.Microseconds/1000000/3600*100) + int(h1.OpenTime.Microseconds/1000000%3600/60)
+			config.LunchEnd = int(h1.CloseTime.Microseconds/1000000/3600*100) + int(h1.CloseTime.Microseconds/1000000%3600/60)
+			config.DinnerStart = 0
+			config.DinnerEnd = 0
+
+			if len(todayHours) > 1 {
+				h2 := todayHours[1]
+				config.DinnerStart = int(h2.OpenTime.Microseconds/1000000/3600*100) + int(h2.OpenTime.Microseconds/1000000%3600/60)
+				config.DinnerEnd = int(h2.CloseTime.Microseconds/1000000/3600*100) + int(h2.CloseTime.Microseconds/1000000%3600/60)
+			} else if config.LunchStart >= 1500 {
+				// 如果只有一个段，且是下午 15:00 之后开始，视为晚餐
+				config.DinnerStart = config.LunchStart
+				config.DinnerEnd = config.LunchEnd
+				config.LunchStart = 0
+				config.LunchEnd = 0
+			}
+		}
 	}
 
 	for _, r := range reservations {
@@ -2409,7 +2449,7 @@ func (server *Server) checkReservationConflict(ctx *gin.Context, tableID int64, 
 		existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
 		newDateTime := time.Date(date.Year(), date.Month(), date.Day(), newTime.Hour(), newTime.Minute(), 0, 0, date.Location())
 
-		if util.AreReservationsConflicting(newDateTime, existingTime) {
+		if util.AreReservationsConflictingWithConfig(newDateTime, existingTime, config) {
 			return true, nil
 		}
 	}

@@ -22,6 +22,7 @@ export interface BusinessHour {
   open_time: string;
   close_time: string;
   is_closed: boolean;
+  special_date?: string;
 }
 
 export interface CloudPrinter {

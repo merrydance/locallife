@@ -135,7 +135,7 @@ Page({
       const availableTimeSlots = timeSlots
         .filter(slot => slot.available)
         .map(slot => {
-          const mealLabel = this.buildTimeLabel(slot.time, true)
+          const mealLabel = this.buildTimeLabel(slot.time, slot.period)
           return { label: mealLabel, value: slot.time }
         })
 
@@ -208,11 +208,16 @@ Page({
     }
   },
 
-  buildTimeLabel(time: string, includeTime = false) {
+  buildTimeLabel(time: string, period?: string) {
     if (!time) return ''
-    const hour = parseInt(time.split(':')[0])
-    const meal = hour < 17 ? '午餐' : '晚餐'
-    return includeTime ? `${time} ${meal}` : `${time} ${meal}`
+    let meal = ''
+    if (period) {
+      meal = period === 'lunch' ? '午餐' : (period === 'dinner' ? '晚餐' : '')
+    } else {
+      const hour = parseInt(time.split(':')[0])
+      meal = hour < 17 ? '午餐' : '晚餐'
+    }
+    return meal ? `${time} (${meal})` : time
   },
 
   onPaymentModeChange(e: WechatMiniprogram.CustomEvent) {

@@ -45,3 +45,11 @@ func RandomMoney() int64 {
 func RandomEmail() string {
 	return fmt.Sprintf("%s@email.com", RandomString(6))
 }
+
+// ValueOrDefault returns the value of the pointer or a default value if the pointer is nil
+func ValueOrDefault[T any](ptr *T, def T) T {
+	if ptr == nil {
+		return def
+	}
+	return *ptr
+}
