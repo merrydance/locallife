@@ -1,92 +1,92 @@
 <custom-navbar title="确认订单" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 160rpx;">
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
   <!-- 收货地址 -->
-  <view class="address-section" bindtap="onSelectAddress">
+  <view class="address-section card" bindtap="onSelectAddress">
     <view wx:if="{{address && address.id}}" class="address-content">
       <view class="address-header">
         <text class="address-name">{{address.contact_name}}</text>
         <text class="address-phone">{{address.contact_phone}}</text>
-        <t-tag wx:if="{{address.is_default}}" size="small" theme="primary">默认</t-tag>
+        <t-tag wx:if="{{address.is_default}}" size="small" theme="primary" variant="light-outline">默认</t-tag>
       </view>
       <text class="address-detail">{{address.detail_address}}</text>
     </view>
     <view wx:else class="address-empty">
-      <t-icon name="location" size="48rpx" />
+      <t-icon name="location" size="48rpx" color="var(--td-text-color-placeholder)" />
       <text class="empty-text">请选择收货地址</text>
     </view>
-    <text class="address-arrow">›</text>
+    <t-icon name="chevron-right" size="40rpx" class="address-arrow" />
   </view>
 
   <!-- 商户列表 -->
   <block wx:for="{{carts || []}}" wx:key="merchantId">
-    <view class="merchant-card">
+    <view class="merchant-card card">
       <view class="merchant-header">
-        <text class="merchant-name">{{item.merchantName}}</text>
-        <text class="merchant-count">共{{item.totalCount}}件</text>
+        <view class="merchant-info" style="display: flex; align-items: center; gap: 8rpx;">
+          <t-icon name="shop" size="32rpx" color="var(--td-text-color-primary)" />
+          <text class="merchant-name">{{item.merchantName}}</text>
+        </view>
+        <text class="merchant-count">共 {{item.totalCount}} 件</text>
       </view>
 
-      <!-- 配送时间（按商户） -->
-      <view class="delivery-section">
+      <!-- 配送时间 -->
+      <view class="module-section">
         <view class="section-title">预计送达时间</view>
         <view class="eta-row" wx:if="{{item.deliveryEtaDisplay}}">
-          <text class="eta-label">预计送达</text>
+          <t-icon name="time" size="32rpx" color="var(--td-brand-color)" />
           <view class="eta-values">
             <text class="eta-window">{{item.deliveryEtaDisplay}}</text>
-            <text class="eta-note" wx:if="{{item.deliveryEtaMinutes}}">约{{item.deliveryEtaMinutes}}分钟</text>
+            <text class="eta-note" wx:if="{{item.deliveryEtaMinutes}}">约 {{item.deliveryEtaMinutes}} 分钟</text>
           </view>
         </view>
         <view class="eta-row" wx:else>
-          <text class="eta-label">预计送达</text>
-          <text class="eta-window">计算中...</text>
+          <text class="eta-label">正在计算送达时间...</text>
         </view>
       </view>
 
       <!-- 商品列表 -->
-      <view class="items-section">
+      <view class="module-section">
         <view class="section-title">商品清单</view>
-        <block wx:for="{{item.items || []}}" wx:key="id" wx:for-item="cartItem">
-          <view class="item-row">
-            <t-image class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" />
-            <view class="item-info">
-              <text class="item-name">{{cartItem.name}}</text>
+        <view class="items-list">
+          <block wx:for="{{item.items || []}}" wx:key="id" wx:for-item="cartItem">
+            <view class="item-row">
+              <t-image class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" lazy />
+              <view class="item-info">
+                <text class="item-name">{{cartItem.name}}</text>
+              </view>
+              <text class="item-quantity">×{{cartItem.quantity}}</text>
+              <text class="item-price">¥{{cartItem.priceDisplay}}</text>
             </view>
-            <text class="item-quantity">×{{cartItem.quantity}}</text>
-            <text class="item-price">¥{{cartItem.priceDisplay}}</text>
-          </view>
-        </block>
-        <view class="merchant-subtotal">
-          <text>小计：¥{{item.subtotalDisplay}}</text>
-          <text class="merchant-delivery">配送费：{{item.deliveryFeeDisplay}}</text>
+          </block>
         </view>
       </view>
 
-      <!-- 备注（按商户） -->
-      <view class="remark-section">
+      <!-- 备注 -->
+      <view class="module-section">
         <view class="section-title">订单备注</view>
         <textarea 
           class="remark-input" 
-          placeholder="如：请提前电话联系、放门口等" 
+          placeholder="给商家留言（选填）" 
           maxlength="100"
-          auto-height="true"
+          auto-height
           data-merchant-id="{{item.merchantId}}"
           value="{{remarks[item.merchantId] || ''}}"
           bindinput="onRemarkInput"
         />
       </view>
 
-      <!-- 费用明细（按商户） -->
-      <view class="cost-section">
+      <!-- 费用明细 -->
+      <view class="module-section">
         <view class="cost-row">
           <text class="cost-label">商品金额</text>
-          <text class="cost-value">{{item.subtotalDisplay}}</text>
+          <text class="cost-value">¥{{item.subtotalDisplay}}</text>
         </view>
         <view class="cost-row">
           <text class="cost-label">配送费</text>
           <text class="cost-value">{{item.deliveryFeeDisplay}}</text>
         </view>
         <view class="cost-row total">
-          <text class="cost-label">商家合计</text>
+          <text class="cost-label">小计</text>
           <text class="cost-value">¥{{item.orderTotalDisplay}}</text>
         </view>
       </view>
@@ -94,18 +94,18 @@
   </block>
 
   <!-- 汇总 -->
-  <view class="cost-section summary">
-    <view class="section-title">总计</view>
+  <view class="cost-section summary card">
+    <view class="section-title">费用合计</view>
     <view class="cost-row">
-      <text class="cost-label">商品金额</text>
-      <text class="cost-value">{{summarySubtotalDisplay}}</text>
+      <text class="cost-label">商品总额</text>
+      <text class="cost-value">¥{{summarySubtotalDisplay}}</text>
     </view>
     <view class="cost-row">
-      <text class="cost-label">配送费</text>
+      <text class="cost-label">配送总费</text>
       <text class="cost-value">{{summaryDeliveryDisplay}}</text>
     </view>
     <view class="cost-row total">
-      <text class="cost-label">实付金额</text>
+      <text class="cost-label">实付款</text>
       <text class="cost-value">¥{{orderTotalDisplay}}</text>
     </view>
   </view>
@@ -114,15 +114,17 @@
 <!-- 底部提交栏 -->
 <view class="submit-bar">
   <view class="submit-info">
-    <text class="submit-label">实付:</text>
+    <text class="submit-label">合计</text>
     <text class="submit-price">¥{{orderTotalDisplay}}</text>
   </view>
   <t-button 
     class="submit-btn" 
     theme="primary" 
+    shape="round"
+    size="large"
     loading="{{loading}}"
     bindtap="onSubmitOrder"
   >
-    ¥{{orderTotalDisplay}} 去支付
+    去支付
   </t-button>
 </view>

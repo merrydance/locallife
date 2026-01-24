@@ -21,7 +21,8 @@ page {
   --td-brand-color-9: #E66A5C;
   --td-brand-color-10: #CC5E50;
   
-  --td-brand-color-light: #FF8A75;
+  /* 浅色背景变量映射到最淡的色阶，确保文字对比度 */
+  --td-brand-color-light: var(--td-brand-color-1);
   --td-brand-color-focus: #E66A5C;
   --td-brand-color-disabled: #FFBFB6;
   
@@ -30,18 +31,21 @@ page {
   --td-success-color-1: #E6F7F5;
   --td-success-color-5: #4DB6AC;
   --td-success-color-7: #00897B;
+  --td-success-color-light: var(--td-success-color-1);
   
   /* 强调色 - 日光芥末 #FFC107 (10%使用) */
   --td-warning-color: #FFC107;
   --td-warning-color-1: #FFF9E6;
   --td-warning-color-5: #FFD54F;
   --td-warning-color-7: #FFC107;
+  --td-warning-color-light: var(--td-warning-color-1);
   
   /* 错误色 - 警示红 #E53935 */
   --td-error-color: #E53935;
   --td-error-color-1: #FFEBEE;
   --td-error-color-5: #EF5350;
   --td-error-color-7: #E53935;
+  --td-error-color-light: var(--td-error-color-1);
   
   /* ========== 背景色 (60%使用) ========== */
   --td-bg-color-page: #FAFAFA;        /* 陶瓷白 - 页面背景 */
@@ -69,19 +73,61 @@ page {
 
   /* ========== 消费侧卡片设计 Token ========== */
   /* 仅用于消费侧组件，不影响商户侧 */
-  --customer-card-padding: 20rpx;
-  --customer-card-gap: 20rpx;
-  --customer-card-margin: 12rpx;
+  --customer-card-padding: 24rpx;
+  --customer-card-gap: 24rpx;
+  --customer-card-margin: 16rpx;
   --customer-card-radius: 16rpx;
   --customer-card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
   --customer-card-shadow-active: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   --customer-image-size: 180rpx;
   --customer-image-radius: 12rpx;
-  --customer-title-size: 28rpx;
-  --customer-subtitle-size: 24rpx;
-  --customer-caption-size: 22rpx;
-  --customer-section-gap: 12rpx;
-  --customer-page-padding: 20rpx;
+  --customer-title-size: 32rpx;
+  --customer-subtitle-size: 26rpx;
+  --customer-caption-size: 24rpx;
+  --customer-section-gap: 16rpx;
+  --customer-page-padding: 24rpx;
+
+  /* ========== 统一文字系统 (Typography System) ========== */
+  --font-size-display: 48rpx;
+  --font-size-title: 36rpx;    /* 页面标题 */
+  --font-size-heading: 32rpx;  /* 卡片/模块标题 */
+  --font-size-base: 28rpx;     /* 正文/列表项 */
+  --font-size-sm: 26rpx;       /* 辅助文本 */
+  --font-size-xs: 24rpx;       /* 说明/标签 */
+  --font-size-xxs: 20rpx;      /* 角标 */
+
+  /* ========== 统一间距系统 (Spacing System) - 8rpx网格 ========== */
+  --spacer-xxs: 4rpx;   /* 极微 */
+  --spacer-xs: 8rpx;    /* 紧凑 (icon-text) */
+  --spacer-sm: 16rpx;   /* 小 (card-margin, tag-gap) */
+  --spacer-md: 24rpx;   /* 中 (card-padding) */
+  --spacer-lg: 32rpx;   /* 大 (section-gap) */
+  --spacer-xl: 48rpx;   /* 超大 */
+  --spacer-xxl: 64rpx;  /* 巨型 */
+
+
+  /* ========== 统一圆角系统 (Radius System) ========== */
+  --radius-xs: 4rpx;    /* 极小 (标签) */
+  --radius-sm: 8rpx;    /* 小 (小卡片/按钮) */
+  --radius-md: 12rpx;   /* 中 (标准卡片/图片) */
+  --radius-lg: 16rpx;   /* 大 (大卡片/弹窗) */
+  --radius-xl: 24rpx;   /* 超大 (底部面板) */
+  --radius-round: 999rpx; /* 全圆 (胶囊/头像) */
+
+  /* ========== 统一层级系统 (Z-Index System) ========== */
+  --z-index-base: 1;
+  --z-index-sticky: 100;   /* 吸顶元素 */
+  --z-index-dropdown: 800; /* 下拉菜单 */
+  --z-index-fixed: 1000;   /* 固定底部栏/悬浮按钮 */
+  --z-index-modal: 2000;   /* 弹窗/遮罩 */
+  --z-index-toast: 3000;   /* 提示框 */
+
+  /* ========== 统一动效系统 (Motion System) ========== */
+  --transition-base: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fade: 0.3s ease-in-out;
+
+  /* ========== 安全区域 (Safe Area) ========== */
+  --safe-area-bottom: env(safe-area-inset-bottom);
 }
 
 /* ========== 深色模式 ========== */

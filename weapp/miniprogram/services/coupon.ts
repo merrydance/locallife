@@ -4,9 +4,9 @@
  */
 
 import {
-  voucherManagementService,
+  getAvailableVouchersForMerchant,
   VoucherResponse
-} from '../api/marketing-membership'
+} from '../api/personal'
 
 export interface Coupon {
   id: string
@@ -43,7 +43,10 @@ export class CouponService {
         return []
       }
 
-      const vouchers = await voucherManagementService.listActiveVouchers(merchantIdNum)
+      const response = await getAvailableVouchersForMerchant(merchantIdNum)
+      // 根据接口定义，getAvailableVouchersForMerchant 返回 ListAvailableVouchersResponse
+      // 其中包含 vouchers 数组
+      const vouchers = response.vouchers || []
       return this.convertVouchersToCoupons(vouchers)
     } catch (error) {
       console.error('获取优惠券失败:', error)

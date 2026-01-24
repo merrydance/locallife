@@ -243,6 +243,8 @@ export interface PublicDish {
   customization_groups?: CustomizationGroup[]
 }
 
+export type DishDTO = PublicDish
+
 /**
  * 菜品列表响应
  */

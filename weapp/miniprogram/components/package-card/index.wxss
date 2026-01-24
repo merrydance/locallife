@@ -1,0 +1,103 @@
+/* 套餐卡片 */
+.package-card {
+  display: flex;
+  gap: var(--spacer-md);
+  padding: var(--spacer-md);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md); /* 12rpx */
+  margin-bottom: 0; /* 由 content-section gap 控制 */
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.package-card:active {
+  background: var(--td-bg-color-secondarycontainer);
+  transform: scale(0.995);
+}
+
+.package-image {
+  width: 180rpx; /* 或 var(--customer-image-size) */
+  height: 180rpx;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  background-color: var(--td-bg-color-secondarycontainer);
+}
+
+.package-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xs);
+  min-width: 0;
+  justify-content: space-between;
+}
+
+/* 行布局 */
+.package-card .row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacer-sm);
+}
+
+.package-card .row-2,
+.package-card .row-3,
+.package-card .row-4,
+.package-card .row-5 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  flex-wrap: wrap;
+}
+
+.package-card .shop-dish-name {
+  flex: 1;
+  font-size: var(--font-size-base); /* 28rpx */
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.package-card .price {
+  font-size: var(--font-size-heading); /* 32rpx */
+  font-weight: 700;
+  color: var(--td-brand-color);
+  line-height: 1;
+}
+
+.package-card .separator {
+  color: var(--td-text-color-disabled);
+  margin: 0 4rpx;
+  font-size: 20rpx;
+}
+
+.package-card .sales {
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.package-card .distance {
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+/* 配送费标签 */
+.package-card .delivery-fee {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-secondary);
+  padding: 2rpx 8rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--radius-xs);
+}
+
+/* 满减标签 */
+.package-card .discount {
+  font-size: var(--font-size-xxs);
+  color: var(--td-brand-color);
+  padding: 2rpx 8rpx;
+  background: var(--td-brand-color-light);
+  border-radius: var(--radius-xs);
+}

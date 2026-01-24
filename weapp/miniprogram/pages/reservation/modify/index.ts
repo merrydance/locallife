@@ -1,5 +1,5 @@
 import { ReservationItem, ReservationResponse, ReservationService } from '../../../api/reservation'
-import { getMerchantDishes, DishDTO } from '../../../api/merchant'
+import { getPublicMerchantDishes, DishDTO } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
@@ -75,7 +75,7 @@ Page({
         try {
             const reservationId = this.data.reservationId
             const reservation = await ReservationService.getReservationDetail(reservationId)
-            const dishesResponse = await getMerchantDishes(String(reservation.merchant_id))
+            const dishesResponse = await getPublicMerchantDishes(Number(reservation.merchant_id))
 
             const dishList: DishView[] = (dishesResponse.dishes || []).map((dish: DishDTO) => {
                 const id = Number(dish.id)

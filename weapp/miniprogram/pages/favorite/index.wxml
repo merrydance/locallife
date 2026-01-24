@@ -26,7 +26,7 @@
                  <text class="sub-text">{{item.sub_title}}</text>
               </view>
               <view class="tags" wx:if="{{item.tags && item.tags.length > 0}}">
-                <t-tag wx:for="{{item.tags}}" wx:key="*this" wx:for-item="tag" size="small" variant="light">{{tag}}</t-tag>
+                <t-tag wx:for="{{item.tags}}" wx:key="*this" wx:for-item="tag" size="small" variant="dark" theme="primary">{{tag}}</t-tag>
               </view>
             </view>
           </view>

@@ -1,39 +1,41 @@
 <custom-navbar title="菜品详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
   <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
   
   <view wx:if="{{!loading && dish}}" class="detail-content">
     <!-- 图片轮播 -->
-    <swiper class="image-swiper" indicator-dots indicator-color="rgba(255,255,255,0.5)" indicator-active-color="#fff" bindchange="onImageChange">
-      <swiper-item wx:for="{{dish.images}}" wx:key="*this">
-        <t-image class="dish-image" src="{{item}}" mode="aspectFill" />
-      </swiper-item>
-    </swiper>
-    <view class="image-indicator">{{currentImageIndex + 1}}/{{dish.images.length}}</view>
+    <view class="swiper-container">
+      <swiper class="image-swiper" indicator-dots indicator-color="rgba(255,255,255,0.5)" indicator-active-color="#fff" bindchange="onImageChange">
+        <swiper-item wx:for="{{dish.images}}" wx:key="*this">
+          <t-image class="dish-image" src="{{item}}" mode="aspectFill" lazy />
+        </swiper-item>
+      </swiper>
+      <view class="image-indicator">{{currentImageIndex + 1}} / {{dish.images.length}}</view>
+    </view>
 
     <!-- 基本信息 -->
-    <view class="info-section">
-      <view class="shop-dish-name">{{dish.shop_name}}·{{dish.name}}</view>
+    <view class="info-section card">
+      <view class="shop-dish-name">{{dish.name}}</view>
       <view class="price-row">
         <text class="price">¥{{dish.priceDisplay}}</text>
         <text wx:if="{{dish.originalPriceDisplay}}" class="original-price">¥{{dish.originalPriceDisplay}}</text>
       </view>
       <view class="tags-row">
-        <t-tag wx:if="{{dish.is_premade}}" theme="warning" variant="dark" size="small">预制菜</t-tag>
-        <t-tag wx:for="{{dish.attributes}}" wx:key="*this" theme="primary" variant="dark" size="small">{{item}}</t-tag>
+        <t-tag wx:if="{{dish.is_premade}}" theme="danger" variant="dark" size="small">预制菜</t-tag>
+        <t-tag wx:for="{{dish.attributes}}" wx:key="*this" theme="primary" variant="light-outline" size="small">{{item}}</t-tag>
       </view>
       <view class="meta-row">
-        <text class="sales">月销{{dish.month_sales}}</text>
+        <text class="sales">月销 {{dish.month_sales}}</text>
       </view>
       <view class="delivery-row" wx:if="{{dish.distance_km_display || dish.estimated_delivery_time_display}}">
-        <text class="distance" wx:if="{{dish.distance_km_display}}">📍{{dish.distance_km_display}}</text>
-        <text class="delivery-time" wx:if="{{dish.estimated_delivery_time_display}}">🕐{{dish.estimated_delivery_time_display}}</text>
+        <text class="distance" wx:if="{{dish.distance_km_display}}">近 {{dish.distance_km_display}}</text>
+        <text class="delivery-time" wx:if="{{dish.estimated_delivery_time_display}}">约 {{dish.estimated_delivery_time_display}} 送达</text>
       </view>
     </view>
 
     <!-- 规格选择 -->
-    <view class="spec-section" wx:if="{{dish.spec_groups && dish.spec_groups.length > 0}}">
+    <view class="spec-section card" wx:if="{{dish.spec_groups && dish.spec_groups.length > 0}}">
       <view class="spec-group" wx:for="{{dish.spec_groups}}" wx:for-item="group" wx:key="id">
         <view class="section-title">{{group.name}}</view>
         <view class="spec-options">
@@ -41,35 +43,39 @@
             wx:for="{{group.specs}}" 
             wx:for-item="spec" 
             wx:key="id"
-            class="spec-tag {{selectedSpecs[group.id] === spec.id ? 'active' : ''}}"
-            variant="{{selectedSpecs[group.id] === spec.id ? 'dark' : 'outline'}}"
-            theme="{{selectedSpecs[group.id] === spec.id ? 'primary' : 'default'}}"
+            class="spec-tag"
+            variant="{{selectedSpecs[group.id] === spec.id ? 'dark' : 'light-outline'}}"
+            theme="primary"
+            size="medium"
             data-group-id="{{group.id}}"
             data-spec-id="{{spec.id}}"
             bind:tap="onSpecTap"
           >
-            {{spec.name}} <text wx:if="{{spec.priceDiffDisplay}}">+¥{{spec.priceDiffDisplay}}</text>
+            {{spec.name}} <text wx:if="{{spec.priceDiffDisplay}}" style="margin-left: 4rpx;">+¥{{spec.priceDiffDisplay}}</text>
           </t-tag>
         </view>
       </view>
     </view>
 
     <!-- 菜品详情 -->
-    <view class="description-section">
+    <view class="description-section card" wx:if="{{dish.description}}">
       <view class="section-title">菜品详情</view>
       <text class="description">{{dish.description}}</text>
     </view>
 
     <!-- 商家信息 -->
-    <view class="shop-section" bindtap="onShopTap">
-      <view class="shop-info">
-        <text class="shop-name">{{dish.shop_name}}</text>
-        <text class="shop-arrow">›</text>
+    <view class="shop-section card" bindtap="onShopTap">
+      <view class="shop-section-content">
+        <view class="shop-info">
+          <t-icon name="shop" size="32rpx" color="var(--td-text-color-secondary)" />
+          <text class="shop-name">{{dish.shop_name}}</text>
+        </view>
+        <t-icon name="chevron-right" size="40rpx" color="var(--td-text-color-placeholder)" />
       </view>
     </view>
 
     <!-- 评价 -->
-    <view class="review-section">
+    <view class="review-section card" wx:if="{{dish.reviews && dish.reviews.length > 0}}">
       <view class="section-title">评价 ({{dish.reviews.length}})</view>
       <view wx:for="{{dish.reviews}}" wx:key="id" class="review-item">
         <view class="review-header">
@@ -77,11 +83,11 @@
           <text class="review-date">{{item.created_at}}</text>
         </view>
         <view class="review-rating">
-          <text wx:for="{{[1,2,3,4,5]}}" wx:key="*this" class="star">{{item.rating >= item ? '⭐' : '☆'}}</text>
+          <t-icon wx:for="{{[1,2,3,4,5]}}" wx:for-item="star" wx:key="*this" name="star-filled" size="24rpx" color="{{item.rating >= star ? 'var(--td-warning-color)' : 'var(--td-bg-color-secondarycontainer)'}}" />
         </view>
         <text class="review-content">{{item.content}}</text>
         <view wx:if="{{item.images.length > 0}}" class="review-images">
-          <t-image wx:for="{{item.images}}" wx:key="*this" class="review-image" src="{{item}}" mode="aspectFill" />
+          <t-image wx:for="{{item.images}}" wx:for-item="img" wx:key="*this" class="review-image" src="{{img}}" mode="aspectFill" lazy />
         </view>
       </view>
     </view>
@@ -91,10 +97,25 @@
 <!-- 底部操作栏 -->
 <view wx:if="{{!loading && dish}}" class="bottom-bar">
   <view class="quantity-control">
-    <t-button size="small" icon="remove" shape="circle" data-type="minus" bindtap="onQuantityChange" />
+    <t-button 
+      size="small" 
+      icon="remove" 
+      shape="circle" 
+      variant="outline"
+      theme="primary"
+      data-type="minus" 
+      bindtap="onQuantityChange" 
+    />
     <text class="quantity">{{quantity}}</text>
-    <t-button size="small" icon="add" shape="circle" theme="primary" data-type="plus" bindtap="onQuantityChange" />
+    <t-button 
+      size="small" 
+      icon="add" 
+      shape="circle" 
+      theme="primary" 
+      data-type="plus" 
+      bindtap="onQuantityChange" 
+    />
   </view>
-  <t-button class="cart-btn" bindtap="onAddToCart">加入购物车</t-button>
-  <t-button class="buy-btn" theme="primary" bindtap="onBuyNow">立即购买</t-button>
+  <t-button class="cart-btn" theme="primary" variant="outline" shape="round" bindtap="onAddToCart">加入购物车</t-button>
+  <t-button class="buy-btn" theme="primary" shape="round" bindtap="onBuyNow">立即购买</t-button>
 </view>

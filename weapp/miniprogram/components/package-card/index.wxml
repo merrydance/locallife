@@ -1,0 +1,29 @@
+<view class="package-card" bindtap="onTap">
+  <t-image class="package-image" src="{{package.imageUrl}}" mode="aspectFill" lazy />
+  <view class="package-info">
+    <view class="row-1">
+      <text class="shop-dish-name">{{package.merchantName}}·{{package.name}}</text>
+      <t-tag wx:if="{{package.merchantIsOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
+    </view>
+
+    <view class="row-2">
+      <text class="price">{{package.priceDisplay}}</text>
+      <text class="separator">|</text>
+      <text class="sales">{{package.salesBadge}}</text>
+    </view>
+    
+    <view class="row-3">
+      <text class="distance">📍{{package.distance}}</text>
+      <text wx:if="{{package.savingsPercent > 0}}" class="discount">省{{package.savingsPercent}}%</text>
+    </view>
+    
+    <view wx:if="{{package.deliveryFeeDisplay}}" class="row-4">
+      <text class="delivery-fee">{{package.deliveryFeeDisplay}}</text>
+    </view>
+    
+    <view wx:if="{{package.tags.length > 0}}" class="row-5">
+      <t-tag wx:for="{{package.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light-outline" theme="primary">{{tag}}</t-tag>
+    </view>
+  </view>
+  <t-button class="add-btn" theme="primary" size="small" icon="add" shape="circle" catchtap="onAdd" />
+</view>

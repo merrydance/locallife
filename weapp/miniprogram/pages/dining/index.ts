@@ -2,7 +2,7 @@ import { precheckDiningSession, openDiningSession, DiningSessionDTO, BillingGrou
 import { createDiningOrder } from '../../api/dining-session'
 import { createBillingGroup, listBillingGroupOrders } from '../../api/billing-group'
 import { getOrderDetail } from '../../api/order'
-import { getMerchantDishes, DishDTO } from '../../api/merchant'
+import { getPublicMerchantDishes as getMerchantDishes, DishDTO, PublicDish } from '../../api/merchant'
 import CartService from '../../services/cart'
 import { logger } from '../../utils/logger'
 import { ErrorHandler } from '../../utils/error-handler'
@@ -12,6 +12,7 @@ import { formatPriceNoSymbol } from '../../utils/util'
 type DishView = DishDTO & {
     priceDisplay: string
     memberPriceDisplay: string | null
+    hasCustomizations?: boolean
 }
 
 type CategoryView = {
@@ -160,14 +161,15 @@ Page({
 
     async loadMenu() {
         try {
-            const response = await getMerchantDishes(this.data.merchantId)
+            const response = await getMerchantDishes(Number(this.data.merchantId))
             // 预处理菜品价格
-            const dishes: DishView[] = (response.dishes || []).map((dish: DishDTO) => {
-                const memberPrice = (dish as unknown as { member_price?: number }).member_price
+            const dishes: DishView[] = (response.dishes || []).map((dish: PublicDish) => {
+                const memberPrice = dish.member_price
                 return {
                     ...dish,
                     priceDisplay: formatPriceNoSymbol(dish.price || 0),
-                    memberPriceDisplay: memberPrice ? formatPriceNoSymbol(memberPrice) : null
+                    memberPriceDisplay: memberPrice ? formatPriceNoSymbol(memberPrice) : null,
+                    hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0
                 }
             })
 
@@ -231,6 +233,11 @@ Page({
             this.updateCartDisplay()
             wx.showToast({ title: '已加入', icon: 'success', duration: 500 })
         }
+    },
+
+    onShowDishDetail(e: WechatMiniprogram.CustomEvent) {
+        // 暂时不支持在极简点餐页选规格，提示用户
+        wx.showToast({ title: '规格选择功能开发中', icon: 'none' })
     },
 
     updateCartDisplay() {

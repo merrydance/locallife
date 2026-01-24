@@ -1,149 +1,162 @@
-.page {
+.page-container {
   min-height: 100vh;
-  padding: 0 32rpx 120rpx;
-  background: #f5f6fb;
+  background: var(--td-bg-color-page);
 }
 
 .loading {
   display: flex;
   justify-content: center;
-  padding-top: 200rpx;
+  align-items: center;
+  width: 100%;
+  padding: 100rpx 0;
 }
 
-/* 状态卡片 */
+.detail-content {
+  padding-bottom: var(--spacer-xl);
+}
+
+/* 卡片通用样式 */
+.card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin: var(--spacer-sm) var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 支付状态卡片 */
 .status-card {
-  background: #fff;
-  border-radius: 28rpx;
-  padding: 48rpx 32rpx;
-  margin-top: 24rpx;
-  text-align: center;
-  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-xl) var(--spacer-md);
 }
 
 .status-icon {
-  margin-bottom: 16rpx;
+  margin-bottom: var(--spacer-xs);
 }
 
 .status-text {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #1d2750;
-  margin-bottom: 12rpx;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
 }
 
 .amount {
-  font-size: 56rpx;
-  font-weight: 700;
-  color: #1d2750;
+  font-size: var(--font-size-display);
+  font-weight: bold;
+  color: var(--td-text-color-primary);
 }
 
 /* 信息卡片 */
-.info-card {
-  background: #fff;
-  border-radius: 28rpx;
-  padding: 32rpx;
-  margin-top: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.08);
-}
-
 .card-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1d2750;
-  margin-bottom: 24rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid #edf0fb;
+  font-size: var(--font-size-heading);
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 16rpx 0;
+  align-items: center;
+  padding: var(--spacer-sm) 0;
+  font-size: var(--font-size-base);
 }
 
-.label {
-  font-size: 28rpx;
-  color: #9aa4c2;
+.info-row .label {
+  color: var(--td-text-color-secondary);
 }
 
-.value {
-  font-size: 28rpx;
-  color: #1d2750;
+.info-row .value {
+  color: var(--td-text-color-primary);
+  font-weight: 500;
   text-align: right;
-  max-width: 60%;
+  max-width: 65%;
   word-break: break-all;
 }
 
-/* 退款项 */
+/* 退款记录 */
 .refund-item {
-  padding: 20rpx 0;
-  border-bottom: 1rpx dashed #edf0fb;
+  padding: var(--spacer-md) 0;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
 }
 
 .refund-item:last-child {
   border-bottom: none;
+  padding-bottom: 0;
 }
 
 .refund-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8rpx;
+  margin-bottom: var(--spacer-xs);
 }
 
 .refund-amount {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #1d2750;
+  font-size: var(--font-size-heading);
+  font-weight: bold;
+  color: var(--td-text-color-primary);
 }
 
 .refund-status {
-  font-size: 24rpx;
-  padding: 6rpx 16rpx;
-  border-radius: 999rpx;
+  font-size: var(--font-size-xxs);
+  padding: 4rpx 16rpx;
+  border-radius: var(--radius-round);
+  font-weight: bold;
 }
 
 .refund-status.pending,
 .refund-status.processing {
-  background: #fff6d9;
-  color: #865900;
+  background: var(--td-warning-color-light);
+  color: var(--td-warning-color);
 }
 
 .refund-status.success {
-  background: #dff7e6;
-  color: #1d7a32;
+  background: var(--td-success-color-light);
+  color: var(--td-success-color);
 }
 
 .refund-status.failed {
-  background: #ffe8e8;
-  color: #e34d59;
+  background: var(--td-error-color-light);
+  color: var(--td-error-color);
 }
 
 .refund-info {
   display: flex;
   justify-content: space-between;
-  font-size: 24rpx;
-  color: #9aa4c2;
+  align-items: center;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
 }
 
 .refund-reason {
   flex: 1;
+  margin-right: var(--spacer-md);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* 操作栏 */
+/* 底部操作栏 */
 .action-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24rpx 32rpx;
-  background: #fff;
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.05);
+  padding: var(--spacer-sm) var(--spacer-md);
+  padding-bottom: calc(var(--spacer-sm) + env(safe-area-inset-bottom));
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-md);
+  z-index: var(--z-index-fixed);
+  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
 }
 
-.empty {
+.empty-view {
   padding-top: 200rpx;
 }

@@ -1,7 +1,12 @@
 import * as CartAPI from '@/api/cart'
 import { UserCartsResponse, MerchantCartResponse, CartResponse } from '@/api/cart'
+import { DishManagementService } from '@/api/dish'
 import { logger } from '@/utils/logger'
 import { getPublicImageUrl } from '@/utils/image'
+
+// ... existing imports
+
+// ... existing imports
 
 interface MerchantCartGroup {
   cartId: number
@@ -35,6 +40,9 @@ interface CartItemView {
   subtotal: number
   subtotalDisplay: string
   isAvailable: boolean
+  specDisplay?: string // 规格展示
+  customizations?: Record<string, unknown> // 原始定制选项，用于前端解析
+  dishImages?: string[] // 新增：套餐内的菜品图片
 }
 
 Page({
@@ -134,11 +142,148 @@ Page({
 
       // 同步到全局状态，让其他页面（如外卖首页）能感知购物车变化
       this.syncToGlobalStore()
+
+      // 【核心修复】异步解析规格名称和套餐图片
+      this.resolveVisibleItemDetails()
     } catch (error) {
       logger.error('Failed to load carts', error, 'cart.loadAllCarts')
       this.setData({ loading: false })
       wx.showToast({ title: '加载购物车失败', icon: 'none' })
     }
+  },
+
+  /**
+   * 异步解析商品规格名称和套餐详情
+   */
+  async resolveVisibleItemDetails() {
+    const { merchantGroups } = this.data
+    const dishIdsToFetch = new Set<number>()
+    const merchantIdsForCombos = new Set<number>()
+    const comboIdsToMap = new Set<number>()
+
+    // 1. 收集需要解析的 ID
+    merchantGroups.forEach(group => {
+      let hasCombo = false
+      group.items.forEach(item => {
+        if (item.dishId) {
+          if (item.customizations && Object.keys(item.customizations).length > 0) {
+            if (!item.specDisplay || item.specDisplay.match(/^[\d\s\/]+$/)) {
+              dishIdsToFetch.add(item.dishId)
+            }
+          }
+        } else if (item.comboId) {
+          hasCombo = true
+          comboIdsToMap.add(item.comboId)
+        }
+      })
+      if (hasCombo) {
+        merchantIdsForCombos.add(group.merchantId)
+      }
+    })
+
+    // 2. 并行获取菜品和套餐详情
+    const dishCache = new Map<number, any>()
+    const comboCache = new Map<number, any>()
+
+    const fetchPromises: Promise<any>[] = []
+
+    // 获取菜品
+    if (dishIdsToFetch.size > 0) {
+      Array.from(dishIdsToFetch).forEach(id => {
+        fetchPromises.push(DishManagementService.getDishDetail(id).then(dish => {
+          if (dish) dishCache.set(id, dish)
+        }).catch(() => {}))
+      })
+    }
+
+    // 获取商户套餐（因为没有单套餐查询API）
+    if (merchantIdsForCombos.size > 0) {
+      const { getPublicMerchantCombos, getPublicMerchantDishes } = require('@/api/merchant')
+      Array.from(merchantIdsForCombos).forEach(mid => {
+        fetchPromises.push(Promise.all([
+          getPublicMerchantCombos(mid),
+          getPublicMerchantDishes(mid)
+        ]).then(([combosRes, dishesRes]) => {
+          const merchantDishes = dishesRes.dishes || []
+          if (combosRes.combos) {
+            combosRes.combos.forEach((c: any) => {
+              if (comboIdsToMap.has(c.id)) {
+                // 注入菜品图片
+                const dishImages = (c.dishes || [])
+                  .map((cd: any) => merchantDishes.find((d: any) => d.id === cd.dish_id)?.image_url)
+                  .filter(Boolean)
+                  .map((url: string) => getPublicImageUrl(url))
+                comboCache.set(c.id, { ...c, dishImages })
+              }
+            })
+          }
+        }).catch(() => {}))
+      })
+    }
+
+    await Promise.all(fetchPromises)
+
+    // 3. 应用解析结果
+    let hasUpdates = false
+    const updatedGroups = merchantGroups.map(group => {
+      let groupUpdated = false
+      const newItems = group.items.map(item => {
+        let itemUpdated = false
+        const newItem = { ...item }
+
+        // 解析菜品规格
+        if (newItem.dishId && dishCache.has(newItem.dishId)) {
+          const dishStr = this.parseSpecNames(dishCache.get(newItem.dishId), newItem.customizations)
+          if (dishStr && dishStr !== newItem.specDisplay) {
+            newItem.specDisplay = dishStr
+            itemUpdated = true
+          }
+        }
+
+        // 解析套餐图片
+        if (newItem.comboId && comboCache.has(newItem.comboId)) {
+          const combo = comboCache.get(newItem.comboId)
+          if (combo.dishImages && combo.dishImages.length > 0) {
+            newItem.dishImages = combo.dishImages
+            itemUpdated = true
+          }
+        }
+
+        if (itemUpdated) {
+          groupUpdated = true
+          hasUpdates = true
+        }
+        return newItem
+      })
+
+      return groupUpdated ? { ...group, items: newItems } : group
+    })
+
+    if (hasUpdates) {
+      this.setData({ merchantGroups: updatedGroups })
+    }
+  },
+
+  /**
+   * 解析规格名称（复用逻辑）
+   */
+  parseSpecNames(dish: any, custs: any): string | null {
+    if (!dish || !custs) return null
+    const groups = dish.customization_groups || dish.customizationGroups || []
+    if (groups.length === 0) return null
+
+    const specNames: string[] = []
+    const allOptions = groups.flatMap((g: any) => g.options || [])
+
+    for (const groupId in custs) {
+      if (groupId.startsWith('meta_') || groupId.startsWith('_')) continue
+      const targetOptionId = String(custs[groupId])
+      const foundOption = allOptions.find((o: any) => String(o.id) === targetOptionId || String(o.tag_id) === targetOptionId)
+      if (foundOption) {
+        specNames.push(foundOption.tag_name || foundOption.name || '未知')
+      }
+    }
+    return specNames.length > 0 ? specNames.join(' / ') : null
   },
 
   /**
@@ -165,19 +310,43 @@ Page({
    * 构建商户购物车组
    */
   buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetail: CartResponse): MerchantCartGroup {
-    const items: CartItemView[] = (cartDetail.items || []).map(item => ({
-      id: item.id,
-      dishId: item.dish_id,
-      comboId: item.combo_id,
-      name: item.name,
-      imageUrl: getPublicImageUrl(item.image_url || ''),
-      quantity: item.quantity,
-      unitPrice: item.unit_price,
-      priceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
-      subtotal: item.subtotal,
-      subtotalDisplay: `¥${(item.subtotal / 100).toFixed(2)}`,
-      isAvailable: item.is_available
-    }))
+    const items: CartItemView[] = (cartDetail.items || []).map(item => {
+      // 处理规格展示
+      // 优先读取元数据 meta_specs
+      // 如果没有元数据，尝试直接拼接 values (此时可能是 IDs, 前端无法 resolve names 除非 heavy fetching)
+      let specDisplay = ''
+      if (item.customizations) {
+        if (typeof item.customizations['meta_specs'] === 'string') {
+          specDisplay = item.customizations['meta_specs']
+        } else if (Object.keys(item.customizations).length > 0) {
+           // 过滤掉非数字 key (假设 group id 是数字), 且过滤 internal keys
+           const meaningfulSpecs = Object.entries(item.customizations)
+             .filter(([key]) => !key.startsWith('_') && !key.startsWith('meta_') && /^\d+$/.test(key))
+             .map(([, val]) => String(val))
+           
+           if (meaningfulSpecs.length > 0) {
+             // 暂时显示纯 ID 作为 fallback，等 resolveSpecsForVisibleItems 异步更新为名称
+             specDisplay = meaningfulSpecs.join(' / ') 
+           }
+        }
+      }
+
+      return {
+        id: item.id,
+        dishId: item.dish_id,
+        comboId: item.combo_id,
+        name: item.name,
+        imageUrl: getPublicImageUrl(item.image_url || ''),
+        quantity: item.quantity,
+        unitPrice: item.unit_price,
+        priceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
+        subtotal: item.subtotal,
+        subtotalDisplay: `¥${(item.subtotal / 100).toFixed(2)}`,
+        isAvailable: item.is_available,
+        specDisplay,
+        customizations: item.customizations
+      }
+    })
 
     const subtotal = cartDetail.subtotal || 0
     const orderType = cartDetail.order_type || merchantCart.order_type || 'takeout'

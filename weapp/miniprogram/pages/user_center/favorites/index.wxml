@@ -30,7 +30,7 @@
           <view class="item-info">
             <view class="item-header">
               <text class="item-name">{{item.name}}</text>
-              <t-tag size="small" variant="light">{{item.type === 'DISH' ? '菜品' : '餐厅'}}</t-tag>
+              <t-tag size="small" variant="dark" theme="primary">{{item.type === 'DISH' ? '菜品' : '餐厅'}}</t-tag>
             </view>
             <text class="item-desc">{{item.desc}}</text>
             <view class="item-bottom">

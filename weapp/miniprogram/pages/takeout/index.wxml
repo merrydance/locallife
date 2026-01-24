@@ -84,38 +84,16 @@
 
     <!-- 套餐列表 -->
     <block wx:if="{{activeTab === 'packages'}}">
-      <view wx:for="{{packages}}" wx:key="id" class="package-card" bindtap="onPackageTap" data-id="{{item.id}}">
-        <t-image class="package-image" src="{{item.imageUrl}}" mode="aspectFill" lazy />
-        <view class="package-info">
-          <!-- 第1行: 店名·套餐名 + 休息中标签 -->
-          <view class="row-1">
-            <text class="shop-dish-name">{{item.merchantName}}·{{item.name}}</text>
-            <t-tag wx:if="{{item.merchantIsOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
-          </view>
-
-          <!-- 第2行: 价格 | 销量 -->
-          <view class="row-2">
-            <text class="price">{{item.priceDisplay}}</text>
-            <text class="separator">|</text>
-            <text class="sales">{{item.salesBadge}}</text>
-          </view>
-          <!-- 第3行: 距离 + 优惠百分比 -->
-          <view class="row-3">
-            <text class="distance">📍{{item.distance}}</text>
-            <text wx:if="{{item.savingsPercent > 0}}" class="discount">省{{item.savingsPercent}}%</text>
-          </view>
-          <!-- 第4行: 配送费 -->
-          <view wx:if="{{item.deliveryFeeDisplay}}" class="row-4">
-            <text class="delivery-fee">{{item.deliveryFeeDisplay}}</text>
-          </view>
-          <!-- 第5行: 标签 -->
-          <view wx:if="{{item.tags.length > 0}}" class="row-5">
-            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light-outline" theme="primary">{{tag}}</t-tag>
-          </view>
-        </view>
-        <!-- 加购按钮 -->
-        <t-button class="add-btn" theme="primary" size="small" icon="add" shape="circle" catchtap="onAddComboToCart" data-id="{{item.id}}" data-merchant-id="{{item.merchantId}}" />
-      </view>
+      <package-card 
+        wx:for="{{packages}}" 
+        wx:key="id" 
+        package="{{item}}" 
+        class="package-item"
+        data-id="{{item.id}}"
+        data-merchant-id="{{item.merchantId}}"
+        bind:click="onPackageTap"
+        bind:add="onAddComboToCart"
+      />
       <t-empty wx:if="{{!loading && packages.length === 0}}" description="暂无套餐" />
       <view wx:if="{{!hasMore && packages.length > 0}}" class="no-more">没有更多了</view>
     </block>

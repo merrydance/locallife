@@ -3,6 +3,8 @@
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-image": "tdesign-miniprogram/image/image",
-        "t-button": "tdesign-miniprogram/button/button"
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-icon": "tdesign-miniprogram/icon/icon"
     }
 }

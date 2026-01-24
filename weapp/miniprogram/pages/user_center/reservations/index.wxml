@@ -28,7 +28,7 @@
       <view class="card-header">
         <view class="merchant-row">
           <view class="merchant-name">{{item._merchantName}}</view>
-          <t-tag class="status-tag {{item._statusClass}}" variant="light" theme="{{item._statusClass === 'completed' ? 'success' : (item._statusClass === 'cancelled' ? 'default' : 'primary')}}">{{item._statusText}}</t-tag>
+          <t-tag class="status-tag {{item._statusClass}}" variant="dark" theme="{{item._statusClass === 'completed' ? 'success' : (item._statusClass === 'cancelled' ? 'default' : 'primary')}}">{{item._statusText}}</t-tag>
         </view>
         <view class="merchant-meta">
           <text class="merchant-address" wx:if="{{item._merchantAddress}}">{{item._merchantAddress}}</text>

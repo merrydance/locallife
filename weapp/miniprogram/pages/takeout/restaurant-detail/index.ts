@@ -72,6 +72,7 @@ interface ComboView {
   originalPriceDisplay: string
   savingsDisplay: string
   dishes: PublicCombo['dishes']
+  dish_images: string[] // 新增：包含菜品的图片列表
 }
 
 Page({
@@ -89,7 +90,8 @@ Page({
     cartPrice: 0,
     cartPriceDisplay: '0.00',
     navBarHeight: 88,
-    loading: true
+    loading: true,
+    headerCollapsed: false
   },
 
   onLoad(options: { id?: string }) {
@@ -124,7 +126,7 @@ Page({
       const merchantId = parseInt(this.data.restaurantId)
 
       // 并行加载商户信息、菜品、套餐和包间
-      const [merchantResult, dishesResult, combosResult, roomsResult] = await Promise.all([
+      const [merchantResult, dishesResult, combosResultFirstPass, roomsResult] = await Promise.all([
         this.loadMerchantInfo(merchantId),
         this.loadDishes(merchantId),
         this.loadCombos(merchantId),
@@ -136,6 +138,14 @@ Page({
         this.setData({ loading: false })
         return
       }
+
+      // 第二次处理套餐，注入菜品图片
+      const combosResult = combosResultFirstPass.map(combo => {
+        const dishImages = (combo.dishes || [])
+          .map(cd => dishesResult.dishes.find(d => d.id === cd.dish_id)?.image_url)
+          .filter(Boolean) as string[]
+        return { ...combo, dish_images: dishImages }
+      })
 
       // 从菜品中提取分类
       const categories = this.extractCategories(dishesResult)
@@ -262,7 +272,8 @@ Page({
         original_price: combo.original_price,
         originalPriceDisplay: formatPriceNoSymbol(combo.original_price || 0),
         savingsDisplay: formatPriceNoSymbol((combo.original_price || 0) - (combo.combo_price || 0)),
-        dishes: combo.dishes || []
+        dishes: combo.dishes || [],
+        dish_images: [] // 初始为空，由外层逻辑注入
       }))
     } catch (error) {
       console.error('加载套餐失败:', error)
@@ -276,7 +287,8 @@ Page({
       // 包间图片是公共图片，使用getPublicImageUrl处理
       return (result.rooms || []).map((room: PublicRoom) => ({
         ...room,
-        primary_image: room.primary_image ? getPublicImageUrl(room.primary_image) : ''
+        primary_image: room.primary_image ? getPublicImageUrl(room.primary_image) : '',
+        minimum_spend: room.minimum_spend || 0 // 防御性处理：防止 NaN
       }))
     } catch (error) {
       console.error('加载包间失败:', error)
@@ -448,5 +460,21 @@ Page({
         url: `/pages/reservation/room-detail/index?id=${roomId}`
       })
     }
+  },
+
+  onScroll(e: WechatMiniprogram.CustomEvent) {
+    const { scrollTop } = e.detail
+    const { headerCollapsed } = this.data
+    const threshold = 50 // 滚动阈值
+
+    if (scrollTop > threshold && !headerCollapsed) {
+      this.setData({ headerCollapsed: true })
+    } else if (scrollTop <= threshold && headerCollapsed) {
+      this.setData({ headerCollapsed: false })
+    }
+  },
+
+  stopPropagation() {
+    // 仅用于阻止冒泡
   }
 })

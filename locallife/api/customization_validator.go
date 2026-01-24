@@ -45,6 +45,11 @@ func parseCustomizationSelections(customizations map[string]interface{}) ([]cust
 	}
 	selections := make([]customizationSelection, 0, len(customizations))
 	for groupKey, raw := range customizations {
+		// allow meta keys
+		if len(groupKey) > 5 && groupKey[:5] == "meta_" {
+			continue
+		}
+
 		groupID, err := strconv.ParseInt(groupKey, 10, 64)
 		if err != nil || groupID <= 0 {
 			return nil, fmt.Errorf("invalid customization group id: %s", groupKey)
@@ -172,6 +177,13 @@ func (server *Server) normalizeDishCustomizations(ctx *gin.Context, dishID int64
 			Value:      option.TagName,
 			ExtraPrice: option.ExtraPrice,
 		})
+	}
+
+	// copy meta_specs if exists
+	if val, ok := customizations["meta_specs"]; ok {
+		if strVal, ok := val.(string); ok {
+			normalized["meta_specs"] = strVal
+		}
 	}
 
 	return items, extraPrice, normalized, nil

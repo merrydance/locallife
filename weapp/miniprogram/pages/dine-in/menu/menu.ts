@@ -654,6 +654,136 @@ Page({
         this.setData({ selectedDish: null })
     },
 
+    // ==================== 选规格 Drawer ====================
+
+    /**
+     * 打开选规格抽屉
+     */
+    openCustomDrawer(e: WechatMiniprogram.CustomEvent) {
+        const dishId = e.currentTarget.dataset.id
+        const dish = this.data.currentDishes.find((d) => d.id === dishId)
+        if (!dish) return
+
+        if (this.data.selectedDish) {
+            this.closeDishDetail()
+        }
+
+        // 转换定制组数据格式
+        const spec_groups = (dish.customization_groups || []).map(group => ({
+            id: String(group.id),
+            name: group.name,
+            is_required: group.is_required,
+            specs: (group.options || []).map(opt => ({
+                id: String(opt.id),
+                name: opt.tag_name || '选项', // 使用 tag_name
+                price_diff: opt.extra_price || 0,
+                priceDiffDisplay: opt.extra_price ? formatPriceNoSymbol(opt.extra_price) : null
+            }))
+        }))
+
+        // 初始化选中状态
+        const drawerSpecs: Record<string, string> = {}
+        spec_groups.forEach(group => {
+            // 如果是必选且有选项，默认选中第一个
+            if (group.is_required && group.specs.length > 0) {
+                drawerSpecs[group.id] = group.specs[0].id
+            }
+        })
+
+        const drawerDish: DrawerDish = {
+            ...dish,
+            spec_groups
+        }
+
+        this.setData({
+            drawerDish,
+            drawerSpecs,
+            drawerQty: 1,
+            drawerVisible: true
+        })
+    },
+
+    /**
+     * 关闭选规格抽屉
+     */
+    closeCustomDrawer() {
+        this.setData({ drawerVisible: false })
+    },
+
+    /**
+     * 切换规格选项
+     */
+    onDrawerSpecTap(e: WechatMiniprogram.CustomEvent) {
+        const { groupId, specId } = e.currentTarget.dataset
+        const drawerSpecs = { ...this.data.drawerSpecs }
+        
+        // 简单处理：单选逻辑。如果需要多选，这里需要改
+        // 根据 CustomizationGroup 定义，目前没有 explicitly say single/multi select. 
+        // 但通常 Radio for single, Checkbox for multi. 
+        // 这里暂时假设一个组内单选。
+        // 如果点击已选中的，且非必选，可以取消？暂不支持取消，点击即选中。
+        
+        drawerSpecs[groupId] = specId
+        this.setData({ drawerSpecs })
+    },
+
+    /**
+     * Drawer 数量减
+     */
+    onDrawerDecrease() {
+        if (this.data.drawerQty > 1) {
+            this.setData({ drawerQty: this.data.drawerQty - 1 })
+        }
+    },
+
+    /**
+     * Drawer 数量加
+     */
+    onDrawerIncrease() {
+        this.setData({ drawerQty: this.data.drawerQty + 1 })
+    },
+
+    /**
+     * 确认选规格加入购物车
+     */
+    async onConfirmCustom() {
+        if (!this.data.drawerDish) return
+
+        const { drawerDish, drawerSpecs, drawerQty } = this.data
+
+        // 校验必选
+        for (const group of drawerDish.spec_groups || []) {
+            if (group.is_required && !drawerSpecs[group.id]) {
+                wx.showToast({ title: `请选择${group.name}`, icon: 'none' })
+                return
+            }
+        }
+
+        try {
+            wx.showLoading({ title: '加入购物车...' })
+            
+            await addToCart({
+                merchant_id: this.data.merchantId,
+                dish_id: drawerDish.id,
+                quantity: drawerQty,
+                customizations: drawerSpecs,
+                order_type: this.data.orderType,
+                table_id: this.data.tableId || undefined,
+                reservation_id: this.data.reservationId || undefined
+            })
+
+            this.closeCustomDrawer()
+            wx.showToast({ title: '已加入', icon: 'success' })
+            this.scheduleCartSync()
+            
+        } catch (error) {
+            console.error('加入购物车失败:', error)
+            wx.showToast({ title: '加入失败', icon: 'none' })
+        } finally {
+            wx.hideLoading()
+        }
+    },
+
     /**
      * 更新购物车数量（WXML 事件绑定）
      */
@@ -826,108 +956,4 @@ Page({
         }
     },
 
-    // ==================== 定制 Drawer ====================
-
-    /**
-     * 打开定制 Drawer
-     */
-    openCustomDrawer(e: WechatMiniprogram.CustomEvent) {
-        const dishId = e.currentTarget.dataset.id
-        const dish = this.data.currentDishes.find((d) => d.id === dishId)
-        if (!dish) return
-
-        // 将 customization_groups 转换为 spec_groups 格式
-        const specGroups = (dish.customization_groups || []).map((group: CustomizationGroup) => ({
-            id: String(group.id),
-            name: group.name,
-            is_required: group.is_required,
-            specs: (group.options || []).map((opt: CustomizationOption) => ({
-                id: String(opt.id),
-                name: opt.tag_name || (opt as unknown as { name?: string }).name || '',
-                price_diff: opt.extra_price || 0,
-                priceDiffDisplay: opt.extra_price ? formatPriceNoSymbol(opt.extra_price) : null
-            }))
-        }))
-
-        // 初始化规格选择（每组选第一个）
-        const defaultSpecs: Record<string, string> = {}
-        specGroups.forEach((group) => {
-            if (group.specs && group.specs.length > 0) {
-                defaultSpecs[group.id] = group.specs[0].id
-            }
-        })
-
-        this.setData({
-            drawerVisible: true,
-            drawerDish: { ...dish, spec_groups: specGroups },
-            drawerSpecs: defaultSpecs,
-            drawerQty: 1
-        })
-    },
-
-    /**
-     * 关闭定制 Drawer
-     */
-    closeCustomDrawer() {
-        this.setData({ drawerVisible: false, drawerDish: null })
-    },
-
-    /**
-     * 选择规格
-     */
-    onDrawerSpecTap(e: WechatMiniprogram.CustomEvent) {
-        const { groupId, specId } = e.currentTarget.dataset
-        this.setData({ [`drawerSpecs.${groupId}`]: specId })
-    },
-
-    /**
-     * Drawer 增加数量
-     */
-    onDrawerIncrease() {
-        this.setData({ drawerQty: this.data.drawerQty + 1 })
-    },
-
-    /**
-     * Drawer 减少数量
-     */
-    onDrawerDecrease() {
-        if (this.data.drawerQty > 1) {
-            this.setData({ drawerQty: this.data.drawerQty - 1 })
-        }
-    },
-
-    /**
-     * 确认定制加入购物车
-     */
-    async onConfirmCustom() {
-        const { drawerDish, drawerSpecs, drawerQty, merchantId } = this.data
-        if (!drawerDish) return
-
-        try {
-            // 构建定制信息
-            const customizations: Record<string, number | string> = {}
-            for (const groupId in drawerSpecs) {
-                if (Object.prototype.hasOwnProperty.call(drawerSpecs, groupId)) {
-                    customizations[groupId] = drawerSpecs[groupId]
-                }
-            }
-
-            const updatedCart = await addToCart({
-                merchant_id: merchantId,
-                dish_id: drawerDish.id,
-                quantity: drawerQty,
-                customizations,
-                order_type: this.data.orderType,
-                table_id: this.data.tableId || undefined,
-                reservation_id: this.data.reservationId || undefined
-            }, { loading: false })
-
-            this.setData({ drawerVisible: false, drawerDish: null })
-            this.applyCartData(updatedCart)
-            wx.showToast({ title: '已添加', icon: 'success' })
-        } catch (error) {
-            this.loadCart()
-            wx.showToast({ title: error instanceof Error ? error.message : '添加失败', icon: 'none' })
-        }
-    }
 })

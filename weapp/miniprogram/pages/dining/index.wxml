@@ -45,6 +45,17 @@
             </view>
           </view>
           <t-button 
+            wx:if="{{item.hasCustomizations}}"
+            class="spec-btn"
+            size="small" 
+            theme="primary"
+            variant="outline"
+            shape="round"
+            data-id="{{item.id}}"
+            bindtap="onShowDishDetail"
+          >选规格</t-button>
+          <t-button 
+            wx:else
             class="add-btn" 
             size="small" 
             icon="add" 

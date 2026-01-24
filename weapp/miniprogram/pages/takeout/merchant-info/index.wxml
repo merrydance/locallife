@@ -12,7 +12,7 @@
           <text class="hero-tag">约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</text>
         </view>
         <view class="hero-tags" wx:if="{{restaurant.tags.length > 0}}">
-          <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" theme="light">{{item}}</t-tag>
+          <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="dark" theme="primary">{{item}}</t-tag>
         </view>
       </view>
     </view>
@@ -53,15 +53,15 @@
         <view class="section-title">优惠活动</view>
         <view class="promotion-list">
           <view class="promo-item" wx:for="{{restaurant.discount_rules}}" wx:key="id">
-            <t-tag theme="danger" variant="light" size="small" class="promo-tag">满减</t-tag>
+            <t-tag theme="danger" variant="dark" size="small" class="promo-tag">满减</t-tag>
             <text class="promo-text">满 {{item.min_order_amount / 100}} 减 {{item.discount_amount / 100}}</text>
           </view>
           <view class="promo-item" wx:for="{{restaurant.vouchers}}" wx:key="id">
-            <t-tag theme="warning" variant="light" size="small" class="promo-tag">代金券</t-tag>
+            <t-tag theme="warning" variant="dark" size="small" class="promo-tag">代金券</t-tag>
             <text class="promo-text">{{item.name}}: ¥{{item.amount / 100}}</text>
           </view>
           <view class="promo-item" wx:for="{{restaurant.delivery_promotions}}" wx:key="id">
-            <t-tag theme="success" variant="light" size="small" class="promo-tag">配送费</t-tag>
+            <t-tag theme="success" variant="dark" size="small" class="promo-tag">配送费</t-tag>
             <text class="promo-text">满 {{item.min_order_amount / 100}} 减免 {{item.discount_amount / 100}}</text>
           </view>
         </view>

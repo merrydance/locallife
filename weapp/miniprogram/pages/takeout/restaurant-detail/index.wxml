@@ -1,45 +1,61 @@
 <custom-navbar title="{{restaurant.name || '餐厅详情'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<!-- 头图 - 固定不滚动 -->
-<view class="header-section" style="top: {{navBarHeight}}px; background-image: url('{{restaurant.cover_image || restaurant.logo_url || '/assets/happy.jpg'}}')">
+<!-- 餐厅头图及基本信息 -->
+<view class="header-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: {{navBarHeight}}px; background-image: url('{{restaurant.cover_image || restaurant.logo_url || '/assets/happy.jpg'}}')">
   <view class="header-overlay">
     <view class="restaurant-title-row" bindtap="onMerchantInfoTap">
-      <view class="restaurant-name">{{restaurant.name}}</view>
-      <text class="name-arrow">›</text>
+      <view class="restaurant-name {{headerCollapsed ? 'text-ellipsis' : ''}}">{{restaurant.name}}</view>
+      <t-icon name="chevron-right" size="40rpx" class="name-arrow" />
     </view>
-    <view class="restaurant-meta">
-      <text class="address" bindtap="onMapTap">{{restaurant.address}}</text>
+    <view class="restaurant-meta" bindtap="onMerchantInfoTap" wx:if="{{!headerCollapsed}}">
+      <view style="display: flex; align-items: center; gap: 8rpx;">
+        <t-icon name="location" size="28rpx" />
+        <text>{{restaurant.address}}</text>
+      </view>
     </view>
-    <view class="restaurant-service">
-      <text class="service-count">本月服务 {{restaurant.monthly_sales || 0}} 单</text>
-      <text class="delivery-time">约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</text>
+    <view class="restaurant-service" wx:if="{{!headerCollapsed}}">
+      <view class="service-count">
+        <text>本月服务 {{restaurant.monthly_sales || 0}} 单</text>
+      </view>
+      <view class="delivery-time">
+        <t-icon name="time" size="24rpx" style="margin-right: 4rpx;" />
+        <text>约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</text>
+      </view>
     </view>
-    <view class="restaurant-tags" wx:if="{{restaurant.tags.length > 0}}">
-      <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" theme="light">{{item}}</t-tag>
+    <view class="restaurant-tags" wx:if="{{restaurant.tags.length > 0 && !headerCollapsed}}">
+      <t-tag 
+        wx:for="{{restaurant.tags}}" 
+        wx:key="*this" 
+        size="extra-small" 
+        variant="light" 
+        theme="primary"
+        style="border-radius: var(--radius-xs);"
+      >{{item}}</t-tag>
     </view>
   </view>
 </view>
 
-<!-- Tab切换 - 固定不滚动 -->
-<view class="tabs-section" style="top: calc({{navBarHeight}}px + 300rpx);">
-  <t-tabs value="{{activeTab}}" bind:change="onTabChange">
+<!-- Tab 导航 -->
+<view class="tabs-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: calc({{navBarHeight}}px + {{headerCollapsed ? '100rpx' : '320rpx'}});">
+  <t-tabs value="{{activeTab}}" bind:change="onTabChange" list-style="border-bottom: none;">
     <t-tab-panel label="菜品" value="dishes" />
-    <t-tab-panel label="套餐({{combos.length}})" value="combos" />
-    <t-tab-panel label="包间({{rooms.length}})" value="rooms" />
+    <t-tab-panel label="套餐" value="combos" />
+    <t-tab-panel label="包间" value="rooms" />
   </t-tabs>
 </view>
 
-<view wx:if="{{loading}}" class="loading-wrapper" style="margin-top: calc({{navBarHeight}}px + 380rpx);">
-  <t-loading theme="circular" size="40rpx" />
+<view wx:if="{{loading}}" class="loading-wrapper" style="margin-top: calc({{navBarHeight}}px + 400rpx);">
+  <t-loading theme="circular" size="48rpx" text="正在加载..." />
 </view>
 
-<!-- 内容区域 - 只有这里滚动 -->
-<view wx:if="{{!loading && restaurant}}" class="content-area" style="top: calc({{navBarHeight}}px + 300rpx + 88rpx);">
-  <!-- 菜品Tab -->
+<!-- 核心内容区域 -->
+<view wx:if="{{!loading && restaurant}}" class="content-area {{headerCollapsed ? 'collapsed' : ''}} {{activeTab === 'rooms' ? 'no-cart' : ''}}" style="top: calc({{navBarHeight}}px + {{headerCollapsed ? '100rpx' : '320rpx'}} + 96rpx);">
+  
+  <!-- 菜品列表 (点单模式) -->
   <view wx:if="{{activeTab === 'dishes'}}" class="dishes-tab">
     <view class="dishes-container">
-      <!-- 左侧分类 -->
-      <scroll-view class="category-sidebar" scroll-y>
+      <!-- 左侧全部分类 -->
+      <scroll-view class="category-sidebar" scroll-y enhanced show-scrollbar="{{false}}">
         <view 
           wx:for="{{categories}}" 
           wx:key="id"
@@ -47,120 +63,135 @@
           data-id="{{item.id}}"
           bindtap="onCategoryChange"
         >
-          {{item.name}}
+          <text>{{item.name}}</text>
         </view>
+        <view style="height: 100rpx;"></view>
       </scroll-view>
 
-      <!-- 右侧菜品列表 -->
-      <scroll-view class="dishes-list" scroll-y>
-        <view wx:for="{{filteredDishes}}" wx:key="id" class="dish-item" data-id="{{item.id}}" bindtap="onDishTap">
-          <t-image class="dish-image" src="{{item.image_url}}" mode="aspectFill" />
+      <!-- 右侧商品列表 -->
+      <scroll-view class="dishes-list" scroll-y enhanced show-scrollbar="{{false}}" bindscroll="onScroll">
+        <view wx:for="{{filteredDishes}}" wx:key="id" class="dish-item" bindtap="onDishTap" data-id="{{item.id}}">
+          <t-image class="dish-image" src="{{item.image_url}}" mode="aspectFill" lazy />
           <view class="dish-info">
-            <text class="dish-name">{{item.name}}</text>
-            <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
-              <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light-outline" theme="primary">{{tag}}</t-tag>
-            </view>
-            <view class="dish-meta">
-              <text class="sales">月销 {{item.monthly_sales || 0}}</text>
+            <view>
+              <view class="dish-name">{{item.name}}</view>
+              <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
+                <t-tag 
+                  wx:for="{{item.tags}}" 
+                  wx:for-item="tag" 
+                  wx:key="*this" 
+                  size="extra-small" 
+                  variant="light-outline" 
+                  theme="primary"
+                >{{tag}}</t-tag>
+              </view>
+              <view class="dish-meta">月售 {{item.monthly_sales || 0}}</view>
             </view>
             <view class="dish-price-row">
               <text class="dish-price">¥{{item.priceDisplay}}</text>
               <text wx:if="{{item.originalPriceDisplay}}" class="dish-original-price">¥{{item.originalPriceDisplay}}</text>
             </view>
           </view>
-          <t-button 
-            wx:if="{{item.hasCustomizations}}"
-            size="small" 
-            theme="primary"
-            variant="outline"
-            shape="round"
-            data-id="{{item.id}}"
-            catchtap="onDishTap"
-          >选规格</t-button>
-          <t-button 
-            wx:else
-            class="add-btn" 
-            size="small" 
-            icon="add" 
-            shape="circle" 
-            theme="primary"
-            data-id="{{item.id}}"
-            catchtap="onAddCart"
-          />
+          <view class="action-area" catchtap="stopPropagation">
+            <t-button 
+              wx:if="{{item.hasCustomizations}}"
+              size="extra-small" 
+              theme="primary"
+              variant="outline"
+              shape="round"
+              data-id="{{item.id}}"
+              catchtap="onDishTap"
+            >规格</t-button>
+            <t-button 
+              wx:else
+              icon="add" 
+              shape="circle" 
+              theme="primary"
+              size="small"
+              data-id="{{item.id}}"
+              catchtap="onAddCart"
+            />
+          </view>
         </view>
         <view wx:if="{{filteredDishes.length === 0}}" class="empty-category">
-          <text>该分类暂无菜品</text>
+          <t-empty icon="info-circle" description="该分类暂无商品" />
         </view>
+        <view style="height: 120rpx;"></view>
       </scroll-view>
     </view>
   </view>
 
-  <!-- 套餐Tab -->
-  <scroll-view wx:if="{{activeTab === 'combos'}}" class="combos-tab" scroll-y>
+  <!-- 精选套餐 -->
+  <scroll-view wx:if="{{activeTab === 'combos'}}" class="combos-tab" scroll-y bindscroll="onScroll">
     <block wx:if="{{combos.length > 0}}">
       <view wx:for="{{combos}}" wx:key="id" class="combo-item" data-id="{{item.id}}" bindtap="onComboTap">
-        <t-image wx:if="{{item.image_url}}" class="combo-image" src="{{item.image_url}}" mode="aspectFill" />
+        <!-- 套餐多图组合展示 -->
+        <view class="combo-image-grid grid-count-{{item.dish_images.length > 4 ? 4 : item.dish_images.length}}" wx:if="{{item.dish_images && item.dish_images.length > 0}}">
+          <t-image 
+            wx:for="{{item.dish_images}}" 
+            wx:for-item="img" 
+            wx:for-index="imgIdx"
+            wx:if="{{imgIdx < 4}}"
+            wx:key="*this"
+            class="grid-img" 
+            src="{{img}}" 
+            mode="aspectFill" 
+            lazy 
+          />
+        </view>
+        <t-image wx:else class="combo-image" src="{{item.image_url}}" mode="aspectFill" lazy />
+
         <view class="combo-info">
-          <text class="combo-name">{{item.name}}</text>
-          <text wx:if="{{item.description}}" class="combo-desc">{{item.description}}</text>
-          <view class="combo-dishes-list" wx:if="{{item.dishes && item.dishes.length > 0}}">
-            <view wx:for="{{item.dishes}}" wx:for-item="dish" wx:key="dish_id" class="combo-dish-item">
-              <text class="combo-dish-name">{{dish.dish_name}}</text>
-              <text class="combo-dish-qty">×{{dish.quantity}}</text>
-            </view>
+          <view>
+            <view class="combo-name">{{item.name}}</view>
+            <view class="combo-desc">{{item.description}}</view>
           </view>
           <view class="combo-price-row">
             <text class="combo-price">¥{{item.comboPriceDisplay}}</text>
-            <text class="combo-original-price">¥{{item.originalPriceDisplay}}</text>
-            <text class="combo-discount">省¥{{item.savingsDisplay}}</text>
+            <view class="combo-discount">省 ¥{{item.savingsDisplay}}</view>
+            <t-button 
+              icon="add" 
+              shape="circle" 
+              theme="primary"
+              size="small"
+              style="margin-left: auto;"
+              data-id="{{item.id}}"
+              catchtap="onAddComboCart"
+            />
           </view>
         </view>
-        <t-button 
-          class="add-btn" 
-          size="small" 
-          icon="add" 
-          shape="circle" 
-          theme="primary"
-          data-id="{{item.id}}"
-          catchtap="onAddComboCart"
-        />
       </view>
     </block>
-    <t-empty wx:else description="暂无套餐" />
+    <t-empty wx:else icon="info-circle" description="暂无精选套餐" />
+    <view class="empty-placeholder"></view>
   </scroll-view>
 
-  <!-- 包间Tab -->
-  <scroll-view wx:if="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y>
+  <!-- 豪华包间 -->
+  <scroll-view wx:if="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y bindscroll="onScroll">
     <block wx:if="{{rooms.length > 0}}">
       <view wx:for="{{rooms}}" wx:key="id" class="room-item" data-id="{{item.id}}" bindtap="onRoomTap">
-        <t-image wx:if="{{item.primary_image}}" class="room-image" src="{{item.primary_image}}" mode="aspectFill" />
-        <view wx:else class="room-image-placeholder">暂无图片</view>
+        <t-image class="room-image" src="{{item.primary_image || '/assets/placeholder-room.jpg'}}" mode="aspectFill" lazy />
         <view class="room-info">
-          <text class="room-name">{{item.name}}</text>
-          <view class="room-tags" wx:if="{{item.tags.length > 0}}">
-            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light">{{tag}}</t-tag>
+          <view class="room-name">{{item.name}}</view>
+          <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="extra-small" variant="light-outline" theme="primary">{{tag}}</t-tag>
           </view>
           <view class="room-meta">
-            <text class="room-capacity">可容纳 {{item.capacity}} 人</text>
-            <text class="room-sales">月销 {{item.monthly_sales || 0}}</text>
-          </view>
-          <view class="room-price-row" wx:if="{{item.minimum_spend}}">
-            <text class="room-price-label">最低消费</text>
-            <text class="room-price">¥{{item.minimum_spend / 100}}</text>
+            <text>可容纳 {{item.capacity}} 人</text>
+            <text class="room-price">¥{{item.minimum_spend / 100}} 起</text>
           </view>
         </view>
       </view>
     </block>
-    <t-empty wx:else description="暂无包间" />
+    <t-empty wx:else icon="info-circle" description="暂无可用包间" />
+    <view class="empty-placeholder"></view>
   </scroll-view>
 
-    <!-- 底部占位 -->
-    <view style="height: 40rpx;"></view>
 </view>
 
-<!-- 购物车栏 - 复用首页组件，贴底显示 -->
+<!-- 购物车浮层 - 仅在点单(菜品/套餐)时显示 -->
 <cart-bar 
-  wx:if="{{!loading && restaurant}}"
+  wx:if="{{!loading && restaurant && activeTab !== 'rooms'}}"
   totalCount="{{cartCount}}"
   totalPrice="{{cartPrice}}"
   alwaysShow="{{true}}"
