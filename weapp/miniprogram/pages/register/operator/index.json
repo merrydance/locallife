@@ -2,9 +2,17 @@
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-cell": "tdesign-miniprogram/cell/cell",
-        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
         "t-button": "tdesign-miniprogram/button/button",
-        "t-upload": "tdesign-miniprogram/upload/upload",
-        "t-picker": "tdesign-miniprogram/picker/picker"
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-input": "tdesign-miniprogram/input/input",
+        "t-steps": "tdesign-miniprogram/steps/steps",
+        "t-step-item": "tdesign-miniprogram/step-item/step-item",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-stepper": "tdesign-miniprogram/stepper/stepper",
+        "t-search": "tdesign-miniprogram/search/search",
+        "t-radio": "tdesign-miniprogram/radio/radio",
+        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
+        "t-popup": "tdesign-miniprogram/popup/popup",
+        "document-uploader": "/components/document-uploader/index"
     }
 }

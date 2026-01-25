@@ -1,353 +1,311 @@
-
-import { ocrOperatorBusinessLicense, ocrOperatorIdCard } from '../../../api/ocr'
+import { 
+  getOrCreateOperatorApplication, 
+  getOperatorApplication,
+  updateOperatorBasic, 
+  ocrOperatorBusinessLicense, 
+  ocrOperatorIdCard, 
+  submitOperatorApplication,
+  listAvailableRegions
+} from '../../../api/operator-application'
 import { logger } from '../../../utils/logger'
-import { ErrorHandler } from '../../../utils/error-handler'
-import { DraftStorage } from '../../../utils/draft-storage'
-
-const DRAFT_KEY = 'operator_register_draft'
 
 Page({
   data: {
     navBarHeight: 88,
+    currentStep: 0,
+    isSubmitting: false,
+    idFront: { url: '', rawUrl: '' },
+    idBack: { url: '', rawUrl: '' },
+    license: { url: '', rawUrl: '' },
+    
+    // 核心表单数据
     formData: {
-      // 基本信息
-      companyName: '',
+      regionId: 0,
+      regionName: '',
+      name: '',
       contactName: '',
-      phone: '',
-      address: '',
-      addressDetail: '',
-      latitude: 0,
-      longitude: 0,
-      operationRegion: '',
-      investment: '',
-
-      // 证照信息
-      creditCode: '',
-      registerAddress: '',
-      licenseValidity: '',
-      businessScope: '',
-
-      // 法人信息
-      legalPerson: '',
-      idCard: '',
-      gender: '',
-      hometown: '',
-      currentAddress: '',
-      idCardValidity: '',
-
-      // 结算信息
-      bankName: '',
-      bankAccount: '',
-      accountName: ''
+      contactPhone: '',
+      years: 3
     },
-    // 图片
-    licenseImages: [] as Array<any>,
-    accountPermitImages: [] as Array<any>,
-    idCardFrontImages: [] as Array<any>,
-    idCardBackImages: [] as Array<any>,
-    planImages: [] as Array<any>,
 
-    // 选择器状态
-    regionPickerVisible: false,
-    regionPickerValue: [],
-    regionOptions: [
-      { label: '单个区县', value: 'district' },
-      { label: '多个区县', value: 'multi_district' },
-      { label: '整个城市', value: 'city' },
-      { label: '多个城市', value: 'multi_city' },
-      { label: '省级区域', value: 'province' }
-    ],
-    investmentPickerVisible: false,
-    investmentPickerValue: [],
-    investmentOptions: [
-      { label: '10万以下', value: 'below_100k' },
-      { label: '10-50万', value: '100k_500k' },
-      { label: '50-100万', value: '500k_1m' },
-      { label: '100-500万', value: '1m_5m' },
-      { label: '500万以上', value: 'above_5m' }
-    ]
+    // 区域选择相关状态
+    regionPopupVisible: false,
+    regionOptions: [] as any[],     // 原始列表
+    filteredRegions: [] as any[]    // 搜索过滤后的列表
   },
 
   onLoad() {
-    this.loadDraft()
+    this.initApplication()
+    this.fetchAvailableRegions()
   },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
+  onNavHeight(e: any) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  // ==================== 草稿管理 ====================
-
-  saveDraft() {
-    const data = {
-      formData: this.data.formData,
-      licenseImages: this.data.licenseImages,
-      accountPermitImages: this.data.accountPermitImages,
-      idCardFrontImages: this.data.idCardFrontImages,
-      idCardBackImages: this.data.idCardBackImages,
-      planImages: this.data.planImages
-    }
-    DraftStorage.save(DRAFT_KEY, data)
-  },
-
-  loadDraft() {
-    const draft = DraftStorage.load(DRAFT_KEY)
-    if (draft) {
-      this.setData(draft)
-    }
-  },
-
-  // ==================== 表单输入 ====================
-
-  updateFormData(key: string, value: any) {
-    this.setData({ [`formData.${key}`]: value })
-    this.saveDraft()
-  },
-
-  onCompanyNameInput(e: WechatMiniprogram.Input) { this.updateFormData('companyName', e.detail.value) },
-  onContactNameInput(e: WechatMiniprogram.Input) { this.updateFormData('contactName', e.detail.value) },
-  onPhoneInput(e: WechatMiniprogram.Input) { this.updateFormData('phone', e.detail.value) },
-  onAddressDetailInput(e: WechatMiniprogram.Input) { this.updateFormData('addressDetail', e.detail.value) },
-
-  // 证照信息输入
-  onCreditCodeInput(e: WechatMiniprogram.Input) { this.updateFormData('creditCode', e.detail.value) },
-  onRegisterAddressInput(e: WechatMiniprogram.Input) { this.updateFormData('registerAddress', e.detail.value) },
-  onLicenseValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('licenseValidity', e.detail.value) },
-  onBusinessScopeInput(e: WechatMiniprogram.Input) { this.updateFormData('businessScope', e.detail.value) },
-
-  // 法人信息输入
-  onLegalPersonInput(e: WechatMiniprogram.Input) { this.updateFormData('legalPerson', e.detail.value) },
-  onIdCardInput(e: WechatMiniprogram.Input) { this.updateFormData('idCard', e.detail.value) },
-  onGenderInput(e: WechatMiniprogram.Input) { this.updateFormData('gender', e.detail.value) },
-  onHometownInput(e: WechatMiniprogram.Input) { this.updateFormData('hometown', e.detail.value) },
-  onCurrentAddressInput(e: WechatMiniprogram.Input) { this.updateFormData('currentAddress', e.detail.value) },
-  onIdCardValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('idCardValidity', e.detail.value) },
-
-  // 结算信息输入
-  onBankNameInput(e: WechatMiniprogram.Input) { this.updateFormData('bankName', e.detail.value) },
-  onBankAccountInput(e: WechatMiniprogram.Input) { this.updateFormData('bankAccount', e.detail.value) },
-  onAccountNameInput(e: WechatMiniprogram.Input) { this.updateFormData('accountName', e.detail.value) },
-
-  // ==================== 地址选择 ====================
-
-  onChooseAddress() {
-    wx.chooseLocation({
-      success: (res) => {
-        this.setData({
-          'formData.address': res.address || res.name,
-          'formData.latitude': res.latitude,
-          'formData.longitude': res.longitude
-        })
-        this.saveDraft()
-      },
-      fail: (err) => {
-        if (err.errMsg.includes('auth deny')) {
+  /**
+   * 初始化申请状态（静默加载）
+   */
+  async initApplication() {
+    try {
+      // 使用 GET 获取已有申请草稿
+      const res = await getOperatorApplication()
+      if (res) {
+        this.mapResponseToData(res)
+        
+        // 根据状态跳转
+        if (res.status === 'submitted') {
+          this.setData({ currentStep: 4 })
+        } else if (res.status === 'approved') {
+          wx.showToast({ title: '您已是合伙人' })
+          setTimeout(() => wx.reLaunch({ url: '/pages/operator/dashboard/index' }), 1500)
+        } else if (res.status === 'rejected') {
           wx.showModal({
-            title: '需要位置权限',
-            content: '请在设置中开启位置权限',
-            confirmText: '去设置',
-            success: (modalRes) => {
-              if (modalRes.confirm) {
-                wx.openSetting()
-              }
-            }
+            title: '审核未通过',
+            content: `原因：${res.reject_reason || '资料核验失败'}`,
+            confirmText: '修改资料'
           })
         }
       }
-    })
-  },
-
-  // ==================== 选择器 ====================
-
-  onChooseRegion() { this.setData({ regionPickerVisible: true }) },
-  onRegionConfirm(e: WechatMiniprogram.CustomEvent) {
-    const { value } = e.detail
-    const selectedOption = this.data.regionOptions.find((opt) => opt.value === value[0])
-    if (selectedOption) {
-      this.updateFormData('operationRegion', selectedOption.label)
-      this.setData({ regionPickerVisible: false })
+    } catch (e: any) {
+      // 404 说明没申请过，留在介绍页，非异常
+      if (e.statusCode !== 404) {
+        logger.error('Init operator application failed', e)
+      }
     }
   },
-  onRegionCancel() { this.setData({ regionPickerVisible: false }) },
 
-  onChooseInvestment() { this.setData({ investmentPickerVisible: true }) },
-  onInvestmentConfirm(e: WechatMiniprogram.CustomEvent) {
-    const { value } = e.detail
-    const selectedOption = this.data.investmentOptions.find((opt) => opt.value === value[0])
-    if (selectedOption) {
-      this.updateFormData('investment', selectedOption.label)
-      this.setData({ investmentPickerVisible: false })
-    }
-  },
-  onInvestmentCancel() { this.setData({ investmentPickerVisible: false }) },
-
-  // ==================== 图片上传与OCR ====================
-
-  // 营业执照
-  async onLicenseUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ licenseImages: files })
-    this.saveDraft()
-
-    if (files.length > 0) {
-      wx.showLoading({ title: '识别中...' })
-      try {
-        const res = await ocrOperatorBusinessLicense(files[0].url)
-        const info = res.ocrData
-
-        this.setData({
-          'formData.creditCode': info.reg_num || info.credit_code || '',
-          'formData.registerAddress': info.address || '',
-          'formData.legalPerson': info.person || info.legal_person || '',
-          'formData.licenseValidity': info.valid_period || info.validity || '',
-          'formData.businessScope': info.business || info.business_scope || ''
+  /**
+   * 获取所有可用的 Level 3 (区县) 区域
+   */
+  async fetchAvailableRegions() {
+    try {
+      const res = await listAvailableRegions({ page_id: 1, page_size: 100, level: 3 })
+      if (res && res.regions) {
+        const options = res.regions.map(r => ({
+          label: r.name,
+          secondary: r.parent_name || '',
+          value: r.id
+        }))
+        this.setData({ 
+          regionOptions: options,
+          filteredRegions: options
+        }, () => {
+          // 在选项加载完成后，如果已经有 regionId，再次尝试回填显示名
+          if (this.data.formData.regionId && !this.data.formData.regionName) {
+            this.syncRegionName(this.data.formData.regionId)
+          }
         })
-        this.saveDraft()
-        wx.showToast({ title: '识别成功', icon: 'success' })
-      } catch (error) {
-        logger.error('OCR failed', error, 'Operator')
-        wx.showToast({ title: '识别失败', icon: 'none' })
+      }
+    } catch (e) {
+      logger.error('Fetch regions failed', e)
+    }
+  },
+
+  /**
+   * 将后端响应映射到视图数据
+   */
+  mapResponseToData(res: any) {
+    if (!res) return
+
+    const newData: any = {
+      'formData.regionId': res.region_id || 0,
+      'formData.name': res.name || '',
+      'formData.contactName': res.contact_name || '',
+      'formData.contactPhone': res.contact_phone || '',
+      'formData.years': res.requested_contract_years || 3,
+      idFront: { url: res.id_card_front_url || '', rawUrl: res.id_card_front_url || '' },
+      idBack: { url: res.id_card_back_url || '', rawUrl: res.id_card_back_url || '' },
+      license: { url: res.business_license_url || '', rawUrl: res.business_license_url || '' }
+    }
+
+    // 优先使用后端返回的名称，否则尝试从本地 Options 中反查
+    const regionId = res.region_id
+    let regionName = res.region_name || ''
+
+    if (!regionName && regionId && this.data.regionOptions.length > 0) {
+      const matched = this.data.regionOptions.find(r => Number(r.value) === Number(regionId))
+      if (matched) {
+        regionName = matched.secondary ? `${matched.secondary} - ${matched.label}` : matched.label
+      }
+    }
+    
+    if (regionName) {
+      newData['formData.regionName'] = regionName
+    }
+
+    this.setData(newData)
+  },
+
+  /**
+   * 根据 ID 同步本地显示名称
+   */
+  syncRegionName(regionId: number | string) {
+    const id = Number(regionId)
+    const matched = this.data.regionOptions.find(r => Number(r.value) === id)
+    if (matched) {
+      const fullName = matched.secondary ? `${matched.secondary} - ${matched.label}` : matched.label
+      this.setData({ 'formData.regionName': fullName })
+    }
+  },
+
+  // ==================== 区域搜索逻辑 ====================
+
+  onOpenRegionPopup() {
+    this.setData({ regionPopupVisible: true })
+  },
+
+  onCloseRegionPopup() {
+    this.setData({ regionPopupVisible: false })
+  },
+
+  onRegionSearch(e: any) {
+    const keyword = (e.detail.value || '').toLowerCase()
+    const filtered = this.data.regionOptions.filter(item => 
+      item.label.toLowerCase().includes(keyword) || 
+      item.secondary.toLowerCase().includes(keyword)
+    )
+    this.setData({ filteredRegions: filtered })
+  },
+
+  onSelectRegion(e: any) {
+    const regionId = Number(e.detail.value)
+    const region = this.data.regionOptions.find(r => Number(r.value) === regionId)
+    
+    if (region) {
+      const fullName = region.secondary ? `${region.secondary} - ${region.label}` : region.label
+      this.setData({
+        'formData.regionId': region.value,
+        'formData.regionName': fullName,
+        regionPopupVisible: false
+      })
+    }
+  },
+
+  // ==================== 输入处理 ====================
+
+  onInput(e: any) {
+    const field = e.currentTarget.dataset.field
+    this.setData({ [`formData.${field}`]: e.detail.value })
+  },
+
+  onYearsChange(e: any) {
+    this.setData({ 'formData.years': e.detail.value })
+  },
+
+  // ==================== 证照上传 (对齐集团模式) ====================
+
+  async onIdFrontUpload(e: any) {
+    const { path } = e.detail
+    this.setData({ 'idFront.url': path })
+    this.processOCR(ocrOperatorIdCard(path, 'Front'))
+  },
+
+  async onIdBackUpload(e: any) {
+    const { path } = e.detail
+    this.setData({ 'idBack.url': path })
+    this.processOCR(ocrOperatorIdCard(path, 'Back'))
+  },
+
+  async onLicenseUpload(e: any) {
+    const { path } = e.detail
+    this.setData({ 'license.url': path })
+    this.processOCR(ocrOperatorBusinessLicense(path))
+  },
+
+  async processOCR(ocrPromise: Promise<any>) {
+    wx.showLoading({ title: '智能识别中...' })
+    try {
+      const res = await ocrPromise
+      this.mapResponseToData(res)
+      wx.hideLoading()
+      wx.showToast({ title: '自动识别成功', icon: 'none' })
+    } catch (e) {
+      wx.hideLoading()
+      logger.error('OCR failed', e)
+    }
+  },
+
+  // ==================== 流程导航 ====================
+
+  onPrev() {
+    this.setData({ currentStep: this.data.currentStep - 1 })
+  },
+
+  async onNext() {
+    const { currentStep, formData, license, idFront, idBack } = this.data
+
+    // 从介绍页进入 Step 1
+    if (currentStep === 0) {
+      this.setData({ currentStep: 1 })
+      return
+    }
+
+    // 从 Step 1 进入 Step 2：锁定区域并保存基础信息
+    if (currentStep === 1) {
+      const { name, contactName, contactPhone, years, regionId } = formData
+
+      // 1. 本地前置校验
+      if (!regionId) return wx.showToast({ title: '请选择运营区域', icon: 'none' })
+      if (!name || name.length < 2) return wx.showToast({ title: '运营商名称至少2位', icon: 'none' })
+      if (!contactName || contactName.length < 2) return wx.showToast({ title: '负责人姓名至少2位', icon: 'none' })
+      if (!contactPhone || contactPhone.length !== 11) return wx.showToast({ title: '请输入11位手机号', icon: 'none' })
+      
+      wx.showLoading({ title: '锁定区域中...', mask: true })
+      try {
+        // 1. 创建/获取草稿
+        const res = await getOrCreateOperatorApplication({ region_id: regionId })
+        this.mapResponseToData(res)
+        
+        // 2. 更新基础信息
+        const updated = await updateOperatorBasic({
+          name: name,
+          contact_name: contactName,
+          contact_phone: contactPhone,
+          requested_contract_years: years
+        })
+        this.mapResponseToData(updated)
+        
+        this.setData({ currentStep: 2 })
+      } catch (e: any) {
+        logger.error('Step 1 sync failed', e)
+        // 优先显示后端返回的精准消息
+        const msg = e.userMessage || e.data?.message || '锁定区域失败，可能已被占用'
+        wx.showToast({ title: msg, icon: 'none' })
       } finally {
         wx.hideLoading()
       }
+      return
     }
-  },
-  onLicenseRemove() {
-    this.setData({ licenseImages: [] })
-    this.saveDraft()
-  },
 
-  // 开户许可证
-  onAccountPermitUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ accountPermitImages: files })
-    this.saveDraft()
-  },
-  onAccountPermitRemove() {
-    this.setData({ accountPermitImages: [] })
-    this.saveDraft()
-  },
-
-  // 身份证正面
-  async onIdCardFrontUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ idCardFrontImages: files })
-    this.saveDraft()
-
-    if (files.length > 0) {
-      wx.showLoading({ title: '识别中...' })
-      try {
-        const res = await ocrOperatorIdCard(files[0].url, 'front')
-        const info = res.ocrData
-
-        this.setData({
-          'formData.legalPerson': info.name || '',
-          'formData.idCard': info.id || info.id_num || '',
-          'formData.gender': info.gender || '',
-          'formData.hometown': info.addr || info.address || ''
-        })
-        this.saveDraft()
-        wx.showToast({ title: '识别成功', icon: 'success' })
-      } catch (error) {
-        logger.error('OCR failed', error, 'Operator')
-        wx.showToast({ title: '识别失败', icon: 'none' })
-      } finally {
-        wx.hideLoading()
+    // 从 Step 2 进入 Step 3：验证图片是否上传
+    if (currentStep === 2) {
+      if (!license.url || !idFront.url || !idBack.url) {
+        return wx.showToast({ title: '请上传所有资质原件', icon: 'none' })
       }
+      this.setData({ currentStep: 3 })
+      return
     }
   },
-  onIdCardFrontRemove() {
-    this.setData({ idCardFrontImages: [] })
-    this.saveDraft()
-  },
 
-  // 身份证反面
-  async onIdCardBackUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ idCardBackImages: files })
-    this.saveDraft()
-
-    if (files.length > 0) {
-      wx.showLoading({ title: '识别中...' })
-      try {
-        const res = await ocrOperatorIdCard(files[0].url, 'back')
-        const info = res.ocrData
-
-        this.setData({
-          'formData.idCardValidity': info.valid_date || info.valid_period || ''
-        })
-        this.saveDraft()
-        wx.showToast({ title: '识别成功', icon: 'success' })
-      } catch (error) {
-        logger.error('OCR failed', error, 'Operator')
-        wx.showToast({ title: '识别失败', icon: 'none' })
-      } finally {
-        wx.hideLoading()
-      }
+  /**
+   * 提交最终申请
+   */
+  async onSubmit() {
+    this.setData({ isSubmitting: true })
+    wx.showLoading({ title: '正式提交申请...', mask: true })
+    try {
+      await submitOperatorApplication()
+      this.setData({ currentStep: 4 })
+    } catch (e: any) {
+      wx.showToast({ title: e.userMessage || '提交审核失败', icon: 'none' })
+    } finally {
+      this.setData({ isSubmitting: false })
+      wx.hideLoading()
     }
   },
-  onIdCardBackRemove() {
-    this.setData({ idCardBackImages: [] })
-    this.saveDraft()
-  },
 
-  // 合作计划书
-  onPlanUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ planImages: files })
-    this.saveDraft()
-  },
-  onPlanRemove(e: WechatMiniprogram.CustomEvent) {
-    const { index } = e.detail
-    const planImages = this.data.planImages
-    planImages.splice(index, 1)
-    this.setData({ planImages })
-    this.saveDraft()
-  },
-
-  // ==================== 提交申请 ====================
-
-  onSubmit() {
-    const { formData, licenseImages, accountPermitImages, idCardFrontImages, idCardBackImages } = this.data
-
-    // 验证必填字段
-    if (!licenseImages.length) return wx.showToast({ title: '请上传营业执照', icon: 'none' })
-    if (!accountPermitImages.length) return wx.showToast({ title: '请上传开户许可证', icon: 'none' })
-    if (!idCardFrontImages.length) return wx.showToast({ title: '请上传法人身份证正面', icon: 'none' })
-    if (!idCardBackImages.length) return wx.showToast({ title: '请上传法人身份证反面', icon: 'none' })
-
-    if (!formData.companyName) return wx.showToast({ title: '请输入公司名称', icon: 'none' })
-    if (!formData.contactName) return wx.showToast({ title: '请输入联系人姓名', icon: 'none' })
-    if (!formData.phone) return wx.showToast({ title: '请输入联系电话', icon: 'none' })
-    if (!formData.address) return wx.showToast({ title: '请选择公司地址', icon: 'none' })
-
-    if (!formData.creditCode) return wx.showToast({ title: '缺少营业执照信息', icon: 'none' })
-    if (!formData.legalPerson) return wx.showToast({ title: '缺少法人信息', icon: 'none' })
-
-    // 构建提交数据
-    const submitData = {
-      ...formData,
-      licenseImages: licenseImages.map((img) => img.url),
-      accountPermitImages: accountPermitImages.map((img) => img.url),
-      idCardFrontImages: idCardFrontImages.map((img) => img.url),
-      idCardBackImages: idCardBackImages.map((img) => img.url),
-      planImages: this.data.planImages.map((img) => img.url)
-    }
-
-    logger.debug('提交的数据:', submitData, 'Operator')
-
-    // TODO: 调用后端 API 提交数据
-    wx.showToast({
-      title: '提交成功，请等待审核',
-      icon: 'success',
-      duration: 2000,
-      success: () => {
-        DraftStorage.clear(DRAFT_KEY)
-        setTimeout(() => {
-          wx.navigateBack()
-        }, 2000)
-      }
-    })
+  onBackHome() {
+    wx.switchTab({ url: '/pages/user_center/index' })
   }
 })
-
