@@ -83,7 +83,8 @@
               <text class="item-price">¥{{item.priceDisplay}}</text>
             </view>
             <view class="item-bottom-row">
-              <text class="item-spec">{{item.spec_text || '标准'}}</text>
+              <text class="item-spec" wx:if="{{item.spec_text}}">{{item.spec_text}}</text>
+              <view wx:else></view>
               <text class="item-qty">×{{item.quantity}}</text>
             </view>
           </view>
@@ -124,15 +125,10 @@
 
     <!-- 备注 -->
     <view class="section-card">
-      <view class="section-title">订单备注</view>
-      <t-textarea 
-        placeholder="有什么特殊要求吗？(选填)"
+      <remark-input 
         value="{{remark}}"
-        maxlength="{{200}}"
-        disableDefaultPadding="{{true}}"
-        autosize
+        placeholder="有什么特殊要求吗？"
         bind:change="onRemarkChange"
-        t-class="remark-textarea"
       />
     </view>
 
@@ -173,7 +169,7 @@
       bind:tap="onSubmitOrder"
       class="submit-btn"
     >
-      ¥{{calculation.totalDisplay || '0.00'}} 去支付
+      去支付
     </t-button>
   </view>
 </view>

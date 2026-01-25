@@ -28,6 +28,12 @@ type cartItemResponse struct {
 	ComboID        *int64                 `json:"combo_id,omitempty"`
 	Quantity       int16                  `json:"quantity"`
 	Customizations map[string]interface{} `json:"customizations,omitempty"`
+	// 解析后的定制规格详情
+	CustomizationDetails []orderCustomizationItem `json:"customization_details,omitempty"`
+	// 聚合好的规格描述文字 (如 "不辣/大份")
+	SpecText string `json:"spec_text,omitempty"`
+	// 套餐成员图片
+	ComboMemberImages []string `json:"combo_member_images,omitempty"`
 	// 商品信息
 	Name        string `json:"name"`
 	ImageURL    string `json:"image_url,omitempty"`
@@ -130,6 +136,8 @@ func (server *Server) getCart(ctx *gin.Context) {
 	}
 
 	response := buildCartResponse(cart, items)
+	server.enrichCartItems(ctx, response.Items)
+	server.enrichComboImages(ctx, response.Items)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -536,6 +544,8 @@ func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart) {
 		return
 	}
 	response := buildCartResponse(cart, items)
+	server.enrichCartItems(ctx, response.Items)
+	server.enrichComboImages(ctx, response.Items)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -1187,7 +1197,7 @@ type listBrowseHistoryResponse struct {
 	// 浏览记录列表
 	Items []browseHistoryItem `json:"items"`
 	// 总数
-	Total int64 `json:"total"`
+	Total      int64 `json:"total"`
 	TotalCount int64 `json:"total_count"`
 	PageID     int   `json:"page_id"`
 	PageSize   int   `json:"page_size"`
@@ -1294,8 +1304,8 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listBrowseHistoryResponse{
-		Items: result,
-		Total: total,
+		Items:      result,
+		Total:      total,
 		TotalCount: total,
 		PageID:     page,
 		PageSize:   pageSize,
@@ -1609,4 +1619,134 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 		CanCombinePay:    canCombinePay,
 		Message:          message,
 	})
+}
+
+// enrichCartItems 从数据库解析定制选项的 ID 并填充显示文字
+func (server *Server) enrichCartItems(ctx context.Context, items []cartItemResponse) {
+	if len(items) == 0 {
+		return
+	}
+
+	// 收集所有需要解析的选项 ID
+	optionIDMap := make(map[int64]bool)
+	for _, item := range items {
+		for _, val := range item.Customizations {
+			var id int64
+			switch v := val.(type) {
+			case string:
+				id, _ = strconv.ParseInt(v, 10, 64)
+			case float64:
+				id = int64(v)
+			case int64:
+				id = v
+			case int:
+				id = int64(v)
+			}
+			if id > 0 {
+				optionIDMap[id] = true
+			}
+		}
+	}
+
+	if len(optionIDMap) == 0 {
+		return
+	}
+
+	uniqueIDs := make([]int64, 0, len(optionIDMap))
+	for id := range optionIDMap {
+		uniqueIDs = append(uniqueIDs, id)
+	}
+
+	// 批量查询库中的名称和价格
+	details, err := server.store.GetCustomizationDetailsByIDs(ctx, uniqueIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get customization details for cart items")
+		return
+	}
+
+	// 映射结果
+	detailLookup := make(map[int64]db.GetCustomizationDetailsByIDsRow)
+	for _, d := range details {
+		detailLookup[d.OptionID] = d
+	}
+
+	// 填充详情
+	for i := range items {
+		var specNames []string
+		// 为了保持顺序，我们按原 Customizations 的 key 排序（或保持原顺序）
+		// 不过 Customizations 是 map，本身无序。
+
+		// 收集并转换
+		for _, val := range items[i].Customizations {
+			var id int64
+			switch v := val.(type) {
+			case string:
+				id, _ = strconv.ParseInt(v, 10, 64)
+			case float64:
+				id = int64(v)
+			case int64:
+				id = v
+			}
+
+			if d, ok := detailLookup[id]; ok {
+				items[i].CustomizationDetails = append(items[i].CustomizationDetails, orderCustomizationItem{
+					GroupID:    d.GroupID,
+					OptionID:   d.OptionID,
+					Name:       d.GroupName,
+					Value:      d.TagName,
+					ExtraPrice: d.ExtraPrice,
+				})
+				specNames = append(specNames, d.TagName)
+			}
+		}
+
+		if len(specNames) > 0 {
+			items[i].SpecText = strings.Join(specNames, "/")
+		} else {
+			items[i].SpecText = "" // 明确为空，方便前端判断
+		}
+	}
+}
+
+// enrichComboImages 为套餐商品填充成员图片
+func (server *Server) enrichComboImages(ctx context.Context, items []cartItemResponse) {
+	if len(items) == 0 {
+		return
+	}
+
+	comboIDs := make([]int64, 0)
+	for _, item := range items {
+		if item.ComboID != nil {
+			comboIDs = append(comboIDs, *item.ComboID)
+		}
+	}
+
+	if len(comboIDs) == 0 {
+		return
+	}
+
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get combo member images")
+		return
+	}
+
+	// 按 combo_id 组织图片
+	imgMap := make(map[int64][]string)
+	for _, row := range memberImages {
+		if row.ImageUrl.Valid {
+			fullURL := normalizeUploadURLForClient(row.ImageUrl.String)
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], fullURL)
+		}
+	}
+
+	// 回填到 items
+	for i := range items {
+		if items[i].ComboID != nil {
+			if imgs, ok := imgMap[*items[i].ComboID]; ok {
+				items[i].ComboMemberImages = imgs
+			}
+		}
+	}
 }

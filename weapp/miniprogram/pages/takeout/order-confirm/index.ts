@@ -17,7 +17,9 @@ interface CartItemView {
   quantity: number
   unitPrice: number
   priceDisplay: string
+  subtotal: number
   subtotalDisplay: string
+  specText?: string
   customizations?: Record<string, unknown>
   dishImages?: string[]
 }
@@ -143,7 +145,9 @@ Page({
           priceDisplay: formatPriceNoSymbol(item.unit_price),
           subtotal: item.subtotal,
           subtotalDisplay: formatPriceNoSymbol(item.subtotal),
-          customizations: item.customizations || undefined
+          specText: item.spec_text || '',
+          customizations: item.customizations || undefined,
+          dishImages: (item.combo_member_images || []).map(url => getPublicImageUrl(url))
         }))
 
         const totalCount = items.reduce((sum, item) => sum + item.quantity, 0)
@@ -178,9 +182,6 @@ Page({
 
       this.setData({ carts: cartViews, loading: false })
       
-      // 异步解析套餐组合图
-      this.resolveComboImages()
-
       // 根据地址计算每个商户配送费
       await this.calculateDeliveryFee()
     } catch (error) {
@@ -275,13 +276,14 @@ Page({
    * 计算配送费并更新应付总额
    */
   async calculateDeliveryFee() {
-    const { carts, address } = this.data
-    if (!carts || carts.length === 0) return
+    const { address } = this.data
+    const currentCarts = this.data.carts
+    if (!currentCarts || currentCarts.length === 0) return
 
     if (!address) {
       this.setData({
         summaryDeliveryDisplay: '待选择地址',
-        orderTotalDisplay: formatPriceNoSymbol(carts.reduce((s, c) => s + (c.subtotal || 0), 0))
+        orderTotalDisplay: formatPriceNoSymbol(currentCarts.reduce((s, c) => s + (c.subtotal || 0), 0))
       })
       return
     }
@@ -289,7 +291,7 @@ Page({
     try {
       const updated = [] as MerchantCartView[]
 
-      for (const cart of carts) {
+      for (const cart of currentCarts) {
         const result = await CartAPI.calculateCart({
           merchant_id: cart.merchantId,
           order_type: cart.orderType,
@@ -481,95 +483,6 @@ Page({
     })
   },
 
-  /**
-   * 异步解析套餐组合图
-   */
-  async resolveComboImages() {
-    const { carts } = this.data
-    const merchantIdsForCombos = new Set<number>()
-    const comboIdsToMap = new Set<number>()
-
-    // 1. 收集需要解析的 ID
-    carts.forEach(cart => {
-      let hasCombo = false
-      cart.items.forEach(item => {
-        if (item.comboId) {
-          hasCombo = true
-          comboIdsToMap.add(item.comboId)
-        }
-      })
-      if (hasCombo) {
-        merchantIdsForCombos.add(cart.merchantId)
-      }
-    })
-
-    if (merchantIdsForCombos.size === 0) return
-
-    // 2. 并行获取商户套餐和菜品
-    const comboCache = new Map<number, any>()
-    const fetchPromises: Promise<any>[] = []
-    
-    Array.from(merchantIdsForCombos).forEach(mid => {
-      fetchPromises.push(Promise.all([
-        getPublicMerchantCombos(mid),
-        getPublicMerchantDishes(mid)
-      ]).then(([combosRes, dishesRes]) => {
-        const merchantDishes = dishesRes.dishes || []
-        if (combosRes.combos) {
-          combosRes.combos.forEach((c: any) => {
-            if (comboIdsToMap.has(c.id)) {
-              // 注入菜品图片
-              // 注入菜品图片
-              const dishImages = (c.dishes || [])
-                .map((cd: any) => {
-                  const dish = merchantDishes.find((d: any) => d.id === cd.dish_id);
-                  return dish?.image_url;
-                })
-                .filter(Boolean)
-                .map((url: string) => getPublicImageUrl(url));
-              comboCache.set(c.id, { ...c, dishImages });
-            }
-          })
-        }
-      }).catch(err => {
-        logger.warn('Resolve combos failed for merchant', { mid, err })
-      }))
-    })
-
-    await Promise.all(fetchPromises)
-
-    // 3. 应用结果
-    let hasUpdates = false
-    const updatedCarts = carts.map(cart => {
-      let cartUpdated = false
-      const newItems = cart.items.map(item => {
-        if (item.comboId && comboCache.has(item.comboId)) {
-          const combo = comboCache.get(item.comboId)
-          let resolvedImages = (combo.dishImages || []) as string[]
-          
-          // 如果解析出来的菜品图太少，把原来的主图也加进去作为补充
-          if (resolvedImages.length > 0 && resolvedImages.length < 4) {
-            if (item.imageUrl && !item.imageUrl.includes('placeholder') && !resolvedImages.includes(item.imageUrl)) {
-              resolvedImages = [item.imageUrl, ...resolvedImages].slice(0, 4)
-            }
-          }
-
-          if (resolvedImages.length > 0) {
-            cartUpdated = true
-            hasUpdates = true
-            return { ...item, dishImages: resolvedImages }
-          }
-        }
-        return item
-      })
-
-      return cartUpdated ? { ...cart, items: newItems } : cart
-    })
-
-    if (hasUpdates) {
-      this.setData({ carts: updatedCarts })
-    }
-  }
 })
 
 function showDebugModal(title: string, error: unknown) {

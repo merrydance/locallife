@@ -246,6 +246,7 @@ page {
 }
 
 .submit-left {
+  flex: 1;
   display: flex;
   align-items: baseline;
 }

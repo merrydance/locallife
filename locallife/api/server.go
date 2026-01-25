@@ -349,6 +349,7 @@ func (server *Server) setupRouter() {
 
 	// 消费者菜品详情（需认证，但不需要商户权限）
 	authGroup.GET("/public/dishes/:id", server.getPublicDishDetail)
+	authGroup.GET("/public/combos/:id", server.getPublicComboDetail)
 	// 消费者商户详情（需认证，但不需要商户权限）
 	authGroup.GET("/public/merchants/:id", server.getPublicMerchantDetail)
 	authGroup.GET("/public/merchants/:id/dishes", server.getPublicMerchantDishes)
@@ -945,7 +946,8 @@ func (server *Server) setupRouter() {
 	cartGroup := authGroup.Group("/cart")
 	{
 		cartGroup.GET("", server.getCart)
-		cartGroup.GET("/summary", server.getUserCartsSummary)                        // 多商户购物车汇总
+		cartGroup.GET("/summary", server.getUserCartsSummary)
+		cartGroup.GET("/user-carts", server.getUserCartsSummary)                        // 多商户购物车汇总
 		cartGroup.POST("/combined-checkout/preview", server.previewCombinedCheckout) // 合单结算预览
 		cartGroup.POST("/items", server.addCartItem)
 		cartGroup.PATCH("/items/:id", server.updateCartItem)

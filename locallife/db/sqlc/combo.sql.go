@@ -189,6 +189,41 @@ func (q *Queries) DeleteComboSet(ctx context.Context, id int64) error {
 	return err
 }
 
+const getComboMemberImagesByCombos = `-- name: GetComboMemberImagesByCombos :many
+SELECT cd.combo_id, d.image_url
+FROM combo_dishes cd
+JOIN dishes d ON cd.dish_id = d.id
+WHERE cd.combo_id = ANY($1::bigint[])
+  AND d.deleted_at IS NULL
+ORDER BY cd.combo_id, cd.id ASC
+`
+
+type GetComboMemberImagesByCombosRow struct {
+	ComboID  int64       `json:"combo_id"`
+	ImageUrl pgtype.Text `json:"image_url"`
+}
+
+// 批量获取多个套餐的成员图片
+func (q *Queries) GetComboMemberImagesByCombos(ctx context.Context, dollar_1 []int64) ([]GetComboMemberImagesByCombosRow, error) {
+	rows, err := q.db.Query(ctx, getComboMemberImagesByCombos, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetComboMemberImagesByCombosRow{}
+	for rows.Next() {
+		var i GetComboMemberImagesByCombosRow
+		if err := rows.Scan(&i.ComboID, &i.ImageUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getComboSet = `-- name: GetComboSet :one
 SELECT id, merchant_id, name, description, image_url, original_price, combo_price, is_online, created_at, updated_at, deleted_at FROM combo_sets
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1

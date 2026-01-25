@@ -261,6 +261,12 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       if (result.statusCode === 400) {
         // 400 Bad Request - 请求参数错误，显示后端返回的具体错误信息
         userMessage = backendMessage || '请求参数错误'
+        
+        // 关键逻辑：如果是商户休息中，返回更友好的提示
+        if (backendMessage === 'merchant is not accepting takeout orders') {
+            userMessage = '商户休息中～'
+        }
+        
         errorDetail = `参数错误(400): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       } else if (result.statusCode === 409) {

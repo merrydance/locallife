@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -33,11 +35,12 @@ type createComboSetRequest struct {
 }
 
 type comboSetResponse struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	ComboPrice  int64   `json:"combo_price"`
-	IsOnline    bool    `json:"is_online"`
+	ID          int64    `json:"id"`
+	Name        string   `json:"name"`
+	Description *string  `json:"description,omitempty"`
+	ComboPrice  int64    `json:"combo_price"`
+	IsOnline    bool     `json:"is_online"`
+	DishImages  []string `json:"dish_images,omitempty"`
 }
 
 // createComboSet godoc
@@ -157,13 +160,18 @@ type getComboSetRequest struct {
 }
 
 type comboSetWithDetailsResponse struct {
-	ID          int64                 `json:"id"`
-	Name        string                `json:"name"`
-	Description *string               `json:"description,omitempty"`
-	ComboPrice  int64                 `json:"combo_price"`
-	IsOnline    bool                  `json:"is_online"`
-	Dishes      []dishInComboResponse `json:"dishes"`
-	Tags        []tagResponse         `json:"tags"`
+	ID            int64                 `json:"id"`
+	MerchantID    int64                 `json:"merchant_id"`
+	Name          string                `json:"name"`
+	Description   *string               `json:"description,omitempty"`
+	ImageUrl      string                `json:"image_url,omitempty"`
+	OriginalPrice int64                 `json:"original_price"`
+	ComboPrice    int64                 `json:"combo_price"`
+	IsOnline      bool                  `json:"is_online"`
+	Dishes        []dishInComboResponse `json:"dishes"`
+	Tags          []tagResponse         `json:"tags"`
+	IsOpen        bool                  `json:"is_open"`
+	DishImages    []string              `json:"dish_images,omitempty"` // 子菜品图片列表
 }
 
 type dishInComboResponse struct {
@@ -288,15 +296,128 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		}
 	}
 
+	// 获取商户状态
+	merchant, _ = server.store.GetMerchant(ctx, result.MerchantID)
+	isOpen := false
+	if merchant.ID > 0 {
+		isOpen = merchant.IsOpen && merchant.Status == "active"
+	}
+
 	ctx.JSON(http.StatusOK, comboSetWithDetailsResponse{
-		ID:          result.ID,
-		Name:        result.Name,
-		Description: stringPtrFromPgText(result.Description),
-		ComboPrice:  result.ComboPrice,
-		IsOnline:    result.IsOnline,
-		Dishes:      dishes,
-		Tags:        tags,
+		ID:            result.ID,
+		MerchantID:    result.MerchantID,
+		Name:          result.Name,
+		Description:   stringPtrFromPgText(result.Description),
+		ImageUrl:      normalizeUploadURLForClient(result.ImageUrl.String),
+		OriginalPrice: result.OriginalPrice,
+		ComboPrice:    result.ComboPrice,
+		IsOnline:      result.IsOnline,
+		Dishes:        dishes,
+		Tags:          tags,
+		IsOpen:        isOpen,
 	})
+}
+
+// getPublicComboDetail godoc
+// @Summary 获取套餐详情（消费者端）
+// @Description 获取套餐详情（包含关联的菜品和标签），无需商户权限
+// @Tags 公开接口
+// @Produce json
+// @Param id path int true "套餐ID"
+// @Success 200 {object} comboSetWithDetailsResponse "套餐详情"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 404 {object} ErrorResponse "套餐不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/combos/{id} [get]
+// @Security BearerAuth
+func (server *Server) getPublicComboDetail(ctx *gin.Context) {
+	var req getComboSetRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 获取套餐详情（使用和商户端相同的查询，但不验证商户 ID）
+	result, err := server.store.GetComboSetWithDetails(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 消费者端只能查看上架的套餐
+	if !result.IsOnline {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combo set is not online")))
+		return
+	}
+
+	// 解析JSON字段
+	var dishes []dishInComboResponse
+	var tags []tagResponse
+
+	if result.Dishes != nil {
+		switch v := result.Dishes.(type) {
+		case []byte:
+			if len(v) > 2 {
+				json.Unmarshal(v, &dishes)
+			}
+		case string:
+			if len(v) > 2 {
+				json.Unmarshal([]byte(v), &dishes)
+			}
+		default:
+			if jsonBytes, err := json.Marshal(v); err == nil {
+				json.Unmarshal(jsonBytes, &dishes)
+			}
+		}
+	}
+
+	if result.Tags != nil {
+		switch v := result.Tags.(type) {
+		case []byte:
+			if len(v) > 2 {
+				json.Unmarshal(v, &tags)
+			}
+		case string:
+			if len(v) > 2 {
+				json.Unmarshal([]byte(v), &tags)
+			}
+		default:
+			if jsonBytes, err := json.Marshal(v); err == nil {
+				json.Unmarshal(jsonBytes, &tags)
+			}
+		}
+	}
+
+	// 获取商户状态
+	merchant, _ := server.store.GetMerchant(ctx, result.MerchantID)
+	isOpen := false
+	if merchant.ID > 0 {
+		isOpen = merchant.IsOpen && merchant.Status == "active"
+	}
+
+	log.Printf("[getPublicComboDetail] ID: %d, MerchantID: %d, IsOpen: %v", result.ID, result.MerchantID, isOpen)
+
+	resp := comboSetWithDetailsResponse{
+		ID:            result.ID,
+		MerchantID:    result.MerchantID,
+		Name:          result.Name,
+		Description:   stringPtrFromPgText(result.Description),
+		ImageUrl:      normalizeUploadURLForClient(result.ImageUrl.String),
+		OriginalPrice: result.OriginalPrice,
+		ComboPrice:    result.ComboPrice,
+		IsOnline:      result.IsOnline,
+		Dishes:        dishes,
+		Tags:          tags,
+		IsOpen:        isOpen,
+	}
+
+	server.enrichSingleComboImages(ctx, &resp)
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 type listComboSetsRequest struct {
@@ -306,11 +427,12 @@ type listComboSetsRequest struct {
 }
 
 type listComboSetsResponse struct {
-	ComboSets []comboSetResponse `json:"combo_sets"`
-	TotalCount int64            `json:"total_count"`
-	Total      int64            `json:"total"`
-	PageID     int32            `json:"page_id"`
-	PageSize   int32            `json:"page_size"`
+	DishImages []string           `json:"dish_images,omitempty"`
+	ComboSets  []comboSetResponse `json:"combo_sets"`
+	TotalCount int64              `json:"total_count"`
+	Total      int64              `json:"total"`
+	PageID     int32              `json:"page_id"`
+	PageSize   int32              `json:"page_size"`
 }
 
 // listComboSets godoc
@@ -388,8 +510,10 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 		})
 	}
 
+	server.enrichComboSetImages(ctx, result)
+
 	ctx.JSON(http.StatusOK, listComboSetsResponse{
-		ComboSets: result,
+		ComboSets:  result,
 		TotalCount: count,
 		Total:      count,
 		PageID:     req.PageID,
@@ -915,4 +1039,61 @@ func stringPtrFromPgText(pt pgtype.Text) *string {
 		return nil
 	}
 	return &pt.String
+}
+
+// enrichComboSetImages godoc
+func (server *Server) enrichComboSetImages(ctx context.Context, combos []comboSetResponse) {
+	if len(combos) == 0 {
+		return
+	}
+
+	comboIDs := make([]int64, 0)
+	for _, combo := range combos {
+		comboIDs = append(comboIDs, combo.ID)
+	}
+
+	if len(comboIDs) == 0 {
+	}
+
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	if err != nil {
+		log.Printf("failed to get combo member images: %v", err)
+		return
+	}
+
+	// 按 combo_id 组织图片
+	imgMap := make(map[int64][]string)
+	for _, row := range memberImages {
+		if row.ImageUrl.Valid {
+			fullURL := normalizeUploadURLForClient(row.ImageUrl.String)
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], fullURL)
+		}
+	}
+
+	// 回填
+	for i := range combos {
+		if imgs, ok := imgMap[combos[i].ID]; ok {
+			combos[i].DishImages = imgs
+		}
+	}
+}
+
+// enrichSingleComboImages 辅助函数：填充单个套餐的图片
+func (server *Server) enrichSingleComboImages(ctx context.Context, combo *comboSetWithDetailsResponse) {
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, []int64{combo.ID})
+	if err != nil {
+		log.Printf("failed to get combo member images: %v", err)
+		return
+	}
+
+	var images []string
+	for _, row := range memberImages {
+		if row.ImageUrl.Valid {
+			fullURL := normalizeUploadURLForClient(row.ImageUrl.String)
+			images = append(images, fullURL)
+		}
+	}
+	combo.DishImages = images
 }

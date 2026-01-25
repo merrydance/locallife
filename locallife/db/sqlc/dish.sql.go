@@ -381,6 +381,54 @@ func (q *Queries) DeleteDishCustomizationOption(ctx context.Context, id int64) e
 	return err
 }
 
+const getCustomizationDetailsByIDs = `-- name: GetCustomizationDetailsByIDs :many
+SELECT 
+    dco.id as option_id,
+    dco.group_id,
+    dcg.name as group_name,
+    t.name as tag_name,
+    dco.extra_price
+FROM dish_customization_options dco
+JOIN dish_customization_groups dcg ON dco.group_id = dcg.id
+JOIN tags t ON dco.tag_id = t.id
+WHERE dco.id = ANY($1::bigint[])
+`
+
+type GetCustomizationDetailsByIDsRow struct {
+	OptionID   int64  `json:"option_id"`
+	GroupID    int64  `json:"group_id"`
+	GroupName  string `json:"group_name"`
+	TagName    string `json:"tag_name"`
+	ExtraPrice int64  `json:"extra_price"`
+}
+
+// 根据自定义选项ID列表获取详细信息
+func (q *Queries) GetCustomizationDetailsByIDs(ctx context.Context, dollar_1 []int64) ([]GetCustomizationDetailsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getCustomizationDetailsByIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCustomizationDetailsByIDsRow{}
+	for rows.Next() {
+		var i GetCustomizationDetailsByIDsRow
+		if err := rows.Scan(
+			&i.OptionID,
+			&i.GroupID,
+			&i.GroupName,
+			&i.TagName,
+			&i.ExtraPrice,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDish = `-- name: GetDish :one
 SELECT id, merchant_id, category_id, name, description, image_url, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate FROM dishes
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1

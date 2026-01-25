@@ -206,12 +206,17 @@ export interface DishInComboResponse {
  */
 export interface ComboSetWithDetailsResponse {
     id: number                                   // 套餐ID
+    merchant_id: number                          // 商户ID
     name: string                                 // 套餐名称
     description?: string                         // 套餐描述
+    image_url?: string                           // 套餐图片
+    original_price: number                       // 原价（分）
     combo_price: number                          // 套餐价格（分）
     is_online: boolean                           // 是否上架
     dishes: DishInComboResponse[]                // 套餐包含的菜品
     tags?: TagInfo[]                             // 标签信息
+    is_open?: boolean                            // 商户是否营业
+    dish_images?: string[]                       // 子菜品图片列表
 }
 
 /**
@@ -827,6 +832,17 @@ export class ComboManagementService {
     static async getComboDetail(comboId: number): Promise<ComboSetWithDetailsResponse> {
         return await request({
             url: `/v1/combos/${comboId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取套餐详情（公开接口，消费者端使用）
+     * GET /v1/public/combos/{id}
+     */
+    static async getPublicComboDetail(comboId: number): Promise<ComboSetWithDetailsResponse> {
+        return await request({
+            url: `/v1/public/combos/${comboId}`,
             method: 'GET'
         })
     }

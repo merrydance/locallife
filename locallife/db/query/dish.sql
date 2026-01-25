@@ -725,3 +725,16 @@ WHERE dt.tag_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL;
+
+-- name: GetCustomizationDetailsByIDs :many
+-- 根据自定义选项ID列表获取详细信息
+SELECT 
+    dco.id as option_id,
+    dco.group_id,
+    dcg.name as group_name,
+    t.name as tag_name,
+    dco.extra_price
+FROM dish_customization_options dco
+JOIN dish_customization_groups dcg ON dco.group_id = dcg.id
+JOIN tags t ON dco.tag_id = t.id
+WHERE dco.id = ANY($1::bigint[]);

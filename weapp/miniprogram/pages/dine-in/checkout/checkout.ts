@@ -174,7 +174,8 @@ Page({
                 ...item,
                 dish_image: getPublicImageUrl(item.image_url),
                 priceDisplay: formatPriceNoSymbol(item.unit_price || 0),
-                subtotalDisplay: formatPriceNoSymbol(item.subtotal || 0)
+                subtotalDisplay: formatPriceNoSymbol(item.subtotal || 0),
+                spec_text: item.spec_text || ''
             }));
 
             const processedCalculation = {

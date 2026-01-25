@@ -31,7 +31,14 @@ export interface CartItemResponse {
     subtotal: number          // 小计金额
     member_price?: number     // 会员价
     is_available: boolean
-    customizations?: Record<string, unknown>  // 定制选项，object类型
+    customizations?: Record<string, unknown>  // 定制选项原始 ID
+    customization_details?: Array<{           // 解析后的详细信息
+        name: string
+        value: string
+        extra_price: number
+    }>
+    spec_text?: string                        // 聚合好的描述文字
+    combo_member_images?: string[]           // 套餐成员图片
 }
 
 /** 购物车摘要 - 对齐 api.cartSummaryResponse */

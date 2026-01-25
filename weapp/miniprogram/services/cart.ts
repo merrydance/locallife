@@ -114,12 +114,12 @@ class CartService {
       this.notifyListeners()
 
       return true
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to add item to cart', error, 'CartService.addItem')
 
-      // Handle simple error reporting
+      // Handle simple error reporting - 优先展示后端返回的友好提示
       wx.showToast({
-        title: '添加失败，请重试',
+        title: error.userMessage || '添加失败，请重试',
         icon: 'none'
       })
       return false

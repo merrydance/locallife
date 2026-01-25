@@ -35,6 +35,25 @@ export class Navigation {
   }
 
   /**
+     * 跳转到套餐详情页
+     */
+  static toComboDetail(comboId: string, extraInfo?: {
+    shopName?: string
+    monthSales?: number
+    distance?: number
+    estimatedDeliveryTime?: number
+  }) {
+    let url = `/pages/takeout/combo-detail/index?id=${comboId}`
+    if (extraInfo) {
+      if (extraInfo.shopName) url += `&shop_name=${encodeURIComponent(extraInfo.shopName)}`
+      if (extraInfo.monthSales) url += `&month_sales=${extraInfo.monthSales}`
+      if (extraInfo.distance) url += `&distance=${extraInfo.distance}`
+      if (extraInfo.estimatedDeliveryTime) url += `&estimated_delivery_time=${extraInfo.estimatedDeliveryTime}`
+    }
+    wx.navigateTo({ url })
+  }
+
+  /**
      * 跳转到购物车页
      */
   static toCart() {

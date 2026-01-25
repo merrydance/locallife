@@ -369,3 +369,12 @@ WHERE
         cs.name ILIKE '%' || $1 || '%' OR 
         m.name ILIKE '%' || $1 || '%'
     );
+
+-- name: GetComboMemberImagesByCombos :many
+-- 批量获取多个套餐的成员图片
+SELECT cd.combo_id, d.image_url
+FROM combo_dishes cd
+JOIN dishes d ON cd.dish_id = d.id
+WHERE cd.combo_id = ANY($1::bigint[])
+  AND d.deleted_at IS NULL
+ORDER BY cd.combo_id, cd.id ASC;

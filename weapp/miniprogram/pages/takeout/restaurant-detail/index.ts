@@ -10,6 +10,7 @@ import CartService from '../../../services/cart'
 import { getPublicImageUrl } from '../../../utils/image'
 import { resolveImageURL } from '../../../utils/image-security'
 import { formatPriceNoSymbol } from '../../../utils/util'
+import Navigation from '../../../utils/navigation'
 
 interface BusinessHoursView {
   day_of_week: number
@@ -262,19 +263,27 @@ Page({
   async loadCombos(merchantId: number): Promise<ComboView[]> {
     try {
       const result = await getPublicMerchantCombos(merchantId)
-      return (result.combos || []).map((combo: PublicCombo) => ({
-        id: combo.id,
-        name: combo.name,
-        description: combo.description || '',
-        image_url: getPublicImageUrl(combo.image_url || ''),
-        combo_price: combo.combo_price,
-        comboPriceDisplay: formatPriceNoSymbol(combo.combo_price || 0),
-        original_price: combo.original_price,
-        originalPriceDisplay: formatPriceNoSymbol(combo.original_price || 0),
-        savingsDisplay: formatPriceNoSymbol((combo.original_price || 0) - (combo.combo_price || 0)),
-        dishes: combo.dishes || [],
-        dish_images: [] // 初始为空，由外层逻辑注入
-      }))
+      return (result.combos || []).map((combo: PublicCombo) => {
+        // 优先使用后端返回的图片列表，如果没有则回退到前端拼接逻辑(兼容旧数据)
+        let dishImages: string[] = []
+        if (combo.dish_images && combo.dish_images.length > 0) {
+           dishImages = combo.dish_images.map(url => getPublicImageUrl(url));
+        }
+
+        return {
+          id: combo.id,
+          name: combo.name,
+          description: combo.description || '',
+          image_url: getPublicImageUrl(combo.image_url || ''),
+          combo_price: combo.combo_price,
+          comboPriceDisplay: formatPriceNoSymbol(combo.combo_price || 0),
+          original_price: combo.original_price,
+          originalPriceDisplay: formatPriceNoSymbol(combo.original_price || 0),
+          savingsDisplay: formatPriceNoSymbol((combo.original_price || 0) - (combo.combo_price || 0)),
+          dishes: combo.dishes || [],
+          dish_images: dishImages 
+        }
+      })
     } catch (error) {
       console.error('加载套餐失败:', error)
       return []
@@ -350,7 +359,17 @@ Page({
 
   onComboTap(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
-    wx.showToast({ title: '套餐详情开发中', icon: 'none' })
+    const combo = this.data.combos.find((c) => String(c.id) === String(id))
+
+    if (combo && this.data.restaurant) {
+      Navigation.toComboDetail(String(id), {
+        shopName: this.data.restaurant.name,
+        monthSales: this.data.restaurant.monthly_sales,
+        estimatedDeliveryTime: this.data.restaurant.avg_prep_minutes
+      })
+    } else {
+      Navigation.toComboDetail(String(id))
+    }
   },
 
   async onAddCart(e: WechatMiniprogram.CustomEvent) {

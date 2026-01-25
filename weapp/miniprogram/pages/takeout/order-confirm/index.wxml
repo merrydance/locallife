@@ -67,6 +67,9 @@
               <t-image wx:else class="item-image" src="{{cartItem.imageUrl}}" mode="aspectFill" lazy />
               <view class="item-info">
                 <text class="item-name">{{cartItem.name}}</text>
+                <view class="item-specs" wx:if="{{cartItem.specText}}">
+                  <text class="item-spec-tag">{{cartItem.specText}}</text>
+                </view>
               </view>
               <text class="item-quantity">×{{cartItem.quantity}}</text>
               <text class="item-price">¥{{cartItem.priceDisplay}}</text>
@@ -77,15 +80,11 @@
 
       <!-- 备注 -->
       <view class="module-section">
-        <view class="section-title">订单备注</view>
-        <textarea 
-          class="remark-input" 
-          placeholder="给商家留言（选填）" 
-          maxlength="100"
-          auto-height
-          data-merchant-id="{{item.merchantId}}"
+        <remark-input
           value="{{remarks[item.merchantId] || ''}}"
-          bindinput="onRemarkInput"
+          placeholder="给商家留言"
+          data-merchant-id="{{item.merchantId}}"
+          bind:change="onRemarkInput"
         />
       </view>
 

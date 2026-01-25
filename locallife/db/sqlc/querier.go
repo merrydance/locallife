@@ -520,6 +520,8 @@ type Querier interface {
 	GetCombinedPaymentSubOrderByOutTradeNo(ctx context.Context, outTradeNo string) (CombinedPaymentSubOrder, error)
 	// 根据订单ID查询其所有合单子单（一个订单可能参与多次合单支付尝试）
 	GetCombinedPaymentSubOrdersByOrder(ctx context.Context, orderID int64) ([]CombinedPaymentSubOrder, error)
+	// 批量获取多个套餐的成员图片
+	GetComboMemberImagesByCombos(ctx context.Context, dollar_1 []int64) ([]GetComboMemberImagesByCombosRow, error)
 	GetComboSet(ctx context.Context, id int64) (ComboSet, error)
 	GetComboSetWithDetails(ctx context.Context, id int64) (GetComboSetWithDetailsRow, error)
 	// 批量获取套餐详情
@@ -531,6 +533,8 @@ type Querier interface {
 	GetCustomerFavoriteDishes(ctx context.Context, arg GetCustomerFavoriteDishesParams) ([]GetCustomerFavoriteDishesRow, error)
 	// 单个顾客在某商户的消费详情
 	GetCustomerMerchantDetail(ctx context.Context, arg GetCustomerMerchantDetailParams) (GetCustomerMerchantDetailRow, error)
+	// 根据自定义选项ID列表获取详细信息
+	GetCustomizationDetailsByIDs(ctx context.Context, dollar_1 []int64) ([]GetCustomizationDetailsByIDsRow, error)
 	GetDailyInventory(ctx context.Context, arg GetDailyInventoryParams) (DailyInventory, error)
 	GetDailyInventoryForUpdate(ctx context.Context, arg GetDailyInventoryForUpdateParams) (DailyInventory, error)
 	GetDefaultBillingGroupBySession(ctx context.Context, diningSessionID int64) (BillingGroup, error)

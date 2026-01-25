@@ -5,6 +5,7 @@
         "t-image": "tdesign-miniprogram/image/image",
         "t-button": "tdesign-miniprogram/button/button",
         "t-tag": "tdesign-miniprogram/tag/tag",
-        "t-icon": "tdesign-miniprogram/icon/icon"
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "remark-input": "/components/remark-input/index"
     }
 }

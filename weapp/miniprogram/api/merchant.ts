@@ -286,6 +286,7 @@ export interface PublicCombo {
   original_price: number
   dishes: ComboDishItem[]
   tags?: string[]
+  dish_images?: string[]
 }
 
 /**

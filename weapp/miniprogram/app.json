@@ -84,6 +84,10 @@
       "pages": ["index"]
     },
     {
+      "root": "pages/takeout/combo-detail",
+      "pages": ["index"]
+    },
+    {
       "root": "pages/takeout/order-confirm",
       "pages": ["index"]
     },

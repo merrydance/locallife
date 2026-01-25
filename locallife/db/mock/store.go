@@ -4985,6 +4985,21 @@ func (mr *MockStoreMockRecorder) GetCombinedPaymentSubOrdersByOrder(ctx, orderID
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCombinedPaymentSubOrdersByOrder", reflect.TypeOf((*MockStore)(nil).GetCombinedPaymentSubOrdersByOrder), ctx, orderID)
 }
 
+// GetComboMemberImagesByCombos mocks base method.
+func (m *MockStore) GetComboMemberImagesByCombos(ctx context.Context, dollar_1 []int64) ([]db.GetComboMemberImagesByCombosRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetComboMemberImagesByCombos", ctx, dollar_1)
+	ret0, _ := ret[0].([]db.GetComboMemberImagesByCombosRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetComboMemberImagesByCombos indicates an expected call of GetComboMemberImagesByCombos.
+func (mr *MockStoreMockRecorder) GetComboMemberImagesByCombos(ctx, dollar_1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetComboMemberImagesByCombos", reflect.TypeOf((*MockStore)(nil).GetComboMemberImagesByCombos), ctx, dollar_1)
+}
+
 // GetComboSet mocks base method.
 func (m *MockStore) GetComboSet(ctx context.Context, id int64) (db.ComboSet, error) {
 	m.ctrl.T.Helper()
@@ -5073,6 +5088,21 @@ func (m *MockStore) GetCustomerMerchantDetail(ctx context.Context, arg db.GetCus
 func (mr *MockStoreMockRecorder) GetCustomerMerchantDetail(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomerMerchantDetail", reflect.TypeOf((*MockStore)(nil).GetCustomerMerchantDetail), ctx, arg)
+}
+
+// GetCustomizationDetailsByIDs mocks base method.
+func (m *MockStore) GetCustomizationDetailsByIDs(ctx context.Context, dollar_1 []int64) ([]db.GetCustomizationDetailsByIDsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCustomizationDetailsByIDs", ctx, dollar_1)
+	ret0, _ := ret[0].([]db.GetCustomizationDetailsByIDsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCustomizationDetailsByIDs indicates an expected call of GetCustomizationDetailsByIDs.
+func (mr *MockStoreMockRecorder) GetCustomizationDetailsByIDs(ctx, dollar_1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustomizationDetailsByIDs", reflect.TypeOf((*MockStore)(nil).GetCustomizationDetailsByIDs), ctx, dollar_1)
 }
 
 // GetDailyInventory mocks base method.

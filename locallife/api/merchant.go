@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -1305,6 +1307,7 @@ type publicComboItem struct {
 	OriginalPrice int64           `json:"original_price"`
 	Dishes        []comboDishItem `json:"dishes"`
 	Tags          []string        `json:"tags"`
+	DishImages    []string        `json:"dish_images,omitempty"`
 }
 
 type publicMerchantCombosResponse struct {
@@ -1373,6 +1376,9 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 
 		comboList = append(comboList, combo)
 	}
+
+	// 批量填充图片
+	server.enrichPublicComboListImages(ctx, comboList)
 
 	ctx.JSON(http.StatusOK, publicMerchantCombosResponse{
 		Combos: comboList,
@@ -1457,4 +1463,43 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, publicMerchantRoomsResponse{
 		Rooms: roomList,
 	})
+}
+
+// enrichPublicComboListImages godoc
+func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []publicComboItem) {
+	if len(combos) == 0 {
+		return
+	}
+
+	comboIDs := make([]int64, 0)
+	for _, c := range combos {
+		comboIDs = append(comboIDs, c.ID)
+	}
+
+	if len(comboIDs) == 0 {
+		return
+	}
+
+	// 批量查询成员图片
+	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
+	if err != nil {
+		log.Printf("[enrichPublicComboListImages] failed to get images: %v", err)
+		return
+	}
+
+	// 按 combo_id 组织图片
+	imgMap := make(map[int64][]string)
+	for _, row := range memberImages {
+		if row.ImageUrl.Valid {
+			fullURL := normalizeUploadURLForClient(row.ImageUrl.String)
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], fullURL)
+		}
+	}
+
+	// 回填
+	for i := range combos {
+		if imgs, ok := imgMap[combos[i].ID]; ok {
+			combos[i].DishImages = imgs
+		}
+	}
 }

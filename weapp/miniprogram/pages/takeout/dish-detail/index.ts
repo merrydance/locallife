@@ -318,6 +318,7 @@ Page({
     const specDesc = specNames.length > 0 ? `(${specNames.join('/')})` : ''
 
     const CartService = require('../../../services/cart').default
+
     const success = await CartService.addItem({
       merchantId: dish.shop_id || dish.merchant_id,
       dishId: dish.id,

@@ -160,6 +160,22 @@
 .item-name {
   font-size: var(--font-size-base);
   color: var(--td-text-color-primary);
+  display: block;
+  margin-bottom: 4rpx;
+}
+
+.item-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+}
+
+.item-spec-tag {
+  font-size: 20rpx;
+  color: var(--td-text-color-placeholder);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: 2rpx 8rpx;
+  border-radius: 4rpx;
 }
 
 .item-quantity {

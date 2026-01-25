@@ -1,0 +1,24 @@
+<view class="remark-input-wrapper">
+  <textarea
+    class="native-textarea"
+    value="{{value}}"
+    placeholder="{{placeholder}}"
+    placeholder-class="textarea-placeholder"
+    maxlength="{{maxlength}}"
+    auto-height
+    bindinput="onInputChange"
+    cursor-spacing="20"
+  />
+
+  <view class="quick-remarks" wx:if="{{quickRemarks.length > 0}}">
+    <view 
+      wx:for="{{quickRemarks}}" 
+      wx:key="*this" 
+      class="quick-remark-tag"
+      bindtap="onQuickRemarkTap"
+      data-item="{{item}}"
+    >
+      + {{item}}
+    </view>
+  </view>
+</view>

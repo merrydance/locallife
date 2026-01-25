@@ -407,8 +407,9 @@ Page({
   },
 
   async loadData() {
-    if (this.data.loading) return
+    if (this._isLoading || this.data.loading) return
 
+    this._isLoading = true
     this.setData({ loading: true })
 
     try {
@@ -423,7 +424,12 @@ Page({
       }
     } catch (error) {
       ErrorHandler.handle(error, 'Takeout.loadData')
+      // 如果是重置加载失败，确保状态正确
+      if (this.data.page === 1) {
+        this.setData({ hasMore: false })
+      }
     } finally {
+      this._isLoading = false
       this.setData({ loading: false })
     }
   },
@@ -786,12 +792,22 @@ Page({
   },
 
   /**
-     * 点击套餐卡片 - 暂时提示（后续可跳转到套餐详情）
+     * 点击套餐卡片 - 跳转到套餐详情
      */
   onPackageTap(e: WechatMiniprogram.TouchEvent) {
     const id = e.currentTarget.dataset.id
-    wx.showToast({ title: `套餐ID: ${id}`, icon: 'none' })
-    // TODO: Navigation.toComboDetail(id)
+    const combo = this.data.packages.find((p) => String(p.id) === String(id))
+
+    if (combo) {
+      Navigation.toComboDetail(String(id), {
+        shopName: combo.merchantName,
+        monthSales: combo.monthlySales,
+        distance: Number(combo.distance.replace(/[^0-9.]/g, '')) * 1000, // 转换回米
+        estimatedDeliveryTime: combo.estimatedDeliveryTime
+      })
+    } else {
+      Navigation.toComboDetail(String(id))
+    }
   },
 
   /**
@@ -806,32 +822,40 @@ Page({
   },
 
   /**
-     * 搜索功能 - 内联搜索，直接在当前页面显示结果
+     * 搜索功能 - 内联搜索，带防抖处理
      */
-  async onSearch(e: WechatMiniprogram.CustomEvent) {
+  onSearch(e: WechatMiniprogram.CustomEvent) {
     const keyword = e.detail.value?.trim() || ''
 
-    // 如果关键词为空，恢复原列表
+    if (this._searchTimer) {
+      clearTimeout(this._searchTimer)
+    }
+
+    // 如果关键词为空，立即执行恢复逻辑
     if (!keyword) {
       this.setData({ searchKeyword: '' })
       this.loadData()
       return
     }
 
-    this.setData({
-      searchKeyword: keyword,
-      loading: true
-    })
+    this._searchTimer = setTimeout(async () => {
+      this.setData({
+        searchKeyword: keyword,
+        loading: true
+      })
 
-    try {
-      await this.searchInline(keyword)
-    } catch (error) {
-      console.error('搜索失败:', error)
-      wx.showToast({ title: '搜索失败', icon: 'error' })
-    } finally {
-      this.setData({ loading: false })
-    }
+      try {
+        await this.searchInline(keyword)
+      } catch (error) {
+        console.error('搜索失败:', error)
+        wx.showToast({ title: '搜索失败', icon: 'error' })
+      } finally {
+        this.setData({ loading: false })
+      }
+    }, 500)
   },
+
+  _searchTimer: null as any,
 
   /**
    * 内联搜索 - 根据当前 Tab 搜索对应内容
@@ -951,29 +975,45 @@ Page({
   },
 
   onReachBottom() {
-    // 防抖：防止快速滚动触发多次请求
-    if (!this.data.hasMore || this.data.loading) return
+    // 增加防抖和状态检查 (增加 _isLoading 私有变量锁)
+    if (!this.data.hasMore || this.data.loading || this._isLoading) {
+      return
+    }
 
-    // 简单的时间戳防抖
+    // 增加时间戳防抖到 500ms
     const now = Date.now()
-    if (this._lastLoadTime && now - this._lastLoadTime < 300) {
+    if (this._lastLoadTime && now - this._lastLoadTime < 500) {
       return
     }
     this._lastLoadTime = now
 
-    // 增加页码 (loadData 会设置 loading: true)
-    const nextPage = this.data.page + 1
+    // 记录上一页页码以便加载失败时恢复
+    const previousPage = this.data.page
+    const nextPage = previousPage + 1
+    
+    // 设置新页码并加载
     this.setData({ page: nextPage })
 
-    // 加载数据，失败时回滚页码
-    this.loadData().catch(() => {
-      logger.error('加载更多失败，回滚页码', { page: nextPage }, 'Takeout.onReachBottom')
-      this.setData({ page: nextPage - 1 })
-      wx.showToast({ title: '加载失败，请重试', icon: 'none' })
+    logger.debug('触发滚动加载', { nextPage }, 'Takeout.onReachBottom')
+
+    this.loadData().catch((error) => {
+      // 只有真正的请求错误才回滚（而不是被 loadData 内部 guard 拦截的情况）
+      if (this.data.page === nextPage) {
+        logger.error('加载更多失败，回滚页码', { nextPage, previousPage }, 'Takeout.onReachBottom')
+        this.setData({ page: previousPage })
+      }
+      
+      // 如果是 429 错误，显示更友好的提示
+      if (error?.message?.includes('429')) {
+        wx.showToast({ title: '请求太频繁，请稍后再试', icon: 'none', duration: 2000 })
+      } else {
+        wx.showToast({ title: '加载失败，请重试', icon: 'none' })
+      }
     })
   },
 
-  _lastLoadTime: 0 as number,
+  _lastLoadTime: 0,
+  _isLoading: false,
 
   /**
    * scroll-view 下拉刷新事件处理
