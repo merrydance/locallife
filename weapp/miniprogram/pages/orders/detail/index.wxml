@@ -1,173 +1,142 @@
 <custom-navbar title="订单详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 240rpx;">
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
   <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
 
-  <view wx:if="{{!loading && order}}" class="detail-content">
-    <!-- 状态 -->
-    <view class="status-card card">
-      <view class="status-header">
-        <t-icon name="{{order.status === 'cancelled' ? 'close-circle-filled' : 'check-circle-filled'}}" size="64rpx" color="var(--td-brand-color)" />
-        <view class="status-meta">
-          <text class="status-text">{{order.statusText}}</text>
-          <text class="status-time">订单编号: {{order.orderNo}}</text>
-        </view>
-        <view wx:if="{{order.expectDeliverTime}}" class="status-chip">预计 {{order.expectDeliverTime}} 送达</view>
+  <view wx:if="{{!loading && order}}" class="detail-content animate-fade-in">
+    <!-- 1. 顶部状态区 -->
+    <view class="status-header">
+      <view class="status-left">
+        <view class="status-title">{{order.statusText}}</view>
+        <view wx:if="{{order.expectDeliverTime}}" class="status-desc">预计 {{order.expectDeliverTime}} 送达</view>
+        <view wx:elif="{{order.status === 'completed'}}" class="status-desc">感谢您对{{order.merchantName}}的信任</view>
+        <view wx:elif="{{order.status === 'cancelled'}}" class="status-desc">{{order.cancelReason || '订单已取消'}}</view>
+        <view wx:else class="status-desc">订单编号: {{order.orderNo}}</view>
       </view>
+      <t-icon name="{{order.status === 'completed' ? 'check-circle' : 'time'}}" size="56rpx" color="#333" />
     </view>
 
-    <!-- 商家信息 -->
-    <view class="merchant-section card">
-      <view class="merchant-info">
-        <view style="display: flex; align-items: center; gap: 8rpx;">
-          <t-icon name="shop" size="32rpx" color="var(--td-text-color-primary)" />
-          <text class="merchant-name">{{order.merchantName}}</text>
-        </view>
-        <t-button size="small" theme="primary" variant="outline" shape="round" icon="call" bindtap="onCallMerchant">联系商家</t-button>
-      </view>
-    </view>
-
-    <!-- 配送/预订/堂食信息 -->
-    <view class="info-module card">
-      <view wx:if="{{order.type === 'takeout'}}">
-        <view class="section-title">
-          <t-icon name="location" size="32rpx" />
-          <text>配送信息</text>
-        </view>
-        <text class="address-text">{{order.address}}</text>
-        <view class="contact-info">
-          <text>{{order.contactName}}</text>
-          <text>{{order.contactPhone}}</text>
-        </view>
-      </view>
-
-      <view wx:if="{{order.type === 'reservation'}}">
-        <view class="section-title">
-          <t-icon name="calendar" size="32rpx" />
-          <text>预订信息</text>
-        </view>
-        <view class="info-row">
-          <text class="label">预约时间</text>
-          <text class="value">{{reservationInfo.reservation_date}} {{reservationInfo.reservation_time}}</text>
-        </view>
-        <view class="info-row">
-          <text class="label">桌台/人数</text>
-          <text class="value">{{reservationInfo.table_no || '--'}} / {{reservationInfo.guest_count}}人</text>
-        </view>
-        <view class="info-row">
-          <text class="label">预约人</text>
-          <text class="value">{{reservationInfo.contact_name}} {{reservationInfo.contact_phone}}</text>
-        </view>
-      </view>
-
-      <view wx:if="{{order.type === 'dine_in'}}">
-        <view class="section-title">
-          <t-icon name="restaurant" size="32rpx" />
-          <text>堂食信息</text>
-        </view>
-        <view class="info-row">
-          <text class="label">用餐桌台</text>
-          <text class="value">{{order.tableId ? ('#' + order.tableId) : '店内用餐'}}</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- 商品列表 -->
-    <view class="items-section card">
-      <view class="section-title">
-        <t-icon name="view-list" size="32rpx" />
-        <text>商品清单</text>
-      </view>
-      <view wx:for="{{order.items}}" wx:key="id" class="item-row">
-        <t-image class="item-image" src="{{item.imageUrl}}" mode="aspectFill" lazy />
-        <view class="item-info">
-          <text class="item-name">{{item.name}}</text>
-          <text class="item-price">¥{{item.unitPriceDisplay}}</text>
-        </view>
-        <text class="item-quantity">x{{item.quantity}}</text>
-      </view>
-    </view>
-
-    <!-- 费用明细 -->
-    <view class="cost-section card">
-      <view class="cost-row">
-        <text class="label">商品金额</text>
-        <text class="value">¥{{order.subtotalDisplay}}</text>
-      </view>
-      <view wx:if="{{order.type === 'takeout'}}" class="cost-row">
-        <text class="label">配送费</text>
-        <text class="value">¥{{order.deliveryFeeDisplay}}</text>
-      </view>
-      <view wx:if="{{order.discountAmount > 0}}" class="cost-row">
-        <text class="label">优惠</text>
-        <text class="value discount">-¥{{order.discountAmountDisplay}}</text>
-      </view>
-      <view class="cost-row total">
-        <text class="label">实付金额</text>
-        <text class="value">¥{{order.payableAmountDisplay}}</text>
-      </view>
-    </view>
-
-    <!-- 订单元数据 -->
-    <view class="metadata-section card">
-      <view class="info-row">
-        <text class="label">下单时间</text>
-        <text class="value">{{order.createTime}}</text>
-      </view>
-      <view class="info-row link-row" bindtap="onViewPayment">
-        <text class="label">支付详情</text>
-        <view class="value-link">
-          <text>点击查看</text>
-          <t-icon name="chevron-right" size="32rpx" />
-        </view>
-      </view>
-    </view>
-
-    <!-- 订单进度 (Timeline) -->
-    <view wx:if="{{order.timeline && order.timeline.length > 0}}" class="timeline-section card">
-      <view class="section-title">
-        <t-icon name="Steps" size="32rpx" />
-        <text>订单进度</text>
-      </view>
-      <view class="timeline">
-        <view class="timeline-row" wx:for="{{order.timeline}}" wx:key="title">
-          <view class="timeline-left">
-            <view class="timeline-dot {{item.done ? 'done' : ''}}" />
-            <view class="timeline-line" />
+    <!-- 2. 操作引导区 (如去支付/物流) -->
+    <view wx:if="{{showPayButton || showTrackingButton}}" class="action-card card">
+       <view class="action-content">
+          <view class="action-text">
+            <text wx:if="{{showPayButton}}">订单等待支付，请在15分钟内完成</text>
+            <text wx:if="{{showTrackingButton}}">骑手正在为您配送中</text>
           </view>
-          <view class="timeline-body">
-            <view class="timeline-head">
-              <view class="timeline-title">{{item.title}}</view>
-              <view class="timeline-time">{{item.time}}</view>
+          <t-button wx:if="{{showPayButton}}" theme="primary" size="small" shape="round" bindtap="onPayOrder">立即支付</t-button>
+          <t-button wx:if="{{showTrackingButton}}" variant="outline" size="small" shape="round" bindtap="onViewTracking">查看进度</t-button>
+       </view>
+    </view>
+
+    <!-- 3. 商品明细卡片 -->
+    <view class="order-card card">
+      <!-- 商户头 -->
+      <view class="merchant-header" bindtap="onEnterMerchant" data-id="{{order.merchantId}}" hover-class="hover-opacity">
+        <view class="merchant-info">
+           <text class="merchant-name">{{order.merchantName}}</text>
+           <t-icon name="chevron-right" size="32rpx" color="#999" />
+        </view>
+        <t-icon name="call" size="40rpx" catchtap="onCallMerchant" color="var(--td-brand-color)" />
+      </view>
+      
+      <t-divider />
+
+      <!-- 商品列表 -->
+      <view class="item-list">
+        <view wx:for="{{order.items}}" wx:key="id" class="order-item">
+          <t-image src="{{item.imageUrl}}" mode="aspectFill" width="112rpx" height="112rpx" shape="round" class="item-img" />
+          <view class="item-main">
+            <view class="item-row-1">
+              <view class="item-name">{{item.name}}</view>
+              <view class="item-price">{{item.unitPriceDisplay}}</view>
             </view>
-            <view class="timeline-desc">{{item.desc}}</view>
+            <view class="item-row-2">
+              <view class="item-specs">
+                <text wx:for="{{item.customizations}}" wx:key="*this" wx:for-item="cust" class="spec-tag">{{cust}}</text>
+              </view>
+              <view class="item-qty">x{{item.quantity}}</view>
+            </view>
           </view>
         </view>
       </view>
+
+      <t-divider dashed />
+
+      <!-- 费用详情 -->
+      <view class="fee-list">
+        <view class="fee-row" wx:if="{{order.type === 'takeout'}}">
+           <text>配送费</text>
+           <view class="price-group">
+             <text wx:if="{{order.deliveryFeeDiscount}}" class="discount-price">{{order.deliveryFeeDiscountDisplay}}</text>
+             <text>{{order.deliveryFeeDisplay}}</text>
+           </view>
+        </view>
+        <view class="fee-row" wx:if="{{order.discountAmount > 0}}">
+           <text>优惠合计</text>
+           <text class="highlight-red">{{order.discountAmountDisplay}}</text>
+        </view>
+      </view>
+
+      <view class="total-row">
+         <text class="total-label">实付</text>
+         <text class="total-price">{{order.payableAmountDisplay}}</text>
+      </view>
     </view>
+
+    <!-- 4. 配送/预订信息卡片 -->
+    <view class="info-card card">
+      <view class="card-title">配送信息</view>
+      
+      <t-cell-group>
+        <block wx:if="{{order.type === 'takeout'}}">
+          <t-cell title="送达地址" note="{{order.address}}" align="top" t-class-note="address-note" />
+          <t-cell title="联系人" note="{{order.contactName}} {{order.contactPhone}}" />
+          <t-cell title="配送时间" note="{{order.expectDeliverTime || '立即配送'}}" />
+        </block>
+
+        <block wx:if="{{order.type === 'reservation'}}">
+           <t-cell title="预订桌台" note="{{reservationInfo.table_no || '待分配'}}" />
+           <t-cell title="预订时间" note="{{reservationInfo.reservation_date}} {{reservationInfo.reservation_time}}" />
+           <t-cell title="预订人数" note="{{reservationInfo.guest_count}}人" />
+           <t-cell title="预订人" note="{{reservationInfo.contact_name}} {{reservationInfo.contact_phone}}" />
+        </block>
+
+         <block wx:if="{{order.type === 'dine_in'}}">
+           <t-cell title="就餐桌号" note="#{{order.tableId || '--'}}" />
+           <t-cell title="就餐人数" note="{{order.guestCount || '--'}}人" />
+         </block>
+      </t-cell-group>
+    </view>
+
+    <!-- 5. 订单信息卡片 -->
+    <view class="info-card card">
+      <view class="card-title">订单信息</view>
+      <t-cell-group>
+        <t-cell title="订单号码" note="{{order.orderNo}}" hover arrow bindtap="onCopy" data-text="{{order.orderNo}}" />
+        <t-cell title="下单时间" note="{{order.createTime}}" />
+        <t-cell title="支付方式" note="{{order.paymentMethod || '在线支付'}}" />
+        <t-cell wx:if="{{order.notes}}" title="备注" note="{{order.notes}}" align="top" />
+      </t-cell-group>
+    </view>
+
   </view>
 </view>
 
-<!-- 底部操作栏 -->
+<!-- 底部固定操作栏 -->
 <view wx:if="{{!loading && order}}" class="bottom-bar">
-  <view wx:if="{{showPayButton || showCancelButton}}" class="action-row">
-    <t-button wx:if="{{showCancelButton}}" class="btn" variant="outline" theme="primary" shape="round" block bindtap="onCancelOrder">取消订单</t-button>
-    <t-button wx:if="{{showPayButton}}" class="btn" theme="primary" shape="round" block bindtap="onPayOrder">去支付</t-button>
-  </view>
+   <view class="bottom-actions">
+      <!-- 辅助按钮 -->
+      <view class="secondary-actions">
+         <t-button wx:if="{{showCancelButton}}" size="medium" variant="outline" shape="round" bindtap="onCancelOrder">取消订单</t-button>
+         <t-button wx:if="{{showContactButton}}" size="medium" variant="outline" icon="chat" shape="round" bindtap="onContact">联系客服</t-button>
+      </view>
 
-  <view wx:if="{{showConfirmButton || showTrackingButton}}" class="action-row">
-    <t-button wx:if="{{showTrackingButton}}" class="btn" variant="outline" theme="primary" shape="round" block bindtap="onViewTracking">查看物流</t-button>
-    <t-button wx:if="{{showConfirmButton}}" class="btn" theme="primary" shape="round" block bindtap="onConfirmReceipt">确认收货</t-button>
-  </view>
-
-  <view wx:if="{{showUrgeButton}}" class="action-row">
-    <t-button class="btn" variant="outline" theme="primary" shape="round" block bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">
-      {{urgeCountdown > 0 ? urgeCountdown + 's后可重新催单' : '催单'}}
-    </t-button>
-  </view>
-
-  <view wx:if="{{order.status === 'completed'}}" class="action-row">
-    <t-button class="btn" variant="outline" theme="primary" shape="round" block bindtap="onReview">评价订单</t-button>
-    <t-button class="btn" theme="primary" shape="round" block bindtap="onReorder">再来一单</t-button>
-  </view>
+      <!-- 主要按钮 -->
+      <view class="primary-actions">
+         <t-button wx:if="{{showPayButton}}" theme="primary" size="medium" shape="round" bindtap="onPayOrder">去支付</t-button>
+         <t-button wx:if="{{showUrgeButton}}" theme="primary" variant="outline" size="medium" shape="round" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">{{urgeCountdown > 0 ? urgeCountdown + 's' : '催单'}}</t-button>
+         <t-button wx:if="{{showConfirmButton}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">确认收货</t-button>
+         <t-button wx:if="{{order.status === 'completed'}}" theme="primary" size="medium" shape="round" bindtap="onReorder">再来一单</t-button>
+      </view>
+   </view>
 </view>

@@ -1,317 +1,275 @@
+/* Pages Order Detail */
 .page-container {
   min-height: 100vh;
-  background: var(--td-bg-color-page);
+  background-color: var(--td-bg-color-page, #f6f6f6);
+  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
 }
 
 .loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  padding: 100rpx 0;
+  padding: 40rpx;
+  text-align: center;
 }
 
-.detail-content {
-  padding-bottom: var(--spacer-xl);
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
 }
 
-/* 卡片通用样式 */
-.card {
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-md);
-  padding: var(--spacer-md);
-  margin: var(--spacer-sm) var(--spacer-md);
-  box-shadow: var(--shadow-sm);
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* 状态卡片 */
-.status-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-sm);
-}
-
+/* 1. Status Header */
 .status-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-md);
-}
-
-.status-meta {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-xxs);
-}
-
-.status-text {
-  font-size: var(--font-size-title);
-  font-weight: bold;
-  color: var(--td-text-color-primary);
-}
-
-.status-time {
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
-}
-
-.status-chip {
-  padding: 8rpx 20rpx;
-  border-radius: var(--radius-round);
-  background: var(--td-brand-color-light);
-  color: var(--td-brand-color);
-  font-size: var(--font-size-xxs);
-  font-weight: bold;
-}
-
-/* 模块标题 */
-.section-title {
-  font-size: var(--font-size-base);
-  font-weight: bold;
-  color: var(--td-text-color-primary);
-  margin-bottom: var(--spacer-md);
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-xs);
-}
-
-/* 商家部分 */
-.merchant-info {
+  background: #fff;
+  padding: 32rpx 40rpx;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.status-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-title {
+  font-size: 44rpx; /* Display size */
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.status-desc {
+  font-size: 26rpx;
+  color: #666;
+}
+
+/* Cards General */
+.card {
+  background: var(--td-bg-color-container, #fff);
+  margin: 20rpx 24rpx;
+  border-radius: var(--radius-md, 16rpx);
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.02);
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  padding: 24rpx 32rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+  color: #333;
+}
+
+/* 2. Action Card */
+.action-card {
+  padding: 24rpx 32rpx;
+  background: #fff;
+  border: 1rpx solid rgba(0,0,0,0.05);
+}
+
+.action-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.action-text {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+/* 3. Order Card (Merchant & Items) */
+.order-card {
+  padding: 0 0 24rpx 0;
+}
+
+.merchant-header {
+  padding: 24rpx 32rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.merchant-info {
+  display: flex;
+  align-items: center;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
 }
 
 .merchant-name {
-  font-size: var(--font-size-base);
-  font-weight: bold;
-  color: var(--td-text-color-primary);
+  margin-right: 8rpx;
 }
 
-.address-text {
-  font-size: var(--font-size-base);
-  color: var(--td-text-color-primary);
-  font-weight: 500;
-  margin-bottom: var(--spacer-xs);
-  display: block;
+.hover-opacity {
+  opacity: 0.7;
 }
 
-.contact-info {
+.item-list {
+  padding: 24rpx 32rpx;
+}
+
+.order-item {
   display: flex;
-  gap: var(--spacer-md);
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-secondary);
+  margin-bottom: 32rpx;
 }
 
-/* 信息行 */
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacer-sm) 0;
-  font-size: var(--font-size-sm);
+.order-item:last-child {
+  margin-bottom: 0;
 }
 
-.info-row:first-child {
-  padding-top: 0;
-}
-
-.info-row .label {
-  color: var(--td-text-color-secondary);
-}
-
-.info-row .value {
-  color: var(--td-text-color-primary);
-  font-weight: 500;
-}
-
-.value-link {
-  display: flex;
-  align-items: center;
-  gap: 4rpx;
-  color: var(--td-brand-color);
-}
-
-/* 商品清单 */
-.item-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-sm);
-  padding: var(--spacer-sm) 0;
-  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
-}
-
-.item-row:last-child {
-  border-bottom: none;
-}
-
-.item-image {
-  width: 100rpx;
-  height: 100rpx;
-  border-radius: var(--radius-sm);
+.item-img {
   flex-shrink: 0;
+  margin-right: 20rpx;
+  background-color: #f9f9f9;
 }
 
-.item-info {
+.item-main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  justify-content: space-between;
+}
+
+.item-row-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8rpx;
 }
 
 .item-name {
-  font-size: var(--font-size-base);
-  color: var(--td-text-color-primary);
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+  line-height: 1.4;
+  flex: 1;
+  margin-right: 24rpx;
 }
 
 .item-price {
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-secondary);
-}
-
-.item-quantity {
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-secondary);
-}
-
-/* 费用明细 */
-.cost-row {
-  display: flex;
-  justify-content: space-between;
-  padding: var(--spacer-xs) 0;
-  font-size: var(--font-size-sm);
-}
-
-.cost-row .label {
-  color: var(--td-text-color-secondary);
-}
-
-.cost-row .value {
-  color: var(--td-text-color-primary);
-}
-
-.cost-row .value.discount {
-  color: var(--td-success-color);
-}
-
-.cost-row.total {
-  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
-  margin-top: var(--spacer-sm);
-  padding-top: var(--spacer-md);
-}
-
-.cost-row.total .label {
+  font-size: 30rpx;
+  color: #333;
   font-weight: bold;
-  font-size: var(--font-size-base);
-  color: var(--td-text-color-primary);
+  font-family: 'DIN Alternate', sans-serif;
 }
 
-.cost-row.total .value {
-  font-size: var(--font-size-title);
-  font-weight: bold;
-  color: var(--td-brand-color);
-}
-
-/* 时间线 */
-.timeline {
-  display: flex;
-  flex-direction: column;
-}
-
-.timeline-row {
-  display: flex;
-  gap: var(--spacer-md);
-  position: relative;
-  padding-bottom: var(--spacer-lg);
-}
-
-.timeline-row:last-child {
-  padding-bottom: 0;
-}
-
-.timeline-left {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 32rpx;
-}
-
-.timeline-dot {
-  width: 16rpx;
-  height: 16rpx;
-  border-radius: var(--radius-round);
-  background: var(--td-bg-color-secondarycontainer);
-  z-index: 2;
-  margin-top: 12rpx;
-}
-
-.timeline-dot.done {
-  background: var(--td-brand-color);
-  box-shadow: 0 0 0 6rpx var(--td-brand-color-light);
-}
-
-.timeline-line {
-  position: absolute;
-  left: 15rpx;
-  top: 28rpx;
-  bottom: -15rpx;
-  width: 2rpx;
-  background: var(--td-bg-color-secondarycontainer);
-  z-index: 1;
-}
-
-.timeline-row:last-child .timeline-line {
-  display: none;
-}
-
-.timeline-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.timeline-head {
+.item-row-2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.timeline-title {
-  font-size: var(--font-size-base);
+.item-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+}
+
+.spec-tag {
+  font-size: 22rpx;
+  color: #999;
+  background: #f5f5f5;
+  padding: 2rpx 8rpx;
+  border-radius: 4rpx;
+}
+
+.item-qty {
+  font-size: 26rpx;
+  color: #999;
+}
+
+/* Fees */
+.fee-list {
+  padding: 16rpx 32rpx;
+}
+
+.fee-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 12rpx;
+}
+
+.price-group {
+  display: flex;
+  gap: 12rpx;
+}
+
+.discount-price {
+  text-decoration: line-through;
+  color: #bbb;
+}
+
+.highlight-red {
+  color: var(--td-error-color, #E34D59);
+}
+
+.total-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  padding: 16rpx 32rpx 0;
+  font-size: 28rpx;
+}
+
+.total-label {
+  margin-right: 12rpx;
+  color: #333;
   font-weight: bold;
-  color: var(--td-text-color-primary);
 }
 
-.timeline-time {
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
+.total-price {
+  font-size: 40rpx;
+  color: #333;
+  font-weight: bold;
+  font-family: 'DIN Alternate', sans-serif;
 }
 
-.timeline-desc {
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-secondary);
+/* Info Cards */
+.address-note {
+  text-align: right;
+  width: 400rpx;
+  white-space: normal !important;
+  line-height: 1.4;
 }
 
-/* 底部操作栏 */
+/* Bottom Bar */
 .bottom-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: var(--spacer-sm) var(--spacer-md);
-  padding-bottom: calc(var(--spacer-sm) + env(safe-area-inset-bottom));
-  background: var(--td-bg-color-container);
-  box-shadow: var(--shadow-md);
-  z-index: var(--z-index-fixed);
-  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
+  background: #fff;
+  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  box-shadow: 0 -2rpx 10rpx rgba(0,0,0,0.05);
+  z-index: 100;
 }
 
-.action-row {
+.bottom-actions {
   display: flex;
-  gap: var(--spacer-sm);
+  justify-content: space-between;
+  align-items: center;
 }
 
-.btn {
-  flex: 1;
+.secondary-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.primary-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-left: auto;
+}
+
+/* TDesign Button Overrides if needed */
+.t-button--medium {
+  font-weight: bold;
 }

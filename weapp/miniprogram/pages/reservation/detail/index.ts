@@ -1,39 +1,27 @@
-import { ReservationItem, ReservationService, ReservationResponse, ReservationStatus } from '../../../api/reservation'
+import { ReservationService } from '../../../api/reservation'
 import { processPayment } from '../../../api/payment'
-import ReservationAdapter from '../../../adapters/reservation'
+import { ReservationCardAdapter, ReservationDetailViewModel, ReservationCardViewModel } from '../../../adapters/reservation-card'
+import { logger } from '../../../utils/logger'
 
-type ReservationItemView = ReservationItem & {
-	_displayName: string
-	_unitPrice: string
-	_totalPrice: string
-	_image: string
-}
-
-type ReservationView = ReservationResponse & {
-    _statusText: string
-    _statusTheme: string
-    _statusColor: string
-    _timeText: string
-    _createdAt: string
-    _reservationDate: string
-    _reservationTime: string
-    _guestCount: string
-    items?: ReservationItemView[]
-    cooking_started_at?: string
-}
+// 取消原因
+const CANCEL_REASONS = [
+    '行程改变',
+    '订错了',
+    '不想去了',
+    '其他原因'
+]
 
 Page({
     data: {
         id: 0,
-        reservation: null as ReservationView | null,
+        reservation: null as ReservationDetailViewModel | null,
         loading: true,
         navBarHeight: 88,
+        
+        // Dialog State
         showCancelDialog: false,
         cancelReason: '',
-        cancelReasons: ['行程改变', '订错了', '不想去了', '其他原因'],
-        showPayButton: false,
-        showCancelButton: false,
-        showModifyButton: false
+        cancelReasons: CANCEL_REASONS
     },
 
     onLoad(options: { id?: string }) {
@@ -44,8 +32,7 @@ Page({
     },
 
     onShow() {
-        // refresh when returning from pay/menu/cart
-        if (this.data.id) {
+        if (this.data.id && this.data.reservation) {
             this.loadDetail()
         }
     },
@@ -55,123 +42,63 @@ Page({
     },
 
     async loadDetail() {
-        this.setData({ loading: true })
+        if (!this.data.reservation) {
+           this.setData({ loading: true })
+        }
+        
         try {
             const res = await ReservationService.getReservationDetail(this.data.id)
-
-            const mappedItems = this.mapReservationItems(res.items || [])
-
-            const formatted: ReservationView = {
-                ...res,
-                items: mappedItems,
-                _statusText: ReservationAdapter.formatStatus(res.status),
-                _statusTheme: ReservationAdapter.getStatusTheme(res.status),
-                _statusColor: this.getStatusColor(res.status),
-                _timeText: this.formatReservationDateTime(res.reservation_date, res.reservation_time),
-                _createdAt: this.formatDateSafe(res.created_at),
-                _reservationDate: res.reservation_date || '--',
-                _reservationTime: res.reservation_time || '--',
-                _guestCount: res.guest_count ? `${res.guest_count}人` : '--'
-            }
-
-            const showPayButton = res.status === 'pending'
-            const showCancelButton = ['pending', 'paid', 'confirmed'].includes(res.status)
-            const showModifyButton = ['paid', 'confirmed', 'checked_in'].includes(res.status)
+            const viewModel = ReservationCardAdapter.toDetailViewModel(res)
 
             this.setData({
-                reservation: formatted,
-                loading: false,
-                showPayButton,
-                showCancelButton,
-                showModifyButton
+                reservation: viewModel,
+                loading: false
             })
         } catch (error) {
-            console.error(error)
+            logger.error('Load reservation detail failed', error)
             wx.showToast({ title: '加载失败', icon: 'none' })
             this.setData({ loading: false })
         }
     },
 
-    getStatusColor(status: ReservationStatus): string {
-        switch (status) {
-            case 'completed':
-            case 'checked_in':
-                return '#00A870'
-            case 'cancelled':
-            case 'expired':
-            case 'no_show':
-                return '#A0A4B3'
-            case 'pending':
-                return '#FF9F45'
-            default:
-                return '#1F7AEC'
+    // Navigation
+    onEnterMerchant() {
+        const mid = this.data.reservation?.merchantId
+        if (mid) {
+             // 假设商户详情页
+            wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${mid}` })
         }
     },
 
-    formatDateSafe(value?: string): string {
-        if (!value) return '--'
-        const d = new Date(value.replace(/-/g, '/'))
-        if (Number.isNaN(d.getTime())) return value
-        return ReservationAdapter.formatFullDateTime(value)
-    },
-
-    formatReservationDateTime(dateStr?: string, timeStr?: string): string {
-        const datePart = (dateStr || '').trim()
-        const timePart = (timeStr || '').trim()
-        if (!datePart && !timePart) return '--'
-
-        // Prefer combined parsing to avoid NaN when time lacks date
-        if (datePart && timePart) {
-            const combined = `${datePart} ${timePart}`.replace(/-/g, '/')
-            const parsed = new Date(combined)
-            if (!Number.isNaN(parsed.getTime())) {
-                const y = parsed.getFullYear()
-                const m = ('0' + (parsed.getMonth() + 1)).slice(-2)
-                const d = ('0' + parsed.getDate()).slice(-2)
-                const hh = ('0' + parsed.getHours()).slice(-2)
-                const mm = ('0' + parsed.getMinutes()).slice(-2)
-                return `${y}-${m}-${d} ${hh}:${mm}`
-            }
+    onNavMerchant() {
+        const address = this.data.reservation?.merchantAddress
+        if (!address) {
+             wx.showToast({ title: '暂无地址信息', icon: 'none' })
+             return
         }
-
-        // Fallback to whichever parts we have
-        if (datePart && timePart) return `${datePart} ${timePart}`
-        if (datePart) return datePart
-        return timePart
-    },
-
-    mapReservationItems(items: ReservationItem[]): ReservationItemView[] {
-        if (!items || items.length === 0) return []
-
-        return items.map((item) => {
-            const unitPrice = this.formatPrice(item.unit_price)
-            const totalPrice = this.formatPrice(item.total_price ?? (item.unit_price ?? 0) * (item.quantity || 1))
-            return {
-                ...item,
-                _displayName: item.name || (item.type === 'combo' ? '套餐' : '菜品'),
-                _unitPrice: unitPrice,
-                _totalPrice: totalPrice,
-                _image: this.normalizeImage(item.image_url)
-            }
+        // 简单处理，实际应解析经纬度
+        wx.openLocation({
+            latitude: 39.9, // Demo default
+            longitude: 116.4,
+            name: this.data.reservation?.merchantName,
+            address: address
         })
     },
 
-    formatPrice(amount?: number): string {
-        if (amount === undefined || amount === null) return '--'
-        return `¥${(amount / 100).toFixed(2)}`
+    onCallMerchant() {
+        const phone = this.data.reservation?.merchantPhone || this.data.reservation?.contactPhone
+        if (phone) {
+            wx.makePhoneCall({ phoneNumber: phone })
+        } else {
+            wx.showToast({ title: '暂无电话', icon: 'none' })
+        }
     },
 
-    normalizeImage(url?: string): string {
-        if (!url) return ''
-        if (url.startsWith('http')) return url
-        if (url.startsWith('/')) return url
-        return url
-    },
-
+    // Actions
     onCancel() {
         this.setData({ showCancelDialog: true })
     },
-
+    
     closeCancelDialog() {
         this.setData({ showCancelDialog: false })
     },
@@ -182,57 +109,64 @@ Page({
 
     async confirmCancel() {
         if (!this.data.cancelReason) {
-            wx.showToast({ title: '请选择取消原因', icon: 'none' })
-            return
+             wx.showToast({ title: '请选择原因', icon: 'none' })
+             return
         }
-
+        
+        wx.showLoading({ title: '提交中' })
         try {
-            wx.showLoading({ title: '提交中...' })
             await ReservationService.cancelReservation(this.data.id, this.data.cancelReason)
             wx.showToast({ title: '已取消', icon: 'success' })
             this.closeCancelDialog()
             this.loadDetail()
-        } catch (error) {
-            const errMessage = error instanceof Error ? error.message : String(error)
-            wx.showToast({ title: errMessage || '取消失败', icon: 'none' })
+        } catch (e) {
+            logger.error('Cancel failed', e)
+            wx.showToast({ title: '取消失败', icon: 'none' })
         } finally {
             wx.hideLoading()
         }
-    },
-
-    onCallMerchant() {
-        const phone = this.data.reservation?.merchant_phone || this.data.reservation?.contact_phone
-        if (!phone) {
-            wx.showToast({ title: '暂无电话', icon: 'none' })
-            return
-        }
-        wx.makePhoneCall({ phoneNumber: phone })
     },
 
     async onPay() {
         if (!this.data.reservation) return
+        wx.showLoading({ title: '拉起支付' })
         try {
-            wx.showLoading({ title: '拉起支付' })
             await processPayment(this.data.reservation.id, 'reservation')
             wx.showToast({ title: '支付成功', icon: 'success' })
             this.loadDetail()
-        } catch (error) {
-            const errMessage = error instanceof Error ? error.message : String(error)
-            wx.showToast({ title: errMessage || '支付失败', icon: 'none' })
+        } catch (e) {
+            logger.error('Pay failed', e)
+            wx.showToast({ title: '支付未完成', icon: 'none' })
         } finally {
             wx.hideLoading()
         }
     },
+    
+    // 跳转到点菜页面进行加菜/修改 (Reservation Context)
+    onModifyDishes() {
+         const res = this.data.reservation
+         if (!res) return
 
-    async onModifyDishes() {
-        if (!this.data.reservation) return
-        if (this.data.reservation.cooking_started_at) {
-            wx.showToast({ title: '已开始起菜，无法修改', icon: 'none' })
-            return
-        }
+         // 传递 reservation_id 让 menu 页面识别是预订点餐
+         wx.navigateTo({
+             url: `/pages/dine-in/menu/menu?reservation_id=${res.id}&merchant_id=${res.merchantId}`
+         })
+    },
 
+    // 再次预订 (跳转预订表单)
+    onRebook() {
+        const res = this.data.reservation
+        if (!res) return
         wx.navigateTo({
-            url: `/pages/reservation/modify/index?id=${this.data.reservation.id}`
+            url: `/pages/reservation/create/index?merchantId=${res.merchantId}`
         })
+    },
+
+    // Copy ID
+    onCopy(e: WechatMiniprogram.BaseEvent) {
+        const text = e.currentTarget.dataset.text
+        if (text) {
+            wx.setClipboardData({ data: String(text) })
+        }
     }
-});
+})

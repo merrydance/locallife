@@ -1,38 +1,123 @@
 <custom-navbar title="我的钱包" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <!-- 余额卡片 -->
-  <view class="balance-card">
-    <view class="balance-info">
-      <text class="label">账户余额(元)</text>
-      <text class="amount">{{balanceDisplay}}</text>
-    </view>
-    <view class="actions">
-      <t-button theme="primary" size="small" bindtap="onTopUp">充值</t-button>
-      <t-button variant="outline" size="small" bindtap="onWithdraw">提现</t-button>
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(40rpx + env(safe-area-inset-bottom));">
+  
+  <!-- 总资产卡片 -->
+  <view class="header-section animate-fade-in">
+    <view class="total-balance-card">
+      <view class="card-content">
+        <view class="balance-header">
+          <text class="label">资产总览</text>
+          <t-image src="/assets/icons/wallet-safe.svg" mode="aspectFit" width="36rpx" height="36rpx" />
+        </view>
+        <view class="balance-display">
+          <text class="symbol">¥</text>
+          <text class="amount">{{balanceDisplay}}</text>
+        </view>
+        <view class="balance-stats">
+          <view class="stat-item">
+            <text class="stat-label">会员卡数</text>
+            <text class="stat-value">{{memberships.length}}</text>
+          </view>
+          <view class="stat-divider"></view>
+          <view class="stat-item">
+            <text class="stat-label">累计充值</text>
+            <text class="stat-value">¥{{totalRechargedDisplay}}</text>
+          </view>
+        </view>
+      </view>
+      <!-- 背景装饰 -->
+      <view class="card-bg-decoration"></view>
     </view>
   </view>
 
-  <!-- 交易记录 -->
-  <view class="transactions-section">
-    <view class="section-title">交易记录</view>
-    <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
-
-    <view wx:if="{{!loading}}" class="transactions-list">
-      <view wx:if="{{transactions.length === 0}}" class="empty">
-        <t-empty description="暂无交易记录" />
+  <!-- 快捷操作栏 -->
+  <view class="action-grid animate-fade-in" style="animation-delay: 0.1s;">
+    <view class="action-item" bindtap="onTopUp">
+      <view class="icon-wrap recharge">
+        <t-image src="/assets/icons/topup-money.svg" mode="aspectFit" width="48rpx" height="48rpx" />
       </view>
+      <text>快速充值</text>
+    </view>
+    <view class="action-item" bindtap="onWithdraw">
+      <view class="icon-wrap withdraw">
+        <t-image src="/assets/icons/withdraw-out.svg" mode="aspectFit" width="48rpx" height="48rpx" />
+      </view>
+      <text class="disabled">提现</text>
+    </view>
+    <view class="action-item" bindtap="onGoToCoupons">
+      <view class="icon-wrap coupon">
+        <t-image src="/assets/icons/coupon-ticket.svg" mode="aspectFit" width="48rpx" height="48rpx" />
+      </view>
+      <text>优惠券</text>
+    </view>
+    <view class="action-item" bindtap="onShowBill">
+      <view class="icon-wrap bill">
+        <t-image src="/assets/icons/bill-list.svg" mode="aspectFit" width="48rpx" height="48rpx" />
+      </view>
+      <text>账单</text>
+    </view>
+  </view>
 
-      <view wx:else>
-        <view wx:for="{{transactions}}" wx:key="id" class="transaction-item">
-          <view class="item-left">
-            <text class="item-title">{{item.title}}</text>
-            <text class="item-time">{{item.time}}</text>
+  <!-- 会员资产列表 -->
+  <view class="section-container animate-fade-in" style="animation-delay: 0.2s;">
+    <view class="section-header">
+      <text class="section-title">我的资产</text>
+      <view class="section-more" bindtap="onManageMembership">
+        <text>管理</text>
+        <t-icon name="chevron-right" size="28rpx" />
+      </view>
+    </view>
+
+    <view class="asset-list">
+      <block wx:if="{{memberships.length > 0}}">
+        <view wx:for="{{memberships}}" wx:key="id" class="asset-card" bindtap="onViewMembership" data-id="{{item.id}}">
+          <view class="asset-info">
+            <t-image src="{{item.logo_url || '/assets/icons/shop.svg'}}" mode="aspectFill" width="80rpx" height="80rpx" shape="circle" class="asset-logo" />
+            <view class="asset-meta">
+              <text class="asset-name">{{item.merchant_name || '会员卡'}}</text>
+              <text class="asset-date">加入于 {{item.created_at_date}}</text>
+            </view>
           </view>
-          <text class="item-amount {{item.amount > 0 ? 'positive' : 'negative'}}">
-            {{item.amountDisplay}}
-          </text>
+          <view class="asset-balance">
+            <text class="asset-amount">¥{{item.balance_display}}</text>
+            <t-tag variant="light-outline" theme="primary" size="extra-small" catchtap="onTopUp" data-id="{{item.id}}">充值</t-tag>
+          </view>
         </view>
+      </block>
+      <view wx:else class="empty-assets">
+        <t-empty description="暂无商户资产" />
+      </view>
+    </view>
+  </view>
+
+  <!-- 最近交易 -->
+  <view class="section-container animate-fade-in" style="animation-delay: 0.3s;">
+    <view class="section-header">
+      <text class="section-title">最近交易记录</text>
+    </view>
+
+    <view class="transactions-list">
+      <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading-center" />
+      <block wx:elif="{{transactions.length > 0}}">
+        <view wx:for="{{transactions}}" wx:key="id" class="transaction-item" bindtap="onTransactionDetail" data-item="{{item}}">
+          <view class="transaction-left">
+            <view class="type-icon {{item.type}}">
+              <t-icon name="{{item.type === 'REFUND' ? 'rollback' : (item.amount > 0 ? 'add' : 'cart')}}" size="32rpx" />
+            </view>
+            <view class="transaction-info">
+              <text class="transaction-title">{{item.title}}</text>
+              <text class="transaction-time">{{item.time}}</text>
+            </view>
+          </view>
+          <view class="transaction-right">
+            <text class="transaction-amount {{item.amount > 0 ? 'positive' : 'negative'}}">{{item.amountDisplay}}</text>
+            <t-tag wx:if="{{item.status}}" variant="light" theme="{{item.statusTheme}}" size="extra-small">{{item.statusName}}</t-tag>
+          </view>
+        </view>
+      </block>
+      <view wx:else class="empty-transactions">
+        <t-empty description="暂无记录" />
       </view>
     </view>
   </view>

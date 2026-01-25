@@ -1,128 +1,216 @@
+/* Pages User Center Membership */
+
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
+  background-color: var(--td-bg-color-page);
+  padding: var(--spacer-md);
+  box-sizing: border-box;
 }
 
-.loading {
+.loading-container {
+  padding: 100rpx 0;
   display: flex;
   justify-content: center;
-  padding: 100rpx 0;
 }
 
-.content {
-  padding: 24rpx;
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Card List */
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+/* Member Card */
 .member-card {
-  border-radius: 24rpx;
-  padding: 40rpx;
-  color: #333;
-  background: #fff;
-  margin-bottom: 32rpx;
+  position: relative;
+  width: 100%;
+  height: 340rpx; /* Fixed height for card look */
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  /* Premium Dark Gradient */
+  background: linear-gradient(135deg, #2C2C2C 0%, #1A1A1A 100%);
+  color: #DFC090; /* Gold text */
+  padding: var(--spacer-lg);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.15);
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  transition: transform 0.2s ease;
 }
 
-.membership-list {
-  display: flex;
-  flex-direction: column;
-  gap: 24rpx;
+.member-card:active {
+  transform: scale(0.98);
 }
 
-.merchant-name {
-  font-size: 32rpx;
-  font-weight: 600;
+/* Decorative Background */
+.card-bg-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+.circle-1 {
+  width: 300rpx;
+  height: 300rpx;
+  top: -100rpx;
+  right: -50rpx;
+}
+.circle-2 {
+  width: 200rpx;
+  height: 200rpx;
+  bottom: -50rpx;
+  left: -50rpx;
 }
 
-.balance {
-  font-size: 28rpx;
-  color: #E34D59;
-  font-weight: 600;
-}
-
-.meta-row {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 16rpx;
-  font-size: 24rpx;
-  color: #666;
-}
-
-.meta-label {
-  color: #999;
-}
-
-.member-card.level-GOLD {
-  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-}
-
+/* Card Header */
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
+  z-index: 2;
 }
 
-.level-name {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-
-.exp-info {
+.merchant-info {
   display: flex;
-  justify-content: space-between;
-  font-size: 24rpx;
-  margin-bottom: 16rpx;
-  opacity: 0.9;
-}
-
-.benefits-section {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-}
-
-.section-title {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 32rpx;
-}
-
-.benefits-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24rpx;
-}
-
-.benefit-item {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 8rpx;
+  gap: var(--spacer-sm);
 }
 
-.benefit-icon {
-  width: 88rpx;
-  height: 88rpx;
-  background: #FFF0F1;
-  border-radius: 50%;
+.merchant-logo {
+  border: 2rpx solid rgba(223, 192, 144, 0.3);
+  background-color: #fff;
+}
+
+.merchant-name {
+  font-size: var(--font-size-heading);
+  font-weight: bold;
+  color: #F0E0C0; /* Lighter Gold */
+  text-shadow: 0 2rpx 4rpx rgba(0,0,0,0.3);
+}
+
+.vip-badge {
   display: flex;
-  justify-content: center;
   align-items: center;
+  gap: 6rpx;
+  background: linear-gradient(90deg, #EED5A9 0%, #DFC090 100%);
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+  font-weight: bold;
+  color: #5A4010; /* Dark Brown for contrast on gold */
+}
+
+/* Card Body */
+.card-body {
+  position: relative;
+  z-index: 2;
+  margin-top: var(--spacer-sm);
+}
+
+.balance-label {
+  font-size: var(--font-size-sm);
+  opacity: 0.8;
   margin-bottom: 8rpx;
 }
 
-.benefit-name {
-  font-size: 26rpx;
-  color: #333;
+.balance-value {
+  display: flex;
+  align-items: baseline;
+  gap: 4rpx;
+}
+
+.symbol {
+  font-size: 32rpx;
   font-weight: 500;
 }
 
-.benefit-desc {
+.amount {
+  font-size: 64rpx;
+  font-weight: bold;
+  font-family: 'DIN Alternate', sans-serif;
+  letter-spacing: 2rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0,0,0,0.3);
+}
+
+/* Card Footer */
+.card-footer {
+  display: flex;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  margin-top: auto;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-label {
   font-size: 20rpx;
-  color: #999;
+  opacity: 0.6;
+  margin-bottom: 4rpx;
+}
+
+.stat-value {
+  font-size: 28rpx;
+  font-family: 'DIN Alternate', sans-serif;
+  font-weight: 500;
+}
+
+.stat-divider {
+  width: 2rpx;
+  height: 24rpx;
+  background: rgba(223, 192, 144, 0.3);
+  margin: 0 var(--spacer-md);
+}
+
+.action-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 10rpx 20rpx;
+  background: rgba(255,255,255,0.1);
+  border: 1rpx solid rgba(255,255,255,0.2);
+  border-radius: 30rpx;
+  font-size: 24rpx;
+  backdrop-filter: blur(4px);
+}
+
+.loading-more {
+  padding: var(--spacer-md);
+  text-align: center;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 200rpx;
+  width: 100%;
+}
+
+.empty-tips {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-secondary);
+  margin-top: var(--spacer-md);
+  margin-bottom: var(--spacer-xl);
+  text-align: center;
+}
+
+.empty-btn {
+  width: 240rpx;
 }

@@ -1,10 +1,12 @@
-import { getMyMemberships, MembershipResponse } from '../../../api/personal'
+import MembershipService, { Membership } from '../../../api/membership'
 import { formatPriceNoSymbol } from '../../../utils/util'
+import { ErrorHandler } from '../../../utils/error-handler'
 
 interface MembershipDisplay {
   id: number
+  merchantId: number
   merchantName: string
-  balance: number
+  logoUrl: string
   balanceDisplay: string
   totalRechargedDisplay: string
   totalConsumedDisplay: string
@@ -13,50 +15,94 @@ interface MembershipDisplay {
 Page({
   data: {
     memberships: [] as MembershipDisplay[],
-    benefits: [
-      { icon: 'discount', name: '会员折扣', desc: '专属会员价' },
-      { icon: 'gift', name: '积分奖励', desc: '消费得积分' },
-      { icon: 'service', name: '专属客服', desc: '优先接入' },
-      { icon: 'shop', name: '余额充值', desc: '充值有优惠' }
-    ],
     navBarHeight: 88,
-    loading: false
+    loading: false,
+    page: 1,
+    pageSize: 10,
+    hasMore: true
   },
 
   onLoad() {
-    this.loadMemberships()
+    this.loadMemberships(true)
   },
 
   onShow() {
-    this.loadMemberships()
+    // Refresh if needed, or just keep loaded
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  async loadMemberships() {
+  async loadMemberships(reset = false) {
+    if (this.data.loading) return
+    if (!reset && !this.data.hasMore) return
+
     this.setData({ loading: true })
 
     try {
-      const response = await getMyMemberships()
-      const memberships: MembershipDisplay[] = response.memberships.map((m: MembershipResponse) => ({
+      const page = reset ? 1 : this.data.page
+      const res = await MembershipService.listMyMemberships(page, this.data.pageSize)
+      
+      const newMemberships: MembershipDisplay[] = res.memberships.map((m: Membership) => ({
         id: m.id,
+        merchantId: m.merchant_id,
         merchantName: m.merchant_name || '商户',
-        balance: m.balance,
+        logoUrl: m.logo_url || '/assets/icons/shop.svg', // Default icon if missing
         balanceDisplay: formatPriceNoSymbol(m.balance || 0),
         totalRechargedDisplay: formatPriceNoSymbol(m.total_recharged || 0),
         totalConsumedDisplay: formatPriceNoSymbol(m.total_consumed || 0)
       }))
 
+      const memberships = reset ? newMemberships : [...this.data.memberships, ...newMemberships]
+      
       this.setData({
         memberships,
+        page: page + 1,
+        hasMore: memberships.length < res.total,
         loading: false
       })
+
     } catch (error) {
-      console.error('加载会员卡失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false, memberships: [] })
+      ErrorHandler.handle(error, 'Membership.list')
+      this.setData({ loading: false })
+      if (reset) this.setData({ memberships: [] })
     }
   },
+
+  onReachBottom() {
+    this.loadMemberships()
+  },
+
+  onPullDownRefresh() {
+    this.loadMemberships(true).then(() => {
+      wx.stopPullDownRefresh()
+    })
+  },
+
+  onCardTap(e: WechatMiniprogram.BaseEvent) {
+    const id = e.currentTarget.dataset.id
+    // Future: Go to membership detail or records
+    const item = this.data.memberships.find(m => m.id === id)
+    if (item) {
+       // Navigate to merchant detail for now, or just show toast
+       wx.navigateTo({
+           url: `/pages/takeout/restaurant-detail/index?id=${item.merchantId}`
+       })
+    }
+  },
+
+  onRechargeTap(e: WechatMiniprogram.BaseEvent) {
+    const item = e.currentTarget.dataset.item
+    // Placeholder for Recharge Flow
+    wx.showToast({
+        title: '充值功能即将上线',
+        icon: 'none'
+    })
+    // In future: navigate to /pages/membership/recharge?id=...
+  },
+
+  onGoHome() {
+    wx.switchTab({ url: '/pages/takeout/index' })
+  }
 })

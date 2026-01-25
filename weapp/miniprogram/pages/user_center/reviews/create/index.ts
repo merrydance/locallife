@@ -2,8 +2,7 @@
  * 创建评价页面
  */
 
-import { createReview, CreateReviewRequest } from '../../../../api/personal'
-import { ReviewService } from '../../../../api/review'
+import { ReviewService, CreateReviewParams } from '../../../../api/review'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
 
@@ -122,13 +121,13 @@ Page({
         this.setData({ submitting: true })
 
         try {
-            const reviewData: CreateReviewRequest = {
+            const reviewData: CreateReviewParams = {
                 order_id: orderId,
                 content,
                 images: images.length > 0 ? images : undefined
             }
 
-            await createReview(reviewData)
+            await ReviewService.createReview(reviewData)
 
             wx.showToast({ title: '评价成功', icon: 'success' })
 

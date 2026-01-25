@@ -1,42 +1,73 @@
-<custom-navbar title="会员中心" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="我的会员" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(40rpx + env(safe-area-inset-bottom));">
+  
+  <!-- Loading -->
+  <view wx:if="{{loading && memberships.length === 0}}" class="loading-container">
+    <t-loading theme="circular" size="40rpx" text="加载中..." />
+  </view>
 
-  <view wx:if="{{!loading}}" class="content">
-    <!-- 会员卡列表 -->
-    <view wx:if="{{memberships.length > 0}}" class="membership-list">
-      <view class="member-card" wx:for="{{memberships}}" wx:key="id">
-        <view class="card-header">
-          <text class="merchant-name">{{item.merchantName}}</text>
-          <text class="balance">¥{{item.balanceDisplay}}</text>
-        </view>
-        <view class="card-body">
-          <view class="meta-row">
-            <text class="meta-label">累计充值</text>
-            <text class="meta-value">¥{{item.totalRechargedDisplay}}</text>
+  <!-- Content -->
+  <view wx:else class="content animate-fade-in">
+    
+    <!-- Membership Cards List -->
+    <view wx:if="{{memberships.length > 0}}" class="card-list">
+      <block wx:for="{{memberships}}" wx:key="id">
+        <view class="member-card" bindtap="onCardTap" data-id="{{item.id}}">
+          <!-- Decorative Background Circles -->
+          <view class="card-bg-circle circle-1"></view>
+          <view class="card-bg-circle circle-2"></view>
+
+          <!-- Card Header -->
+          <view class="card-header">
+            <view class="merchant-info">
+              <t-image src="{{item.logoUrl}}" mode="aspectFill" width="60rpx" height="60rpx" class="merchant-logo" shape="circle" />
+              <text class="merchant-name">{{item.merchantName}}</text>
+            </view>
+            <view class="vip-badge">
+              <t-icon name="diamond" size="24rpx" color="#7A5C26" />
+              <text>VIP会员</text>
+            </view>
           </view>
-          <view class="meta-row">
-            <text class="meta-label">累计消费</text>
-            <text class="meta-value">¥{{item.totalConsumedDisplay}}</text>
+
+          <!-- Card Body: Balance -->
+          <view class="card-body">
+            <view class="balance-label">账户余额</view>
+            <view class="balance-value">
+              <text class="symbol">¥</text>
+              <text class="amount">{{item.balanceDisplay}}</text>
+            </view>
+          </view>
+
+          <!-- Card Footer: Stats -->
+          <view class="card-footer">
+            <view class="stat-item">
+              <text class="stat-label">累计充值</text>
+              <text class="stat-value">¥{{item.totalRechargedDisplay}}</text>
+            </view>
+            <view class="stat-divider"></view>
+            <view class="stat-item">
+              <text class="stat-label">累计消费</text>
+              <text class="stat-value">¥{{item.totalConsumedDisplay}}</text>
+            </view>
+            
+            <view class="action-btn" catchtap="onRechargeTap" data-item="{{item}}">
+              <text>立即充值</text>
+              <t-icon name="chevron-right" size="24rpx" color="#fff" />
+            </view>
           </view>
         </view>
-      </view>
+      </block>
+      
+      <t-loading wx:if="{{hasMore}}" theme="spinner" size="40rpx" class="loading-more" text="加载更多..." />
     </view>
-    <t-empty wx:else description="暂无会员卡" />
 
-    <!-- 会员权益 -->
-    <view class="benefits-section">
-      <view class="section-title">会员权益</view>
-      <view class="benefits-grid">
-        <view wx:for="{{benefits}}" wx:key="name" class="benefit-item">
-          <view class="benefit-icon">
-            <t-icon name="{{item.icon}}" size="48rpx" color="#E34D59" />
-          </view>
-          <text class="benefit-name">{{item.name}}</text>
-          <text class="benefit-desc">{{item.desc}}</text>
-        </view>
-      </view>
+    <!-- Empty State -->
+    <view wx:else class="empty-state">
+      <t-empty image="/assets/icons/empty.svg" description="暂无会员卡" />
+      <view class="empty-tips">去喜欢的餐厅看看，加入会员享受优惠吧</view>
+      <t-button theme="primary" size="medium" shape="round" bindtap="onGoHome" class="empty-btn">去逛逛</t-button>
     </view>
+
   </view>
 </view>

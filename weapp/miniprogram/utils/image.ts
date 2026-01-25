@@ -27,7 +27,7 @@ export function formatImageUrl(
 ): string {
   // 空值处理
   if (!url) {
-    return '/assets/placeholder.png'
+    return '/assets/icons/plate.svg'
   }
 
   // 预处理Url：如果以 / 开头，拼接域名

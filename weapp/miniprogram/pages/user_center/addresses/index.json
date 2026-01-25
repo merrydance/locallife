@@ -6,6 +6,8 @@
         "t-button": "tdesign-miniprogram/button/button",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-divider": "tdesign-miniprogram/divider/divider"
     }
 }

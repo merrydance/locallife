@@ -2,7 +2,7 @@
   <!-- 图片：已在 TypeScript 中预处理 fallback -->
   <t-image 
     class="room-image" 
-    src="{{room.primary_image || '/assets/placeholder.png'}}" 
+    src="{{room.primary_image || '/assets/icons/plate.svg'}}" 
     mode="aspectFill" 
     lazy 
   />

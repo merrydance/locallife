@@ -27,7 +27,6 @@ Page({
       this.setData({ addressId: Number(options.id) })
       this.loadAddress(Number(options.id))
       this.setData({ navTitle: '编辑地址' })
-      wx.setNavigationBarTitle({ title: '编辑地址' })
     } else if (options.wechat_data) {
       // 从微信导入的数据
       try {
@@ -38,13 +37,11 @@ Page({
           detailAddress: data.detail_address,
           navTitle: '完善地址'
         })
-        wx.setNavigationBarTitle({ title: '完善地址' })
       } catch (e) {
         logger.error('Parse wechat data failed', e, 'AddressEdit')
       }
     } else {
       this.setData({ navTitle: '新增地址' })
-      wx.setNavigationBarTitle({ title: '新增地址' })
     }
   },
 
@@ -53,6 +50,7 @@ Page({
   },
 
   async loadAddress(id: number) {
+    wx.showLoading({ title: '加载中' })
     try {
       const detail = await AddressService.getAddressDetail(id)
       this.setData({
@@ -66,6 +64,9 @@ Page({
     } catch (error) {
       logger.error('Load address failed:', error, 'AddressEdit')
       wx.showToast({ title: '加载失败', icon: 'error' })
+      setTimeout(() => wx.navigateBack(), 1500)
+    } finally {
+       wx.hideLoading()
     }
   },
 
@@ -91,9 +92,9 @@ Page({
         // 使用选择的位置更新地址和经纬度
         const newAddress = res.name || res.address || ''
 
-        // 直接用地图选择的地址覆盖详细地址，避免旧值遗留
+        // 直接用地图选择的地址作为基础，用户可在此基础上修改门牌号
         this.setData({
-          detailAddress: newAddress,
+          detailAddress: newAddress ? `${newAddress} ` : this.data.detailAddress,
           latitude: String(res.latitude),
           longitude: String(res.longitude)
         })
@@ -101,7 +102,19 @@ Page({
       fail: (err) => {
         if (err.errMsg.includes('cancel')) return
         logger.error('Choose location failed:', err, 'AddressEdit')
-        wx.showToast({ title: '请在设置中开启位置权限', icon: 'none' })
+        
+        if (err.errMsg.includes('auth') || err.errMsg.includes('authorize')) {
+            wx.showModal({
+                title: '需要权限',
+                content: '请在设置中开启位置权限以选择地址',
+                confirmText: '去设置',
+                success: (m) => {
+                    if (m.confirm) wx.openSetting()
+                }
+            })
+        } else {
+            wx.showToast({ title: '无法打开地图', icon: 'none' })
+        }
       }
     })
   },
@@ -145,26 +158,23 @@ Page({
       }
 
       wx.showToast({ title: '保存成功', icon: 'success' })
-      setTimeout(() => wx.navigateBack(), 1500)
+      setTimeout(() => wx.navigateBack(), 1000)
     } catch (error) {
-      logger.error('Save address failed:', error, 'AddressEdit')
-
-      // 针对未能自动定位的错误，弹出短文案的确认弹窗
-      const err = error as { message?: string; response?: { data?: { error?: string } }; data?: { error?: string } }
+      logger.error('Save failed', error)
+      const err = error as any
       const message = err?.message || err?.response?.data?.error || err?.data?.error
-      if (message && (
+       if (message && (
         message.includes('未能定位') ||
-        message.includes('geocode no result') ||
-        message.includes('nominatim search')
+        message.includes('geocode')
       )) {
         wx.showModal({
-          title: '提示',
-          content: '未能定位，请在地图上选点或补充门牌号',
+          title: '区域识别失败',
+          content: '请尝试在地图上重新选点，或者仅修改门牌号',
           showCancel: false
         })
         return
       }
-
+      
       ErrorHandler.handle(error, 'AddressEdit.save')
     } finally {
       this.setData({ saving: false })
@@ -177,15 +187,18 @@ Page({
     wx.showModal({
       title: '删除地址',
       content: '确认删除此地址?',
+      confirmColor: '#E34D59',
       success: async (res) => {
         if (res.confirm) {
+            wx.showLoading({ title: '删除中' })
           try {
             await AddressService.deleteAddress(this.data.addressId)
             wx.showToast({ title: '已删除', icon: 'success' })
-            setTimeout(() => wx.navigateBack(), 1500)
+            setTimeout(() => wx.navigateBack(), 1000)
           } catch (error) {
-            logger.error('Delete address failed:', error, 'AddressEdit')
             ErrorHandler.handle(error, 'AddressEdit.delete')
+          } finally {
+              wx.hideLoading()
           }
         }
       }

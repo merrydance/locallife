@@ -5,6 +5,10 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-image": "tdesign-miniprogram/image/image",
         "t-button": "tdesign-miniprogram/button/button",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-cell": "tdesign-miniprogram/cell/cell",
+        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+        "t-divider": "tdesign-miniprogram/divider/divider",
+        "t-tag": "tdesign-miniprogram/tag/tag"
     }
 }

@@ -24,11 +24,16 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
+  preventBubble() {},
+
   async loadAddresses() {
     this.setData({ loading: true })
 
     try {
       const addresses = await AddressService.getAddresses()
+      // Sort: Default first
+      addresses.sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0))
+      
       this.setData({
         addresses,
         loading: false
@@ -64,13 +69,25 @@ Page({
       fail: (err) => {
         if (err.errMsg.includes('cancel')) return
         logger.error('Choose address failed:', err, 'Addresses')
-        wx.showToast({ title: '获取微信地址失败', icon: 'none' })
+        
+        // 如果是权限问题，提示用户打开权限
+        if (err.errMsg.includes('auth')) {
+             wx.showModal({
+                title: '需要授权',
+                content: '请在设置中打开通讯录权限以导入地址',
+                confirmText: '去设置',
+                success: (modalRes) => {
+                    if (modalRes.confirm) wx.openSetting()
+                }
+             })
+        }
       }
     })
   },
 
   onEditAddress(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset
+    if (!id) return
     wx.navigateTo({
       url: `/pages/user_center/addresses/edit/index?id=${id}`
     })
@@ -78,9 +95,12 @@ Page({
 
   onDeleteAddress(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset
+    if (!id) return
+
     wx.showModal({
       title: '删除地址',
       content: '确认删除此地址?',
+      confirmColor: '#E34D59',
       success: async (res) => {
         if (res.confirm) {
           try {
@@ -97,13 +117,19 @@ Page({
 
   onSelectAddress(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset
+    if (!id) return
+
     if (this.data.isSelectMode) {
       const pages = getCurrentPages()
-      const prevPage = pages[pages.length - 2] as WechatMiniprogram.Page.Instance<WechatMiniprogram.IAnyObject, WechatMiniprogram.IAnyObject> & {
-        setData: (data: Record<string, unknown>) => void
-      }
-      if (prevPage) {
+      const prevPage = pages[pages.length - 2] as any
+      if (prevPage && prevPage.setData) {
+        // 尝试设置上一页的数据，或者是调用一个回调如果页面支持
+        // 假设上一页监听 selectedAddressId
         prevPage.setData({ selectedAddressId: id })
+        // 如果有 onAddressSelected 方法也可以调用
+        if (typeof prevPage.onAddressSelected === 'function') {
+            prevPage.onAddressSelected(this.data.addresses.find(a => a.id === id))
+        }
       }
       wx.navigateBack()
     }
@@ -111,12 +137,18 @@ Page({
 
   async onSetDefault(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset
+    // 如果已经是默认，就不做操作
+    const current = this.data.addresses.find(a => a.id === id)
+    if (current?.is_default) return
 
     try {
+      wx.showLoading({ title: '设置中' })
       await AddressService.setDefaultAddress(id)
+      wx.hideLoading()
       wx.showToast({ title: '已设为默认', icon: 'success' })
       this.loadAddresses()
     } catch (error) {
+      wx.hideLoading()
       ErrorHandler.handle(error, 'Addresses.setDefault')
     }
   }

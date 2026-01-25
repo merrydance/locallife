@@ -1,85 +1,102 @@
 <custom-navbar title="支付详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(40rpx + env(safe-area-inset-bottom));">
+  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading-center" />
 
-  <view wx:if="{{!loading && payment}}" class="detail-content">
+  <view wx:if="{{!loading && payment}}" class="detail-content animate-fade-in">
     <!-- 支付状态卡片 -->
-    <view class="status-card card">
-      <view class="status-icon">
-        <t-icon wx:if="{{payment.status === 'paid'}}" name="check-circle-filled" size="120rpx" color="var(--td-success-color)" />
-        <t-icon wx:elif="{{payment.status === 'pending'}}" name="time-filled" size="120rpx" color="var(--td-warning-color)" />
-        <t-icon wx:elif="{{payment.status === 'failed'}}" name="close-circle-filled" size="120rpx" color="var(--td-error-color)" />
-        <t-icon wx:elif="{{payment.status === 'cancelled'}}" name="info-circle-filled" size="120rpx" color="var(--td-text-color-placeholder)" />
-        <t-icon wx:elif="{{payment.status === 'refunded'}}" name="check-circle-filled" size="120rpx" color="var(--td-brand-color)" />
+    <view class="status-card highlight-card">
+      <view class="status-main">
+        <view class="status-icon-wrap {{payment.status}}">
+          <t-icon wx:if="{{payment.status === 'paid'}}" name="check-circle-filled" size="64rpx" />
+          <t-icon wx:elif="{{payment.status === 'pending'}}" name="time-filled" size="64rpx" />
+          <t-icon wx:elif="{{payment.status === 'failed'}}" name="close-circle-filled" size="64rpx" />
+          <t-icon wx:elif="{{payment.status === 'cancelled'}}" name="info-circle-filled" size="64rpx" />
+          <t-icon wx:elif="{{payment.status === 'refunded'}}" name="check-circle-filled" size="64rpx" />
+        </view>
+        <view class="status-info">
+          <view class="status-text">{{statusText}}</view>
+          <view class="amount-wrap">
+            <text class="symbol">¥</text>
+            <text class="amount">{{amountDisplay}}</text>
+          </view>
+        </view>
       </view>
-      <view class="status-text">{{statusText}}</view>
-      <view class="amount">¥{{amountDisplay}}</view>
+      <view class="card-footer-tip" wx:if="{{payment.status === 'pending'}}">请在 15 分钟内完成支付</view>
     </view>
 
-    <!-- 支付信息 -->
-    <view class="payment-info card">
-      <view class="card-title">
-        <t-icon name="creditcard" size="32rpx" />
-        <text>支付信息</text>
-      </view>
-      <view class="info-row">
-        <text class="label">支付方式</text>
-        <text class="value">{{paymentMethodText}}</text>
-      </view>
-      <view class="info-row">
-        <text class="label">订单编号</text>
-        <text class="value">{{payment.order_id}}</text>
-      </view>
-      <view class="info-row" wx:if="{{payment.transaction_id}}">
-        <text class="label">交易流水号</text>
-        <text class="value">{{payment.transaction_id}}</text>
-      </view>
-      <view class="info-row">
-        <text class="label">下单时间</text>
-        <text class="value">{{payment.created_at}}</text>
-      </view>
-      <view class="info-row" wx:if="{{payment.paid_at}}">
-        <text class="label">支付时间</text>
-        <text class="value">{{payment.paid_at}}</text>
-      </view>
-      <view class="info-row" wx:if="{{payment.description}}">
-        <text class="label">支付摘要</text>
-        <text class="value">{{payment.description}}</text>
+    <!-- 支付信息列表 -->
+    <view class="info-section">
+      <view class="section-card">
+        <view class="info-group">
+          <view class="info-row">
+            <text class="label">支付方式</text>
+            <view class="value-wrap">
+              <t-icon name="{{payment.payment_method === 'balance' ? 'wallet' : 'logo-wechat'}}" size="32rpx" style="margin-right:8rpx" />
+              <text class="value">{{paymentMethodText}}</text>
+            </view>
+          </view>
+          <t-divider dashed />
+          <view class="info-row">
+            <text class="label">订单编号</text>
+            <text class="value copyable">{{payment.order_id}}</text>
+          </view>
+          <t-divider dashed />
+          <view class="info-row" wx:if="{{payment.transaction_id}}">
+            <text class="label">交易流水号</text>
+            <text class="value">{{payment.transaction_id}}</text>
+          </view>
+          <t-divider dashed />
+          <view class="info-row">
+            <text class="label">下单时间</text>
+            <text class="value">{{payment.created_at}}</text>
+          </view>
+          <view class="info-row" wx:if="{{payment.paid_at}}">
+            <text class="label">支付时间</text>
+            <text class="value">{{payment.paid_at}}</text>
+          </view>
+          <t-divider dashed wx:if="{{payment.description}}" />
+          <view class="info-row" wx:if="{{payment.description}}">
+            <text class="label">支付摘要</text>
+            <text class="value">{{payment.description}}</text>
+          </view>
+        </view>
       </view>
     </view>
 
     <!-- 退款记录 -->
-    <view class="refund-section card" wx:if="{{showRefundList && refunds.length > 0}}">
-      <view class="card-title">
-        <t-icon name="assignment-refund" size="32rpx" />
-        <text>退款记录</text>
+    <view class="section-container" wx:if="{{showRefundList && refunds.length > 0}}">
+      <view class="section-header">
+        <text class="section-title">退款流水</text>
       </view>
-      <view 
-        class="refund-item" 
-        wx:for="{{refunds}}" 
-        wx:key="id"
-        data-id="{{item.id}}"
-        bindtap="onViewRefund"
-      >
-        <view class="refund-main">
-          <view class="refund-amount">¥{{item._amountDisplay}}</view>
-          <view class="refund-status {{item._statusClass}}">{{item._statusText}}</view>
-        </view>
-        <view class="refund-info">
-          <text class="refund-reason">{{item.reason}}</text>
-          <text class="refund-time">{{item.created_at}}</text>
+      <view class="refund-list">
+        <view 
+          class="refund-card" 
+          wx:for="{{refunds}}" 
+          wx:key="id"
+          data-id="{{item.id}}"
+          bindtap="onViewRefund"
+        >
+          <view class="refund-card-header">
+            <t-tag variant="light" theme="{{item._statusTheme || 'primary'}}" size="small">{{item._statusText}}</t-tag>
+            <text class="refund-card-amount">- ¥{{item._amountDisplay}}</text>
+          </view>
+          <view class="refund-card-body">
+            <text class="refund-reason">{{item.reason || '常规退款'}}</text>
+            <text class="refund-time">{{item.created_at}}</text>
+          </view>
+          <t-icon name="chevron-right" size="32rpx" color="#DDD" class="arrow" />
         </view>
       </view>
     </view>
   </view>
 
   <!-- 操作按钮 -->
-  <view class="action-bar" wx:if="{{!loading && payment && showCloseButton}}">
-    <t-button theme="primary" variant="outline" shape="round" block bindtap="onClosePayment">关闭支付</t-button>
+  <view class="bottom-action-bar animate-slide-up" wx:if="{{!loading && payment && showCloseButton}}">
+    <t-button theme="primary" variant="outline" shape="round" block size="large" bindtap="onClosePayment">关闭支付详情</t-button>
   </view>
 
-  <view wx:if="{{!loading && !payment}}" class="empty-view">
+  <view wx:if="{{!loading && !payment}}" class="empty-center">
     <t-empty icon="info-circle-filled" description="未找到相关的支付记录" />
   </view>
 </view>

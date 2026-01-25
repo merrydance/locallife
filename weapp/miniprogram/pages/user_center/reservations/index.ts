@@ -3,81 +3,16 @@
  * 显示用户的所有预订记录
  */
 
-import { ReservationService, ReservationResponse, ReservationStatus, ReservationListParams } from '../../../api/reservation'
+import { ReservationService, ReservationStatus, ReservationListParams, ReservationResponse } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
-
-type ReservationView = ReservationResponse & {
-    _statusText: string
-    _statusClass: string
-    _canCancel: boolean
-    _canOrder: boolean
-    _dateTimeDisplay: string
-    _depositDisplay: string
-    _merchantName: string
-    _merchantAddress: string
-    _merchantPhone: string
-}
-
-type ShareEvent = {
-    target?: {
-        dataset?: {
-            id?: string | number
-        }
-    }
-}
-
-const getEventId = (event: WechatMiniprogram.BaseEvent): number | null => {
-    const currentDataset = event.currentTarget.dataset as { id?: string | number }
-    const targetDataset = (event.target as { dataset?: { id?: string | number } } | undefined)?.dataset
-    const rawId = currentDataset?.id ?? targetDataset?.id
-    const id = typeof rawId === 'number' ? rawId : Number(rawId)
-    return Number.isFinite(id) ? id : null
-}
-
-function formatReservationDateTime(reservationDate?: string, reservationTime?: string): string {
-    const datePart = (reservationDate || '').trim()
-    const timePart = (reservationTime || '').trim()
-
-    const combined = timePart.includes('T') || timePart.includes('-')
-        ? timePart
-        : `${datePart} ${timePart}`.trim()
-
-    const parsed = combined ? new Date(combined.replace(/-/g, '/')) : null
-
-    if (parsed && !Number.isNaN(parsed.getTime())) {
-        const now = new Date()
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        const target = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
-        const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000)
-
-        const hours = ('0' + parsed.getHours()).slice(-2)
-        const minutes = ('0' + parsed.getMinutes()).slice(-2)
-
-        let dateLabel = ''
-        if (diffDays === 0) {
-            dateLabel = '今天'
-        } else if (diffDays === 1) {
-            dateLabel = '明天'
-        } else if (diffDays === -1) {
-            dateLabel = '昨天'
-        } else {
-            const month = ('0' + (parsed.getMonth() + 1)).slice(-2)
-            const day = ('0' + parsed.getDate()).slice(-2)
-            dateLabel = `${month}-${day}`
-        }
-
-        return `${dateLabel} · ${hours}:${minutes}`
-    }
-
-    if (datePart && timePart) return `${datePart} ${timePart}`
-    return timePart || datePart || ''
-}
+import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
+import { processPayment } from '../../../api/payment'
 
 // 状态筛选选项
 const STATUS_TABS = [
     { label: '全部', value: '' },
     { label: '待支付', value: 'pending' },
-    { label: '已确认', value: 'confirmed' },
+    { label: '已确认', value: 'confirmed' }, // 包含 confirmed, checked_in
     { label: '已完成', value: 'completed' },
     { label: '已取消', value: 'cancelled' }
 ]
@@ -90,16 +25,23 @@ const CANCEL_REASONS = [
     '其他原因'
 ]
 
+const getEventId = (event: WechatMiniprogram.BaseEvent): number | null => {
+    const dataset = event.currentTarget.dataset as { id?: string | number }
+    const id = dataset.id
+    const numericId = typeof id === "number" ? id : Number(id)
+    return Number.isFinite(numericId) ? numericId : null
+}
+
 Page({
     data: {
-        reservations: [] as ReservationView[],
+        reservations: [] as ReservationCardViewModel[],
         navBarHeight: 88,
         loading: false,
         page: 1,
         pageSize: 10,
         hasMore: true,
         statusTabs: STATUS_TABS,
-        currentStatus: '' as ReservationStatus | ''
+        currentStatus: '' as string
     },
 
     onLoad() {
@@ -123,6 +65,8 @@ Page({
         }
     },
 
+    preventBubble() {},
+
     async loadReservations(reset = false) {
         if (this.data.loading) return
         this.setData({ loading: true })
@@ -136,16 +80,19 @@ Page({
             const params: ReservationListParams = {
                 page_id: page,
                 page_size: pageSize,
-                ...(currentStatus ? { status: currentStatus } : {})
+                // Status mapping if needed, e.g. mapping UI 'confirmed' to API ['confirmed', 'checked_in'] would happen here if API supported array.
+                // Assuming simple status passing for now.
+                ...(currentStatus ? { status: currentStatus as ReservationStatus } : {})
             }
 
             const response = await ReservationService.getUserReservations(params)
             const result = response.reservations
             const totalCount = typeof response.total_count === 'number' ? response.total_count : result.length
 
-            // 处理显示字段
-            const processedReservations = result.map((r: ReservationResponse) => this.processReservation(r))
-            const reservations = reset ? processedReservations : [...this.data.reservations, ...processedReservations]
+            // 使用 Adapter 转换
+            const viewModels = result.map(r => ReservationCardAdapter.toCardViewModel(r))
+            
+            const reservations = reset ? viewModels : [...this.data.reservations, ...viewModels]
 
             this.setData({
                 reservations,
@@ -159,55 +106,7 @@ Page({
         }
     },
 
-    processReservation(r: ReservationResponse): ReservationView {
-        const merchantName = r.merchant_name || ''
-        const merchantAddress = r.merchant_address || ''
-        const merchantPhone = r.merchant_phone || ''
-        return {
-            ...r,
-            _statusText: this.getStatusText(r.status || ''),
-            _statusClass: r.status || '',
-            _canCancel: ['pending', 'paid', 'confirmed'].includes(r.status || ''),
-            _canOrder: ['confirmed', 'checked_in'].includes(r.status || ''),  // 已确认或已签到可点菜
-            _dateTimeDisplay: formatReservationDateTime(r.reservation_date, r.reservation_time),
-            _depositDisplay: r.deposit_amount ? `¥${(r.deposit_amount / 100).toFixed(2)}` : '',
-            _merchantName: merchantName,
-            _merchantAddress: merchantAddress,
-            _merchantPhone: merchantPhone
-        }
-    },
-
-    noop() {},
-
-    onShareAppMessage(res?: ShareEvent) {
-        const idFromButton = res?.target?.dataset?.id
-        const targetId = Number(idFromButton || this.data.reservations[0]?.id || 0)
-        const target = this.data.reservations.find((r) => r.id === targetId)
-
-        const titleParts = [target?._merchantName || '预订']
-        if (target?._dateTimeDisplay) {
-            titleParts.push(target._dateTimeDisplay)
-        }
-
-        return {
-            title: titleParts.join(' · '),
-            path: `/pages/reservation/detail/index?id=${targetId}`
-        }
-    },
-
-    getStatusText(status: string): string {
-        const statusMap: Record<string, string> = {
-            'pending': '待支付',
-            'paid': '已支付',
-            'confirmed': '已确认',
-            'completed': '已完成',
-            'cancelled': '已取消',
-            'no_show': '未到店'
-        }
-        return statusMap[status] || status
-    },
-
-    onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: ReservationStatus | '' }>) {
+    onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
         const status = e.detail.value || ''
         if (status === this.data.currentStatus) return
         this.setData({ currentStatus: status })
@@ -216,11 +115,7 @@ Page({
 
     onViewDetail(e: WechatMiniprogram.BaseEvent) {
         const id = getEventId(e)
-        if (!id) {
-            wx.showToast({ title: '缺少预订ID', icon: 'none' })
-            return
-        }
-
+        if (!id) return
         wx.navigateTo({
             url: `/pages/reservation/detail/index?id=${id}`
         })
@@ -254,15 +149,37 @@ Page({
     },
 
     /**
+     * 去支付
+     */
+    async onPayReservation(e: WechatMiniprogram.BaseEvent) {
+        const id = getEventId(e)
+        if (!id) return
+
+        wx.showLoading({ title: '拉起支付...' })
+        try {
+             // 预订支付通常是定金，这里的objectType可能是 'reservation'
+            await processPayment(id, 'reservation')
+            wx.showToast({ title: '支付成功', icon: 'success' })
+            setTimeout(() => this.loadReservations(true), 1000)
+        } catch (error) {
+            logger.error('支付失败', error, 'Reservations.onPay')
+            wx.showToast({ title: '支付未完成', icon: 'none' })
+        } finally {
+            wx.hideLoading()
+        }
+    },
+
+    /**
      * 跳转到点菜页面
      */
     onGoToOrder(e: WechatMiniprogram.BaseEvent) {
-        const item = (e.currentTarget.dataset as { item?: ReservationResponse }).item
+        const item = (e.currentTarget.dataset as { item?: ReservationCardViewModel }).item
         if (!item) return
 
         // 跳转到堂食点餐页面，传递预订ID和商户ID
+        // 注意：这里需要确保 menu 页面支持 reservation_id 参数
         wx.navigateTo({
-            url: `/pages/dine-in/menu/menu?reservation_id=${item.id}&merchant_id=${item.merchant_id}`
+            url: `/pages/dine-in/menu/menu?reservation_id=${item.id}&merchant_id=${item.merchantId}`
         })
     }
 })

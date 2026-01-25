@@ -1,162 +1,210 @@
 .page-container {
   min-height: 100vh;
-  background: var(--td-bg-color-page);
+  background-color: var(--td-bg-color-page);
 }
 
-.loading {
+.loading-center {
+  padding-top: 200rpx;
   display: flex;
   justify-content: center;
-  align-items: center;
-  width: 100%;
-  padding: 100rpx 0;
 }
 
 .detail-content {
-  padding-bottom: var(--spacer-xl);
-}
-
-/* 卡片通用样式 */
-.card {
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-md);
   padding: var(--spacer-md);
-  margin: var(--spacer-sm) var(--spacer-md);
-  box-shadow: var(--shadow-sm);
 }
 
-/* 支付状态卡片 */
-.status-card {
+/* 状态高亮卡片 */
+.highlight-card {
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  padding: var(--spacer-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--spacer-md);
+}
+
+.status-main {
+  display: flex;
+  align-items: center;
+}
+
+.status-icon-wrap {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: var(--spacer-lg);
+}
+
+.status-icon-wrap.paid { background: var(--td-success-color-light); color: var(--td-success-color); }
+.status-icon-wrap.pending { background: var(--td-warning-color-light); color: var(--td-warning-color); }
+.status-icon-wrap.failed { background: var(--td-error-color-light); color: var(--td-error-color); }
+.status-icon-wrap.refunded { background: var(--td-brand-color-light); color: var(--td-brand-color); }
+
+.status-info {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--spacer-sm);
-  padding: var(--spacer-xl) var(--spacer-md);
-}
-
-.status-icon {
-  margin-bottom: var(--spacer-xs);
 }
 
 .status-text {
   font-size: var(--font-size-base);
-  font-weight: 500;
   color: var(--td-text-color-secondary);
+  margin-bottom: 8rpx;
 }
 
-.amount {
+.amount-wrap {
+  display: flex;
+  align-items: baseline;
+}
+
+.amount-wrap .symbol {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-right: 4rpx;
+}
+
+.amount-wrap .amount {
   font-size: var(--font-size-display);
   font-weight: bold;
-  color: var(--td-text-color-primary);
+}
+
+.card-footer-tip {
+  margin-top: var(--spacer-md);
+  padding-top: var(--spacer-sm);
+  border-top: 1rpx dashed #EEEEEE;
+  font-size: var(--font-size-xs);
+  color: var(--td-warning-color);
+  text-align: center;
 }
 
 /* 信息卡片 */
-.card-title {
-  font-size: var(--font-size-heading);
-  font-weight: bold;
-  color: var(--td-text-color-primary);
-  margin-bottom: var(--spacer-md);
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-xs);
+.section-card {
+  background: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacer-sm) 0;
-  font-size: var(--font-size-base);
+  padding: var(--spacer-md) 0;
 }
 
 .info-row .label {
+  font-size: var(--font-size-base);
   color: var(--td-text-color-secondary);
 }
 
 .info-row .value {
+  font-size: var(--font-size-base);
   color: var(--td-text-color-primary);
   font-weight: 500;
   text-align: right;
-  max-width: 65%;
-  word-break: break-all;
 }
 
-/* 退款记录 */
-.refund-item {
-  padding: var(--spacer-md) 0;
-  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
+.value-wrap {
+  display: flex;
+  align-items: center;
 }
 
-.refund-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+/* 退款流水列表 */
+.section-container {
+  margin-top: var(--spacer-lg);
 }
 
-.refund-main {
+.section-header {
+  margin-bottom: var(--spacer-sm);
+}
+
+.section-title {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+}
+
+.refund-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.refund-card {
+  position: relative;
+  background: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+  padding-right: 80rpx;
+}
+
+.refund-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacer-xs);
+  margin-bottom: 12rpx;
 }
 
-.refund-amount {
+.refund-card-amount {
   font-size: var(--font-size-heading);
-  font-weight: bold;
+  font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
-.refund-status {
-  font-size: var(--font-size-xxs);
-  padding: 4rpx 16rpx;
-  border-radius: var(--radius-round);
-  font-weight: bold;
-}
-
-.refund-status.pending,
-.refund-status.processing {
-  background: var(--td-warning-color-light);
-  color: var(--td-warning-color);
-}
-
-.refund-status.success {
-  background: var(--td-success-color-light);
-  color: var(--td-success-color);
-}
-
-.refund-status.failed {
-  background: var(--td-error-color-light);
-  color: var(--td-error-color);
-}
-
-.refund-info {
+.refund-card-body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
 }
 
 .refund-reason {
-  flex: 1;
-  margin-right: var(--spacer-md);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
 }
 
-/* 底部操作栏 */
-.action-bar {
+.refund-time {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+}
+
+.refund-card .arrow {
+  position: absolute;
+  right: var(--spacer-md);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* 底部按钮 */
+.bottom-action-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: var(--spacer-sm) var(--spacer-md);
-  padding-bottom: calc(var(--spacer-sm) + env(safe-area-inset-bottom));
-  background: var(--td-bg-color-container);
-  box-shadow: var(--shadow-md);
-  z-index: var(--z-index-fixed);
-  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
+  padding: var(--spacer-md);
+  padding-bottom: calc(var(--spacer-md) + env(safe-area-inset-bottom));
+  background: #FFFFFF;
+  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.05);
 }
 
-.empty-view {
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.empty-center {
   padding-top: 200rpx;
 }
