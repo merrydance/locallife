@@ -22,6 +22,8 @@ export interface OrderCardViewModel {
     canCancel: boolean
     canPay: boolean
     actions?: string[]
+    itemCount: number
+    merchantId: number
 }
 
 export interface PreviewItemViewModel {
@@ -56,7 +58,9 @@ export const OrderCardAdapter = {
             canReorder: ['completed', 'cancelled', 'user_delivered'].includes(order.status),
             canCancel,
             canPay,
-            actions
+            actions,
+            itemCount: order.items ? order.items.reduce((acc, item) => acc + item.quantity, 0) : 0,
+            merchantId: order.merchant_id
         }
     },
 

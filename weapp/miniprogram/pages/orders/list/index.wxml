@@ -1,66 +1,89 @@
 <custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<scroll-view class="page" scroll-y="true" scroll-with-animation="true" style="padding-top: {{navBarHeight}}px;">
-  <!-- 状态筛选Tab -->
-  <view class="tabs-container">
-    <t-tabs value="{{currentStatus}}" bind:change="onStatusChange">
+<view class="page" style="padding-top: {{navBarHeight}}px">
+  <!-- 顶部状态栏 -->
+  <view class="tabs-wrapper">
+    <t-tabs value="{{currentStatus}}" bind:change="onStatusChange" theme="tag" space-evenly="{{false}}" split="{{false}}">
       <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
     </t-tabs>
   </view>
 
-  <!-- 骨架屏 -->
-  <view wx:if="{{loading && orders.length === 0}}" class="skeleton-container">
-    <view class="card skeleton" wx:for="{{[1,2,3]}}" wx:key="*this">
-      <view class="skeleton-line" style="width: 60%; height: 32rpx; margin-bottom: 12rpx;"></view>
-      <view class="skeleton-line" style="width: 40%; height: 24rpx; margin-bottom: 20rpx;"></view>
-      <view class="skeleton-line" style="width: 100%; height: 80rpx;"></view>
+  <!-- 列表内容 -->
+  <view class="order-list">
+    <!-- 空状态 -->
+    <view wx:if="{{!loading && orders.length === 0}}" class="empty-state">
+      <t-empty image="order" description="暂无相关订单" />
     </view>
-  </view>
 
-  <!-- 空状态 -->
-  <view wx:elif="{{orders.length === 0}}" class="empty">
-    <t-empty description="暂无订单" />
-  </view>
-
-  <!-- 订单列表 -->
-  <view wx:else class="order-list">
-    <view class="card" wx:for="{{orders}}" wx:key="id">
+    <!-- 订单卡片 -->
+    <view class="order-card" wx:for="{{orders}}" wx:key="id" bindtap="onViewOrder" data-id="{{item.id}}" hover-class="order-card-hover">
+      <!-- 头部：商户信息 + 状态 -->
       <view class="card-header">
-        <view class="merchant-block">
-          <view class="merchant">{{item.merchantName}}</view>
-          <view class="order-id">#{{item.orderNo}}</view>
+        <view class="merchant-info">
+          <text class="merchant-name">{{item.merchantName}}</text>
+          <t-icon name="chevron-right" size="32rpx" color="#999" />
         </view>
-        <view class="status-pill {{item.statusClass}}">{{item.statusLabel}}</view>
+        <view class="status-tag {{item.statusClass}}">{{item.statusLabel}}</view>
       </view>
 
-      <view class="status-hint" wx:if="{{item.highlight}}">{{item.highlight}}</view>
+      <!-- 内容区：商品预览 -->
+      <view class="card-content">
+        <!-- 单商品展示 -->
+        <view wx:if="{{item.previewItems.length === 1}}" class="single-item">
+          <t-image src="{{item.previewItems[0].imageUrl}}" mode="aspectFill" width="140rpx" height="140rpx" shape="round" class="item-img" />
+          <view class="item-details">
+            <view class="item-name">{{item.previewItems[0].dishName}}</view>
+            <!-- 预留规格展示 -->
+            <!-- <view class="item-specs">具体规格</view> -->
+          </view>
+          <view class="item-qty">x{{item.previewItems[0].quantity}}</view>
+        </view>
 
-      <view class="badge-row" wx:if="{{item.badges.length > 0}}">
-        <view class="pill" wx:for="{{item.badges}}" wx:for-item="badge" wx:key="*this">{{badge}}</view>
-      </view>
-
-      <view class="preview-list" wx:if="{{item.previewItems.length > 0}}">
-        <view class="preview-item" wx:for="{{item.previewItems}}" wx:for-item="preview" wx:key="dishId">
-          <image class="item-thumb" src="{{preview.imageUrl}}" mode="aspectFill" />
-          <view class="name">{{preview.dishName}}</view>
-          <text class="count">×{{preview.quantity}}</text>
+        <!-- 多商品展示 -->
+        <view wx:else class="multi-items">
+          <scroll-view scroll-x class="item-scroll" enable-flex catchtap="preventBubble">
+            <view class="scroll-inner">
+              <view wx:for="{{item.previewItems}}" wx:for-item="dish" wx:key="dishId" class="scroll-item">
+                <t-image src="{{dish.imageUrl}}" mode="aspectFill" width="140rpx" height="140rpx" shape="round" />
+                <view class="item-sub-name">{{dish.dishName}}</view>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="item-summary">
+            <view class="summary-price">
+               <text class="price-num">{{item.totalDisplay}}</text>
+            </view>
+            <view class="summary-count">共{{item.itemCount}}件</view>
+          </view>
         </view>
       </view>
 
-      <view class="meta-row">
-        <view class="created">{{item.createTimeDisplay}}</view>
-        <view class="total">{{item.totalDisplay}}</view>
-      </view>
+      <!-- 底部：结算信息 & 操作按钮 -->
+      <view class="card-footer">
+        <!-- 单商品的结算信息因为布局不同，在这里统一补齐总价显示 -->
+        <view wx:if="{{item.previewItems.length === 1}}" class="footer-price">
+           <text class="count-label">共{{item.itemCount}}件</text>
+           <text class="total-label">合计</text>
+           <text class="total-val">{{item.totalDisplay}}</text>
+        </view>
+        <view wx:else></view> <!-- 占位撑开 -->
 
-      <view class="btn-row">
-        <button class="primary-btn" data-id="{{item.id}}" bindtap="onViewOrder">查看详情</button>
+        <view class="footer-actions" catchtap="preventBubble">
+          <t-button wx:if="{{item.canCancel}}" size="small" variant="outline" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
+          
+          <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayOrder" data-id="{{item.id}}" t-class="action-btn">去支付</t-button>
+          
+          <t-button wx:if="{{item.canReorder}}" size="small" variant="outline" shape="round" catchtap="onReorder" data-id="{{item.id}}" t-class="action-btn">再来一单</t-button>
+          
+          <!-- 其他动态按钮可扩展 -->
+        </view>
       </view>
     </view>
-
-    <!-- 加载状态 -->
-    <view class="loading-footer">
+    
+    <!-- 加载更多 -->
+     <view class="loading-footer">
       <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="加载中..." />
       <view wx:elif="{{!hasMore && orders.length > 0}}" class="no-more">没有更多了</view>
     </view>
   </view>
-</scroll-view>
+</view>

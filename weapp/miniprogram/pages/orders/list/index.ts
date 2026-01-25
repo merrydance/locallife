@@ -13,57 +13,15 @@ import type { OrderCardViewModel } from "../../../adapters/order-card";
 import CartService from "../../../services/cart";
 import { OrderAdapter } from "../../../adapters/order";
 
-// 不同订单类型的状态筛选选项
-const STATUS_TABS_MAP: Record<
-  string,
-  Array<{ label: string; value: OrderStatus | "" }>
-> = {
-  takeout: [
-    { label: "全部", value: "" },
-    { label: "待支付", value: "pending" },
-    { label: "待接单", value: "paid" },
-    { label: "制作中", value: "preparing" },
-    { label: "已接单", value: "courier_accepted" },
-    { label: "已取餐", value: "picked" },
-    { label: "配送中", value: "delivering" },
-    { label: "待确认", value: "rider_delivered" },
-    { label: "已送达", value: "user_delivered" },
-    { label: "已完成", value: "completed" },
-    { label: "已取消", value: "cancelled" },
-  ],
-  dine_in: [
-    { label: "全部", value: "" },
-    { label: "待支付", value: "pending" },
-    { label: "待确认", value: "paid" },
-    { label: "制作中", value: "preparing" },
-    { label: "已完成", value: "completed" },
-    { label: "已取消", value: "cancelled" },
-  ],
-  reservation: [
-    { label: "全部", value: "" },
-    { label: "待支付", value: "pending" },
-    { label: "待确认", value: "paid" },
-    { label: "制作中", value: "preparing" },
-    { label: "已完成", value: "completed" },
-    { label: "已取消", value: "cancelled" },
-  ],
-  takeaway: [
-    { label: "全部", value: "" },
-    { label: "待支付", value: "pending" },
-    { label: "待接单", value: "paid" },
-    { label: "制作中", value: "preparing" },
-    { label: "已取餐", value: "picked" },
-    { label: "已完成", value: "completed" },
-    { label: "已送达", value: "user_delivered" },
-    { label: "已取消", value: "cancelled" },
-  ],
-  default: [
-    { label: "全部", value: "" },
-    { label: "待支付", value: "pending" },
-    { label: "已完成", value: "completed" },
-    { label: "已取消", value: "cancelled" },
-  ],
-};
+// 简化后的状态筛选选项，更符合主流外卖APP习惯
+const STATUS_TABS = [
+  { label: "全部", value: "" },
+  { label: "待支付", value: "pending" },
+  { label: "制作中", value: "preparing" }, // 对应商家接单/制作
+  { label: "配送中", value: "delivering" }, // 对应骑手接单/配送
+  { label: "已完成", value: "completed" }, // 对应送达/完成
+  { label: "已取消", value: "cancelled" }, // 对应取消/售后
+];
 
 // 取消原因选项
 const CANCEL_REASONS = [
@@ -104,7 +62,7 @@ Page({
     page: 1,
     pageSize: 10,
     hasMore: true,
-    statusTabs: STATUS_TABS_MAP.default,
+    statusTabs: STATUS_TABS,
     currentStatus: "" as OrderStatus | "",
     orderType: "" as OrderTypeFilter,
     pageTitle: "我的订单",
@@ -112,22 +70,25 @@ Page({
 
   onLoad(options: { order_type?: string }) {
     const orderType = normalizeOrderType(options?.order_type);
+    
+    // 根据订单类型设置标题
     const titleMap: Record<string, string> = {
       takeout: "外卖订单",
       reservation: "预订订单",
       dine_in: "堂食订单",
       takeaway: "自取订单",
     };
+    
     this.setData({
       orderType,
       pageTitle: titleMap[orderType] || "我的订单",
-      statusTabs: STATUS_TABS_MAP[orderType] || STATUS_TABS_MAP.default,
     });
+    
     this.loadOrders(true);
   },
 
   onShow() {
-    // 返回时刷新列表
+    // 返回时刷新列表，确保状态最新
     if (this.data.orders.length > 0) {
       this.loadOrders(true);
     }
@@ -144,6 +105,9 @@ Page({
     }
   },
 
+  // 防止冒泡
+  preventBubble() {},
+
   async loadOrders(reset = false) {
     if (this.data.loading) return;
     this.setData({ loading: true });
@@ -154,16 +118,16 @@ Page({
 
     try {
       const { currentStatus, page, pageSize, orderType } = this.data;
-      // API Call with status filter
+      
       const params: ListOrdersParams = {
         page_id: page,
         page_size: pageSize,
         ...(currentStatus ? { status: currentStatus } : {}),
         ...(orderType ? { order_type: orderType } : {}),
       };
+      
       const result = await getOrders(params);
 
-      // 兼容不同返回结构：数组 / {orders} / {list} / {items} / {data: {...}}
       const unwrap = (payload: unknown): unknown[] => {
         if (Array.isArray(payload)) return payload;
         if (payload && typeof payload === "object") {
@@ -178,7 +142,6 @@ Page({
 
       const orderDTOsRaw = unwrap(result);
 
-      // 过滤掉空值或非对象；并在 map 阶段做单条 try/catch，避免坏数据导致整页崩溃
       const orderDTOs = orderDTOsRaw
         .filter(isOrderResponse)
         .map((item) => {
@@ -191,7 +154,14 @@ Page({
         })
         .filter(Boolean) as OrderCardViewModel[];
 
-      // Sort by priority (preparing > delivering > completed)
+      // 如果不是All tab，通常此时返回的已经是按时间降序的（后端），若需要前端重排可在此进行
+      // 目前保持 addapter 中的 sortByPriority 也不错，但要注意分页时可能会乱
+      // 如果后端已排序，前端最好不要 re-sort across pages unless loading full list.
+      // 假设后端返回按创建时间倒序。OrderCardAdapter.sortByPriority 会把进行中的排前面。
+      // 在分页加载时，这可能导致乱序（新页面的高优先级跑到下面）。
+      // 简化逻辑：仅在第一页或重置时排序，或者信任后端排序。
+      // 现在的 sortByPriority 主要是为了把"进行中"的任务提权。
+      // 考虑到分页，前端重排只能在当前页内有效。
       const sortedOrders = OrderCardAdapter.sortByPriority(orderDTOs);
 
       const orders = reset
@@ -202,8 +172,9 @@ Page({
 
       this.setData({
         orders,
-        hasMore: page * pageSize < totalCount,
+        hasMore: orders.length < totalCount && orderDTOs.length > 0, // 简单判断或使用 count
       });
+      
     } catch (error) {
       logger.error("Load orders failed:", error, "List");
       wx.showToast({ title: "加载失败", icon: "error" });
@@ -212,7 +183,6 @@ Page({
     }
   },
 
-  // 状态筛选切换
   onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatus | "" }>) {
     const status = e.detail.value || "";
     if (status === this.data.currentStatus) return;
@@ -226,7 +196,13 @@ Page({
     wx.navigateTo({ url: `/pages/orders/detail/index?id=${id}` });
   },
 
-  // 快速取消订单
+  onEnterMerchant(e: WechatMiniprogram.BaseEvent) {
+    const id = getDatasetId(e);
+    if (!id) return;
+    // 跳转到餐厅详情 (假设是 takeout 类型的详情页，若是 din-in 可能不同，但通常共用详情页)
+    wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${id}` });
+  },
+
   onCancelOrder(e: WechatMiniprogram.BaseEvent) {
     const id = getDatasetId(e);
     if (!id) return;
@@ -254,7 +230,6 @@ Page({
     }
   },
 
-  // 去支付
   onPayOrder(e: WechatMiniprogram.BaseEvent) {
     const id = getDatasetId(e);
     if (!id) {
@@ -286,7 +261,6 @@ Page({
           reservationId?: number
         } = { orderType }
 
-        // 根据订单类型只传递对应的上下文，避免不相关字段干扰
         if (orderType === 'dine_in' && orderDetail.tableId) {
           cartContext.tableId = orderDetail.tableId
         }
@@ -296,7 +270,6 @@ Page({
 
         await CartService.loadCart(orderDetail.merchantId, cartContext)
 
-        // 直接累加到当前购物车，避免覆盖已有商品
         const addResults = await Promise.all(
           orderDetail.items.map((item) =>
             CartService.addItem({
