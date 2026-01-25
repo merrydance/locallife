@@ -1002,9 +1002,15 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
 		if diningSession == nil {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for billing group")))
-			return
-		}
+			if req.OrderType == OrderTypeDineIn {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for billing group")))
+				return
+			}
+			if req.BillingGroupID != nil {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("billing_group_id requires an active session")))
+				return
+			}
+		} else {
 
 		var bg db.BillingGroup
 		if req.BillingGroupID != nil {
@@ -1054,6 +1060,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		if req.BillingGroupID == nil {
 			bgID := bg.ID
 			req.BillingGroupID = &bgID
+		}
 		}
 	}
 

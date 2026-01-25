@@ -51,6 +51,18 @@ interface ReservationsPageClientProps {
   totalCount: number;
 }
 
+interface BusinessHour {
+  day_of_week: number;
+  open_time: string;
+  close_time: string;
+  is_closed: boolean;
+}
+
+interface MerchantProfile {
+    id: number;
+    business_hours?: BusinessHour[];
+}
+
 export function ReservationsPageClient({
   stats: initialStats,
   date,
@@ -65,6 +77,7 @@ export function ReservationsPageClient({
   const [creating, setCreating] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
+  const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
 
   // 动态数据状态
   const [scheduleReservations, setScheduleReservations] = useState<ReservationResponse[]>([]);
@@ -134,8 +147,17 @@ export function ReservationsPageClient({
   useEffect(() => {
     loadTables();
     loadScheduleReservations();
-    // 初始加载时不需要 loadStats，因为已经有了 initialStats
+    loadMerchantProfile();
   }, []);
+
+  const loadMerchantProfile = async () => {
+    try {
+      const profile = await apiGet<MerchantProfile>("/merchants/me");
+      setMerchant(profile);
+    } catch (error) {
+      console.error("Failed to load merchant profile:", error);
+    }
+  };
 
   const loadTables = async () => {
     setTableLoading(true);
@@ -174,7 +196,7 @@ export function ReservationsPageClient({
   };
 
   const refreshAll = async () => {
-    await Promise.all([loadTables(), loadScheduleReservations(), loadStats()]);
+    await Promise.all([loadTables(), loadScheduleReservations(), loadStats(), loadMerchantProfile()]);
   };
 
   const updateQuery = (next: Record<string, string | number | undefined>) => {
@@ -189,9 +211,48 @@ export function ReservationsPageClient({
     router.push(`/merchant/reservations?${params.toString()}`);
   };
 
+  const timeSlots = useMemo(() => {
+    if (!merchant || !merchant.business_hours || !formData.date) {
+      // Fallback if no data
+      return { 
+        lunch: ["11:00", "11:30", "12:00", "12:30", "13:00", "13:30"],
+        dinner: ["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"]
+      };
+    }
+    
+    const dayOfWeek = new Date(formData.date).getDay();
+    const hours = merchant.business_hours.find(h => h.day_of_week === dayOfWeek);
+
+    if (!hours || hours.is_closed) {
+      return { lunch: [], dinner: [] };
+    }
+
+    const slots: string[] = [];
+    const [openH, openM] = hours.open_time.split(':').map(Number);
+    const [closeH, closeM] = hours.close_time.split(':').map(Number);
+    
+    let currentInMinutes = openH * 60 + openM;
+    const closeInMinutes = closeH * 60 + closeM;
+    
+    while (currentInMinutes <= closeInMinutes - 30) { // 至少预留30分钟
+      const h = Math.floor(currentInMinutes / 60);
+      const m = currentInMinutes % 60;
+      const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      slots.push(timeStr);
+      currentInMinutes += 30;
+    }
+
+    if (slots.length === 0) return { lunch: [], dinner: [] };
+
+    // 简单以 16:00 分界午晚市
+    const lunch = slots.filter(t => parseInt(t.split(':')[0]) < 16);
+    const dinner = slots.filter(t => parseInt(t.split(':')[0]) >= 16);
+    
+    return { lunch, dinner };
+  }, [merchant, formData.date]);
+
   const handleDateChange = (newDate: string) => {
     setFormData(f => ({ ...f, date: newDate }));
-    // updateQuery({ date: newDate }); // 不再变更 URL，既然去除了日期选择器
   };
 
   const openCreateDialog = (tableId: number, targetDate?: string, preferredTime?: string) => {
@@ -239,7 +300,6 @@ export function ReservationsPageClient({
       }));
       toast.success("预订成功");
       setIsCreateOpen(false);
-      // 刷新所有数据
       await refreshAll();
       router.refresh();
     } catch (error: any) {
@@ -260,7 +320,6 @@ export function ReservationsPageClient({
       });
       toast.success("修改成功");
       setIsCreateOpen(false);
-      // 刷新所有数据
       await refreshAll();
       router.refresh();
     } catch (error: any) {
@@ -278,7 +337,6 @@ export function ReservationsPageClient({
       toast.success("已取消预订");
       setIsCreateOpen(false);
       setIsCancelConfirmOpen(false);
-      // 刷新所有数据
       await refreshAll();
       router.refresh();
     } catch (error: any) {
@@ -416,7 +474,7 @@ export function ReservationsPageClient({
                   <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-500"></span> 已预定</span>
                </div>
              </div>
-             {/* 日期选择器已移除 */}
+             {/* 日期选择器已移除，使用弹窗内选择 */}
           </div>
           {tableLoading ? (
              <div className="flex flex-col items-center justify-center py-32 gap-6">
@@ -457,10 +515,21 @@ export function ReservationsPageClient({
                      <Select value={formData.time} onValueChange={v => setFormData(f => ({...f, time: v}))}>
                         <SelectTrigger className="flex-1 h-11 rounded-xl border-2 font-bold focus:ring-primary shadow-sm"><SelectValue placeholder="进店时间" /></SelectTrigger>
                         <SelectContent className="max-h-[320px] overflow-y-auto">
-                           <div className="p-2 text-[10px] font-bold text-muted-foreground bg-muted/30 rounded-md mb-1 px-3">午餐时段 (11:00 - 14:00)</div>
-                           {["11:00", "11:30", "12:00", "12:30", "13:00", "13:30"].map(t => <SelectItem key={t} value={t} className="py-2.5">{t}</SelectItem>)}
-                           <div className="p-2 text-[10px] font-bold text-muted-foreground bg-muted/30 rounded-md my-2 px-3">晚餐时段 (17:00 - 21:00)</div>
-                           {["17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"].map(t => <SelectItem key={t} value={t} className="py-2.5">{t}</SelectItem>)}
+                           {timeSlots.lunch.length > 0 && (
+                             <>
+                               <div className="p-2 text-[10px] font-bold text-muted-foreground bg-muted/30 rounded-md mb-1 px-3">午餐时段</div>
+                               {timeSlots.lunch.map(t => <SelectItem key={t} value={t} className="py-2.5">{t}</SelectItem>)}
+                             </>
+                           )}
+                           {timeSlots.dinner.length > 0 && (
+                             <>
+                               <div className="p-2 text-[10px] font-bold text-muted-foreground bg-muted/30 rounded-md my-2 px-3">晚餐时段</div>
+                               {timeSlots.dinner.map(t => <SelectItem key={t} value={t} className="py-2.5">{t}</SelectItem>)}
+                             </>
+                           )}
+                           {timeSlots.lunch.length === 0 && timeSlots.dinner.length === 0 && (
+                             <div className="p-4 text-center text-sm text-muted-foreground">该日期不营业或无时段</div>
+                           )}
                         </SelectContent>
                      </Select>
                      <Input type="number" placeholder="人数" value={formData.guest_count} onChange={e => setFormData(f => ({...f, guest_count: e.target.value}))} className="h-11 flex-1 rounded-xl border-2 font-black" />

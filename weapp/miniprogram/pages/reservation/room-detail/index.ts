@@ -1,13 +1,15 @@
 import { getRoomDetail, Room } from '../../../api/reservation'
-import { checkRoomAvailability, RoomAvailabilityResponse } from '../../../api/room'
+import { checkRoomAvailability, RoomAvailabilityResponse, TimeSlot } from '../../../api/room'
 import { formatTime, formatPriceNoSymbol } from '@/utils/util'
 
 interface DayAvailability {
   date: string
-  dayLabel: string    // "周一" "周二" 等
-  dateNum: string     // "6" "7" 等
-  lunchAvailable: boolean    // 午餐时段是否可订
-  dinnerAvailable: boolean   // 晚餐时段是否可订
+  dayLabel: string
+  dateNum: string
+  lunchAvailable: boolean
+  dinnerAvailable: boolean
+  lunchSlots: TimeSlot[]
+  dinnerSlots: TimeSlot[]
 }
 
 type RoomView = Room & {
@@ -89,7 +91,9 @@ Page({
         dayLabel: i === 0 ? '今天' : '周' + weekDays[date.getDay()],
         dateNum: String(date.getDate()),
         lunchAvailable: false,
-        dinnerAvailable: false
+        dinnerAvailable: false,
+        lunchSlots: [],
+        dinnerSlots: []
       })
     }
 
@@ -97,27 +101,37 @@ Page({
 
     // 并行加载所有日期的可用时段
     try {
-      const promises = calendarDays.map(d =>
-        checkRoomAvailability(roomId, { date: d.date })
-          .catch((err) => {
-            console.error(`加载日期 ${d.date} 可用性失败:`, err)
-            return { time_slots: [] } as RoomAvailabilityResponse
-          })
-      )
-      const results = await Promise.all(promises)
+      // 顺序加载，避免触发 API 速率限制
+      const results: RoomAvailabilityResponse[] = []
+      
+      for (const d of calendarDays) {
+        try {
+          const res = await checkRoomAvailability(roomId, { date: d.date })
+          results.push(res)
+        } catch (err) {
+          console.error(`加载日期 ${d.date} 可用性失败:`, err)
+          // 失败时默认为空
+          results.push({ time_slots: [] } as RoomAvailabilityResponse)
+        }
+      }
 
-      const updatedDays = calendarDays.map((day, i) => {
+      const updatedDays: DayAvailability[] = calendarDays.map((day, i) => {
         const slots = results[i].time_slots || []
         
-        // 使用后端返回的 period 进行分类，不再硬编码 11:00/17:00
+        // 使用后端返回的 period 进行分类
         const lunchSlots = slots.filter(s => s.period === 'lunch')
         const dinnerSlots = slots.filter(s => s.period === 'dinner')
         const otherSlots = slots.filter(s => s.period === 'other')
 
+        // 将 other 合并到 dinner 中
+        const effectiveDinnerSlots = [...dinnerSlots, ...otherSlots]
+
         return {
           ...day,
+          lunchSlots: lunchSlots,
+          dinnerSlots: effectiveDinnerSlots,
           lunchAvailable: lunchSlots.some(s => s.available),
-          dinnerAvailable: dinnerSlots.some(s => s.available) || otherSlots.some(s => s.available)
+          dinnerAvailable: effectiveDinnerSlots.some(s => s.available)
         }
       })
 
@@ -154,11 +168,17 @@ Page({
       // 查找该类别的第一个可用时段作为默认时间
       let time = ''
       const day = this.data.calendarDays.find(d => d.date === selectedDate)
-      if (day) {
-        // 我们需要重新获取该日期的可用时段，或者在 calendarDays 中存储它们
-        // 为了简单起见，如果 12:00/18:00 不满足，我们在 confirm 页面会重新校验
-        if (selectedType === 'lunch') time = '12:00'
-        else if (selectedType === 'dinner') time = '18:00'
+      
+      if (day && selectedType) {
+        const targetSlots = selectedType === 'lunch' ? day.lunchSlots : day.dinnerSlots
+        const firstAvailable = targetSlots.find(s => s.available)
+        
+        if (firstAvailable) {
+          time = firstAvailable.time
+        } else {
+          // 兜底逻辑
+          time = selectedType === 'lunch' ? '12:00' : '18:00'
+        }
       }
 
       const url = `/pages/reservation/confirm/index?roomId=${room.id}&merchantId=${room.merchant_id}&roomName=${encodeURIComponent(room.name)}&capacity=${room.capacity}&deposit=${room.deposit}&date=${selectedDate}&time=${time}`
