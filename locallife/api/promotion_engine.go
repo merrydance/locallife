@@ -30,6 +30,7 @@ type PriceCalculationResult struct {
 type AppliedPromotion struct {
 	Title  string `json:"title"`
 	Amount int64  `json:"amount"`
+	Type   string `json:"type"` // merchant, voucher, delivery
 }
 
 type PaymentAssessment struct {
@@ -72,6 +73,7 @@ func (server *Server) CalculateFinalPrice(ctx context.Context, opt OrderContext)
 			res.AppliedPromotions = append(res.AppliedPromotions, AppliedPromotion{
 				Title:  rule.Name,
 				Amount: rule.DiscountAmount,
+				Type:   "merchant",
 			})
 			// 目前 DiscountRule 表通过 can_stack_with_voucher 控制叠加性
 			if !rule.CanStackWithVoucher {
@@ -87,8 +89,9 @@ func (server *Server) CalculateFinalPrice(ctx context.Context, opt OrderContext)
 		res.DeliveryFeeDiscount = feeRes.PromotionDiscount
 		if res.DeliveryFeeDiscount > 0 {
 			res.AppliedPromotions = append(res.AppliedPromotions, AppliedPromotion{
-				Title:  "配送费减免",
+				Title:  "代取费减免",
 				Amount: res.DeliveryFeeDiscount,
+				Type:   "delivery",
 			})
 		}
 	}
@@ -101,6 +104,7 @@ func (server *Server) CalculateFinalPrice(ctx context.Context, opt OrderContext)
 			res.AppliedPromotions = append(res.AppliedPromotions, AppliedPromotion{
 				Title:  voucher.Name,
 				Amount: voucher.Amount,
+				Type:   "voucher",
 			})
 		}
 	}

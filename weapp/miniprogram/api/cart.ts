@@ -163,6 +163,7 @@ export interface CalculateCartResponse {
     applied_promotions?: Array<{  // 已应用的优惠明细
         title: string
         amount: number
+        type: string
     }>
 }
 

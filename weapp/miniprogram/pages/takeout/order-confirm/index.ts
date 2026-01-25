@@ -45,7 +45,7 @@ interface MerchantCartView {
   orderTotalDisplay: string
   originalTotalDisplay: string // 原价（不含优惠）
   hasDiscount: boolean         // 是否有优惠
-  appliedPromotions: Array<{ title: string, amountDisplay: string }>
+  appliedPromotions: Array<{ title: string, amountDisplay: string, type: string }>
 }
 
 Page({
@@ -361,13 +361,14 @@ Page({
         const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
         const appliedPromotions = (result.applied_promotions || []).map(p => ({
           title: p.title || '优惠',
-          amountDisplay: formatPriceNoSymbol(p.amount || 0)
+          amountDisplay: formatPriceNoSymbol(p.amount || 0),
+          type: p.type || 'merchant'
         }))
 
         updated.push({
           ...cart,
           deliveryFee,
-          deliveryFeeDisplay: finalDeliveryFee > 0 ? '¥' + formatPriceNoSymbol(finalDeliveryFee) : '免配送费',
+          deliveryFeeDisplay: finalDeliveryFee > 0 ? '¥' + formatPriceNoSymbol(finalDeliveryFee) : '免代取费',
           deliveryFeeDiscount,
           deliveryDistance,
           orderTotal,
@@ -380,14 +381,19 @@ Page({
         })
       }
 
-      const summarySubtotal = updated.reduce((sum, c) => sum + (c.subtotal || 0), 0)
+      const summarySubtotal = updated.reduce((sum, c) => {
+        const merchDiscount = (c.appliedPromotions || [])
+          .filter(p => p.type === 'merchant' || p.type === 'voucher')
+          .reduce((s, p) => s + (Number(p.amountDisplay) * 100), 0);
+        return sum + (c.subtotal || 0) - merchDiscount;
+      }, 0)
       const summaryDelivery = updated.reduce((sum, c) => sum + Math.max(0, (c.deliveryFee || 0) - (c.deliveryFeeDiscount || 0)), 0)
       const totalOrderAmount = updated.reduce((sum, c) => sum + (c.orderTotal || 0), 0)
 
       this.setData({
         carts: updated,
         summarySubtotalDisplay: formatPriceNoSymbol(summarySubtotal),
-        summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + formatPriceNoSymbol(summaryDelivery) : '免配送费',
+        summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + formatPriceNoSymbol(summaryDelivery) : '免代取费',
         orderTotalDisplay: formatPriceNoSymbol(totalOrderAmount)
       })
     } catch (error) {

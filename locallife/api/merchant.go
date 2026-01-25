@@ -881,7 +881,7 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 				Title:       fmt.Sprintf("满%d返运费", promo.MinOrderAmount/100),
 				Description: fmt.Sprintf("订单满%d元，返还运费", promo.MinOrderAmount/100),
 				MinAmount:   promo.MinOrderAmount,
-				Value:       0, // 全额返还
+				Value:       promo.DiscountAmount, // 实际返还金额
 				ValidUntil:  promo.ValidUntil.Format("2006-01-02"),
 			})
 		}

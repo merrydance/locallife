@@ -94,11 +94,15 @@
           <text class="cost-label">商品金额</text>
           <text class="cost-value">¥{{item.subtotalDisplay}}</text>
         </view>
+        <view class="cost-row" wx:for="{{item.appliedPromotions || []}}" wx:key="title" wx:for-item="promo" wx:if="{{promo.type === 'merchant' || promo.type === 'voucher'}}">
+          <text class="cost-label status-red">{{promo.title}}</text>
+          <text class="cost-value status-red">-¥{{promo.amountDisplay}}</text>
+        </view>
         <view class="cost-row">
-          <text class="cost-label">配送费</text>
+          <text class="cost-label">代取费</text>
           <text class="cost-value">{{item.deliveryFeeDisplay}}</text>
         </view>
-        <view class="cost-row" wx:for="{{item.appliedPromotions || []}}" wx:key="title" wx:for-item="promo">
+        <view class="cost-row" wx:for="{{item.appliedPromotions || []}}" wx:key="title" wx:for-item="promo" wx:if="{{promo.type === 'delivery'}}">
           <text class="cost-label status-red">{{promo.title}}</text>
           <text class="cost-value status-red">-¥{{promo.amountDisplay}}</text>
         </view>
@@ -119,7 +123,7 @@
           <t-radio value="wechat" label="微信支付" icon="circle">
             <t-icon name="logo-wechat" size="40rpx" color="#07C160" slot="icon" />
           </t-radio>
-          <t-radio value="balance" label="余额支付" icon="circle" disabled="{{!memberBalances[item.merchantId] || memberBalances[item.merchantId] <= 0}}">
+          <t-radio value="balance" icon="circle" disabled="{{!memberBalances[item.merchantId] || memberBalances[item.merchantId] <= 0}}">
             <view slot="label" style="display: flex; flex-direction: column;">
               <view style="display: flex; align-items: center; gap: 8rpx;">
                 <text>余额支付</text>
@@ -155,7 +159,7 @@
       <text class="cost-value">¥{{summarySubtotalDisplay}}</text>
     </view>
     <view class="cost-row">
-      <text class="cost-label">配送总费</text>
+      <text class="cost-label">代取总费</text>
       <text class="cost-value">{{summaryDeliveryDisplay}}</text>
     </view>
     <view class="cost-row total">

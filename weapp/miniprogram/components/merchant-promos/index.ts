@@ -18,6 +18,7 @@ interface PromotionItem {
     bonus_amount: number   // 赠送金额(充值活动用)
     valid_until: string    // 有效期
     rule_id: number        // 规则ID（充值活动用）
+    displayTitle?: string  // 展现用的格式化标题
 }
 
 /** 商户优惠响应 */
@@ -145,16 +146,27 @@ Component({
                 const discountRules = (result.discount_rules || []).filter(isNotExpired)
                 
                 // 处理配送优惠（过滤已过期）
-                const deliveryFeeRules = (result.delivery_fee_rules || []).filter(isNotExpired)
+                const deliveryFeeRules = (result.delivery_fee_rules || []).filter(isNotExpired).map(rule => {
+                    const valueStr = formatPriceNoSymbol(rule.value)
+                    return {
+                        ...rule,
+                        displayTitle: rule.value > 0 ? `${rule.title} ¥${valueStr}` : rule.title
+                    }
+                })
                 
-                // 处理优惠券（过滤已过期）
+                // 处理优惠券（过滤已过期，改为规则样式展示）
                 const vouchers: VoucherView[] = (result.vouchers || [])
                     .filter(isNotExpired)
-                    .map(v => ({
-                        ...v,
-                        minAmountDisplay: formatPriceNoSymbol(v.min_amount),
-                        valueDisplay: formatPriceNoSymbol(v.value)
-                    }))
+                    .map(v => {
+                        const minStr = formatPriceNoSymbol(v.min_amount)
+                        const valStr = formatPriceNoSymbol(v.value)
+                        return {
+                            ...v,
+                            minAmountDisplay: minStr,
+                            valueDisplay: valStr,
+                            displayTitle: `代金券 满${minStr}减${valStr}`
+                        }
+                    })
                 
                 // 处理充值规则（过滤已过期）
                 const rechargeRules: RechargeView[] = (result.recharge_rules || [])
