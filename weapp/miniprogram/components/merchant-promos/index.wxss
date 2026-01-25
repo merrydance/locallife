@@ -1,0 +1,205 @@
+/* 商户优惠中心组件样式 */
+.merchant-promos {
+  background: linear-gradient(135deg, #FFFAF5 0%, #FFF8F0 100%);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  border: 1rpx solid rgba(255, 107, 0, 0.12);
+}
+
+.promo-loading {
+  display: flex;
+  justify-content: center;
+  padding: 32rpx 0;
+}
+
+.promo-header {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.promo-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+  flex: 1;
+}
+
+/* 分区样式 */
+.promo-section {
+  margin-bottom: 20rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid rgba(0,0,0,0.05);
+}
+
+.promo-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 12rpx;
+}
+
+/* 横向滚动标签 */
+.promo-scroll {
+  white-space: nowrap;
+}
+
+.promo-tags {
+  display: inline-flex;
+  gap: 12rpx;
+}
+
+.promo-tag {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12rpx 20rpx;
+  border-radius: 8rpx;
+  white-space: nowrap;
+}
+
+.promo-tag.discount {
+  background: linear-gradient(135deg, #E8F3FF 0%, #F0F7FF 100%);
+  border: 1rpx solid rgba(0, 82, 217, 0.2);
+}
+
+.promo-tag.delivery {
+  background: linear-gradient(135deg, #E8FFF0 0%, #F0FFF5 100%);
+  border: 1rpx solid rgba(7, 193, 96, 0.2);
+}
+
+.promo-tag.voucher {
+  background: linear-gradient(135deg, #FFF0F0 0%, #FFF5F5 100%);
+  border: 1rpx solid rgba(227, 77, 89, 0.2);
+}
+
+.tag-main {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.tag-amount {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #E34D59;
+}
+
+.tag-condition {
+  font-size: 20rpx;
+  color: #999;
+  margin-top: 4rpx;
+}
+
+/* 充值活动区域 */
+.recharge-section {
+  background: linear-gradient(135deg, #FFF5EB 0%, #FFFAF5 100%);
+  margin: 0 -24rpx -24rpx;
+  padding: 20rpx 24rpx 24rpx;
+  border-radius: 0 0 16rpx 16rpx;
+  border-top: 1rpx dashed rgba(255, 107, 0, 0.3);
+}
+
+.recharge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.recharge-item {
+  flex: 1 1 calc(50% - 6rpx);
+  min-width: 200rpx;
+  background: #fff;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  border: 2rpx solid #E5E5E5;
+  transition: all 0.2s ease;
+}
+
+.recharge-item.selected {
+  border-color: #FF6B00;
+  background: linear-gradient(135deg, #FFF5EB 0%, #FFF 100%);
+  box-shadow: 0 4rpx 12rpx rgba(255, 107, 0, 0.15);
+}
+
+.recharge-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+  margin-bottom: 6rpx;
+}
+
+.amount-main {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.amount-bonus {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #FF6B00;
+}
+
+.recharge-total {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.total-label {
+  font-size: 20rpx;
+  color: #999;
+}
+
+.total-amount {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #FF6B00;
+}
+
+.insufficient-tip {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: #FEF0F0;
+  padding: 14rpx 16rpx;
+  border-radius: 8rpx;
+  margin-bottom: 14rpx;
+}
+
+.insufficient-tip text {
+  font-size: 22rpx;
+  color: #FA5151;
+  flex: 1;
+}
+
+.recharge-btn {
+  width: 100%;
+}
+
+/* 无优惠时的空状态 */
+.promo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 24rpx 0;
+  background: #F7F8FA;
+  border-radius: 12rpx;
+}
+
+.empty-text {
+  font-size: 26rpx;
+  color: #999;
+}

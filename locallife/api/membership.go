@@ -24,15 +24,15 @@ type joinMembershipRequest struct {
 
 // membershipResponse 会员信息响应
 type membershipResponse struct {
-	ID             int64     `json:"id"`
-	MerchantID     int64     `json:"merchant_id"`
-	MerchantName   string    `json:"merchant_name,omitempty"`
-	LogoURL        string    `json:"logo_url,omitempty"`
-	UserID         int64     `json:"user_id"`
-	Balance        int64     `json:"balance"`
-	TotalRecharged int64     `json:"total_recharged"`
-	TotalConsumed  int64     `json:"total_consumed"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             int64      `json:"id"`
+	MerchantID     int64      `json:"merchant_id"`
+	MerchantName   string     `json:"merchant_name,omitempty"`
+	LogoURL        string     `json:"logo_url,omitempty"`
+	UserID         int64      `json:"user_id"`
+	Balance        int64      `json:"balance"`
+	TotalRecharged int64      `json:"total_recharged"`
+	TotalConsumed  int64      `json:"total_consumed"`
+	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
@@ -231,14 +231,14 @@ type createRechargeRuleRequest struct {
 
 // rechargeRuleResponse 充值规则响应
 type rechargeRuleResponse struct {
-	ID             int64     `json:"id"`
-	MerchantID     int64     `json:"merchant_id"`
-	RechargeAmount int64     `json:"recharge_amount"`
-	BonusAmount    int64     `json:"bonus_amount"`
-	IsActive       bool      `json:"is_active"`
-	ValidFrom      time.Time `json:"valid_from"`
-	ValidUntil     time.Time `json:"valid_until"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             int64      `json:"id"`
+	MerchantID     int64      `json:"merchant_id"`
+	RechargeAmount int64      `json:"recharge_amount"`
+	BonusAmount    int64      `json:"bonus_amount"`
+	IsActive       bool       `json:"is_active"`
+	ValidFrom      time.Time  `json:"valid_from"`
+	ValidUntil     time.Time  `json:"valid_until"`
+	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
@@ -381,6 +381,54 @@ func (server *Server) listActiveRechargeRules(ctx *gin.Context) {
 	}
 	if merchant.ID != req.MerchantID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized for this merchant")))
+		return
+	}
+
+	rules, err := server.store.ListActiveRechargeRules(ctx, req.MerchantID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	rsp := make([]rechargeRuleResponse, len(rules))
+	for i, rule := range rules {
+		rsp[i] = convertRechargeRuleResponse(rule)
+	}
+
+	ctx.JSON(http.StatusOK, rsp)
+}
+
+// getPublicRechargeRulesRequest 获取公开充值规则请求（C端）
+type getPublicRechargeRulesRequest struct {
+	MerchantID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// getPublicRechargeRules godoc
+// @Summary 获取商户的生效中充值规则（C端公开）
+// @Description 获取商户当前生效中的充值规则，供C端用户查看充值活动
+// @Tags 会员管理
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {array} rechargeRuleResponse "规则列表"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/public/merchants/{id}/recharge-rules [get]
+// @Security BearerAuth
+func (server *Server) getPublicRechargeRules(ctx *gin.Context) {
+	var req getPublicRechargeRulesRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 验证商户存在
+	_, err := server.store.GetMerchant(ctx, req.MerchantID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 

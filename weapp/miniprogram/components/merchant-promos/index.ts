@@ -1,0 +1,261 @@
+/**
+ * 商户优惠中心组件
+ * 展示商户所有优惠活动：满减、配送优惠、优惠券、充值活动
+ * 可用于所有支付页面
+ */
+
+import { rechargeMembership, getMyMemberships, MembershipResponse } from '../../api/personal'
+import { formatPriceNoSymbol } from '../../utils/util'
+import { request } from '../../utils/request'
+
+/** 优惠项目类型 - 对齐后端 api.promotionItem */
+interface PromotionItem {
+    type: string           // delivery_fee_return, discount, voucher, recharge
+    title: string          // 优惠标题
+    description: string    // 优惠描述
+    min_amount: number     // 起点金额（分）
+    value: number          // 优惠金额或比例
+    bonus_amount: number   // 赠送金额(充值活动用)
+    valid_until: string    // 有效期
+    rule_id: number        // 规则ID（充值活动用）
+}
+
+/** 商户优惠响应 */
+interface MerchantPromotionsResponse {
+    merchant_id: number
+    delivery_fee_rules: PromotionItem[]
+    discount_rules: PromotionItem[]
+    vouchers: PromotionItem[]
+    recharge_rules: PromotionItem[]
+}
+
+/** 展示用的充值项 */
+interface RechargeView extends PromotionItem {
+    rechargeDisplay: string
+    bonusDisplay: string
+    totalDisplay: string
+    minAmountDisplay: string
+    valueDisplay: string
+}
+
+/** 展示用的优惠券项 */
+interface VoucherView extends PromotionItem {
+    minAmountDisplay: string
+    valueDisplay: string
+}
+
+Component({
+    properties: {
+        /** 商户ID */
+        merchantId: {
+            type: Number,
+            value: 0
+        },
+        /** 是否显示余额不足提示 */
+        showInsufficientTip: {
+            type: Boolean,
+            value: false
+        },
+        /** 当前余额（分） */
+        currentBalance: {
+            type: Number,
+            value: 0
+        },
+        /** 会员ID（如果有） */
+        membershipId: {
+            type: Number,
+            value: 0
+        }
+    },
+
+    data: {
+        visible: false,
+        loading: false,
+        recharging: false,
+        hasPromos: false,
+        totalCount: 0,
+        
+        // 各类优惠
+        discountRules: [] as PromotionItem[],
+        deliveryFeeRules: [] as PromotionItem[],
+        vouchers: [] as VoucherView[],
+        rechargeRules: [] as RechargeView[],
+        
+        // 充值选择
+        selectedRechargeId: 0,
+        selectedRechargeDisplay: ''
+    },
+
+    observers: {
+        'merchantId': function(merchantId: number) {
+            if (merchantId > 0) {
+                this.loadPromotions()
+            }
+        }
+    },
+
+    lifetimes: {
+        attached() {
+            if (this.data.merchantId > 0) {
+                this.loadPromotions()
+            }
+        }
+    },
+
+    methods: {
+        /** 加载商户优惠活动 */
+        async loadPromotions() {
+            const { merchantId } = this.data
+
+            if (!merchantId) return
+
+            this.setData({ loading: true, visible: true })
+
+            try {
+                // 调用聚合API获取所有优惠
+                const result = await request<MerchantPromotionsResponse>({
+                    url: `/v1/merchants/${merchantId}/promotions`,
+                    method: 'GET'
+                })
+
+                // 处理满减规则
+                const discountRules = result.discount_rules || []
+                
+                // 处理配送优惠
+                const deliveryFeeRules = result.delivery_fee_rules || []
+                
+                // 处理优惠券
+                const vouchers: VoucherView[] = (result.vouchers || []).map(v => ({
+                    ...v,
+                    minAmountDisplay: formatPriceNoSymbol(v.min_amount),
+                    valueDisplay: formatPriceNoSymbol(v.value)
+                }))
+                
+                // 处理充值规则
+                const rechargeRules: RechargeView[] = (result.recharge_rules || []).map(r => ({
+                    ...r,
+                    rechargeDisplay: formatPriceNoSymbol(r.min_amount),
+                    bonusDisplay: formatPriceNoSymbol(r.bonus_amount),
+                    totalDisplay: formatPriceNoSymbol(r.min_amount + r.bonus_amount),
+                    minAmountDisplay: formatPriceNoSymbol(r.min_amount),
+                    valueDisplay: formatPriceNoSymbol(r.value)
+                }))
+
+                // 计算总数
+                const totalCount = discountRules.length + deliveryFeeRules.length + 
+                                   vouchers.length + rechargeRules.length
+                const hasPromos = totalCount > 0
+
+                // 默认选择第一个充值项
+                const selectedRechargeId = rechargeRules.length > 0 ? rechargeRules[0].rule_id : 0
+                const selectedRechargeDisplay = rechargeRules.length > 0 ? rechargeRules[0].rechargeDisplay : ''
+
+                this.setData({
+                    discountRules,
+                    deliveryFeeRules,
+                    vouchers,
+                    rechargeRules,
+                    totalCount,
+                    hasPromos,
+                    selectedRechargeId,
+                    selectedRechargeDisplay,
+                    loading: false,
+                    visible: true // 始终显示，无优惠时展示空状态
+                })
+            } catch (err) {
+                console.error('加载优惠活动失败:', err)
+                this.setData({ loading: false, visible: false }) // 仅加载失败时隐藏
+            }
+        },
+
+        /** 选择充值规则 */
+        onSelectRecharge(e: WechatMiniprogram.TouchEvent) {
+            const { rule } = e.currentTarget.dataset as { rule?: RechargeView }
+            if (!rule) return
+
+            this.setData({
+                selectedRechargeId: rule.rule_id,
+                selectedRechargeDisplay: rule.rechargeDisplay
+            })
+        },
+
+        /** 点击充值按钮 */
+        async onRecharge() {
+            const { selectedRechargeId, rechargeRules, recharging } = this.data
+            let { membershipId } = this.data
+
+            if (recharging || !selectedRechargeId) return
+
+            const selectedRule = rechargeRules.find(r => r.rule_id === selectedRechargeId)
+            if (!selectedRule) return
+
+            this.setData({ recharging: true })
+
+            try {
+                // 如果没有 membershipId，需要先获取或创建
+                if (!membershipId) {
+                    const membershipsResult = await getMyMemberships()
+                    const membership = membershipsResult.memberships?.find(
+                        (m: MembershipResponse) => m.merchant_id === this.data.merchantId
+                    )
+                    if (membership) {
+                        membershipId = membership.id
+                    } else {
+                        // 用户还不是会员，需要先加入
+                        wx.showToast({ title: '请先加入会员', icon: 'none' })
+                        this.setData({ recharging: false })
+                        return
+                    }
+                }
+
+                // 调用充值接口
+                const result = await rechargeMembership({
+                    membership_id: membershipId,
+                    payment_method: 'wechat',
+                    recharge_amount: selectedRule.min_amount  // min_amount 就是充值金额
+                })
+
+                if (result.pay_params) {
+                    // 调起微信支付
+                    wx.requestPayment({
+                        ...result.pay_params,
+                        success: () => {
+                            wx.showToast({ title: '充值成功', icon: 'success' })
+                            // 通知父组件刷新余额
+                            this.triggerEvent('recharged', {
+                                amount: selectedRule.min_amount,
+                                bonus: selectedRule.bonus_amount
+                            })
+                        },
+                        fail: (err: WechatMiniprogram.GeneralCallbackResult) => {
+                            if (err.errMsg.includes('cancel')) {
+                                wx.showToast({ title: '已取消支付', icon: 'none' })
+                            } else {
+                                wx.showToast({ title: '支付失败', icon: 'error' })
+                            }
+                        }
+                    })
+                }
+            } catch (err) {
+                console.error('充值失败:', err)
+                wx.showToast({
+                    title: err instanceof Error ? err.message : '充值失败',
+                    icon: 'error'
+                })
+            } finally {
+                this.setData({ recharging: false })
+            }
+        },
+
+        /** 领取优惠券 */
+        onClaimVoucher(e: WechatMiniprogram.TouchEvent) {
+            const { voucher } = e.currentTarget.dataset as { voucher?: VoucherView }
+            if (!voucher) return
+
+            // 触发领券事件，由父组件处理
+            this.triggerEvent('claimVoucher', {
+                voucher
+            })
+        }
+    }
+})

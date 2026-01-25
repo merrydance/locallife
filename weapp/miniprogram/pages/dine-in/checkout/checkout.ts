@@ -67,6 +67,8 @@ Page({
         selectedPaymentMethod: 'wechat_pay' as 'wechat_pay' | 'balance',
         memberBalance: 0,  // 用户在该商户的储值余额（分）
         memberBalanceDisplay: '0.00',  // 格式化后的余额
+        membershipId: 0,   // 会员ID（用于充值）
+        balanceInsufficient: false,  // 余额是否不足
 
         // 优惠券
         vouchers: [] as UserCoupon[],
@@ -194,6 +196,7 @@ Page({
             // 获取用户在该商户的储值余额
             let memberBalance = 0;
             let memberBalanceDisplay = '0.00';
+            let membershipId = 0;
             try {
                 const membershipsResult = await getMyMemberships();
                 const membership = membershipsResult.memberships?.find(
@@ -202,6 +205,7 @@ Page({
                 if (membership) {
                     memberBalance = membership.balance || 0;
                     memberBalanceDisplay = formatPriceNoSymbol(memberBalance);
+                    membershipId = membership.id;
                 }
             } catch (err) {
                 console.warn('获取会员余额失败:', err);
@@ -232,6 +236,7 @@ Page({
                 reservationInfo,
                 memberBalance,
                 memberBalanceDisplay,
+                membershipId,
                 paymentMethods,
                 'diningInfo.guest_count': guestCount
             });
@@ -252,9 +257,85 @@ Page({
      */
     onPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
         const value = e.detail.value as 'wechat_pay' | 'balance'
+        const { memberBalance, calculation } = this.data;
+        
+        // 检查余额是否足够
+        const totalAmount = calculation?.total_amount || 0;
+        const balanceInsufficient = value === 'balance' && memberBalance < totalAmount;
+        
         this.setData({
-            selectedPaymentMethod: value
+            selectedPaymentMethod: value,
+            balanceInsufficient
         });
+
+        // 如果余额不足，提示用户
+        if (balanceInsufficient) {
+            wx.showToast({
+                title: '余额不足，请先充值',
+                icon: 'none',
+                duration: 2000
+            });
+        }
+    },
+
+    /**
+     * 充值成功回调
+     */
+    async onRecharged(e: WechatMiniprogram.CustomEvent) {
+        const { amount, bonus } = e.detail as { amount: number; bonus: number };
+        const totalRecharged = amount + bonus;
+        
+        // 更新余额
+        const newBalance = this.data.memberBalance + totalRecharged;
+        const newBalanceDisplay = formatPriceNoSymbol(newBalance);
+        
+        // 更新支付方式选项
+        const totalAmount = this.data.calculation?.total_amount || 0;
+        const balanceInsufficient = newBalance < totalAmount;
+        
+        const paymentMethods = [
+            { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat', disabled: false },
+            {
+                id: 'balance',
+                name: `储值支付 (¥${newBalanceDisplay})`,
+                icon: 'wallet',
+                disabled: newBalance <= 0
+            }
+        ];
+        
+        this.setData({
+            memberBalance: newBalance,
+            memberBalanceDisplay: newBalanceDisplay,
+            paymentMethods,
+            balanceInsufficient,
+            // 如果余额充足，切换到余额支付
+            selectedPaymentMethod: !balanceInsufficient ? 'balance' : this.data.selectedPaymentMethod
+        });
+    },
+
+    /**
+     * 领取优惠券回调
+     */
+    onClaimVoucher(e: WechatMiniprogram.CustomEvent) {
+        const { voucher } = e.detail as { voucher: { title: string; value: number } };
+        
+        wx.showToast({
+            title: `已领取${voucher.title}`,
+            icon: 'success'
+        });
+        
+        // 刷新优惠券列表
+        this.loadVouchersAsync();
+    },
+
+    /**
+     * 异步加载优惠券（不阻塞页面）
+     */
+    async loadVouchersAsync() {
+        // 延迟加载，避免影响主流程
+        setTimeout(() => {
+            this.onShowVouchers();
+        }, 500);
     },
 
     /**
@@ -429,6 +510,20 @@ Page({
                 icon: 'error'
             });
             return;
+        }
+
+        // 余额支付时检查余额是否充足
+        if (selectedPaymentMethod === 'balance') {
+            const totalAmount = calculation?.total_amount || 0;
+            if (this.data.memberBalance < totalAmount) {
+                this.setData({ balanceInsufficient: true });
+                wx.showToast({
+                    title: '余额不足，请先充值或更换支付方式',
+                    icon: 'none',
+                    duration: 2500
+                });
+                return;
+            }
         }
 
         try {

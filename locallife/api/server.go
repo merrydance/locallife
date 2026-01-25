@@ -355,6 +355,7 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/public/merchants/:id/dishes", server.getPublicMerchantDishes)
 	authGroup.GET("/public/merchants/:id/combos", server.getPublicMerchantCombos)
 	authGroup.GET("/public/merchants/:id/rooms", server.getPublicMerchantRooms)
+	authGroup.GET("/public/merchants/:id/recharge-rules", server.getPublicRechargeRules)
 
 	// 分享功能由小程序前端 share 属性实现，无需后端API
 
@@ -947,7 +948,7 @@ func (server *Server) setupRouter() {
 	{
 		cartGroup.GET("", server.getCart)
 		cartGroup.GET("/summary", server.getUserCartsSummary)
-		cartGroup.GET("/user-carts", server.getUserCartsSummary)                        // 多商户购物车汇总
+		cartGroup.GET("/user-carts", server.getUserCartsSummary)                     // 多商户购物车汇总
 		cartGroup.POST("/combined-checkout/preview", server.previewCombinedCheckout) // 合单结算预览
 		cartGroup.POST("/items", server.addCartItem)
 		cartGroup.PATCH("/items/:id", server.updateCartItem)

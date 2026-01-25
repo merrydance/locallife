@@ -143,11 +143,31 @@
             title="{{item.name}}"
             leftIcon="{{item.icon}}"
             hover
+            class="{{item.disabled ? 'payment-disabled' : ''}}"
           >
-            <t-radio slot="right-icon" value="{{item.id}}" icon="circle" />
+            <t-radio slot="right-icon" value="{{item.id}}" icon="circle" disabled="{{item.disabled}}" />
           </t-cell>
         </t-cell-group>
       </t-radio-group>
+
+      <!-- 余额不足提示（当选择余额支付但余额不足时显示） -->
+      <view wx:if="{{balanceInsufficient}}" class="balance-warning">
+        <t-icon name="error-circle-filled" size="36rpx" color="#FA5151" />
+        <view class="warning-content">
+          <text class="warning-title">余额不足</text>
+          <text class="warning-desc">当前余额 ¥{{memberBalanceDisplay}}，订单需要 ¥{{calculation.totalDisplay}}</text>
+        </view>
+      </view>
+
+      <!-- 商户优惠中心（展示所有优惠：满减、配送、优惠券、充值活动） -->
+      <merchant-promos 
+        merchantId="{{merchantId}}"
+        showInsufficientTip="{{balanceInsufficient}}"
+        currentBalance="{{memberBalance}}"
+        membershipId="{{membershipId}}"
+        bind:recharged="onRecharged"
+        bind:claimVoucher="onClaimVoucher"
+      />
     </view>
 
     <!-- 底部占位 -->

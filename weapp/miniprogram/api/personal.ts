@@ -604,6 +604,38 @@ export function getMembershipTransactions(
     })
 }
 
+// ==================== 充值规则接口 ====================
+
+/** 充值规则响应 - 对齐 api.rechargeRuleResponse */
+export interface RechargeRuleResponse {
+    id: number                            // 规则ID
+    merchant_id: number                   // 商户ID
+    recharge_amount: number               // 充值金额（分）
+    bonus_amount: number                  // 赠送金额（分）
+    is_active: boolean                    // 是否激活
+    valid_from: string                    // 有效期开始
+    valid_until: string                   // 有效期结束
+    created_at: string                    // 创建时间
+    updated_at?: string                   // 更新时间
+}
+
+/** 充值响应 - 对齐 api.rechargeResponse */
+export interface RechargeResponse {
+    payment_order_id: number              // 支付订单ID
+    out_trade_no: string                  // 商户订单号
+    pay_params: WechatMiniprogram.RequestPaymentOption  // 微信支付参数
+}
+
+/**
+ * 获取商户的生效中充值规则（C端公开）
+ */
+export function getPublicRechargeRules(merchantId: number): Promise<RechargeRuleResponse[]> {
+    return request({
+        url: `/v1/public/merchants/${merchantId}/recharge-rules`,
+        method: 'GET'
+    })
+}
+
 // ==================== 通知系统接口 ====================
 
 /**

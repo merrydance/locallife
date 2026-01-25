@@ -816,12 +816,14 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 // 下方 getMerchantPromotions 是聚合展示接口，用于 C 端用户查看商户所有优惠
 
 type promotionItem struct {
-	Type        string `json:"type"`        // delivery_fee_return, discount, voucher
-	Title       string `json:"title"`       // 优惠标题
-	Description string `json:"description"` // 优惠描述
-	MinAmount   int64  `json:"min_amount"`  // 起点金额（分）
-	Value       int64  `json:"value"`       // 优惠金额或比例
-	ValidUntil  string `json:"valid_until"` // 有效期
+	Type        string `json:"type"`         // delivery_fee_return, discount, voucher, recharge
+	Title       string `json:"title"`        // 优惠标题
+	Description string `json:"description"`  // 优惠描述
+	MinAmount   int64  `json:"min_amount"`   // 起点金额（分）
+	Value       int64  `json:"value"`        // 优惠金额或比例
+	BonusAmount int64  `json:"bonus_amount"` // 赠送金额(充值活动用)
+	ValidUntil  string `json:"valid_until"`  // 有效期
+	RuleID      int64  `json:"rule_id"`      // 规则ID（充值活动用）
 }
 
 type merchantPromotionsResponse struct {
@@ -829,11 +831,12 @@ type merchantPromotionsResponse struct {
 	DeliveryFeeRules []promotionItem `json:"delivery_fee_rules"` // 满返运费
 	DiscountRules    []promotionItem `json:"discount_rules"`     // 满减活动
 	Vouchers         []promotionItem `json:"vouchers"`           // 可领优惠券
+	RechargeRules    []promotionItem `json:"recharge_rules"`     // 充值活动
 }
 
 // getMerchantPromotions godoc
 // @Summary 获取商户优惠活动
-// @Description 获取商户所有活跃的优惠活动（满返运费、满减、可领优惠券）
+// @Description 获取商户所有活跃的优惠活动（满返运费、满减、可领优惠券、充值活动）
 // @Tags 商户
 // @Accept json
 // @Produce json
@@ -866,6 +869,7 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 		DeliveryFeeRules: []promotionItem{},
 		DiscountRules:    []promotionItem{},
 		Vouchers:         []promotionItem{},
+		RechargeRules:    []promotionItem{},
 	}
 
 	// 获取满返运费规则
@@ -917,6 +921,24 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 					ValidUntil:  v.ValidUntil.Format("2006-01-02"),
 				})
 			}
+		}
+	}
+
+	// 获取充值活动
+	rechargeRules, err := server.store.ListActiveRechargeRules(ctx, merchantID)
+	if err == nil {
+		for _, r := range rechargeRules {
+			total := r.RechargeAmount + r.BonusAmount
+			response.RechargeRules = append(response.RechargeRules, promotionItem{
+				Type:        "recharge",
+				Title:       fmt.Sprintf("充%d送%d", r.RechargeAmount/100, r.BonusAmount/100),
+				Description: fmt.Sprintf("充值%d元，赠送%d元，到账%d元", r.RechargeAmount/100, r.BonusAmount/100, total/100),
+				MinAmount:   r.RechargeAmount,
+				Value:       r.BonusAmount,
+				BonusAmount: r.BonusAmount,
+				ValidUntil:  r.ValidUntil.Format("2006-01-02"),
+				RuleID:      r.ID,
+			})
 		}
 	}
 
