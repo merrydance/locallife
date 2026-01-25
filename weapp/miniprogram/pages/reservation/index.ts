@@ -235,11 +235,6 @@ Page({
     this.loadItems(true)
   },
 
-  onItemTap(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.currentTarget.dataset
-    wx.navigateTo({ url: `/pages/merchant/detail/index?id=${id}` })
-  },
-
   onReachBottom() {
     if (this.data.hasMore) {
       this.setData({ page: this.data.page + 1 })
