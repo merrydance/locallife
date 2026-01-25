@@ -919,6 +919,7 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 					MinAmount:   v.MinOrderAmount,
 					Value:       v.Amount,
 					ValidUntil:  v.ValidUntil.Format("2006-01-02"),
+					RuleID:      v.ID, // 用于领券API
 				})
 			}
 		}

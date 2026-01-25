@@ -48,6 +48,22 @@
   margin-bottom: 12rpx;
 }
 
+/* 自动应用/点击领取提示 */
+.auto-apply-hint {
+  font-size: 20rpx;
+  color: #07C160;
+  background: rgba(7, 193, 96, 0.1);
+  padding: 2rpx 8rpx;
+  border-radius: 4rpx;
+  margin-left: auto;
+}
+
+.click-hint {
+  font-size: 20rpx;
+  color: #E34D59;
+  margin-left: auto;
+}
+
 /* 横向滚动标签 */
 .promo-scroll {
   white-space: nowrap;
@@ -98,6 +114,16 @@
   font-size: 20rpx;
   color: #999;
   margin-top: 4rpx;
+}
+
+/* 优惠券领取按钮 */
+.claim-btn {
+  font-size: 20rpx;
+  color: #fff;
+  background: linear-gradient(135deg, #E34D59 0%, #FF6B6B 100%);
+  padding: 4rpx 16rpx;
+  border-radius: 16rpx;
+  margin-top: 8rpx;
 }
 
 /* 充值活动区域 */

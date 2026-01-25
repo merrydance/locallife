@@ -118,30 +118,41 @@ Component({
                     method: 'GET'
                 })
 
-                // 处理满减规则
-                const discountRules = result.discount_rules || []
-                
-                // 处理配送优惠
-                const deliveryFeeRules = result.delivery_fee_rules || []
-                
-                // 处理优惠券
-                const vouchers: VoucherView[] = (result.vouchers || []).map(v => ({
-                    ...v,
-                    minAmountDisplay: formatPriceNoSymbol(v.min_amount),
-                    valueDisplay: formatPriceNoSymbol(v.value)
-                }))
-                
-                // 处理充值规则
-                const rechargeRules: RechargeView[] = (result.recharge_rules || []).map(r => ({
-                    ...r,
-                    rechargeDisplay: formatPriceNoSymbol(r.min_amount),
-                    bonusDisplay: formatPriceNoSymbol(r.bonus_amount),
-                    totalDisplay: formatPriceNoSymbol(r.min_amount + r.bonus_amount),
-                    minAmountDisplay: formatPriceNoSymbol(r.min_amount),
-                    valueDisplay: formatPriceNoSymbol(r.value)
-                }))
+                // 客户端过期过滤（防止用户长时间停留页面，期间活动过期）
+                const isNotExpired = (item: PromotionItem): boolean => {
+                    if (!item.valid_until) return true // 无有效期则永久有效
+                    const expireDate = new Date(item.valid_until + 'T23:59:59')
+                    return expireDate >= new Date()
+                }
 
-                // 计算总数
+                // 处理满减规则（过滤已过期）
+                const discountRules = (result.discount_rules || []).filter(isNotExpired)
+                
+                // 处理配送优惠（过滤已过期）
+                const deliveryFeeRules = (result.delivery_fee_rules || []).filter(isNotExpired)
+                
+                // 处理优惠券（过滤已过期）
+                const vouchers: VoucherView[] = (result.vouchers || [])
+                    .filter(isNotExpired)
+                    .map(v => ({
+                        ...v,
+                        minAmountDisplay: formatPriceNoSymbol(v.min_amount),
+                        valueDisplay: formatPriceNoSymbol(v.value)
+                    }))
+                
+                // 处理充值规则（过滤已过期）
+                const rechargeRules: RechargeView[] = (result.recharge_rules || [])
+                    .filter(isNotExpired)
+                    .map(r => ({
+                        ...r,
+                        rechargeDisplay: formatPriceNoSymbol(r.min_amount),
+                        bonusDisplay: formatPriceNoSymbol(r.bonus_amount),
+                        totalDisplay: formatPriceNoSymbol(r.min_amount + r.bonus_amount),
+                        minAmountDisplay: formatPriceNoSymbol(r.min_amount),
+                        valueDisplay: formatPriceNoSymbol(r.value)
+                    }))
+
+                // 计算总数（过滤后）
                 const totalCount = discountRules.length + deliveryFeeRules.length + 
                                    vouchers.length + rechargeRules.length
                 const hasPromos = totalCount > 0
@@ -248,14 +259,52 @@ Component({
         },
 
         /** 领取优惠券 */
-        onClaimVoucher(e: WechatMiniprogram.TouchEvent) {
-            const { voucher } = e.currentTarget.dataset as { voucher?: VoucherView }
+        async onClaimVoucher(e: WechatMiniprogram.TouchEvent) {
+            const { voucher } = e.currentTarget.dataset as { voucher?: VoucherView & { voucher_id?: number } }
             if (!voucher) return
 
-            // 触发领券事件，由父组件处理
-            this.triggerEvent('claimVoucher', {
-                voucher
-            })
+            // 注意：vouchers 列表中的优惠券是商户发行的优惠券模板，需要领取后才能使用
+            // rule_id 在这里对应的是 voucher_id（优惠券模板ID）
+            const voucherId = voucher.rule_id
+
+            if (!voucherId) {
+                // 如果没有ID，只触发事件让父组件处理
+                this.triggerEvent('claimVoucher', { voucher })
+                return
+            }
+
+            try {
+                // 调用领券API
+                await request({
+                    url: `/v1/vouchers/${voucherId}/claim`,
+                    method: 'POST'
+                })
+
+                wx.showToast({
+                    title: '领取成功',
+                    icon: 'success'
+                })
+
+                // 通知父组件刷新
+                this.triggerEvent('voucherClaimed', {
+                    voucher,
+                    voucherId
+                })
+
+            } catch (err) {
+                const errorMsg = err instanceof Error ? err.message : '领取失败'
+                
+                // 已领取的情况
+                if (errorMsg.includes('already') || errorMsg.includes('已领取')) {
+                    wx.showToast({ title: '您已领取过该优惠券', icon: 'none' })
+                } else if (errorMsg.includes('expired') || errorMsg.includes('过期')) {
+                    wx.showToast({ title: '优惠券已过期', icon: 'none' })
+                } else if (errorMsg.includes('out') || errorMsg.includes('领完')) {
+                    wx.showToast({ title: '优惠券已领完', icon: 'none' })
+                } else {
+                    wx.showToast({ title: errorMsg, icon: 'none' })
+                }
+            }
         }
     }
 })

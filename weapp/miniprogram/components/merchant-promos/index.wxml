@@ -13,11 +13,12 @@
       <t-tag theme="warning" variant="light" size="small">{{totalCount}}个活动</t-tag>
     </view>
 
-    <!-- 满减活动 -->
+    <!-- 满减活动（自动应用最优） -->
     <view wx:if="{{discountRules.length > 0}}" class="promo-section">
       <view class="section-label">
         <t-icon name="gift" size="28rpx" color="#0052D9" />
         <text>满减优惠</text>
+        <text class="auto-apply-hint">自动应用</text>
       </view>
       <scroll-view scroll-x class="promo-scroll">
         <view class="promo-tags">
@@ -56,6 +57,7 @@
       <view class="section-label">
         <t-icon name="coupon" size="28rpx" color="#E34D59" />
         <text>领券中心</text>
+        <text class="click-hint">点击领取</text>
       </view>
       <scroll-view scroll-x class="promo-scroll">
         <view class="promo-tags">
@@ -68,6 +70,7 @@
           >
             <text class="tag-amount">¥{{item.valueDisplay}}</text>
             <text class="tag-condition">满{{item.minAmountDisplay}}可用</text>
+            <text class="claim-btn">领取</text>
           </view>
         </view>
       </scroll-view>
