@@ -65,6 +65,11 @@ Component({
         membershipId: {
             type: Number,
             value: 0
+        },
+        /** 订单应付总额（分），用于显示余额充足提示 */
+        orderTotal: {
+            type: Number,
+            value: 0
         }
     },
 
@@ -83,7 +88,8 @@ Component({
         
         // 充值选择
         selectedRechargeId: 0,
-        selectedRechargeDisplay: ''
+        selectedRechargeDisplay: '',
+        balanceDisplay: '0.00'
     },
 
     observers: {
@@ -91,6 +97,11 @@ Component({
             if (merchantId > 0) {
                 this.loadPromotions()
             }
+        },
+        'currentBalance': function(balance: number) {
+            this.setData({
+                balanceDisplay: formatPriceNoSymbol(balance)
+            })
         }
     },
 
@@ -117,6 +128,11 @@ Component({
                     url: `/v1/merchants/${merchantId}/promotions`,
                     method: 'GET'
                 })
+
+                if (!result) {
+                    this.setData({ loading: false });
+                    return;
+                }
 
                 // 客户端过期过滤（防止用户长时间停留页面，期间活动过期）
                 const isNotExpired = (item: PromotionItem): boolean => {
@@ -259,7 +275,7 @@ Component({
         },
 
         /** 领取优惠券 */
-        async onClaimVoucher(e: WechatMiniprogram.TouchEvent) {
+        async onClaim(e: WechatMiniprogram.TouchEvent) {
             const { voucher } = e.currentTarget.dataset as { voucher?: VoucherView & { voucher_id?: number } }
             if (!voucher) return
 

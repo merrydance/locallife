@@ -51,9 +51,9 @@
           <block wx:for="{{item.items || []}}" wx:key="id" wx:for-item="cartItem">
             <view class="item-row">
               <!-- 组合图系统 -->
-              <view wx:if="{{cartItem.dishImages && cartItem.dishImages.length > 0}}" class="combo-image-grid grid-count-{{cartItem.dishImages.length > 4 ? 4 : cartItem.dishImages.length}}">
+              <view wx:if="{{cartItem.dishImages && cartItem.dishImages.length > 0}}" class="combo-image-grid grid-count-{{(cartItem.dishImages && cartItem.dishImages.length > 4) ? 4 : (cartItem.dishImages ? cartItem.dishImages.length : 0)}}">
                 <t-image 
-                  wx:for="{{cartItem.dishImages}}" 
+                  wx:for="{{cartItem.dishImages || []}}" 
                   wx:for-item="img" 
                   wx:for-index="imgIdx"
                   wx:if="{{imgIdx < 4}}"
@@ -98,7 +98,7 @@
           <text class="cost-label">配送费</text>
           <text class="cost-value">{{item.deliveryFeeDisplay}}</text>
         </view>
-        <view class="cost-row" wx:for="{{item.appliedPromotions}}" wx:key="title" wx:for-item="promo">
+        <view class="cost-row" wx:for="{{item.appliedPromotions || []}}" wx:key="title" wx:for-item="promo">
           <text class="cost-label status-red">{{promo.title}}</text>
           <text class="cost-value status-red">-¥{{promo.amountDisplay}}</text>
         </view>
@@ -139,6 +139,7 @@
           merchantId="{{item.merchantId}}"
           membershipId="{{membershipIds[item.merchantId]}}"
           currentBalance="{{memberBalances[item.merchantId]}}"
+          orderTotal="{{item.orderTotal}}"
           bind:recharged="onRecharged"
           bind:voucherClaimed="onVoucherClaimed"
         />

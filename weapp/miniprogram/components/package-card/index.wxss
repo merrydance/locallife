@@ -125,3 +125,13 @@
   height: 100% !important;
   display: block;
 }
+
+/* 加购按钮区域 - 与 dish-card 保持对齐 */
+.add-btn-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  flex-shrink: 0;
+  margin-left: var(--spacer-xs);
+}

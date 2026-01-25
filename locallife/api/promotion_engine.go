@@ -52,8 +52,9 @@ type OrderContext struct {
 
 func (server *Server) CalculateFinalPrice(ctx context.Context, opt OrderContext) (*PriceCalculationResult, error) {
 	res := &PriceCalculationResult{
-		Subtotal:    opt.Subtotal,
-		DeliveryFee: opt.DeliveryFee,
+		Subtotal:          opt.Subtotal,
+		DeliveryFee:       opt.DeliveryFee,
+		AppliedPromotions: []AppliedPromotion{}, // 显式初始化，避免返回 null
 	}
 
 	// 1. 获取商户所有激活的满减规则

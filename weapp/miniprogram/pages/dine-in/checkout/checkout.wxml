@@ -69,7 +69,7 @@
       </view>
       
       <view class="items-list">
-        <view wx:for="{{cart.items}}" wx:key="id" class="order-item">
+        <view wx:for="{{cart.items || []}}" wx:key="id" class="order-item">
           <t-image 
             src="{{item.dish_image || item.image_url}}" 
             mode="aspectFill" 
@@ -104,7 +104,7 @@
       </view>
       
       <!-- 自动应用的优惠列表 -->
-      <view class="price-row" wx:for="{{calculation.applied_promotions}}" wx:key="title">
+      <view class="price-row" wx:for="{{calculation.applied_promotions || []}}" wx:key="title">
         <text class="price-label">{{item.title}}</text>
         <text class="price-value status-red">-¥{{item.amountDisplay}}</text>
       </view>
@@ -130,7 +130,7 @@
       <t-radio-group value="{{selectedPaymentMethod}}" bind:change="onPaymentMethodChange">
         <t-cell-group theme="card">
           <t-cell 
-            wx:for="{{paymentMethods}}" 
+            wx:for="{{paymentMethods || []}}" 
             wx:key="id" 
             title="{{item.name}}"
             leftIcon="{{item.icon}}"
@@ -157,6 +157,7 @@
         showInsufficientTip="{{balanceInsufficient}}"
         currentBalance="{{memberBalance}}"
         membershipId="{{membershipId}}"
+        orderTotal="{{calculation.total_amount}}"
         bind:recharged="onRecharged"
         bind:claimVoucher="onClaimVoucher"
       />
@@ -218,7 +219,7 @@
         
         <!-- 优惠券列表 -->
         <view 
-          wx:for="{{vouchers}}" 
+          wx:for="{{vouchers || []}}" 
           wx:key="id" 
           class="voucher-item {{selectedVoucher && selectedVoucher.id === item.id ? 'selected' : ''}}"
           bind:tap="onSelectVoucher"

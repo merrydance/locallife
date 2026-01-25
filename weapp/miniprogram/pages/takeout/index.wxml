@@ -62,7 +62,7 @@
       
       <!-- 真实数据 -->
       <dish-card 
-        wx:for="{{dishes}}" 
+        wx:for="{{dishes || []}}" 
         wx:key="id"
         dish="{{item}}"
         bind:add="onAddCart"
@@ -74,7 +74,7 @@
     <!-- 餐厅列表 -->
     <block wx:if="{{activeTab === 'restaurants'}}">
       <restaurant-card 
-        wx:for="{{restaurants}}" 
+        wx:for="{{restaurants || []}}" 
         wx:key="id"
         restaurant="{{item}}"
       />
@@ -85,7 +85,7 @@
     <!-- 套餐列表 -->
     <block wx:if="{{activeTab === 'packages'}}">
       <package-card 
-        wx:for="{{packages}}" 
+        wx:for="{{packages || []}}" 
         wx:key="id" 
         package="{{item}}" 
         class="package-item"

@@ -31,7 +31,7 @@
       <!-- 左侧分类 -->
       <scroll-view class="category-sidebar" scroll-y>
         <view 
-          wx:for="{{categories}}" 
+          wx:for="{{categories || []}}" 
           wx:key="id"
           class="category-item {{currentCategoryId === item.id ? 'active' : ''}}"
           data-id="{{item.id}}"
@@ -44,13 +44,13 @@
       <!-- 右侧菜品 -->
       <scroll-view class="dishes-list" scroll-y>
         <block wx:if="{{currentDishes.length > 0}}">
-          <view wx:for="{{currentDishes}}" wx:key="id" class="dish-item">
+          <view wx:for="{{currentDishes || []}}" wx:key="id" class="dish-item">
             <t-image class="dish-image" src="{{item.image_url}}" mode="aspectFill" data-id="{{item.id}}" bindtap="viewDishDetail" />
             <view class="dish-info" data-id="{{item.id}}" bindtap="viewDishDetail">
               <text class="dish-name">{{item.name}}</text>
               <text wx:if="{{item.description}}" class="dish-desc">{{item.description}}</text>
               <view class="dish-tags" wx:if="{{item.tags && item.tags.length > 0}}">
-                <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" theme="primary" variant="dark">{{tag}}</t-tag>
+                <t-tag wx:for="{{item.tags || []}}" wx:for-item="tag" wx:key="*this" size="small" theme="primary" variant="dark">{{tag}}</t-tag>
               </view>
               <view class="dish-price-row">
                 <text class="dish-price">¥{{item.priceDisplay}}</text>
@@ -104,7 +104,7 @@
     </view>
     
     <scroll-view class="cart-items-scroll" scroll-y>
-      <view wx:for="{{cart.items}}" wx:key="id" class="cart-item">
+      <view wx:for="{{cart.items || []}}" wx:key="id" class="cart-item">
         <image class="cart-thumb" src="{{item.image_url || item.dish_image || ''}}" mode="aspectFill" />
         <view class="cart-body">
           <view class="cart-row">
@@ -160,11 +160,11 @@
     </view>
     
     <scroll-view scroll-y class="drawer-content">
-      <view class="spec-group" wx:for="{{drawerDish.spec_groups}}" wx:key="id" wx:for-item="group">
+      <view class="spec-group" wx:for="{{drawerDish.spec_groups || []}}" wx:key="id" wx:for-item="group">
         <view class="group-title">{{group.name}}</view>
         <view class="spec-list">
           <t-tag 
-            wx:for="{{group.specs}}" 
+            wx:for="{{group.specs || []}}" 
             wx:key="id" 
             wx:for-item="spec"
             class="spec-item {{drawerSpecs[group.id] === spec.id ? 'active' : ''}}"

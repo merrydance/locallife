@@ -149,16 +149,17 @@
           <view class="combo-price-row">
             <text class="combo-price">¥{{item.comboPriceDisplay}}</text>
             <view class="combo-discount">省 ¥{{item.savingsDisplay}}</view>
-            <t-button 
-              icon="add" 
-              shape="circle" 
-              theme="primary"
-              size="small"
-              style="margin-left: auto;"
-              data-id="{{item.id}}"
-              catchtap="onAddComboCart"
-            />
           </view>
+        </view>
+        <view class="action-area" catchtap="stopPropagation">
+          <t-button 
+            icon="add" 
+            shape="circle" 
+            theme="primary"
+            size="small"
+            data-id="{{item.id}}"
+            catchtap="onAddComboCart"
+          />
         </view>
       </view>
     </block>

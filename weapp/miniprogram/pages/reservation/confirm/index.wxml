@@ -58,6 +58,7 @@
         merchantId="{{merchantId}}"
         membershipId="{{membershipId}}"
         currentBalance="{{memberBalance}}"
+        orderTotal="{{calculation.total_amount}}"
         bind:recharged="onRecharged"
         bind:voucherClaimed="onVoucherClaimed"
       />
@@ -72,7 +73,7 @@
       </view>
       
       <!-- 优惠明细 -->
-      <view class="price-row" wx:for="{{calculation.applied_promotions}}" wx:key="title" style="display: flex; justify-content: space-between; margin-bottom: 12rpx; color: #E34D59;">
+      <view class="price-row" wx:for="{{calculation.applied_promotions || []}}" wx:key="title" style="display: flex; justify-content: space-between; margin-bottom: 12rpx; color: #E34D59;">
         <text>{{item.title}}</text>
         <text>-¥{{item.amountDisplay}}</text>
       </view>

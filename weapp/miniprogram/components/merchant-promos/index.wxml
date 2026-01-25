@@ -1,22 +1,22 @@
 <!-- 商户优惠信息展示与充值入口 -->
 <view class="promo-center" wx:if="{{hasPromos}}">
   <!-- 商户通用规则展示 (展示为主) -->
-  <view class="rules-section" wx:if="{{discountRules.length > 0 || deliveryFeeRules.length > 0}}">
-    <view class="rule-item" wx:for="{{discountRules}}" wx:key="title">
+  <view class="rules-section" wx:if="{{(discountRules && discountRules.length > 0) || (deliveryFeeRules && deliveryFeeRules.length > 0)}}">
+    <view class="rule-item" wx:for="{{discountRules || []}}" wx:key="title">
       <text class="rule-badge discount">减</text>
       <text class="rule-text">{{item.title}}</text>
     </view>
-    <view class="rule-item" wx:for="{{deliveryFeeRules}}" wx:key="title">
+    <view class="rule-item" wx:for="{{deliveryFeeRules || []}}" wx:key="title">
       <text class="rule-badge delivery">配</text>
       <text class="rule-text">{{item.title}}</text>
     </view>
   </view>
 
   <!-- 待领券展示 (展示为主，可点击快速领取) -->
-  <view class="vouchers-section" wx:if="{{vouchers.length > 0}}">
+  <view class="vouchers-section" wx:if="{{vouchers && vouchers.length > 0}}">
     <view class="v-label">可用优惠券</view>
     <view class="v-list">
-      <view class="v-item" wx:for="{{vouchers}}" wx:key="title" bindtap="onClaim" data-id="{{item.rule_id}}">
+      <view class="v-item" wx:for="{{vouchers || []}}" wx:key="title" bindtap="onClaim" data-id="{{item.rule_id}}">
         <text class="v-val">¥{{item.valueDisplay}}</text>
         <text class="v-btn">领</text>
       </view>
@@ -24,14 +24,14 @@
   </view>
 
   <!-- 充值入口 (唯一复杂交互) -->
-  <view class="recharge-section" wx:if="{{rechargeRules.length > 0}}">
+  <view class="recharge-section" wx:if="{{rechargeRules && rechargeRules.length > 0}}">
     <view class="recharge-header">
       <text class="r-title">会员充值奖励</text>
       <t-tag wx:if="{{currentBalance < orderTotal}}" size="extra-small" theme="danger" variant="light">当前余额 ¥{{balanceDisplay}}，不足以支付</t-tag>
     </view>
     <view class="recharge-grid">
       <view 
-        wx:for="{{rechargeRules}}" 
+        wx:for="{{rechargeRules || []}}" 
         wx:key="rule_id"
         class="recharge-box {{selectedRechargeId === item.rule_id ? 'active' : ''}}"
         bindtap="onSelectRecharge"

@@ -272,7 +272,7 @@ Page({
     const { merchantId } = e.currentTarget.dataset as { merchantId?: number | string }
     const merchantIdNum = Number(merchantId)
     if (!merchantIdNum) return
-    const remarks = { ...this.data.remarks, [merchantIdNum]: e.detail.value }
+    const remarks = { ...(this.data.remarks || {}), [merchantIdNum]: e.detail.value }
     this.setData({ remarks })
   },
 
@@ -347,6 +347,8 @@ Page({
           longitude: address.longitude ? Number(address.longitude) : undefined
         }, { loading: false })
 
+        if (!result) continue;
+
         const deliveryFee = result.delivery_fee || 0
         const deliveryFeeDiscount = result.delivery_fee_discount || 0
         const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
@@ -358,8 +360,8 @@ Page({
         const deliveryEtaMinutes = result.delivery_eta_minutes || 0
         const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
         const appliedPromotions = (result.applied_promotions || []).map(p => ({
-          title: p.title,
-          amountDisplay: formatPriceNoSymbol(p.amount)
+          title: p.title || '优惠',
+          amountDisplay: formatPriceNoSymbol(p.amount || 0)
         }))
 
         updated.push({
@@ -374,7 +376,7 @@ Page({
           hasDiscount,
           deliveryEtaMinutes,
           deliveryEtaDisplay,
-          appliedPromotions
+          appliedPromotions: appliedPromotions || []
         })
       }
 

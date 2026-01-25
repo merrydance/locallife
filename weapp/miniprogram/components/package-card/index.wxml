@@ -39,5 +39,8 @@
       <t-tag wx:for="{{package.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light-outline" theme="primary">{{tag}}</t-tag>
     </view>
   </view>
-  <t-button class="add-btn" theme="primary" size="small" icon="add" shape="circle" catchtap="onAdd" />
+  
+  <view class="add-btn-wrapper">
+    <t-button theme="primary" size="small" icon="add" shape="circle" catchtap="onAdd" />
+  </view>
 </view>
