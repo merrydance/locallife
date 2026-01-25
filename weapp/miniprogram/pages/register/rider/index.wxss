@@ -1,36 +1,248 @@
-/* 骑手注册页面 - 特殊样式 */
-/* 大部分样式已使用common.wxss中的通用类 */
-
-/* t-cell组件内的输入框样式 */
-.input,
-.picker {
-  text-align: right;
-  font-size: 28rpx;
-  color: #333;
-  width: 100%;
-  max-width: 420rpx;
+.page-container {
+  min-height: 100vh;
+  background-color: var(--td-bg-color-page);
 }
 
-/* 地址显示文本 */
-.address-display {
-  text-align: right;
-  font-size: 28rpx;
-  color: #333;
-  word-break: break-all;
+.steps-container {
+  background: #FFFFFF;
+  padding: 24rpx 0;
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
 }
 
-/* picker选择器文本(支持换行) */
-.picker-text {
-  text-align: right;
-  font-size: 28rpx;
-  color: #333;
-  max-width: 420rpx;
-  word-wrap: break-word;
-  word-break: break-all;
-  white-space: normal;
+.form-content {
+  padding: 0 var(--spacer-md);
 }
 
-/* placeholder颜色 */
-.placeholder {
-  color: #999;
+.step-view {
+  display: block;
+}
+
+/* Step 0: Hero */
+.hero-card {
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  padding: 80rpx 40rpx;
+  text-align: center;
+  margin-top: var(--spacer-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-title {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  margin-top: 40rpx;
+}
+
+.hero-subtitle {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+  margin-top: 16rpx;
+}
+
+.benefit-grid {
+  display: flex;
+  justify-content: center;
+  gap: 40rpx;
+  margin-top: 64rpx;
+}
+
+.benefit-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.benefit-item text {
+  font-size: 24rpx;
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+
+.notice-box {
+  background: #FFF9E6;
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-top: var(--spacer-lg);
+}
+
+.notice-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #B27400;
+  margin-bottom: 12rpx;
+}
+
+.notice-text {
+  font-size: 24rpx;
+  color: #CC8F00;
+  line-height: 1.6;
+}
+
+/* Common form styles */
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  margin: 40rpx 0 24rpx 8rpx;
+}
+
+.upload-section {
+  background: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.label-row {
+  margin-bottom: 24rpx;
+}
+
+.label {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.label.required::after {
+  content: '*';
+  color: var(--td-error-color);
+  margin-left: 4rpx;
+}
+
+.upload-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.card-group {
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-group.gray-bg {
+  background: #F9FAFB;
+}
+
+.cell-value {
+  font-size: 28rpx;
+}
+
+.cell-value.placeholder {
+  color: var(--td-text-color-placeholder);
+}
+
+.info-tip {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+  margin-top: 16rpx;
+  margin-left: 8rpx;
+}
+
+/* Review Phase */
+.review-status {
+  padding: 80rpx 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.status-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  margin-top: 32rpx;
+}
+
+.status-desc {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+  margin-top: 12rpx;
+}
+
+.summary-card {
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  padding: 40rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32rpx;
+}
+
+.summary-item:last-child {
+  margin-bottom: 0;
+}
+
+.summary-item .label {
+  font-size: 28rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.summary-item .value {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.tag-row {
+  display: flex;
+  gap: 12rpx;
+}
+
+/* Fixed Footer */
+.footer-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  background: #FFFFFF;
+  box-shadow: 0 -4rpx 16rpx rgba(0,0,0,0.05);
+  z-index: 100;
+}
+
+.btn-group {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 24rpx;
+}
+
+/* animations */
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s ease-out both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.step-view.center {
+  padding: 120rpx 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.loading-sub {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+  margin-top: 24rpx;
 }

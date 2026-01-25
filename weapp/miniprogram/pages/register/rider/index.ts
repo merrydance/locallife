@@ -1,285 +1,199 @@
-
-import { ocrRiderIdCard } from '../../../api/ocr'
+import { 
+  getOrCreateRiderApplication, 
+  updateRiderApplicationBasic, 
+  ocrRiderIdCard, 
+  ocrRiderHealthCert, 
+  submitRiderApplication,
+  resetRiderApplication
+} from '../../../api/rider-application'
 import { logger } from '../../../utils/logger'
-import { ErrorHandler } from '../../../utils/error-handler'
-import { DraftStorage } from '../../../utils/draft-storage'
-import { submitRiderApplication, ApplyRiderRequest } from '../../../api/onboarding'
-
-const DRAFT_KEY = 'rider_register_draft'
 
 Page({
   data: {
     navBarHeight: 88,
+    currentStep: 0,
+    isSubmitting: false,
+    idFront: { url: '', rawUrl: '' },
+    idBack: { url: '', rawUrl: '' },
+    healthCert: { url: '', rawUrl: '' },
     formData: {
-      // 基本信息
-      name: '',
+      realName: '',
       phone: '',
-      idCard: '',
       address: '',
-      addressDetail: '',
-      latitude: 0,
-      longitude: 0,
-      vehicle: '',
-      availableTime: '',
-
-      // 身份信息
-      gender: '',
-      hometown: '',
-      currentAddress: '',
-      idCardValidity: ''
-    },
-    // 图片
-    idCardFrontImages: [] as Array<any>,
-    idCardBackImages: [] as Array<any>,
-    healthCertImages: [] as Array<any>,
-
-    // 选择器状态
-    vehiclePickerVisible: false,
-    vehiclePickerValue: [],
-    vehicleOptions: [
-      { label: '电动车', value: 'electric_bike' },
-      { label: '摩托车', value: 'motorcycle' },
-      { label: '自行车', value: 'bicycle' },
-      { label: '汽车', value: 'car' },
-      { label: '步行', value: 'walk' }
-    ],
-    timePickerVisible: false,
-    timePickerValue: [],
-    timeOptions: [
-      { label: '全天', value: 'all_day' },
-      { label: '仅白天', value: 'day_only' },
-      { label: '仅晚上', value: 'night_only' },
-      { label: '周末', value: 'weekend' },
-      { label: '工作日', value: 'workday' }
-    ]
+      idNumber: '',
+      idValidity: '',
+      healthCertNo: '',
+      healthCertDate: ''
+    }
   },
 
-  onLoad() {
-    this.loadDraft()
+  async onLoad() {
+    await this.initApplication()
   },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
+  onNavHeight(e: any) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  // ==================== 草稿管理 ====================
-
-  saveDraft() {
-    const data = {
-      formData: this.data.formData,
-      idCardFrontImages: this.data.idCardFrontImages,
-      idCardBackImages: this.data.idCardBackImages,
-      healthCertImages: this.data.healthCertImages
+  async initApplication() {
+    wx.showLoading({ title: '加载中...' })
+    try {
+      const res = await getOrCreateRiderApplication()
+      if (res) {
+        this.mapResponseToData(res)
+        
+        // 如果已被拒绝，自动重置或提示
+        if (res.status === 'rejected') {
+          wx.showModal({
+            title: '申请未通过',
+            content: `驳回原因：${res.reject_reason || '资料不全'}. 是否修改重试？`,
+            success: async (modalRes) => {
+              if (modalRes.confirm) {
+                const refreshed = await resetRiderApplication()
+                this.mapResponseToData(refreshed)
+              } else {
+                wx.navigateBack()
+              }
+            }
+          })
+        } else if (res.status === 'approved') {
+          wx.showToast({ title: '您已入驻成功' })
+          setTimeout(() => wx.reLaunch({ url: '/pages/rider/dashboard/index' }), 1000)
+        }
+      }
+    } catch (e) {
+      logger.error('Init rider application failed', e)
+    } finally {
+      wx.hideLoading()
     }
-    DraftStorage.save(DRAFT_KEY, data)
   },
 
-  loadDraft() {
-    const draft = DraftStorage.load(DRAFT_KEY)
-    if (draft) {
-      this.setData(draft)
+  mapResponseToData(res: any) {
+    this.setData({
+      'formData.realName': res.real_name || res.id_card_ocr?.name || '',
+      'formData.phone': res.phone || '',
+      'formData.idNumber': res.id_card_ocr?.id_number || '',
+      'formData.idValidity': res.id_card_ocr?.valid_end || '',
+      'formData.healthCertNo': res.health_cert_ocr?.cert_number || '',
+      'formData.healthCertDate': res.health_cert_ocr?.valid_end || '',
+      idFront: { url: res.id_card_front_url || '', rawUrl: res.id_card_front_url || '' },
+      idBack: { url: res.id_card_back_url || '', rawUrl: res.id_card_back_url || '' },
+      healthCert: { url: res.health_cert_url || '', rawUrl: res.health_cert_url || '' }
+    })
+  },
+
+  async onIdFrontUpload(e: any) {
+    const { path } = e.detail
+    this.setData({ 'idFront.url': path })
+    this.processOCR(ocrRiderIdCard(path, 'Front'), 'identity')
+  },
+
+  async onIdBackUpload(e: any) {
+    const { path } = e.detail
+    this.setData({ 'idBack.url': path })
+    this.processOCR(ocrRiderIdCard(path, 'Back'), 'identity')
+  },
+
+  async onHealthCertUpload(e: any) {
+    const { path } = e.detail
+    this.setData({ 'healthCert.url': path })
+    this.processOCR(ocrRiderHealthCert(path), 'health')
+  },
+
+  async processOCR(ocrPromise: Promise<any>, type: 'identity' | 'health') {
+    wx.showLoading({ title: '智能识别中...' })
+    try {
+      const res = await ocrPromise
+      this.mapResponseToData(res)
+      wx.hideLoading()
+      wx.showToast({ title: '识别成功', icon: 'none' })
+    } catch (e) {
+      wx.hideLoading()
+      logger.error('OCR failed', e)
     }
   },
 
-  // ==================== 表单输入 ====================
-
-  updateFormData(key: string, value: any) {
-    this.setData({ [`formData.${key}`]: value })
-    this.saveDraft()
+  onInput(e: any) {
+    const field = e.currentTarget.dataset.field
+    this.setData({ [`formData.${field}`]: e.detail.value })
   },
-
-  onNameInput(e: WechatMiniprogram.Input) { this.updateFormData('name', e.detail.value) },
-  onPhoneInput(e: WechatMiniprogram.Input) { this.updateFormData('phone', e.detail.value) },
-  onIdCardInput(e: WechatMiniprogram.Input) { this.updateFormData('idCard', e.detail.value) },
-  onAddressDetailInput(e: WechatMiniprogram.Input) { this.updateFormData('addressDetail', e.detail.value) },
-
-  // 身份信息输入
-  onGenderInput(e: WechatMiniprogram.Input) { this.updateFormData('gender', e.detail.value) },
-  onHometownInput(e: WechatMiniprogram.Input) { this.updateFormData('hometown', e.detail.value) },
-  onCurrentAddressInput(e: WechatMiniprogram.Input) { this.updateFormData('currentAddress', e.detail.value) },
-  onIdCardValidityInput(e: WechatMiniprogram.Input) { this.updateFormData('idCardValidity', e.detail.value) },
-
-  // ==================== 地址选择 ====================
 
   onChooseAddress() {
     wx.chooseLocation({
       success: (res) => {
-        this.setData({
-          'formData.address': res.address || res.name,
-          'formData.latitude': res.latitude,
-          'formData.longitude': res.longitude
-        })
-        this.saveDraft()
-      },
-      fail: (err) => {
-        if (err.errMsg.includes('auth deny')) {
-          wx.showModal({
-            title: '需要位置权限',
-            content: '请在设置中开启位置权限',
-            confirmText: '去设置',
-            success: (modalRes) => {
-              if (modalRes.confirm) {
-                wx.openSetting()
-              }
-            }
-          })
-        }
+        this.setData({ 'formData.address': res.address || res.name })
       }
     })
   },
 
-  // ==================== 选择器 ====================
-
-  onChooseVehicle() { this.setData({ vehiclePickerVisible: true }) },
-  onVehicleConfirm(e: WechatMiniprogram.CustomEvent) {
-    const { value } = e.detail
-    const selectedOption = this.data.vehicleOptions.find((opt) => opt.value === value[0])
-    if (selectedOption) {
-      this.updateFormData('vehicle', selectedOption.label)
-      this.setData({ vehiclePickerVisible: false })
-    }
+  onPrev() {
+    this.setData({ currentStep: this.data.currentStep - 1 })
   },
-  onVehicleCancel() { this.setData({ vehiclePickerVisible: false }) },
 
-  onChooseTime() { this.setData({ timePickerVisible: true }) },
-  onTimeConfirm(e: WechatMiniprogram.CustomEvent) {
-    const { value } = e.detail
-    const selectedOption = this.data.timeOptions.find((opt) => opt.value === value[0])
-    if (selectedOption) {
-      this.updateFormData('availableTime', selectedOption.label)
-      this.setData({ timePickerVisible: false })
+  async onNext() {
+    const { currentStep, idFront, idBack, healthCert, formData } = this.data
+
+    if (currentStep === 1) {
+      if (!idFront.url || !idBack.url || !healthCert.url) {
+        return wx.showToast({ title: '请上传所有必需证照', icon: 'none' })
+      }
     }
-  },
-  onTimeCancel() { this.setData({ timePickerVisible: false }) },
 
-  // ==================== 图片上传与OCR ====================
-
-  // 身份证正面
-  async onIdCardFrontUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ idCardFrontImages: files })
-    this.saveDraft()
-
-    if (files.length > 0) {
-      wx.showLoading({ title: '识别中...' })
+    if (currentStep === 2) {
+      if (!formData.realName || !formData.phone) {
+        return wx.showToast({ title: '请确认真实姓名和手机号', icon: 'none' })
+      }
+      // 同步基础信息
+      wx.showLoading({ title: '保存信息...' })
       try {
-        const res = await ocrRiderIdCard(files[0].url, 'front')
-        const info = res.ocrData
-
-        this.setData({
-          'formData.name': info.name || '',
-          'formData.idCard': info.id || info.id_num || '',
-          'formData.gender': info.gender || '',
-          'formData.hometown': info.addr || info.address || ''
+        await updateRiderApplicationBasic({
+          real_name: formData.realName,
+          phone: formData.phone
         })
-        this.saveDraft()
-        wx.showToast({ title: '识别成功', icon: 'success' })
-      } catch (error) {
-        logger.error('OCR failed', error, 'Rider')
-        wx.showToast({ title: '识别失败', icon: 'none' })
+      } catch (e) {
+        logger.error('Update basic failed', e)
       } finally {
         wx.hideLoading()
       }
     }
-  },
-  onIdCardFrontRemove() {
-    this.setData({ idCardFrontImages: [] })
-    this.saveDraft()
-  },
 
-  // 身份证反面
-  async onIdCardBackUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ idCardBackImages: files })
-    this.saveDraft()
-
-    if (files.length > 0) {
-      wx.showLoading({ title: '识别中...' })
-      try {
-        const res = await ocrRiderIdCard(files[0].url, 'back')
-        const info = res.ocrData
-
-        this.setData({
-          'formData.idCardValidity': info.valid_date || info.valid_period || ''
-        })
-        this.saveDraft()
-        wx.showToast({ title: '识别成功', icon: 'success' })
-      } catch (error) {
-        logger.error('OCR failed', error, 'Rider')
-        wx.showToast({ title: '识别失败', icon: 'none' })
-      } finally {
-        wx.hideLoading()
-      }
-    }
+    this.setData({ currentStep: currentStep + 1 })
   },
-  onIdCardBackRemove() {
-    this.setData({ idCardBackImages: [] })
-    this.saveDraft()
-  },
-
-  // 健康证
-  onHealthCertUpload(e: WechatMiniprogram.CustomEvent) {
-    const { files } = e.detail
-    this.setData({ healthCertImages: files })
-    this.saveDraft()
-  },
-  onHealthCertRemove() {
-    this.setData({ healthCertImages: [] })
-    this.saveDraft()
-  },
-
-  // ==================== 提交申请 ====================
 
   async onSubmit() {
-    const { formData, idCardFrontImages, idCardBackImages, healthCertImages } = this.data
-
-    // 验证必填字段
-    if (!idCardFrontImages.length) return wx.showToast({ title: '请上传身份证正面', icon: 'none' })
-    if (!idCardBackImages.length) return wx.showToast({ title: '请上传身份证反面', icon: 'none' })
-    if (!healthCertImages.length) return wx.showToast({ title: '请上传健康证', icon: 'none' })
-
-    if (!formData.name) return wx.showToast({ title: '请输入真实姓名', icon: 'none' })
-    if (!formData.phone) return wx.showToast({ title: '请输入联系电话', icon: 'none' })
-    if (!formData.idCard) return wx.showToast({ title: '请输入身份证号', icon: 'none' })
-    if (!formData.address) return wx.showToast({ title: '请选择常驻地址', icon: 'none' })
-
-    if (!formData.gender) return wx.showToast({ title: '缺少身份信息', icon: 'none' })
-
-    // 构建提交数据
-    const submitData: ApplyRiderRequest = {
-      real_name: formData.name,
-      phone: formData.phone,
-      id_card_no: formData.idCard,
-      vehicle_type: formData.vehicle,
-      address: formData.address,
-      gender: formData.gender,
-
-      id_card_front_images: idCardFrontImages.map((img) => img.url),
-      id_card_back_images: idCardBackImages.map((img) => img.url),
-      health_certificate_images: healthCertImages.map((img) => img.url)
-    }
-
-    wx.showLoading({ title: '提交中...' })
-
+    this.setData({ isSubmitting: true, currentStep: 4 })
     try {
-      await submitRiderApplication(submitData)
-
-      wx.showToast({
-        title: '申请提交成功',
-        icon: 'success',
-        duration: 2000,
-        success: () => {
-          DraftStorage.clear(DRAFT_KEY)
-          setTimeout(() => {
-            wx.navigateBack()
-          }, 2000)
+      const res = await submitRiderApplication()
+      
+      // 模拟审核轮询或等待
+      setTimeout(() => {
+        if (res.status === 'approved') {
+          wx.showModal({
+            title: '审核通过',
+            content: '恭喜！您已正式成为 LocalLife 骑手。',
+            showCancel: false,
+            success: () => wx.reLaunch({ url: '/pages/rider/dashboard/index' })
+          })
+        } else if (res.status === 'rejected') {
+          wx.showModal({
+            title: '审核未通过',
+            content: res.reject_reason || '资料核验不匹配',
+            confirmText: '修改资料',
+            success: async (m) => {
+              if (m.confirm) {
+                const draft = await resetRiderApplication()
+                this.mapResponseToData(draft)
+                this.setData({ currentStep: 1, isSubmitting: false })
+              } else {
+                wx.navigateBack()
+              }
+            }
+          })
         }
-      })
-    } catch (error) {
-      logger.error('Apply rider failed:', error, 'Rider')
-      wx.showToast({ title: '提交失败', icon: 'error' })
-    } finally {
-      wx.hideLoading()
+      }, 1500)
+    } catch (e: any) {
+      this.setData({ isSubmitting: false, currentStep: 3 })
+      wx.showToast({ title: e.message || '提交失败', icon: 'none' })
     }
   }
 })
