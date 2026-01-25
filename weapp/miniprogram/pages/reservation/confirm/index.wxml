@@ -30,15 +30,58 @@
       <t-input label="备注" placeholder="如有特殊需求请备注" value="{{form.remark}}" data-field="remark" bindchange="onInputChange" />
     </t-cell-group>
 
-    <!-- 预订模式选择 -->
-    <t-cell-group title="预订方式" style="margin-top: 24rpx;">
-      <view class="mode-selector">
-        <t-radio-group value="{{paymentMode}}" bind:change="onPaymentModeChange">
-          <t-radio value="full" label="在线点菜（支付全款）" icon="circle" />
-          <t-radio value="deposit" label="预缴定金（到店点菜）" icon="circle" />
+    <!-- 支付方式选择 (仅当需要支付定金或全款时展示) -->
+    <t-cell-group title="支付方式" style="margin-top: 24rpx;" wx:if="{{paymentMode !== 'none'}}">
+      <view class="payment-selector">
+        <t-radio-group value="{{selectedPaymentMethod}}" bind:change="onSelectedPaymentMethodChange">
+          <t-radio value="wechat" label="微信支付" icon="circle">
+            <t-icon name="logo-wechat" size="40rpx" color="#07C160" slot="icon" />
+          </t-radio>
+          <t-radio value="balance" label="余额支付" icon="circle" disabled="{{memberBalance <= 0}}">
+            <view slot="label" style="display: flex; flex-direction: column;">
+              <view style="display: flex; align-items: center; gap: 8rpx;">
+                <text>余额支付</text>
+                <t-tag wx:if="{{memberBalance > 0 && memberBalance < (paymentMode === 'deposit' ? deposit : 0)}}" size="extra-small" theme="warning" variant="light">余额不足以全抵</t-tag>
+              </view>
+              <text class="balance-note" wx:if="{{memberBalanceDisplay}}">可用余额: ¥{{memberBalanceDisplay}}</text>
+              <text class="balance-note" wx:else>未加入会员或无余额</text>
+            </view>
+            <t-icon name="wallet" size="40rpx" color="{{memberBalance <= 0 ? '#ccc' : '#FF6B00'}}" slot="icon" />
+          </t-radio>
         </t-radio-group>
       </view>
     </t-cell-group>
+
+    <!-- 商户优惠活动 -->
+    <view style="margin: 24rpx;">
+      <merchant-promos 
+        merchantId="{{merchantId}}"
+        membershipId="{{membershipId}}"
+        currentBalance="{{memberBalance}}"
+        bind:recharged="onRecharged"
+        bind:voucherClaimed="onVoucherClaimed"
+      />
+    </view>
+  </view>
+
+    <!-- 费用明细 -->
+    <view class="section-card price-section" style="margin: 24rpx; background: #fff; padding: 24rpx; border-radius: 16rpx;" wx:if="{{paymentMode !== 'none'}}">
+      <view class="price-row" style="display: flex; justify-content: space-between; margin-bottom: 12rpx;">
+        <text style="color: #666;">预计金额 ({{paymentMode === 'deposit' ? '定金' : '全款'}})</text>
+        <text style="color: #333; font-weight: bold;">¥{{paymentMode === 'deposit' ? depositDisplay : calculation.subtotalDisplay}}</text>
+      </view>
+      
+      <!-- 优惠明细 -->
+      <view class="price-row" wx:for="{{calculation.applied_promotions}}" wx:key="title" style="display: flex; justify-content: space-between; margin-bottom: 12rpx; color: #E34D59;">
+        <text>{{item.title}}</text>
+        <text>-¥{{item.amountDisplay}}</text>
+      </view>
+
+      <view class="price-row total-row" style="display: flex; justify-content: space-between; margin-top: 16rpx; padding-top: 16rpx; border-top: 1rpx solid #eee;">
+        <text style="font-weight: bold; color: #333;">最终应付</text>
+        <text style="font-size: 36rpx; font-weight: bold; color: #E34D59;">¥{{calculation.totalDisplay}}</text>
+      </view>
+    </view>
   </view>
 
   <!-- 支付提示 -->
@@ -51,7 +94,7 @@
 <!-- 底部提交栏 -->
 <view class="bottom-bar">
   <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit">
-    {{paymentMode === 'deposit' ? '支付定金 ¥' + depositDisplay : '选择菜品'}}
+    {{paymentMode === 'deposit' ? '确认预定 (¥' + calculation.totalDisplay + ')' : '下一步：选择菜品'}}
   </t-button>
 </view>
 

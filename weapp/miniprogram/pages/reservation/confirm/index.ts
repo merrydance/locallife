@@ -6,6 +6,9 @@
 import { formatTime, formatPriceNoSymbol } from '@/utils/util'
 import { createReservation, CreateReservationRequest } from '../../../api/reservation'
 import { checkRoomAvailability } from '../../../api/room'
+import { getMyMemberships, MembershipResponse } from '../../../api/personal'
+import { createReservationPayment, invokeWechatPay } from '../../../api/payment'
+import { calculateCart } from '../../../api/cart'
 
 interface TimeSlot {
   time: string
@@ -22,6 +25,13 @@ Page({
     deposit: 0,
     depositDisplay: '0.00',
     paymentMode: 'full' as 'deposit' | 'full',
+    
+    // 支付及会员相关
+    selectedPaymentMethod: 'wechat', // 'wechat' | 'balance'
+    memberBalance: 0,
+    memberBalanceDisplay: '',
+    membershipId: 0,
+
     form: {
       date: '',
       time: '',
@@ -39,7 +49,17 @@ Page({
     availableTimeSlots: [] as Array<{ label: string, value: string }>,  // 可用时段列表（picker格式）
     selectedTimeLabel: '',
     timePickerVisible: false,
-    loadingSlots: false
+    loadingSlots: false,
+
+    calculation: {
+      subtotal: 0,
+      subtotalDisplay: '0.00',
+      discount_amount: 0,
+      discountDisplay: '0.00',
+      total_amount: 0,
+      totalDisplay: '0.00',
+      applied_promotions: [] as any[]
+    }
   },
 
   onLoad(options: {
@@ -63,7 +83,8 @@ Page({
         roomName: decodeURIComponent(options.roomName || ''),
         capacity: capacityNum,
         deposit: depositNum,
-        depositDisplay: formatPriceNoSymbol(depositNum)
+        depositDisplay: formatPriceNoSymbol(depositNum),
+        'calculation.totalDisplay': formatPriceNoSymbol(depositNum)
       })
     }
 
@@ -83,6 +104,32 @@ Page({
       if (options.roomId) {
         this.loadAvailability(dateStr, parseInt(options.roomId || '0', 10))
       }
+    }
+
+    // 加载会员信息
+    this.loadMemberships()
+    // 初始化计算金额
+    this.calculateAmount()
+  },
+
+  async loadMemberships() {
+    const { merchantId } = this.data
+    if (!merchantId) return
+
+    try {
+      const result = await getMyMemberships()
+      const membership = result.memberships?.find(
+        (m: MembershipResponse) => m.merchant_id === merchantId
+      )
+      if (membership) {
+        this.setData({
+          memberBalance: membership.balance,
+          memberBalanceDisplay: formatPriceNoSymbol(membership.balance),
+          membershipId: membership.id
+        })
+      }
+    } catch (error) {
+      console.error('[预订] 加载会员信息失败:', error)
     }
   },
 
@@ -222,10 +269,61 @@ Page({
 
   onPaymentModeChange(e: WechatMiniprogram.CustomEvent) {
     this.setData({ paymentMode: e.detail.value })
+    this.calculateAmount()
+  },
+
+  onSelectedPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
+    this.setData({ selectedPaymentMethod: e.detail.value })
+  },
+
+  onRecharged() {
+    this.loadMemberships()
+  },
+
+  onVoucherClaimed() {
+    wx.showToast({ title: '领券完成', icon: 'success' })
+    this.calculateAmount() // 领券后刷新金额
+  },
+
+  /**
+   * 计算应付金额
+   */
+  async calculateAmount() {
+    const { merchantId, paymentMode, deposit } = this.data
+    if (!merchantId) return
+
+    try {
+      const params = {
+        merchant_id: merchantId,
+        order_type: 'reservation'
+      }
+      
+      const result = await calculateCart(params)
+      
+      this.setData({
+        calculation: {
+          subtotal: paymentMode === 'deposit' ? deposit : result.subtotal,
+          subtotalDisplay: formatPriceNoSymbol(paymentMode === 'deposit' ? deposit : result.subtotal),
+          discount_amount: result.discount_amount,
+          discountDisplay: formatPriceNoSymbol(result.discount_amount),
+          total_amount: result.total_amount,
+          totalDisplay: formatPriceNoSymbol(result.total_amount),
+          applied_promotions: (result.applied_promotions || []).map((p: any) => ({
+            ...p,
+            amountDisplay: formatPriceNoSymbol(p.amount)
+          }))
+        }
+      })
+    } catch (err) {
+      console.error('计算金额失败:', err)
+      this.setData({
+        'calculation.totalDisplay': formatPriceNoSymbol(paymentMode === 'deposit' ? deposit : 0)
+      })
+    }
   },
 
   async onSubmit() {
-    const { form, tableId, paymentMode, merchantId } = this.data
+    const { form, tableId, paymentMode, merchantId, selectedPaymentMethod } = this.data
 
     // 表单验证
     if (!form.date || !form.time || !form.name || !form.phone) {
@@ -246,7 +344,7 @@ Page({
     this.setData({ submitting: true })
 
     try {
-      // 无论哪种模式，都先创建预订（锁定房间）
+      // 1. 创建预订
       const reservationData: CreateReservationRequest = {
         table_id: tableId,
         date: form.date,
@@ -258,25 +356,41 @@ Page({
         notes: form.remark || undefined
       }
 
-      console.log('[预订] 发送数据:', JSON.stringify(reservationData))
-
       const reservation = await createReservation(reservationData)
 
       if (paymentMode === 'full') {
-        // 全款模式：跳转到点菜页面（传入 reservation_id）
         wx.redirectTo({
           url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${merchantId}`
         })
       } else {
-        // 定金模式：跳转到支付页面
-        wx.showModal({
-          title: '预定创建成功',
-          content: '支付页面正在开发中，请稍后在预订列表中完成支付',
-          showCancel: false,
-          success: () => {
-            wx.navigateBack()
+        // 定金模式：发起支付
+        try {
+          // 修复：确保调用 API 接受的参数正确
+          const paymentParams: any = {
+            reservation_id: reservation.id,
+            use_balance: selectedPaymentMethod === 'balance'
           }
-        })
+          
+          const paymentResult = await createReservationPayment(reservation.id)
+
+          if (paymentResult.pay_params) {
+            await invokeWechatPay(paymentResult.pay_params)
+            wx.showToast({ title: '支付成功', icon: 'success' })
+          } else if (paymentResult.status === 'paid') {
+            wx.showToast({ title: '余额支付成功', icon: 'success' })
+          }
+
+          setTimeout(() => {
+            wx.redirectTo({ url: `/pages/reservation/detail/index?id=${reservation.id}` })
+          }, 1500)
+          
+        } catch (payErr) {
+          console.error('[预订支付] 支付失败或取消:', payErr)
+          wx.showToast({ title: '支付未完成', icon: 'none' })
+          setTimeout(() => {
+            wx.redirectTo({ url: `/pages/reservation/detail/index?id=${reservation.id}` })
+          }, 1500)
+        }
       }
     } catch (error) {
       const errMessage = error instanceof Error ? error.message : String(error)

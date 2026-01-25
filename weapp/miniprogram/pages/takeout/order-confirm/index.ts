@@ -7,6 +7,7 @@ import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getPublicMerchantCombos, getPublicMerchantDishes } from '../../../api/merchant'
+import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 
 interface CartItemView {
   id: number
@@ -42,6 +43,9 @@ interface MerchantCartView {
   deliveryEtaDisplay: string
   orderTotal: number
   orderTotalDisplay: string
+  originalTotalDisplay: string // 原价（不含优惠）
+  hasDiscount: boolean         // 是否有优惠
+  appliedPromotions: Array<{ title: string, amountDisplay: string }>
 }
 
 Page({
@@ -54,7 +58,13 @@ Page({
     loading: false,
     orderTotalDisplay: '0.00',
     summarySubtotalDisplay: '0.00',
-    summaryDeliveryDisplay: '待计算'
+    summaryDeliveryDisplay: '待计算',
+    
+    // 支付及会员相关
+    selectedPaymentMethod: 'wechat', // 'wechat' | 'balance'
+    memberBalances: {} as Record<number, number>, // merchantId -> balance
+    memberBalanceDisplays: {} as Record<number, string>,
+    membershipIds: {} as Record<number, number>
   },
 
   onLoad(options: { cart_ids?: string }) {
@@ -170,7 +180,10 @@ Page({
           deliveryEtaMinutes: 0,
           deliveryEtaDisplay: '',
           orderTotal: subtotal,
-          orderTotalDisplay: formatPriceNoSymbol(subtotal)
+          orderTotalDisplay: formatPriceNoSymbol(subtotal),
+          originalTotalDisplay: formatPriceNoSymbol(subtotal),
+          hasDiscount: false,
+          appliedPromotions: []
         })
       }
 
@@ -184,10 +197,44 @@ Page({
       
       // 根据地址计算每个商户配送费
       await this.calculateDeliveryFee()
+      
+      // 加载会员信息
+      await this.loadMemberships()
     } catch (error) {
       logger.error('Load cart failed', error, 'Order-confirm')
       wx.showToast({ title: '加载购物车失败', icon: 'error' })
       this.setData({ loading: false })
+    }
+  },
+
+  async loadMemberships() {
+    const { carts } = this.data
+    if (!carts || carts.length === 0) return
+
+    try {
+      const result = await getMyMemberships()
+      const memberBalances: Record<number, number> = {}
+      const memberBalanceDisplays: Record<number, string> = {}
+      const membershipIds: Record<number, number> = {}
+
+      carts.forEach(cart => {
+        const membership = result.memberships?.find(
+          (m: MembershipResponse) => m.merchant_id === cart.merchantId
+        )
+        if (membership) {
+          memberBalances[cart.merchantId] = membership.balance
+          memberBalanceDisplays[cart.merchantId] = formatPriceNoSymbol(membership.balance)
+          membershipIds[cart.merchantId] = membership.id
+        }
+      })
+
+      this.setData({
+        memberBalances,
+        memberBalanceDisplays,
+        membershipIds
+      })
+    } catch (error) {
+      logger.error('Load memberships failed', error, 'Order-confirm')
     }
   },
 
@@ -304,11 +351,16 @@ Page({
         const deliveryFeeDiscount = result.delivery_fee_discount || 0
         const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
         const deliveryDistance = result.delivery_distance || 0
-        const orderTotal = typeof result.total_amount === 'number'
-          ? result.total_amount
-          : (cart.subtotal || 0) + finalDeliveryFee - (result.discount_amount || 0)
+        const orderTotal = result.total_amount || 0
+        const originalTotal = (cart.subtotal || 0) + deliveryFee // 原价 = 商品小计 + 原始配送费
+        const hasDiscount = orderTotal < originalTotal
+
         const deliveryEtaMinutes = result.delivery_eta_minutes || 0
         const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
+        const appliedPromotions = (result.applied_promotions || []).map(p => ({
+          title: p.title,
+          amountDisplay: formatPriceNoSymbol(p.amount)
+        }))
 
         updated.push({
           ...cart,
@@ -318,20 +370,23 @@ Page({
           deliveryDistance,
           orderTotal,
           orderTotalDisplay: formatPriceNoSymbol(orderTotal),
+          originalTotalDisplay: formatPriceNoSymbol(originalTotal),
+          hasDiscount,
           deliveryEtaMinutes,
-          deliveryEtaDisplay
+          deliveryEtaDisplay,
+          appliedPromotions
         })
       }
 
       const summarySubtotal = updated.reduce((sum, c) => sum + (c.subtotal || 0), 0)
       const summaryDelivery = updated.reduce((sum, c) => sum + Math.max(0, (c.deliveryFee || 0) - (c.deliveryFeeDiscount || 0)), 0)
-      const orderTotal = updated.reduce((sum, c) => sum + (c.orderTotal || 0), 0)
+      const totalOrderAmount = updated.reduce((sum, c) => sum + (c.orderTotal || 0), 0)
 
       this.setData({
         carts: updated,
         summarySubtotalDisplay: formatPriceNoSymbol(summarySubtotal),
         summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + formatPriceNoSymbol(summaryDelivery) : '免配送费',
-        orderTotalDisplay: formatPriceNoSymbol(orderTotal)
+        orderTotalDisplay: formatPriceNoSymbol(totalOrderAmount)
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
@@ -409,7 +464,9 @@ Page({
           notes: remarks[cart.merchantId] || '',
           delivery_fee: cart.deliveryFee,
           delivery_fee_discount: cart.deliveryFeeDiscount,
-          delivery_distance: cart.deliveryDistance
+          delivery_distance: cart.deliveryDistance,
+          // 仅在单商户下单时启用余额支付选择
+          use_balance: carts.length === 1 && this.data.selectedPaymentMethod === 'balance'
         }
 
         const order = await createOrder(requestData)
@@ -461,6 +518,12 @@ Page({
             wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
           }, 1500)
         }
+      } else if (paymentResult.status === 'paid') {
+        // 余额全额支付成功
+        wx.showToast({ title: '余额支付成功', icon: 'success' })
+        setTimeout(() => {
+          wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+        }, 1500)
       } else {
         this.showPaymentDevModal(orderId)
       }
@@ -482,6 +545,29 @@ Page({
       }
     })
   },
+
+  /**
+   * 切换支付方式
+   */
+  onPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
+    this.setData({ selectedPaymentMethod: e.detail.value })
+  },
+
+  /**
+   * 充值成功回调
+   */
+  onRecharged() {
+    this.loadMemberships() // 重新加载余额
+  },
+
+  /**
+   * 领券成功回调
+   */
+  onVoucherClaimed() {
+    wx.showToast({ title: '领券完成', icon: 'success' })
+    // 重要：领券后立即重新计算优惠金额，让用户看到变化
+    this.calculateDeliveryFee()
+  }
 
 })
 

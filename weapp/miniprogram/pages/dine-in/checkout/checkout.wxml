@@ -95,31 +95,23 @@
     </view>
 
     <!-- 优惠券 -->
-    <view class="section-card">
-      <t-cell 
-        title="优惠券" 
-        arrow 
-        hover 
-        bind:click="onShowVouchers"
-        note="{{selectedVoucher ? selectedVoucher.title : '选择可用优惠券'}}"
-        t-class-note="{{selectedVoucher ? 'voucher-selected' : 'voucher-placeholder'}}"
-      />
-    </view>
-
-    <!-- 费用明细 -->
+    <!-- 费用明细 (数据源自后端 calculateCart) -->
     <view class="section-card price-section">
-      <view class="section-title">费用明细</view>
+      <view class="section-title">结算明细</view>
       <view class="price-row">
-        <text class="price-label">商品合计</text>
-        <text class="price-value">¥{{calculation.subtotalDisplay || '0.00'}}</text>
+        <text class="price-label">订单原价</text>
+        <text class="price-value">¥{{calculation.subtotalDisplay}}</text>
       </view>
-      <view class="price-row" wx:if="{{calculation.discount_amount > 0}}">
-        <text class="price-label">优惠减免</text>
-        <text class="price-value discount">-¥{{calculation.discountDisplay}}</text>
+      
+      <!-- 自动应用的优惠列表 -->
+      <view class="price-row" wx:for="{{calculation.applied_promotions}}" wx:key="title">
+        <text class="price-label">{{item.title}}</text>
+        <text class="price-value status-red">-¥{{item.amountDisplay}}</text>
       </view>
+
       <view class="price-row total-row">
-        <text class="price-label bold">应付金额</text>
-        <text class="price-value total">¥{{calculation.totalDisplay || '0.00'}}</text>
+        <text class="price-label bold">实付金额</text>
+        <text class="price-value total highlight">¥{{calculation.totalDisplay}}</text>
       </view>
     </view>
 

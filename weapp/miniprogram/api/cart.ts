@@ -160,6 +160,10 @@ export interface CalculateCartResponse {
     meets_min_order: boolean      // 是否满足起送金额
     min_order_amount: number      // 最小起送金额（分），0表示无限制
     total_amount: number          // 实付金额（分）
+    applied_promotions?: Array<{  // 已应用的优惠明细
+        title: string
+        amount: number
+    }>
 }
 
 // ==================== API接口函数 ====================

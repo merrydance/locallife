@@ -1,701 +1,206 @@
-/**
- * 堂食/预订结算页面
- * 处理堂食和预订订单的结算和支付流程
- */
-
-import { getCart, calculateCart, CalculateCartResponse, CartResponse, CartItemResponse } from '../../../api/cart';
-import { createOrder, CreateOrderRequest, OrderItemRequest } from '../../../api/order';
-import { createPayment, invokeWechatPay } from '../../../api/payment';
-import { getTableDetail } from '../../../api/table';
-import { getReservationDetail, ReservationResponse } from '../../../api/reservation';
-import { CouponService } from '../../../api/coupon';
-import { getMyMemberships, MembershipResponse } from '../../../api/personal';
-import { formatPriceNoSymbol } from '../../../utils/util';
-import { getPublicImageUrl } from '../../../utils/image';
-import { getStableBarHeights } from '../../../utils/responsive';
-import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merchant';
-import type { UserCoupon } from '../../../api/coupon';
-
-type OrderCalculation = CalculateCartResponse & {
-    subtotalDisplay?: string;
-    discountDisplay?: string;
-    totalDisplay?: string;
-}
-
-type CartItemView = CartItemResponse & {
-    dish_image: string;
-    priceDisplay: string;
-    subtotalDisplay: string;
-}
-
-type CartView = CartResponse & {
-    items: CartItemView[];
-}
-
-type TableInfoView = { table_number: string; table_no?: string; merchant_name?: string };
-
-type LegacyPaymentResult = {
-    payment_info?: {
-        jsapi_params?: WechatMiniprogram.RequestPaymentOption;
-    };
-    payment: {
-        order_id: number;
-        status?: string;
-    };
-};
+import { getCart, calculateCart } from '../../../api/cart'
+import { getPublicMerchantDetail } from '../../../api/merchant'
+import { getTableDetail } from '../../../api/table'
+import { getReservationDetail } from '../../../api/reservation'
+import { createOrder } from '../../../api/order'
+import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
+import { getMyMemberships, MembershipResponse } from '../../../api/personal'
+import { formatPriceNoSymbol } from '../../../utils/util'
+import { getPublicImageUrl } from '../../../utils/image'
 
 Page({
     data: {
-        tableId: 0,
         merchantId: 0,
-        reservationId: 0,  // 预订点菜场景
+        tableId: 0,
+        reservationId: 0,
         orderType: 'dine_in' as 'dine_in' | 'reservation',
-        navBarHeight: 64,
-
-        // 订单数据
-        cart: null as CartView | null,
-        calculation: null as OrderCalculation | null,
-        tableInfo: null as TableInfoView | null,
-        merchantInfo: null as PublicMerchantDetail | null,
-        reservationInfo: null as ReservationResponse | null,
-
-        // 支付方式
-        paymentMethods: [
-            { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat' },
-            { id: 'balance', name: '储值支付', icon: 'wallet', disabled: true }
-        ],
-        selectedPaymentMethod: 'wechat_pay' as 'wechat_pay' | 'balance',
-        memberBalance: 0,  // 用户在该商户的储值余额（分）
-        memberBalanceDisplay: '0.00',  // 格式化后的余额
-        membershipId: 0,   // 会员ID（用于充值）
-        balanceInsufficient: false,  // 余额是否不足
-
-        // 优惠券
-        vouchers: [] as UserCoupon[],
-        selectedVoucher: null as UserCoupon | null,
-        voucherVisible: false,
-        voucherLoading: false,  // 优惠券加载状态（不影响主页面）
-
-        // 界面状态
+        
         loading: true,
-        submitting: false,
-
-        // 备注信息
+        merchantInfo: null as any,
+        tableInfo: null as any,
+        reservationInfo: null as any,
+        cart: null as any,
+        calculation: {
+            subtotal: 0,
+            subtotalDisplay: '0.00',
+            discount_amount: 0,
+            discountDisplay: '0.00',
+            total_amount: 0,
+            totalDisplay: '0.00',
+            applied_promotions: [] as any[]
+        },
+        
         remark: '',
-
-        // 用餐信息
+        selectedPaymentMethod: 'wechat_pay',
+        paymentMethods: [] as any[],
+        memberBalance: 0,
+        memberBalanceDisplay: '0.00',
+        membershipId: 0,
+        balanceInsufficient: false,
+        
         diningInfo: {
-            guest_count: 2  // 默认2人
+            guest_count: 2
         }
     },
 
-    onLoad(options: { table_id?: string; merchant_id?: string; order_type?: 'dine_in' | 'reservation'; reservation_id?: string }) {
-        const { table_id, merchant_id, order_type = 'dine_in', reservation_id } = options;
+    async onLoad(options: any) {
+        const merchantId = parseInt(options.merchant_id);
+        const tableId = options.table_id ? parseInt(options.table_id) : 0;
+        const reservationId = options.reservation_id ? parseInt(options.reservation_id) : 0;
+        const orderType = options.order_type || (reservationId ? 'reservation' : 'dine_in');
 
-        if (!merchant_id) {
-            wx.showToast({
-                title: '参数错误',
-                icon: 'error'
-            });
-            wx.navigateBack();
-            return;
-        }
-
-        // 预订场景需要 reservation_id，堂食场景需要 table_id
-        if (order_type === 'reservation' && !reservation_id) {
-            wx.showToast({ title: '缺少预订ID', icon: 'error' });
-            wx.navigateBack();
-            return;
-        }
-        if (order_type === 'dine_in' && !table_id) {
-            wx.showToast({ title: '缺少桌台ID', icon: 'error' });
-            wx.navigateBack();
-            return;
-        }
-
-        const { navBarHeight } = getStableBarHeights();
-        this.setData({
-            tableId: table_id ? parseInt(table_id) : 0,
-            merchantId: parseInt(merchant_id),
-            reservationId: reservation_id ? parseInt(reservation_id) : 0,
-            orderType: order_type as 'dine_in' | 'reservation',
-            navBarHeight
+        this.setData({ 
+            merchantId, 
+            tableId, 
+            reservationId, 
+            orderType 
         });
 
-        this.initPage();
+        await this.initData();
     },
 
     /**
-     * 初始化页面数据
+     * 初始化数据（SSOT：一切以 calculateCart 为准）
      */
-    async initPage() {
-        const { merchantId, orderType, tableId, reservationId } = this.data;
+    async initData() {
+        this.setData({ loading: true });
+        const { merchantId, tableId, reservationId, orderType } = this.data;
 
         try {
-            this.setData({ loading: true });
+            // 1. 获取基础信息
+            const [merchantInfo, cart] = await Promise.all([
+                getPublicMerchantDetail(merchantId),
+                getCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
+            ]);
 
-            const params = {
+            // 2. 获取计算结果 (后端自动应用最优优惠)
+            const calculationResult = await calculateCart({
                 merchant_id: merchantId,
                 order_type: orderType,
                 table_id: tableId || undefined,
                 reservation_id: reservationId || undefined
-            };
-
-            // 并行加载基本信息
-            const [cart, calculation] = await Promise.all([
-                getCart(params),
-                calculateCart(params)
-            ]);
-
-            if (!cart.items || cart.items.length === 0) {
-                wx.showModal({
-                    title: '提示',
-                    content: '购物车为空，请先选择菜品',
-                    showCancel: false,
-                    success: () => wx.navigateBack()
-                });
-                return;
-            }
-
-            // 获取商户信息
-            const merchantInfo = await getPublicMerchantDetail(merchantId);
-
-            // 获取桌台/预约信息
-            let tableNo = '';
-            let reservationInfo = null;
-            if (this.data.orderType === 'dine_in' && this.data.tableId) {
-                const tableResult = await getTableDetail(this.data.tableId);
-                tableNo = tableResult.table_no;
-            } else if (this.data.orderType === 'reservation' && this.data.reservationId) {
-                reservationInfo = await getReservationDetail(this.data.reservationId);
-                tableNo = reservationInfo.table_no || '';
-            }
-
-            // 预处理购物车数据
-            const processedItems = (cart.items || []).map(item => ({
-                ...item,
-                dish_image: getPublicImageUrl(item.image_url),
-                priceDisplay: formatPriceNoSymbol(item.unit_price || 0),
-                subtotalDisplay: formatPriceNoSymbol(item.subtotal || 0),
-                spec_text: item.spec_text || ''
-            }));
-
-            const processedCalculation = {
-                ...calculation,
-                subtotalDisplay: formatPriceNoSymbol(calculation.subtotal || 0),
-                discountDisplay: formatPriceNoSymbol(calculation.discount_amount || 0),
-                totalDisplay: formatPriceNoSymbol(calculation.total_amount || 0)
-            };
-
-            // 预处理商户信息
-            const processedMerchant = {
-                ...merchantInfo,
-                logo_url: getPublicImageUrl(merchantInfo.logo_url)
-            };
-
-            // 获取用户在该商户的储值余额
-            let memberBalance = 0;
-            let memberBalanceDisplay = '0.00';
-            let membershipId = 0;
-            try {
-                const membershipsResult = await getMyMemberships();
-                const membership = membershipsResult.memberships?.find(
-                    (m: MembershipResponse) => m.merchant_id === merchantId
-                );
-                if (membership) {
-                    memberBalance = membership.balance || 0;
-                    memberBalanceDisplay = formatPriceNoSymbol(memberBalance);
-                    membershipId = membership.id;
-                }
-            } catch (err) {
-                console.warn('获取会员余额失败:', err);
-                wx.showToast({
-                    title: err instanceof Error ? err.message : '获取会员余额失败',
-                    icon: 'none'
-                });
-            }
-            // 更新支付方式，添加余额显示
-            const paymentMethods = [
-                { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat', disabled: false },
-                {
-                    id: 'balance',
-                    name: `储值支付 (¥${memberBalanceDisplay})`,
-                    icon: 'wallet',
-                    disabled: memberBalance <= 0
-                }
-            ];
-
-            // 设置就餐人数：优先使用预订信息中的人数
-            const guestCount = reservationInfo?.guest_count || 2;
-
-            this.setData({
-                cart: { ...cart, items: processedItems },
-                calculation: processedCalculation,
-                tableInfo: { table_number: tableNo },
-                merchantInfo: processedMerchant,
-                reservationInfo,
-                memberBalance,
-                memberBalanceDisplay,
-                membershipId,
-                paymentMethods,
-                'diningInfo.guest_count': guestCount
             });
+
+            // 3. 处理会员信息
+            await this.loadMembershipInfo();
+
+            // 4. 更新 UI 数据
+            this.renderData(merchantInfo, cart, calculationResult);
 
         } catch (error) {
-            console.error('初始化页面失败:', error);
-            wx.showToast({
-                title: error instanceof Error ? error.message : '加载失败',
-                icon: 'error'
-            });
+            console.error('初始化失败:', error);
+            wx.showToast({ title: '加载失败', icon: 'error' });
         } finally {
             this.setData({ loading: false });
         }
     },
 
-    /**
-     * 支付方式变化 (t-radio-group)
-     */
-    onPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
-        const value = e.detail.value as 'wechat_pay' | 'balance'
-        const { memberBalance, calculation } = this.data;
-        
-        // 检查余额是否足够
-        const totalAmount = calculation?.total_amount || 0;
-        const balanceInsufficient = value === 'balance' && memberBalance < totalAmount;
-        
-        this.setData({
-            selectedPaymentMethod: value,
-            balanceInsufficient
-        });
-
-        // 如果余额不足，提示用户
-        if (balanceInsufficient) {
-            wx.showToast({
-                title: '余额不足，请先充值',
-                icon: 'none',
-                duration: 2000
-            });
+    async loadMembershipInfo() {
+        try {
+            const membershipsResult = await getMyMemberships();
+            const membership = membershipsResult.memberships?.find(
+                (m: MembershipResponse) => m.merchant_id === this.data.merchantId
+            );
+            if (membership) {
+                const balance = membership.balance || 0;
+                this.setData({
+                    memberBalance: balance,
+                    memberBalanceDisplay: formatPriceNoSymbol(balance),
+                    membershipId: membership.id
+                });
+            }
+        } catch (err) {
+            console.warn('获取余额失败', err);
         }
     },
 
-    /**
-     * 充值成功回调
-     */
-    async onRecharged(e: WechatMiniprogram.CustomEvent) {
-        const { amount, bonus } = e.detail as { amount: number; bonus: number };
-        const totalRecharged = amount + bonus;
-        
-        // 更新余额
-        const newBalance = this.data.memberBalance + totalRecharged;
-        const newBalanceDisplay = formatPriceNoSymbol(newBalance);
-        
-        // 更新支付方式选项
-        const totalAmount = this.data.calculation?.total_amount || 0;
-        const balanceInsufficient = newBalance < totalAmount;
-        
+    renderData(merchantInfo: any, cart: any, calculation: any) {
+        const processedCalculation = {
+            ...calculation,
+            subtotalDisplay: formatPriceNoSymbol(calculation.subtotal || 0),
+            totalDisplay: formatPriceNoSymbol(calculation.total_amount || 0),
+            applied_promotions: (calculation.applied_promotions || []).map((p: any) => ({
+                ...p,
+                amountDisplay: formatPriceNoSymbol(p.amount || 0)
+            }))
+        };
+
+        const balanceInsufficient = this.data.memberBalance < calculation.total_amount;
+
         const paymentMethods = [
             { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat', disabled: false },
-            {
-                id: 'balance',
-                name: `储值支付 (¥${newBalanceDisplay})`,
-                icon: 'wallet',
-                disabled: newBalance <= 0
+            { 
+                id: 'balance', 
+                name: `储值支付 (¥${this.data.memberBalanceDisplay})`, 
+                icon: 'wallet', 
+                disabled: this.data.memberBalance <= 0 
             }
         ];
-        
-        this.setData({
-            memberBalance: newBalance,
-            memberBalanceDisplay: newBalanceDisplay,
-            paymentMethods,
-            balanceInsufficient,
-            // 如果余额充足，切换到余额支付
-            selectedPaymentMethod: !balanceInsufficient ? 'balance' : this.data.selectedPaymentMethod
-        });
-    },
-
-    /**
-     * 领取优惠券回调
-     */
-    onClaimVoucher(e: WechatMiniprogram.CustomEvent) {
-        const { voucher } = e.detail as { voucher: { title: string; value: number } };
-        
-        wx.showToast({
-            title: `已领取${voucher.title}`,
-            icon: 'success'
-        });
-        
-        // 刷新优惠券列表
-        this.loadVouchersAsync();
-    },
-
-    /**
-     * 异步加载优惠券（不阻塞页面）
-     */
-    async loadVouchersAsync() {
-        // 延迟加载，避免影响主流程
-        setTimeout(() => {
-            this.onShowVouchers();
-        }, 500);
-    },
-
-    /**
-     * 显示优惠券选择
-     */
-    async onShowVouchers() {
-        const { merchantId, calculation } = this.data;
-
-        // 检查订单金额是否足够使用优惠券
-        if (!calculation || calculation.subtotal <= 0) {
-            wx.showToast({ title: '购物车为空', icon: 'none' });
-            return;
-        }
-
-        // 先打开弹窗，再加载数据（避免页面刷新）
-        this.setData({
-            voucherVisible: true,
-            voucherLoading: true
-        });
-
-        try {
-            const result = await CouponService.getMyCoupons({
-                status: 'available',
-                page_id: 1,
-                page_size: 50
-            });
-
-            const coupons = result?.coupons || [];
-
-            // 过滤该商户可用的优惠券
-            const availableVouchers = coupons.filter((c: UserCoupon) =>
-                c.merchant_id === merchantId || c.merchant_id === 0 // 0 表示通用券
-            );
-
-            this.setData({
-                vouchers: availableVouchers,
-                voucherLoading: false
-            });
-        } catch (error) {
-            console.error('加载优惠券失败:', error);
-            this.setData({
-                vouchers: [],
-                voucherLoading: false
-            });
-        }
-    },
-
-    /**
-     * 优惠券弹窗状态变化
-     */
-    onVoucherPopupChange(e: WechatMiniprogram.CustomEvent) {
-        if (!e.detail.visible) {
-            this.setData({ voucherVisible: false });
-        }
-    },
-
-    closeVoucherPopup() {
-        this.setData({ voucherVisible: false });
-    },
-
-    /**
-     * 取消使用优惠券
-     */
-    async onClearVoucher() {
-        this.setData({
-            selectedVoucher: null,
-            voucherVisible: false,
-            loading: true
-        });
-
-        try {
-            const params = {
-                merchant_id: this.data.merchantId,
-                order_type: this.data.orderType,
-                table_id: this.data.tableId || undefined,
-                reservation_id: this.data.reservationId || undefined
-            };
-
-            const calculation = await calculateCart(params);
-
-            this.setData({
-                calculation: {
-                    ...calculation,
-                    subtotalDisplay: formatPriceNoSymbol(calculation.subtotal || 0),
-                    discountDisplay: formatPriceNoSymbol(calculation.discount_amount || 0),
-                    totalDisplay: formatPriceNoSymbol(calculation.total_amount || 0)
-                }
-            });
-        } catch (error) {
-            console.error('重新计算金额失败:', error);
-        } finally {
-            this.setData({ loading: false });
-        }
-    },
-
-    async onSelectVoucher(e: WechatMiniprogram.CustomEvent) {
-        const { voucher } = e.currentTarget.dataset as { voucher?: UserCoupon };
-        if (!voucher) return;
 
         this.setData({
-            selectedVoucher: voucher,
-            voucherVisible: false,
-            loading: true
-        });
-
-        try {
-            // 重新计算金额
-            const params = {
-                merchant_id: this.data.merchantId,
-                order_type: this.data.orderType,
-                table_id: this.data.tableId || undefined,
-                reservation_id: this.data.reservationId || undefined,
-                voucher_id: voucher.id
-            };
-
-            const calculation = await calculateCart(params);
-
-            this.setData({
-                calculation: {
-                    ...calculation,
-                    subtotalDisplay: formatPriceNoSymbol(calculation.subtotal || 0),
-                    discountDisplay: formatPriceNoSymbol(calculation.discount_amount || 0),
-                    totalDisplay: formatPriceNoSymbol(calculation.total_amount || 0)
-                }
-            });
-        } catch (error) {
-            console.error('计算优惠失败:', error);
-        } finally {
-            this.setData({ loading: false });
-        }
-    },
-
-    /**
-     * 备注输入 (t-textarea)
-     */
-    onRemarkChange(e: WechatMiniprogram.CustomEvent) {
-        this.setData({
-            remark: e.detail.value
-        });
-    },
-
-    /**
-     * 用餐人数变化 (t-stepper)
-     */
-    onGuestCountChange(e: WechatMiniprogram.CustomEvent) {
-        this.setData({
-            'diningInfo.guest_count': e.detail.value
-        });
-    },
-
-    /**
-     * 提交订单
-     */
-    async onSubmitOrder() {
-        const {
+            merchantInfo: { ...merchantInfo, logo_url: getPublicImageUrl(merchantInfo.logo_url) },
             cart,
-            calculation,
-            tableId,
-            merchantId,
-            orderType,
-            selectedPaymentMethod,
-            remark,
-            diningInfo,
-            submitting
-        } = this.data;
+            calculation: processedCalculation,
+            balanceInsufficient,
+            paymentMethods,
+            selectedPaymentMethod: balanceInsufficient ? 'wechat_pay' : this.data.selectedPaymentMethod
+        });
+    },
 
-        if (submitting) return;
+    onPaymentMethodChange(e: any) {
+        this.setData({ selectedPaymentMethod: e.detail.value });
+    },
 
-        if (!cart || !cart.items || cart.items.length === 0) {
-            wx.showToast({
-                title: '购物车为空',
-                icon: 'error'
-            });
-            return;
-        }
+    onRemarkChange(e: any) {
+        this.setData({ remark: e.detail.value });
+    },
 
-        // 余额支付时检查余额是否充足
-        if (selectedPaymentMethod === 'balance') {
-            const totalAmount = calculation?.total_amount || 0;
-            if (this.data.memberBalance < totalAmount) {
-                this.setData({ balanceInsufficient: true });
-                wx.showToast({
-                    title: '余额不足，请先充值或更换支付方式',
-                    icon: 'none',
-                    duration: 2500
-                });
-                return;
-            }
-        }
+    onRecharged() {
+        this.initData(); // 重新初始化，自动刷新余额和计算结果
+    },
+
+    onVoucherClaimed() {
+        this.initData(); // 重新初始化，自动应用新领的券
+    },
+
+    async onSubmit() {
+        if (this.data.loading) return;
+        this.setData({ loading: true });
+
+        const { merchantId, orderType, tableId, reservationId, selectedPaymentMethod, remark } = this.data;
 
         try {
-            this.setData({ submitting: true });
-
-            // 创建订单
-            const items: OrderItemRequest[] = cart.items.map((item) => ({
-                dish_id: item.dish_id,
-                combo_id: item.combo_id,
-                quantity: item.quantity,
-                customizations: item.customizations as Record<string, number | string> | undefined
-            }));
-
-            const orderData: CreateOrderRequest = {
+            const order = await createOrder({
                 merchant_id: merchantId,
                 order_type: orderType,
-                items,
+                table_id: tableId || undefined,
+                reservation_id: reservationId || undefined,
                 notes: remark,
-                user_voucher_id: this.data.selectedVoucher?.id,
-                use_balance: selectedPaymentMethod === 'balance'
-            };
-
-            // 堂食场景传 table_id，预订场景传 reservation_id
-            if (orderType === 'dine_in') {
-                orderData.table_id = tableId;
-            } else if (orderType === 'reservation') {
-                orderData.reservation_id = this.data.reservationId;
-            }
-
-            const order = await createOrder(orderData);
-
-            // 创建支付
-            await this.doCreatePayment(order.id, calculation!.total_amount, selectedPaymentMethod);
-
-        } catch (error: unknown) {
-            console.error('提交订单失败:', error);
-            wx.showToast({
-                title: error instanceof Error ? error.message : '提交失败',
-                icon: 'error'
+                use_balance: selectedPaymentMethod === 'balance',
+                items: [] // 购物车已经在后端，前端传空即可（符合后端逻辑）
             });
-        } finally {
-            this.setData({ submitting: false });
+
+            await this.handlePayment(order.id);
+
+        } catch (error: any) {
+            wx.showToast({ title: error.message || '下单失败', icon: 'error' });
+            this.setData({ loading: false });
         }
     },
 
-    /**
-     * 创建支付
-     */
-    async doCreatePayment(orderId: number, _amount: number, paymentMethod: 'wechat_pay' | 'balance') {
+    async handlePayment(orderId: number) {
         try {
-            if (paymentMethod === 'wechat_pay') {
-                // 创建支付订单
-                const paymentResult = await createPayment({
-                    order_id: orderId,
-                    payment_type: 'miniprogram',
-                    business_type: 'order'
-                });
-
-                // 调起微信支付
-                if (paymentResult.pay_params) {
-                    await invokeWechatPay(paymentResult.pay_params);
-                    this.handlePaymentSuccess();
-                } else {
-                    throw new Error('支付参数缺失');
-                }
-            } else if (paymentMethod === 'balance') {
-                // 余额支付通过创建订单时的 use_balance 参数处理
-                this.handlePaymentSuccess();
-            } else {
-                throw new Error('不支持的支付方式');
+            const payment = await createOrderPayment(orderId);
+            if (payment.pay_params) {
+                await invokeWechatPay(payment.pay_params);
             }
-        } catch (error: unknown) {
-            console.error('创建支付失败:', error);
-            throw error;
+            wx.showToast({ title: '支付成功', icon: 'success' });
+            setTimeout(() => {
+                wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` });
+            }, 1000);
+        } catch (error) {
+            console.error('支付失败', error);
+            wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` });
         }
-    },
-
-    /**
-     * 支付成功处理
-     */
-    handlePaymentSuccess() {
-        wx.showToast({ title: '支付成功', icon: 'success' });
-        setTimeout(() => {
-            wx.redirectTo({
-                url: '/pages/orders/list/index?tab=dine_in'
-            });
-        }, 1500);
-    },
-
-    /**
-     * 处理微信支付
-     */
-    async handleWechatPay(paymentResult: LegacyPaymentResult) {
-        const { payment_info } = paymentResult;
-
-        if (payment_info?.jsapi_params) {
-            // 调用微信支付
-            wx.requestPayment({
-                ...payment_info.jsapi_params,
-                success: () => {
-                    this.onPaymentSuccess(paymentResult.payment);
-                },
-                fail: (error: unknown) => {
-                    console.error('微信支付失败:', error);
-                    wx.showToast({
-                        title: '支付失败',
-                        icon: 'error'
-                    });
-                }
-            });
-        } else {
-            throw new Error('微信支付参数错误');
-        }
-    },
-
-    /**
-     * 处理支付宝支付
-     */
-    async handleAlipay(_paymentResult: LegacyPaymentResult) {
-        // 支付宝支付逻辑
-        // 这里需要根据实际的支付宝SDK实现
-        wx.showToast({
-            title: '支付宝支付暂未开放',
-            icon: 'none'
-        });
-    },
-
-    /**
-     * 处理余额支付
-     */
-    async handleBalancePay(paymentResult: LegacyPaymentResult) {
-        // 余额支付通常是同步的
-        if (paymentResult.payment.status === 'paid') {
-            this.onPaymentSuccess(paymentResult.payment);
-        } else {
-            throw new Error('余额不足');
-        }
-    },
-
-    /**
-     * 支付成功处理
-     */
-    onPaymentSuccess(payment: { order_id: number }) {
-        const { calculation, tableInfo } = this.data;
-
-        wx.showToast({
-            title: '支付成功',
-            icon: 'success'
-        });
-
-        // 跳转到支付成功页面
-        setTimeout(() => {
-            wx.redirectTo({
-                url: `/pages/dine-in/payment-success/payment-success?order_id=${payment.order_id}&amount=${calculation?.total_amount}&merchant_name=${encodeURIComponent(tableInfo?.merchant_name || '')}&table_number=${tableInfo?.table_number}`
-            });
-        }, 1500);
-    },
-
-    /**
-     * 返回菜单
-     */
-    backToMenu() {
-        wx.navigateBack();
-    },
-
-    /**
-     * 查看订单详情
-     */
-    viewOrderDetail() {
-        // 如果有正在处理的订单，跳转到订单详情
-        wx.navigateTo({
-            url: '/pages/order/list/list?type=dine_in'
-        });
     }
 });

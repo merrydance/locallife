@@ -101,6 +101,16 @@
   margin-bottom: var(--spacer-sm);
 }
 
+.payment-section {
+  padding: var(--spacer-sm) 0;
+}
+
+.balance-note {
+  font-size: 22rpx;
+  color: #999;
+  margin-top: 4rpx;
+}
+
 /* 配送时间 */
 .eta-row {
   padding: var(--spacer-sm);
@@ -218,14 +228,54 @@
 }
 
 .cost-row.total {
-  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
   margin-top: var(--spacer-sm);
   padding-top: var(--spacer-sm);
+  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
 }
 
 .cost-row.total .cost-label {
   font-weight: bold;
   color: var(--td-text-color-primary);
+}
+
+.cost-divider {
+  height: 1rpx;
+  background-color: var(--td-bg-color-secondarycontainer);
+  margin: var(--spacer-sm) 0;
+}
+
+.total-row-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total-label {
+  font-size: var(--font-size-heading);
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+}
+
+.total-price-group {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacer-xs);
+}
+
+.old-price {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+  text-decoration: line-through;
+}
+
+.new-price {
+  font-size: var(--font-size-heading);
+  font-weight: bold;
+  color: var(--td-brand-color);
+}
+
+.status-red {
+  color: var(--td-error-color) !important;
 }
 
 .cost-row.total .cost-value {

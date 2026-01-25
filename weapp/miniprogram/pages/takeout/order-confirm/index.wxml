@@ -98,10 +98,50 @@
           <text class="cost-label">配送费</text>
           <text class="cost-value">{{item.deliveryFeeDisplay}}</text>
         </view>
-        <view class="cost-row total">
-          <text class="cost-label">小计</text>
-          <text class="cost-value">¥{{item.orderTotalDisplay}}</text>
+        <view class="cost-row" wx:for="{{item.appliedPromotions}}" wx:key="title" wx:for-item="promo">
+          <text class="cost-label status-red">{{promo.title}}</text>
+          <text class="cost-value status-red">-¥{{promo.amountDisplay}}</text>
         </view>
+        <view class="cost-divider"></view>
+        <view class="cost-row total-row-main">
+          <text class="total-label">小计</text>
+          <view class="total-price-group">
+            <text class="old-price" wx:if="{{item.hasDiscount}}">¥{{item.originalTotalDisplay}}</text>
+            <text class="new-price">¥{{item.orderTotalDisplay}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 支付方式 (仅在单商户或特定逻辑下展示，这里演示为每个商户可单独选，但因最终不支持合单支付，我们主要服务单商户场景) -->
+      <view class="module-section payment-section" wx:if="{{carts.length === 1}}">
+        <view class="section-title">支付方式</view>
+        <t-radio-group value="{{selectedPaymentMethod}}" bind:change="onPaymentMethodChange">
+          <t-radio value="wechat" label="微信支付" icon="circle">
+            <t-icon name="logo-wechat" size="40rpx" color="#07C160" slot="icon" />
+          </t-radio>
+          <t-radio value="balance" label="余额支付" icon="circle" disabled="{{!memberBalances[item.merchantId] || memberBalances[item.merchantId] <= 0}}">
+            <view slot="label" style="display: flex; flex-direction: column;">
+              <view style="display: flex; align-items: center; gap: 8rpx;">
+                <text>余额支付</text>
+                <t-tag wx:if="{{memberBalances[item.merchantId] > 0 && memberBalances[item.merchantId] < item.orderTotal}}" size="extra-small" theme="warning" variant="light">余额不足以全抵</t-tag>
+              </view>
+              <text class="balance-note" wx:if="{{memberBalanceDisplays[item.merchantId]}}">可用余额: ¥{{memberBalanceDisplays[item.merchantId]}}</text>
+              <text class="balance-note" wx:else>未加入会员或无余额</text>
+            </view>
+            <t-icon name="wallet" size="40rpx" color="{{(!memberBalances[item.merchantId] || memberBalances[item.merchantId] <= 0) ? '#ccc' : '#FF6B00'}}" slot="icon" />
+          </t-radio>
+        </t-radio-group>
+      </view>
+
+      <!-- 商户优惠活动 -->
+      <view class="module-section">
+        <merchant-promos 
+          merchantId="{{item.merchantId}}"
+          membershipId="{{membershipIds[item.merchantId]}}"
+          currentBalance="{{memberBalances[item.merchantId]}}"
+          bind:recharged="onRecharged"
+          bind:voucherClaimed="onVoucherClaimed"
+        />
       </view>
     </view>
   </block>

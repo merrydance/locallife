@@ -863,7 +863,9 @@ type calculateCartResponse struct {
 	// 实付金额（分）
 	TotalAmount int64 `json:"total_amount"`
 	// 优惠说明
-	DiscountInfo string `json:"discount_info"`
+	DiscountInfo string `json:"discount_info,omitempty"`
+	// 已应用的优惠明细
+	AppliedPromotions []AppliedPromotion `json:"applied_promotions,omitempty"`
 	// 最小起送金额（分），0表示无限制
 	MinOrderAmount int64 `json:"min_order_amount"`
 	// 是否满足起送金额
@@ -1038,7 +1040,6 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 
 	// 计算配送费（如果提供了地址或坐标）
 	var deliveryFee int64
-	var deliveryFeeDiscount int64
 	var deliveryDistance int32
 	var routeDurationSec int
 	var eta DeliveryETAResult
@@ -1074,7 +1075,6 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		)
 		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
 			deliveryFee = feeResult.FinalFee
-			deliveryFeeDiscount = feeResult.PromotionDiscount
 			routeDurationSec = routeResult.Duration
 		}
 	} else if req.Latitude != nil && req.Longitude != nil {
@@ -1104,71 +1104,49 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		)
 		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
 			deliveryFee = feeResult.FinalFee
-			deliveryFeeDiscount = feeResult.PromotionDiscount
 			routeDurationSec = routeResult.Duration
 		}
 	}
 
-	// 计算预计送达时间：出餐 + 骑手到店 + 店到用户 + 缓冲（封装为 helper 复用）
+	// 计算预计送达时间：出餐 + 骑手到店 + 店到用户 + 缓冲
 	eta = server.computeDeliveryETA(ctx, merchant.ID, deliveryDistance, routeDurationSec)
 
-	// 计算优惠券减免（如果提供了优惠券）
-	var discountAmount int64
-	var discountInfo string
-	if req.VoucherID != nil {
-		voucher, err := server.store.GetUserVoucher(ctx, *req.VoucherID)
-		if err == nil && voucher.UserID == authPayload.UserID && voucher.Status == "unused" {
-			now := time.Now()
-			if now.After(voucher.ExpiresAt) {
-				discountInfo = "优惠券已过期"
-			} else if len(voucher.AllowedOrderTypes) > 0 && !containsString(voucher.AllowedOrderTypes, req.OrderType) {
-				discountInfo = "优惠券不适用于该订单类型"
-			} else if voucher.MerchantID == req.MerchantID && subtotal >= voucher.MinOrderAmount {
-				discountAmount = voucher.Amount
-				discountInfo = voucher.Name
-			} else if subtotal < voucher.MinOrderAmount {
-				discountInfo = "未达到优惠券使用门槛"
-			} else {
-				discountInfo = "优惠券不适用于该商户"
-			}
-		} else {
-			discountInfo = "优惠券不可用"
-		}
-	}
-
-	totalAmount := subtotal + deliveryFee - deliveryFeeDiscount - discountAmount
-	if totalAmount < 0 {
-		totalAmount = 0
+	// 使用统一优惠引擎计算最终价格
+	calcResult, err := server.CalculateFinalPrice(ctx, OrderContext{
+		MerchantID:  merchant.ID,
+		UserID:      authPayload.UserID,
+		OrderType:   req.OrderType,
+		Subtotal:    subtotal,
+		VoucherID:   req.VoucherID,
+		DeliveryFee: deliveryFee,
+		Distance:    deliveryDistance,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("calculate final price: %w", err)))
+		return
 	}
 
 	log.Info().
 		Int64("merchant_id", req.MerchantID).
 		Str("order_type", req.OrderType).
 		Int32("delivery_distance", deliveryDistance).
-		Int64("delivery_fee", deliveryFee).
-		Int64("delivery_fee_discount", deliveryFeeDiscount).
-		Int32("delivery_eta_minutes", eta.DeliveryEtaMinutes).
-		Int32("prepare_minutes", eta.PrepareMinutes).
-		Int32("rider_to_store_minutes", eta.RiderToStoreMinutes).
-		Int32("store_to_user_minutes", eta.StoreToUserMinutes).
-		Int32("buffer_minutes", eta.BufferMinutes).
-		Int64("subtotal", subtotal).
-		Int64("total_amount", totalAmount).
-		Msg("calculateCart result")
+		Int64("total_amount", calcResult.TotalAmount).
+		Msg("calculateCart result from engine")
 
 	ctx.JSON(http.StatusOK, calculateCartResponse{
-		Subtotal:            subtotal,
-		DeliveryFee:         deliveryFee,
-		DeliveryFeeDiscount: deliveryFeeDiscount,
+		Subtotal:            calcResult.Subtotal,
+		DeliveryFee:         calcResult.DeliveryFee,
+		DeliveryFeeDiscount: calcResult.DeliveryFeeDiscount,
 		DeliveryDistance:    deliveryDistance,
 		DeliveryEtaMinutes:  eta.DeliveryEtaMinutes,
 		PrepareMinutes:      eta.PrepareMinutes,
 		RiderToStoreMinutes: eta.RiderToStoreMinutes,
 		StoreToUserMinutes:  eta.StoreToUserMinutes,
 		BufferMinutes:       eta.BufferMinutes,
-		DiscountAmount:      discountAmount,
-		TotalAmount:         totalAmount,
-		DiscountInfo:        discountInfo,
+		DiscountAmount:      calcResult.VoucherDiscount + calcResult.MerchantDiscount,
+		TotalAmount:         calcResult.TotalAmount,
+		DiscountInfo:        "", // 具体的明细已在 AppliedPromotions 中
+		AppliedPromotions:   calcResult.AppliedPromotions,
 		MinOrderAmount:      minOrderAmount,
 		MeetsMinOrder:       meetsMinOrder,
 	})

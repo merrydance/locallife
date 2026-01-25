@@ -1,131 +1,48 @@
-<!--商户优惠中心组件 - 展示所有优惠活动-->
-<view class="merchant-promos" wx:if="{{visible}}">
-  <!-- 加载中 -->
-  <view wx:if="{{loading}}" class="promo-loading">
-    <t-loading theme="circular" size="32rpx" text="加载优惠中..." />
+<!-- 商户优惠信息展示与充值入口 -->
+<view class="promo-center" wx:if="{{hasPromos}}">
+  <!-- 商户通用规则展示 (展示为主) -->
+  <view class="rules-section" wx:if="{{discountRules.length > 0 || deliveryFeeRules.length > 0}}">
+    <view class="rule-item" wx:for="{{discountRules}}" wx:key="title">
+      <text class="rule-badge discount">减</text>
+      <text class="rule-text">{{item.title}}</text>
+    </view>
+    <view class="rule-item" wx:for="{{deliveryFeeRules}}" wx:key="title">
+      <text class="rule-badge delivery">配</text>
+      <text class="rule-text">{{item.title}}</text>
+    </view>
   </view>
 
-  <!-- 有活动时展示 -->
-  <view wx:elif="{{hasPromos}}" class="promo-content">
-    <view class="promo-header">
-      <t-icon name="discount" size="36rpx" color="#FF6B00" />
-      <text class="promo-title">优惠活动</text>
-      <t-tag theme="warning" variant="light" size="small">{{totalCount}}个活动</t-tag>
+  <!-- 待领券展示 (展示为主，可点击快速领取) -->
+  <view class="vouchers-section" wx:if="{{vouchers.length > 0}}">
+    <view class="v-label">可用优惠券</view>
+    <view class="v-list">
+      <view class="v-item" wx:for="{{vouchers}}" wx:key="title" bindtap="onClaim" data-id="{{item.rule_id}}">
+        <text class="v-val">¥{{item.valueDisplay}}</text>
+        <text class="v-btn">领</text>
+      </view>
     </view>
+  </view>
 
-    <!-- 满减活动（自动应用最优） -->
-    <view wx:if="{{discountRules.length > 0}}" class="promo-section">
-      <view class="section-label">
-        <t-icon name="gift" size="28rpx" color="#0052D9" />
-        <text>满减优惠</text>
-        <text class="auto-apply-hint">自动应用</text>
-      </view>
-      <scroll-view scroll-x class="promo-scroll">
-        <view class="promo-tags">
-          <view 
-            wx:for="{{discountRules}}" 
-            wx:key="title" 
-            class="promo-tag discount"
-          >
-            <text class="tag-main">{{item.title}}</text>
-          </view>
-        </view>
-      </scroll-view>
+  <!-- 充值入口 (唯一复杂交互) -->
+  <view class="recharge-section" wx:if="{{rechargeRules.length > 0}}">
+    <view class="recharge-header">
+      <text class="r-title">会员充值奖励</text>
+      <t-tag wx:if="{{currentBalance < orderTotal}}" size="extra-small" theme="danger" variant="light">当前余额 ¥{{balanceDisplay}}，不足以支付</t-tag>
     </view>
-
-    <!-- 配送优惠 -->
-    <view wx:if="{{deliveryFeeRules.length > 0}}" class="promo-section">
-      <view class="section-label">
-        <t-icon name="deliver" size="28rpx" color="#07C160" />
-        <text>配送优惠</text>
-      </view>
-      <scroll-view scroll-x class="promo-scroll">
-        <view class="promo-tags">
-          <view 
-            wx:for="{{deliveryFeeRules}}" 
-            wx:key="title" 
-            class="promo-tag delivery"
-          >
-            <text class="tag-main">{{item.title}}</text>
-          </view>
-        </view>
-      </scroll-view>
-    </view>
-
-    <!-- 可领优惠券 -->
-    <view wx:if="{{vouchers.length > 0}}" class="promo-section">
-      <view class="section-label">
-        <t-icon name="coupon" size="28rpx" color="#E34D59" />
-        <text>领券中心</text>
-        <text class="click-hint">点击领取</text>
-      </view>
-      <scroll-view scroll-x class="promo-scroll">
-        <view class="promo-tags">
-          <view 
-            wx:for="{{vouchers}}" 
-            wx:key="title" 
-            class="promo-tag voucher"
-            bind:tap="onClaimVoucher"
-            data-voucher="{{item}}"
-          >
-            <text class="tag-amount">¥{{item.valueDisplay}}</text>
-            <text class="tag-condition">满{{item.minAmountDisplay}}可用</text>
-            <text class="claim-btn">领取</text>
-          </view>
-        </view>
-      </scroll-view>
-    </view>
-
-    <!-- 充值活动 -->
-    <view wx:if="{{rechargeRules.length > 0}}" class="promo-section recharge-section">
-      <view class="section-label">
-        <t-icon name="wallet" size="28rpx" color="#FF6B00" />
-        <text>储值有礼</text>
-        <t-tag wx:if="{{showInsufficientTip}}" theme="danger" variant="light" size="small">余额不足</t-tag>
-      </view>
-      
-      <view class="recharge-list">
-        <view 
-          wx:for="{{rechargeRules}}" 
-          wx:key="rule_id" 
-          class="recharge-item {{selectedRechargeId === item.rule_id ? 'selected' : ''}}"
-          bind:tap="onSelectRecharge"
-          data-rule="{{item}}"
-        >
-          <view class="recharge-amount">
-            <text class="amount-main">充{{item.rechargeDisplay}}</text>
-            <text class="amount-bonus">送{{item.bonusDisplay}}</text>
-          </view>
-          <view class="recharge-total">
-            <text class="total-label">到账</text>
-            <text class="total-amount">¥{{item.totalDisplay}}</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 余额不足提示 -->
-      <view wx:if="{{showInsufficientTip}}" class="insufficient-tip">
-        <t-icon name="error-circle" size="28rpx" color="#FA5151" />
-        <text>余额不足以支付本单，请先充值或选择其他支付方式</text>
-      </view>
-
-      <t-button 
-        theme="primary" 
-        size="medium" 
-        shape="round"
-        class="recharge-btn"
-        bind:tap="onRecharge"
-        loading="{{recharging}}"
-        disabled="{{!selectedRechargeId}}"
+    <view class="recharge-grid">
+      <view 
+        wx:for="{{rechargeRules}}" 
+        wx:key="rule_id"
+        class="recharge-box {{selectedRechargeId === item.rule_id ? 'active' : ''}}"
+        bindtap="onSelectRecharge"
+        data-rule="{{item}}"
       >
-        {{selectedRechargeId ? '立即充值 ¥' + selectedRechargeDisplay : '选择充值金额'}}
-      </t-button>
+        <text class="rb-main">充{{item.rechargeDisplay}}</text>
+        <text class="rb-sub">送{{item.bonusDisplay}}</text>
+      </view>
     </view>
-  </view>
-
-  <!-- 无活动时展示友好提示 -->
-  <view wx:elif="{{!loading && !hasPromos}}" class="promo-empty">
-    <t-icon name="discount" size="40rpx" color="#CCCCCC" />
-    <text class="empty-text">当前暂无优惠活动</text>
+    <t-button block theme="primary" size="medium" shape="round" class="pay-btn" bindtap="onRecharge" loading="{{recharging}}">
+      {{selectedRechargeId ? '立即充值 ¥' + selectedRechargeDisplay : '选择充值金额'}}
+    </t-button>
   </view>
 </view>

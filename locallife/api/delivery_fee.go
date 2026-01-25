@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -1014,7 +1015,7 @@ var (
 
 // calculateDeliveryFeeInternal 内部运费计算方法，供其他模块调用
 // 此方法会自动获取配置，如果配置不存在则使用默认值
-func (server *Server) calculateDeliveryFeeInternal(ctx *gin.Context, regionID, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
+func (server *Server) calculateDeliveryFeeInternal(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
 	// 获取基础运费配置
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, regionID)
 	if err != nil {
@@ -1041,7 +1042,7 @@ func (server *Server) calculateDeliveryFeeInternal(ctx *gin.Context, regionID, m
 }
 
 // calculateDeliveryFeeWithConfig 使用预取配置计算运费的核心方法
-func (server *Server) calculateDeliveryFeeWithConfig(ctx *gin.Context, config *db.DeliveryFeeConfig, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
+func (server *Server) calculateDeliveryFeeWithConfig(ctx context.Context, config *db.DeliveryFeeConfig, merchantID int64, distance int32, orderAmount int64) (*DeliveryFeeResult, error) {
 	regionID := config.RegionID
 
 	// 1. 计算基础运费
