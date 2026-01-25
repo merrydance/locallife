@@ -42,6 +42,9 @@
       "name": "register",
       "pages": [
         "merchant/index",
+        "merchant/store/index",
+        "merchant/group/index",
+        "merchant/join-group/index",
         "rider/index",
         "operator/index"
       ],

@@ -1,0 +1,153 @@
+<custom-navbar title="餐厅入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
+  
+  <!-- 步骤条 (Step 0 不显示) -->
+  <view class="steps-container" wx:if="{{currentStep > 0}}">
+    <t-steps current="{{currentStep - 1}}" bind:change="onStepChange">
+      <t-step-item title="上传" />
+      <t-step-item title="信息" />
+      <t-step-item title="位置" />
+      <t-step-item title="审核" />
+    </t-steps>
+  </view>
+
+  <view class="form-container">
+    
+    <!-- Step 0: 介绍页 -->
+    <view class="step-content" wx:if="{{currentStep === 0}}">
+        <view class="intro-card">
+            <view class="intro-title">欢迎，入驻成功您可以得到：</view>
+            <view class="intro-text">
+                <view>免费的餐厅数字化系统。</view>
+                <view>封顶 5% 技术服务费仅对外卖和预定订单收取。</view>
+                <view>堂食订单不收技术服务费。</view>
+                <view>无其他隐形费用。</view>
+                <view class="highlight">平台把利润留给餐厅，餐厅把品质给顾客。</view>
+            </view>
+        </view>
+    </view>
+
+    <!-- Step 1: 证照上传 -->
+    <view class="step-content" wx:if="{{currentStep === 1}}">
+        <view class="section-header">证照上传 (自动识别)</view>
+        <view class="upload-group">
+            <view class="upload-item">
+                <view class="upload-label">营业执照 (必传)</view>
+                <document-uploader type="license" title="点击上传营业执照" value="{{licenseImages.length > 0 ? licenseImages[0].url : ''}}" rawUrl="{{licenseImages.length > 0 ? licenseImages[0].rawUrl : ''}}" bind:change="onLicenseUpload" bind:remove="onLicenseRemove" bind:imageerror="onImageError" />
+            </view>
+            <view class="upload-item">
+                <view class="upload-label">食品经营许可证 (必传)</view>
+                <document-uploader type="permit" title="点击上传许可证" value="{{foodLicenseImages.length > 0 ? foodLicenseImages[0].url : ''}}" rawUrl="{{foodLicenseImages.length > 0 ? foodLicenseImages[0].rawUrl : ''}}" bind:change="onFoodLicenseUpload" bind:remove="onFoodLicenseRemove" bind:imageerror="onImageError" />
+            </view>
+        </view>
+        <view class="upload-group">
+            <view class="upload-item">
+                <view class="upload-label">法人身份证正面 (必传)</view>
+                <document-uploader type="id-front" title="上传人像页" value="{{idCardFrontImages.length > 0 ? idCardFrontImages[0].url : ''}}" rawUrl="{{idCardFrontImages.length > 0 ? idCardFrontImages[0].rawUrl : ''}}" bind:change="onIdCardFrontUpload" bind:remove="onIdCardFrontRemove" bind:imageerror="onImageError" />
+            </view>
+            <view class="upload-item">
+                <view class="upload-label">法人身份证反面 (必传)</view>
+                <document-uploader type="id-back" title="上传国徽页" value="{{idCardBackImages.length > 0 ? idCardBackImages[0].url : ''}}" rawUrl="{{idCardBackImages.length > 0 ? idCardBackImages[0].rawUrl : ''}}" bind:change="onIdCardBackUpload" bind:remove="onIdCardBackRemove" bind:imageerror="onImageError" />
+            </view>
+        </view>
+    </view>
+
+    <!-- Step 2: 信息确认 (OCR 识别结果，只读) -->
+    <view class="step-content" wx:if="{{currentStep === 2}}">
+        <view class="section-header">证照信息 (OCR识别)</view>
+        <view class="form-group readonly-group">
+            <t-cell title="营业执照名" note="{{formData.licenseName || '待识别'}}" />
+            <t-cell title="统一信用代码" note="{{formData.creditCode || '待识别'}}" />
+            <t-cell title="注册地址" note="{{formData.registerAddress || '待识别'}}" />
+            <t-cell title="营业期限" note="{{formData.licenseValidity || '待识别'}}" />
+            <view class="scope-cell">
+                <view class="scope-label">经营范围</view>
+                <view class="scope-content">{{formData.businessScope || '待识别'}}</view>
+            </view>
+            <t-cell title="许可证有效期" note="{{formData.foodLicenseValidity || '待识别'}}" />
+        </view>
+
+        <view class="section-header">法人信息 (OCR识别)</view>
+        <view class="form-group readonly-group">
+            <t-cell title="法人姓名" note="{{formData.legalPerson || '待识别'}}" />
+            <t-cell title="身份证号" note="{{formData.idCard || '待识别'}}" />
+            <t-cell title="身份证有效期" note="{{formData.idCardValidity || '待识别'}}" />
+        </view>
+        
+        <view class="section-header">基本信息 (可编辑)</view>
+        <view class="form-group">
+            <t-input label="店铺名称" layout="vertical" placeholder="请输入店铺展示名" value="{{formData.name}}" bindchange="onNameInput" bindblur="onFieldBlur" data-field="name" />
+            <t-input label="联系电话" type="number" layout="vertical" placeholder="请输入联系电话" value="{{formData.phone}}" bindchange="onPhoneInput" bindblur="onFieldBlur" data-field="phone" />
+        </view>
+    </view>
+
+    <!-- Step 3: 位置与图片 -->
+    <view class="step-content" wx:if="{{currentStep === 3}}">
+        <view class="section-header">店铺位置</view>
+        <view class="form-group">
+             <view class="external-field">
+                <view class="custom-label-row">
+                   <text class="external-label">店铺地址</text>
+                   <t-button theme="primary" variant="text" size="small" icon="location" bindtap="onChooseAddress">选择位置</t-button>
+                </view>
+                <t-textarea placeholder="请选择或输入店铺地址" value="{{formData.address}}" autosize bindchange="onAddressInput" bindblur="onFieldBlur" data-field="address" />
+             </view>
+        </view>
+        
+        <view class="section-header">门头照 (最多3张)</view>
+        <view class="upload-container">
+            <t-upload mediaType="{{['image']}}" max="{{3}}" files="{{storefrontImages || []}}" bind:add="onStorefrontImageUpload" bind:remove="onStorefrontImageRemove" />
+            <view class="upload-tip">请上传店铺门头清晰照片</view>
+        </view>
+        <view class="section-header">环境照 (最多5张)</view>
+        <view class="upload-container">
+            <t-upload mediaType="{{['image']}}" max="{{5}}" files="{{environmentImages || []}}" bind:add="onEnvironmentImageUpload" bind:remove="onEnvironmentImageRemove" />
+            <view class="upload-tip">请上传店内环境照片</view>
+        </view>
+    </view>
+
+    <!-- Step 4: 预览提交 -->
+    <view class="step-content" wx:if="{{currentStep === 4}}">
+         <view class="review-title">请确认以下信息</view>
+         <view class="form-group">
+             <t-cell title="店铺名称" note="{{formData.name}}" />
+             <t-cell title="联系电话" note="{{formData.phone}}" />
+             <t-cell title="店铺地址" note="{{formData.address}}" />
+             <t-cell title="法人姓名" note="{{formData.legalPerson}}" />
+         </view>
+         <view class="review-tips">提交后将进入审核流程。</view>
+    </view>
+
+    <!-- Step 5: 提交后轮询 -->
+    <view class="step-content" wx:if="{{currentStep === 5}}">
+        <view class="polling-container">
+             <t-loading theme="circular" size="80rpx" text="正在提交并审核..." layout="vertical" />
+             <view class="polling-text">请稍候，系统正在处理您的入驻申请</view>
+             <view class="polling-tips">预计需要 5-10 秒</view>
+        </view>
+    </view>
+
+  </view>
+
+  <!-- 底部操作栏 -->
+  <view class="submit-bar">
+    <block wx:if="{{currentStep === 0}}">
+         <t-button class="submit-btn" theme="primary" size="large" bindtap="nextStep">开始入驻</t-button>
+    </block>
+    <block wx:if="{{currentStep > 0 && currentStep < 4}}">
+         <view class="btn-row">
+            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep">上一步</t-button>
+            <t-button class="half-btn" theme="primary" size="large" bindtap="nextStep">下一步</t-button>
+         </view>
+    </block>
+    <block wx:if="{{currentStep === 4}}">
+         <view class="btn-row">
+            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep" disabled="{{isSubmitting}}">上一步</t-button>
+            <t-button class="half-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">提交入驻</t-button>
+         </view>
+    </block>
+  </view>
+</view>
+
+
