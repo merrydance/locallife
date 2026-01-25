@@ -4,7 +4,6 @@
     "pages/reservation/index",
     "pages/user_center/index",
     "pages/dining/index",
-    "pages/credit/index",
     "pages/user/bind-merchant/index"
   ],
   "subPackages": [
@@ -105,7 +104,6 @@
     { "root": "pages/reservation/room-detail", "pages": ["index"] },
     { "root": "pages/user_center/addresses", "pages": ["index", "edit/index"] },
     { "root": "pages/user_center/coupons", "pages": ["index"] },
-    { "root": "pages/user_center/credit", "pages": ["index"] },
     { "root": "pages/user_center/favorites", "pages": ["index"] },
     { "root": "pages/user_center/membership", "pages": ["index"] },
     { "root": "pages/user_center/reviews", "pages": ["index", "create/index"] },

@@ -55,9 +55,9 @@ Page({
     userRole: 'guest' as 'guest' | 'merchant' | 'rider' | 'operator',
     workbenches: [] as Array<{ id: string, name: string, path: string }>,
     registrationOptions: [
-      { id: 'merchant', name: '餐厅入驻', desc: '开通商家账号', path: '/pages/register/merchant/index' },
-      { id: 'rider', name: '骑手入驻', desc: '成为配送骑手', path: '/pages/register/rider/index' },
-      { id: 'operator', name: '运营商入驻', desc: '区域运营合作', path: '/pages/register/operator/index' }
+      { id: 'merchant', name: '餐厅入驻', desc: '开通商家账号', path: '/pages/register/merchant/index', icon: 'shop' },
+      { id: 'rider', name: '骑手入驻', desc: '成为配送骑手', path: '/pages/register/rider/index', icon: 'undertake-delivery' },
+      { id: 'operator', name: '运营商入驻', desc: '区域运营合作', path: '/pages/register/operator/index', icon: 'root-list' }
     ],
     navBarHeight: 88,
     scrollViewHeight: 600
@@ -185,9 +185,6 @@ Page({
     Navigation.toWallet()
   },
 
-  onCredit() {
-    Navigation.toCredit()
-  },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
@@ -199,7 +196,7 @@ Page({
     if (roles.includes('merchant') || roles.includes('operator')) {
       workbenches.push({
         id: 'merchant',
-        name: '商家工作台',
+        name: '商家管理',
         icon: 'shop',
         path: '/pages/merchant/dashboard/index'
       })
@@ -208,8 +205,8 @@ Page({
     if (roles.includes('rider') || roles.includes('operator')) {
       workbenches.push({
         id: 'rider',
-        name: '骑手工作台',
-        icon: 'user-circle', // generic user icon for rider
+        name: '骑手配送',
+        icon: 'delivery',
         path: '/pages/rider/dashboard/index'
       })
     }
@@ -219,9 +216,8 @@ Page({
       workbenches.push({
         id: 'admin',
         name: '平台管理',
-        desc: '系统管理控制台',
-        icon: 'control-platform', // Safe bet or 'desktop'
-        path: '/pages/platform/dashboard/dashboard' // Corrected path
+        icon: 'control-platform',
+        path: '/pages/platform/dashboard/dashboard'
       })
     }
 

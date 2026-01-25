@@ -97,9 +97,12 @@ export class Navigation {
      * 跳转到评价页
      * TODO: 页面 pages/orders/review/index 不存在
      */
+  /**
+     * 跳转到评价页
+     */
   static toReview(orderId: string) {
     wx.navigateTo({
-      url: `/pages/orders/review/index?order_id=${orderId}`
+      url: `/pages/user_center/reviews/create/index?orderId=${orderId}`
     })
   }
 
@@ -219,14 +222,6 @@ export class Navigation {
     })
   }
 
-  /**
-     * 跳转到信用分页
-     */
-  static toCredit() {
-    wx.navigateTo({
-      url: '/pages/user_center/credit/index'
-    })
-  }
 
   // ==================== 骑手相关 ====================
 

@@ -1,43 +1,51 @@
-/* 用户中心 - 统一设计规范 */
+/* 用户中心 - 严格遵循 DESIGN_SYSTEM.md 规范 */
 
 /* Skyline 滚动容器 */
 .page-scroll {
-  background: #FAFAFA;
+  background: var(--td-bg-color-page);
   box-sizing: border-box;
 }
 
-/* 内容区域 - 与 takeout/reservation 一致 */
+/* 内容区域 */
 .content-section {
   display: flex;
   flex-direction: column;
-  padding: 12rpx 20rpx 24rpx;
+  padding: var(--spacer-sm) var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
 }
 
-/* User Profile Card - 与其他卡片统一 */
+/* 基础卡片样式 */
+.card-base {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* User Profile Card */
 .user-card {
-  background: #fff;
-  padding: 20rpx;
-  border-radius: 16rpx;
-  margin-bottom: 12rpx;
+  background: var(--td-bg-color-container);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacer-md);
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 .avatar-wrapper {
   padding: 0;
-  width: 96rpx !important;
-  height: 96rpx !important;
-  border-radius: 50%;
-  margin: 0 20rpx 0 0 !important;
-  background-color: #f3f3f3;
+  width: 112rpx !important;
+  height: 112rpx !important;
+  border-radius: var(--radius-round);
+  margin: 0 var(--spacer-md) 0 0 !important;
+  background-color: var(--td-bg-color-secondarycontainer);
   position: relative;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
 }
 
 .avatar-wrapper::after {
@@ -45,9 +53,9 @@
 }
 
 .avatar {
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 50%;
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: var(--radius-round);
   display: block;
 }
 
@@ -56,47 +64,73 @@
   flex-direction: column;
   align-items: flex-start;
   flex: 1;
+  overflow: hidden;
 }
 
-.scan-entry {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 36rpx;
-  background: #fff;
-  border: 1rpx solid #e5e5e5;
+.nickname-row {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  margin-left: 12rpx;
+  width: 100%;
 }
 
 .nickname-input {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #333;
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
   text-align: left;
-  height: 48rpx;
-  min-height: 48rpx;
-  width: 100%;
+  height: 64rpx;
+  min-height: 64rpx;
+  width: auto;
+  max-width: 300rpx;
   background: transparent;
   padding: 0;
-  border-radius: 0;
+  margin-right: var(--spacer-sm);
 }
 
-/* 卡片区块 - 统一样式 */
+.scan-entry {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-bg-color-container);
+  border: 1rpx solid var(--td-border-level-1-color, #eee);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: var(--spacer-sm);
+  transition: all var(--transition-base);
+}
+
+.scan-entry:active {
+  background: var(--td-bg-color-secondarycontainer);
+  transform: scale(0.95);
+}
+
+/* 卡片区块 */
 .card-section {
-  margin-bottom: 12rpx;
+  margin-bottom: var(--spacer-md);
 }
 
 .card-title {
-  padding: 16rpx 0 12rpx;
-  font-size: 24rpx;
-  color: #999;
+  padding: var(--spacer-sm) 0 var(--spacer-xs);
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+  font-weight: 500;
+  letter-spacing: 2rpx;
 }
 
 .card-body {
-  background: #fff;
-  border-radius: 16rpx;
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
+}
+
+/* TDesign 覆盖样式 */
+.t-grid {
+  background-color: transparent !important;
+}
+
+.t-cell-group {
+  background-color: transparent !important;
 }
