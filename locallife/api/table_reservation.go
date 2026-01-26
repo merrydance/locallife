@@ -1433,20 +1433,21 @@ func (server *Server) getReservationStats(ctx *gin.Context) {
 	}
 
 	// 获取统计
-	stats, err := server.store.GetReservationStats(ctx, merchant.ID)
+	stats, err := server.store.GetReservationStatsEnhanced(ctx, merchant.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"pending_count":   stats.PendingCount,
-		"paid_count":      stats.PaidCount,
-		"confirmed_count": stats.ConfirmedCount,
-		"completed_count": stats.CompletedCount,
-		"cancelled_count": stats.CancelledCount,
-		"expired_count":   stats.ExpiredCount,
-		"no_show_count":   stats.NoShowCount,
+		"pending_count":    stats.PendingCount,
+		"paid_count":       stats.PaidCount,
+		"confirmed_count":  stats.ConfirmedCount,
+		"checked_in_count": stats.CheckedInCount,
+		"completed_count":  stats.CompletedCount,
+		"cancelled_count":  stats.CancelledCount,
+		"expired_count":    stats.ExpiredCount,
+		"no_show_count":    stats.NoShowCount,
 	})
 }
 

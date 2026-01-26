@@ -231,18 +231,17 @@ func closeDiningSessionInternal(ctx context.Context, q *Queries, sessionID int64
 		}
 	}
 
-	// 4) Update table status to available
+	// 4) Update table status to available and clear current reservation
+	// When a session is closed, the table becomes available, so it cannot have a "current" reservation.
+	// We must clear it and complete the corresponding reservation to prevent ghost bookings preventing new reservations.
+
 	table, err := q.GetTable(ctx, session.TableID)
 	if err != nil {
 		return DiningSession{}, fmt.Errorf("get table: %w", err)
 	}
 
-	// If the table was occupied for a specific reservation, and that reservation is now done,
-	// we should clear CurrentReservationID if it matches Session.ReservationID.
-	newReservationID := table.CurrentReservationID
-	if session.ReservationID.Valid && table.CurrentReservationID.Valid && session.ReservationID.Int64 == table.CurrentReservationID.Int64 {
-		newReservationID = pgtype.Int8{Valid: false}
-	}
+	// Always clear CurrentReservationID
+	newReservationID := pgtype.Int8{Valid: false}
 
 	_, err = q.UpdateTableStatus(ctx, UpdateTableStatusParams{
 		ID:                   session.TableID,
@@ -254,8 +253,16 @@ func closeDiningSessionInternal(ctx context.Context, q *Queries, sessionID int64
 	}
 
 	// 5) Update reservation status to 'completed'
+	// We should complete the reservation linked to the session OR the one linked to the table
+	resIDToComplete := pgtype.Int8{Valid: false}
 	if session.ReservationID.Valid {
-		if _, err := q.db.Exec(ctx, `UPDATE table_reservations SET status = 'completed', completed_at = now(), updated_at = now() WHERE id = $1`, session.ReservationID.Int64); err != nil {
+		resIDToComplete = session.ReservationID
+	} else if table.CurrentReservationID.Valid {
+		resIDToComplete = table.CurrentReservationID
+	}
+
+	if resIDToComplete.Valid {
+		if _, err := q.db.Exec(ctx, `UPDATE table_reservations SET status = 'completed', completed_at = now(), updated_at = now() WHERE id = $1 AND status != 'completed'`, resIDToComplete.Int64); err != nil {
 			return DiningSession{}, fmt.Errorf("update reservation to completed: %w", err)
 		}
 	}

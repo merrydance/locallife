@@ -112,7 +112,7 @@ export function ReservationsPageClient({
 
     return scheduleReservations.find(r => {
       if (r.table_id !== parseInt(formData.table_id) || r.reservation_date !== formData.date) return false;
-      if (['cancelled', 'no_show'].includes(r.status)) return false;
+      if (['cancelled', 'no_show', 'completed'].includes(r.status)) return false;
       
       const resHour = parseInt(r.reservation_time.split(":")[0]);
       return isLunchSlot ? resHour < 15 : resHour >= 15;
@@ -161,6 +161,7 @@ export function ReservationsPageClient({
     loadTables();
     loadScheduleReservations();
     loadMerchantProfile();
+    loadStats();
   }, []);
 
   // 1. 监听 WebSocket 实时消息
@@ -309,7 +310,7 @@ export function ReservationsPageClient({
     const existingRes = scheduleReservations.find(r => 
       r.table_id === tableId && 
       r.reservation_date === targetDay && 
-      !['cancelled', 'no_show'].includes(r.status) &&
+      !['cancelled', 'no_show', 'completed'].includes(r.status) &&
       (isTargetingLunch ? parseInt(r.reservation_time.split(":")[0]) < 15 : parseInt(r.reservation_time.split(":")[0]) >= 15)
     );
 
@@ -460,7 +461,7 @@ export function ReservationsPageClient({
                    const dayRes = scheduleReservations.filter(r => 
                      r.table_id === table.id && 
                      r.reservation_date === day.dateStr && 
-                     !['cancelled', 'no_show'].includes(r.status)
+                     !['cancelled', 'no_show', 'completed'].includes(r.status)
                    );
                    const hasLunch = dayRes.some(r => parseInt(r.reservation_time.split(":")[0]) < 15);
                    const hasDinner = dayRes.some(r => parseInt(r.reservation_time.split(":")[0]) >= 15);

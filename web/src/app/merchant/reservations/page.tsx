@@ -18,11 +18,10 @@ interface MerchantReservationsResponse {
   total_count: number;
 }
 
-export default async function ReservationsPage({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>;
+export default async function ReservationsPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
+  const searchParams = await props.searchParams;
   const date = (searchParams?.date as string) || formatDate(new Date());
 
   const [stats, reservationsRes] = await Promise.all([

@@ -726,6 +726,13 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 		reservationID = pgtype.Int8{Int64: *req.CurrentReservationID, Valid: true}
 	}
 
+	// 强制清理：如果是释放桌台，且桌台当前有预订，强制结束预订状态
+	// 这是为了防止 UpdateTableStatus 清除了桌台上的引用，但 Reservation 表里依然保留 checked_in 状态
+	if req.Status == "available" && table.CurrentReservationID.Valid {
+		// 我们忽略错误，因为如果预订已经结束也无所谓; 主要是为了处理脏数据
+		_, _ = server.store.UpdateReservationToCompleted(ctx, table.CurrentReservationID.Int64)
+	}
+
 	updatedTable, err := server.store.UpdateTableStatus(ctx, db.UpdateTableStatusParams{
 		ID:                   uriReq.ID,
 		Status:               req.Status,
