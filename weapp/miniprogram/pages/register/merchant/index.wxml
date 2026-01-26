@@ -9,7 +9,7 @@
   <view class="entry-list animate-fade-in">
     <view class="entry-card" bindtap="onSelectStore" hover-class="card-hover">
       <view class="entry-icon store">
-        <t-icon name="shop" size="64rpx" color="#FF6B58" />
+        <t-image src="/assets/icons/store.svg" width="64rpx" height="64rpx" />
       </view>
       <view class="entry-info">
         <text class="entry-title">单店入驻</text>
@@ -20,7 +20,7 @@
 
     <view class="entry-card" bindtap="onSelectGroup" hover-class="card-hover">
       <view class="entry-icon group">
-        <t-icon name="root-list" size="64rpx" color="#0052D9" />
+        <t-image src="/assets/icons/brand.svg" width="64rpx" height="64rpx" />
       </view>
       <view class="entry-info">
         <text class="entry-title">集团 / 品牌入驻</text>

@@ -1,4 +1,4 @@
-<custom-navbar title="合伙人入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="运营商入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(140rpx + env(safe-area-inset-bottom));">
   
@@ -29,7 +29,7 @@
           <view class="feature-item">
             <view class="feature-icon"><t-icon name="chart-bubble" size="48rpx" color="var(--td-brand-color)" /></view>
             <view class="feature-info">
-              <text class="feature-title">高额流水抽成</text>
+              <text class="feature-title">高比例分佣</text>
               <text class="feature-desc">区域内所有商家流水均可获得收益分成</text>
             </view>
           </view>

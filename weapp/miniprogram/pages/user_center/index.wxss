@@ -88,6 +88,10 @@
   margin-right: var(--spacer-sm);
 }
 
+.role-tag {
+  margin-right: 8rpx;
+}
+
 .scan-entry {
   width: 80rpx;
   height: 80rpx;
@@ -133,4 +137,9 @@
 
 .t-cell-group {
   background-color: transparent !important;
+}
+
+.grid-item-image {
+  width: 48rpx !important;
+  height: 48rpx !important;
 }

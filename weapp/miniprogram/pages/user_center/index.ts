@@ -52,8 +52,8 @@ Page({
       nickName: '微信用户',
       avatarUrl: ''
     },
-    userRole: 'guest' as 'guest' | 'merchant' | 'rider' | 'operator',
-    workbenches: [] as Array<{ id: string, name: string, path: string }>,
+    userRoles: [] as Array<{ key: string, label: string }>,
+    workbenches: [] as Array<{ id: string, name: string, path: string, icon: string }>,
     registrationOptions: [
       { id: 'merchant', name: '餐厅入驻', desc: '开通商家账号', path: '/pages/register/merchant/index', icon: 'shop' },
       { id: 'rider', name: '骑手入驻', desc: '成为配送骑手', path: '/pages/register/rider/index', icon: 'undertake-delivery' },
@@ -92,17 +92,22 @@ Page({
     },
     roles: string[] | string
   ) {
-    const role = (Array.isArray(roles) ? roles[0] : roles) as 'guest' | 'merchant' | 'rider' | 'operator' // Primary role for display
+    const roleList = Array.isArray(roles) ? roles : [roles]
+    const roleMap: Record<string, string> = {
+      'merchant': '商家',
+      'rider': '骑手',
+      'operator': '运营',
+      'admin': '管理员'
+    }
+
     this.setData({
       userInfo: {
         nickName: info.nickName || info.full_name || info.nickname || '微信用户',
         avatarUrl: info.avatarUrl || info.avatar_url || info.avatar || ''
       },
-      userRole: role // Keep for compatibility
+      userRoles: roleList.map(r => ({ key: r, label: roleMap[r] || r }))
     })
 
-    // Normalize to array for workbench check
-    const roleList = Array.isArray(roles) ? roles : [roles]
     this.loadWorkbenches(roleList)
   },
 
@@ -196,8 +201,8 @@ Page({
     if (roles.includes('merchant') || roles.includes('operator')) {
       workbenches.push({
         id: 'merchant',
-        name: '商家管理',
-        icon: 'shop',
+        name: '商户中心',
+        icon: '/assets/icons/store.svg',
         path: '/pages/merchant/dashboard/index'
       })
     }
@@ -206,7 +211,7 @@ Page({
       workbenches.push({
         id: 'rider',
         name: '骑手配送',
-        icon: 'delivery',
+        icon: '/assets/icons/rider.svg',
         path: '/pages/rider/dashboard/index'
       })
     }
@@ -215,8 +220,8 @@ Page({
     if (roles.includes('admin')) {
       workbenches.push({
         id: 'admin',
-        name: '平台管理',
-        icon: 'control-platform',
+        name: '平台管理中心',
+        icon: '/assets/icons/platform.svg',
         path: '/pages/platform/dashboard/dashboard'
       })
     }

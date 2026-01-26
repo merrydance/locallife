@@ -19,9 +19,11 @@
       <view class="info-wrapper">
         <view class="nickname-row">
           <input type="nickname" class="nickname-input" placeholder="点击设置昵称" value="{{userInfo.nickName}}" bind:change="onNicknameChange" bind:blur="onNicknameChange" />
-          <t-tag wx:if="{{userRole && userRole !== 'guest'}}" theme="primary" variant="light-outline" size="small" shape="round">
-            {{userRole === 'merchant' ? '商家' : (userRole === 'rider' ? '骑手' : (userRole === 'operator' ? '运营' : '管理员'))}}
-          </t-tag>
+          <block wx:for="{{userRoles}}" wx:key="key">
+            <t-tag theme="primary" variant="light-outline" size="small" shape="round" class="role-tag">
+              {{item.label}}
+            </t-tag>
+          </block>
         </view>
       </view>
       <view class="scan-entry" bindtap="onScanToJoin" hover-class="scan-entry--active">
@@ -38,10 +40,11 @@
             wx:for="{{workbenches}}" 
             wx:key="id"
             text="{{item.name}}"
-            icon="{{item.icon}}"
+            image="{{item.icon}}"
             bind:click="onWorkbenchTap"
             data-path="{{item.path}}"
             t-class-text="grid-item-text"
+            t-class-image="grid-item-image"
           />
         </t-grid>
       </view>
