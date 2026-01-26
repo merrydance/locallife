@@ -1,68 +1,103 @@
+/* 配送历史样式 */
+
 .page-container {
+  background: var(--td-bg-color-page);
   min-height: 100vh;
-  background: #F6F6F6;
 }
 
-.feed-header {
-  padding: 32rpx 32rpx 16rpx;
-  background: #fff;
-}
-
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-  color: #333;
-  display: block;
-}
-
-.subtitle {
-  font-size: 26rpx;
-  color: #999;
-  margin-top: 8rpx;
-  display: block;
-}
-
-.loading {
+.history-summary {
   display: flex;
-  justify-content: center;
-  padding: 100rpx 0;
-}
-
-.feed-list {
-  padding: 24rpx;
-}
-
-.feed-item {
-  background: #fff;
-  border-radius: 12rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
-  display: flex;
-  justify-content: space-between;
+  background: #FFFFFF;
+  padding: 40rpx;
   align-items: center;
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.summary-item {
+  flex: 1;
+  text-align: center;
+}
+
+.summary-item .val {
+  font-size: var(--font-size-title);
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  margin-bottom: 8rpx;
+}
+
+.summary-item .lab {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+}
+
+.history-list {
+  padding: 0 var(--spacer-md);
+}
+
+.history-card {
+  background: #FFFFFF;
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-sm);
   box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.02);
 }
 
-.feed-content {
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacer-md);
+}
+
+.card-header .date {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.route-info {
+  margin-bottom: var(--spacer-md);
+}
+
+.address {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
   display: flex;
   align-items: center;
-  flex: 1;
-  margin-right: 24rpx;
 }
 
-.icon {
-  margin-right: 16rpx;
-  flex-shrink: 0;
+.address t-icon {
+  margin-right: 12rpx;
+  color: var(--td-text-color-placeholder);
 }
 
-.text {
-  font-size: 28rpx;
-  color: #333;
-  line-height: 1.4;
+.arrow {
+  padding: 8rpx 0 8rpx 36rpx;
+  color: var(--td-border-level-1-color);
 }
 
-.time {
-  font-size: 24rpx;
-  color: #999;
-  flex-shrink: 0;
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--spacer-sm);
+  border-top: 1rpx solid var(--td-border-level-1-color);
+}
+
+.order-no {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+}
+
+.income {
+  font-size: var(--font-size-base);
+  font-weight: bold;
+  color: var(--td-success-color);
+}
+
+.no-more {
+  text-align: center;
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+  padding: 40rpx 0;
 }

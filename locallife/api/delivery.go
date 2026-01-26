@@ -50,24 +50,25 @@ type getRecommendedOrdersRequest struct {
 }
 
 type recommendedOrderResponse struct {
-	OrderID           int64     `json:"order_id"`
-	MerchantID        int64     `json:"merchant_id"`
-	TotalScore        int       `json:"total_score"`
-	DistanceScore     int       `json:"distance_score"`
-	RouteScore        int       `json:"route_score"`
-	UrgencyScore      int       `json:"urgency_score"`
-	ProfitScore       int       `json:"profit_score"`
-	DistanceToPickup  int       `json:"distance_to_pickup"`      // 直线距离（米）
-	RealDistance      int       `json:"real_distance,omitempty"` // 真实骑行距离（米）
-	EstimatedMinutes  int       `json:"estimated_minutes"`       // 预估时间（分钟）
-	RealDuration      int       `json:"real_duration,omitempty"` // 真实骑行时间（秒）
-	DeliveryFee       int64     `json:"delivery_fee"`
-	Distance          int       `json:"distance"` // 商家到顾客距离
-	PickupLongitude   float64   `json:"pickup_longitude"`
-	PickupLatitude    float64   `json:"pickup_latitude"`
-	DeliveryLongitude float64   `json:"delivery_longitude"`
-	DeliveryLatitude  float64   `json:"delivery_latitude"`
-	ExpiresAt         time.Time `json:"expires_at"`
+	OrderID            int64      `json:"order_id"`
+	MerchantID         int64      `json:"merchant_id"`
+	TotalScore         int        `json:"total_score"`
+	DistanceScore      int        `json:"distance_score"`
+	RouteScore         int        `json:"route_score"`
+	UrgencyScore       int        `json:"urgency_score"`
+	ProfitScore        int        `json:"profit_score"`
+	DistanceToPickup   int        `json:"distance_to_pickup"`      // 直线距离（米）
+	RealDistance       int        `json:"real_distance,omitempty"` // 真实骑行距离（米）
+	EstimatedMinutes   int        `json:"estimated_minutes"`       // 预估时间（分钟）
+	RealDuration       int        `json:"real_duration,omitempty"` // 真实骑行时间（秒）
+	DeliveryFee        int64      `json:"delivery_fee"`
+	Distance           int        `json:"distance"` // 商家到顾客距离
+	PickupLongitude    float64    `json:"pickup_longitude"`
+	PickupLatitude     float64    `json:"pickup_latitude"`
+	DeliveryLongitude  float64    `json:"delivery_longitude"`
+	DeliveryLatitude   float64    `json:"delivery_latitude"`
+	ExpiresAt          time.Time  `json:"expires_at"`
+	ExpectedDeliveryAt *time.Time `json:"expected_delivery_at,omitempty"` // 预计送达时间
 }
 
 // getRecommendedOrders godoc
@@ -163,12 +164,13 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 				Longitude: deliveryLng.Float64,
 				Latitude:  deliveryLat.Float64,
 			},
-			Distance:         int(item.Distance),
-			DeliveryFee:      item.DeliveryFee,
-			ExpectedPickupAt: item.ExpectedPickupAt,
-			ExpiresAt:        item.ExpiresAt,
-			Priority:         int(item.Priority),
-			CreatedAt:        item.CreatedAt,
+			Distance:           int(item.Distance),
+			DeliveryFee:        item.DeliveryFee,
+			ExpectedPickupAt:   item.ExpectedPickupAt,
+			ExpectedDeliveryAt: item.ExpectedDeliveryAt.Time,
+			ExpiresAt:          item.ExpiresAt,
+			Priority:           int(item.Priority),
+			CreatedAt:          item.CreatedAt,
 		})
 	}
 
@@ -228,22 +230,23 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 	var response []recommendedOrderResponse
 	for _, s := range scored {
 		resp := recommendedOrderResponse{
-			OrderID:           s.OrderID,
-			MerchantID:        s.PoolOrder.MerchantID,
-			TotalScore:        s.TotalScore,
-			DistanceScore:     s.DistanceScore,
-			RouteScore:        s.RouteScore,
-			UrgencyScore:      s.UrgencyScore,
-			ProfitScore:       s.ProfitScore,
-			DistanceToPickup:  s.DistanceToPickup,
-			EstimatedMinutes:  s.EstimatedMinutes,
-			DeliveryFee:       s.PoolOrder.DeliveryFee,
-			Distance:          s.PoolOrder.Distance,
-			PickupLongitude:   s.PoolOrder.PickupLocation.Longitude,
-			PickupLatitude:    s.PoolOrder.PickupLocation.Latitude,
-			DeliveryLongitude: s.PoolOrder.DeliveryLocation.Longitude,
-			DeliveryLatitude:  s.PoolOrder.DeliveryLocation.Latitude,
-			ExpiresAt:         s.PoolOrder.ExpiresAt,
+			OrderID:            s.OrderID,
+			MerchantID:         s.PoolOrder.MerchantID,
+			TotalScore:         s.TotalScore,
+			DistanceScore:      s.DistanceScore,
+			RouteScore:         s.RouteScore,
+			UrgencyScore:       s.UrgencyScore,
+			ProfitScore:        s.ProfitScore,
+			DistanceToPickup:   s.DistanceToPickup,
+			EstimatedMinutes:   s.EstimatedMinutes,
+			DeliveryFee:        s.PoolOrder.DeliveryFee,
+			Distance:           s.PoolOrder.Distance,
+			PickupLongitude:    s.PoolOrder.PickupLocation.Longitude,
+			PickupLatitude:     s.PoolOrder.PickupLocation.Latitude,
+			DeliveryLongitude:  s.PoolOrder.DeliveryLocation.Longitude,
+			DeliveryLatitude:   s.PoolOrder.DeliveryLocation.Latitude,
+			ExpiresAt:          s.PoolOrder.ExpiresAt,
+			ExpectedDeliveryAt: &s.PoolOrder.ExpectedDeliveryAt,
 		}
 		// 添加真实距离（如果有）
 		if rd, ok := realDistances[s.OrderID]; ok {
@@ -559,6 +562,11 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		fmt.Sprintf("订单%s已有骑手接单，正在前往取餐", order.OrderNo),
 	)
 
+	// 📢 M8: 实时广播通知全区域骑手：订单已被抢，请从大厅移除
+	if server.deliveryBroadcast != nil {
+		_ = server.deliveryBroadcast.BroadcastOrderGone(ctx, merchant.RegionID, order.ID)
+	}
+
 	// 重新获取更新后的配送单
 	updatedDelivery, err := server.store.GetDelivery(ctx, result.Delivery.ID)
 	if err != nil {
@@ -573,7 +581,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 // updateDeliveryEstimatedTime 骑手接单后重新计算预估送达时间
 // 使用自建 LBS 计算真实骑行距离，预估时间 = 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
 func (server *Server) updateDeliveryEstimatedTime(ctx context.Context, delivery db.Delivery, rider db.Rider, merchant db.Merchant) {
-	const riderSpeedMetersPerHour = 15000 // 骑手平均速度：15km/h
+	riderSpeedMetersPerHour := server.config.RiderAverageSpeed
 
 	// 检查骑手位置是否有效
 	if !rider.CurrentLatitude.Valid || !rider.CurrentLongitude.Valid {
@@ -593,13 +601,15 @@ func (server *Server) updateDeliveryEstimatedTime(ctx context.Context, delivery 
 	// 计算商户到顾客的距离（米）
 	var merchantToCustomerDistance int = int(delivery.Distance) // 使用已存储的距离
 
-	// 使用自建 LBS 计算真实骑行距离
+	// 1. 优先尝试使用 LBS 计算在途时间 (Duration)
+	var riderToMerchantMinutes float64
+	var merchantToCustomerMinutes float64
+
 	if server.mapClient != nil {
 		riderLoc := maps.Location{Lat: riderLat.Float64, Lng: riderLng.Float64}
 		merchantLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
 		deliveryLoc := maps.Location{Lat: deliveryLat.Float64, Lng: deliveryLng.Float64}
 
-		// 批量查询：骑手→商户，商户→顾客
 		froms := []maps.Location{riderLoc, merchantLoc}
 		tos := []maps.Location{merchantLoc, deliveryLoc}
 
@@ -607,30 +617,32 @@ func (server *Server) updateDeliveryEstimatedTime(ctx context.Context, delivery 
 		if err == nil && len(result.Rows) >= 2 {
 			if len(result.Rows[0].Elements) > 0 {
 				riderToMerchantDistance = result.Rows[0].Elements[0].Distance
+				riderToMerchantMinutes = float64(result.Rows[0].Elements[0].Duration) / 60.0
 			}
 			if len(result.Rows[1].Elements) > 0 {
 				merchantToCustomerDistance = result.Rows[1].Elements[0].Distance
+				merchantToCustomerMinutes = float64(result.Rows[1].Elements[0].Duration) / 60.0
 			}
 		} else {
-			log.Warn().Err(err).Msg("failed to get distance matrix from LBS, using stored distance")
+			log.Warn().Err(err).Msg("failed to get distance matrix from LBS, fallback to manual estimation")
 		}
 	}
 
-	// 如果LBS调用失败，使用直线距离估算骑手到商户距离
-	if riderToMerchantDistance == 0 {
-		riderToMerchantDistance = algorithm.HaversineDistance(
-			algorithm.Location{Latitude: riderLat.Float64, Longitude: riderLng.Float64},
-			algorithm.Location{Latitude: merchantLat.Float64, Longitude: merchantLng.Float64},
-		)
-		// 直线距离乘以1.3作为实际骑行距离估算
-		riderToMerchantDistance = int(float64(riderToMerchantDistance) * 1.3)
+	// 2. 兜底逻辑：如果 LBS 未返回时间（如超限或异常），则使用配置的骑手速度进行估算
+	if riderToMerchantMinutes <= 0 {
+		if riderToMerchantDistance == 0 {
+			dist := algorithm.HaversineDistance(
+				algorithm.Location{Latitude: riderLat.Float64, Longitude: riderLng.Float64},
+				algorithm.Location{Latitude: merchantLat.Float64, Longitude: merchantLng.Float64},
+			)
+			riderToMerchantDistance = int(float64(dist) * 1.3)
+		}
+		riderToMerchantMinutes = float64(riderToMerchantDistance) / float64(riderSpeedMetersPerHour) * 60
 	}
 
-	// 计算时间（分钟）
-	// 骑手到商户时间
-	riderToMerchantMinutes := float64(riderToMerchantDistance) / float64(riderSpeedMetersPerHour) * 60
-	// 商户到顾客时间
-	merchantToCustomerMinutes := float64(merchantToCustomerDistance) / float64(riderSpeedMetersPerHour) * 60
+	if merchantToCustomerMinutes <= 0 {
+		merchantToCustomerMinutes = float64(merchantToCustomerDistance) / float64(riderSpeedMetersPerHour) * 60
+	}
 
 	// 出餐等待时间：使用已有的预估出餐时间减去当前时间（如果还没出餐）
 	var prepareWaitMinutes float64 = 0

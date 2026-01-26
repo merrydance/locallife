@@ -1,71 +1,103 @@
-<custom-navbar title="任务详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="配送详情" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+<scroll-view 
+  scroll-y 
+  class="page-container" 
+  style="padding-top: {{navBarHeight}}px; padding-bottom: 180rpx;"
+>
+  <view class="loading-box" wx:if="{{loading}}">
+    <t-loading theme="circular" size="40rpx" text="正在加载详情..." />
+  </view>
 
-  <view wx:if="{{!loading && task}}" class="content">
-    <!-- 状态卡片 -->
-    <view class="status-card">
-      <view class="status-header">
-        <text class="status-text">{{task.status === 'ACCEPTED' ? '待取货' : (task.status === 'DELIVERING' ? '配送中' : '已完成')}}</text>
-        <text class="time-limit">剩余时间: {{task.time_limit}}</text>
+  <view class="content" wx:elif="{{delivery}}">
+    <!-- 1. 进度追踪 -->
+    <view class="detail-card steps-card">
+      <t-steps current="{{currentStep}}" readonly t-class="custom-steps">
+        <t-step-item 
+          wx:for="{{statusSteps}}" 
+          wx:key="status" 
+          title="{{item.title}}" 
+        />
+      </t-steps>
+    </view>
+
+    <!-- 2. 收入与时间 -->
+    <view class="detail-card income-card">
+      <view class="info-item">
+        <text class="label">预计收益</text>
+        <view class="value price">¥{{delivery.rider_earnings / 100}}</view>
       </view>
-      <view class="income-row">
-        <text>预计收入</text>
-        <text class="income">¥{{task.incomeDisplay}}</text>
+      <t-divider layout="vertical" />
+      <view class="info-item">
+        <text class="label">送达时限</text>
+        <view class="value">{{delivery.estimated_delivery_at ? '今日 ' + delivery.estimated_delivery_at : '尽快送达'}}</view>
       </view>
     </view>
 
-    <!-- 路线信息 -->
-    <view class="section">
-      <view class="location-item">
-        <view class="dot pickup"></view>
+    <!-- 3. 取餐与送餐地址 -->
+    <view class="detail-card route-card">
+      <view class="location-box pickup">
+        <view class="marker">取</view>
         <view class="info">
-          <text class="label">取货点</text>
-          <text class="name">{{task.merchant.name}}</text>
-          <text class="address">{{task.merchant.address}}</text>
+          <view class="title-row">
+            <text class="name">{{delivery.pickup_address}}</text>
+            <t-button size="extra-small" variant="outline" shape="round" bindtap="onCallPhone" data-phone="{{delivery.pickup_phone}}">联系商家</t-button>
+          </view>
+          <view class="contact-sub" wx:if="{{delivery.pickup_contact}}">
+            <text>{{delivery.pickup_contact}}</text>
+            <text class="phone" wx:if="{{delivery.pickup_phone}}">{{delivery.pickup_phone}}</text>
+          </view>
         </view>
-        <t-button size="small" shape="circle" icon="call" data-phone="{{task.merchant.phone}}" bindtap="onCall" />
       </view>
-      
-      <view class="divider"></view>
 
-      <view class="location-item">
-        <view class="dot deliver"></view>
+      <view class="route-line-detail"></view>
+
+      <view class="location-box delivery">
+        <view class="marker">送</view>
         <view class="info">
-          <text class="label">送货点</text>
-          <text class="name">{{task.customer.name}}</text>
-          <text class="address">{{task.customer.address}}</text>
-        </view>
-        <t-button size="small" shape="circle" icon="call" data-phone="{{task.customer.phone}}" bindtap="onCall" />
-      </view>
-    </view>
-
-    <!-- 订单明细 -->
-    <view class="section">
-      <view class="section-title">订单内容</view>
-      <view class="order-items">
-        <view wx:for="{{task.items}}" wx:key="name" class="item-row">
-          <text class="item-name">{{item.name}}</text>
-          <text class="item-count">x{{item.count}}</text>
+          <view class="title-row">
+            <text class="name">{{delivery.delivery_address}}</text>
+            <t-button theme="primary" size="extra-small" variant="outline" shape="round" bindtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">联系顾客</t-button>
+          </view>
+           <view class="contact-sub">
+            <text>{{delivery.delivery_contact || '匿名用户'}}</text>
+            <text class="phone" wx:if="{{delivery.delivery_phone}}">{{delivery.delivery_phone}}</text>
+          </view>
         </view>
       </view>
     </view>
 
-    <!-- 订单信息 -->
-    <view class="section">
-      <view class="info-row">
-        <text class="label">订单编号</text>
-        <text class="value">{{task.order_no}}</text>
-      </view>
+    <!-- 4. 订单详情信息 -->
+    <view class="detail-card info-section">
+      <t-cell-group borderless>
+        <t-cell title="订单单号" hover arrow="{{false}}">
+          <view slot="note" class="order-no-box" bindtap="onCopyOrderNo">
+            <text>{{orderId}}</text>
+            <t-icon name="copy" size="32rpx" style="margin-left: 8rpx;" />
+          </view>
+        </t-cell>
+        <t-cell title="备注" note="{{delivery.remark || '无'}}" />
+        <t-cell title="下单时间" note="{{delivery.created_at}}" />
+      </t-cell-group>
+    </view>
+
+    <!-- 5. 异常报备入口 -->
+    <view class="exception-entry" bindtap="onReportException">
+      <t-icon name="error-circle" size="32rpx" />
+      <text>配送遇到问题？去报备</text>
     </view>
   </view>
-</view>
+</scroll-view>
 
-<!-- 底部操作栏 -->
-<view wx:if="{{!loading && task}}" class="bottom-bar">
-  <t-button theme="light" bindtap="onReportIssue">上报异常</t-button>
-  <t-button theme="primary" bindtap="onUpdateStatus">
-    {{task.status === 'ACCEPTED' ? '确认取货' : '确认送达'}}
+<!-- 底部固定操作按钮 -->
+<view class="bottom-action" wx:if="{{delivery && delivery.status !== 'completed'}}">
+  <t-button 
+    theme="primary" 
+    size="large" 
+    block 
+    shape="round" 
+    bindtap="onUpdateStatus"
+  >
+    {{delivery.status === 'assigned' ? '开始取餐' : (delivery.status === 'start_pickup' ? '确认已取餐' : (delivery.status === 'picked_up' ? '开始配送' : '确认已送达'))}}
   </t-button>
 </view>

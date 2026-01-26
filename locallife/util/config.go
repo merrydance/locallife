@@ -12,8 +12,9 @@ import (
 type Config struct {
 	Environment          string        `mapstructure:"ENVIRONMENT"`
 	AllowedOrigins       []string      `mapstructure:"ALLOWED_ORIGINS"`
-	LBSProvider          string        `mapstructure:"LBS_PROVIDER"` // 仅支持 "osm"（自建）
-	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"` // OSM 反向代理基地址，如 https://lbs.merrydance.cn
+	LBSProvider          string        `mapstructure:"LBS_PROVIDER"`        // 仅支持 "osm"（自建）
+	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"`        // OSM 反向代理基地址，如 https://lbs.merrydance.cn
+	OSMBaseURLBackup     string        `mapstructure:"OSM_BASE_URL_BACKUP"` // 备用 OSM 地址
 	DBSource             string        `mapstructure:"DB_SOURCE"`
 	MigrationURL         string        `mapstructure:"MIGRATION_URL"`
 	AutoMigrate          bool          `mapstructure:"AUTO_MIGRATE"`
@@ -54,8 +55,8 @@ type Config struct {
 	WebBaseURL string `mapstructure:"WEB_BASE_URL"` // H5页面基础URL，用于分享功能
 
 	// Web 登录扫码会话
-	WebLoginSessionTTL time.Duration `mapstructure:"WEB_LOGIN_SESSION_TTL"`
-	WebLoginQRSigningKey string       `mapstructure:"WEB_LOGIN_QR_SIGNING_KEY"`
+	WebLoginSessionTTL   time.Duration `mapstructure:"WEB_LOGIN_SESSION_TTL"`
+	WebLoginQRSigningKey string        `mapstructure:"WEB_LOGIN_QR_SIGNING_KEY"`
 
 	// 上传文件安全访问（签名URL）
 	UploadURLSigningKey string        `mapstructure:"UPLOAD_URL_SIGNING_KEY"` // HMAC签名密钥（建议随机长字符串）
@@ -73,6 +74,10 @@ type Config struct {
 	GeofenceAutoAdvanceEnabled bool `mapstructure:"GEOFENCE_AUTO_ADVANCE_ENABLED"`
 	GeofenceAutoPickupEnabled  bool `mapstructure:"GEOFENCE_AUTO_PICKUP_ENABLED"`
 	GeofenceAutoDeliverEnabled bool `mapstructure:"GEOFENCE_AUTO_DELIVER_ENABLED"`
+
+	// Delivery and LBS configs
+	RiderAverageSpeed  int `mapstructure:"RIDER_AVERAGE_SPEED"`  // m/h
+	DefaultPrepareTime int `mapstructure:"DEFAULT_PREPARE_TIME"` // minutes
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -95,6 +100,9 @@ func LoadConfig(path string) (config Config, err error) {
 	viper.SetDefault("GEOFENCE_AUTO_ADVANCE_ENABLED", false)
 	viper.SetDefault("GEOFENCE_AUTO_PICKUP_ENABLED", false)
 	viper.SetDefault("GEOFENCE_AUTO_DELIVER_ENABLED", false)
+	// Delivery defaults
+	viper.SetDefault("RIDER_AVERAGE_SPEED", 15000)
+	viper.SetDefault("DEFAULT_PREPARE_TIME", 20)
 	// Web 登录默认过期时间
 	viper.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
 

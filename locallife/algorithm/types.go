@@ -12,16 +12,17 @@ type Location struct {
 
 // PoolOrder 订单池中的订单
 type PoolOrder struct {
-	OrderID          int64     `json:"order_id"`
-	MerchantID       int64     `json:"merchant_id"`
-	PickupLocation   Location  `json:"pickup_location"`
-	DeliveryLocation Location  `json:"delivery_location"`
-	Distance         int       `json:"distance"`     // 配送距离（米）
-	DeliveryFee      int64     `json:"delivery_fee"` // 配送费（分）
-	ExpectedPickupAt time.Time `json:"expected_pickup_at"`
-	ExpiresAt        time.Time `json:"expires_at"`
-	Priority         int       `json:"priority"`
-	CreatedAt        time.Time `json:"created_at"`
+	OrderID            int64     `json:"order_id"`
+	MerchantID         int64     `json:"merchant_id"`
+	PickupLocation     Location  `json:"pickup_location"`
+	DeliveryLocation   Location  `json:"delivery_location"`
+	Distance           int       `json:"distance"`     // 配送距离（米）
+	DeliveryFee        int64     `json:"delivery_fee"` // 配送费（分）
+	ExpectedPickupAt   time.Time `json:"expected_pickup_at"`
+	ExpectedDeliveryAt time.Time `json:"expected_delivery_at"`
+	ExpiresAt          time.Time `json:"expires_at"`
+	Priority           int       `json:"priority"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 // ActiveDelivery 骑手当前正在配送的订单

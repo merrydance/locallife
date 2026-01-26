@@ -12,7 +12,9 @@ import (
 // ProcessPaymentSuccessTxParams contains the input parameters for processing payment success idempotently
 // across different business types.
 type ProcessPaymentSuccessTxParams struct {
-	PaymentOrderID int64
+	PaymentOrderID     int64
+	RiderAverageSpeed  int
+	DefaultPrepareTime int
 }
 
 // ProcessPaymentSuccessTxResult contains the result of payment success processing
@@ -200,7 +202,11 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			// 某些情况下（如下单未支付时），会话可能未正确关联订单
 			// 这里不做强校验，由 processOrderPaymentWithQueries 处理业务逻辑
 
-			orderResult, err := processOrderPaymentWithQueries(ctx, q, paymentOrder.OrderID.Int64)
+			orderResult, err := processOrderPaymentWithQueries(ctx, q, ProcessOrderPaymentTxParams{
+				OrderID:            paymentOrder.OrderID.Int64,
+				RiderAverageSpeed:  arg.RiderAverageSpeed,
+				DefaultPrepareTime: arg.DefaultPrepareTime,
+			})
 			if err != nil {
 				return fmt.Errorf("process order payment: %w", err)
 			}

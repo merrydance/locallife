@@ -7,6 +7,7 @@ INSERT INTO orders (
     address_id,
     delivery_fee,
     delivery_distance,
+    delivery_duration,
     table_id,
     reservation_id,
     subtotal,
@@ -23,7 +24,7 @@ INSERT INTO orders (
     replaced_by_order_id,
     pickup_code
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
 ) RETURNING *;
 
 -- name: GetOrder :one

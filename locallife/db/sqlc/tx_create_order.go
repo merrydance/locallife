@@ -23,6 +23,9 @@ type CreateOrderTxParams struct {
 	// 余额支付相关（可选）
 	MembershipID *int64 // 会员卡ID
 	BalancePaid  int64  // 余额支付金额
+
+	// 配送精度相关（可选）
+	DeliveryDuration int32 // 配送预计在途时间（秒），由 LBS 真实路径计算得出
 }
 
 // CreateOrderTxResult contains the result of the create order transaction
@@ -177,7 +180,10 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 
 // ProcessOrderPaymentTxParams contains the input parameters for processing order payment
 type ProcessOrderPaymentTxParams struct {
-	OrderID int64
+	OrderID            int64
+	RiderAverageSpeed  int
+	DefaultPrepareTime int
+	DeliveryDuration   int32 // 配送预计在途时间（秒），由 LBS 提供
 }
 
 // ProcessOrderPaymentTxResult contains the result of order payment processing
@@ -193,9 +199,9 @@ type ProcessOrderPaymentTxResult struct {
 func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrderPaymentTxParams) (ProcessOrderPaymentTxResult, error) {
 	var result ProcessOrderPaymentTxResult
 
- 	err := store.execTx(ctx, func(q *Queries) error {
+	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
-		result, err = processOrderPaymentWithQueries(ctx, q, arg.OrderID)
+		result, err = processOrderPaymentWithQueries(ctx, q, arg)
 		if err != nil {
 			return err
 		}
@@ -205,8 +211,9 @@ func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrd
 	return result, err
 }
 
-func processOrderPaymentWithQueries(ctx context.Context, q *Queries, orderID int64) (ProcessOrderPaymentTxResult, error) {
+func processOrderPaymentWithQueries(ctx context.Context, q *Queries, arg ProcessOrderPaymentTxParams) (ProcessOrderPaymentTxResult, error) {
 	var result ProcessOrderPaymentTxResult
+	orderID := arg.OrderID
 
 	// 1. Get order with lock for idempotency
 	order, err := q.GetOrderForUpdate(ctx, orderID)
@@ -344,12 +351,18 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, orderID int
 		// ========== 计算预估出餐时间 ==========
 		// 策略：取订单中各菜品制作时间的最大值
 		// 如果没有菜品制作时间数据，则使用商户平均出餐时间
-		// 如果商户也没有历史数据，使用默认值20分钟
-		const (
-			defaultPrepareTimeMinutes = 20    // 默认出餐时间（分钟）
-			avgPrepareTimeCalcDays    = 7     // 计算平均出餐时间的天数范围
-			riderSpeedMetersPerHour   = 15000 // 骑手平均速度：15km/h = 15000m/h
-		)
+		// 如果商户也没有历史数据，使用入参中的默认值
+		const avgPrepareTimeCalcDays = 7 // 计算平均出餐时间的天数范围
+
+		riderSpeedMetersPerHour := arg.RiderAverageSpeed
+		if riderSpeedMetersPerHour <= 0 {
+			riderSpeedMetersPerHour = 15000 // Fallback
+		}
+
+		defaultPrepareTimeMinutes := arg.DefaultPrepareTime
+		if defaultPrepareTimeMinutes <= 0 {
+			defaultPrepareTimeMinutes = 20 // Fallback
+		}
 
 		now := time.Now()
 		var maxPrepareTime int16 = 0
@@ -378,22 +391,32 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, orderID int
 
 		// 如果仍然没有数据，使用默认值
 		if maxPrepareTime == 0 {
-			maxPrepareTime = defaultPrepareTimeMinutes
+			maxPrepareTime = int16(defaultPrepareTimeMinutes)
 		}
 
 		// 预计出餐时间 = 当前时间 + 最大菜品制作时间
 		estimatedPickupAt := now.Add(time.Duration(maxPrepareTime) * time.Minute)
 
 		// ========== 计算预估送达时间 ==========
-		// 配送时间 = 出餐时间 + 配送距离/骑手速度
-		// 注意：这里只计算商户到顾客的距离，暂不考虑骑手到商户的距离（因为接单骑手未知）
-		deliveryDistance := int32(0)
+		// 配送时间计算策略（SSOT原则）：
+		// 1. 优先使用订单落库时持久化的精准时间 (Consistent Content)
+		// 2. 其次使用当前事务传入的实时 LBS 时间
+		// 3. 最后回退到基于平均速度的物理估算
+		var deliveryDistance int32
 		if result.Order.DeliveryDistance.Valid {
 			deliveryDistance = result.Order.DeliveryDistance.Int32
 		}
 
-		// 配送时间（分钟）= 距离(米) / 速度(米/小时) * 60
-		deliveryTimeMinutes := float64(deliveryDistance) / float64(riderSpeedMetersPerHour) * 60
+		var deliveryTimeMinutes float64
+		if result.Order.DeliveryDuration.Valid && result.Order.DeliveryDuration.Int32 > 0 {
+			deliveryTimeMinutes = float64(result.Order.DeliveryDuration.Int32) / 60.0
+		} else if arg.DeliveryDuration > 0 {
+			deliveryTimeMinutes = float64(arg.DeliveryDuration) / 60.0
+		} else {
+			// 配送时间（分钟）= 距离(米) / 速度(米/小时) * 60
+			deliveryTimeMinutes = float64(deliveryDistance) / float64(riderSpeedMetersPerHour) * 60
+		}
+
 		// 最少5分钟配送时间
 		if deliveryTimeMinutes < 5 {
 			deliveryTimeMinutes = 5
@@ -438,17 +461,18 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, orderID int
 		// expires_at 字段不再用于过滤，设置一个很远的未来时间
 		// 外卖订单会一直在配送池中可见，直到被骑手接单或订单取消
 		poolItem, err := q.AddToDeliveryPool(ctx, AddToDeliveryPoolParams{
-			OrderID:           result.Order.ID,
-			MerchantID:        merchant.ID,
-			PickupLongitude:   merchant.Longitude,
-			PickupLatitude:    merchant.Latitude,
-			DeliveryLongitude: userAddress.Longitude,
-			DeliveryLatitude:  userAddress.Latitude,
-			Distance:          deliveryDistance,
-			DeliveryFee:       result.Order.DeliveryFee,
-			ExpectedPickupAt:  estimatedPickupAt,
-			ExpiresAt:         now.Add(365 * 24 * time.Hour), // 设置一年后，实际不再用于过滤
-			Priority:          priority,
+			OrderID:            result.Order.ID,
+			MerchantID:         merchant.ID,
+			PickupLongitude:    merchant.Longitude,
+			PickupLatitude:     merchant.Latitude,
+			DeliveryLongitude:  userAddress.Longitude,
+			DeliveryLatitude:   userAddress.Latitude,
+			Distance:           deliveryDistance,
+			DeliveryFee:        result.Order.DeliveryFee,
+			ExpectedPickupAt:   estimatedPickupAt,
+			ExpectedDeliveryAt: pgtype.Timestamptz{Time: estimatedDeliveryAt, Valid: true},
+			ExpiresAt:          now.Add(365 * 24 * time.Hour), // 设置一年后，实际不再用于过滤
+			Priority:           priority,
 		})
 		if err != nil {
 			return result, fmt.Errorf("add to delivery pool: %w", err)

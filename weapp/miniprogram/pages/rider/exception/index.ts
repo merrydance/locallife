@@ -1,142 +1,143 @@
-import { riderExceptionHandlingService, ExceptionReportResponse } from '../../../api/rider-exception-handling';
+import RiderService from '../../../api/rider'
+import { Delivery } from '../../../api/delivery'
+import { logger } from '../../../utils/logger'
+import { getStableBarHeights } from '../../../utils/responsive'
 
 Page({
-    data: {
-        exceptions: [] as ExceptionReportResponse[],
-        orders: [] as any[], // Fix type inference
-        selectedOrderIndex: -1,
-        formData: {
-            order_id: 0,
-            exception_type: 'bad_weather',
-            description: '',
-            images: [] as string[]
-        },
-        showDialog: false,
-        loading: false
+  data: {
+    navBarHeight: 88,
+    loading: false,
+    
+    // 列表数据
+    historyApps: [] as any[],
+    activeOrders: [] as Delivery[],
+    
+    // 表单数据
+    showForm: false,
+    formData: {
+      orderId: 0,
+      type: 'customer_unreachable',
+      description: '',
+      images: [] as string[]
     },
+    
+    typeOptions: [
+      { label: '联系不上顾客', value: 'customer_unreachable' },
+      { label: '商户未出餐', value: 'merchant_not_ready' },
+      { label: '天气恶劣', value: 'weather_issue' },
+      { label: '道路封堵', value: 'road_blocked' },
+      { label: '其他', value: 'other' }
+    ]
+  },
 
-    onLoad() {
-        this.loadExceptions();
-        this.loadActiveOrders();
-    },
-
-    async loadExceptions() {
-        this.setData({ loading: true });
-        try {
-            // Check return type structure of getExceptions
-            const res = await riderExceptionHandlingService.getRiderAppeals({ page_id: 1, page_size: 20 });
-            // Note: getRiderAppeals returns { appeals: ... }, but we might need exception list specifically if it's different.
-            // The file `rider-exception-handling.ts` has `reportException` but seemingly no `getExceptions` method for just exceptions?
-            // Re-reading Step 697: It maps `getRiderAppeals` to appeal service.
-            // But `ExceptionReportResponse` is what we defined locally? 
-            // Actually `riderExceptionHandlingService` has methods `reportException`, `reportDelay`.
-            // It seems `getExceptions` was missing in the service or I missed it.
-            // Let's use `getRiderAppeals` as a proxy or if I need to add `getExceptions` I should have done it.
-            // Wait, previous code used `riderExceptionService.getExceptions`. 
-            // In Step 697, `rider-exception-handling.ts` DOES NOT have `getExceptions`. It has `getRiderAppeals`.
-            // So we display appeals as exceptions for now, or I need to add `getExceptions`.
-            // Let's assume we use `getRiderAppeals` for "Exceptions" view if they are treated as appeals, 
-            // OR I should use `getExceptions` if I intended to implement a separate list.
-            // Given the code `reportException` exists, `getExceptions` should probably exist.
-            // But since I cannot edit the API file easily without seeing it all again or risking it,
-            // I will use `getRiderAppeals` and cast/map if needed, OR just mock it if it's a demo.
-            // Actually, `reportException` calls `/rider/orders/${orderId}/exception`. 
-            // I'll stick to `getRiderAppeals` as the "History" for now to satisfy compilation.
-            this.setData({ exceptions: res.appeals as any[], loading: false });
-        } catch (error) {
-            console.error(error);
-            this.setData({ loading: false });
-        }
-    },
-
-    // Mock for now, usually fetched from order service
-    loadActiveOrders() {
-        this.setData({
-            orders: [
-                { id: 1001, order_no: 'ORD-1001', shopName: 'Tasty Burger' },
-                { id: 1002, order_no: 'ORD-1002', shopName: 'Pizza Hut' }
-            ] as any[]
-        });
-    },
-
-    onAdd() {
-        this.setData({ showDialog: true });
-    },
-
-    onOrderChange(e: any) {
-        const index = e.detail.value;
-        const order = this.data.orders[index] as any;
-        this.setData({
-            selectedOrderIndex: index,
-            'formData.order_id': order.id
-        });
-    },
-
-    onTypeChange(e: any) {
-        this.setData({ 'formData.exception_type': e.detail.value });
-    },
-
-    onDescChange(e: any) {
-        this.setData({ 'formData.description': e.detail.value });
-    },
-
-    onImageAdd(e: any) {
-        // TDesign upload component handling
-        const { files } = e.detail;
-        // In real app, we upload to server here. Mocking url.
-        this.setData({
-            'formData.images': files.map((f: any) => f.url || 'https://via.placeholder.com/150')
-        });
-    },
-
-    onImageRemove(e: any) {
-        const { index } = e.detail;
-        const images = [...this.data.formData.images];
-        images.splice(index, 1);
-        this.setData({ 'formData.images': images });
-    },
-
-    async onConfirm() {
-        const { formData } = this.data;
-        if (!formData.order_id) {
-            wx.showToast({ title: '请选择订单', icon: 'none' });
-            return;
-        }
-        if (!formData.description) {
-            wx.showToast({ title: '请输入描述', icon: 'none' });
-            return;
-        }
-
-        try {
-            wx.showLoading({ title: '提交中' });
-            await riderExceptionHandlingService.reportException(formData.order_id, {
-                exception_type: formData.exception_type as any,
-                description: formData.description,
-                evidence_urls: formData.images
-            });
-
-            this.setData({ showDialog: false });
-            this.loadExceptions();
-            wx.showToast({ title: '提交成功', icon: 'success' });
-
-            // Reset form
-            this.setData({
-                selectedOrderIndex: -1,
-                formData: {
-                    order_id: 0,
-                    exception_type: 'bad_weather',
-                    description: '',
-                    images: []
-                }
-            });
-        } catch (error: any) {
-            wx.showToast({ title: error.message || '提交失败', icon: 'none' });
-        } finally {
-            wx.hideLoading();
-        }
-    },
-
-    onCancel() {
-        this.setData({ showDialog: false });
+  onLoad(options: any) {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    
+    if (options.orderId) {
+      this.setData({ 
+        'formData.orderId': Number(options.orderId),
+        showForm: true
+      })
     }
-});
+    
+    this.fetchData()
+  },
+
+  async fetchData() {
+    this.setData({ loading: true })
+    try {
+      // 1. 获取活跃订单供选择
+      const activeOrders = await (require('../../../utils/request').request({
+        url: '/v1/delivery/active',
+        method: 'GET'
+      }))
+      
+      // 2. 获取历史申诉/异常记录
+      const history = await (require('../../../utils/request').request({
+          url: '/v1/rider/appeals',
+          method: 'GET'
+      }))
+
+      this.setData({ 
+        activeOrders,
+        historyApps: history.appeals || []
+      })
+    } catch (err) {
+      logger.error('Fetch exception data failed', err)
+    } finally {
+      this.setData({ loading: false })
+    }
+  },
+
+  onOpenForm() {
+    this.setData({ showForm: true })
+  },
+
+  onCloseForm() {
+    this.setData({ showForm: false })
+  },
+
+  onSelectOrder(e: any) {
+    const { id } = e.currentTarget.dataset
+    this.setData({ 'formData.orderId': id })
+  },
+
+  onTypeChange(e: any) {
+    this.setData({ 'formData.type': e.detail.value })
+  },
+
+  onDescriptionChange(e: any) {
+    this.setData({ 'formData.description': e.detail.value })
+  },
+
+  /**
+   * 图片上传
+   */
+  onAddImage(e: any) {
+    const { files } = e.detail
+    // 实际生产环境应在此调用 upload api
+    this.setData({
+      'formData.images': [...this.data.formData.images, ...files.map((f: any) => f.url || f.path)]
+    })
+  },
+
+  onRemoveImage(e: any) {
+    const { index } = e.detail
+    const images = [...this.data.formData.images]
+    images.splice(index, 1)
+    this.setData({ 'formData.images': images })
+  },
+
+  /**
+   * 提交上报
+   */
+  async onSubmit() {
+    const { formData } = this.data
+    if (!formData.orderId) {
+      wx.showToast({ title: '请选择相关订单', icon: 'none' })
+      return
+    }
+    if (!formData.description) {
+      wx.showToast({ title: '请填写异常描述', icon: 'none' })
+      return
+    }
+
+    wx.showLoading({ title: '提交中...' })
+    try {
+      await RiderService.reportException(formData.orderId, {
+        exception_type: formData.type,
+        description: formData.description,
+        evidence_urls: formData.images
+      })
+      
+      wx.showToast({ title: '上报成功', icon: 'success' })
+      this.setData({ showForm: false })
+      this.fetchData() // 刷新列表
+    } catch (err: any) {
+      wx.showToast({ title: err.userMessage || '上报失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
+  }
+})

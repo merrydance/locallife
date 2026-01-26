@@ -410,6 +410,12 @@ func newOrderResponse(o db.Order) orderResponse {
 		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
 	}
 
+	// 配送预计在途时长 (ETA)
+	if o.DeliveryDuration.Valid && o.DeliveryDuration.Int32 > 0 {
+		etaMinutes := o.DeliveryDuration.Int32 / 60
+		resp.DeliveryEtaMinutes = &etaMinutes
+	}
+
 	resp.Actions = orderActions(o)
 
 	return resp
@@ -1096,6 +1102,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	var deliveryFeeDiscount int64 = req.DeliveryFeeDiscount
 	var serverFee int64
 	var serverFeeDiscount int64
+	var deliveryDuration int32
 	if req.OrderType == OrderTypeTakeout && req.AddressID != nil {
 		// 获取用户地址
 		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
@@ -1130,6 +1137,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 					routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
 					if err == nil && routeResult != nil {
 						deliveryDistance = int32(routeResult.Distance)
+						deliveryDuration = int32(routeResult.Duration)
 					}
 					if err != nil {
 						log.Warn().Err(err).
@@ -1409,6 +1417,9 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	if deliveryDistance > 0 {
 		arg.DeliveryDistance = pgtype.Int4{Int32: deliveryDistance, Valid: true}
 	}
+	if deliveryDuration > 0 {
+		arg.DeliveryDuration = pgtype.Int4{Int32: deliveryDuration, Valid: true}
+	}
 	if req.TableID != nil {
 		arg.TableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
 	}
@@ -1440,6 +1451,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		VoucherAmount:     voucherAmount,
 		MembershipID:      membershipID,
 		BalancePaid:       balancePaid,
+		DeliveryDuration:  deliveryDuration,
 	})
 	if err != nil {
 		// 处理特定错误
@@ -1462,7 +1474,9 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	// 如果是余额全额支付，则自动推进订单状态和后续流程（扣库存、发配送等）
 	if req.UseBalance && balancePaid >= totalAmount && txResult.Order.Status == OrderStatusPending {
 		paymentResult, err := server.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{
-			OrderID: txResult.Order.ID,
+			OrderID:            txResult.Order.ID,
+			RiderAverageSpeed:  server.config.RiderAverageSpeed,
+			DefaultPrepareTime: server.config.DefaultPrepareTime,
 		})
 		if err != nil {
 			log.Error().Err(err).Int64("order_id", txResult.Order.ID).Msg("failed to process automatic balance payment")
@@ -2462,7 +2476,11 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 
 	// 差额为零或负数（无需补差），直接推进支付后履约流程：扣减库存、发厨房/通知
 	if delta <= 0 {
-		result, err := server.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{OrderID: newOrder.ID})
+		result, err := server.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{
+			OrderID:            newOrder.ID,
+			RiderAverageSpeed:  server.config.RiderAverageSpeed,
+			DefaultPrepareTime: server.config.DefaultPrepareTime,
+		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return

@@ -1,152 +1,172 @@
+/* 配送详情样式 - 高级感与功能性结合 */
+
 .page-container {
+  background: var(--td-bg-color-page);
   min-height: 100vh;
-  background: #F6F6F6;
 }
 
-.loading {
+.loading-box {
   display: flex;
   justify-content: center;
   padding: 100rpx 0;
 }
 
 .content {
-  padding: 24rpx;
+  padding: var(--spacer-md);
 }
 
-.status-card {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 32rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+.detail-card {
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
 }
 
-.status-header {
+/* 进度追踪 */
+.steps-card {
+  padding: 40rpx var(--spacer-md);
+}
+
+.custom-steps {
+  --td-step-item-active-color: var(--td-brand-color);
+  --td-step-item-finish-color: var(--td-success-color);
+}
+
+/* 收入卡片 */
+.income-card {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 24rpx;
 }
 
-.status-text {
+.income-card .info-item {
+  flex: 1;
+  text-align: center;
+}
+
+.income-card .label {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+  margin-bottom: 8rpx;
+  display: block;
+}
+
+.income-card .value {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.income-card .price {
+  color: var(--td-brand-color);
   font-size: 40rpx;
-  font-weight: bold;
-  color: #333;
 }
 
-.time-limit {
-  font-size: 28rpx;
-  color: #E34D59;
+/* 路线卡片 */
+.route-card {
+  position: relative;
+  padding: 40rpx var(--spacer-md);
 }
 
-.income-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 24rpx;
-  border-top: 1rpx solid #F0F0F0;
-}
-
-.income {
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #E34D59;
-}
-
-.section {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 24rpx;
-}
-
-.location-item {
+.location-box {
   display: flex;
   align-items: flex-start;
-  gap: 16rpx;
 }
 
-.dot {
-  width: 20rpx;
-  height: 20rpx;
-  border-radius: 50%;
-  margin-top: 12rpx;
-  flex-shrink: 0;
-}
-
-.dot.pickup { background: #0052D9; }
-.dot.deliver { background: #E34D59; }
-
-.info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.label {
+.location-box .marker {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 12rpx;
+  color: #FFFFFF;
   font-size: 24rpx;
-  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 4rpx;
 }
 
-.name {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #333;
+.pickup .marker {
+  background: #FFA000;
 }
 
-.address {
-  font-size: 26rpx;
-  color: #666;
+.delivery .marker {
+  background: var(--td-success-color);
 }
 
-.divider {
-  height: 1rpx;
-  background: #F0F0F0;
-  margin: 24rpx 0;
+.location-box .info {
+  margin-left: 24rpx;
+  flex: 1;
 }
 
-.section-title {
-  font-size: 30rpx;
-  font-weight: bold;
-  margin-bottom: 16rpx;
-}
-
-.item-row {
+.title-row {
   display: flex;
   justify-content: space-between;
-  padding: 12rpx 0;
-  font-size: 28rpx;
-  color: #333;
+  align-items: flex-start;
+  margin-bottom: 8rpx;
 }
 
-.info-row {
+.title-row .name {
+  font-size: var(--font-size-heading);
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  line-height: 1.4;
+  flex: 1;
+  margin-right: 20rpx;
+}
+
+.contact-sub {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.contact-sub .phone {
+  margin-left: 16rpx;
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+
+.route-line-detail {
+  width: 2rpx;
+  height: 80rpx;
+  background: #EEEEEE;
+  margin: 10rpx 0 10rpx 23rpx;
+}
+
+/* 详情信息 */
+.info-section {
+  padding: 0;
+  overflow: hidden;
+}
+
+.order-no-box {
   display: flex;
-  justify-content: space-between;
-  font-size: 28rpx;
+  align-items: center;
+  color: var(--td-text-color-secondary);
 }
 
-.info-row .label {
-  color: #666;
+/* 异常入口 */
+.exception-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacer-md);
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-sm);
 }
 
-.info-row .value {
-  color: #333;
+.exception-entry t-icon {
+  margin-right: 12rpx;
 }
 
-.bottom-bar {
+/* 底部按钮 */
+.bottom-action {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 16rpx 24rpx;
-  background: #fff;
-  box-shadow: 0 -4rpx 12rpx rgba(0,0,0,0.08);
-  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
-  display: flex;
-  gap: 24rpx;
-}
-
-.bottom-bar t-button {
-  flex: 1;
+  padding: 24rpx 40rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: #FFFFFF;
+  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.05);
+  z-index: 100;
 }

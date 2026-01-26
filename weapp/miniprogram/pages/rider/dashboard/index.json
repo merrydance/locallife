@@ -1,7 +1,18 @@
 {
-    "navigationBarTitleText": "骑手端",
+    "navigationBarTitleText": "骑手调度中心",
     "usingComponents": {
-        "delivery-card": "../../../components/delivery-card/index",
-        "map-view": "../../../components/map-view/index"
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-grid": "tdesign-miniprogram/grid/grid",
+        "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
+        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-switch": "tdesign-miniprogram/switch/switch",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-sticky": "tdesign-miniprogram/sticky/sticky",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-divider": "tdesign-miniprogram/divider/divider",
+        "custom-navbar": "/components/custom-navbar/index"
     }
 }

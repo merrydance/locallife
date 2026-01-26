@@ -393,6 +393,8 @@ type DeliveryPool struct {
 	ExpiresAt        time.Time `json:"expires_at"`
 	Priority         int32     `json:"priority"`
 	CreatedAt        time.Time `json:"created_at"`
+	// 预计送达时间
+	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
 }
 
 type DiningSession struct {
@@ -1067,6 +1069,8 @@ type Order struct {
 	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
 	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
 	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
+	// 配送预计在途时间（秒），由 LBS 真实路径计算得出
+	DeliveryDuration pgtype.Int4 `json:"delivery_duration"`
 }
 
 type OrderDisplayConfig struct {

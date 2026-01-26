@@ -1,110 +1,108 @@
 import { request } from '../utils/request'
 
-/**
- * 配送单响应 - 对齐 api.deliveryResponse
- */
-export interface DeliveryResponse {
+export interface RecommendedOrder {
+    order_id: number
+    merchant_id: number
+    total_score: number
+    distance_to_pickup: number
+    real_distance?: number
+    estimated_minutes: number
+    delivery_fee: number
+    distance: number // Merchant to Customer
+    pickup_longitude: number
+    pickup_latitude: number
+    delivery_longitude: number
+    delivery_latitude: number
+    expires_at: string
+    // Added for UI display convenience (fetched separately if needed or enriched)
+    merchant_name?: string
+    merchant_address?: string
+    customer_address?: string
+}
+
+export interface Delivery {
     id: number
     order_id: number
     rider_id?: number
-    status: string
     pickup_address: string
+    pickup_longitude: number
+    pickup_latitude: number
     pickup_contact?: string
     pickup_phone?: string
-    pickup_latitude: number
-    pickup_longitude: number
     delivery_address: string
+    delivery_longitude: number
+    delivery_latitude: number
     delivery_contact?: string
     delivery_phone?: string
-    delivery_latitude: number
-    delivery_longitude: number
-    distance: number
-    delivery_fee: number
+    status: 'pending_grab' | 'assigned' | 'start_pickup' | 'picked_up' | 'delivering' | 'completed' | 'exception'
     rider_earnings: number
     estimated_pickup_at?: string
     estimated_delivery_at?: string
-    assigned_at?: string
     picked_at?: string
     delivered_at?: string
-    completed_at?: string
-    created_at: string
 }
 
-/**
- * 骑手位置响应 - 对齐 api.locationResponse
- */
-export interface LocationResponse {
-    latitude: number
-    longitude: number
-    accuracy?: number
-    speed?: number
-    heading?: number
-    recorded_at: string
+export class DeliveryService {
+    /**
+     * 获取推荐接单列表 (抢单池)
+     */
+    static async getRecommendedOrders(lng: number, lat: number): Promise<RecommendedOrder[]> {
+        return await request({
+            url: '/v1/delivery/recommend',
+            method: 'GET',
+            data: { longitude: lng, latitude: lat }
+        })
+    }
+
+    /**
+     * 抢单
+     */
+    static async grabOrder(orderId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/grab/${orderId}`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 开始取餐 (前往商家)
+     */
+    static async startPickup(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/start-pickup`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 确认取餐 (已拿到餐品)
+     */
+    static async confirmPickup(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/confirm-pickup`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 开始送餐 (前往客户)
+     */
+    static async startDelivery(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/start-delivery`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 确认送达
+     */
+    static async confirmDelivery(deliveryId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/confirm-delivery`,
+            method: 'POST'
+        })
+    }
 }
 
-/**
- * 获取骑手最新位置
- * GET /v1/delivery/:delivery_id/rider-location
- */
-export function getRiderLocation(deliveryId: number) {
-    return request<LocationResponse>({
-        url: `/v1/delivery/${deliveryId}/rider-location`,
-        method: 'GET'
-    })
-}
-
-/**
- * 骑手确认取餐
- * POST /v1/delivery/:delivery_id/confirm-pickup
- */
-export function confirmPickup(deliveryId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/${deliveryId}/confirm-pickup`,
-        method: 'POST'
-    })
-}
-
-/**
- * 骑手确认送达
- * POST /v1/delivery/:delivery_id/confirm-delivery
- */
-export function confirmDelivery(deliveryId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/${deliveryId}/confirm-delivery`,
-        method: 'POST'
-    })
-}
-
-/**
- * 获取配送轨迹
- * GET /v1/delivery/:delivery_id/track
- */
-export function getDeliveryTrack(deliveryId: number, since?: string) {
-    return request<LocationResponse[]>({
-        url: `/v1/delivery/${deliveryId}/track`,
-        method: 'GET',
-        data: since ? { since } : undefined
-    })
-}
-
-/**
- * 获取配送单详情
- * GET /v1/delivery/:delivery_id
- */
-export function getDeliveryDetail(deliveryId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/${deliveryId}`,
-        method: 'GET'
-    })
-}
-
-/**
- * 根据订单ID获取配送信息
- * GET /v1/delivery/order/:order_id
- */
-export function getDeliveryByOrder(orderId: number) {
-    return request<DeliveryResponse>({
-        url: `/v1/delivery/order/${orderId}`,
-        method: 'GET'
-    })
-}
+export default DeliveryService

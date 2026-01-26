@@ -1,121 +1,137 @@
-import { pickupOrder, deliverOrder, getRiderDashboard, RiderOrderDTO } from '../../../api/rider'
+import DeliveryService, { Delivery } from '../../../api/delivery'
 import { logger } from '../../../utils/logger'
-import { ErrorHandler } from '../../../utils/error-handler'
-import { formatPriceNoSymbol } from '../../../utils/util'
+import { getStableBarHeights } from '../../../utils/responsive'
 
 Page({
-  data: {
-    taskId: '',
-    task: null as any,
-    navBarHeight: 88,
-    loading: false
-  },
+    data: {
+        orderId: 0,
+        delivery: null as Delivery | null,
+        loading: false,
+        navBarHeight: 88,
+        
+        // 状态映射
+        statusSteps: [
+            { title: '已接单', status: 'assigned' },
+            { title: '取餐中', status: 'start_pickup' },
+            { title: '配送中', status: 'delivering' },
+            { title: '已送达', status: 'completed' }
+        ],
+        currentStep: 0
+    },
 
-  onLoad(options: any) {
-    if (options.id) {
-      this.setData({ taskId: options.id })
-      this.loadTaskDetail()
-    }
-  },
-
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
-  },
-
-  async loadTaskDetail() {
-    this.setData({ loading: true })
-    try {
-      // Note: Missing GET /rider/orders/{id} API.
-      // Trying to find in dashboard active tasks.
-      const dashboard = await getRiderDashboard()
-      const taskDTO = dashboard.active_tasks.find((t) => t.id === this.data.taskId)
-
-      if (taskDTO) {
-        this.setData({
-          task: this.mapTask(taskDTO),
-          loading: false
+    onLoad(options: any) {
+        const { navBarHeight } = getStableBarHeights()
+        this.setData({ 
+            navBarHeight,
+            orderId: Number(options.id)
         })
-      } else {
-        wx.showToast({ title: '任务详情获取失败(API缺失)', icon: 'none' })
-        this.setData({ loading: false })
-      }
-    } catch (error) {
-      logger.error('Load failed', error, 'Task-detail')
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
-    }
-  },
+        this.fetchTaskDetail()
+    },
 
-  mapTask(dto: RiderOrderDTO) {
-    return {
-      id: dto.id,
-      order_no: dto.id.slice(-8).toUpperCase(),
-      status: dto.status,
-      income: dto.fee, // Cents
-      incomeDisplay: formatPriceNoSymbol(dto.fee || 0),
-      time_limit: dto.expect_deliver_time ? dto.expect_deliver_time.slice(11, 16) : '',
-      merchant: {
-        name: dto.merchant_name,
-        address: dto.merchant_address,
-        phone: '13800000000', // Missing in DTO
-        lat: 0, // Missing in DTO
-        lng: 0  // Missing in DTO
-      },
-      customer: {
-        name: '顾客', // Missing in DTO
-        address: dto.customer_address,
-        phone: '13900000000', // Missing in DTO
-        lat: 0, // Missing in DTO
-        lng: 0  // Missing in DTO
-      },
-      items: [] // Missing in DTO
-    }
-  },
-
-  onCall(e: WechatMiniprogram.CustomEvent) {
-    const { phone } = e.currentTarget.dataset
-    if (!phone || phone === '13800000000' || phone === '13900000000') {
-      wx.showToast({ title: '暂无电话信息', icon: 'none' })
-      return
-    }
-    wx.makePhoneCall({ phoneNumber: phone })
-  },
-
-  onUpdateStatus() {
-    const { task } = this.data
-    if (!task) return
-
-    let actionPromise: Promise<void> | null = null
-    let actionText = ''
-
-    if (task.status === 'ACCEPTED' || task.status === 'CONFIRMED') { // Assuming CONFIRMED is 'To Pickup'
-      actionText = '确认取货'
-      actionPromise = pickupOrder(task.id)
-    } else if (task.status === 'DELIVERING') {
-      actionText = '确认送达'
-      actionPromise = deliverOrder(task.id)
-    }
-
-    if (!actionPromise) return
-
-    wx.showModal({
-      title: '状态更新',
-      content: `确认${actionText}?`,
-      success: async (res) => {
-        if (res.confirm) {
-          try {
-            await actionPromise
-            wx.showToast({ title: '操作成功', icon: 'success' })
-            this.loadTaskDetail()
-          } catch (error) {
-            wx.showToast({ title: '操作失败', icon: 'none' })
-          }
+    async fetchTaskDetail() {
+        this.setData({ loading: true })
+        try {
+            const data = await DeliveryService.grabOrder(this.data.orderId) // Technically this gets the detail if already grabbed
+            // Actually in our Go API, POST /v1/delivery/grab/:order_id is for grabbing.
+            // GET /v1/delivery/order/:order_id is for fetching.
+            const delivery = await (require('../../../utils/request').request({
+                url: `/v1/delivery/order/${this.data.orderId}`,
+                method: 'GET'
+            }))
+            
+            this.setData({ 
+                delivery,
+                currentStep: this.mapStatusToStep(delivery.status)
+            })
+        } catch (err) {
+            logger.error('Fetch task detail failed', err)
+            wx.showToast({ title: '加载失败', icon: 'none' })
+        } finally {
+            this.setData({ loading: false })
         }
-      }
-    })
-  },
+    },
 
-  onReportIssue() {
-    wx.navigateTo({ url: `/pages/rider/claims/index?taskId=${this.data.taskId}` })
-  }
+    mapStatusToStep(status: string): number {
+        const statusMap: Record<string, number> = {
+            'assigned': 0,
+            'start_pickup': 1,
+            'picked_up': 2,
+            'delivering': 2,
+            'completed': 3
+        }
+        return statusMap[status] ?? 0
+    },
+
+    /**
+     * 更新配送状态按钮点击
+     */
+    async onUpdateStatus() {
+        if (!this.data.delivery) return
+        const { id, status } = this.data.delivery
+        
+        let nextAction = ''
+        let actionMethod: any = null
+
+        if (status === 'assigned') {
+            nextAction = '开始取餐'
+            actionMethod = DeliveryService.startPickup
+        } else if (status === 'start_pickup') {
+            nextAction = '确认已取餐'
+            actionMethod = DeliveryService.confirmPickup
+        } else if (status === 'picked_up') {
+            nextAction = '开始配送'
+            actionMethod = DeliveryService.startDelivery
+        } else if (status === 'delivering') {
+            nextAction = '确认已送达'
+            actionMethod = DeliveryService.confirmDelivery
+        }
+
+        if (!actionMethod) return
+
+        wx.showModal({
+            title: '状态变更',
+            content: `确定要 ${nextAction} 吗？`,
+            success: async (res) => {
+                if (res.confirm) {
+                    wx.showLoading({ title: '处理中...' })
+                    try {
+                        const updated = await actionMethod(id)
+                        this.setData({ 
+                            delivery: updated,
+                            currentStep: this.mapStatusToStep(updated.status)
+                        })
+                        wx.showToast({ title: '操作成功', icon: 'success' })
+                        
+                        // 如果已完成，延迟返回或刷新
+                        if (updated.status === 'completed') {
+                            setTimeout(() => wx.navigateBack(), 1500)
+                        }
+                    } catch (err: any) {
+                        wx.showToast({ title: err.userMessage || '操作失败', icon: 'none' })
+                    } finally {
+                        wx.hideLoading()
+                    }
+                }
+            }
+        })
+    },
+
+    onCallPhone(e: any) {
+        const { phone } = e.currentTarget.dataset
+        if (!phone) return
+        wx.makePhoneCall({ phoneNumber: phone })
+    },
+
+    onReportException() {
+      wx.navigateTo({
+        url: `/pages/rider/exception/index?orderId=${this.data.orderId}`
+      })
+    },
+
+    onCopyOrderNo() {
+        wx.setClipboardData({
+            data: String(this.data.orderId),
+            success: () => wx.showToast({ title: '已复制' })
+        })
+    }
 })

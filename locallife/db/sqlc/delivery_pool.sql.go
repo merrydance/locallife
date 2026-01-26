@@ -23,25 +23,27 @@ INSERT INTO delivery_pool (
     distance,
     delivery_fee,
     expected_pickup_at,
+    expected_delivery_at,
     expires_at,
     priority
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+) RETURNING id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at
 `
 
 type AddToDeliveryPoolParams struct {
-	OrderID           int64          `json:"order_id"`
-	MerchantID        int64          `json:"merchant_id"`
-	PickupLongitude   pgtype.Numeric `json:"pickup_longitude"`
-	PickupLatitude    pgtype.Numeric `json:"pickup_latitude"`
-	DeliveryLongitude pgtype.Numeric `json:"delivery_longitude"`
-	DeliveryLatitude  pgtype.Numeric `json:"delivery_latitude"`
-	Distance          int32          `json:"distance"`
-	DeliveryFee       int64          `json:"delivery_fee"`
-	ExpectedPickupAt  time.Time      `json:"expected_pickup_at"`
-	ExpiresAt         time.Time      `json:"expires_at"`
-	Priority          int32          `json:"priority"`
+	OrderID            int64              `json:"order_id"`
+	MerchantID         int64              `json:"merchant_id"`
+	PickupLongitude    pgtype.Numeric     `json:"pickup_longitude"`
+	PickupLatitude     pgtype.Numeric     `json:"pickup_latitude"`
+	DeliveryLongitude  pgtype.Numeric     `json:"delivery_longitude"`
+	DeliveryLatitude   pgtype.Numeric     `json:"delivery_latitude"`
+	Distance           int32              `json:"distance"`
+	DeliveryFee        int64              `json:"delivery_fee"`
+	ExpectedPickupAt   time.Time          `json:"expected_pickup_at"`
+	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
+	ExpiresAt          time.Time          `json:"expires_at"`
+	Priority           int32              `json:"priority"`
 }
 
 func (q *Queries) AddToDeliveryPool(ctx context.Context, arg AddToDeliveryPoolParams) (DeliveryPool, error) {
@@ -55,6 +57,7 @@ func (q *Queries) AddToDeliveryPool(ctx context.Context, arg AddToDeliveryPoolPa
 		arg.Distance,
 		arg.DeliveryFee,
 		arg.ExpectedPickupAt,
+		arg.ExpectedDeliveryAt,
 		arg.ExpiresAt,
 		arg.Priority,
 	)
@@ -73,6 +76,7 @@ func (q *Queries) AddToDeliveryPool(ctx context.Context, arg AddToDeliveryPoolPa
 		&i.ExpiresAt,
 		&i.Priority,
 		&i.CreatedAt,
+		&i.ExpectedDeliveryAt,
 	)
 	return i, err
 }
@@ -89,7 +93,7 @@ func (q *Queries) CountDeliveryPool(ctx context.Context) (int64, error) {
 }
 
 const getDeliveryPoolByOrderID = `-- name: GetDeliveryPoolByOrderID :one
-SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at FROM delivery_pool
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE order_id = $1 LIMIT 1
 `
 
@@ -110,12 +114,13 @@ func (q *Queries) GetDeliveryPoolByOrderID(ctx context.Context, orderID int64) (
 		&i.ExpiresAt,
 		&i.Priority,
 		&i.CreatedAt,
+		&i.ExpectedDeliveryAt,
 	)
 	return i, err
 }
 
 const getDeliveryPoolItem = `-- name: GetDeliveryPoolItem :one
-SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at FROM delivery_pool
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE id = $1 LIMIT 1
 `
 
@@ -136,12 +141,13 @@ func (q *Queries) GetDeliveryPoolItem(ctx context.Context, id int64) (DeliveryPo
 		&i.ExpiresAt,
 		&i.Priority,
 		&i.CreatedAt,
+		&i.ExpectedDeliveryAt,
 	)
 	return i, err
 }
 
 const getDeliveryPoolItemForUpdate = `-- name: GetDeliveryPoolItemForUpdate :one
-SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at FROM delivery_pool
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -163,12 +169,13 @@ func (q *Queries) GetDeliveryPoolItemForUpdate(ctx context.Context, id int64) (D
 		&i.ExpiresAt,
 		&i.Priority,
 		&i.CreatedAt,
+		&i.ExpectedDeliveryAt,
 	)
 	return i, err
 }
 
 const listDeliveryPool = `-- name: ListDeliveryPool :many
-SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at,
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at,
     (priority + EXTRACT(EPOCH FROM (now() - created_at)) / 600)::int AS effective_priority
 FROM delivery_pool
 ORDER BY effective_priority DESC, created_at ASC
@@ -181,20 +188,21 @@ type ListDeliveryPoolParams struct {
 }
 
 type ListDeliveryPoolRow struct {
-	ID                int64          `json:"id"`
-	OrderID           int64          `json:"order_id"`
-	MerchantID        int64          `json:"merchant_id"`
-	PickupLongitude   pgtype.Numeric `json:"pickup_longitude"`
-	PickupLatitude    pgtype.Numeric `json:"pickup_latitude"`
-	DeliveryLongitude pgtype.Numeric `json:"delivery_longitude"`
-	DeliveryLatitude  pgtype.Numeric `json:"delivery_latitude"`
-	Distance          int32          `json:"distance"`
-	DeliveryFee       int64          `json:"delivery_fee"`
-	ExpectedPickupAt  time.Time      `json:"expected_pickup_at"`
-	ExpiresAt         time.Time      `json:"expires_at"`
-	Priority          int32          `json:"priority"`
-	CreatedAt         time.Time      `json:"created_at"`
-	EffectivePriority int32          `json:"effective_priority"`
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	MerchantID         int64              `json:"merchant_id"`
+	PickupLongitude    pgtype.Numeric     `json:"pickup_longitude"`
+	PickupLatitude     pgtype.Numeric     `json:"pickup_latitude"`
+	DeliveryLongitude  pgtype.Numeric     `json:"delivery_longitude"`
+	DeliveryLatitude   pgtype.Numeric     `json:"delivery_latitude"`
+	Distance           int32              `json:"distance"`
+	DeliveryFee        int64              `json:"delivery_fee"`
+	ExpectedPickupAt   time.Time          `json:"expected_pickup_at"`
+	ExpiresAt          time.Time          `json:"expires_at"`
+	Priority           int32              `json:"priority"`
+	CreatedAt          time.Time          `json:"created_at"`
+	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
+	EffectivePriority  int32              `json:"effective_priority"`
 }
 
 // 列出所有待接单的配送池订单
@@ -223,6 +231,7 @@ func (q *Queries) ListDeliveryPool(ctx context.Context, arg ListDeliveryPoolPara
 			&i.ExpiresAt,
 			&i.Priority,
 			&i.CreatedAt,
+			&i.ExpectedDeliveryAt,
 			&i.EffectivePriority,
 		); err != nil {
 			return nil, err
@@ -236,7 +245,7 @@ func (q *Queries) ListDeliveryPool(ctx context.Context, arg ListDeliveryPoolPara
 }
 
 const listDeliveryPoolNearby = `-- name: ListDeliveryPoolNearby :many
-SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, 
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at, 
     (6371000 * acos(cos(radians($1::float8)) * cos(radians(pickup_latitude)) * 
     cos(radians(pickup_longitude) - radians($2::float8)) + 
     sin(radians($1::float8)) * sin(radians(pickup_latitude))))::int AS distance_to_rider,
@@ -257,21 +266,22 @@ type ListDeliveryPoolNearbyParams struct {
 }
 
 type ListDeliveryPoolNearbyRow struct {
-	ID                int64          `json:"id"`
-	OrderID           int64          `json:"order_id"`
-	MerchantID        int64          `json:"merchant_id"`
-	PickupLongitude   pgtype.Numeric `json:"pickup_longitude"`
-	PickupLatitude    pgtype.Numeric `json:"pickup_latitude"`
-	DeliveryLongitude pgtype.Numeric `json:"delivery_longitude"`
-	DeliveryLatitude  pgtype.Numeric `json:"delivery_latitude"`
-	Distance          int32          `json:"distance"`
-	DeliveryFee       int64          `json:"delivery_fee"`
-	ExpectedPickupAt  time.Time      `json:"expected_pickup_at"`
-	ExpiresAt         time.Time      `json:"expires_at"`
-	Priority          int32          `json:"priority"`
-	CreatedAt         time.Time      `json:"created_at"`
-	DistanceToRider   int32          `json:"distance_to_rider"`
-	EffectivePriority int32          `json:"effective_priority"`
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	MerchantID         int64              `json:"merchant_id"`
+	PickupLongitude    pgtype.Numeric     `json:"pickup_longitude"`
+	PickupLatitude     pgtype.Numeric     `json:"pickup_latitude"`
+	DeliveryLongitude  pgtype.Numeric     `json:"delivery_longitude"`
+	DeliveryLatitude   pgtype.Numeric     `json:"delivery_latitude"`
+	Distance           int32              `json:"distance"`
+	DeliveryFee        int64              `json:"delivery_fee"`
+	ExpectedPickupAt   time.Time          `json:"expected_pickup_at"`
+	ExpiresAt          time.Time          `json:"expires_at"`
+	Priority           int32              `json:"priority"`
+	CreatedAt          time.Time          `json:"created_at"`
+	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
+	DistanceToRider    int32              `json:"distance_to_rider"`
+	EffectivePriority  int32              `json:"effective_priority"`
 }
 
 // 按骑手位置获取附近的可接订单
@@ -304,6 +314,7 @@ func (q *Queries) ListDeliveryPoolNearby(ctx context.Context, arg ListDeliveryPo
 			&i.ExpiresAt,
 			&i.Priority,
 			&i.CreatedAt,
+			&i.ExpectedDeliveryAt,
 			&i.DistanceToRider,
 			&i.EffectivePriority,
 		); err != nil {
@@ -318,7 +329,7 @@ func (q *Queries) ListDeliveryPoolNearby(ctx context.Context, arg ListDeliveryPo
 }
 
 const listDeliveryPoolNearbyByRegion = `-- name: ListDeliveryPoolNearbyByRegion :many
-SELECT dp.id, dp.order_id, dp.merchant_id, dp.pickup_longitude, dp.pickup_latitude, dp.delivery_longitude, dp.delivery_latitude, dp.distance, dp.delivery_fee, dp.expected_pickup_at, dp.expires_at, dp.priority, dp.created_at, 
+SELECT dp.id, dp.order_id, dp.merchant_id, dp.pickup_longitude, dp.pickup_latitude, dp.delivery_longitude, dp.delivery_latitude, dp.distance, dp.delivery_fee, dp.expected_pickup_at, dp.expires_at, dp.priority, dp.created_at, dp.expected_delivery_at, 
     (6371000 * acos(cos(radians($1::float8)) * cos(radians(dp.pickup_latitude)) * 
     cos(radians(dp.pickup_longitude) - radians($2::float8)) + 
     sin(radians($1::float8)) * sin(radians(dp.pickup_latitude))))::int AS distance_to_rider,
@@ -342,21 +353,22 @@ type ListDeliveryPoolNearbyByRegionParams struct {
 }
 
 type ListDeliveryPoolNearbyByRegionRow struct {
-	ID                int64          `json:"id"`
-	OrderID           int64          `json:"order_id"`
-	MerchantID        int64          `json:"merchant_id"`
-	PickupLongitude   pgtype.Numeric `json:"pickup_longitude"`
-	PickupLatitude    pgtype.Numeric `json:"pickup_latitude"`
-	DeliveryLongitude pgtype.Numeric `json:"delivery_longitude"`
-	DeliveryLatitude  pgtype.Numeric `json:"delivery_latitude"`
-	Distance          int32          `json:"distance"`
-	DeliveryFee       int64          `json:"delivery_fee"`
-	ExpectedPickupAt  time.Time      `json:"expected_pickup_at"`
-	ExpiresAt         time.Time      `json:"expires_at"`
-	Priority          int32          `json:"priority"`
-	CreatedAt         time.Time      `json:"created_at"`
-	DistanceToRider   int32          `json:"distance_to_rider"`
-	EffectivePriority int32          `json:"effective_priority"`
+	ID                 int64              `json:"id"`
+	OrderID            int64              `json:"order_id"`
+	MerchantID         int64              `json:"merchant_id"`
+	PickupLongitude    pgtype.Numeric     `json:"pickup_longitude"`
+	PickupLatitude     pgtype.Numeric     `json:"pickup_latitude"`
+	DeliveryLongitude  pgtype.Numeric     `json:"delivery_longitude"`
+	DeliveryLatitude   pgtype.Numeric     `json:"delivery_latitude"`
+	Distance           int32              `json:"distance"`
+	DeliveryFee        int64              `json:"delivery_fee"`
+	ExpectedPickupAt   time.Time          `json:"expected_pickup_at"`
+	ExpiresAt          time.Time          `json:"expires_at"`
+	Priority           int32              `json:"priority"`
+	CreatedAt          time.Time          `json:"created_at"`
+	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
+	DistanceToRider    int32              `json:"distance_to_rider"`
+	EffectivePriority  int32              `json:"effective_priority"`
 }
 
 // 按区域过滤的骑手可接订单列表，实现多租户隔离
@@ -391,6 +403,7 @@ func (q *Queries) ListDeliveryPoolNearbyByRegion(ctx context.Context, arg ListDe
 			&i.ExpiresAt,
 			&i.Priority,
 			&i.CreatedAt,
+			&i.ExpectedDeliveryAt,
 			&i.DistanceToRider,
 			&i.EffectivePriority,
 		); err != nil {

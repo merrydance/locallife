@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -17,6 +18,7 @@ import (
 	"github.com/merrydance/locallife/autotag"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/scheduler"
 	"github.com/merrydance/locallife/session"
 	"github.com/merrydance/locallife/util"
@@ -141,7 +143,13 @@ func main() {
 	runDBMetricsCollector(ctx, waitGroup, connPool)
 
 	if config.RedisAddress != "" {
-		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store)
+		// 初始化逻辑层
+		redisClient := redis.NewClient(&redis.Options{
+			Addr:     config.RedisAddress,
+			Password: config.RedisPassword,
+		})
+		deliveryBroadcast := logic.NewDeliveryBroadcastLogic(store, redisClient)
+		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, deliveryBroadcast)
 	}
 
 	schedulerManager := scheduler.NewManager()
@@ -188,6 +196,7 @@ func runTaskProcessor(
 	config util.Config,
 	redisOpt asynq.RedisClientOpt,
 	store db.Store,
+	deliveryBroadcast *logic.DeliveryBroadcastLogic,
 ) worker.TaskDistributor {
 	// 创建任务分发器
 	taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
@@ -221,7 +230,7 @@ func runTaskProcessor(
 	}
 
 	// 创建并启动任务处理器（传入 distributor 以支持任务链）
-	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient)
+	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, config)
 	log.Info().Msg("start task processor")
 
 	waitGroup.Go(func() error {

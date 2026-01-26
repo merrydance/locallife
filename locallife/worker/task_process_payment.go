@@ -314,7 +314,9 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 		Msg("processing payment success")
 
 	result, err := processor.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
-		PaymentOrderID: payload.PaymentOrderID,
+		PaymentOrderID:     payload.PaymentOrderID,
+		RiderAverageSpeed:  processor.config.RiderAverageSpeed,
+		DefaultPrepareTime: processor.config.DefaultPrepareTime,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -606,48 +608,46 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 		return
 	}
 
-	// 构建完整的新订单池消息数据（骑手App可直接显示）
-	newOrderData := map[string]any{
-		"type":                 "new_delivery_order",
-		"order_id":             order.ID,
-		"delivery_id":          delivery.ID,
-		"merchant_id":          merchant.ID,
-		"merchant_name":        merchant.Name,
-		"pickup_address":       delivery.PickupAddress,
-		"pickup_longitude":     pickupLng.Float64,
-		"pickup_latitude":      pickupLat.Float64,
-		"delivery_address":     delivery.DeliveryAddress,
-		"delivery_longitude":   deliveryLng.Float64,
-		"delivery_latitude":    deliveryLat.Float64,
-		"delivery_fee":         order.DeliveryFee,
-		"distance":             poolItem.Distance,                 // 商家到顾客距离（米）
-		"priority":             poolItem.Priority,                 // 优先级（高值单=2或3）
-		"expected_pickup_at":   poolItem.ExpectedPickupAt,         // 预计出餐时间
-		"expected_delivery_at": delivery.EstimatedDeliveryAt.Time, // 预计送达时间
-		"is_high_value":        order.DeliveryFee >= 1000,         // 运费>=10元为高值单
-		"created_at":           poolItem.CreatedAt,
-	}
-	msgData, _ := json.Marshal(newOrderData)
-
-	// 通过 Redis Pub/Sub 推送给骑手
-	notifiedCount := 0
-	for _, riderID := range ridersToNotify {
-		pushMsg := websocket.NotificationPushMessage{
-			EntityType: "rider",
-			EntityID:   riderID,
-			Message: websocket.Message{
-				Type:      "delivery_pool_update",
-				Data:      json.RawMessage(msgData),
-				Timestamp: time.Now(),
-			},
+	// 构建完整的新订单池消息数据（使用标准类型常量）
+	if processor.deliveryBroadcast != nil {
+		_ = processor.deliveryBroadcast.BroadcastNewOrderNotification(ctx, merchant.RegionID, *poolItem, merchant.Name)
+	} else {
+		// 回退方案（保持兼容）
+		newOrderData := map[string]any{
+			"type":                 "new_delivery_order",
+			"order_id":             order.ID,
+			"delivery_id":          delivery.ID,
+			"merchant_id":          merchant.ID,
+			"merchant_name":        merchant.Name,
+			"pickup_address":       delivery.PickupAddress,
+			"pickup_longitude":     pickupLng.Float64,
+			"pickup_latitude":      pickupLat.Float64,
+			"delivery_address":     delivery.DeliveryAddress,
+			"delivery_longitude":   deliveryLng.Float64,
+			"delivery_latitude":    deliveryLat.Float64,
+			"delivery_fee":         order.DeliveryFee,
+			"distance":             poolItem.Distance,
+			"priority":             poolItem.Priority,
+			"expected_pickup_at":   poolItem.ExpectedPickupAt,
+			"expected_delivery_at": delivery.EstimatedDeliveryAt.Time,
+			"is_high_value":        order.DeliveryFee >= 1000,
+			"created_at":           poolItem.CreatedAt,
 		}
-		wsMessageJSON, _ := json.Marshal(pushMsg)
+		msgData, _ := json.Marshal(newOrderData)
 
-		channel := fmt.Sprintf("notification:rider:%d", riderID)
-		if err := processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err(); err != nil {
-			log.Error().Err(err).Int64("rider_id", riderID).Msg("publish new delivery to rider failed")
-		} else {
-			notifiedCount++
+		for _, riderID := range ridersToNotify {
+			pushMsg := websocket.NotificationPushMessage{
+				EntityType: "rider",
+				EntityID:   riderID,
+				Message: websocket.Message{
+					Type:      "delivery_pool_update",
+					Data:      json.RawMessage(msgData),
+					Timestamp: time.Now(),
+				},
+			}
+			wsMessageJSON, _ := json.Marshal(pushMsg)
+			channel := fmt.Sprintf("notification:rider:%d", riderID)
+			_ = processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err()
 		}
 	}
 
@@ -657,7 +657,6 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 		Float64("search_radius_m", usedDistance).
 		Bool("region_broadcast", isRegionBroadcast).
 		Int64("region_id", merchant.RegionID).
-		Int("notified_count", notifiedCount).
 		Int64("delivery_fee", order.DeliveryFee).
 		Bool("is_high_value", order.DeliveryFee >= 1000).
 		Msg("✅ new delivery order pushed to riders")

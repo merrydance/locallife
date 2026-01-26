@@ -1,119 +1,152 @@
+/* 骑手钱包样式 */
+
 .page-container {
+  background: var(--td-bg-color-page);
   min-height: 100vh;
-  background: #F6F6F6;
 }
 
-.loading {
+.wallet-card {
+  margin: var(--spacer-md);
+  padding: 48rpx;
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.balance-main {
+  text-align: center;
+  margin-bottom: 48rpx;
+}
+
+.balance-main .label {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-placeholder);
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+.balance-main .value {
+  font-size: 64rpx;
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+}
+
+.balance-sub {
   display: flex;
-  justify-content: center;
-  padding: 100rpx 0;
-}
-
-.content {
-  padding: 24rpx;
-}
-
-.deposit-card {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 40rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 24rpx;
+  padding: 24rpx 0;
+  border-top: 1rpx solid var(--td-border-level-1-color);
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
+  margin-bottom: 48rpx;
 }
 
-.label {
-  font-size: 28rpx;
-  color: #666;
+.balance-divider {
+  width: 1rpx;
+  height: 40rpx;
+  background: var(--td-border-level-1-color);
 }
 
-.amount-row {
+.sub-item {
+  flex: 1;
+  text-align: center;
+}
+
+.sub-label {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+  margin-bottom: 4rpx;
+  display: block;
+}
+
+.sub-value {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+}
+
+.wallet-actions {
   display: flex;
-  align-items: baseline;
-  margin-bottom: 40rpx;
-  justify-content: center;
+  gap: 24rpx;
 }
 
-.currency {
-  font-size: 40rpx;
-  font-weight: bold;
-  color: #333;
+/* 历史列表 */
+.history-section {
+  padding: var(--spacer-md);
 }
 
-.amount {
-  font-size: 80rpx;
-  font-weight: bold;
-  color: #333;
-  line-height: 1;
-}
-
-.info-card {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 24rpx;
+.section-header {
+  margin-bottom: var(--spacer-md);
 }
 
 .section-title {
-  font-size: 30rpx;
+  font-size: var(--font-size-heading);
   font-weight: bold;
-  color: #333;
-  margin-bottom: 24rpx;
-}
-
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  font-size: 26rpx;
-  color: #666;
-  margin-bottom: 16rpx;
-}
-
-.history-section {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  color: var(--td-text-color-primary);
 }
 
 .history-item {
+  background: #FFFFFF;
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #F0F0F0;
+  margin-bottom: var(--spacer-sm);
 }
 
-.history-item:last-child {
-  border-bottom: none;
+.item-icon {
+  margin-right: 24rpx;
 }
 
-.item-left {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
+.item-info {
+  flex: 1;
 }
 
-.item-type {
-  font-size: 28rpx;
-  color: #333;
+.item-title {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+  margin-bottom: 4rpx;
 }
 
 .item-time {
-  font-size: 24rpx;
-  color: #999;
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
 }
 
 .item-amount {
-  font-size: 32rpx;
+  font-size: var(--font-size-heading);
   font-weight: bold;
 }
 
-.item-amount.positive { color: #E34D59; }
-.item-amount.negative { color: #333; }
+.item-amount.positive {
+  color: var(--td-success-color);
+}
+
+.item-amount.negative {
+  color: var(--td-text-color-primary);
+}
+
+.load-more-tip {
+  text-align: center;
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+  padding: 40rpx 0;
+}
+
+/* 弹窗内容 */
+.dialog-content {
+  padding-top: 24rpx;
+}
+
+.amount-input {
+  background: var(--td-bg-color-page);
+  border-radius: var(--radius-sm);
+  padding: 0 16rpx !important;
+}
+
+.dialog-tips {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+  margin-top: 16rpx;
+  padding: 0 16rpx;
+}

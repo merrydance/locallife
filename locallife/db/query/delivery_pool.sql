@@ -9,10 +9,11 @@ INSERT INTO delivery_pool (
     distance,
     delivery_fee,
     expected_pickup_at,
+    expected_delivery_at,
     expires_at,
     priority
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 ) RETURNING *;
 
 -- name: GetDeliveryPoolItem :one

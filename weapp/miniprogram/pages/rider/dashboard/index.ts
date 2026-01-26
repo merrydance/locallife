@@ -1,150 +1,283 @@
-import { getRiderDashboard, setRiderOnline, setRiderOffline, pickupOrder, deliverOrder, acceptOrder, RiderOrderDTO } from '../../../api/rider'
+import RiderService, { RiderInfo, RiderStatus } from '../../../api/rider'
+import DeliveryService, { RecommendedOrder, Delivery } from '../../../api/delivery'
 import { logger } from '../../../utils/logger'
-import { ErrorHandler } from '../../../utils/error-handler'
-import { responsiveBehavior } from '../../../utils/responsive'
+import { getStableBarHeights } from '../../../utils/responsive'
+import { wsManager, WSMessageType } from '../../../utils/websocket'
+import { globalStore } from '../../../utils/global-store'
 
 const app = getApp<IAppOption>()
 
-interface Task {
-  id: string
-  shopName: string
-  shopAddress: string
-  customerAddress: string
-  distance: string
-  income: string
-  status: number // 0: Pending, 1: To Pick Up, 2: Delivering
-}
-
 Page({
-  behaviors: [responsiveBehavior],
   data: {
+    // UI 状态
+    navBarHeight: 88,
+    activeTab: 'hall', // hall: 抢单大厅, my: 我的配送
+    loading: false,
+    isRefresherTriggered: false,
+
+    // 骑手基础信息
+    riderInfo: null as RiderInfo | null,
+    riderStatus: null as RiderStatus | null,
     isOnline: false,
-    hasActiveTask: false,
-    currentTask: null as Task | null,
-    riderId: '',
-    loading: false
+
+    // 数据列表
+    recommendOrders: [] as RecommendedOrder[], // 待抢订单
+    activeDeliveries: [] as Delivery[],       // 当前配送中
+    stats: {
+      todayCount: 0,
+      todayEarnings: 0,
+      creditScore: 0
+    },
+    
+    // 实时数据补充
+    newOrdersCount: 0, 
+    _wsListeners: [] as any[]
   },
 
-  pollTimer: null as any,
-
   onLoad() {
-    const userInfo = app.globalData.userInfo as { id?: string | number } | null
-    this.setData({ riderId: userInfo?.id ? String(userInfo.id) : '' })
-    this.loadDashboard()
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    this.initData()
   },
 
   onShow() {
-    this.startPolling()
-  },
-
-  onHide() {
-    this.stopPolling()
-  },
-
-  onUnload() {
-    this.stopPolling()
-  },
-
-  async onToggleOnline(e: any) {
-    const isOnline = e.detail.value
-    this.setData({ isOnline })
-
-    try {
-      if (isOnline) {
-        await setRiderOnline()
-        this.loadDashboard()
-      } else {
-        await setRiderOffline()
-        this.setData({ hasActiveTask: false, currentTask: null })
-      }
-    } catch (error) {
-      this.setData({ isOnline: !isOnline })
-      wx.showToast({ title: '操作失败', icon: 'none' })
+    if (this.data.isOnline) {
+      this.refreshData()
+      this.initWebSocket()
     }
   },
 
-  async loadDashboard() {
-    try {
-      const dashboard = await getRiderDashboard()
-      this.setData({ isOnline: !!dashboard.rider_id }) // Simple check for online
+  onHide() {
+    this.cleanupWebSocket()
+  },
 
-      const activeTasks = dashboard.active_tasks || []
-      if (activeTasks.length > 0) {
-        this.setData({
-          hasActiveTask: true,
-          currentTask: this.mapTask(activeTasks[0])
-        })
-      } else {
-        this.setData({ hasActiveTask: false, currentTask: null })
+  onUnload() {
+    this.cleanupWebSocket()
+  },
+
+  async initData() {
+    this.setData({ loading: true })
+    try {
+      const [info, status] = await Promise.all([
+        RiderService.getMe(),
+        RiderService.getStatus()
+      ])
+      
+      this.setData({
+        riderInfo: info,
+        riderStatus: status,
+        isOnline: status.is_online,
+        stats: {
+          todayCount: info.total_orders || 0,
+          todayEarnings: info.total_earnings || 0,
+          creditScore: info.credit_score || 0
+        }
+      })
+
+      if (status.is_online) {
+        this.refreshData()
       }
-    } catch (error) {
-      console.error('Load dashboard failed', error)
+    } catch (err) {
+      logger.error('Failed to init rider data', err)
     } finally {
       this.setData({ loading: false })
     }
   },
 
-  startPolling() {
-    this.stopPolling()
-    this.pollTimer = setInterval(() => {
-      this.loadDashboard()
-    }, 5000)
-  },
+  /**
+   * 刷新业务数据（订单列表）
+   */
+  async refreshData() {
+    if (!this.data.isOnline) return
 
-  stopPolling() {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer)
-      this.pollTimer = null
-    }
-  },
-
-  mapTask(dto: RiderOrderDTO): Task {
-    let status = 0
-    if (dto.status === 'ACCEPTED' || dto.status === 'CONFIRMED') status = 1
-    else if (dto.status === 'DELIVERING') status = 2
-    else if (dto.status === 'COMPLETED') status = 3
-    else status = 0
-
-    const dist = status === 2 ? dto.distance_to_deliver : dto.distance_to_shop
-    return {
-      id: dto.id,
-      shopName: dto.merchant_name,
-      shopAddress: dto.merchant_address,
-      customerAddress: dto.customer_address,
-      distance: dist ? `${(dist / 1000).toFixed(1)}km` : '未知',
-      income: `¥${(dto.fee / 100).toFixed(2)}`,
-      status
-    }
-  },
-
-  async onTaskAction(e: WechatMiniprogram.CustomEvent) {
-    const { action } = e.detail
-    if (!this.data.currentTask) return
-    const orderId = this.data.currentTask.id
-
-    wx.showLoading({ title: '处理中' })
     try {
-      if (action === 'accepted') {
-        await acceptOrder(orderId)
-        wx.showToast({ title: '接单成功', icon: 'success' })
-        this.loadDashboard()
-      } else if (action === 'picked_up') {
-        await pickupOrder(orderId)
-        wx.showToast({ title: '已确认取货', icon: 'success' })
-        this.loadDashboard()
-      } else if (action === 'delivered') {
-        await deliverOrder(orderId)
-        wx.showToast({ title: '配送完成', icon: 'success' })
-        this.setData({
-          hasActiveTask: false,
-          currentTask: null
-        })
+      // 获取位置
+      const location = await this.getLocation()
+      
+      const [hallOrders, myDeliveries] = await Promise.all([
+        DeliveryService.getRecommendedOrders(location.longitude, location.latitude),
+        request({ url: '/v1/delivery/active', method: 'GET' }) as Promise<Delivery[]>
+      ])
+
+      this.setData({
+        recommendOrders: hallOrders || [],
+        activeDeliveries: myDeliveries || [],
+        isRefresherTriggered: false
+      })
+    } catch (err) {
+      logger.error('Refresh data error', err)
+      this.setData({ 
+        recommendOrders: [],
+        activeDeliveries: [],
+        isRefresherTriggered: false 
+      })
+    }
+  },
+
+  async getLocation(): Promise<WechatMiniprogram.GetLocationSuccessCallbackResult> {
+    return new Promise((resolve, reject) => {
+      wx.getLocation({
+        type: 'gcj02',
+        success: resolve,
+        fail: reject
+      })
+    })
+  },
+
+  /**
+   * 切换上下线
+   */
+  async onToggleOnline(e: any) {
+    const targetOnline = e.detail.value
+    wx.showLoading({ title: targetOnline ? '正在上线...' : '正在下线...' })
+    
+    try {
+      let info: RiderInfo
+      if (targetOnline) {
+        info = await RiderService.goOnline()
+        wx.showToast({ title: '已上线，可以接单', icon: 'success' })
+      } else {
+        info = await RiderService.goOffline()
+        wx.showToast({ title: '已下线', icon: 'none' })
       }
-    } catch (error) {
-      logger.error('Action failed', error, 'Dashboard')
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      
+      this.setData({ 
+        isOnline: targetOnline,
+        riderInfo: info
+      })
+      
+      if (targetOnline) {
+        this.refreshData()
+        this.initWebSocket()
+      } else {
+        this.setData({ recommendOrders: [] })
+        this.cleanupWebSocket()
+      }
+    } catch (err: any) {
+      this.setData({ isOnline: !targetOnline })
+      wx.showToast({ 
+        title: err.userMessage || '操作失败', 
+        icon: 'none' 
+      })
     } finally {
       wx.hideLoading()
     }
+  },
+
+  onTabChange(e: any) {
+    this.setData({ activeTab: e.detail.value })
+  },
+
+  async onPullDownRefresh() {
+    this.setData({ isRefresherTriggered: true });
+    await this.refreshData();
+    this.setData({ isRefresherTriggered: false });
+  },
+
+  /**
+   * 抢单操作
+   */
+  async onGrabOrder(e: any) {
+    const { orderId } = e.currentTarget.dataset
+    if (!orderId) return
+
+    wx.showLoading({ title: '抢单中...' })
+    try {
+      await DeliveryService.grabOrder(orderId)
+      wx.showToast({ title: '抢单成功！', icon: 'success' })
+      
+      // 切换到“我的”并刷新
+      this.setData({ activeTab: 'my' })
+      this.refreshData()
+    } catch (err: any) {
+      wx.showToast({ 
+        title: err.userMessage || '抢单失败', 
+        icon: 'none' 
+      })
+    } finally {
+      wx.hideLoading()
+    }
+  },
+
+  /**
+   * 前往任务详情
+   */
+  onGoToDetail(e: any) {
+    const { orderId } = e.currentTarget.dataset
+    wx.navigateTo({
+      url: `/pages/rider/task-detail/index?id=${orderId}`
+    })
+  },
+
+  /**
+   * 提现/钱包
+   */
+  onGoToWallet() {
+    wx.navigateTo({ url: '/pages/rider/deposit/index' })
+  },
+
+  /**
+   * 初始化 WebSocket 监听
+   */
+  initWebSocket() {
+    if (!this.data.isOnline) return;
+    
+    wsManager.connect();
+    
+    // 清除旧监听
+    this.cleanupWebSocket();
+
+    // 1. 监听订单消失事件 (已被别人抢走)
+    const goneSub = wsManager.on(WSMessageType.DELIVERY_POOL_GONE, (data) => {
+      const { order_id } = data;
+      const { recommendOrders } = this.data;
+      
+      // 检查该订单是否在当前列表中
+      const index = recommendOrders.findIndex(o => o.order_id === order_id);
+      if (index > -1) {
+        logger.info(`订单 ${order_id} 已被他人抢走，从本地移除`, undefined, 'RiderDashboard');
+        
+        // 瞬间移除，由于是静态化原则，我们只删除对应的项，不引起滚动重置
+        const newList = [...recommendOrders];
+        newList.splice(index, 1);
+        this.setData({ recommendOrders: newList });
+      }
+    });
+
+    // 2. 监听新订单入场事件
+    const newSub = wsManager.on(WSMessageType.DELIVERY_POOL_NEW, (data) => {
+       // 不要在屏幕上跳动新卡片，而是提示“有新单”
+       this.setData({
+         newOrdersCount: this.data.newOrdersCount + 1
+       });
+       
+       // 震动提醒骑手
+       wx.vibrateShort({ type: 'medium' });
+    });
+
+    this.data._wsListeners = [goneSub, newSub];
+  },
+
+  cleanupWebSocket() {
+    if (this.data._wsListeners) {
+      this.data._wsListeners.forEach(unsub => {
+        if (typeof unsub === 'function') unsub();
+      });
+      this.data._wsListeners = [];
+    }
+  },
+
+  /**
+   * 手动刷新大厅
+   */
+  onRefreshHall() {
+    this.setData({ newOrdersCount: 0 });
+    this.refreshData();
   }
 })
+
+// 简单请求辅助（补丁，避免重写太多文件）
+function request(opt: any) {
+  const { request } = require('../../../utils/request')
+  return request(opt)
+}

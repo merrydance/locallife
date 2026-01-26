@@ -12,6 +12,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
@@ -31,20 +32,21 @@ type MessageResponse struct {
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
-	config          util.Config
-	store           db.Store
-	tokenMaker      token.Maker
-	wechatClient    wechat.WechatClient
-	paymentClient   wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
-	ecommerceClient wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
-	dataEncryptor   util.DataEncryptor              // 敏感数据加密器（本地存储加密）
-	mapClient       maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
-	weatherCache    weather.WeatherCache
-	taskDistributor worker.TaskDistributor
-	wsHub           *websocket.Hub           // WebSocket连接管理（骑手和商户）
-	wsPubSub        *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
-	rateLimiter     *RateLimiter
-	router          *gin.Engine
+	config            util.Config
+	store             db.Store
+	tokenMaker        token.Maker
+	wechatClient      wechat.WechatClient
+	paymentClient     wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
+	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
+	dataEncryptor     util.DataEncryptor              // 敏感数据加密器（本地存储加密）
+	mapClient         maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
+	weatherCache      weather.WeatherCache
+	taskDistributor   worker.TaskDistributor
+	wsHub             *websocket.Hub           // WebSocket连接管理（骑手和商户）
+	wsPubSub          *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	deliveryBroadcast *logic.DeliveryBroadcastLogic
+	rateLimiter       *RateLimiter
+	router            *gin.Engine
 }
 
 // NewServer creates a new HTTP server and set up routing.
@@ -100,13 +102,30 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		}
 	}
 
-	// 创建自建 OSM 地图客户端（唯一支持的 LBS 提供方）
+	// 创建 LBS 地图客户端（支持多级故障转移：OSM -> Tencent）
 	var mapClient maps.TencentMapClientInterface
+	var lbsProviders []maps.TencentMapClientInterface
+
+	// 1. 优先使用自建 OSM
 	if config.OSMBaseURL != "" {
-		mapClient = maps.NewOSMClient(config.OSMBaseURL)
-		log.Info().Str("provider", "osm").Str("base", config.OSMBaseURL).Msg("map client initialized")
+		lbsProviders = append(lbsProviders, maps.NewOSMClient(config.OSMBaseURL))
+	}
+
+	// 2. 备用自建 OSM
+	if config.OSMBaseURLBackup != "" {
+		lbsProviders = append(lbsProviders, maps.NewOSMClient(config.OSMBaseURLBackup))
+	}
+
+	// 3. 腾讯地图作为最终云端兜底
+	if config.TencentMapKey != "" {
+		lbsProviders = append(lbsProviders, maps.NewTencentMapClient(config.TencentMapKey))
+	}
+
+	if len(lbsProviders) > 0 {
+		mapClient = maps.NewFallbackMapClient(lbsProviders...)
+		log.Info().Int("providers_count", len(lbsProviders)).Msg("✅ LBS Fallback system initialized")
 	} else {
-		log.Warn().Msg("OSM_BASE_URL not configured, map client disabled")
+		log.Warn().Msg("⚠️ No LBS providers configured, map features will be disabled")
 	}
 
 	// 创建本地数据加密器（用于加密存储敏感信息）
@@ -174,6 +193,10 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		taskDistributor: taskDistributor,
 		wsHub:           wsHub,
 		wsPubSub:        wsPubSub,
+	}
+
+	if wsPubSub != nil {
+		server.deliveryBroadcast = logic.NewDeliveryBroadcastLogic(store, wsPubSub.GetRedisClient())
 	}
 
 	server.setupRouter()

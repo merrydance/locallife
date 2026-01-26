@@ -7,6 +7,8 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
@@ -35,12 +37,14 @@ type TaskProcessor interface {
 }
 
 type RedisTaskProcessor struct {
-	server          *asynq.Server
-	store           db.Store
-	distributor     TaskDistributor                 // 用于在任务中分发后续任务
-	wechatClient    wechat.WechatClient             // 微信小程序客户端（用于证照OCR等）
-	ecommerceClient wechat.EcommerceClientInterface // 平台收付通客户端（分账）
-	redisClient     *redis.Client                   // Redis客户端（用于Pub/Sub推送通知）
+	server            *asynq.Server
+	store             db.Store
+	distributor       TaskDistributor                 // 用于在任务中分发后续任务
+	wechatClient      wechat.WechatClient             // 微信小程序客户端（用于证照OCR等）
+	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通客户端（分账）
+	redisClient       *redis.Client                   // Redis客户端（用于Pub/Sub推送通知）
+	deliveryBroadcast *logic.DeliveryBroadcastLogic
+	config            util.Config
 }
 
 func NewRedisTaskProcessor(
@@ -49,6 +53,8 @@ func NewRedisTaskProcessor(
 	distributor TaskDistributor,
 	wechatClient wechat.WechatClient,
 	ecommerceClient wechat.EcommerceClientInterface,
+	deliveryBroadcast *logic.DeliveryBroadcastLogic,
+	config util.Config,
 ) TaskProcessor {
 	logger := NewLogger()
 	redis.SetLogger(logger)
@@ -80,12 +86,14 @@ func NewRedisTaskProcessor(
 	})
 
 	return &RedisTaskProcessor{
-		server:          server,
-		store:           store,
-		distributor:     distributor,
-		wechatClient:    wechatClient,
-		ecommerceClient: ecommerceClient,
-		redisClient:     redisClient,
+		server:            server,
+		store:             store,
+		distributor:       distributor,
+		wechatClient:      wechatClient,
+		ecommerceClient:   ecommerceClient,
+		redisClient:       redisClient,
+		deliveryBroadcast: deliveryBroadcast,
+		config:            config,
 	}
 }
 

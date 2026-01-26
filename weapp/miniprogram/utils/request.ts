@@ -275,8 +275,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         errorDetail = `冲突(409): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       } else if (result.statusCode === 404) {
-        userMessage = '服务暂时不可用,请稍后重试'
-        errorDetail = '服务未找到(404) - 可能是后端服务未启动'
+        userMessage = backendMessage || '服务暂时不可用,请稍后重试'
+        errorDetail = backendMessage ? `服务未找到(404): ${backendMessage}` : '服务未找到(404) - 可能是后端服务未启动'
       } else if (result.statusCode === 502 || result.statusCode === 503 || result.statusCode === 504) {
         userMessage = '服务暂时不可用,请稍后重试'
         errorDetail = `网关错误(${result.statusCode}) - 后端服务可能未启动`

@@ -12,8 +12,8 @@ import (
 
 const (
 	// Redis频道前缀
-	channelPrefixRider    = "notification:rider:"    // notification:rider:{rider_id}
-	channelPrefixMerchant = "notification:merchant:" // notification:merchant:{merchant_id}
+	channelPrefixRider    = "notification:rider:"          // notification:rider:{rider_id}
+	channelPrefixMerchant = "notification:merchant:"       // notification:merchant:{merchant_id}
 	channelPlatformAlerts = "notification:platform:alerts" // 平台告警频道
 )
 
@@ -35,7 +35,7 @@ type NotificationPushMessage struct {
 // NewPubSubManager 创建PubSub管理器
 func NewPubSubManager(redisAddr string, redisPassword string, hub *Hub) (*PubSubManager, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
+		Addr:     redisAddr,
 		Password: redisPassword,
 	})
 
@@ -55,6 +55,11 @@ func NewPubSubManager(redisAddr string, redisPassword string, hub *Hub) (*PubSub
 	}
 
 	return manager, nil
+}
+
+// GetRedisClient 返回 Redis 客户端，用于逻辑层发布自定义消息
+func (m *PubSubManager) GetRedisClient() *redis.Client {
+	return m.redisClient
 }
 
 // Start 启动订阅（监听所有骑手、商户和平台告警的通知频道）

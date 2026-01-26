@@ -1,71 +1,64 @@
-import { getAvailableOrders, acceptOrder, RiderOrderDTO } from '../../../api/rider'
+import { Delivery } from '../../../api/delivery'
 import { logger } from '../../../utils/logger'
-import { ErrorHandler } from '../../../utils/error-handler'
+import { getStableBarHeights } from '../../../utils/responsive'
 
 Page({
   data: {
-    tasks: [] as RiderOrderDTO[],
-    loading: false,
     navBarHeight: 88,
+    loading: false,
+    deliveries: [] as Delivery[],
+    pageID: 1,
     hasMore: true,
-    page: 1
+    
+    // 统计
+    totalEarnings: 0,
+    totalCount: 0
   },
 
   onLoad() {
-    this.loadTasks(true)
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    this.fetchHistory()
   },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
-  },
-
-  onPullDownRefresh() {
-    this.loadTasks(true).then(() => {
-      wx.stopPullDownRefresh()
-    })
+  async fetchHistory() {
+    if (this.data.loading) return
+    this.setData({ loading: true })
+    
+    try {
+        const resp = await (require('../../../utils/request').request({
+            url: '/v1/delivery/history',
+            method: 'GET',
+            data: {
+                page_id: this.data.pageID,
+                page_size: 20
+            }
+        }))
+        
+        const list = resp.deliveries || []
+        this.setData({
+            deliveries: this.data.pageID === 1 ? list : [...this.data.deliveries, ...list],
+            hasMore: list.length === 20,
+            totalEarnings: resp.total_earnings || 0,
+            totalCount: resp.total || 0
+        })
+    } catch (err) {
+        logger.error('Fetch delivery history failed', err)
+    } finally {
+        this.setData({ loading: false })
+    }
   },
 
   onReachBottom() {
     if (this.data.hasMore && !this.data.loading) {
-      this.setData({ page: this.data.page + 1 })
-      this.loadTasks(false)
+        this.setData({ pageID: this.data.pageID + 1 }, () => this.fetchHistory())
     }
   },
 
-  async loadTasks(reset = false) {
-    if (this.data.loading) return
-    this.setData({ loading: true })
-
-    if (reset) {
-      this.setData({ page: 1, tasks: [], hasMore: true })
-    }
-
-    try {
-      const res = await getAvailableOrders(this.data.page)
-      const newTasks = res.items
-            
-      this.setData({
-        tasks: reset ? newTasks : [...this.data.tasks, ...newTasks],
-        hasMore: newTasks.length > 0, // Simple check
-        loading: false
-      })
-    } catch (error) {
-      logger.error('Load tasks failed', error, 'Tasks')
-      this.setData({ loading: false })
-      wx.showToast({ title: '加载失败', icon: 'none' })
-    }
-  },
-
-  async onTaskAction(e: WechatMiniprogram.CustomEvent) {
-    const { id, action } = e.detail
-    if (action === 'accept') {
-      try {
-        await acceptOrder(id)
-        wx.showToast({ title: '抢单成功', icon: 'success' })
-        this.loadTasks(true) // Refresh list
-      } catch (error) {
-        wx.showToast({ title: '抢单失败', icon: 'none' })
-      }
-    }
+  onGoToDetail(e: any) {
+    const { orderId } = e.currentTarget.dataset
+    wx.navigateTo({
+        url: `/pages/rider/task-detail/index?id=${orderId}`
+    })
   }
 })

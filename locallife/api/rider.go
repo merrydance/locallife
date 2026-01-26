@@ -86,7 +86,7 @@ func (server *Server) getRiderMe(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -291,7 +291,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -409,7 +409,7 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -519,7 +519,7 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -578,7 +578,7 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -644,7 +644,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -723,7 +723,7 @@ func (server *Server) goOnline(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -777,7 +777,7 @@ func (server *Server) goOffline(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -870,7 +870,7 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1436,7 +1436,7 @@ func (server *Server) getRiderPremiumScore(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1488,7 +1488,7 @@ type listRiderPremiumScoreHistoryResponse struct {
 	TotalCount   int64                 `json:"total_count"`
 	PageID       int32                 `json:"page_id"`
 	PageSize     int32                 `json:"page_size"`
-	Logs         []premiumScoreLogItem `json:"logs"`          // 历史记录
+	Logs         []premiumScoreLogItem `json:"logs"` // 历史记录
 }
 
 // getChangeTypeName 获取变更类型中文名
@@ -1537,7 +1537,7 @@ func (server *Server) listRiderPremiumScoreHistory(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
