@@ -157,6 +157,28 @@ func (q *Queries) ExpireWebLoginSession(ctx context.Context, id int64) (WebLogin
 	return i, err
 }
 
+const expireWebLoginSessionsBefore = `-- name: ExpireWebLoginSessionsBefore :execrows
+UPDATE web_login_sessions
+SET status = 'expired',
+    updated_at = NOW()
+WHERE status = $1
+  AND expires_at < $2
+`
+
+type ExpireWebLoginSessionsBeforeParams struct {
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// 批量过期超时的 pending 会话
+func (q *Queries) ExpireWebLoginSessionsBefore(ctx context.Context, arg ExpireWebLoginSessionsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, expireWebLoginSessionsBefore, arg.Status, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getWebLoginSessionByCode = `-- name: GetWebLoginSessionByCode :one
 SELECT id, code, status, user_id, expires_at, confirmed_at, consumed_at, web_user_agent, web_client_ip, confirm_client_ip, created_at, updated_at, poll_token FROM web_login_sessions
 WHERE code = $1

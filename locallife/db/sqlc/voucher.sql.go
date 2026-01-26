@@ -213,6 +213,21 @@ func (q *Queries) DeleteVoucher(ctx context.Context, id int64) error {
 	return err
 }
 
+const expireUnusedVouchers = `-- name: ExpireUnusedVouchers :execrows
+UPDATE user_vouchers
+SET status = 'expired'
+WHERE status = 'unused' 
+    AND expires_at <= NOW()
+`
+
+func (q *Queries) ExpireUnusedVouchers(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, expireUnusedVouchers)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getUserVoucher = `-- name: GetUserVoucher :one
 SELECT uv.id, uv.voucher_id, uv.user_id, uv.status, uv.order_id, uv.used_at, uv.obtained_at, uv.expires_at, v.merchant_id, v.code, v.name, v.amount, v.min_order_amount, v.allowed_order_types
 FROM user_vouchers uv
@@ -793,18 +808,6 @@ func (q *Queries) ListUserVouchers(ctx context.Context, arg ListUserVouchersPara
 		return nil, err
 	}
 	return items, nil
-}
-
-const markExpiredVouchers = `-- name: MarkExpiredVouchers :exec
-UPDATE user_vouchers
-SET status = 'expired'
-WHERE status = 'unused' 
-    AND expires_at <= NOW()
-`
-
-func (q *Queries) MarkExpiredVouchers(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, markExpiredVouchers)
-	return err
 }
 
 const markUserVoucherAsExpiredOnRollback = `-- name: MarkUserVoucherAsExpiredOnRollback :one

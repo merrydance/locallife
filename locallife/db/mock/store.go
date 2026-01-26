@@ -743,6 +743,21 @@ func (mr *MockStoreMockRecorder) CloseDiningSessionTx(ctx, arg any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseDiningSessionTx", reflect.TypeOf((*MockStore)(nil).CloseDiningSessionTx), ctx, arg)
 }
 
+// CloseExpiredPaymentOrders mocks base method.
+func (m *MockStore) CloseExpiredPaymentOrders(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseExpiredPaymentOrders", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloseExpiredPaymentOrders indicates an expected call of CloseExpiredPaymentOrders.
+func (mr *MockStoreMockRecorder) CloseExpiredPaymentOrders(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseExpiredPaymentOrders", reflect.TypeOf((*MockStore)(nil).CloseExpiredPaymentOrders), ctx)
+}
+
 // CompleteDeliveryTx mocks base method.
 func (m *MockStore) CompleteDeliveryTx(ctx context.Context, arg db.CompleteDeliveryTxParams) (db.CompleteDeliveryTxResult, error) {
 	m.ctrl.T.Helper()
@@ -4280,6 +4295,21 @@ func (mr *MockStoreMockRecorder) DeleteVoucher(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVoucher", reflect.TypeOf((*MockStore)(nil).DeleteVoucher), ctx, id)
 }
 
+// ExpireUnusedVouchers mocks base method.
+func (m *MockStore) ExpireUnusedVouchers(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExpireUnusedVouchers", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExpireUnusedVouchers indicates an expected call of ExpireUnusedVouchers.
+func (mr *MockStoreMockRecorder) ExpireUnusedVouchers(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpireUnusedVouchers", reflect.TypeOf((*MockStore)(nil).ExpireUnusedVouchers), ctx)
+}
+
 // ExpireWebLoginSession mocks base method.
 func (m *MockStore) ExpireWebLoginSession(ctx context.Context, id int64) (db.WebLoginSession, error) {
 	m.ctrl.T.Helper()
@@ -4293,6 +4323,21 @@ func (m *MockStore) ExpireWebLoginSession(ctx context.Context, id int64) (db.Web
 func (mr *MockStoreMockRecorder) ExpireWebLoginSession(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpireWebLoginSession", reflect.TypeOf((*MockStore)(nil).ExpireWebLoginSession), ctx, id)
+}
+
+// ExpireWebLoginSessionsBefore mocks base method.
+func (m *MockStore) ExpireWebLoginSessionsBefore(ctx context.Context, arg db.ExpireWebLoginSessionsBeforeParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExpireWebLoginSessionsBefore", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExpireWebLoginSessionsBefore indicates an expected call of ExpireWebLoginSessionsBefore.
+func (mr *MockStoreMockRecorder) ExpireWebLoginSessionsBefore(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpireWebLoginSessionsBefore", reflect.TypeOf((*MockStore)(nil).ExpireWebLoginSessionsBefore), ctx, arg)
 }
 
 // ExploreNearbyRooms mocks base method.
@@ -10726,6 +10771,21 @@ func (mr *MockStoreMockRecorder) ListOnlineRidersByRegion(ctx, regionID any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOnlineRidersByRegion", reflect.TypeOf((*MockStore)(nil).ListOnlineRidersByRegion), ctx, regionID)
 }
 
+// ListOpenDiningSessionsBefore mocks base method.
+func (m *MockStore) ListOpenDiningSessionsBefore(ctx context.Context, arg db.ListOpenDiningSessionsBeforeParams) ([]db.DiningSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOpenDiningSessionsBefore", ctx, arg)
+	ret0, _ := ret[0].([]db.DiningSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOpenDiningSessionsBefore indicates an expected call of ListOpenDiningSessionsBefore.
+func (mr *MockStoreMockRecorder) ListOpenDiningSessionsBefore(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOpenDiningSessionsBefore", reflect.TypeOf((*MockStore)(nil).ListOpenDiningSessionsBefore), ctx, arg)
+}
+
 // ListOpenMerchants mocks base method.
 func (m *MockStore) ListOpenMerchants(ctx context.Context, arg db.ListOpenMerchantsParams) ([]db.Merchant, error) {
 	m.ctrl.T.Helper()
@@ -11039,6 +11099,21 @@ func (m *MockStore) ListPendingDeliveries(ctx context.Context, limit int32) ([]d
 func (mr *MockStoreMockRecorder) ListPendingDeliveries(ctx, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingDeliveries", reflect.TypeOf((*MockStore)(nil).ListPendingDeliveries), ctx, limit)
+}
+
+// ListPendingDeliveriesBefore mocks base method.
+func (m *MockStore) ListPendingDeliveriesBefore(ctx context.Context, arg db.ListPendingDeliveriesBeforeParams) ([]db.Delivery, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingDeliveriesBefore", ctx, arg)
+	ret0, _ := ret[0].([]db.Delivery)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingDeliveriesBefore indicates an expected call of ListPendingDeliveriesBefore.
+func (mr *MockStoreMockRecorder) ListPendingDeliveriesBefore(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingDeliveriesBefore", reflect.TypeOf((*MockStore)(nil).ListPendingDeliveriesBefore), ctx, arg)
 }
 
 // ListPendingEcommerceApplyments mocks base method.
@@ -12073,20 +12148,6 @@ func (m *MockStore) MarkAllNotificationsAsRead(ctx context.Context, userID int64
 func (mr *MockStoreMockRecorder) MarkAllNotificationsAsRead(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAllNotificationsAsRead", reflect.TypeOf((*MockStore)(nil).MarkAllNotificationsAsRead), ctx, userID)
-}
-
-// MarkExpiredVouchers mocks base method.
-func (m *MockStore) MarkExpiredVouchers(ctx context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkExpiredVouchers", ctx)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkExpiredVouchers indicates an expected call of MarkExpiredVouchers.
-func (mr *MockStoreMockRecorder) MarkExpiredVouchers(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkExpiredVouchers", reflect.TypeOf((*MockStore)(nil).MarkExpiredVouchers), ctx)
 }
 
 // MarkNoShowTx mocks base method.

@@ -11,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const closeExpiredPaymentOrders = `-- name: CloseExpiredPaymentOrders :execrows
+UPDATE payment_orders
+SET status = 'closed'
+WHERE status = 'pending' AND expires_at < now()
+`
+
+// 批量关闭过期的 pending 支付订单
+func (q *Queries) CloseExpiredPaymentOrders(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, closeExpiredPaymentOrders)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createPaymentOrder = `-- name: CreatePaymentOrder :one
 INSERT INTO payment_orders (
     order_id,

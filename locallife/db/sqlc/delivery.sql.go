@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -484,6 +485,71 @@ LIMIT $1
 
 func (q *Queries) ListPendingDeliveries(ctx context.Context, limit int32) ([]Delivery, error) {
 	rows, err := q.db.Query(ctx, listPendingDeliveries, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Delivery{}
+	for rows.Next() {
+		var i Delivery
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.RiderID,
+			&i.PickupAddress,
+			&i.PickupLongitude,
+			&i.PickupLatitude,
+			&i.PickupContact,
+			&i.PickupPhone,
+			&i.PickedAt,
+			&i.DeliveryAddress,
+			&i.DeliveryLongitude,
+			&i.DeliveryLatitude,
+			&i.DeliveryContact,
+			&i.DeliveryPhone,
+			&i.DeliveredAt,
+			&i.Distance,
+			&i.DeliveryFee,
+			&i.RiderEarnings,
+			&i.Status,
+			&i.EstimatedPickupAt,
+			&i.EstimatedDeliveryAt,
+			&i.IsDamaged,
+			&i.IsDelayed,
+			&i.DamageAmount,
+			&i.DamageReason,
+			&i.CreatedAt,
+			&i.AssignedAt,
+			&i.CompletedAt,
+			&i.RiderDeliveredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingDeliveriesBefore = `-- name: ListPendingDeliveriesBefore :many
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
+WHERE status = $1
+  AND created_at < $2
+ORDER BY created_at ASC
+LIMIT $3
+`
+
+type ListPendingDeliveriesBeforeParams struct {
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	Limit     int32     `json:"limit"`
+}
+
+// 获取超时未接单的配送单
+func (q *Queries) ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error) {
+	rows, err := q.db.Query(ctx, listPendingDeliveriesBefore, arg.Status, arg.CreatedAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

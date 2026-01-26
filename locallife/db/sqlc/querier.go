@@ -81,6 +81,8 @@ type Querier interface {
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error
 	CloseDiningSession(ctx context.Context, id int64) (DiningSession, error)
+	// 批量关闭过期的 pending 支付订单
+	CloseExpiredPaymentOrders(ctx context.Context) (int64, error)
 	ConfirmFraudPattern(ctx context.Context, arg ConfirmFraudPatternParams) error
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
@@ -451,7 +453,10 @@ type Querier interface {
 	DeleteUserRoleByUserAndRole(ctx context.Context, arg DeleteUserRoleByUserAndRoleParams) error
 	// 软删除代金券模板
 	DeleteVoucher(ctx context.Context, id int64) error
+	ExpireUnusedVouchers(ctx context.Context) (int64, error)
 	ExpireWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
+	// 批量过期超时的 pending 会话
+	ExpireWebLoginSessionsBefore(ctx context.Context, arg ExpireWebLoginSessionsBeforeParams) (int64, error)
 	// 探索附近包间（无需指定预订日期时段），用于本地包间浏览流
 	// 返回包间信息 + 商户信息 + 主图 + 近30天预订量
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
@@ -1094,6 +1099,7 @@ type Querier interface {
 	ListOnlineRiders(ctx context.Context) ([]Rider, error)
 	// 列出区域内在线骑手
 	ListOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) ([]Rider, error)
+	ListOpenDiningSessionsBefore(ctx context.Context, arg ListOpenDiningSessionsBeforeParams) ([]DiningSession, error)
 	// 获取营业中的商户列表
 	ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsParams) ([]Merchant, error)
 	// =========================== 运营商视角 ===========================
@@ -1121,6 +1127,8 @@ type Querier interface {
 	// 查询待支付且已过期的合单（用于定时关闭）
 	ListPendingCombinedPaymentOrders(ctx context.Context, limit int32) ([]CombinedPaymentOrder, error)
 	ListPendingDeliveries(ctx context.Context, limit int32) ([]Delivery, error)
+	// 获取超时未接单的配送单
+	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
 	// 列出待审核的申请（平台管理员用）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
@@ -1213,7 +1221,6 @@ type Querier interface {
 	ListWeatherCoefficients(ctx context.Context, arg ListWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
-	MarkExpiredVouchers(ctx context.Context) error
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)

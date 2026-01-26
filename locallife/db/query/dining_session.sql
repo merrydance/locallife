@@ -42,3 +42,10 @@ SELECT * FROM dining_sessions
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
+
+-- name: ListOpenDiningSessionsBefore :many
+SELECT * FROM dining_sessions
+WHERE status = sqlc.arg('status')
+  AND opened_at < sqlc.arg('opened_at')
+ORDER BY opened_at ASC
+LIMIT sqlc.arg('limit');

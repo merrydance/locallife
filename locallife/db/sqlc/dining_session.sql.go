@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -174,6 +175,52 @@ type ListDiningSessionsByUserParams struct {
 
 func (q *Queries) ListDiningSessionsByUser(ctx context.Context, arg ListDiningSessionsByUserParams) ([]DiningSession, error) {
 	rows, err := q.db.Query(ctx, listDiningSessionsByUser, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DiningSession{}
+	for rows.Next() {
+		var i DiningSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.TableID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.ActiveOrderID,
+			&i.Status,
+			&i.OpenedAt,
+			&i.ClosedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenDiningSessionsBefore = `-- name: ListOpenDiningSessionsBefore :many
+SELECT id, merchant_id, table_id, reservation_id, user_id, active_order_id, status, opened_at, closed_at, created_at, updated_at FROM dining_sessions
+WHERE status = $1
+  AND opened_at < $2
+ORDER BY opened_at ASC
+LIMIT $3
+`
+
+type ListOpenDiningSessionsBeforeParams struct {
+	Status   string    `json:"status"`
+	OpenedAt time.Time `json:"opened_at"`
+	Limit    int32     `json:"limit"`
+}
+
+func (q *Queries) ListOpenDiningSessionsBefore(ctx context.Context, arg ListOpenDiningSessionsBeforeParams) ([]DiningSession, error) {
+	rows, err := q.db.Query(ctx, listOpenDiningSessionsBefore, arg.Status, arg.OpenedAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

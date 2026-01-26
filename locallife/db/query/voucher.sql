@@ -177,7 +177,7 @@ SET
 WHERE id = $1 AND status = 'used' AND order_id = $2
 RETURNING *;
 
--- name: MarkExpiredVouchers :exec
+-- name: ExpireUnusedVouchers :execrows
 UPDATE user_vouchers
 SET status = 'expired'
 WHERE status = 'unused' 
