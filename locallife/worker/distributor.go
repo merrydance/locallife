@@ -23,6 +23,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskOrderPaymentTimeout 分发订单支付超时任务
+	DistributeTaskOrderPaymentTimeout(
+		ctx context.Context,
+		payload *PayloadOrderPaymentTimeout,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskReservationNoShowAlert 分发预定未到店提醒任务
 	DistributeTaskReservationNoShowAlert(
 		ctx context.Context,

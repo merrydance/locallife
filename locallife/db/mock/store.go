@@ -11071,6 +11071,21 @@ func (mr *MockStoreMockRecorder) ListPendingOperatorApplications(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingOperatorApplications", reflect.TypeOf((*MockStore)(nil).ListPendingOperatorApplications), ctx, arg)
 }
 
+// ListPendingOrdersBefore mocks base method.
+func (m *MockStore) ListPendingOrdersBefore(ctx context.Context, arg db.ListPendingOrdersBeforeParams) ([]db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingOrdersBefore", ctx, arg)
+	ret0, _ := ret[0].([]db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingOrdersBefore indicates an expected call of ListPendingOrdersBefore.
+func (mr *MockStoreMockRecorder) ListPendingOrdersBefore(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingOrdersBefore", reflect.TypeOf((*MockStore)(nil).ListPendingOrdersBefore), ctx, arg)
+}
+
 // ListPendingReservationsNearDeadline mocks base method.
 func (m *MockStore) ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]db.TableReservation, error) {
 	m.ctrl.T.Helper()

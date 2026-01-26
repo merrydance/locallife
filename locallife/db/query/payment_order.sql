@@ -121,3 +121,9 @@ SET
     processed_at = now()
 WHERE id = $1 AND status = 'paid' AND processed_at IS NULL
 RETURNING *;
+
+-- name: CloseExpiredPaymentOrders :execrows
+-- 批量关闭过期的 pending 支付订单
+UPDATE payment_orders
+SET status = 'closed'
+WHERE status = 'pending' AND expires_at < now();

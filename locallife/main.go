@@ -157,6 +157,7 @@ func main() {
 	schedulerManager.Register("auto-tag", autotag.NewScheduler(store))
 	schedulerManager.Register("session-cleanup", session.NewScheduler(store))
 	schedulerManager.Register("payment-recovery", worker.NewPaymentRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.StartAll(ctx, waitGroup)
 
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)

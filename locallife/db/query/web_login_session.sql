@@ -44,3 +44,11 @@ SET status = 'expired',
     updated_at = NOW()
 WHERE id = $1 AND status <> 'consumed'
 RETURNING *;
+
+-- name: ExpireWebLoginSessionsBefore :execrows
+-- 批量过期超时的 pending 会话
+UPDATE web_login_sessions
+SET status = 'expired',
+    updated_at = NOW()
+WHERE status = sqlc.arg('status')
+  AND expires_at < sqlc.arg('expires_at');

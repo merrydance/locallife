@@ -22,6 +22,10 @@ func (NoopTaskDistributor) DistributeTaskReservationPaymentTimeout(ctx context.C
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskOrderPaymentTimeout(ctx context.Context, payload *PayloadOrderPaymentTimeout, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskReservationNoShowAlert(ctx context.Context, payload *PayloadReservationNoShowAlert, opts ...asynq.Option) error {
 	return nil
 }

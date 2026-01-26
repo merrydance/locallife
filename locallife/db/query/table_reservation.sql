@@ -39,6 +39,7 @@ INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.id = $1;
 
 -- name: ListReservationsByUserWithStatus :many
+-- 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 SELECT 
     tr.*,
     t.table_no,
@@ -46,6 +47,7 @@ SELECT
 FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.user_id = sqlc.arg('user_id')
+  AND (tr.source IS NULL OR tr.source = 'online')
   AND (sqlc.narg('status')::text IS NULL OR tr.status = sqlc.narg('status'))
 ORDER BY
   CASE tr.status

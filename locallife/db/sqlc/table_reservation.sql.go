@@ -1253,6 +1253,7 @@ SELECT
 FROM table_reservations tr
 INNER JOIN tables t ON tr.table_id = t.id
 WHERE tr.user_id = $1
+  AND (tr.source IS NULL OR tr.source = 'online')
   AND ($2::text IS NULL OR tr.status = $2)
 ORDER BY
   CASE tr.status
@@ -1307,6 +1308,7 @@ type ListReservationsByUserWithStatusRow struct {
 	TableType        string             `json:"table_type"`
 }
 
+// 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 func (q *Queries) ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error) {
 	rows, err := q.db.Query(ctx, listReservationsByUserWithStatus,
 		arg.UserID,

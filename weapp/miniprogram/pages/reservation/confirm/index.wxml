@@ -83,7 +83,6 @@
         <text style="font-size: 36rpx; font-weight: bold; color: #E34D59;">¥{{calculation.totalDisplay}}</text>
       </view>
     </view>
-  </view>
 
   <!-- 支付提示 -->
   <view class="payment-tip">

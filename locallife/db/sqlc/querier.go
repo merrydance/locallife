@@ -1124,6 +1124,9 @@ type Querier interface {
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
 	// 列出待审核的申请（平台管理员用）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
+	// ==================== 订单超时清理 ====================
+	// 获取超时未支付的 pending 订单（创建时间早于指定时间）
+	ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error)
 	// Find pending reservations within N minutes of payment deadline (for reminder notifications)
 	ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]TableReservation, error)
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
@@ -1155,6 +1158,7 @@ type Querier interface {
 	ListReservationsByMerchantAndStatus(ctx context.Context, arg ListReservationsByMerchantAndStatusParams) ([]ListReservationsByMerchantAndStatusRow, error)
 	ListReservationsByTable(ctx context.Context, arg ListReservationsByTableParams) ([]TableReservation, error)
 	ListReservationsByTableAndDate(ctx context.Context, arg ListReservationsByTableAndDateParams) ([]TableReservation, error)
+	// 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 	ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error)
 	ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMerchantParams) ([]Review, error)
 	ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]Review, error)

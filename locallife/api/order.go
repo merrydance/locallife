@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
@@ -1012,55 +1013,55 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			}
 		} else {
 
-		var bg db.BillingGroup
-		if req.BillingGroupID != nil {
-			var err error
-			bg, err = server.store.GetBillingGroup(ctx, *req.BillingGroupID)
-			if err != nil {
+			var bg db.BillingGroup
+			if req.BillingGroupID != nil {
+				var err error
+				bg, err = server.store.GetBillingGroup(ctx, *req.BillingGroupID)
+				if err != nil {
+					if isNotFoundError(err) {
+						ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
+						return
+					}
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+					return
+				}
+			} else {
+				var err error
+				bg, err = server.store.GetDefaultBillingGroupBySession(ctx, diningSession.ID)
+				if err != nil {
+					if isNotFoundError(err) {
+						ctx.JSON(http.StatusConflict, errorResponse(errors.New("default billing group not found")))
+						return
+					}
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+					return
+				}
+			}
+
+			if bg.DiningSessionID != diningSession.ID {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group does not belong to this dining session")))
+				return
+			}
+			if bg.Status == "closed" {
+				ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group is closed")))
+				return
+			}
+			if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
+				BillingGroupID: bg.ID,
+				UserID:         authPayload.UserID,
+			}); err != nil {
 				if isNotFoundError(err) {
-					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
+					ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a member of the billing group")))
 					return
 				}
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
-		} else {
-			var err error
-			bg, err = server.store.GetDefaultBillingGroupBySession(ctx, diningSession.ID)
-			if err != nil {
-				if isNotFoundError(err) {
-					ctx.JSON(http.StatusConflict, errorResponse(errors.New("default billing group not found")))
-					return
-				}
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-		}
 
-		if bg.DiningSessionID != diningSession.ID {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group does not belong to this dining session")))
-			return
-		}
-		if bg.Status == "closed" {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group is closed")))
-			return
-		}
-		if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
-			BillingGroupID: bg.ID,
-			UserID:         authPayload.UserID,
-		}); err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a member of the billing group")))
-				return
+			if req.BillingGroupID == nil {
+				bgID := bg.ID
+				req.BillingGroupID = &bgID
 			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if req.BillingGroupID == nil {
-			bgID := bg.ID
-			req.BillingGroupID = &bgID
-		}
 		}
 	}
 
@@ -1531,6 +1532,18 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			_ = server.store.ClearCart(ctx, cart.ID)
 		}
 	}
+
+	// 调度订单支付超时任务：对于仍处于 pending 状态（需在线支付）的订单
+	// 30分钟后自动取消
+	if txResult.Order.Status == OrderStatusPending && server.taskDistributor != nil {
+		timeoutAt := time.Now().Add(worker.OrderPaymentTimeoutMinutes * time.Minute)
+		_ = server.taskDistributor.DistributeTaskOrderPaymentTimeout(
+			ctx,
+			&worker.PayloadOrderPaymentTimeout{OrderID: txResult.Order.ID},
+			asynq.ProcessAt(timeoutAt),
+		)
+	}
+
 	ctx.JSON(http.StatusOK, resp)
 }
 

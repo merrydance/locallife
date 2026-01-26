@@ -328,3 +328,13 @@ WHERE merchant_id = $1
   AND created_at >= $2 AND created_at <= $3
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
+
+-- ==================== 订单超时清理 ====================
+
+-- name: ListPendingOrdersBefore :many
+-- 获取超时未支付的 pending 订单（创建时间早于指定时间）
+SELECT * FROM orders
+WHERE status = sqlc.arg('status')
+  AND created_at < sqlc.arg('created_at')
+ORDER BY created_at ASC
+LIMIT sqlc.arg('limit');

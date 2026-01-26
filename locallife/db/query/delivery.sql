@@ -154,3 +154,11 @@ SET
     estimated_delivery_at = $2
 WHERE id = $1
 RETURNING *;
+
+-- name: ListPendingDeliveriesBefore :many
+-- 获取超时未接单的配送单
+SELECT * FROM deliveries
+WHERE status = sqlc.arg('status')
+  AND created_at < sqlc.arg('created_at')
+ORDER BY created_at ASC
+LIMIT sqlc.arg('limit');

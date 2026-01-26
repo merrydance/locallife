@@ -137,6 +137,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskMerchantApplicationIDCa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskMerchantApplicationIDCardOCR", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskMerchantApplicationIDCardOCR), varargs...)
 }
 
+// DistributeTaskOrderPaymentTimeout mocks base method.
+func (m *MockTaskDistributor) DistributeTaskOrderPaymentTimeout(ctx context.Context, payload *worker.PayloadOrderPaymentTimeout, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskOrderPaymentTimeout", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskOrderPaymentTimeout indicates an expected call of DistributeTaskOrderPaymentTimeout.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskOrderPaymentTimeout(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskOrderPaymentTimeout", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskOrderPaymentTimeout), varargs...)
+}
+
 // DistributeTaskPaymentOrderTimeout mocks base method.
 func (m *MockTaskDistributor) DistributeTaskPaymentOrderTimeout(ctx context.Context, payload *worker.PayloadPaymentOrderTimeout, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()
