@@ -588,73 +588,168 @@ export function DineInPageClient() {
                       key={table.id}
                       onClick={() => handleShowDetail(table)}
                       className={cn(
-                        "group p-3 rounded-lg border transition-all cursor-pointer flex items-center gap-6 bg-white hover:shadow-sm",
+                        "group p-4 rounded-xl border transition-all cursor-pointer bg-white hover:shadow-md",
                         isOccupied ? "border-primary/30 bg-primary/5" : "border-slate-100 hover:border-primary/50 hover:bg-slate-50"
                       )}
                     >
-                      <div className="w-12 text-center">
-                         <h5 className="text-xl font-black">{table.table_no}</h5>
-                      </div>
-                      <div className="w-24">
-                        <Badge variant={config.badgeVariant} className={cn("text-[10px] h-5 px-2 font-bold", config.bgColor, config.color, "border-none")}>
-                           {config.label}
-                        </Badge>
-                      </div>
-                      <div className="flex-1 flex items-center gap-8">
-                         {isOccupied ? (
-                           <>
-                             <div className="w-32 flex flex-col gap-1">
-                                <Progress value={progress?.percentage} className="h-1" indicatorClassName="bg-primary" />
-                                <span className="text-[10px] font-medium text-slate-400 tracking-tighter">出餐 {progress?.percentage.toFixed(0)}%</span>
+                      <div className="flex items-center gap-6">
+                        {/* Table Info */}
+                        <div className="w-16 text-center shrink-0">
+                           <h5 className="text-2xl font-black tracking-tighter">{table.table_no}</h5>
+                           <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-center gap-1">
+                             <Users className="size-3" /> {table.capacity}
+                           </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="w-20 shrink-0 text-center">
+                          <Badge variant={config.badgeVariant} className={cn("text-[10px] h-6 px-2.5 font-bold shadow-sm", config.bgColor, config.color, "border-none")}>
+                             {config.label}
+                          </Badge>
+                        </div>
+
+                        {/* Main Content Area */}
+                        <div className="flex-1 min-w-0">
+                           {isOccupied ? (
+                             <div className="flex gap-8">
+                               {/* Order Progress & Amount */}
+                               <div className="w-40 shrink-0 space-y-2">
+                                  <div className="flex flex-col">
+                                     <span className="text-xs font-medium text-slate-500 mb-1">当前消费</span>
+                                     <span className="text-xl font-black text-primary font-mono tracking-tight">
+                                       <span className="text-xs mr-0.5">¥</span>{formatAmount(table.activeOrder?.total_amount)}
+                                     </span>
+                                  </div>
+                                  <div className="space-y-1">
+                                     <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                                        <span>出餐进度</span>
+                                        <span className={cn(progress?.percentage === 100 ? "text-emerald-600" : "text-primary")}>
+                                          {progress?.ready}/{progress?.total}
+                                        </span>
+                                     </div>
+                                     <Progress value={progress?.percentage} className="h-1.5" indicatorClassName={cn(progress?.percentage === 100 ? "bg-emerald-500" : "bg-primary")} />
+                                  </div>
+                               </div>
+                               
+                               {/* Order Items Preview */}
+                               <div className="flex-1 min-w-0 border-l border-dashed border-primary/20 pl-6">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
+                                    菜品明细 ({table.activeOrder?.items?.length || 0})
+                                  </span>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(table.activeOrder?.items || []).slice(0, 4).map((item, idx) => (
+                                      <Badge key={idx} variant="secondary" className="bg-white border-slate-200 text-slate-600 font-normal h-6">
+                                        {item.quantity}x {item.name}
+                                      </Badge>
+                                    ))}
+                                    {(table.activeOrder?.items?.length || 0) > 4 && (
+                                      <Badge variant="outline" className="border-dashed text-muted-foreground h-6">
+                                        +{table.activeOrder!.items!.length - 4} 更多
+                                      </Badge>
+                                    )}
+                                    {(!table.activeOrder?.items || table.activeOrder.items.length === 0) && (
+                                      <span className="text-xs text-slate-400 italic">暂无已点菜品</span>
+                                    )}
+                                  </div>
+                               </div>
                              </div>
-                             <div className="flex flex-col">
-                                <span className="text-xs font-black text-primary">¥{formatAmount(table.activeOrder?.total_amount)}</span>
-                                <span className="text-[10px] text-muted-foreground">当前账单</span>
+                            ) : isReserved ? (
+                              <div className="flex items-center gap-6 h-full">
+                                <div className="bg-amber-50 rounded-lg p-3 border border-amber-100 flex items-center gap-3">
+                                  <div className="bg-white p-2 rounded-md shadow-sm">
+                                    <Clock className="size-4 text-amber-600" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-amber-900 line-clamp-1">{table.current_reservation?.contact_name}</p>
+                                    <p className="text-[10px] text-amber-600 font-medium mt-0.5 flex items-center gap-2">
+                                      <span>{table.current_reservation?.reservation_time} 到访</span>
+                                      <span className="w-px h-2 bg-amber-200" />
+                                      <span className="flex items-center gap-1"><Phone className="size-2.5" /> {table.current_reservation?.contact_phone}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                                {table.current_reservation?.guest_count && (
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase">预订人数</span>
+                                    <span className="text-sm font-bold text-slate-700">{table.current_reservation.guest_count} 人</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : table.todayReservation ? (
+                              <div className="flex items-center gap-6 h-full">
+                                <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex items-center gap-3 opacity-80">
+                                  <div className="bg-white p-2 rounded-md shadow-sm">
+                                    <Calendar className="size-4 text-slate-500" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-slate-700 line-clamp-1">{table.todayReservation.contact_name}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium mt-0.5 flex items-center gap-2">
+                                      <span>今晚 {table.todayReservation.reservation_time}</span>
+                                      <span className="w-px h-2 bg-slate-200" />
+                                      <span className="flex items-center gap-1"><Phone className="size-2.5" /> {table.todayReservation.contact_phone}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                             <div className="h-full flex items-center opacity-30">
+                                <span className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                                  <Armchair className="size-4" /> 暂无客人
+                                </span>
                              </div>
-                           </>
-                          ) : isReserved ? (
-                            <div className="flex items-center gap-4">
-                              <span className="text-xs font-bold text-amber-600 flex items-center gap-2">
-                                <Clock className="size-3" /> {table.current_reservation?.reservation_time} · {table.current_reservation?.contact_name}
-                              </span>
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Phone className="size-3" /> {table.current_reservation?.contact_phone}
-                              </span>
-                            </div>
-                          ) : table.todayReservation ? (
-                            <div className="flex items-center gap-4">
-                              <span className="text-xs font-bold text-slate-500 flex items-center gap-2">
-                                <Calendar className="size-3" /> 今日 {table.todayReservation.reservation_time} · {table.todayReservation.contact_name}
-                              </span>
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Phone className="size-3" /> {table.todayReservation.contact_phone}
-                              </span>
-                            </div>
-                          ) : (
-                           <span className="text-xs text-slate-300 italic">等待客人</span>
-                         )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isOccupied ? (
-                           <>
-                             <Button variant="secondary" size="sm" className="h-8 px-3 text-xs font-bold rounded-lg text-primary bg-primary/10" onClick={(e) => { e.stopPropagation(); handleCloseTable(table); }}>结账</Button>
-                             <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-medium text-amber-600 hover:bg-amber-50" onClick={(e) => { e.stopPropagation(); setSelectedTable(table); setIsTransferModalOpen(true); }}>换桌</Button>
-                           </>
-                        ) : (isReserved || table.todayReservation) && isReservationCheckInReady((table.current_reservation || table.todayReservation)?.reservation_time || "") ? (
-                           <Button 
-                             variant="default" 
-                             size="sm" 
-                             className="h-8 px-3 text-xs font-bold rounded-lg"
-                             disabled={actionLoading === table.id}
-                             onClick={(e) => { e.stopPropagation(); handleCheckinReservation(table); }}
-                           >
-                             <UserCheck className="size-3 mr-1" /> 到店签到
-                           </Button>
-                        ) : null}
-                        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-slate-400 hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); handleResetTable(table); }}>
-                          <Sparkles className="size-3 mr-1" /> 清扫
-                        </Button>
-                        <ChevronRight className="size-4 text-slate-300" />
+                           )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 border-l pl-6 py-2">
+                          {isOccupied ? (
+                             <>
+                               <Button 
+                                 variant="default" 
+                                 size="sm" 
+                                 className="h-9 px-4 text-xs font-bold rounded-lg shadow-sm shadow-primary/20" 
+                                 onClick={(e) => { e.stopPropagation(); handleCloseTable(table); }}
+                               >
+                                 <Receipt className="size-3.5 mr-1.5" /> 结账退台
+                               </Button>
+                               <Button 
+                                 variant="outline" 
+                                 size="sm" 
+                                 className="h-9 w-9 p-0 rounded-lg text-amber-600 hover:bg-amber-50 border-amber-200" 
+                                 title="换桌"
+                                 onClick={(e) => { e.stopPropagation(); setSelectedTable(table); setIsTransferModalOpen(true); }}
+                               >
+                                  <ArrowRightLeft className="size-4" />
+                               </Button>
+                             </>
+                          ) : (isReserved || table.todayReservation) && isReservationCheckInReady((table.current_reservation || table.todayReservation)?.reservation_time || "") ? (
+                             <Button 
+                               variant="default" 
+                               size="sm" 
+                               className="h-9 px-4 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-600/20"
+                               disabled={actionLoading === table.id}
+                               onClick={(e) => { e.stopPropagation(); handleCheckinReservation(table); }}
+                             >
+                               <UserCheck className="size-3.5 mr-1.5" /> 到店签到
+                             </Button>
+                          ) : null}
+                          
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-9 w-9 p-0 rounded-lg text-slate-400 hover:bg-slate-100" 
+                            title="清扫/重置"
+                            onClick={(e) => { e.stopPropagation(); handleResetTable(table); }}
+                          >
+                            <Sparkles className="size-4" />
+                          </Button>
+                          
+                          <div className="h-4 w-px bg-slate-200 mx-1" />
+                          
+                          <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                            <ChevronRight className="size-4" />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );

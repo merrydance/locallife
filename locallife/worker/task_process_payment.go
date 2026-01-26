@@ -350,13 +350,13 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 	if paymentOrder.BusinessType == "reservation" && paymentOrder.ReservationID.Valid {
 		res, err := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
 		if err == nil {
-			// 计算提醒时间：预定日期 + 预定时间 + 30分钟
+			// 计算提醒时间：预定日期 + 预定时间
 			hours := res.ReservationTime.Microseconds / 1000000 / 3600
 			minutes := (res.ReservationTime.Microseconds / 1000000 % 3600) / 60
 			alertTime := time.Date(
 				res.ReservationDate.Time.Year(), res.ReservationDate.Time.Month(), res.ReservationDate.Time.Day(),
 				int(hours), int(minutes), 0, 0, time.Local,
-			).Add(30 * time.Minute)
+			)
 
 			_ = processor.distributor.DistributeTaskReservationNoShowAlert(
 				ctx,

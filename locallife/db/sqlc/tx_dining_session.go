@@ -253,5 +253,12 @@ func closeDiningSessionInternal(ctx context.Context, q *Queries, sessionID int64
 		return DiningSession{}, fmt.Errorf("update table status to available: %w", err)
 	}
 
+	// 5) Update reservation status to 'completed'
+	if session.ReservationID.Valid {
+		if _, err := q.db.Exec(ctx, `UPDATE table_reservations SET status = 'completed', completed_at = now(), updated_at = now() WHERE id = $1`, session.ReservationID.Int64); err != nil {
+			return DiningSession{}, fmt.Errorf("update reservation to completed: %w", err)
+		}
+	}
+
 	return session, nil
 }

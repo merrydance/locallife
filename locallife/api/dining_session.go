@@ -485,7 +485,7 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 				"message":     "该顾客有多次恶意索赔记录，谨慎服务",
 			})
 			server.wsHub.SendToMerchant(session.MerchantID, websocket.Message{
-				Type:      "merchant_user_risk_alert",
+				Type:      EventMerchantUserRiskAlert,
 				Data:      alertPayload,
 				Timestamp: time.Now(),
 			})
@@ -494,13 +494,49 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 		// 推送桌台状态变更
 		tableData, _ := json.Marshal(map[string]any{
 			"id":     session.TableID,
-			"status": "occupied",
+			"status": TableStatusOccupied,
 		})
 		server.wsHub.SendToMerchant(session.MerchantID, websocket.Message{
-			Type:      "table_status_change",
+			Type:      EventTableStatusChange,
 			Data:      tableData,
 			Timestamp: time.Now(),
 		})
+
+		// 如果关联了预订，推送预订状态变更 (checked_in)
+		if session.ReservationID.Valid {
+			if updatedRes, err := server.store.GetTableReservationWithTable(ctx, session.ReservationID.Int64); err == nil {
+				// 获取关联的订单项 (为了完整性，虽然列表可能只需要基本信息)
+				// 简单起见，这里复用 newReservationWithTableResponse
+				resResp := newReservationWithTableResponse(updatedRes)
+				// 尝试获取 Items (可选，为了列表视图完整性)
+				if items, err := server.store.ListReservationItems(ctx, updatedRes.ID); err == nil {
+					resResp.Items = make([]reservationItemResponse, len(items))
+					for i, item := range items {
+						resResp.Items[i] = reservationItemResponse{
+							ID:         item.ID,
+							Quantity:   item.Quantity,
+							UnitPrice:  item.UnitPrice,
+							TotalPrice: int64(item.Quantity) * item.UnitPrice,
+							Type:       "dish", // Default
+							Name:       item.DishName.String,
+						}
+						// 简单的映射，不像 listMerchantReservations 那么细致，主要为了状态更新
+						if item.DishImageUrl.Valid {
+							resResp.Items[i].ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
+						}
+					}
+				}
+
+				resPayload, _ := json.Marshal(map[string]any{
+					"reservation": resResp,
+				})
+				server.wsHub.SendToMerchant(session.MerchantID, websocket.Message{
+					Type:      EventReservationUpdate,
+					Data:      resPayload,
+					Timestamp: time.Now(),
+				})
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, openDiningSessionResponse{
@@ -554,7 +590,7 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if session.Status != "open" {
+	if session.Status != DiningSessionStatusOpen {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session is not open")))
 		return
 	}
@@ -697,7 +733,7 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 			"status":   result.FromTable.Status,
 		})
 		server.wsHub.SendToMerchant(result.Session.MerchantID, websocket.Message{
-			Type:      "table_status_change",
+			Type:      EventTableStatusChange,
 			Data:      fromPayload,
 			Timestamp: time.Now(),
 		})
@@ -708,7 +744,7 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 			"status":   result.ToTable.Status,
 		})
 		server.wsHub.SendToMerchant(result.Session.MerchantID, websocket.Message{
-			Type:      "table_status_change",
+			Type:      EventTableStatusChange,
 			Data:      toPayload,
 			Timestamp: time.Now(),
 		})
@@ -720,7 +756,7 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 			"operator_id":   authPayload.UserID,
 		})
 		server.wsHub.SendToMerchant(result.Session.MerchantID, websocket.Message{
-			Type:      "table_transfer",
+			Type:      EventTableTransfer,
 			Data:      transferPayload,
 			Timestamp: time.Now(),
 		})
@@ -790,14 +826,29 @@ func (server *Server) checkoutDiningSession(ctx *gin.Context) {
 	if server.wsHub != nil {
 		tableData, _ := json.Marshal(map[string]any{
 			"id":     result.Session.TableID,
-			"status": "available",
-			"event":  "session_closed",
+			"status": TableStatusAvailable,
+			"event":  EventSessionClosed,
 		})
 		server.wsHub.SendToMerchant(merchant.ID, websocket.Message{
-			Type:      "table_status_change",
+			Type:      EventTableStatusChange,
 			Data:      tableData,
 			Timestamp: time.Now(),
 		})
+
+		// 如果关联了预订，推送预订状态变更 (completed)
+		if result.Session.ReservationID.Valid {
+			if updatedRes, err := server.store.GetTableReservationWithTable(ctx, result.Session.ReservationID.Int64); err == nil {
+				resResp := newReservationWithTableResponse(updatedRes)
+				resPayload, _ := json.Marshal(map[string]any{
+					"reservation": resResp,
+				})
+				server.wsHub.SendToMerchant(merchant.ID, websocket.Message{
+					Type:      EventReservationUpdate,
+					Data:      resPayload,
+					Timestamp: time.Now(),
+				})
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, newDiningSessionResponse(result.Session))

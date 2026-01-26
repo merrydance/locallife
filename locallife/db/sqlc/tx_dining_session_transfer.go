@@ -152,8 +152,11 @@ func (store *SQLStore) TransferDiningSessionTableTx(ctx context.Context, arg Tra
 			return fmt.Errorf("update dining session table: %w", err)
 		}
 
-		// [Change] We no longer update the reservation's table ID to maintain historical accuracy
-		// of what table was originally reserved. The session still points to the reservation.
+		if session.ReservationID.Valid {
+			if _, err := q.db.Exec(ctx, `UPDATE table_reservations SET table_id = $1, updated_at = now() WHERE id = $2`, toTable.ID, session.ReservationID.Int64); err != nil {
+				return fmt.Errorf("update reservation table: %w", err)
+			}
+		}
 
 		updatedFrom, err := q.UpdateTableStatus(ctx, UpdateTableStatusParams{
 			ID:                   fromTable.ID,

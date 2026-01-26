@@ -22,16 +22,6 @@ import (
 // ==================== 预定管理 ====================
 
 // 预定状态常量
-const (
-	ReservationStatusPending   = "pending"
-	ReservationStatusPaid      = "paid"
-	ReservationStatusConfirmed = "confirmed"
-	ReservationStatusCheckedIn = "checked_in"
-	ReservationStatusCompleted = "completed"
-	ReservationStatusCancelled = "cancelled"
-	ReservationStatusExpired   = "expired"
-	ReservationStatusNoShow    = "no_show"
-)
 
 const (
 	reservationActionConfirm      = "confirm"
@@ -448,6 +438,16 @@ func (server *Server) createReservation(ctx *gin.Context) {
 
 	// 预订成功提醒：若用户在外卖拒绝服务名单中，通知商户后台
 	if server.wsHub != nil {
+		// 发送新预订通知给商户
+		newReservationPayload, _ := json.Marshal(map[string]any{
+			"reservation": newReservationResponse(result.Reservation),
+		})
+		server.wsHub.SendToMerchant(result.Reservation.MerchantID, websocket.Message{
+			Type:      "reservation_new",
+			Data:      newReservationPayload,
+			Timestamp: time.Now(),
+		})
+
 		block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
 			EntityType: "user",
 			EntityID:   authPayload.UserID,
@@ -686,7 +686,16 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 		}
 		totalCount = count
 	} else {
-		statuses := []string{"pending", "paid", "confirmed", "checked_in", "completed", "cancelled", "expired", "no_show"}
+		statuses := []string{
+			ReservationStatusPending,
+			ReservationStatusPaid,
+			ReservationStatusConfirmed,
+			ReservationStatusCheckedIn,
+			ReservationStatusCompleted,
+			ReservationStatusCancelled,
+			ReservationStatusExpired,
+			ReservationStatusNoShow,
+		}
 		for _, s := range statuses {
 			count, err := server.store.CountReservationsByUserAndStatus(ctx, db.CountReservationsByUserAndStatusParams{
 				UserID: authPayload.UserID,
@@ -880,6 +889,40 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 			minutes := (r.ReservationTime.Microseconds / 1000000 % 3600) / 60
 			resp[i].ReservationTime = time.Date(0, 1, 1, int(hours), int(minutes), 0, 0, time.UTC).Format("15:04")
 		}
+
+		// 填充预订菜品
+		items, err := server.store.ListReservationItems(ctx, r.ID)
+		if err == nil && len(items) > 0 {
+			resp[i].Items = make([]reservationItemResponse, len(items))
+			for j, item := range items {
+				resp[i].Items[j] = reservationItemResponse{
+					ID:         item.ID,
+					Quantity:   item.Quantity,
+					UnitPrice:  item.UnitPrice,
+					TotalPrice: int64(item.Quantity) * item.UnitPrice,
+					Type:       "dish",
+				}
+
+				if item.DishID.Valid {
+					resp[i].Items[j].DishID = &item.DishID.Int64
+					if item.DishName.Valid {
+						resp[i].Items[j].Name = item.DishName.String
+					}
+					if item.DishImageUrl.Valid {
+						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
+					}
+				} else if item.ComboID.Valid {
+					resp[i].Items[j].ComboID = &item.ComboID.Int64
+					resp[i].Items[j].Type = "combo"
+					if item.ComboName.Valid {
+						resp[i].Items[j].Name = item.ComboName.String
+					}
+					if item.ComboImageUrl.Valid {
+						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.ComboImageUrl.String)
+					}
+				}
+			}
+		}
 	}
 
 	var totalCount int64
@@ -996,14 +1039,14 @@ func (server *Server) confirmReservation(ctx *gin.Context) {
 		return
 	}
 
-	// 创建未到店提醒任务 (预定时间后30分钟)
+	// 创建未到店提醒任务
 	if server.taskDistributor != nil {
 		hours := result.Reservation.ReservationTime.Microseconds / 1000000 / 3600
 		minutes := (result.Reservation.ReservationTime.Microseconds / 1000000 % 3600) / 60
 		alertTime := time.Date(
 			result.Reservation.ReservationDate.Time.Year(), result.Reservation.ReservationDate.Time.Month(), result.Reservation.ReservationDate.Time.Day(),
 			int(hours), int(minutes), 0, 0, time.Local,
-		).Add(30 * time.Minute)
+		)
 
 		_ = server.taskDistributor.DistributeTaskReservationNoShowAlert(
 			ctx,
@@ -2009,6 +2052,22 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 		return
 	}
 
+	// 创建未到店提醒任务
+	if server.taskDistributor != nil {
+		hours := reservation.ReservationTime.Microseconds / 1000000 / 3600
+		minutes := (reservation.ReservationTime.Microseconds / 1000000 % 3600) / 60
+		alertTime := time.Date(
+			reservation.ReservationDate.Time.Year(), reservation.ReservationDate.Time.Month(), reservation.ReservationDate.Time.Day(),
+			int(hours), int(minutes), 0, 0, time.Local,
+		)
+
+		_ = server.taskDistributor.DistributeTaskReservationNoShowAlert(
+			ctx,
+			&worker.PayloadReservationNoShowAlert{ReservationID: reservation.ID},
+			asynq.ProcessAt(alertTime),
+		)
+	}
+
 	ctx.JSON(http.StatusOK, newReservationResponse(reservation))
 }
 
@@ -2379,6 +2438,40 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 			hours := r.ReservationTime.Microseconds / 1000000 / 3600
 			minutes := (r.ReservationTime.Microseconds / 1000000 % 3600) / 60
 			resp[i].ReservationTime = time.Date(0, 1, 1, int(hours), int(minutes), 0, 0, time.UTC).Format("15:04")
+		}
+
+		// 填充预订菜品
+		items, err := server.store.ListReservationItems(ctx, r.ID)
+		if err == nil && len(items) > 0 {
+			resp[i].Items = make([]reservationItemResponse, len(items))
+			for j, item := range items {
+				resp[i].Items[j] = reservationItemResponse{
+					ID:         item.ID,
+					Quantity:   item.Quantity,
+					UnitPrice:  item.UnitPrice,
+					TotalPrice: int64(item.Quantity) * item.UnitPrice,
+					Type:       "dish",
+				}
+
+				if item.DishID.Valid {
+					resp[i].Items[j].DishID = &item.DishID.Int64
+					if item.DishName.Valid {
+						resp[i].Items[j].Name = item.DishName.String
+					}
+					if item.DishImageUrl.Valid {
+						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
+					}
+				} else if item.ComboID.Valid {
+					resp[i].Items[j].ComboID = &item.ComboID.Int64
+					resp[i].Items[j].Type = "combo"
+					if item.ComboName.Valid {
+						resp[i].Items[j].Name = item.ComboName.String
+					}
+					if item.ComboImageUrl.Valid {
+						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.ComboImageUrl.String)
+					}
+				}
+			}
 		}
 	}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   RefreshCw, 
@@ -10,9 +10,19 @@ import {
   Utensils,
   History,
   Receipt,
-  AlertCircle
+  AlertCircle,
+  LayoutGrid, 
+  List as ListIcon, 
+  Phone, 
+  UserCheck
 } from "lucide-react";
 import { toast } from "sonner";
+import { 
+  EventReservationNew, 
+  EventReservationUpdate,
+  ReservationStatusPaid,
+  ReservationStatusConfirmed
+} from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -83,6 +93,7 @@ export function ReservationsPageClient({
   const [scheduleReservations, setScheduleReservations] = useState<ReservationResponse[]>([]);
   const [statsState, setStatsState] = useState<ReservationStatsResponse>(initialStats);
   const [totalCountState, setTotalCountState] = useState(initialTotalCount);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const [formData, setFormData] = useState({
     table_id: "",
@@ -144,11 +155,45 @@ export function ReservationsPageClient({
     return days;
   }, []);
 
+
+
   useEffect(() => {
     loadTables();
     loadScheduleReservations();
     loadMerchantProfile();
   }, []);
+
+  // 1. 监听 WebSocket 实时消息
+  useEffect(() => {
+    const handleRealtimeMessage = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const msg = customEvent.detail;
+      
+      if (!msg) return;
+
+      if (msg.type === EventReservationNew) {
+        const newRes = msg.data?.reservation as ReservationResponse;
+        toast.info(`收到新预订：${newRes?.contact_name || '新客人'} (${newRes?.guest_count}人) - ${newRes?.reservation_time}`, {
+          duration: 5000,
+          action: {
+            label: "查看",
+            onClick: () => setViewMode('list')
+          }
+        });
+        refreshAll();
+      } else if (msg.type === EventReservationUpdate) {
+         // 预订状态变更（如用户取消）
+         refreshAll();
+      }
+    };
+
+    window.addEventListener("merchant-realtime", handleRealtimeMessage);
+    return () => {
+      window.removeEventListener("merchant-realtime", handleRealtimeMessage);
+    };
+  }, []);
+
+
 
   const loadMerchantProfile = async () => {
     try {
@@ -346,6 +391,22 @@ export function ReservationsPageClient({
     }
   };
 
+  const handleCheckIn = async (reservationId: number, tableId: number) => {
+    setActionLoading(true);
+    try {
+      await apiPost("/dining-sessions/open", {
+        table_id: tableId,
+        reservation_id: reservationId
+      });
+      toast.success("客人签到成功，已开台");
+      await refreshAll();
+    } catch (error: any) {
+      toast.error(error.message || "签到失败");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const TableCard = ({ table }: { table: TableResponse }) => {
     return (
       <Card className={cn(
@@ -474,16 +535,126 @@ export function ReservationsPageClient({
                   <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-500"></span> 已预定</span>
                </div>
              </div>
-             {/* 日期选择器已移除，使用弹窗内选择 */}
+             
+             <div className="flex bg-slate-100 p-1 rounded-lg">
+                <Button 
+                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
+                  size="sm" 
+                  className={cn("h-8 px-3 rounded-md transition-all", viewMode === 'grid' && "bg-white shadow-sm font-bold text-primary")}
+                  onClick={() => setViewMode('grid')}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-1.5" /> 房态视图
+                </Button>
+                <Button 
+                  variant={viewMode === 'list' ? 'secondary' : 'ghost'} 
+                  size="sm" 
+                  className={cn("h-8 px-3 rounded-md transition-all", viewMode === 'list' && "bg-white shadow-sm font-bold text-primary")}
+                  onClick={() => setViewMode('list')}
+                >
+                  <ListIcon className="h-4 w-4 mr-1.5" /> 预订列表
+                </Button>
+             </div>
           </div>
+
           {tableLoading ? (
              <div className="flex flex-col items-center justify-center py-32 gap-6">
                <RefreshCw className="h-12 w-12 text-primary animate-spin opacity-40" />
                <p className="text-sm font-black text-slate-400 tracking-tighter uppercase">加载中...</p>
              </div>
-          ) : (
+          ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8">
               {tables.map(table => <TableCard key={table.id} table={table} />)}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {scheduleReservations.length === 0 ? (
+                 <div className="text-center py-20 text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
+                    <Calendar className="h-10 w-10 mx-auto mb-2 text-slate-300" />
+                    <p>暂无预订记录</p>
+                 </div>
+              ) : (
+                scheduleReservations.map(res => (
+                  <div key={res.id} className="bg-white border rounded-xl p-4 transition-all hover:shadow-md hover:border-primary/30 group">
+                     <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4">
+                           <div className="h-12 w-12 rounded-xl bg-primary/5 text-primary flex flex-col items-center justify-center border border-primary/10">
+                              <span className="text-[10px] font-bold uppercase leading-none">{res.reservation_date.slice(5).replace('-','/')}</span>
+                              <span className="text-lg font-black leading-none mt-0.5">{res.reservation_time}</span>
+                           </div>
+                           <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                 <h4 className="font-bold text-lg text-slate-900">{res.contact_name}</h4>
+                                 <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal text-slate-500 bg-slate-50">
+                                   {res.guest_count} 人
+                                 </Badge>
+                                 <Badge className={cn(
+                                   "text-[10px] h-5 px-1.5 font-bold border-0",
+                                   res.status === 'confirmed' || res.status === 'paid' ? "bg-emerald-100 text-emerald-700" :
+                                   res.status === 'pending' ? "bg-amber-100 text-amber-700" :
+                                   res.status === 'cancelled' || res.status === 'no_show' ? "bg-slate-100 text-slate-500 line-through" :
+                                   "bg-blue-100 text-blue-700"
+                                 )}>
+                                   {res.status === 'pending' ? '待支付' :
+                                    res.status === 'paid' ? '已支付' :
+                                    res.status === 'confirmed' ? '已确认' :
+                                    res.status === 'checked_in' ? '已入座' :
+                                    res.status === 'completed' ? '已完成' :
+                                    res.status === 'cancelled' ? '已取消' : '未到店'}
+                                 </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
+                                 <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {tables.find(t => t.id === res.table_id)?.table_no || '未知桌台'}</span>
+                                 <span className="w-px h-3 bg-slate-200" />
+                                 <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {res.contact_phone}</span>
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                           {/* Quick Actions for List View */}
+                           {(res.status === 'paid' || res.status === 'confirmed') && (
+                             <Button 
+                               size="sm" 
+                               className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm shadow-emerald-600/20"
+                               onClick={() => handleCheckIn(res.id, res.table_id)}
+                               disabled={actionLoading}
+                             >
+                               <UserCheck className="h-4 w-4 mr-1.5" /> 确认到店
+                             </Button>
+                           )}
+                           <Button 
+                             variant="outline" 
+                             size="sm" 
+                             className="h-9 px-4 rounded-lg font-bold"
+                             onClick={() => openCreateDialog(res.table_id, res.reservation_date, res.reservation_time)}
+                           >
+                             详情
+                           </Button>
+                        </div>
+                     </div>
+                     
+                     {/* Dish Items Display */}
+                     {res.items && res.items.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-dashed pl-16">
+                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                             <Utensils className="h-3 w-3" /> 预点菜品 ({res.items.length})
+                           </p>
+                           <div className="flex flex-wrap gap-2">
+                              {res.items.map((item, idx) => (
+                                <Badge key={idx} variant="secondary" className="bg-slate-50 border-slate-200 text-slate-700 font-medium pl-1 pr-2 py-1 h-auto flex items-center gap-1.5">
+                                   {item.image_url && (
+                                     <img src={item.image_url} alt={item.name} className="w-5 h-5 rounded object-cover" />
+                                   )}
+                                   <span className="text-[10px] bg-slate-200 px-1 rounded text-slate-600 font-bold">x{item.quantity}</span>
+                                   <span>{item.name}</span>
+                                </Badge>
+                              ))}
+                           </div>
+                        </div>
+                     )}
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
