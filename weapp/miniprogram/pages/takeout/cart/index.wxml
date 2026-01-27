@@ -1,26 +1,36 @@
 <custom-navbar title="购物车" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 140rpx;">
-  <!-- 加载中 -->
-  <view wx:if="{{loading}}" class="loading-container">
-    <t-loading theme="circular" size="48rpx" />
+  <!-- 骨架屏加载状态 (App Shell + Skeleton) -->
+  <view wx:if="{{loading && merchantGroups.length === 0}}" class="cart-skeleton">
+    <view wx:for="{{[1,2]}}" wx:key="*this" class="merchant-skeleton-group card">
+      <view class="skeleton-header skeleton-shimmer"></view>
+      <list-skeleton wx:for="{{[1,2]}}" wx:key="*this" showAvatar="{{true}}" />
+      <view class="skeleton-footer skeleton-shimmer"></view>
+    </view>
   </view>
 
   <!-- 购物车列表（按商户分组） -->
   <view wx:elif="{{merchantGroups.length > 0}}" class="cart-groups">
     <view wx:for="{{merchantGroups || []}}" wx:key="cartId" class="merchant-group">
       <!-- 商户头部 -->
-      <view class="merchant-header">
-        <view class="merchant-info" bindtap="onToggleMerchant" data-cart-id="{{item.cartId}}">
+      <view class="merchant-header {{item.errorStatus ? 'disabled' : ''}}">
+        <view class="merchant-info" bindtap="{{item.errorStatus ? '' : 'onToggleMerchant'}}" data-cart-id="{{item.cartId}}">
           <t-checkbox 
             value="{{item.cartId}}" 
             checked="{{item.selected}}"
+            disabled="{{!!item.errorStatus}}"
             borderless
             t-class="custom-checkbox"
             t-class-icon="custom-checkbox-icon"
           />
           <image wx:if="{{item.merchantLogo}}" class="merchant-logo" src="{{item.merchantLogo}}" mode="aspectFill" />
           <text class="merchant-name">{{item.merchantName}}</text>
+          
+          <!-- 错误提示标签 -->
+          <t-tag wx:if="{{item.errorStatus}}" theme="danger" variant="dark" size="small" style="margin-left: 12rpx; flex-shrink: 0; max-width: 240rpx;">
+            <view style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{item.errorStatus}}</view>
+          </t-tag>
         </view>
         <text class="clear-btn" bindtap="onClearMerchant" data-merchant-id="{{item.merchantId}}">清空本店</text>
       </view>

@@ -5,11 +5,36 @@
   padding: 0 var(--spacer-md);
 }
 
+/* 骨架屏布局 */
+.cart-skeleton {
+  padding-top: var(--spacer-md);
+}
+
+.merchant-skeleton-group {
+  margin-bottom: var(--spacer-md);
+  padding: var(--spacer-md);
+  background: #fff;
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-header {
+  height: 40rpx;
+  width: 40%;
+  margin-bottom: 30rpx;
+  background: #f0f0f0;
+  border-radius: 4rpx;
+}
+
+.skeleton-footer {
+  height: 60rpx;
+  width: 100%;
+  margin-top: 20rpx;
+  background: #f0f0f0;
+  border-radius: 4rpx;
+}
+
 .loading-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 60vh;
+  display: none;
 }
 
 /* 空状态容器 */
@@ -44,6 +69,12 @@
   justify-content: space-between;
   padding: var(--spacer-sm) var(--spacer-md) var(--spacer-sm) 12rpx;
   border-bottom: 1rpx solid var(--td-component-stroke);
+}
+
+.merchant-header.disabled {
+  /* opacity: 0.75; */
+  /* filter: grayscale(0.8); */
+  /* 移除背景色变化，保持卡片一体感 */
 }
 
 .merchant-info {

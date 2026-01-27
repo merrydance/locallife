@@ -25,3 +25,17 @@
   align-items: center;
   background-color: #f9f9f9;
 }
+.loading-state.skeleton-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 37%, #f0f0f0 63%);
+  background-size: 400% 100%;
+  animation: auth-shimmer 1.4s ease infinite;
+}
+
+@keyframes auth-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}

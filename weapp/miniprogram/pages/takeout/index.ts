@@ -76,12 +76,14 @@ Page({
     searchKeyword: '',
     page: 1,
     hasMore: true,
-    loading: false,
+    loading: true, // 初始设为 true，确保首屏骨架屏立即显示
+    isError: false,
+    errorMsg: '',
     // 位置状态
     needLocation: false, // 是否需要用户手动定位
     // 下拉刷新状态
     refresherTriggered: false,
-    // 预加载状态
+    // 预传数据状态
     isPrefetching: false
   },
 
@@ -183,13 +185,11 @@ Page({
     }
 
     // 检查是否需要加载数据
-    if (this.data.dishes.length === 0 && !this.data.loading) {
+    if (this.data.dishes.length === 0) {
       logger.info('[Takeout.onShow] 开始 tryLoadData', undefined, 'Takeout.onShow')
       this.tryLoadData()
     } else {
-      logger.debug('[Takeout.onShow] 跳过 tryLoadData', {
-        reason: this.data.dishes.length > 0 ? '已有数据' : '正在加载中'
-      }, 'Takeout.onShow')
+      logger.debug('[Takeout.onShow] 跳过 tryLoadData，已有数据')
     }
   },
 
@@ -407,10 +407,10 @@ Page({
   },
 
   async loadData() {
-    if (this._isLoading || this.data.loading) return
+    if (this._isLoading) return // 仅检查物理请求锁，不检查 UI loading 标志
 
     this._isLoading = true
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     try {
       const { activeTab } = this.data
@@ -422,11 +422,15 @@ Page({
       } else {
         await this.loadPackages(this.data.page === 1)
       }
-    } catch (error) {
+    } catch (error: any) {
       ErrorHandler.handle(error, 'Takeout.loadData')
-      // 如果是重置加载失败，确保状态正确
+      // 如果是第一页重置加载失败，显示错误状态
       if (this.data.page === 1) {
-        this.setData({ hasMore: false })
+        this.setData({ 
+          isError: true, 
+          errorMsg: error.userMessage || '数据加载失败',
+          hasMore: false 
+        })
       }
     } finally {
       this._isLoading = false

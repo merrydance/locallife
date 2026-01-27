@@ -118,7 +118,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     url,
     method = 'GET',
     data,
-    loading = true,
+    loading = false, // 默认为 false，由页面根据业务逻辑显示骨架屏或局部加载
     loadingText = '加载中...',
     context,
     requestId = `${method}_${url}_${Date.now()}`,

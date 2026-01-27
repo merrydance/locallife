@@ -23,7 +23,9 @@ Page({
     orderDTO: null as OrderResponse | null,
     reservationInfo: null as ReservationResponse | null,
     navBarHeight: 88,
-    loading: false,
+    loading: true,
+    isError: false,
+    errorMsg: '',
     
     // UI Flags
     showTrackingButton: false,
@@ -56,7 +58,7 @@ Page({
   },
 
   async loadOrderDetail() {
-    // 首次加载显示loading，后续静默刷新
+    this.setData({ isError: false })
     if (!this.data.order) {
        this.setData({ loading: true })
     }
@@ -102,10 +104,18 @@ Page({
 
       // 检查催单冷却时间
       this.checkUrgeCooldown()
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Load order detail failed:', error, 'Detail')
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      if (!this.data.order) {
+        this.setData({ 
+          loading: false, 
+          isError: true, 
+          errorMsg: error.message || '加载订单详情失败'
+        })
+      } else {
+        wx.showToast({ title: '刷新失败', icon: 'none' })
+        this.setData({ loading: false })
+      }
     }
   },
 

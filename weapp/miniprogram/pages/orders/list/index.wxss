@@ -226,3 +226,12 @@
   color: #bbb;
   font-size: 24rpx;
 }
+
+.error-container {
+  padding: 120rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--td-bg-color-page);
+}

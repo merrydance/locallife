@@ -1,6 +1,4 @@
-import {
-  getDeliveryByOrder,
-  getRiderLocation,
+import DeliveryService, {
   DeliveryResponse,
 } from "../../../api/delivery";
 import { getBicyclingDirection } from "../../../api/location";
@@ -50,6 +48,8 @@ Page({
     deliveryId: 0,
     navBarHeight: 88,
     loading: true,
+    isError: false,
+    errorMsg: '',
     // 配送信息
     delivery: null as DeliveryResponse | null,
     riderName: "",
@@ -91,10 +91,10 @@ Page({
   },
 
   async loadDeliveryData() {
-    this.setData({ loading: true });
+    this.setData({ loading: true, isError: false });
     try {
       // 1. 获取配送信息
-      const delivery = await getDeliveryByOrder(this.data.orderId);
+      const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId);
 
       // 2. 处理骑手信息
       const riderPhone = delivery.pickup_phone || "";
@@ -137,10 +137,13 @@ Page({
       if (delivery.status === "delivering" || delivery.status === "picked") {
         this.startLocationTracking();
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.error("加载配送信息失败", error, "tracking.loadDeliveryData");
-      wx.showToast({ title: "加载失败", icon: "error" });
-      this.setData({ loading: false });
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: error.message || '获取配送信息失败' 
+      });
     }
   },
 
@@ -234,7 +237,7 @@ Page({
     if (!deliveryId || !delivery) return;
 
     try {
-      const location = await getRiderLocation(deliveryId);
+      const location = await DeliveryService.getRiderLocation(deliveryId);
       if (location && location.latitude && location.longitude) {
         const riderPoint: MapPoint = {
           latitude: location.latitude,

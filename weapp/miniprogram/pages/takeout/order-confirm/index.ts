@@ -55,7 +55,8 @@ Page({
     address: null as Address | null,
     remarks: {} as Record<number, string>,
     navBarHeight: 88,
-    loading: false,
+    initLoading: true, // 页面初始化加载标志（用于骨架屏）
+    loading: false,    // 按钮提交加载标志
     orderTotalDisplay: '0.00',
     summarySubtotalDisplay: '0.00',
     summaryDeliveryDisplay: '待计算',
@@ -95,54 +96,40 @@ Page({
 
   async loadCart() {
     try {
-      this.setData({ loading: true })
+      this.setData({ initLoading: true })
       console.log('[Order-confirm] Loading takeout cart...')
 
       // Step 1: 获取外卖类型的购物车列表
       const userCarts = await CartAPI.getUserCarts('takeout')
-      console.log('[Order-confirm] userCarts:', JSON.stringify(userCarts))
-
+      
       if (!userCarts.carts || userCarts.carts.length === 0) {
-        console.log('[Order-confirm] No carts found, navigating back')
         wx.showToast({ title: '购物车为空', icon: 'none' })
         setTimeout(() => wx.navigateBack(), 1500)
         return
       }
 
-      // 如果有指定的cart_ids，只使用这些购物车
+      // ... (中间过滤逻辑保持不变)
       const { cartIds } = this.data
       let selectedCarts = userCarts.carts
       if (cartIds.length > 0) {
         selectedCarts = userCarts.carts.filter(c => cartIds.includes(c.cart_id || 0))
       }
-
-      if (selectedCarts.length === 0) {
-        // 如果没有匹配的cart_ids，使用第一个购物车
-        selectedCarts = [userCarts.carts[0]]
-      }
+      if (selectedCarts.length === 0) selectedCarts = [userCarts.carts[0]]
 
       // 逐商户拉取购物车详情
       const cartViews: MerchantCartView[] = []
       for (const merchantCart of selectedCarts) {
         const merchantId = merchantCart.merchant_id
-        const orderType = (merchantCart.order_type || 'takeout') as OrderType
-
-        if (!merchantId) {
-          wx.showToast({ title: '商户信息缺失', icon: 'none' })
-          setTimeout(() => wx.navigateBack(), 1500)
-          return
-        }
+        if (!merchantId) continue
 
         const cartDetail = await CartAPI.getCart({
           merchant_id: merchantId,
-          order_type: orderType,
+          order_type: (merchantCart.order_type || 'takeout') as OrderType,
           table_id: merchantCart.table_id || undefined,
           reservation_id: merchantCart.reservation_id || undefined
         })
 
-        if (!cartDetail.items || cartDetail.items.length === 0) {
-          continue
-        }
+        if (!cartDetail.items || cartDetail.items.length === 0) continue
 
         const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
           id: item.id,
@@ -160,50 +147,41 @@ Page({
           dishImages: (item.combo_member_images || []).map(url => getPublicImageUrl(url))
         }))
 
-        const totalCount = items.reduce((sum, item) => sum + item.quantity, 0)
-        const subtotal = cartDetail.subtotal
-
         cartViews.push({
           merchantId,
           merchantName: merchantCart.merchant_name || '商家',
-          orderType,
+          orderType: (merchantCart.order_type || 'takeout') as OrderType,
           tableId: merchantCart.table_id || undefined,
           reservationId: merchantCart.reservation_id || undefined,
           items,
-          totalCount,
-          subtotal,
-          subtotalDisplay: formatPriceNoSymbol(subtotal),
+          totalCount: items.reduce((sum, item) => sum + item.quantity, 0),
+          subtotal: cartDetail.subtotal,
+          subtotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
           deliveryFee: 0,
           deliveryFeeDisplay: '待计算',
           deliveryFeeDiscount: 0,
           deliveryDistance: 0,
           deliveryEtaMinutes: 0,
           deliveryEtaDisplay: '',
-          orderTotal: subtotal,
-          orderTotalDisplay: formatPriceNoSymbol(subtotal),
-          originalTotalDisplay: formatPriceNoSymbol(subtotal),
+          orderTotal: cartDetail.subtotal,
+          orderTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
+          originalTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
           hasDiscount: false,
           appliedPromotions: []
         })
       }
 
-      if (cartViews.length === 0) {
-        wx.showToast({ title: '购物车为空', icon: 'none' })
-        setTimeout(() => wx.navigateBack(), 1500)
-        return
-      }
-
-      this.setData({ carts: cartViews, loading: false })
+      this.setData({ carts: cartViews, initLoading: false })
       
-      // 根据地址计算每个商户配送费
-      await this.calculateDeliveryFee()
+      // 根据地址计算每个商户配送费 (silent)
+      await this.calculateDeliveryFee(true)
       
       // 加载会员信息
       await this.loadMemberships()
     } catch (error) {
       logger.error('Load cart failed', error, 'Order-confirm')
-      wx.showToast({ title: '加载购物车失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ initLoading: false })
+      wx.showToast({ title: '加载失败', icon: 'error' })
     }
   },
 
@@ -322,7 +300,7 @@ Page({
   /**
    * 计算配送费并更新应付总额
    */
-  async calculateDeliveryFee() {
+  async calculateDeliveryFee(silent: boolean = false) {
     const { address } = this.data
     const currentCarts = this.data.carts
     if (!currentCarts || currentCarts.length === 0) return

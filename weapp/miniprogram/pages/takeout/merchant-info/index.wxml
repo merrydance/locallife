@@ -1,9 +1,25 @@
 <custom-navbar title="商家信息" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page" style="padding-top: {{navBarHeight}}px;">
-  <view wx:if="{{loading}}" class="loading-state">加载中...</view>
-  <t-empty wx:elif="{{!restaurant}}" description="商家不存在" />
-  <view wx:else>
+  <!-- 1. 错误状态 -->
+  <view wx:if="{{isError}}" class="error-container">
+    <t-empty icon="info-circle" description="{{errorMsg}}" />
+    <t-button theme="primary" variant="outline" size="small" bindtap="loadMerchantInfo" style="margin-top: 24rpx;">重新加载</t-button>
+  </view>
+
+  <!-- 2. 骨架屏状态 (App Shell + Skeleton) -->
+  <view wx:elif="{{loading && !restaurant}}" class="skeleton-content">
+    <view class="skeleton-hero skeleton-shimmer"></view>
+    <view class="content">
+      <view class="info-section" wx:for="{{[1,2,3]}}" wx:key="*this">
+        <view class="skeleton-line skeleton-shimmer" style="width: 30%; height: 36rpx; margin-bottom: 30rpx;"></view>
+        <view class="skeleton-line skeleton-shimmer" style="width: 100%; height: 120rpx;"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 3. 正常内容 -->
+  <view wx:elif="{{restaurant}}">
     <view class="hero" style="background-image: url('{{restaurant.cover_image || restaurant.logo_url || '/assets/happy.jpg'}}')">
       <view class="hero-overlay">
         <view class="hero-name">{{restaurant.name}}</view>

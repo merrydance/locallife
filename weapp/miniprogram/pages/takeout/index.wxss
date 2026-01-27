@@ -58,6 +58,13 @@
   font-size: var(--font-size-xs);
 }
 
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 100rpx 0;
+}
+
 /* ========== 位置引导提示 ========== */
 .location-guide {
   display: flex;

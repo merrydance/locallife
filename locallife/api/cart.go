@@ -977,7 +977,7 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 	}
 	if req.OrderType == "takeout" {
 		if merchant.Status != "active" || !merchant.IsOpen {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户暂不接单，请选择其他商户")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户已打烊")))
 			return
 		}
 	}

@@ -9,10 +9,33 @@
   box-sizing: border-box;
 }
 
-.loading-state {
+/* 骨架屏布局 */
+.skeleton-content {
+  background: #F6F6F6;
+  min-height: 100vh;
+}
+
+.skeleton-hero {
+  height: 380rpx;
+  background: #e0e0e0;
+  margin-bottom: 24rpx;
+}
+
+.skeleton-line {
+  background: #e0e0e0;
+  border-radius: 4rpx;
+}
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 120rpx 0;
-  text-align: center;
-  color: #888;
+}
+
+.loading-state {
+  display: none;
 }
 
 .hero {

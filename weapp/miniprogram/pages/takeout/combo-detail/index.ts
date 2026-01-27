@@ -54,6 +54,8 @@ Page({
     combo: null as ComboViewModel | null,
     quantity: 1,
     loading: true,
+    isError: false,
+    errorMsg: '',
     totalPrice: 0,
     totalPriceDisplay: '0.00',
     extraInfo: {} as ExtraInfo,
@@ -94,22 +96,25 @@ Page({
   },
 
   async loadComboDetail() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     try {
       const comboId = parseInt(this.data.comboId)
       const comboData: ComboSetWithDetailsResponse = await ComboManagementService.getPublicComboDetail(comboId)
 
       if (!comboData) {
-        wx.showToast({ title: '套餐不存在', icon: 'error' })
-        this.setData({ loading: false })
+        this.setData({ 
+          loading: false, 
+          isError: true, 
+          errorMsg: '该套餐已售罄或下架' 
+        })
         return
       }
 
+      // ... (构建逻辑保持不变)
       const extraInfo = this.data.extraInfo
       const imageUrl = getPublicImageUrl(comboData.image_url || '')
       
-      // 计算原价（如果后端没传，则取子菜品之和，或者取 comboData.original_price）
       let originalPrice = comboData.original_price || 0
       if (!originalPrice && comboData.dishes) {
         originalPrice = comboData.dishes.reduce((sum, d) => sum + (d.dish_price || 0) * (d.quantity || 1), 0)
@@ -130,11 +135,7 @@ Page({
         ? comboData.dish_images.map(url => getPublicImageUrl(url))
         : (comboData.dishes || []).map(d => getPublicImageUrl(d.dish_image_url || '')).filter(Boolean)
       const selectedTags: Record<string, string> = {}
-      if (comboData.tags && comboData.tags.length > 0) {
-        // 默认不选中任何，或者选中第一个
-      }
 
-      // 构建视图模型
       const combo: ComboViewModel = {
         id: comboData.id,
         name: comboData.name,
@@ -175,14 +176,17 @@ Page({
       // 埋点
       tracker.log(EventType.VIEW_DISH, String(combo.id), {
         is_combo: true,
-        shop_id: combo.merchant_id, // Keep shop_id for tracker for now, as it might be an external system requirement
+        shop_id: combo.merchant_id,
         price: combo.combo_price
       })
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载套餐详情失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: error.userMessage || '加载详情失败' 
+      })
     }
   },
 

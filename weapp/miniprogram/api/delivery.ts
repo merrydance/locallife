@@ -45,6 +45,8 @@ export interface Delivery {
     estimated_delivery_at?: string
     picked_at?: string
     delivered_at?: string
+    created_at?: string
+    assigned_at?: string
     notes?: string
 }
 
@@ -119,6 +121,18 @@ export class DeliveryService {
             method: 'GET'
         })
     }
+
+    /**
+     * 获取骑手位置
+     */
+    static async getRiderLocation(deliveryId: number): Promise<{ latitude: number; longitude: number }> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/rider-location`,
+            method: 'GET'
+        })
+    }
 }
+
+export type DeliveryResponse = Delivery;
 
 export default DeliveryService

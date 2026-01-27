@@ -1,9 +1,21 @@
 <custom-navbar title="确认订单" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
-  <!-- 收货地址 -->
-  <view class="address-section card" bindtap="onSelectAddress">
-    <view wx:if="{{address && address.id}}" class="address-content">
+  <!-- 1. 骨架屏状态 (App Shell + Skeleton) -->
+  <view wx:if="{{initLoading}}" class="skeleton-content">
+    <view class="address-skeleton card skeleton-shimmer"></view>
+    <view wx:for="{{[1]}}" wx:key="*this" class="merchant-skeleton card">
+      <view class="skeleton-line skeleton-shimmer" style="width: 40%; height: 40rpx; margin-bottom: 30rpx;"></view>
+      <view class="skeleton-line skeleton-shimmer" style="width: 100%; height: 160rpx; margin-bottom: 20rpx;"></view>
+      <view class="skeleton-line skeleton-shimmer" style="width: 100%; height: 160rpx;"></view>
+    </view>
+  </view>
+
+  <!-- 2. 正常内容 -->
+  <block wx:else>
+    <!-- 收货地址 -->
+    <view class="address-section card" bindtap="onSelectAddress">
+      <view wx:if="{{address && address.id}}" class="address-content">
       <view class="address-header">
         <text class="address-name">{{address.contact_name}}</text>
         <text class="address-phone">{{address.contact_phone}}</text>
@@ -166,7 +178,8 @@
       <text class="cost-label">实付款</text>
       <text class="cost-value">¥{{orderTotalDisplay}}</text>
     </view>
-  </view>
+    </view>
+  </block>
 </view>
 
 <!-- 底部提交栏 -->

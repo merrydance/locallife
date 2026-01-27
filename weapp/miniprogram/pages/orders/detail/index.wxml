@@ -1,10 +1,45 @@
 <custom-navbar title="订单详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
+  <!-- 1. 错误状态 -->
+  <view wx:if="{{isError}}" class="error-container">
+    <t-empty icon="info-circle" description="{{errorMsg}}" />
+    <t-button theme="primary" variant="outline" size="small" bindtap="loadOrderDetail" style="margin-top: 24rpx;">重试</t-button>
+  </view>
 
-  <view wx:if="{{!loading && order}}" class="detail-content animate-fade-in">
-    <!-- 1. 顶部状态区 -->
+  <!-- 2. 骨架屏加载 (App Shell + Skeleton) -->
+  <view wx:elif="{{loading && !order}}" class="skeleton-container">
+    <!-- Status Header Skeleton -->
+    <view class="status-header skeleton-bg">
+       <view class="status-left">
+         <view class="skeleton-rect" style="width: 200rpx; height: 50rpx; margin-bottom: 16rpx;"></view>
+         <view class="skeleton-rect" style="width: 400rpx; height: 32rpx;"></view>
+       </view>
+       <view class="skeleton-circle" style="width: 56rpx; height: 56rpx;"></view>
+    </view>
+    
+    <!-- Action Skeleton -->
+    <view class="action-card card skeleton-bg" style="height: 140rpx;"></view>
+
+    <!-- Merchant/Items Skeleton -->
+    <view class="order-card card skeleton-bg" style="padding: 24rpx;">
+       <view class="skeleton-rect" style="width: 300rpx; height: 40rpx; margin-bottom: 32rpx;"></view>
+       <list-skeleton wx:for="{{[1,2]}}" wx:key="*this" showAvatar="{{true}}" />
+       <view class="total-row" style="margin-top: 20rpx; justify-content: flex-end;">
+          <view class="skeleton-rect" style="width: 150rpx; height: 40rpx;"></view>
+       </view>
+    </view>
+
+    <!-- Info Card Skeleton -->
+    <view class="info-card card skeleton-bg">
+        <view class="skeleton-rect" style="width: 120rpx; height: 36rpx; margin-bottom: 24rpx;"></view>
+        <view wx:for="{{[1,2,3]}}" wx:key="*this" class="skeleton-rect" style="width: 100%; height: 60rpx; margin-bottom: 16rpx;"></view>
+    </view>
+  </view>
+
+  <!-- 3. 正常内容 -->
+  <view wx:if="{{order}}" class="detail-content animate-fade-in">
+    <!-- 顶部状态区 -->
     <view class="status-header">
       <view class="status-left">
         <view class="status-title">{{order.statusText}}</view>
@@ -16,7 +51,7 @@
       <t-icon name="{{order.status === 'completed' ? 'check-circle' : 'time'}}" size="56rpx" color="#333" />
     </view>
 
-    <!-- 2. 操作引导区 (如去支付/物流) -->
+    <!-- 操作引导区 (如去支付/物流) -->
     <view wx:if="{{showPayButton || showTrackingButton}}" class="action-card card">
        <view class="action-content">
           <view class="action-text">
@@ -28,7 +63,7 @@
        </view>
     </view>
 
-    <!-- 3. 商品明细卡片 -->
+    <!-- 商品明细卡片 -->
     <view class="order-card card">
       <!-- 商户头 -->
       <view class="merchant-header" bindtap="onEnterMerchant" data-id="{{order.merchantId}}" hover-class="hover-opacity">
@@ -83,7 +118,7 @@
       </view>
     </view>
 
-    <!-- 4. 配送/预订信息卡片 -->
+    <!-- 配送/预订信息卡片 -->
     <view class="info-card card">
       <view class="card-title">配送信息</view>
       
@@ -108,7 +143,7 @@
       </t-cell-group>
     </view>
 
-    <!-- 5. 订单信息卡片 -->
+    <!-- 订单信息卡片 -->
     <view class="info-card card">
       <view class="card-title">订单信息</view>
       <t-cell-group>
@@ -118,7 +153,6 @@
         <t-cell wx:if="{{order.notes}}" title="备注" note="{{order.notes}}" align="top" />
       </t-cell-group>
     </view>
-
   </view>
 </view>
 

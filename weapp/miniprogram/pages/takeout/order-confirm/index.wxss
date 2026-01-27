@@ -3,6 +3,29 @@
   background: var(--td-bg-color-page);
 }
 
+/* 骨架屏布局 */
+.skeleton-content {
+  padding-top: var(--spacer-sm);
+}
+
+.address-skeleton {
+  height: 140rpx;
+  background: #f0f0f0;
+  border-radius: var(--radius-md);
+}
+
+.merchant-skeleton {
+  min-height: 400rpx;
+  background: #fff;
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+}
+
+.skeleton-line {
+  background: #f0f0f0;
+  border-radius: 4rpx;
+}
+
 /* 卡片通用样式 */
 .card {
   background: var(--td-bg-color-container);

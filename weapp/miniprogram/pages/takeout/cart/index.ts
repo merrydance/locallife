@@ -26,6 +26,7 @@ interface MerchantCartGroup {
   itemCount: number
   allAvailable: boolean
   selected: boolean
+  errorStatus?: string // 商户错误状态：如“已打烊”、“无法配送”
 }
 
 interface CartItemView {
@@ -102,7 +103,8 @@ Page({
       }
 
       // 为每个商户获取详细购物车内容
-      const merchantGroups: MerchantCartGroup[] = []
+      let merchantGroups: MerchantCartGroup[] = []
+
 
       for (const merchantCart of userCarts.carts) {
         if (!merchantCart.merchant_id) continue
@@ -121,9 +123,15 @@ Page({
         }
       }
 
-      // 默认全选
-      const selectedCartIds = merchantGroups.map(g => g.cartId)
+      // 预先计算费用并校验商户状态（在显示前完成）
+      merchantGroups = await this.calculateDeliveryFees(merchantGroups, true)
 
+      // 默认全选（排除有错误的商户）
+      const selectedCartIds = merchantGroups
+        .filter(g => !g.errorStatus)
+        .map(g => g.cartId)
+
+      // 设置数据并显示
       this.setData({
         loading: false,
         merchantGroups,
@@ -136,8 +144,6 @@ Page({
         }
       })
 
-      // 计算各商户代取费
-      await this.calculateDeliveryFees()
       this.calculateCheckoutTotal()
 
       // 同步到全局状态，让其他页面（如外卖首页）能感知购物车变化
@@ -215,17 +221,19 @@ Page({
       totalAmountDisplay: `¥${(subtotal / 100).toFixed(2)}`,
       itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
       allAvailable: items.every(item => item.isAvailable),
-      selected: true
+      selected: true // 初始设为true，calculateDeliveryFees 后可能会改为 false
     }
   },
 
   /**
    * 计算各商户代取费
    * 获取用户当前地址并计算每个商户的代取费
+   * @param groups 可选，如果传入则计算该列表，否则使用 this.data.merchantGroups
+   * @returns 更新后的 merchantGroups
    */
-  async calculateDeliveryFees(silent: boolean = false) {
-    const { merchantGroups } = this.data
-    if (merchantGroups.length === 0) return
+  async calculateDeliveryFees(groups?: MerchantCartGroup[], silent: boolean = false): Promise<MerchantCartGroup[]> {
+    const merchantGroups = groups || this.data.merchantGroups
+    if (merchantGroups.length === 0) return []
 
     // 获取用户地址或当前位置用于计算代取费
     const app = getApp()
@@ -234,9 +242,10 @@ Page({
     const longitude = app.globalData?.longitude
 
     const updatedGroups = [...merchantGroups]
+    let hasChanges = false
 
-    for (let i = 0; i < updatedGroups.length; i++) {
-      const group = updatedGroups[i]
+    // 并行计算以提高速度
+    await Promise.all(updatedGroups.map(async (group, i) => {
       try {
         // 优先使用 address_id，fallback 到当前位置坐标
         const result = await CartAPI.calculateCart({
@@ -257,15 +266,51 @@ Page({
             ? `¥${(result.delivery_fee / 100).toFixed(2)}`
             : '免代取费',
           totalAmount: group.subtotal + (result.delivery_fee || 0),
-          totalAmountDisplay: `¥${((group.subtotal + (result.delivery_fee || 0)) / 100).toFixed(2)}`
+          totalAmountDisplay: `¥${((group.subtotal + (result.delivery_fee || 0)) / 100).toFixed(2)}`,
+          errorStatus: '', // 清除错误状态
+          // 既然计算成功，如果是之前因错误导致的selected=false，是否要恢复？
+          // 保守起见，保持当前selected状态，除非它之前是错的但用户本意是选中
+          // 这里简化：只有在出错时才强制selected=false
         }
-      } catch (error) {
+      } catch (error: any) {
         logger.warn('Failed to calculate delivery fee', { merchantId: group.merchantId }, 'cart.calculateDeliveryFees')
-        // 保持原有值，显示"待计算"
+        
+        // 捕获错误并显示给用户（如商户打烊、超出范围）
+        updatedGroups[i] = {
+          ...group,
+          errorStatus: error.userMessage || '暂不支持配送',
+          selected: false // 有错误时自动取消选中
+        }
+        hasChanges = true
+      }
+    }))
+
+    // 如果是基于 this.data 进行的更新，则需要 setData
+    if (!groups) {
+      this.setData({ merchantGroups: updatedGroups })
+      
+      // 检查 selectedCartIds 是否需要更新
+      const { selectedCartIds } = this.data
+      const newSelectedIds = updatedGroups.filter(g => g.selected && selectedCartIds.includes(g.cartId)).map(g => g.cartId)
+      
+      // 如果有原来选中的现在因为错误变为了不选中
+      if (newSelectedIds.length !== selectedCartIds.length) {
+         // 注意：这里的简单比较可能不够，但通常足够处理 "选中->不选中" 的情况
+         // 更严谨：newSelectedIds 应该是 (OldSelected intersect ValidGroups)
+         // 上面的 filter 已经做了这件事：g.selected 被置为 false 了如果出错
+         const validSelectedIds = selectedCartIds.filter(id => {
+           const g = updatedGroups.find(group => group.cartId === id)
+           return g && !g.errorStatus
+         })
+         
+         if (validSelectedIds.length !== selectedCartIds.length) {
+            this.setData({ selectedCartIds: validSelectedIds })
+            this.calculateCheckoutTotal()
+         }
       }
     }
 
-    this.setData({ merchantGroups: updatedGroups })
+    return updatedGroups
   },
 
   /**
@@ -293,6 +338,13 @@ Page({
   onToggleMerchant(e: WechatMiniprogram.CustomEvent) {
     const { cartId } = e.currentTarget.dataset
     const { selectedCartIds, merchantGroups } = this.data
+
+    const group = merchantGroups.find(g => g.cartId === cartId)
+    // 阻止有错误的商户被选中
+    if (group?.errorStatus) {
+      wx.showToast({ title: group.errorStatus, icon: 'none' })
+      return
+    }
 
     const index = selectedCartIds.indexOf(cartId)
     if (index > -1) {
@@ -331,7 +383,7 @@ Page({
       // 更新小计和总价
       this.recalculateSubtotals()
       // 重新计算代取费（后端根据订单金额计算）
-      this.calculateDeliveryFees(true)
+      this.calculateDeliveryFees(undefined, true)
     } catch (error) {
       // 回滚本地状态
       this.updateLocalQuantity(itemId, currentQuantity)
@@ -367,7 +419,7 @@ Page({
       await CartAPI.updateCartItem(itemId, { quantity: newQuantity }, { loading: false })
       this.recalculateSubtotals()
       // 重新计算代取费
-      this.calculateDeliveryFees(true)
+      this.calculateDeliveryFees(undefined, true)
     } catch (error) {
       // 回滚
       this.updateLocalQuantity(itemId, currentQuantity)
@@ -487,7 +539,7 @@ Page({
         })
       } else {
         this.recalculateSubtotals()
-        this.calculateDeliveryFees(true)
+        this.calculateDeliveryFees(undefined, true)
       }
       this.calculateCheckoutTotal()
       this.syncToGlobalStore()

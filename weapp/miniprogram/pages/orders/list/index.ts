@@ -58,7 +58,9 @@ Page({
   data: {
     orders: [] as OrderCardViewModel[],
     navBarHeight: 88,
-    loading: false,
+    loading: true,
+    isError: false,
+    errorMsg: '',
     page: 1,
     pageSize: 10,
     hasMore: true,
@@ -109,8 +111,8 @@ Page({
   preventBubble() {},
 
   async loadOrders(reset = false) {
-    if (this.data.loading) return;
-    this.setData({ loading: true });
+    if (this.data.loading && !reset) return;
+    this.setData({ loading: true, isError: false });
 
     if (reset) {
       this.setData({ page: 1, orders: [], hasMore: true });
@@ -128,6 +130,7 @@ Page({
       
       const result = await getOrders(params);
 
+      // (unwrap logic remains same)
       const unwrap = (payload: unknown): unknown[] => {
         if (Array.isArray(payload)) return payload;
         if (payload && typeof payload === "object") {
@@ -154,15 +157,7 @@ Page({
         })
         .filter(Boolean) as OrderCardViewModel[];
 
-      // 如果不是All tab，通常此时返回的已经是按时间降序的（后端），若需要前端重排可在此进行
-      // 目前保持 addapter 中的 sortByPriority 也不错，但要注意分页时可能会乱
-      // 如果后端已排序，前端最好不要 re-sort across pages unless loading full list.
-      // 假设后端返回按创建时间倒序。OrderCardAdapter.sortByPriority 会把进行中的排前面。
-      // 在分页加载时，这可能导致乱序（新页面的高优先级跑到下面）。
-      // 简化逻辑：仅在第一页或重置时排序，或者信任后端排序。
-      // 现在的 sortByPriority 主要是为了把"进行中"的任务提权。
-      // 考虑到分页，前端重排只能在当前页内有效。
-      const sortedOrders = OrderCardAdapter.sortByPriority(orderDTOs);
+      const sortedOrders = orderDTOs;
 
       const orders = reset
         ? sortedOrders
@@ -172,14 +167,23 @@ Page({
 
       this.setData({
         orders,
-        hasMore: orders.length < totalCount && orderDTOs.length > 0, // 简单判断或使用 count
+        hasMore: orders.length < totalCount && orderDTOs.length > 0,
+        loading: false
       });
       
-    } catch (error) {
+    } catch (error: any) {
       logger.error("Load orders failed:", error, "List");
-      wx.showToast({ title: "加载失败", icon: "error" });
-    } finally {
-      this.setData({ loading: false });
+      // 仅在首屏（page=1 且无数据）时显示全屏错误
+      if (this.data.page === 1 && this.data.orders.length === 0) {
+        this.setData({ 
+          loading: false, 
+          isError: true, 
+          errorMsg: error.message || '加载订单失败'
+        });
+      } else {
+        this.setData({ loading: false });
+        wx.showToast({ title: "加载失败", icon: "error" });
+      }
     }
   },
 

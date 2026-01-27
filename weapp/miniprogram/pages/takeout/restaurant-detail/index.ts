@@ -92,6 +92,8 @@ Page({
     cartPriceDisplay: '0.00',
     navBarHeight: 88,
     loading: true,
+    isError: false,
+    errorMsg: '',
     headerCollapsed: false
   },
 
@@ -121,7 +123,7 @@ Page({
   },
 
   async loadRestaurantDetail() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     try {
       const merchantId = parseInt(this.data.restaurantId)
@@ -135,8 +137,11 @@ Page({
       ])
 
       if (!merchantResult) {
-        wx.showToast({ title: '商家不存在', icon: 'error' })
-        this.setData({ loading: false })
+        this.setData({ 
+          loading: false, 
+          isError: true, 
+          errorMsg: '商家信息不存在或已下架' 
+        })
         return
       }
 
@@ -163,10 +168,13 @@ Page({
       })
 
       this.filterDishes()
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载商户详情失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: error.userMessage || '数据请求失败，请检查网络'
+      })
     }
   },
 

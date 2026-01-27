@@ -23,7 +23,9 @@ Page({
     restaurantId: '',
     restaurant: null as RestaurantInfoViewModel | null,
     navBarHeight: 88,
-    loading: true
+    loading: true,
+    isError: false,
+    errorMsg: ''
   },
 
   onLoad(options: { id?: string }) {
@@ -42,13 +44,18 @@ Page({
   },
 
   async loadMerchantInfo() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
     try {
       const merchantId = parseInt(this.data.restaurantId)
       const merchant: PublicMerchantDetail = await getPublicMerchantDetail(merchantId)
 
       if (!merchant) {
-        this.setData({ restaurant: null, loading: false })
+        this.setData({ 
+          restaurant: null, 
+          loading: false, 
+          isError: true, 
+          errorMsg: '商家信息不存在' 
+        })
         return
       }
 
@@ -80,10 +87,13 @@ Page({
         },
         loading: false
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载商户信息失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: error.userMessage || '加载商家详情失败' 
+      })
     }
   },
 

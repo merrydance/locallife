@@ -89,6 +89,8 @@ Page({
     navBarHeight: 88,
     currentImageIndex: 0,
     loading: true,
+    isError: false,
+    errorMsg: '',
     totalPrice: 0,
     totalPriceDisplay: '0.00',
     extraInfo: {} as ExtraInfo
@@ -104,7 +106,7 @@ Page({
     const estimatedDeliveryTime = parseInt(options.estimated_delivery_time || options.delivery_time || '0')
 
     if (!dishId) {
-      wx.showToast({ title: '菜品ID缺失', icon: 'error' })
+      wx.showToast({ title: '参数错误', icon: 'error' })
       setTimeout(() => wx.navigateBack(), 1500)
       return
     }
@@ -122,17 +124,20 @@ Page({
   },
 
   async loadDishDetail() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     try {
       const dishId = parseInt(this.data.dishId)
 
-      // 获取菜品详情
+      // 获取菜品详情 (silent request implied by request.ts default)
       const dishData: DishResponse = await DishManagementService.getDishDetail(dishId)
 
       if (!dishData) {
-        wx.showToast({ title: '菜品不存在', icon: 'error' })
-        this.setData({ loading: false })
+        this.setData({ 
+          loading: false, 
+          isError: true, 
+          errorMsg: '该菜品已下架或不存在' 
+        })
         return
       }
 
@@ -223,10 +228,13 @@ Page({
         tags: dish.tags
       })
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载菜品详情失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false, 
+        isError: true, 
+        errorMsg: error.userMessage || '加载信息失败，请重试' 
+      })
     }
   },
 
