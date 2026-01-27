@@ -214,3 +214,28 @@
 .empty-btn {
   width: 240rpx;
 }
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.membership-skeleton-list {
+  padding: var(--spacer-md);
+}
+
+.skeleton-item {
+  margin-bottom: var(--spacer-md);
+}
+
+.load-more-wrap {
+  padding: 32rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--td-text-color-placeholder);
+}

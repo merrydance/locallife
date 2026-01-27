@@ -63,6 +63,9 @@ Page({
     },
     isLargeScreen: false,
     navBarHeight: 88,
+    loading: false,
+    initialLoading: true,
+    error: null as string | null,
     metrics: [
       { label: '总GMV', value: '¥1,254,300', change: '+15%', trend: 'up' },
       { label: '活跃商户', value: '45', change: '+2', trend: 'up' },
@@ -80,6 +83,31 @@ Page({
 
   onLoad() {
     this.setData({ isLargeScreen: isLargeScreen() })
+    this.loadData()
+  },
+
+  async loadData() {
+    this.setData({ loading: true, error: null })
+    try {
+      // 模拟 API 加载延迟
+      await new Promise(resolve => setTimeout(resolve, 800))
+      
+      this.setData({
+        initialLoading: false,
+        loading: false
+      })
+    } catch (error) {
+      console.error('加载分析数据失败:', error)
+      this.setData({
+        initialLoading: false,
+        loading: false,
+        error: '加载分析数据失败'
+      })
+    }
+  },
+
+  onRetry() {
+    this.loadData()
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {

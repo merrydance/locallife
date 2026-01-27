@@ -268,6 +268,7 @@ Page({
     this.setData({ isRefresherTriggered: true });
     await this.refreshData();
     this.setData({ isRefresherTriggered: false });
+    wx.stopPullDownRefresh();
   },
 
   /**

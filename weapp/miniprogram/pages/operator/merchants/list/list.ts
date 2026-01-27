@@ -16,6 +16,9 @@ Page({
         loading: false,
         loadingMore: false,
         refreshing: false,
+        initialLoading: true,
+        error: null as string | null,
+        navBarHeight: 88,
 
         // 商户列表
         merchants: [] as OperatorMerchantItem[],
@@ -41,7 +44,15 @@ Page({
     },
 
     onLoad() {
-        this.loadMerchants()
+        this.loadMerchants(true)
+    },
+
+    onNavHeight(e: any) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
+    onRetry() {
+        this.loadMerchants(true)
     },
 
     onPullDownRefresh() {
@@ -56,11 +67,11 @@ Page({
      * 加载商户列表
      */
     async loadMerchants(refresh: boolean = false) {
-        if (this.data.loading || this.data.loadingMore) return
+        if (this.data.loading || (this.data.loadingMore && !refresh)) return
 
         try {
             if (refresh) {
-                this.setData({ loading: true, page: 1 })
+                this.setData({ loading: true, error: null, page: 1 })
             } else {
                 this.setData({ loadingMore: true })
             }
@@ -84,14 +95,18 @@ Page({
                 merchants,
                 total,
                 hasMore,
-                page: this.data.page + 1
+                page: refresh ? 2 : this.data.page + 1,
+                loading: false,
+                loadingMore: false,
+                initialLoading: false
             })
         } catch (error) {
             console.error('加载商户列表失败:', error)
-            wx.showToast({
-                title: '加载失败',
-                icon: 'none'
-            })
+            if (refresh) {
+                this.setData({ error: '加载商户列表失败', initialLoading: false })
+            } else {
+                wx.showToast({ title: '加载更多失败', icon: 'none' })
+            }
         } finally {
             this.setData({
                 loading: false,

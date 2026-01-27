@@ -7,6 +7,7 @@ Page({
     keyword: '',
     groups: [] as any[],
     searched: false,
+    loading: false,
     dialogVisible: false,
     selectedGroupId: 0,
     selectedGroupName: '',
@@ -23,16 +24,16 @@ Page({
 
   async onSearchSubmit() {
     if (!this.data.keyword.trim()) return
-    wx.showLoading({ title: '搜索中...' })
+    this.setData({ loading: true, searched: false, groups: [] })
     try {
       const res = await searchGroups(this.data.keyword)
       this.setData({ 
         groups: res || [],
-        searched: true
+        searched: true,
+        loading: false
       })
-      wx.hideLoading()
     } catch (e) {
-      wx.hideLoading()
+      this.setData({ loading: false })
       logger.error('Search groups failed', e)
     }
   },

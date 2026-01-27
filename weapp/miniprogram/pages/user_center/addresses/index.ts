@@ -7,6 +7,8 @@ Page({
     addresses: [] as Address[],
     navBarHeight: 88,
     loading: false,
+    initialLoading: true,
+    error: null as string | null,
     isSelectMode: false
   },
 
@@ -27,7 +29,8 @@ Page({
   preventBubble() {},
 
   async loadAddresses() {
-    this.setData({ loading: true })
+    if (this.data.loading && !this.data.initialLoading) return
+    this.setData({ loading: true, error: null })
 
     try {
       const addresses = await AddressService.getAddresses()
@@ -36,12 +39,21 @@ Page({
       
       this.setData({
         addresses,
-        loading: false
+        loading: false,
+        initialLoading: false
       })
     } catch (error) {
       ErrorHandler.handle(error, 'Addresses.loadAddresses')
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false,
+        initialLoading: false,
+        error: '加载收货地址失败'
+      })
     }
+  },
+
+  onRetry() {
+    this.loadAddresses()
   },
 
   onAddAddress() {

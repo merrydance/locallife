@@ -2,6 +2,9 @@
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-button": "tdesign-miniprogram/button/button",
-        "t-icon": "tdesign-miniprogram/icon/icon"
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "list-skeleton": "/components/list-skeleton/index",
+        "card-skeleton": "/components/card-skeleton/index"
     }
 }

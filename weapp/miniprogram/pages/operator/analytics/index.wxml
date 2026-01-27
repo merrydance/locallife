@@ -2,43 +2,63 @@
 
 <view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
   <view class="content">
-    <!-- 核心指标 -->
-    <view class="metrics-grid">
-      <view wx:for="{{metrics}}" wx:key="label" class="metric-card">
-        <text class="metric-label">{{item.label}}</text>
-        <text class="metric-value">{{item.value}}</text>
-        <view class="metric-trend {{item.trend}}">
-          <t-icon name="{{item.trend === 'up' ? 'arrow-up' : 'arrow-down'}}" size="24rpx" />
-          <text>{{item.change}}</text>
+    <!-- 错误状态 -->
+    <view wx:if="{{error && !initialLoading}}" class="error-container">
+      <t-empty icon="info-circle" description="{{error}}">
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+      </t-empty>
+    </view>
+
+    <block wx:else>
+      <!-- Loading (Skeleton) -->
+      <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
+        <view class="metrics-skeleton">
+          <card-skeleton wx:for="{{4}}" wx:key="index" t-class="metric-skeleton-item" />
         </view>
+        <card-skeleton t-class="chart-skeleton" />
+        <list-skeleton row="5" t-class="table-skeleton" />
       </view>
-    </view>
 
-    <!-- 区域分布图 -->
-    <view class="chart-card">
-      <view class="card-header">
-        <text class="card-title">区域订单分布</text>
-      </view>
-      <view class="chart-container">
-        <ec-canvas id="mychart-dom-bar" canvas-id="mychart-bar" ec="{{ ec }}"></ec-canvas>
-      </view>
-    </view>
-
-    <!-- 商户排行榜 -->
-    <view class="table-card">
-      <view class="card-header">
-        <text class="card-title">商户 GMV 排行榜</text>
-      </view>
-      <view class="ranking-list">
-        <view wx:for="{{topMerchants}}" wx:key="rank" class="ranking-item">
-          <view class="rank-num rank-{{item.rank}}">{{item.rank}}</view>
-          <view class="merchant-info">
-            <text class="merchant-name">{{item.name}}</text>
-            <text class="merchant-orders">{{item.orders}} 单</text>
+      <view wx:else class="animate-fade-in">
+        <!-- 核心指标 -->
+        <view class="metrics-grid">
+          <view wx:for="{{metrics}}" wx:key="label" class="metric-card">
+            <text class="metric-label">{{item.label}}</text>
+            <text class="metric-value">{{item.value}}</text>
+            <view class="metric-trend {{item.trend}}">
+              <t-icon name="{{item.trend === 'up' ? 'arrow-up' : 'arrow-down'}}" size="24rpx" />
+              <text>{{item.change}}</text>
+            </view>
           </view>
-          <text class="merchant-gmv">¥{{item.gmv}}</text>
+        </view>
+
+        <!-- 区域分布图 -->
+        <view class="chart-card">
+          <view class="card-header">
+            <text class="card-title">区域订单分布</text>
+          </view>
+          <view class="chart-container">
+            <ec-canvas id="mychart-dom-bar" canvas-id="mychart-bar" ec="{{ ec }}"></ec-canvas>
+          </view>
+        </view>
+
+        <!-- 商户排行榜 -->
+        <view class="table-card">
+          <view class="card-header">
+            <text class="card-title">商户 GMV 排行榜</text>
+          </view>
+          <view class="ranking-list">
+            <view wx:for="{{topMerchants}}" wx:key="rank" class="ranking-item">
+              <view class="rank-num rank-{{item.rank}}">{{item.rank}}</view>
+              <view class="merchant-info">
+                <text class="merchant-name">{{item.name}}</text>
+                <text class="merchant-orders">{{item.orders}} 单</text>
+              </view>
+              <text class="merchant-gmv">¥{{item.gmv}}</text>
+            </view>
+          </view>
         </view>
       </view>
-    </view>
+    </block>
   </view>
 </view>

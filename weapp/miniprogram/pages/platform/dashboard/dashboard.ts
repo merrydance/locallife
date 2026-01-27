@@ -73,9 +73,11 @@ Page({
     /**
      * 加载大屏数据
      */
-    async loadDashboardData() {
+    async loadDashboardData(silent = false) {
         try {
-            this.setData({ loading: true })
+            if (!silent) {
+                this.setData({ loading: true })
+            }
 
             // 并行加载所有数据
             const [dashboardData, managementData] = await Promise.all([
@@ -93,12 +95,16 @@ Page({
             })
         } catch (error) {
             console.error('加载大屏数据失败:', error)
-            wx.showToast({
-                title: '加载失败',
-                icon: 'none'
-            })
+            if (!silent) {
+                wx.showToast({
+                    title: '加载失败',
+                    icon: 'none'
+                })
+            }
         } finally {
-            this.setData({ loading: false })
+            if (!silent) {
+                this.setData({ loading: false })
+            }
         }
     },
 
@@ -108,7 +114,7 @@ Page({
     async onRefresh() {
         this.setData({ refreshing: true })
         try {
-            await this.loadDashboardData()
+            await this.loadDashboardData(true) // Silent load to avoid skeleton flash, rely on refresher spinner
         } finally {
             this.setData({ refreshing: false })
         }
@@ -162,7 +168,7 @@ Page({
     startAutoRefresh() {
         // 每30秒自动刷新实时数据
         const timer = setInterval(() => {
-            this.loadDashboardData()
+            this.loadDashboardData(true) // Silent refresh
         }, 30000)
 
         this.setData({ refreshTimer: timer as any })
@@ -207,3 +213,4 @@ Page({
         this.setData({ navBarHeight: e.detail.navBarHeight })
     }
 })
+

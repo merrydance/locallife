@@ -21,8 +21,10 @@ Page({
     data: {
         activeTab: 'dish' as FavoriteType, // 'dish' | 'merchant'
         favorites: [] as FavoriteViewModel[],
-        loading: false,
         navBarHeight: 88,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
         
         // Paging
         page: 1,
@@ -51,9 +53,9 @@ Page({
 
     async loadFavorites(reset = false) {
         if (!this.data.hasMore && !reset) return
-        if (this.data.loading) return
+        if (this.data.loading && !this.data.initialLoading) return
 
-        this.setData({ loading: true })
+        this.setData({ loading: true, error: null })
 
         try {
             let list: FavoriteViewModel[] = []
@@ -62,14 +64,7 @@ Page({
             if (this.data.activeTab === 'dish') {
                 const res = await FavoriteService.getFavoriteDishes(this.data.page, this.data.pageSize)
                 list = res.dishes.map((d: any) => ({
-                    id: d.id, // favorite record id (or dish id? backend response has id as record id?)
-                              // Looking at api/favorite.go: ID is record ID, DishID is target. 
-                              // BUT for removal we need DISH ID? wait. 
-                              // deleteFavoriteDish uses PATH param :id.
-                              // api/favorite.go: deleteFavoriteDish parses "id".
-                              // Usually REST API DELETE /v1/favorites/dishes/:id implies deleting the FAVORITE record or the DISH?
-                              // Actually, looking at the code: `server.store.RemoveFavoriteDish(ctx, db.RemoveFavoriteDishParams{ DishID: dishID })`
-                              // So it expects the TARGET ID (DishID), not the Favorite Record ID.
+                    id: d.id,
                     targetId: d.dish_id,
                     type: 'dish',
                     typeText: '菜品',
@@ -90,7 +85,7 @@ Page({
                     title: m.merchant_name,
                     image: m.merchant_logo || '',
                     subTitle: m.address || '',
-                    rating: 5.0, // Backend doesn't return rating in favorite response?
+                    rating: 5.0,
                     createdAt: m.created_at?.split('T')[0] || ''
                 }))
                 total = res.total
@@ -101,12 +96,21 @@ Page({
                 favorites: newFavorites,
                 hasMore: newFavorites.length < total,
                 page: this.data.page + 1,
-                loading: false
+                loading: false,
+                initialLoading: false
             })
         } catch (error) {
-            this.setData({ loading: false })
+            this.setData({ 
+                loading: false,
+                initialLoading: false,
+                error: '加载收藏列表失败'
+            })
             ErrorHandler.handle(error, 'Favorites.load')
         }
+    },
+
+    onRetry() {
+        this.loadFavorites(true)
     },
 
     onReachBottom() {

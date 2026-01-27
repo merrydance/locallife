@@ -1,13 +1,15 @@
 import { operatorBasicManagementService, OperatorBasicManagementAdapter } from '../../../api/operator-basic-management'
-import type { RegionResponse } from '../../../api/operator-basic-management'
 
 Page({
     data: {
         regions: [] as any[],
-        loading: false,
+        initialLoading: true,
+        loadingMore: false,
+        error: '',
         page: 1,
         pageSize: 20,
-        hasMore: true
+        hasMore: true,
+        navBarHeight: 0
     },
 
     onLoad() {
@@ -19,17 +21,26 @@ Page({
     },
 
     onReachBottom() {
-        if (this.data.hasMore && !this.data.loading) {
+        if (this.data.hasMore && !this.data.loadingMore && !this.data.initialLoading) {
             this.loadRegions(false)
         }
     },
 
-    async loadRegions(reset = false) {
-        if (this.data.loading) return
+    onNavHeight(e: any) {
+        this.setData({
+            navBarHeight: e.detail.navBarHeight
+        })
+    },
 
-        this.setData({ loading: true })
+    onRetry() {
+        this.loadRegions(true)
+    },
+
+    async loadRegions(reset = false) {
         if (reset) {
-            this.setData({ page: 1, regions: [], hasMore: true })
+            this.setData({ initialLoading: true, error: '', page: 1, regions: [], hasMore: true })
+        } else {
+            this.setData({ loadingMore: true })
         }
 
         try {
@@ -38,19 +49,27 @@ Page({
                 limit: this.data.pageSize
             })
 
-            const newRegions = res.regions.map(r => OperatorBasicManagementAdapter.adaptRegionResponse(r))
+            const newRegions = (res.regions || []).map(r => OperatorBasicManagementAdapter.adaptRegionResponse(r))
 
             this.setData({
                 regions: reset ? newRegions : [...this.data.regions, ...newRegions],
                 page: this.data.page + 1,
                 hasMore: res.has_more,
-                loading: false
+                initialLoading: false,
+                loadingMore: false
             })
 
-        } catch (err) {
+        } catch (err: any) {
             console.error(err)
-            wx.showToast({ title: '加载失败', icon: 'error' })
-            this.setData({ loading: false })
+            const errorMsg = err.message || '加载区域列表失败'
+            this.setData({
+                error: errorMsg,
+                initialLoading: false,
+                loadingMore: false
+            })
+            if (!reset) {
+                wx.showToast({ title: errorMsg, icon: 'none' })
+            }
         } finally {
             if (reset) wx.stopPullDownRefresh()
         }

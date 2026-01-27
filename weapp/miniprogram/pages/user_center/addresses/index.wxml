@@ -2,69 +2,79 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(180rpx + env(safe-area-inset-bottom));">
   
-  <!-- Loading State -->
-  <t-loading wx:if="{{loading && addresses.length === 0}}" theme="circular" size="40rpx" class="loading" text="加载中..." />
+  <!-- 错误状态 -->
+  <view wx:if="{{error && !initialLoading}}" class="error-container">
+    <t-empty icon="info-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+    </t-empty>
+  </view>
 
-  <!-- Empty State -->
-  <view wx:elif="{{addresses.length === 0}}" class="empty-state animate-fade-in">
-    <t-empty image="/assets/icons/empty.svg" description="暂无收货地址" />
-    <view class="empty-actions">
-       <t-button theme="primary" size="medium" shape="round" bindtap="onAddAddress" icon="add">新建地址</t-button>
-       <t-button variant="outline" size="medium" shape="round" bindtap="onImportWechatAddress" icon="logo-wechat">微信导入</t-button>
+  <block wx:else>
+    <!-- Loading State (Skeleton) -->
+    <view wx:if="{{initialLoading}}" class="address-skeleton-list">
+      <list-skeleton row="5" t-class="skeleton-item" />
     </view>
-  </view>
 
-  <!-- Address List -->
-  <view wx:else class="address-list animate-fade-in">
-    <block wx:for="{{addresses}}" wx:key="id">
-      <view 
-        class="address-card {{isSelectMode ? 'selectable' : ''}}" 
-        bindtap="onSelectAddress" 
-        data-id="{{item.id}}"
-        hover-class="card-hover"
-      >
-        <view class="card-main">
-          <view class="info-header">
-             <view class="user-info">
-               <text class="name">{{item.contact_name}}</text>
-               <text class="phone">{{item.contact_phone}}</text>
-             </view>
-             <t-tag wx:if="{{item.is_default}}" size="small" variant="light" theme="primary">默认</t-tag>
-          </view>
-          
-          <view class="address-detail">
-             <text>{{item.detail_address}}</text>
-          </view>
-        </view>
-
-        <t-divider dashed />
-
-        <view class="card-actions" catchtap="preventBubble">
-           <!-- Left: Set Default -->
-           <view class="action-left" catchtap="onSetDefault" data-id="{{item.id}}" wx:if="{{!isSelectMode}}">
-             <t-icon name="{{item.is_default ? 'check-circle-filled' : 'circle'}}" size="36rpx" color="{{item.is_default ? 'var(--td-brand-color)' : '#999'}}" />
-             <text class="action-text {{item.is_default ? 'active' : ''}}">{{item.is_default ? '默认地址' : '设为默认'}}</text>
-           </view>
-           <view class="action-left" wx:else>
-              <!-- Selector Placeholder if strictly needed, or just hide left action -->
-           </view>
-
-           <!-- Right: Edit/Delete -->
-           <view class="action-right">
-             <view class="btn-icon" catchtap="onEditAddress" data-id="{{item.id}}">
-               <t-icon name="edit" size="32rpx" color="#666" />
-               <text>编辑</text>
-             </view>
-             <view class="btn-icon" catchtap="onDeleteAddress" data-id="{{item.id}}">
-               <t-icon name="delete" size="32rpx" color="#666" />
-               <text>删除</text>
-             </view>
-           </view>
-        </view>
+    <!-- Empty State -->
+    <view wx:elif="{{addresses.length === 0}}" class="empty-state animate-fade-in">
+      <t-empty image="/assets/icons/empty.svg" description="暂无收货地址" />
+      <view class="empty-actions">
+         <t-button theme="primary" size="medium" shape="round" bindtap="onAddAddress" icon="add">新建地址</t-button>
+         <t-button variant="outline" size="medium" shape="round" bindtap="onImportWechatAddress" icon="logo-wechat">微信导入</t-button>
       </view>
-    </block>
-  </view>
+    </view>
 
+    <!-- Address List -->
+    <view wx:else class="address-list animate-fade-in">
+      <block wx:for="{{addresses}}" wx:key="id">
+        <view 
+          class="address-card {{isSelectMode ? 'selectable' : ''}}" 
+          bindtap="onSelectAddress" 
+          data-id="{{item.id}}"
+          hover-class="card-hover"
+        >
+          <view class="card-main">
+            <view class="info-header">
+               <view class="user-info">
+                 <text class="name">{{item.contact_name}}</text>
+                 <text class="phone">{{item.contact_phone}}</text>
+               </view>
+               <t-tag wx:if="{{item.is_default}}" size="small" variant="light" theme="primary">默认</t-tag>
+            </view>
+            
+            <view class="address-detail">
+               <text>{{item.detail_address}}</text>
+            </view>
+          </view>
+
+          <t-divider dashed />
+
+          <view class="card-actions" catchtap="preventBubble">
+             <!-- Left: Set Default -->
+             <view class="action-left" catchtap="onSetDefault" data-id="{{item.id}}" wx:if="{{!isSelectMode}}">
+               <t-icon name="{{item.is_default ? 'check-circle-filled' : 'circle'}}" size="36rpx" color="{{item.is_default ? 'var(--td-brand-color)' : '#999'}}" />
+               <text class="action-text {{item.is_default ? 'active' : ''}}">{{item.is_default ? '默认地址' : '设为默认'}}</text>
+             </view>
+             <view class="action-left" wx:else>
+                <!-- Selector Placeholder -->
+             </view>
+
+             <!-- Right: Edit/Delete -->
+             <view class="action-right">
+               <view class="btn-icon" catchtap="onEditAddress" data-id="{{item.id}}">
+                 <t-icon name="edit" size="32rpx" color="#666" />
+                 <text>编辑</text>
+               </view>
+               <view class="btn-icon" catchtap="onDeleteAddress" data-id="{{item.id}}">
+                 <t-icon name="delete" size="32rpx" color="#666" />
+                 <text>删除</text>
+               </view>
+             </view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </block>
 </view>
 
 <!-- Bottom Fixed Bar -->

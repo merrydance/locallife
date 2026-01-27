@@ -208,3 +208,20 @@
 .empty-center {
   padding-top: 200rpx;
 }
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.detail-skeleton {
+  padding: var(--spacer-md);
+}
+
+.skeleton-item {
+  margin-bottom: var(--spacer-md);
+}

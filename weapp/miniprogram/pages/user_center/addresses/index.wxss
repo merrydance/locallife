@@ -152,3 +152,20 @@
   color: var(--td-text-color-secondary);
   padding: 12rpx 0;
 }
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.address-skeleton-list {
+  padding: var(--spacer-md);
+}
+
+.skeleton-item {
+  margin-bottom: var(--spacer-md);
+}

@@ -3,6 +3,9 @@
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-switch": "tdesign-miniprogram/switch/switch",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "card-skeleton": "/components/card-skeleton/index"
     }
 }

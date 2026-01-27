@@ -11,31 +11,40 @@
     />
   </view>
 
-  <view class="result-list">
-    <block wx:if="{{groups.length > 0}}">
-      <view class="group-card" wx:for="{{groups}}" wx:key="id">
-        <view class="group-info">
-          <view class="group-name">{{item.name}}</view>
-          <view class="group-addr">地址: {{item.address || '暂无地址'}}</view>
-        </view>
-        <t-button 
-          theme="primary" 
-          variant="outline" 
-          size="small" 
-          bindtap="onApply" 
-          data-id="{{item.id}}" 
-          data-name="{{item.name}}"
-        >申请加入</t-button>
-      </view>
+  <view class="content">
+    <block wx:if="{{loading}}">
+       <view class="skeleton-container animate-fade-in">
+          <list-skeleton row="3" />
+       </view>
     </block>
-    <view class="empty-state" wx:elif="{{searched && groups.length === 0}}">
-      <t-empty icon="search" description="未搜索到相关品牌" />
-    </view>
-    <view class="search-tip" wx:elif="{{!searched}}">
-      <t-icon name="info-circle" size="32rpx" />
-      <text>请输入品牌名称全称或关键字进行搜索</text>
-    </view>
+    
+    <block wx:else>
+        <view class="result-list animate-fade-in" wx:if="{{groups.length > 0}}">
+            <view class="group-card" wx:for="{{groups}}" wx:key="id">
+                <view class="group-info">
+                <view class="group-name">{{item.name}}</view>
+                <view class="group-addr">地址: {{item.address || '暂无地址'}}</view>
+                </view>
+                <t-button 
+                theme="primary" 
+                variant="outline" 
+                size="small" 
+                bindtap="onApply" 
+                data-id="{{item.id}}" 
+                data-name="{{item.name}}"
+                >申请加入</t-button>
+            </view>
+        </view>
+        <view class="empty-state" wx:elif="{{searched && groups.length === 0}}">
+            <t-empty icon="search" description="未搜索到相关品牌" />
+        </view>
+        <view class="search-tip" wx:elif="{{!searched}}">
+            <t-icon name="info-circle" size="32rpx" />
+            <text>请输入品牌名称全称或关键字进行搜索</text>
+        </view>
+    </block>
   </view>
+
 
   <!-- Apply Dialog -->
   <t-dialog

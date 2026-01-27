@@ -15,7 +15,8 @@ Page({
         inviteCode: '',
         loading: false,
         success: false,
-        result: null as BindMerchantResponse | null
+        result: null as BindMerchantResponse | null,
+        navBarHeight: 88
     },
 
     onLoad(options: { code?: string }) {
@@ -25,6 +26,10 @@ Page({
             // 自动绑定
             this.bindMerchant()
         }
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
     // 输入邀请码
@@ -203,8 +208,8 @@ Page({
 
     // 返回首页
     goHome() {
-        wx.reLaunch({
-            url: '/pages/index/index'
+        wx.switchTab({
+            url: '/pages/takeout/index'
         })
     }
 })

@@ -1,8 +1,14 @@
 <custom-navbar title="平台管理大屏" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view class="platform-dashboard" style="padding-top: {{navBarHeight}}px;">
-  <!-- 加载状态 -->
-  <t-loading wx:if="{{loading}}" theme="circular" size="large" text="加载中..." class="loading-container" />
+  <!-- Skeleton Loading -->
+  <view wx:if="{{loading && !realtimeData}}" class="skeleton-container animate-fade-in">
+    <view class="skeleton-grid">
+      <card-skeleton wx:for="{{4}}" wx:key="index" />
+    </view>
+    <view style="height: 20rpx;"></view>
+    <list-skeleton row="3" />
+  </view>
 
   <block wx:else>
     <!-- 1. 手机端布局 (Mobile) -->
@@ -38,3 +44,4 @@
     </match-media>
   </block>
 </view>
+

@@ -28,12 +28,13 @@
       "pages": [
         "analytics/index",
         "automation/index",
-        "claims/index",
         "dashboard/index",
         "merchants/index",
         "rules/index",
         "dashboard/dashboard",
-        "merchants/list/list"
+        "merchants/list/list",
+        "appeal/list/index",
+        "appeal/detail/index"
       ],
       "independent": false
     },

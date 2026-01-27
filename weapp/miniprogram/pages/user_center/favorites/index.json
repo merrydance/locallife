@@ -9,6 +9,7 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-rate": "tdesign-miniprogram/rate/rate",
         "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "list-skeleton": "/components/list-skeleton/index"
     }
 }

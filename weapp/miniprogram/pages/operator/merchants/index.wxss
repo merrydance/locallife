@@ -84,3 +84,54 @@
   padding-top: 16rpx;
   border-top: 1rpx solid #F0F0F0;
 }
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.skeleton-container {
+  padding: 24rpx;
+}
+
+.merchants-skeleton-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24rpx;
+}
+
+@media (min-width: 1024rpx) {
+  .merchants-skeleton-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1440rpx) {
+  .merchants-skeleton-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.merchant-skeleton-item {
+  height: 380rpx;
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding: 32rpx 0;
+}
+
+/* 动画 */
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}

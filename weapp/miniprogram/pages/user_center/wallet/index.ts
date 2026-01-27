@@ -31,8 +31,10 @@ Page({
     totalRechargedDisplay: '0.00',
     memberships: [] as MembershipDisplay[],
     transactions: [] as TransactionDisplay[],
+    navBarHeight: 88,
     loading: false,
-    navBarHeight: 88
+    initialLoading: true,
+    error: null as string | null
   },
 
   onLoad() {
@@ -52,6 +54,9 @@ Page({
   },
 
   async initData() {
+    if (this.data.loading && !this.data.initialLoading) return
+    
+    this.setData({ loading: true, error: null })
     try {
       const [membershipRes, paymentRes] = await Promise.all([
         MembershipService.listMyMemberships(1, 50),
@@ -109,13 +114,21 @@ Page({
         totalRechargedDisplay: formatPriceNoSymbol(totalRecharged),
         memberships,
         transactions,
-        loading: false
+        loading: false,
+        initialLoading: false
       })
     } catch (error) {
       console.error('Failed to load wallet data:', error)
-      this.setData({ loading: false })
-      wx.showToast({ title: '加载失败', icon: 'error' })
+      this.setData({ 
+        loading: false, 
+        initialLoading: false,
+        error: '加载钱包数据失败'
+      })
     }
+  },
+
+  onRetry() {
+    this.initData()
   },
 
   onShowAssetDetail() {

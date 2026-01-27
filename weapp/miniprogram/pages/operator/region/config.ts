@@ -5,7 +5,9 @@ import type { DeliveryFeeConfigResponse, PeakHourConfigResponse, CreateDeliveryF
 Page({
     data: {
         regionId: 0,
-        loading: true,
+        initialLoading: true,
+        error: '',
+        navBarHeight: 0,
 
         // 配送费配置
         feeConfig: null as DeliveryFeeConfigResponse | null,
@@ -50,8 +52,18 @@ Page({
         }
     },
 
+    onNavHeight(e: any) {
+        this.setData({
+            navBarHeight: e.detail.navBarHeight
+        })
+    },
+
+    onRetry() {
+        this.loadData()
+    },
+
     async loadData() {
-        this.setData({ loading: true })
+        this.setData({ initialLoading: true, error: '' })
         try {
             const regionId = this.data.regionId
 
@@ -66,7 +78,7 @@ Page({
             this.setData({
                 feeConfig,
                 peakConfigs,
-                loading: false,
+                initialLoading: false,
                 // 初始化表单显示
                 baseFeeInput: feeConfig ? (feeConfig.base_fee / 100).toString() : '0',
                 baseDistanceInput: feeConfig ? feeConfig.base_distance.toString() : '3000',
@@ -75,10 +87,14 @@ Page({
                 maxDistanceInput: feeConfig ? feeConfig.max_delivery_distance.toString() : '10000'
             })
 
-        } catch (err) {
+        } catch (err: any) {
             console.error(err)
-            wx.showToast({ title: '加载配置失败', icon: 'error' })
-            this.setData({ loading: false })
+            const errorMsg = err.message || '加载配置失败'
+            this.setData({
+                initialLoading: false,
+                error: errorMsg
+            })
+            // wx.showToast({ title: '加载配置失败', icon: 'error' }) // Reduce noise if displaying error UI
         }
     },
 

@@ -13,7 +13,9 @@ Page({
         refundId: 0,
         refund: null as RefundOrder | null,
         navBarHeight: 88,
-        loading: true,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
         // 显示字段
         amountDisplay: '',
         statusText: '',
@@ -30,16 +32,24 @@ Page({
     },
 
     async loadRefundDetail() {
-        this.setData({ loading: true })
+        if (!this.data.refundId) return
+        this.setData({ loading: true, error: null })
         try {
             const refund = await getRefundById(this.data.refundId)
             this.processRefund(refund)
+            this.setData({ initialLoading: false, loading: false })
         } catch (error) {
             logger.error('加载退款详情失败', error, 'refund-detail.loadRefundDetail')
-            wx.showToast({ title: '加载失败', icon: 'error' })
-        } finally {
-            this.setData({ loading: false })
+            this.setData({ 
+                initialLoading: false, 
+                loading: false,
+                error: '加载退款详情失败'
+            })
         }
+    },
+
+    onRetry() {
+        this.loadRefundDetail()
     },
 
     processRefund(refund: RefundOrder) {

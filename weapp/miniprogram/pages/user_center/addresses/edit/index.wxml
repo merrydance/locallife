@@ -2,59 +2,75 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(180rpx + env(safe-area-inset-bottom));">
   
-  <view class="form-title">联系人</view>
-  <view class="form-card">
-    <t-input
-      label="姓名"
-      placeholder="请填写收货人姓名"
-      value="{{contactName}}"
-      bind:change="onNameChange"
-      borderless="{{false}}"
-    />
-    <t-input
-      label="手机号"
-      placeholder="请填写11位手机号"
-      type="number"
-      maxlength="11"
-      value="{{contactPhone}}"
-      bind:change="onPhoneChange"
-      borderless="{{true}}"
-    />
+  <!-- 错误状态 -->
+  <view wx:if="{{error && !initialLoading}}" class="error-container">
+    <t-empty icon="info-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+    </t-empty>
   </view>
 
-  <view class="form-title">收货地址</view>
-  <view class="form-card">
-    <t-cell
-      title="定位"
-      note="{{latitude ? '已选择坐标' : '点击选择定位'}}"
-      arrow
-      hover
-      bind:click="onChooseLocation"
-    >
-       <t-icon slot="left-icon" name="location" size="40rpx" style="margin-right: 16rpx; color: var(--td-brand-color);" />
-    </t-cell>
-    
-    <t-textarea
-      label="门牌号"
-      placeholder="详细地址，例：1层101室"
-      value="{{detailAddress}}"
-      bind:change="onDetailChange"
-      maxlength="100"
-      autosize
-      class="detail-textarea"
-    />
-  </view>
+  <block wx:else>
+    <!-- Loading State (Skeleton) -->
+    <view wx:if="{{initialLoading}}" class="form-skeleton">
+      <list-skeleton row="6" t-class="skeleton-item" />
+    </view>
 
-  <view class="form-card" style="margin-top: 32rpx;">
-    <t-cell title="设为默认地址" bordered="{{false}}">
-      <t-switch value="{{isDefault}}" bind:change="onDefaultChange" slot="note" />
-    </t-cell>
-  </view>
+    <!-- Main Form Content -->
+    <block wx:else>
+      <view class="form-title">联系人</view>
+      <view class="form-card">
+        <t-input
+          label="姓名"
+          placeholder="请填写收货人姓名"
+          value="{{contactName}}"
+          bind:change="onNameChange"
+          borderless="{{false}}"
+        />
+        <t-input
+          label="手机号"
+          placeholder="请填写11位手机号"
+          type="number"
+          maxlength="11"
+          value="{{contactPhone}}"
+          bind:change="onPhoneChange"
+          borderless="{{true}}"
+        />
+      </view>
 
-  <view wx:if="{{addressId}}" class="delete-section">
-     <t-button variant="text" theme="danger" bindtap="onDelete">删除收货地址</t-button>
-  </view>
+      <view class="form-title">收货地址</view>
+      <view class="form-card">
+        <t-cell
+          title="定位"
+          note="{{latitude ? '已选择坐标' : '点击选择定位'}}"
+          arrow
+          hover
+          bind:click="onChooseLocation"
+        >
+           <t-icon slot="left-icon" name="location" size="40rpx" style="margin-right: 16rpx; color: var(--td-brand-color);" />
+        </t-cell>
+        
+        <t-textarea
+          label="门牌号"
+          placeholder="详细地址，例：1层101室"
+          value="{{detailAddress}}"
+          bind:change="onDetailChange"
+          maxlength="100"
+          autosize
+          class="detail-textarea"
+        />
+      </view>
 
+      <view class="form-card" style="margin-top: 32rpx;">
+        <t-cell title="设为默认地址" bordered="{{false}}">
+          <t-switch value="{{isDefault}}" bind:change="onDefaultChange" slot="note" />
+        </t-cell>
+      </view>
+
+      <view wx:if="{{addressId}}" class="delete-section">
+         <t-button variant="text" theme="danger" bindtap="onDelete">删除收货地址</t-button>
+      </view>
+    </block>
+  </block>
 </view>
 
 <view class="bottom-bar">

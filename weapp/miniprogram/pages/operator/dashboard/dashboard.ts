@@ -15,7 +15,10 @@ import type {
 
 Page({
     data: {
-        loading: true,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
+        navBarHeight: 88,
         refreshing: false,
 
         // 运营商信息
@@ -66,6 +69,10 @@ Page({
         this.loadDashboardData()
     },
 
+    onNavHeight(e: any) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
+    },
+
     onPullDownRefresh() {
         this.setData({ refreshing: true })
         this.loadDashboardData().finally(() => {
@@ -78,9 +85,10 @@ Page({
      * 加载工作台数据
      */
     async loadDashboardData() {
-        try {
-            this.setData({ loading: true })
+        if (this.data.loading && !this.data.initialLoading) return
+        this.setData({ loading: true, error: null })
 
+        try {
             // 并行加载所有数据
             const [
                 dashboardData,
@@ -101,17 +109,22 @@ Page({
                 selectedRegionId: dashboardData.regionStats[0]?.region_id || 0,
                 merchantSummary: merchantData.merchantSummary,
                 riderSummary: riderData.riderSummary,
-                appealSummary: analyticsData.appealSummary
+                appealSummary: analyticsData.appealSummary,
+                loading: false,
+                initialLoading: false
             })
         } catch (error) {
             console.error('加载工作台数据失败:', error)
-            wx.showToast({
-                title: '加载失败',
-                icon: 'none'
+            this.setData({ 
+                loading: false, 
+                initialLoading: false,
+                error: '加载工作台数据失败'
             })
-        } finally {
-            this.setData({ loading: false })
         }
+    },
+
+    onRetry() {
+        this.loadDashboardData()
     },
 
     /**

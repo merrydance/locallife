@@ -2,79 +2,80 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(40rpx + env(safe-area-inset-bottom));">
   
-  <!-- Loading -->
-  <view wx:if="{{loading && reviews.length === 0}}" class="loading-container">
-    <t-loading theme="circular" size="40rpx" text="加载中..." />
+  <!-- 错误状态 -->
+  <view wx:if="{{error && !initialLoading}}" class="error-container">
+    <t-empty icon="info-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+    </t-empty>
   </view>
 
-  <!-- Content -->
-  <view wx:else class="content animate-fade-in">
-    
-    <!-- Empty State -->
-    <view wx:if="{{reviews.length === 0}}" class="empty-state">
-      <t-empty image="/assets/icons/empty.svg" description="暂无评价" />
-      <view class="empty-tips">去评价下吃过的美食吧</view>
-      <t-button theme="primary" size="medium" shape="round" bindtap="onGoHome" class="empty-btn">去评价</t-button>
+  <block wx:else>
+    <!-- Loading (Skeleton) -->
+    <view wx:if="{{initialLoading}}" class="review-skeleton-list">
+      <list-skeleton row="5" t-class="skeleton-item" />
     </view>
 
-    <!-- Review List -->
-    <view wx:else class="review-list">
-      <block wx:for="{{reviews}}" wx:key="id">
-        <view class="review-card" bindtap="onItemClick" data-id="{{item.id}}">
-           
-           <!-- Header -->
-           <view class="card-header">
-              <view class="header-left">
-                  <t-image src="{{item.logoUrl}}" width="48rpx" height="48rpx" shape="circle" class="merchant-logo" />
-                  <text class="merchant-name">{{item.merchantName}}</text>
-                  <t-icon name="chevron-right" size="32rpx" color="#ccc" />
-              </view>
-              <view class="status-tag {{item.isVisible ? 'visible' : 'hidden'}}">
-                  {{item.isVisible ? '已发布' : '审核中'}}
-              </view>
-           </view>
+    <!-- Content -->
+    <view wx:else class="content animate-fade-in">
+      
+      <!-- Empty State -->
+      <view wx:if="{{reviews.length === 0}}" class="empty-state">
+        <t-empty image="/assets/icons/empty.svg" description="暂无评价" />
+        <view class="empty-tips">去评价下吃过的美食吧</view>
+        <t-button theme="primary" size="medium" shape="round" bindtap="onGoHome" class="empty-btn">去逛逛</t-button>
+      </view>
 
-           <!-- Rating (Using star placeholder or t-rate if I had rating data, but API doesn't return rating! 
-                Wait, API CreateReview doesn't take rating? 
-                Checking api/review.go: createReviewRequest has Content and Images. NO RATING.
-                So reviews are text-only? That's unusual for a food app.
-                Maybe rating is in a separate table or assumed? 
-                Re-checking CreateReviewParams... 
-                "Content string, Images []string". No score.
-                Okay, so no star rating display. Just text.
-           -->
-           
-           <!-- Content -->
-           <view class="card-content">
-              <text class="review-text" user-select>{{item.content}}</text>
-           </view>
+      <!-- Review List -->
+      <view wx:else class="review-list">
+        <block wx:for="{{reviews}}" wx:key="id">
+          <view class="review-card" bindtap="onItemClick" data-id="{{item.id}}">
+             
+             <!-- Header -->
+             <view class="card-header">
+                <view class="header-left">
+                    <t-image src="{{item.logoUrl}}" width="48rpx" height="48rpx" shape="circle" class="merchant-logo" />
+                    <text class="merchant-name">{{item.merchantName}}</text>
+                    <t-icon name="chevron-right" size="32rpx" color="#ccc" />
+                </view>
+                <view class="status-tag {{item.isVisible ? 'visible' : 'hidden'}}">
+                    {{item.isVisible ? '已发布' : '审核中'}}
+                </view>
+             </view>
 
-           <!-- Images -->
-           <view class="card-images" wx:if="{{item.images && item.images.length > 0}}">
-              <block wx:for="{{item.images}}" wx:for-item="img" wx:key="*this">
-                 <t-image src="{{img}}" mode="aspectFill" width="220rpx" height="220rpx" class="review-img" bindtap="onImagePreview" data-urls="{{item.images}}" data-current="{{img}}" />
-              </block>
-           </view>
+             <!-- Content -->
+             <view class="card-content">
+                <text class="review-text" user-select>{{item.content}}</text>
+             </view>
 
-           <!-- Footer info -->
-           <view class="card-footer">
-              <text class="date">{{item.createdAt}}</text>
-              <t-tag wx:if="{{item.merchantReply}}" size="small" variant="light" theme="warning" class="reply-tag">商家已回复</t-tag>
-           </view>
+             <!-- Images -->
+             <view class="card-images" wx:if="{{item.images && item.images.length > 0}}">
+                <block wx:for="{{item.images}}" wx:for-item="img" wx:key="*this">
+                   <t-image src="{{img}}" mode="aspectFill" width="220rpx" height="220rpx" class="review-img" bindtap="onImagePreview" data-urls="{{item.images}}" data-current="{{img}}" />
+                </block>
+             </view>
 
-           <!-- Merchant Reply -->
-           <view class="merchant-reply" wx:if="{{item.merchantReply}}">
-              <view class="reply-header">
-                  <text class="reply-title">商家回复：</text>
-                  <text class="reply-date">{{item.repliedAt}}</text>
-              </view>
-              <text class="reply-content">{{item.merchantReply}}</text>
-           </view>
+             <!-- Footer info -->
+             <view class="card-footer">
+                <text class="date">{{item.createdAt}}</text>
+                <t-tag wx:if="{{item.merchantReply}}" size="small" variant="light" theme="warning" class="reply-tag">商家已回复</t-tag>
+             </view>
 
+             <!-- Merchant Reply -->
+             <view class="merchant-reply" wx:if="{{item.merchantReply}}">
+                <view class="reply-header">
+                    <text class="reply-title">商家回复：</text>
+                    <text class="reply-date">{{item.repliedAt}}</text>
+                </view>
+                <text class="reply-content">{{item.merchantReply}}</text>
+             </view>
+
+          </view>
+        </block>
+
+        <view class="load-more-wrap" wx:if="{{loading}}">
+          <t-loading theme="circular" size="32rpx" text="正在加载..." />
         </view>
-      </block>
-
-      <t-loading wx:if="{{hasMore}}" theme="spinner" size="40rpx" class="loading-more" text="加载更多..." />
+      </view>
     </view>
-  </view>
+  </block>
 </view>

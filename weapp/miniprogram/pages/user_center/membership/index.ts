@@ -17,6 +17,8 @@ Page({
     memberships: [] as MembershipDisplay[],
     navBarHeight: 88,
     loading: false,
+    initialLoading: true,
+    error: null as string | null,
     page: 1,
     pageSize: 10,
     hasMore: true
@@ -35,10 +37,10 @@ Page({
   },
 
   async loadMemberships(reset = false) {
-    if (this.data.loading) return
+    if (this.data.loading && !this.data.initialLoading) return
     if (!reset && !this.data.hasMore) return
 
-    this.setData({ loading: true })
+    this.setData({ loading: true, error: null })
 
     try {
       const page = reset ? 1 : this.data.page
@@ -60,14 +62,23 @@ Page({
         memberships,
         page: page + 1,
         hasMore: memberships.length < res.total,
-        loading: false
+        loading: false,
+        initialLoading: false
       })
 
     } catch (error) {
       ErrorHandler.handle(error, 'Membership.list')
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false,
+        initialLoading: false,
+        error: '加载会员卡失败'
+      })
       if (reset) this.setData({ memberships: [] })
     }
+  },
+
+  onRetry() {
+    this.loadMemberships(true)
   },
 
   onReachBottom() {

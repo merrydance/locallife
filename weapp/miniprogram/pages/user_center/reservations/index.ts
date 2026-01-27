@@ -37,6 +37,8 @@ Page({
         reservations: [] as ReservationCardViewModel[],
         navBarHeight: 88,
         loading: false,
+        initialLoading: true,
+        error: null as string | null,
         page: 1,
         pageSize: 10,
         hasMore: true,
@@ -68,8 +70,8 @@ Page({
     preventBubble() {},
 
     async loadReservations(reset = false) {
-        if (this.data.loading) return
-        this.setData({ loading: true })
+        if (this.data.loading && !this.data.initialLoading) return
+        this.setData({ loading: true, error: null })
 
         if (reset) {
             this.setData({ page: 1, reservations: [], hasMore: true })
@@ -80,8 +82,6 @@ Page({
             const params: ReservationListParams = {
                 page_id: page,
                 page_size: pageSize,
-                // Status mapping if needed, e.g. mapping UI 'confirmed' to API ['confirmed', 'checked_in'] would happen here if API supported array.
-                // Assuming simple status passing for now.
                 ...(currentStatus ? { status: currentStatus as ReservationStatus } : {})
             }
 
@@ -89,7 +89,6 @@ Page({
             const result = response.reservations
             const totalCount = typeof response.total_count === 'number' ? response.total_count : result.length
 
-            // 使用 Adapter 转换
             const viewModels = result.map(r => ReservationCardAdapter.toCardViewModel(r))
             
             const reservations = reset ? viewModels : [...this.data.reservations, ...viewModels]
@@ -97,13 +96,21 @@ Page({
             this.setData({
                 reservations,
                 loading: false,
+                initialLoading: false,
                 hasMore: page * pageSize < totalCount
             })
         } catch (error) {
             logger.error('加载预订列表失败', error, 'reservations.loadReservations')
-            wx.showToast({ title: '加载失败', icon: 'error' })
-            this.setData({ loading: false })
+            this.setData({ 
+                loading: false,
+                initialLoading: false,
+                error: '加载预订列表失败'
+            })
         }
+    },
+
+    onRetry() {
+        this.loadReservations(true)
     },
 
     onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {

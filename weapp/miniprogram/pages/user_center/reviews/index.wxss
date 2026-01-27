@@ -172,3 +172,28 @@
   padding: var(--spacer-md);
   text-align: center;
 }
+
+/* 异常状态 */
+.error-container {
+  padding: 120rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 骨架屏 */
+.review-skeleton-list {
+  padding: 0;
+}
+
+.skeleton-item {
+  margin-bottom: var(--spacer-md);
+}
+
+.load-more-wrap {
+  padding: 32rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--td-text-color-placeholder);
+}

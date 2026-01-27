@@ -11,9 +11,13 @@ import {
   submitMerchantApplication,
   getMyApplication,
   resetMerchantApplication,
+  uploadMerchantImage,
+  updateMerchantImages,
   MerchantApplicationDraftResponse,
   OCRStatus
 } from '../../../../api/onboarding'
+import { resolveImageURL } from '../../../../utils/image-security'
+import { API_CONFIG } from '../../../../config/index'
 
 const DRAFT_KEY = 'merchant_register_draft'
 
@@ -177,7 +181,7 @@ Page({
       }
 
       // 解析图片 URL
-      const { resolveImageURL } = require('../../../../utils/image-security')
+      // 184 require REMOVED
       const safeResolve = async (url: string): Promise<string> => {
         if (!url) return ''
         try { return await resolveImageURL(url) } catch { return '' }
@@ -737,7 +741,7 @@ Page({
     console.log('[MerchantRegister] 图片加载失败，重新签名:', rawUrl, 'retryCount:', retryCount)
 
     try {
-      const { resolveImageURL } = require('../../../../utils/image-security')
+      // 744 require REMOVED
       const newSignedUrl = await resolveImageURL(rawUrl)
 
       // 根据 rawUrl 找到对应的图片数组并更新
@@ -761,7 +765,7 @@ Page({
 
   // 刷新门头照/环境照签名 URL
   async refreshShopImageUrls() {
-    const { resolveImageURL } = require('../../../../utils/image-security')
+    // 768 require REMOVED
 
     // 刷新门头照
     const storefrontImages = [...this.data.storefrontImages]
@@ -835,8 +839,7 @@ Page({
     console.log('[MerchantRegister] 门头照上传开始:', newFile.url)
     wx.showLoading({ title: '上传中...' })
     try {
-      const { uploadMerchantImage, updateMerchantImages } = require('../../../api/onboarding')
-      const { API_CONFIG } = require('../../../config/index')
+      // 842-843 require REMOVED
 
       const result = await uploadMerchantImage(newFile.url, 'storefront')
       console.log('[MerchantRegister] 门头照上传响应:', JSON.stringify(result))
@@ -848,7 +851,7 @@ Page({
       }
 
       // 调用签名接口获取可访问的 URL
-      const { resolveImageURL } = require('../../../utils/image-security')
+      // 855 require REMOVED
       const displayUrl = await resolveImageURL(rawUrl)
       console.log('[MerchantRegister] 门头照显示 URL:', displayUrl)
 
@@ -877,7 +880,7 @@ Page({
     this.setData({ storefrontImages: images })
 
     try {
-      const { updateMerchantImages } = require('../../../api/onboarding')
+      // 884 require REMOVED
       await updateMerchantImages({
         storefront_images: images.map((img: any) => img.url)
       })
@@ -911,8 +914,7 @@ Page({
     console.log('[MerchantRegister] 环境照上传开始:', newFile.url)
     wx.showLoading({ title: '上传中...' })
     try {
-      const { uploadMerchantImage, updateMerchantImages } = require('../../../api/onboarding')
-      const { API_CONFIG } = require('../../../config/index')
+      // 918-919 require REMOVED
 
       const result = await uploadMerchantImage(newFile.url, 'environment')
       console.log('[MerchantRegister] 环境照上传响应:', JSON.stringify(result))
@@ -924,7 +926,7 @@ Page({
       }
 
       // 调用签名接口获取可访问的 URL
-      const { resolveImageURL } = require('../../../utils/image-security')
+      // 931 require REMOVED
       const displayUrl = await resolveImageURL(rawUrl)
       console.log('[MerchantRegister] 环境照显示 URL:', displayUrl)
 
@@ -953,7 +955,7 @@ Page({
     this.setData({ environmentImages: images })
 
     try {
-      const { updateMerchantImages } = require('../../../api/onboarding')
+      // 960 require REMOVED
       await updateMerchantImages({
         environment_images: images.map((img: any) => img.url)
       })

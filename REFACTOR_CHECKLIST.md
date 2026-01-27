@@ -50,7 +50,7 @@
 - [ ] `pages/rider/deposit/index`
 - [ ] `pages/rider/tasks/index`
 - [ ] `pages/rider/delivery/manage/manage`
-- [ ] `pages/register/rider/index`
+- [x] `pages/register/rider/index` (已完成 App Shell)
 
 ### 🍔 外卖业务 (Takeout)
 
@@ -86,47 +86,47 @@
 
 ### 👤 个人中心与通用 (User & General)
 
-- [ ] `pages/user_center/index`
-- [ ] `pages/user_center/wallet/index`
-- [ ] `pages/user_center/addresses/index`
-- [ ] `pages/user_center/addresses/edit/index`
-- [ ] `pages/user_center/coupons/index`
-- [ ] `pages/user_center/favorites/index`
-- [ ] `pages/user_center/membership/index`
-- [ ] `pages/user_center/payment-detail/index`
-- [ ] `pages/user_center/refund-detail/index`
-- [ ] `pages/user_center/reservations/index`
-- [ ] `pages/user_center/reviews/index`
-- [ ] `pages/user_center/reviews/create/index`
-- [ ] `pages/user/bind-merchant/index`
-- [ ] `pages/favorite/index`
-- [ ] `pages/message/center/index`
-- [ ] `pages/coupon/center/index`
-- [ ] `pages/coupon/my/index`
-- [ ] `pages/support/index`
+- [x] `pages/user_center/index` (已完成 App Shell、骨架屏重构及工作台样式优化)
+- [x] `pages/user_center/wallet/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/addresses/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/addresses/edit/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/coupons/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/favorites/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/membership/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/payment-detail/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/refund-detail/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/reservations/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/reviews/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user_center/reviews/create/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/user/bind-merchant/index` (已完成 App Shell 与 TDesign 重构)
+- [x] `pages/favorite/index` (已移除，映射至 `user_center/favorites`)
+- [x] `pages/message/center/index` (已移除，暂无消息中心，采用系统通知/弹窗)
+- [x] `pages/coupon/center/index` (已移除，映射至 `user_center/coupons`)
+- [x] `pages/coupon/my/index` (已移除，映射至 `user_center/coupons`)
+- [x] `pages/support/index` (已移除，当前使用一键拨号客服)
 
 ### 🏢 商家、运营与平台 (B-Side & Admin)
 
-- [ ] `pages/operator/dashboard/index`
-- [ ] `pages/operator/dashboard/dashboard`
-- [ ] `pages/operator/analytics/index`
-- [ ] `pages/operator/appeal/list/index`
-- [ ] `pages/operator/appeal/detail/index`
-- [ ] `pages/operator/automation/index`
-- [ ] `pages/operator/claims/index`
-- [ ] `pages/operator/delivery-fee/index`
-- [ ] `pages/operator/merchants/index`
-- [ ] `pages/operator/merchants/list/list`
-- [ ] `pages/operator/region/index`
-- [ ] `pages/operator/region/config`
-- [ ] `pages/operator/rules/index`
-- [ ] `pages/operator/stats/index`
-- [ ] `pages/register/merchant/index`
-- [ ] `pages/register/merchant/group/index`
-- [ ] `pages/register/merchant/join-group/index`
-- [ ] `pages/register/merchant/store/index`
-- [ ] `pages/register/operator/index`
-- [ ] `pages/platform/dashboard/dashboard`
+- [x] `pages/operator/dashboard/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/dashboard/dashboard` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/analytics/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/appeal/list/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/appeal/detail/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/automation/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/claims/index` (已移除，功能合并至 appeal)
+- [x] `pages/operator/delivery-fee/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/merchants/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/merchants/list/list` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/region/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/region/config` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/rules/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/operator/stats/index` (已移除，非独立页面)
+- [x] `pages/register/merchant/index`
+- [x] `pages/register/merchant/group/index` (已完成 App Shell)
+- [x] `pages/register/merchant/join-group/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/register/merchant/store/index` (已完成 App Shell)
+- [x] `pages/register/operator/index` (已完成 App Shell)
+- [x] `pages/platform/dashboard/dashboard` (已完成 App Shell 与骨架屏重构)
 
 ---
 

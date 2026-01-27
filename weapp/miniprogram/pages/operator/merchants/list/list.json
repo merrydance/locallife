@@ -1,9 +1,7 @@
 {
     "navigationBarTitleText": "商户管理",
-    "navigationBarBackgroundColor": "#1890ff",
-    "navigationBarTextStyle": "white",
-    "enablePullDownRefresh": true,
     "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
         "t-search": "tdesign-miniprogram/search/search",
         "t-tabs": "tdesign-miniprogram/tabs/tabs",
         "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
@@ -13,6 +11,7 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-button": "tdesign-miniprogram/button/button",
         "t-dialog": "tdesign-miniprogram/dialog/dialog",
-        "t-textarea": "tdesign-miniprogram/textarea/textarea"
+        "t-textarea": "tdesign-miniprogram/textarea/textarea",
+        "list-skeleton": "/components/list-skeleton/index"
     }
 }

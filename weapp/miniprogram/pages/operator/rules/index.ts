@@ -5,7 +5,9 @@ Page({
     rules: [] as any[],
     isLargeScreen: false,
     navBarHeight: 88,
-    loading: false
+    loading: false,
+    initialLoading: true,
+    error: null as string | null,
   },
 
   onLoad() {
@@ -18,9 +20,11 @@ Page({
   },
 
   async loadRules() {
-    this.setData({ loading: true })
+    this.setData({ loading: true, error: null })
     try {
-      // Mock data - GET /api/v1/operator/rules
+      // 模拟 API 加载延迟
+      await new Promise(resolve => setTimeout(resolve, 800))
+      
       const mockRules = [
         {
           id: 'rule_1',
@@ -49,12 +53,21 @@ Page({
       ]
       this.setData({
         rules: mockRules,
-        loading: false
+        loading: false,
+        initialLoading: false
       })
     } catch (error) {
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      console.error('加载规则配置失败:', error)
+      this.setData({ 
+        loading: false,
+        initialLoading: false,
+        error: '加载规则配置失败' 
+      })
     }
+  },
+
+  onRetry() {
+    this.loadRules()
   },
 
   onEditRule(e: WechatMiniprogram.CustomEvent) {

@@ -20,7 +20,9 @@ Page({
         payment: null as PaymentOrder | null,
         refunds: [] as RefundView[],
         navBarHeight: 88,
-        loading: true,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
         // 显示字段
         amountDisplay: '',
         statusText: '',
@@ -41,22 +43,26 @@ Page({
     },
 
     async loadPaymentDetail() {
-        this.setData({ loading: true })
+        if (!this.data.paymentId) return
+        this.setData({ loading: true, error: null })
         try {
             const payment = await getPaymentById(this.data.paymentId)
             this.processPayment(payment)
 
             await this.loadRefunds()
+            this.setData({ initialLoading: false, loading: false })
         } catch (error) {
             logger.error('加载支付详情失败', error, 'payment-detail.loadPaymentDetail')
-            wx.showToast({ title: '加载失败', icon: 'error' })
-        } finally {
-            this.setData({ loading: false })
+            this.setData({ 
+                initialLoading: false, 
+                loading: false,
+                error: '加载支付详情失败'
+            })
         }
     },
 
     async loadPaymentByOrder(orderId: number) {
-        this.setData({ loading: true })
+        this.setData({ loading: true, error: null })
         try {
             // 通过订单ID获取支付列表，取第一条
             const result = await getPayments({ order_id: orderId, page: 1, page_size: 1 })
@@ -65,14 +71,31 @@ Page({
                 this.setData({ paymentId: payment.id })
                 this.processPayment(payment)
                 await this.loadRefunds()
+                this.setData({ initialLoading: false, loading: false })
             } else {
-                wx.showToast({ title: '未找到支付记录', icon: 'none' })
+                this.setData({ 
+                    initialLoading: false, 
+                    loading: false,
+                    error: '未找到支付记录'
+                })
             }
         } catch (error) {
             logger.error('加载支付详情失败', error, 'payment-detail.loadPaymentByOrder')
-            wx.showToast({ title: '加载失败', icon: 'error' })
-        } finally {
-            this.setData({ loading: false })
+            this.setData({ 
+                initialLoading: false, 
+                loading: false,
+                error: '加载支付详情失败'
+            })
+        }
+    },
+
+    onRetry() {
+        const pages = getCurrentPages()
+        const options = (pages[pages.length - 1] as any).options
+        if (options.id) {
+            this.loadPaymentDetail()
+        } else if (options.orderId) {
+            this.loadPaymentByOrder(parseInt(options.orderId))
         }
     },
 

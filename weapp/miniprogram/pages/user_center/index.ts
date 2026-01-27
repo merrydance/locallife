@@ -60,7 +60,10 @@ Page({
       { id: 'operator', name: '运营商入驻', desc: '区域运营合作', path: '/pages/register/operator/index', icon: 'root-list' }
     ],
     navBarHeight: 88,
-    scrollViewHeight: 600
+    scrollViewHeight: 600,
+    loading: false,
+    initialLoading: true,
+    error: null as string | null,
   },
 
   onLoad() {
@@ -95,6 +98,8 @@ Page({
     const roleList = Array.isArray(roles) ? roles : [roles]
     const roleMap: Record<string, string> = {
       'merchant': '商家',
+      'merchant_boss': '店长',
+      'merchant_staff': '店员',
       'rider': '骑手',
       'operator': '运营',
       'admin': '管理员'
@@ -120,10 +125,13 @@ Page({
   },
 
   async refreshUserInfo() {
+    if (this.data.loading) return
+    
+    this.setData({ loading: true, error: null })
     try {
       const user = await getUserInfo()
       if (user) {
-        logger.debug('Refreshed User Info from Backend', user) // Debug log
+        logger.debug('Refreshed User Info from Backend', user)
 
         // Recover avatar from local storage if backend returns empty
         const localAvatar = wx.getStorageSync('user_avatar')
@@ -139,9 +147,19 @@ Page({
         // Update Local Data
         this.updateUser(app.globalData.userInfo, user.roles || [])
       }
+      this.setData({ initialLoading: false, loading: false })
     } catch (err) {
       logger.error('Failed to refresh user info', err)
+      this.setData({ 
+        error: '加载用户信息失败', 
+        loading: false,
+        initialLoading: false 
+      })
     }
+  },
+
+  onRetry() {
+    this.refreshUserInfo()
   },
 
   // ==================== 导航方法 ====================
@@ -198,7 +216,8 @@ Page({
   loadWorkbenches(roles: string[]) {
     const workbenches = []
 
-    if (roles.includes('merchant') || roles.includes('operator')) {
+    // 商家入口：支持多种角色，或者运营人员
+    if (roles.some(r => ['merchant', 'merchant_boss', 'merchant_staff', 'operator'].includes(r))) {
       workbenches.push({
         id: 'merchant',
         name: '商户中心',
@@ -207,12 +226,23 @@ Page({
       })
     }
 
+    // 骑手入口：支持骑手，或者运营人员
     if (roles.includes('rider') || roles.includes('operator')) {
       workbenches.push({
         id: 'rider',
         name: '骑手配送',
         icon: '/assets/icons/rider.svg',
         path: '/pages/rider/dashboard/index'
+      })
+    }
+
+    // 运营入口：独立显示
+    if (roles.includes('operator')) {
+      workbenches.push({
+        id: 'operator',
+        name: '运营管理中心',
+        icon: '/assets/icons/bill-list.svg',
+        path: '/pages/operator/dashboard/index'
       })
     }
 

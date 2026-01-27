@@ -139,7 +139,57 @@
   background-color: transparent !important;
 }
 
-.grid-item-image {
-  width: 48rpx !important;
-  height: 48rpx !important;
+.workbench-icon {
+  width: 44rpx !important;
+  height: 44rpx !important;
+  margin-right: 12rpx;
+}
+
+/* 骨架屏样式 */
+.skeleton-breath {
+  animation: bg-breath 1.5s infinite ease-in-out;
+}
+
+@keyframes bg-breath {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.avatar-skeleton {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-bg-color-secondarycontainer);
+  margin-right: var(--spacer-md);
+}
+
+.info-skeleton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.line-skeleton {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--radius-xs);
+  margin-bottom: var(--spacer-xs);
+}
+
+.title-line {
+  width: 200rpx;
+  height: 48rpx;
+}
+
+.tag-line {
+  width: 120rpx;
+  height: 32rpx;
+}
+
+/* 异常状态样式 */
+.error-state {
+  padding: 80rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }

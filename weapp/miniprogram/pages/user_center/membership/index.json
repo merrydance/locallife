@@ -10,6 +10,7 @@
         "t-divider": "tdesign-miniprogram/divider/divider",
         "t-button": "tdesign-miniprogram/button/button",
         "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "list-skeleton": "/components/list-skeleton/index"
     }
 }

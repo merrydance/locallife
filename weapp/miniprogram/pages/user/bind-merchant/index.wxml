@@ -1,55 +1,77 @@
-<!-- 员工绑定商户页面 -->
-<view class="bind-container">
+<custom-navbar title="加入商户" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
   <!-- 成功状态 -->
-  <view wx:if="{{success}}" class="success-state">
-    <view class="success-icon">✅</view>
-    <text class="success-title">加入成功</text>
-    <text class="success-merchant">{{result.merchant_name}}</text>
-    <text class="success-role">您的角色：{{result.role === 'cashier' ? '收银员' : result.role}}</text>
+  <view wx:if="{{success}}" class="success-state animate-fade-in">
+    <t-result 
+      theme="success" 
+      title="加入成功" 
+      description="您已成功加入 {{result.merchant_name}}"
+    >
+      <view slot="description" class="role-desc">
+        您的角色：{{result.role === 'cashier' ? '收银员' : result.role}}
+      </view>
+    </t-result>
     
     <view class="success-actions">
-      <button class="btn-primary" bindtap="goToMerchant">进入工作台</button>
-      <button class="btn-outline" bindtap="goHome">返回首页</button>
+      <t-button theme="primary" block size="large" shape="round" bindtap="goToMerchant">进入工作台</t-button>
+      <t-button variant="outline" block size="large" shape="round" bindtap="goHome" class="mt-md">返回首页</t-button>
     </view>
   </view>
 
   <!-- 输入邀请码 -->
-  <view wx:else class="input-state">
+  <view wx:else class="input-state animate-fade-in">
     <view class="page-header">
-      <text class="page-icon">🏪</text>
-      <text class="page-title">加入商户</text>
+      <view class="header-icon-wrap">
+        <t-icon name="store" size="64rpx" color="#0052D9" />
+      </view>
+      <text class="page-title">商户入职</text>
       <text class="page-desc">输入邀请码或扫描二维码加入商户团队</text>
     </view>
 
-    <view class="input-section">
-      <text class="section-label">邀请码</text>
-      <input 
-        class="invite-input" 
+    <view class="form-section">
+      <t-input 
+        label="邀请码" 
         placeholder="请输入邀请码" 
         value="{{inviteCode}}"
-        bindinput="onInput"
+        bindchange="onInput"
+        borderless
+        class="invite-input-wrap"
       />
     </view>
 
     <view class="action-section">
-      <button class="btn-primary btn-full" disabled="{{loading}}" bindtap="bindMerchant">
-        {{loading ? '加入中...' : '立即加入'}}
-      </button>
+      <t-button 
+        theme="primary" 
+        block 
+        size="large" 
+        shape="round" 
+        loading="{{loading}}" 
+        disabled="{{!inviteCode}}"
+        bindtap="bindMerchant"
+      >立即加入</t-button>
       
       <view class="divider">
-        <view class="divider-line"></view>
-        <text class="divider-text">或</text>
-        <view class="divider-line"></view>
+        <view class="line"></view>
+        <text class="text">或</text>
+        <view class="line"></view>
       </view>
       
-      <button class="btn-scan" bindtap="onScan">
-        <text class="scan-icon">📷</text>
-        <text>扫描二维码</text>
-      </button>
+      <t-button 
+        variant="outline" 
+        block 
+        size="large" 
+        shape="round" 
+        bindtap="onScan"
+        icon="scan"
+      >扫描二维码</t-button>
     </view>
 
-    <view class="tips">
-      <text class="tips-title">如何获取邀请码？</text>
+    <view class="tips-card">
+      <view class="tips-header">
+        <t-icon name="help-circle" size="32rpx" color="#999" />
+        <text class="tips-title">如何获取邀请码？</text>
+      </view>
       <text class="tips-content">请联系店铺老板或店长，从员工管理页面生成邀请码二维码分享给您。</text>
     </view>
   </view>

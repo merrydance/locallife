@@ -10,62 +10,69 @@
 
   <!-- 列表内容 -->
   <view class="list-container">
-    <!-- 骨架屏 -->
-    <view wx:if="{{loading && reservations.length === 0}}" class="skeleton-container">
-      <view class="card skeleton" wx:for="{{[1,2,3]}}" wx:key="*this">
-        <view class="skeleton-line full" style="height: 180rpx;"></view>
-      </view>
+    <!-- 错误状态 -->
+    <view wx:if="{{error && !initialLoading}}" class="error-container">
+      <t-empty icon="info-circle" description="{{error}}">
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+      </t-empty>
     </view>
 
-    <!-- 空状态 -->
-    <view wx:elif="{{reservations.length === 0}}" class="empty-state">
-      <t-empty image="order" description="暂无预订记录" />
-    </view>
-
-    <!-- 预订卡片列表 -->
-    <view wx:else class="card-list">
-      <view class="reservation-card" wx:for="{{reservations}}" wx:key="id" bindtap="onViewDetail" data-id="{{item.id}}" hover-class="card-hover">
-        <!-- 卡片头部: 商户信息 + 状态 -->
-        <view class="card-header">
-           <view class="merchant-info">
-             <text class="merchant-name">{{item.merchantName}}</text>
-             <t-icon name="chevron-right" size="32rpx" color="#999" />
-           </view>
-           <t-tag variant="light" theme="{{item.statusTagTheme}}">{{item.statusText}}</t-tag>
-        </view>
-
-        <!-- 卡片内容: 时间、人数、信息 -->
-        <view class="card-body">
-           <view class="info-primary">
-              <view class="time-display">{{item.dateTimeDisplay}}</view>
-              <view class="guest-info">{{item.guestCount}}人</view>
-           </view>
-           
-           <view class="info-secondary" wx:if="{{item.itemsPreview}}">
-              <t-icon name="view-list" size="28rpx" color="#999" />
-              <text class="items-text">{{item.itemsPreview}}</text>
-           </view>
-
-           <view class="info-secondary" wx:if="{{item.depositDisplay}}">
-              <text>需付定金</text>
-              <text class="price-val">{{item.depositDisplay}}</text>
-           </view>
-        </view>
-
-        <!-- 卡片底部: 操作按钮 -->
-        <view class="card-footer" catchtap="preventBubble">
-           <t-button wx:if="{{item.canCancel}}" size="small" variant="outline" shape="round" catchtap="onCancelReservation" data-id="{{item.id}}">取消</t-button>
-           <t-button wx:if="{{item.canViewDetail}}" size="small" variant="outline" shape="round" catchtap="onViewDetail" data-id="{{item.id}}">详情</t-button>
-           <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayReservation" data-id="{{item.id}}">去支付</t-button>
-           <t-button wx:if="{{item.canOrder}}" size="small" theme="primary" shape="round" catchtap="onGoToOrder" data-item="{{item}}">加菜/点餐</t-button>
-        </view>
+    <block wx:else>
+      <!-- 骨架屏 -->
+      <view wx:if="{{initialLoading}}" class="reservations-skeleton-list">
+        <list-skeleton row="5" t-class="skeleton-item" />
       </view>
 
-      <!-- 加载状态 -->
-      <view class="loading-footer">
-        <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" text="加载中..." />
+      <!-- 空状态 -->
+      <view wx:elif="{{reservations.length === 0}}" class="empty-state animate-fade-in">
+        <t-empty image="order" description="暂无预订记录" />
+      </view>
+
+      <!-- 预订卡片列表 -->
+      <view wx:else class="card-list animate-fade-in">
+        <view class="reservation-card" wx:for="{{reservations}}" wx:key="id" bindtap="onViewDetail" data-id="{{item.id}}" hover-class="card-hover">
+          <!-- 卡片头部: 商户信息 + 状态 -->
+          <view class="card-header">
+             <view class="merchant-info">
+               <text class="merchant-name">{{item.merchantName}}</text>
+               <t-icon name="chevron-right" size="32rpx" color="#999" />
+             </view>
+             <t-tag variant="light" theme="{{item.statusTagTheme}}">{{item.statusText}}</t-tag>
+          </view>
+
+          <!-- 卡片内容: 时间、人数、信息 -->
+          <view class="card-body">
+             <view class="info-primary">
+                <view class="time-display">{{item.dateTimeDisplay}}</view>
+                <view class="guest-info">{{item.guestCount}}人</view>
+             </view>
+             
+             <view class="info-secondary" wx:if="{{item.itemsPreview}}">
+                <t-icon name="view-list" size="28rpx" color="#999" />
+                <text class="items-text">{{item.itemsPreview}}</text>
+             </view>
+
+             <view class="info-secondary" wx:if="{{item.depositDisplay}}">
+                <text>需付定金</text>
+                <text class="price-val">{{item.depositDisplay}}</text>
+             </view>
+          </view>
+
+          <!-- 卡片底部: 操作按钮 -->
+          <view class="card-footer" catchtap="preventBubble">
+             <t-button wx:if="{{item.canCancel}}" size="small" variant="outline" shape="round" catchtap="onCancelReservation" data-id="{{item.id}}">取消</t-button>
+             <t-button wx:if="{{item.canViewDetail}}" size="small" variant="outline" shape="round" catchtap="onViewDetail" data-id="{{item.id}}">详情</t-button>
+             <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayReservation" data-id="{{item.id}}">去支付</t-button>
+             <t-button wx:if="{{item.canOrder}}" size="small" theme="primary" shape="round" catchtap="onGoToOrder" data-item="{{item}}">加菜/点餐</t-button>
+          </view>
+        </view>
+
+        <!-- 加载状态 -->
+        <view class="load-more-wrap" wx:if="{{loading}}">
+          <t-loading theme="circular" size="32rpx" text="正在加载..." />
+        </view>
         <view wx:elif="{{!hasMore && reservations.length > 0}}" class="no-more">没有更多了</view>
       </view>
-    </view>
+    </block>
   </view>
 </view>

@@ -8,10 +8,17 @@ Page({
             extra_distance_fee: 0,
             min_order_amount: 0,
             max_delivery_distance: 0,
-            is_active: true
-        } as Partial<DeliveryFeeConfigResponse>,
+            is_active: true,
+            night_surcharge: 0,
+            night_start: '22:00',
+            night_end: '06:00',
+            extra_distance_unit: 1000
+        } as any, // Using any temporarily as the response type might need update
         regionId: 1, // Default region ID for simple admin config
-        loading: false
+        initialLoading: true,
+        loading: false,
+        error: '',
+        navBarHeight: 0
     },
 
     onLoad(options: any) {
@@ -21,8 +28,18 @@ Page({
         this.loadConfig();
     },
 
+    onNavHeight(e: any) {
+        this.setData({
+            navBarHeight: e.detail.navBarHeight
+        })
+    },
+
+    onRetry() {
+        this.loadConfig();
+    },
+
     async loadConfig() {
-        this.setData({ loading: true });
+        this.setData({ initialLoading: true, error: '' });
         try {
             const config = await deliveryFeeService.getRegionConfig(this.data.regionId);
             this.setData({
@@ -30,24 +47,49 @@ Page({
                     ...config,
                     base_fee: config.base_fee / 100,
                     extra_distance_fee: config.extra_distance_fee / 100,
-                    min_order_amount: config.min_order_amount / 100
+                    min_order_amount: config.min_order_amount / 100,
+                    // Mock additional fields if not present in API response yet
+                    night_surcharge: (config as any).night_surcharge ? (config as any).night_surcharge / 100 : 0,
+                    night_start: (config as any).night_start || '22:00',
+                    night_end: (config as any).night_end || '06:00',
+                    extra_distance_unit: (config as any).extra_distance_unit || 1000
                 },
-                loading: false
+                initialLoading: false
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
+            const errorMsg = error.message || '加载配置失败';
+            
+            // Mock data for fallback/demo purposes if API fails (or for development)
+            // In production, we might want to just show the error.
+            // For this refactor, let's show error but allow retry
+            this.setData({
+                error: errorMsg,
+                initialLoading: false
+            });
+            
+             // Fallback for development if needed:
+             /*
             this.setData({
                 'config.base_fee': 5,
                 'config.base_distance': 3000,
                 'config.extra_distance_fee': 2,
                 'config.min_order_amount': 20,
                 'config.max_delivery_distance': 10000,
-                loading: false
+                initialLoading: false
             });
+            */
         }
     },
 
     onInput(e: any) {
+        const field = e.currentTarget.dataset.field;
+        this.setData({
+            [`config.${field}`]: e.detail.value
+        });
+    },
+
+    onTimeChange(e: any) {
         const field = e.currentTarget.dataset.field;
         this.setData({
             [`config.${field}`]: e.detail.value
@@ -66,7 +108,8 @@ Page({
                 extra_distance_fee: Number(config.extra_distance_fee) * 100,
                 min_order_amount: Number(config.min_order_amount) * 100,
                 max_delivery_distance: Number(config.max_delivery_distance),
-                is_active: config.is_active
+                is_active: config.is_active,
+                // Add unknown fields only if API supports them, otherwise this might just be local state
             };
 
             await deliveryFeeService.updateRegionConfig(regionId, submitData);
@@ -78,3 +121,4 @@ Page({
         }
     }
 });
+

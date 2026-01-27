@@ -20,8 +20,10 @@ Page({
     data: {
         activeTab: 'AVAILABLE', // 'AVAILABLE' | 'MY'
         coupons: [] as CouponViewModel[],
-        loading: false,
         navBarHeight: 88,
+        loading: false,
+        initialLoading: true,
+        error: null as string | null,
         
         // Paging
         page: 1,
@@ -50,9 +52,9 @@ Page({
 
     async loadCoupons(reset = false) {
         if (!this.data.hasMore && !reset) return
-        if (this.data.loading) return
+        if (this.data.loading && !this.data.initialLoading) return
 
-        this.setData({ loading: true })
+        this.setData({ loading: true, error: null })
 
         try {
             let list: CouponViewModel[] = []
@@ -83,12 +85,21 @@ Page({
                 coupons: newCoupons,
                 hasMore: newCoupons.length < total,
                 page: this.data.page + 1,
-                loading: false
+                loading: false,
+                initialLoading: false
             })
         } catch (error) {
-            this.setData({ loading: false })
+            this.setData({ 
+                loading: false,
+                initialLoading: false,
+                error: '加载优惠券失败'
+            })
             ErrorHandler.handle(error, 'Coupons.load')
         }
+    },
+
+    onRetry() {
+        this.loadCoupons(true)
     },
 
     onReachBottom() {

@@ -1,33 +1,60 @@
-<view class="page">
-  <view class="section">
-    <view class="section-title">基础配送配置</view>
-    <t-input label="基础配送费" placeholder="请输入金额" suffix="元" type="digit" value="{{baseFeeInput}}" data-field="baseFeeInput" bind:change="onInputChange" />
-    <t-input label="基础距离" placeholder="请输入距离" suffix="米" type="number" value="{{baseDistanceInput}}" data-field="baseDistanceInput" bind:change="onInputChange" />
-    <t-input label="超距加价" placeholder="请输入金额" suffix="元/km" type="digit" value="{{extraFeeInput}}" data-field="extraFeeInput" bind:change="onInputChange" />
-    <t-input label="起送金额" placeholder="请输入金额" suffix="元" type="digit" value="{{minOrderInput}}" data-field="minOrderInput" bind:change="onInputChange" />
-    <t-input label="最大配送范围" placeholder="请输入距离" suffix="米" type="number" value="{{maxDistanceInput}}" data-field="maxDistanceInput" bind:change="onInputChange" />
-    
-    <view class="btn-wrapper">
-        <t-button theme="primary" block bind:tap="onSaveFeeConfig">保存基础配置</t-button>
-    </view>
-  </view>
+<custom-navbar title="区域配送配置" showBack="{{true}}" bind:navheight="onNavHeight" />
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view class="content">
 
-  <view class="section">
-    <view class="section-header">
-        <view class="section-title">特殊/峰时配置</view>
-        <t-button size="small" variant="outline" bind:tap="onAddPeak">添加</t-button>
+    <!-- Error State -->
+    <view wx:if="{{error && !initialLoading}}" class="error-container">
+      <t-empty icon="info-circle" description="{{error}}">
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+      </t-empty>
     </view>
-    
-    <view class="peak-list">
-        <block wx:for="{{peakConfigs}}" wx:key="id">
-            <t-cell title="{{item.start_time}} - {{item.end_time}}" description="周{{tools.formatDays(item.days_of_week)}} | 加价 {{item.extra_fee/100}}元 | {{item.multiplier}}倍">
-                <view slot="right-icon" bind:tap="onDeletePeak" data-id="{{item.id}}">
-                    <t-icon name="delete" size="48rpx" color="#d9001b" />
-                </view>
-            </t-cell>
-        </block>
-        <t-empty wx:if="{{peakConfigs.length === 0}}" icon="info-circle-filled" description="暂无特殊时段配置" />
-    </view>
+
+    <block wx:else>
+      <!-- Skeleton State -->
+      <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
+        <card-skeleton />
+        <view style="height: 20rpx;"></view>
+        <card-skeleton />
+      </view>
+
+      <!-- Content State -->
+      <view wx:else class="animate-fade-in">
+        <view class="section">
+          <view class="section-title">基础配送配置</view>
+          <t-cell-group theme="card">
+              <t-input label="基础配送费" placeholder="请输入金额" suffix="元" type="digit" value="{{baseFeeInput}}" data-field="baseFeeInput" bind:change="onInputChange" align="right" />
+              <t-input label="基础距离" placeholder="请输入距离" suffix="米" type="number" value="{{baseDistanceInput}}" data-field="baseDistanceInput" bind:change="onInputChange" align="right" />
+              <t-input label="超距加价" placeholder="请输入金额" suffix="元/km" type="digit" value="{{extraFeeInput}}" data-field="extraFeeInput" bind:change="onInputChange" align="right" />
+              <t-input label="起送金额" placeholder="请输入金额" suffix="元" type="digit" value="{{minOrderInput}}" data-field="minOrderInput" bind:change="onInputChange" align="right" />
+              <t-input label="最大配送范围" placeholder="请输入距离" suffix="米" type="number" value="{{maxDistanceInput}}" data-field="maxDistanceInput" bind:change="onInputChange" align="right" />
+          </t-cell-group>
+          
+          <view class="btn-wrapper">
+              <t-button theme="primary" block bind:tap="onSaveFeeConfig">保存基础配置</t-button>
+          </view>
+        </view>
+
+        <view class="section">
+          <view class="section-header">
+              <view class="section-title">特殊/峰时配置</view>
+              <t-button size="small" variant="outline" bind:tap="onAddPeak">添加</t-button>
+          </view>
+          
+          <view class="peak-list">
+              <block wx:for="{{peakConfigs}}" wx:key="id">
+                  <view class="peak-item-wrapper">
+                      <t-cell title="{{item.start_time}} - {{item.end_time}}" description="周{{tools.formatDays(item.days_of_week)}} | 加价 {{item.extra_fee/100}}元 | {{item.multiplier}}倍">
+                          <view slot="right-icon" bind:tap="onDeletePeak" data-id="{{item.id}}">
+                              <t-icon name="delete" size="48rpx" color="#d9001b" />
+                          </view>
+                      </t-cell>
+                  </view>
+              </block>
+              <t-empty wx:if="{{peakConfigs.length === 0}}" icon="info-circle-filled" description="暂无特殊时段配置" />
+          </view>
+        </view>
+      </view>
+    </block>
   </view>
   
   <!-- Modal -->

@@ -18,15 +18,20 @@ Page({
     longitude: '',
     isDefault: false,
     saving: false,
+    initialLoading: false,
+    error: null as string | null,
     navBarHeight: 88,
     navTitle: '编辑地址'
   },
 
   onLoad(options: { id?: string; wechat_data?: string }) {
     if (options.id) {
-      this.setData({ addressId: Number(options.id) })
+      this.setData({ 
+        addressId: Number(options.id),
+        initialLoading: true,
+        navTitle: '编辑地址'
+      })
       this.loadAddress(Number(options.id))
-      this.setData({ navTitle: '编辑地址' })
     } else if (options.wechat_data) {
       // 从微信导入的数据
       try {
@@ -50,7 +55,7 @@ Page({
   },
 
   async loadAddress(id: number) {
-    wx.showLoading({ title: '加载中' })
+    this.setData({ initialLoading: true, error: null })
     try {
       const detail = await AddressService.getAddressDetail(id)
       this.setData({
@@ -59,14 +64,21 @@ Page({
         detailAddress: detail.detail_address,
         latitude: detail.latitude,
         longitude: detail.longitude,
-        isDefault: detail.is_default
+        isDefault: detail.is_default,
+        initialLoading: false
       })
     } catch (error) {
       logger.error('Load address failed:', error, 'AddressEdit')
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      setTimeout(() => wx.navigateBack(), 1500)
-    } finally {
-       wx.hideLoading()
+      this.setData({ 
+        initialLoading: false,
+        error: '加载地址详情失败'
+      })
+    }
+  },
+
+  onRetry() {
+    if (this.data.addressId) {
+      this.loadAddress(this.data.addressId)
     }
   },
 

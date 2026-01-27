@@ -9,6 +9,8 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-image": "tdesign-miniprogram/image/image",
-        "auth-image": "/components/auth-image/index"
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "auth-image": "/components/auth-image/index",
+        "card-skeleton": "/components/card-skeleton/index"
     }
 }

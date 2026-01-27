@@ -13,6 +13,8 @@ Page({
         merchantName: '',
         navBarHeight: 88,
         loading: false,
+        initialLoading: true,
+        error: null as string | null,
         submitting: false,
         // 表单数据
         content: '',
@@ -36,15 +38,31 @@ Page({
     },
 
     async loadOrderInfo() {
+        if (!this.data.orderId) {
+            this.setData({ initialLoading: false })
+            return
+        }
+        this.setData({ loading: true, error: null })
         try {
             const order = await getOrderDetail(this.data.orderId)
             this.setData({
                 merchantId: order.merchant_id,
-                merchantName: order.merchant_name
+                merchantName: order.merchant_name,
+                initialLoading: false,
+                loading: false
             })
         } catch (error) {
             logger.error('加载订单信息失败', error, 'reviews/create.loadOrderInfo')
+            this.setData({ 
+                initialLoading: false,
+                loading: false,
+                error: '加载订单信息失败'
+            })
         }
+    },
+
+    onRetry() {
+        this.loadOrderInfo()
     },
 
     onContentInput(e: WechatMiniprogram.CustomEvent) {
