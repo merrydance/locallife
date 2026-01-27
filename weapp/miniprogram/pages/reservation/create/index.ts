@@ -19,6 +19,10 @@ Page({
         showPartySizePicker: false,
         minDate: new Date().getTime(),
         maxDate: new Date().getTime() + 30 * 24 * 60 * 60 * 1000,
+        
+        // App Shell
+        navBarHeight: 88,
+        submitting: false,
 
         // Picker Ranges
         timeOptions: [
@@ -46,6 +50,10 @@ Page({
             { label: '9-10人', value: 10 },
             { label: '10人以上', value: 12 }
         ]
+    },
+
+    onNavHeight(e: any) {
+        this.setData({ navBarHeight: e.detail.navBarHeight });
     },
 
     onLoad(options: any) {
@@ -118,6 +126,8 @@ Page({
 
     // Submit
     async onSubmit() {
+        if (this.data.submitting) return;
+
         const { merchantId, date, time, partySize, contactName, contactPhone, notes } = this.data;
         const reservationTime = `${date} ${time}:00`;
 
@@ -134,7 +144,7 @@ Page({
         }
 
         try {
-            wx.showLoading({ title: '提交中...' });
+            this.setData({ submitting: true });
 
             await ReservationService.createReservation({
                 merchant_id: merchantId,
@@ -151,12 +161,11 @@ Page({
                 wx.redirectTo({
                     url: '/pages/reservation/list/index'
                 });
-            }, 1500);
+            }, 1000);
 
         } catch (error: any) {
             wx.showToast({ title: error.message || '预订失败', icon: 'none' });
-        } finally {
-            wx.hideLoading();
+            this.setData({ submitting: false });
         }
     }
 });

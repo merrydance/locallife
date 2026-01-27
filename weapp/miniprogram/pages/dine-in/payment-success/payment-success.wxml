@@ -1,5 +1,7 @@
 <!--堂食支付成功页面-->
-<view class="payment-success-container">
+<custom-navbar title="支付成功" showBack="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(env(safe-area-inset-bottom) + 40rpx);">
   <!-- 成功状态 -->
   <view class="success-section">
     <view class="success-icon">✅</view>

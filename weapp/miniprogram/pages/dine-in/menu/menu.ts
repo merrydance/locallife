@@ -209,8 +209,7 @@ Page({
     async initPageById(tableId: number, merchantId: number) {
         // 暂时用 initPageByTableNo 的方式，需要查询桌号
         // 后续可以优化为直接用 tableId
-        wx.showToast({ title: '加载中...', icon: 'loading' })
-        this.setData({ loading: true })
+        this.setData({ loading: true, hasError: false })
 
         try {
             const tableDetail = await getTableDetail(tableId)
@@ -220,10 +219,13 @@ Page({
             } else {
                 throw new Error('无法获取桌台信息')
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('初始化失败:', error)
-            wx.showToast({ title: '加载失败', icon: 'error' })
-            this.setData({ loading: false })
+            this.setData({
+                loading: false,
+                hasError: true,
+                errorMessage: error.message || '加载失败'
+            })
         }
     },
 
@@ -232,8 +234,7 @@ Page({
      */
     async initPageForReservation(reservationId: number, merchantId: number) {
         try {
-            this.setData({ loading: true })
-            wx.showLoading({ title: '加载菜单...' })
+            this.setData({ loading: true, hasError: false })
 
             // 并行获取预订详情、商户信息和菜品列表
             const { getPublicMerchantDetail } = require('../../../api/merchant')
@@ -322,13 +323,11 @@ Page({
             // 加载购物车
             await this.loadCart()
 
-            wx.hideLoading()
-        } catch (error) {
-            wx.hideLoading()
+        } catch (error: any) {
             console.error('预订初始化失败:', error)
-            wx.showToast({
-                title: error instanceof Error ? error.message : '加载失败',
-                icon: 'error'
+            this.setData({
+                hasError: true,
+                errorMessage: error.message || '加载失败'
             })
         } finally {
             this.setData({ loading: false })
@@ -340,8 +339,7 @@ Page({
      */
     async initPageByTableNo(merchantId: number, tableNo: string) {
         try {
-            this.setData({ loading: true })
-            wx.showLoading({ title: '加载菜单...' })
+            this.setData({ loading: true, hasError: false })
 
             // 调用扫码API获取完整信息
             const scanResult = await scanTable(merchantId, tableNo)
@@ -392,13 +390,11 @@ Page({
             // 加载购物车
             await this.loadCart()
 
-            wx.hideLoading()
-        } catch (error) {
-            wx.hideLoading()
+        } catch (error: any) {
             console.error('扫码初始化失败:', error)
-            wx.showToast({
-                title: error instanceof Error ? error.message : '加载失败',
-                icon: 'error'
+            this.setData({
+                hasError: true,
+                errorMessage: error.message || '加载失败'
             })
         } finally {
             this.setData({ loading: false })

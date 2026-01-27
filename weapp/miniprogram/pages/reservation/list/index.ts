@@ -16,7 +16,20 @@ Page({
         pageSize: 10,
         hasMore: true,
         loading: false,
-        refreshing: false
+        refreshing: false,
+        
+        // App Shell & Error State
+        navBarHeight: 88,
+        isError: false,
+        errorMessage: ''
+    },
+
+    onNavHeight(e: any) {
+        this.setData({ navBarHeight: e.detail.navBarHeight });
+    },
+
+    onRetry() {
+        this.loadReservations(true);
     },
 
     onLoad() {
@@ -49,7 +62,8 @@ Page({
             currentTab: e.detail.value,
             reservations: [],
             page: 1,
-            hasMore: true
+            hasMore: true,
+            isError: false // clear error on tab change
         });
         this.loadReservations(true);
     },
@@ -57,7 +71,7 @@ Page({
     async loadReservations(reset: boolean) {
         if (this.data.loading && !reset) return;
 
-        this.setData({ loading: true });
+        this.setData({ loading: true, isError: false });
 
         try {
             const page = reset ? 1 : this.data.page;
@@ -83,10 +97,13 @@ Page({
                 loading: false
             });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            this.setData({ loading: false });
-            wx.showToast({ title: '加载失败', icon: 'none' });
+            this.setData({ 
+                loading: false,
+                isError: true,
+                errorMessage: error.message || '加载失败，请重试'
+            });
         }
     },
 

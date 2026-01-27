@@ -16,6 +16,8 @@ Page({
         id: 0,
         reservation: null as ReservationDetailViewModel | null,
         loading: true,
+        isError: false,
+        errorMessage: '',
         navBarHeight: 88,
         
         // Dialog State
@@ -41,9 +43,15 @@ Page({
         this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
     },
 
+    onRetry() {
+        this.loadDetail()
+    },
+
     async loadDetail() {
-        if (!this.data.reservation) {
-           this.setData({ loading: true })
+        // Only show full page loading if no data yet (first load or retry)
+        const isFirstLoad = !this.data.reservation
+        if (isFirstLoad) {
+           this.setData({ loading: true, isError: false })
         }
         
         try {
@@ -54,10 +62,18 @@ Page({
                 reservation: viewModel,
                 loading: false
             })
-        } catch (error) {
+        } catch (error: any) {
             logger.error('Load reservation detail failed', error)
-            wx.showToast({ title: '加载失败', icon: 'none' })
-            this.setData({ loading: false })
+            
+            if (isFirstLoad) {
+                this.setData({ 
+                    loading: false,
+                    isError: true,
+                    errorMessage: error.message || '加载失败'
+                })
+            } else {
+                wx.showToast({ title: '刷新失败', icon: 'none' })
+            }
         }
     },
 

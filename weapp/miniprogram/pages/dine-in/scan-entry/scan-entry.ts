@@ -23,7 +23,12 @@ Page({
         showTransferDialog: false,
         transferCode: '',
         transferSubmitting: false,
-        activeSession: null as DiningSessionDTO | null
+        activeSession: null as DiningSessionDTO | null,
+        navBarHeight: 88
+    },
+
+    onNavHeight(e: WechatMiniprogram.CustomEvent) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
     onLoad(options: { scene?: string; q?: string; table_id?: string }) {

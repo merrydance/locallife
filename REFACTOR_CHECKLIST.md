@@ -65,24 +65,24 @@
 
 ### 🛋️ 堂食与预订 (Dining & Reservation)
 
-- [ ] `pages/dining/index`
-- [ ] `pages/dine-in/scan-entry/scan-entry`
-- [ ] `pages/dine-in/menu/menu`
-- [ ] `pages/dine-in/checkout/checkout`
-- [ ] `pages/dine-in/payment-success/payment-success`
-- [ ] `pages/reservation/index`
-- [ ] `pages/reservation/list/index`
-- [ ] `pages/reservation/create/index`
-- [ ] `pages/reservation/detail/index`
-- [ ] `pages/reservation/modify/index`
-- [ ] `pages/reservation/room-detail/index`
-- [ ] `pages/reservation/confirm/index`
+- [x] `pages/dining/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/dine-in/scan-entry/scan-entry` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/dine-in/menu/menu` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/dine-in/checkout/checkout` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/dine-in/payment-success/payment-success` (已完成 App Shell 重构)
+- [x] `pages/reservation/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/reservation/list/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/reservation/create/index` (已完成 App Shell 重构)
+- [x] `pages/reservation/detail/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/reservation/modify/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/reservation/room-detail/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/reservation/confirm/index` (已完成 App Shell 与骨架屏重构)
 
 ### 📦 订单管理 (Orders)
 
-- [ ] `pages/orders/list/index`
-- [ ] `pages/orders/detail/index`
-- [ ] `pages/orders/tracking/index`
+- [x] `pages/orders/list/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/orders/detail/index` (已完成 App Shell 与骨架屏重构)
+- [x] `pages/orders/tracking/index` (已完成订单追踪地图骨架屏重构)
 
 ### 👤 个人中心与通用 (User & General)
 

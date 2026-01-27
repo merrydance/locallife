@@ -1,5 +1,5 @@
 /* 扫码点餐入口页面样式 */
-.scan-entry-container {
+.page-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20rpx;
@@ -463,4 +463,50 @@
 .dialog-actions .confirm {
   background: #667eea;
   color: #fff;
+}
+/* Skeleton Styles */
+.skeleton-container {
+  padding: 24rpx;
+}
+
+.skeleton-animate {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 12rpx;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-merchant-header {
+  height: 180rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  margin-bottom: 20rpx;
+  opacity: 0.8;
+}
+
+.skeleton-card {
+  background: #fff;
+  border-radius: 20rpx;
+  opacity: 0.8;
+}
+
+.skeleton-btn {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50rpx;
+}
+
+.skeleton-line {
+  height: 32rpx;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 8rpx;
+}
+
+.w-60 { width: 60%; }
+.w-80 { width: 80%; }
+.w-70 { width: 70%; }
+.mb-24 { margin-bottom: 24rpx; }
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
 }

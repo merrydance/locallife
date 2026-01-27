@@ -3,8 +3,32 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
   <!-- 加载状态 -->
-  <view wx:if="{{loading}}" class="loading-wrapper">
-    <t-loading theme="circular" size="48rpx" text="加载订单中..." />
+  <!-- 骨架屏 -->
+  <view wx:if="{{loading}}" class="skeleton-wrapper">
+    <view class="skeleton-card skeleton-animate">
+       <view class="skeleton-row">
+         <view class="skeleton-circle"></view>
+         <view style="flex:1; display:flex; flex-direction:column; gap:16rpx;">
+            <view class="skeleton-line w-60"></view>
+            <view class="skeleton-line w-40"></view>
+         </view>
+       </view>
+    </view>
+    <view class="skeleton-card skeleton-animate">
+       <view class="skeleton-line w-40" style="margin-bottom:24rpx;"></view>
+       <view class="skeleton-line w-80"></view>
+    </view>
+    <view class="skeleton-card skeleton-animate">
+       <view class="skeleton-line w-40" style="margin-bottom:24rpx;"></view>
+       <view class="skeleton-line w-80"></view>
+       <view class="skeleton-line w-80" style="margin-top:20rpx;"></view>
+    </view>
+  </view>
+
+  <!-- 错误状态 -->
+  <view wx:elif="{{isError}}" class="error-loading-container">
+    <t-empty icon="error-circle" description="{{errorMessage}}" />
+    <t-button theme="primary" bindtap="onRetry">重试</t-button>
   </view>
 
   <!-- 主内容 -->
@@ -168,7 +192,7 @@
   </scroll-view>
 
   <!-- 底部提交栏 -->
-  <view class="submit-bar" wx:if="{{!loading}}">
+  <view class="submit-bar" wx:if="{{!loading && !isError}}">
     <view class="submit-left">
       <text class="submit-label">应付：</text>
       <text class="submit-price">¥{{calculation.totalDisplay || '0.00'}}</text>

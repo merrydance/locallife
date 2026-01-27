@@ -36,7 +36,9 @@ Page({
         cartPriceDisplay: '0.00',
         sharedDishCounts: {} as Record<number, number>,
         navBarHeight: 88,
-        loading: true
+        loading: true,
+        isError: false,
+        errorMsg: ''
     },
 
     onLoad(options: { table_id?: string; merchant_id?: string; dev?: string }) {
@@ -53,8 +55,11 @@ Page({
                 this.setData({ tableId: '1', merchantId: '1' })
                 this.init()
             } else {
-                wx.showToast({ title: '无效的二维码', icon: 'error' })
-                setTimeout(() => wx.navigateBack(), 1500)
+                this.setData({ 
+                    loading: false, 
+                    isError: true, 
+                    errorMsg: '无效的二维码参数' 
+                })
             }
         }
     },
@@ -64,15 +69,23 @@ Page({
     },
 
     async init() {
-        this.setData({ loading: true })
+        this.setData({ loading: true, isError: false })
         try {
             await this.checkAndOpenSession()
             await this.loadMenu()
             this.setData({ loading: false })
-        } catch (error) {
+        } catch (error: any) {
             ErrorHandler.handle(error, 'Dining.init')
-            this.setData({ loading: false })
+            this.setData({ 
+                loading: false, 
+                isError: true, 
+                errorMsg: error.message || '加载失败，请重试' 
+            })
         }
+    },
+
+    onRetry() {
+        this.init()
     },
 
     async checkAndOpenSession() {
@@ -190,7 +203,7 @@ Page({
             this.setData({ dishes, categories })
         } catch (error) {
             logger.error('加载菜单失败', error, 'Dining.loadMenu')
-            wx.showToast({ title: '加载菜单失败', icon: 'error' })
+            throw error
         }
     },
 

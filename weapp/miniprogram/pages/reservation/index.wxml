@@ -52,6 +52,12 @@
       <card-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
     </block>
 
+    <!-- Error State -->
+    <view wx:elif="{{isError && itemList.length === 0}}" class="error-container" style="padding-top: 100rpx; display: flex; flex-direction: column; align-items: center; gap: 32rpx;">
+       <t-empty icon="error-circle" description="{{errorMessage}}" />
+       <t-button theme="primary" size="medium" bindtap="onRetry">重试</t-button>
+    </view>
+
     <!-- Empty State -->
     <view wx:elif="{{itemList.length === 0 && !loading}}" class="empty-container">
       <t-empty 

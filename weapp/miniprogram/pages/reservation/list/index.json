@@ -1,13 +1,16 @@
 {
     "navigationBarTitleText": "我的预订",
-    "enablePullDownRefresh": true,
+    "navigationStyle": "custom",
     "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
         "t-tabs": "tdesign-miniprogram/tabs/tabs",
         "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
         "t-pull-down-refresh": "tdesign-miniprogram/pull-down-refresh/pull-down-refresh",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-load-more": "tdesign-miniprogram/load-more/load-more",
+        "t-button": "tdesign-miniprogram/button/button",
+        "card-skeleton": "/components/card-skeleton/index"
     }
 }

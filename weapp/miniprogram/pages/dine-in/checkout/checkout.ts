@@ -40,7 +40,19 @@ Page({
         
         diningInfo: {
             guest_count: 2
-        }
+        },
+
+        // 导航栏高度
+        navBarHeight: 88,
+
+        // 错误状态
+        isError: false,
+        errorMessage: '',
+        submitting: false
+    },
+
+    onNavHeight(e: any) {
+        this.setData({ navBarHeight: e.detail.navBarHeight });
     },
 
     async onLoad(options: any) {
@@ -60,10 +72,17 @@ Page({
     },
 
     /**
+     * 重试加载
+     */
+    onRetry() {
+        this.initData();
+    },
+
+    /**
      * 初始化数据（SSOT：一切以 calculateCart 为准）
      */
     async initData() {
-        this.setData({ loading: true });
+        this.setData({ loading: true, isError: false });
         const { merchantId, tableId, reservationId, orderType } = this.data;
 
         try {
@@ -87,9 +106,12 @@ Page({
             // 4. 更新 UI 数据
             this.renderData(merchantInfo, cart, calculationResult);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('初始化失败:', error);
-            wx.showToast({ title: '加载失败', icon: 'error' });
+            this.setData({ 
+                isError: true, 
+                errorMessage: error.message || '加载失败，请重试'
+            });
         } finally {
             this.setData({ loading: false });
         }
@@ -164,8 +186,8 @@ Page({
     },
 
     async onSubmit() {
-        if (this.data.loading) return;
-        this.setData({ loading: true });
+        if (this.data.submitting) return;
+        this.setData({ submitting: true });
 
         const { merchantId, orderType, tableId, reservationId, selectedPaymentMethod, remark } = this.data;
 
@@ -184,7 +206,7 @@ Page({
 
         } catch (error: any) {
             wx.showToast({ title: error.message || '下单失败', icon: 'error' });
-            this.setData({ loading: false });
+            this.setData({ submitting: false });
         }
     },
 

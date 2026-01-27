@@ -1,11 +1,18 @@
 <custom-navbar title="包间详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 140rpx;">
-  <view wx:if="{{loading}}" class="loading-wrapper">
-    <t-loading theme="circular" size="48rpx" text="加载中..." />
+  <block wx:if="{{loading}}">
+     <view style="padding: 24rpx;">
+       <card-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
+     </view>
+  </block>
+
+  <view wx:elif="{{isError}}" class="error-container" style="padding-top: 200rpx; display: flex; flex-direction: column; align-items: center; gap: 32rpx;">
+     <t-empty icon="error-circle" description="{{errorMessage}}" />
+     <t-button theme="primary" size="medium" bindtap="onRetry">重试</t-button>
   </view>
 
-  <view wx:if="{{!loading && room}}" class="content-view">
+  <view wx:elif="{{room}}" class="content-view">
     <!-- 轮播图卡片 -->
     <view class="swiper-container">
       <t-swiper 
@@ -139,6 +146,6 @@
 </view>
 
 <!-- 底部操作栏 -->
-<view wx:if="{{!loading && room}}" class="bottom-bar">
+<view wx:if="{{!loading && !isError && room}}" class="bottom-bar">
   <t-button block theme="primary" size="large" shape="round" bindtap="onBook">立即预订包间</t-button>
 </view>

@@ -61,6 +61,10 @@ Page({
     uiGuestCount: 2,  // 默认2人
     uiPriceRange: '',
 
+    // Helper for Error State
+    isError: false,
+    errorMessage: '',
+
     // Helpers
     guestOptionsShort: [
       { label: '2人', value: 2 },
@@ -117,7 +121,7 @@ Page({
 
   async loadItems(reset = false) {
     if (this.data.loading) return
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     if (reset) {
       this.setData({ page: 1, itemList: [], hasMore: true })
@@ -194,11 +198,18 @@ Page({
         hasMore: newList.length === pageSize
       })
 
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Load items failed', error, 'Reservation')
-      wx.showToast({ title: '加载失败', icon: 'none' })
-      this.setData({ loading: false })
+      this.setData({ 
+        loading: false,
+        isError: true,
+        errorMessage: error.message || '加载失败，请重试'
+      })
     }
+  },
+
+  onRetry() {
+    this.loadItems(true)
   },
 
   // ==================== Interactions ====================

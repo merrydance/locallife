@@ -415,3 +415,58 @@ page {
 .payment-disabled {
   opacity: 0.5;
 }
+/* Skeleton Styles */
+.skeleton-wrapper {
+  padding: 24rpx;
+  background: #fff;
+  min-height: 100vh;
+}
+
+.skeleton-card {
+  background: #f8f8f8;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+}
+
+.skeleton-row {
+  display: flex;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.skeleton-circle {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: #eee;
+}
+
+.skeleton-line {
+  height: 32rpx;
+  background: #eee;
+  border-radius: 8rpx;
+}
+
+.skeleton-animate {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.w-60 { width: 60%; }
+.w-40 { width: 40%; }
+.mt-20 { margin-top: 20rpx; }
+
+.error-loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 80vh;
+  gap: 32rpx;
+}

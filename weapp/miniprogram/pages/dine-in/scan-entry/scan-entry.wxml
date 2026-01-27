@@ -1,20 +1,38 @@
 <!--扫码点餐入口页面-->
-<view class="scan-entry-container">
-  <!-- 加载状态 -->
-  <view wx:if="{{loading}}" class="loading-container">
-    <view class="loading-spinner"></view>
-    <text class="loading-text">正在获取桌台信息...</text>
+<custom-navbar title="扫码点餐" showBack="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <!-- 1. 骨架屏 (加载状态) -->
+  <view wx:if="{{loading}}" class="skeleton-container">
+    <!-- Merchant Header Skeleton -->
+    <view class="skeleton-merchant-header skeleton-animate"></view>
+    
+    <!-- Table Card Skeleton -->
+    <view class="skeleton-card skeleton-animate" style="height: 300rpx; margin-bottom: 32rpx;"></view>
+    
+    <!-- Buttons Skeleton -->
+    <view class="skeleton-btn skeleton-animate" style="height: 88rpx; margin-bottom: 24rpx;"></view>
+    <view class="skeleton-sub-btns" style="display: flex; gap: 24rpx;">
+      <view class="skeleton-btn skeleton-animate" style="flex: 1; height: 80rpx;"></view>
+      <view class="skeleton-btn skeleton-animate" style="flex: 1; height: 80rpx;"></view>
+    </view>
+    
+    <!-- Info List Skeleton -->
+    <view class="skeleton-info-list" style="margin-top: 48rpx;">
+       <view class="skeleton-line skeleton-animate w-80 mb-24"></view>
+       <view class="skeleton-line skeleton-animate w-60 mb-24"></view>
+       <view class="skeleton-line skeleton-animate w-70 mb-24"></view>
+    </view>
   </view>
 
-  <!-- 错误状态 -->
+  <!-- 2. 错误状态 -->
   <view wx:elif="{{error}}" class="error-container">
-    <image class="error-icon" src="/assets/icons/error.png" mode="aspectFit"></image>
-    <text class="error-text">{{error}}</text>
-    <button class="retry-btn" bindtap="rescan">重新扫码</button>
+    <t-empty icon="error-circle" description="{{error}}" />
+    <t-button theme="primary" variant="outline" size="medium" bindtap="rescan" style="margin-top: 24rpx;">重新扫码</t-button>
   </view>
 
-  <!-- 桌台信息 -->
-  <view wx:else class="table-info-container">
+  <!-- 3. 正常内容 -->
+  <view wx:else class="content animate-fade-in">
     <!-- 商户头部 -->
     <view class="merchant-header">
       <image class="merchant-logo" src="{{merchantInfo.logo_url}}" mode="aspectFill"></image>

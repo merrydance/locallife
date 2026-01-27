@@ -1,9 +1,39 @@
 <custom-navbar title="堂食点餐" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;">
-  <t-loading wx:if="{{loading}}" theme="circular" size="40rpx" class="loading" />
   
-  <view wx:if="{{!loading && session}}" class="content">
+  <!-- 1. 错误状态 -->
+  <view wx:if="{{isError}}" class="error-container">
+    <t-empty icon="info-circle" description="{{errorMsg}}" />
+    <t-button theme="primary" variant="outline" size="medium" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <!-- 2. 骨架屏 (App Shell + Skeleton) -->
+  <view wx:elif="{{loading}}" class="skeleton-container">
+    <!-- Header -->
+    <view class="skeleton-header skeleton-animate"></view>
+    <!-- Body -->
+    <view class="skeleton-body">
+      <!-- Sidebar -->
+      <view class="skeleton-sidebar">
+         <view wx:for="{{[1,2,3,4,5,6]}}" wx:key="*this" class="skeleton-tab skeleton-animate"></view>
+      </view>
+      <!-- List -->
+      <view class="skeleton-content">
+         <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this" class="skeleton-dish-item">
+            <view class="skeleton-dish-img skeleton-animate"></view>
+            <view class="skeleton-dish-info">
+               <view class="skeleton-line w-60 skeleton-animate"></view>
+               <view class="skeleton-line w-40 skeleton-animate"></view>
+               <view class="skeleton-line w-40 skeleton-animate" style="margin-top: 20rpx;"></view>
+            </view>
+         </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 3. 正常内容 -->
+  <view wx:elif="{{session}}" class="content animate-fade-in">
     <!-- 桌台信息 -->
     <view class="table-info">
       <view class="info-row">
@@ -35,7 +65,7 @@
       <!-- 右侧菜品 -->
       <scroll-view class="dishes-list" scroll-y>
         <view wx:for="{{dishes}}" wx:key="id" wx:if="{{item.category_id === activeCategoryId}}" class="dish-item">
-          <t-image class="dish-image" src="{{item.image_url}}" mode="aspectFill" />
+          <t-image class="dish-image" src="{{item.image_url}}" mode="aspectFill" lazy />
           <view class="dish-info">
             <text class="dish-name">{{item.name}}</text>
             <text class="dish-desc">{{item.description}}</text>

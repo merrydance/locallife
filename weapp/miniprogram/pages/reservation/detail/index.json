@@ -1,13 +1,19 @@
 {
     "navigationBarTitleText": "预订详情",
+    "navigationStyle": "custom",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
+        "card-skeleton": "/components/card-skeleton/index",
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-divider": "tdesign-miniprogram/divider/divider",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-image": "tdesign-miniprogram/image/image",
         "t-cell": "tdesign-miniprogram/cell/cell",
         "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-icon": "tdesign-miniprogram/icon/icon",
         "t-dialog": "tdesign-miniprogram/dialog/dialog",
+        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
         "t-radio": "tdesign-miniprogram/radio/radio",
-        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group"
+        "t-empty": "tdesign-miniprogram/empty/empty"
     }
 }

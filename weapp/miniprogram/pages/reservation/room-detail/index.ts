@@ -23,6 +23,8 @@ Page({
     room: null as RoomView | null,
     navBarHeight: 88,
     loading: false,
+    isError: false,
+    errorMessage: '',
     // 可用日期列表（未来7天）
     calendarDays: [] as DayAvailability[],
     currentMonth: '',
@@ -42,8 +44,12 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
+  onRetry() {
+    this.loadRoomDetail(this.data.roomId)
+  },
+
   async loadRoomDetail(id: string) {
-    this.setData({ loading: true })
+    this.setData({ loading: true, isError: false })
 
     try {
       const room = await getRoomDetail(id)
@@ -59,9 +65,13 @@ Page({
       })
       // 加载可用日期
       this.loadCalendarData(parseInt(id))
-    } catch (error) {
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+    } catch (error: any) {
+      console.error(error)
+      this.setData({ 
+        loading: false,
+        isError: true,
+        errorMessage: error.message || '加载详情失败'
+      })
     }
   },
 

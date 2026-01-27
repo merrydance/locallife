@@ -1,8 +1,14 @@
 {
     "navigationBarTitleText": "扫码点餐",
+    "navigationStyle": "custom",
     "navigationBarBackgroundColor": "#667eea",
     "navigationBarTextStyle": "white",
     "backgroundColor": "#667eea",
     "enablePullDownRefresh": false,
-    "disableScroll": false
+    "disableScroll": false,
+    "usingComponents": {
+        "custom-navbar": "/components/custom-navbar/index",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-empty": "tdesign-miniprogram/empty/empty"
+    }
 }

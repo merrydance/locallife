@@ -9,7 +9,12 @@ Page({
         paymentAmount: 0,
         merchantInfo: null as { name: string } | null,
         tableInfo: null as { table_number: string } | null,
-        countdown: 5
+        countdown: 5,
+        navBarHeight: 88
+    },
+
+    onNavHeight(e: any) {
+        this.setData({ navBarHeight: e.detail.navBarHeight });
     },
 
     onLoad(options: { order_id?: string; amount?: string; merchant_name?: string; table_number?: string }) {
