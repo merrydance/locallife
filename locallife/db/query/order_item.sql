@@ -47,3 +47,6 @@ ORDER BY oi.id;
 -- name: DeleteOrderItems :exec
 DELETE FROM order_items
 WHERE order_id = $1;
+-- name: CountOrderItems :one
+SELECT COALESCE(SUM(quantity), 0)::bigint FROM order_items
+WHERE order_id = $1;

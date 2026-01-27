@@ -3,6 +3,10 @@ import { request } from '../utils/request'
 export interface RecommendedOrder {
     order_id: number
     merchant_id: number
+    merchant_name?: string
+    merchant_address?: string
+    customer_address?: string
+    item_count?: number
     total_score: number
     distance_to_pickup: number
     real_distance?: number
@@ -14,16 +18,14 @@ export interface RecommendedOrder {
     delivery_longitude: number
     delivery_latitude: number
     expires_at: string
-    // Added for UI display convenience (fetched separately if needed or enriched)
-    merchant_name?: string
-    merchant_address?: string
-    customer_address?: string
 }
 
 export interface Delivery {
     id: number
     order_id: number
+    order_no?: string
     rider_id?: number
+    merchant_name?: string
     pickup_address: string
     pickup_longitude: number
     pickup_latitude: number
@@ -34,12 +36,16 @@ export interface Delivery {
     delivery_latitude: number
     delivery_contact?: string
     delivery_phone?: string
-    status: 'pending_grab' | 'assigned' | 'start_pickup' | 'picked_up' | 'delivering' | 'completed' | 'exception'
+    status: 'pending' | 'assigned' | 'picking' | 'picked' | 'delivering' | 'delivered' | 'completed' | 'cancelled' | 'exception'
+    delivery_fee: number
     rider_earnings: number
+    freeze_amount?: number
+    item_count?: number
     estimated_pickup_at?: string
     estimated_delivery_at?: string
     picked_at?: string
     delivered_at?: string
+    notes?: string
 }
 
 export class DeliveryService {
@@ -101,6 +107,16 @@ export class DeliveryService {
         return await request({
             url: `/v1/delivery/${deliveryId}/confirm-delivery`,
             method: 'POST'
+        })
+    }
+
+    /**
+     * 获取详情 (通过订单ID)
+     */
+    static async getDeliveryByOrder(orderId: number): Promise<Delivery> {
+        return await request({
+            url: `/v1/delivery/order/${orderId}`,
+            method: 'GET'
         })
     }
 }

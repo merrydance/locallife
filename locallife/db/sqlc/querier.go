@@ -139,6 +139,7 @@ type Querier interface {
 	// 统计运营商管理的区域数量
 	CountOperatorRegions(ctx context.Context, operatorID int64) (int64, error)
 	CountOperators(ctx context.Context) (int64, error)
+	CountOrderItems(ctx context.Context, orderID int64) (int64, error)
 	// 统计订单被催单次数（从状态日志表查询催单记录）
 	CountOrderUrges(ctx context.Context, orderID int64) (int64, error)
 	CountOrdersByMerchant(ctx context.Context, merchantID int64) (int64, error)

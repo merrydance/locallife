@@ -3,14 +3,14 @@
 <scroll-view 
   scroll-y 
   class="page-container" 
-  style="padding-top: {{navBarHeight}}px; padding-bottom: 180rpx;"
+  style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;"
 >
   <view class="loading-box" wx:if="{{loading}}">
     <t-loading theme="circular" size="40rpx" text="正在加载详情..." />
   </view>
 
-  <view class="content" wx:elif="{{delivery}}">
-    <!-- 1. 进度追踪 -->
+  <view class="content">
+    <!-- 1. 进度追踪 (Shell stays even when data is missing) -->
     <view class="detail-card steps-card">
       <t-steps current="{{currentStep}}" readonly t-class="custom-steps">
         <t-step-item 
@@ -21,76 +21,95 @@
       </t-steps>
     </view>
 
-    <!-- 2. 收入与时间 -->
-    <view class="detail-card income-card">
-      <view class="info-item">
-        <text class="label">预计收益</text>
-        <view class="value price">¥{{delivery.rider_earnings / 100}}</view>
-      </view>
-      <t-divider layout="vertical" />
-      <view class="info-item">
-        <text class="label">送达时限</text>
-        <view class="value">{{delivery.estimated_delivery_at ? '今日 ' + delivery.estimated_delivery_at : '尽快送达'}}</view>
-      </view>
+    <!-- 2. 异常状态展示 (Only shows if not loading AND no data) -->
+    <view class="error-placeholder" wx:if="{{!loading && !delivery}}">
+      <t-empty icon="info-circle" description="订单不存在或已被接走" />
+      <t-button theme="primary" variant="outline" shape="round" block size="large" bindtap="onBack" style="margin-top: 40rpx;">
+        返回大厅
+      </t-button>
     </view>
 
-    <!-- 3. 取餐与送餐地址 -->
-    <view class="detail-card route-card">
-      <view class="location-box pickup">
-        <view class="marker">取</view>
-        <view class="info">
-          <view class="title-row">
-            <text class="name">{{delivery.pickup_address}}</text>
-            <t-button size="extra-small" variant="outline" shape="round" bindtap="onCallPhone" data-phone="{{delivery.pickup_phone}}">联系商家</t-button>
+    <!-- 3. 正常业务数据占位/展示 -->
+    <block wx:if="{{delivery}}">
+      <!-- 收入与时间 -->
+      <view class="detail-card income-card">
+        <view class="info-item">
+          <text class="label">预计收益</text>
+          <view class="value price">¥{{delivery.rider_earnings / 100 || '--'}}</view>
+        </view>
+        <t-divider layout="vertical" />
+        <view class="info-item">
+          <text class="label">送达时限</text>
+          <view class="value">{{delivery.deadline_desc || '尽快送达'}}</view>
+        </view>
+      </view>
+
+      <!-- 取餐与送餐地址 -->
+      <view class="detail-card route-card">
+        <view class="location-box pickup">
+          <view class="marker orange">取</view>
+          <view class="info">
+            <view class="title-row">
+              <text class="name">{{delivery.merchant_name || delivery.pickup_address}}</text>
+              <view class="call-action" wx:if="{{delivery.pickup_phone}}" catchtap="onCallPhone" data-phone="{{delivery.pickup_phone}}">
+                <t-icon name="call" size="44rpx" color="var(--td-brand-color)" />
+              </view>
+            </view>
+            <view class="contact-sub">
+              <text class="address-text">{{delivery.pickup_address}}</text>
+            </view>
           </view>
-          <view class="contact-sub" wx:if="{{delivery.pickup_contact}}">
-            <text>{{delivery.pickup_contact}}</text>
-            <text class="phone" wx:if="{{delivery.pickup_phone}}">{{delivery.pickup_phone}}</text>
+        </view>
+        
+        <view class="route-line-detail"></view>
+        
+        <view class="location-box delivery">
+          <view class="marker green">送</view>
+          <view class="info">
+            <view class="title-row">
+              <text class="name">{{delivery.delivery_address}}</text>
+              <view class="call-action" wx:if="{{delivery.delivery_phone}}" catchtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">
+                <t-icon name="call" size="44rpx" color="var(--td-brand-color)" />
+              </view>
+            </view>
+             <view class="contact-sub">
+              <text>{{delivery.delivery_contact || '客户'}}</text>
+            </view>
           </view>
         </view>
       </view>
 
-      <view class="route-line-detail"></view>
-
-      <view class="location-box delivery">
-        <view class="marker">送</view>
-        <view class="info">
-          <view class="title-row">
-            <text class="name">{{delivery.delivery_address}}</text>
-            <t-button theme="primary" size="extra-small" variant="outline" shape="round" bindtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">联系顾客</t-button>
-          </view>
-           <view class="contact-sub">
-            <text>{{delivery.delivery_contact || '匿名用户'}}</text>
-            <text class="phone" wx:if="{{delivery.delivery_phone}}">{{delivery.delivery_phone}}</text>
+      <!-- 商品清单 -->
+      <view class="detail-card items-card" wx:if="{{delivery.items && delivery.items.length > 0}}">
+        <view class="card-title">商品清单 (共{{delivery.item_count}}件)</view>
+        <view class="item-list">
+          <view class="item-row" wx:for="{{delivery.items}}" wx:key="name">
+            <text class="dish-name">{{item.name}}</text>
+            <text class="dish-qty">x {{item.quantity}}</text>
           </view>
         </view>
       </view>
-    </view>
 
-    <!-- 4. 订单详情信息 -->
-    <view class="detail-card info-section">
-      <t-cell-group borderless>
-        <t-cell title="订单单号" hover arrow="{{false}}">
-          <view slot="note" class="order-no-box" bindtap="onCopyOrderNo">
-            <text>{{orderId}}</text>
-            <t-icon name="copy" size="32rpx" style="margin-left: 8rpx;" />
-          </view>
-        </t-cell>
-        <t-cell title="备注" note="{{delivery.remark || '无'}}" />
-        <t-cell title="下单时间" note="{{delivery.created_at}}" />
-      </t-cell-group>
-    </view>
+      <!-- 订单信息 -->
+      <view class="detail-card info-section">
+        <t-cell-group borderless>
+          <t-cell title="订单单号" note="{{orderId}}" />
+          <t-cell title="备注" note="{{delivery.notes}}" wx:if="{{delivery.notes}}" />
+          <t-cell title="下单时间" note="{{delivery.created_at}}" />
+        </t-cell-group>
+      </view>
 
-    <!-- 5. 异常报备入口 -->
-    <view class="exception-entry" bindtap="onReportException">
-      <t-icon name="error-circle" size="32rpx" />
-      <text>配送遇到问题？去报备</text>
-    </view>
+      <!-- 异常报备入口 -->
+      <view class="exception-entry" bindtap="onReportException">
+        <t-icon name="error-circle" size="32rpx" />
+        <text>配送遇到问题？去报备</text>
+      </view>
+    </block>
   </view>
 </scroll-view>
 
 <!-- 底部固定操作按钮 -->
-<view class="bottom-action" wx:if="{{delivery && delivery.status !== 'completed'}}">
+<view class="bottom-action" wx:if="{{delivery && delivery.status !== 'completed' && delivery.status !== 'delivered'}}">
   <t-button 
     theme="primary" 
     size="large" 
@@ -98,6 +117,6 @@
     shape="round" 
     bindtap="onUpdateStatus"
   >
-    {{delivery.status === 'assigned' ? '开始取餐' : (delivery.status === 'start_pickup' ? '确认已取餐' : (delivery.status === 'picked_up' ? '开始配送' : '确认已送达'))}}
+    {{delivery.status === 'assigned' ? '我已到达商家' : (delivery.status === 'picking' ? '确认取餐' : (delivery.status === 'picked' ? '开始配送' : '确认已送达'))}}
   </t-button>
 </view>

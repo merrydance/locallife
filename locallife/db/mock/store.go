@@ -1402,6 +1402,21 @@ func (mr *MockStoreMockRecorder) CountOperators(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOperators", reflect.TypeOf((*MockStore)(nil).CountOperators), ctx)
 }
 
+// CountOrderItems mocks base method.
+func (m *MockStore) CountOrderItems(ctx context.Context, orderID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOrderItems", ctx, orderID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOrderItems indicates an expected call of CountOrderItems.
+func (mr *MockStoreMockRecorder) CountOrderItems(ctx, orderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOrderItems", reflect.TypeOf((*MockStore)(nil).CountOrderItems), ctx, orderID)
+}
+
 // CountOrderUrges mocks base method.
 func (m *MockStore) CountOrderUrges(ctx context.Context, orderID int64) (int64, error) {
 	m.ctrl.T.Helper()

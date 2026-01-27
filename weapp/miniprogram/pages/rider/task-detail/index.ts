@@ -12,7 +12,7 @@ Page({
         // 状态映射
         statusSteps: [
             { title: '已接单', status: 'assigned' },
-            { title: '取餐中', status: 'start_pickup' },
+            { title: '取餐中', status: 'picking' },
             { title: '配送中', status: 'delivering' },
             { title: '已送达', status: 'completed' }
         ],
@@ -29,23 +29,21 @@ Page({
     },
 
     async fetchTaskDetail() {
+        if (!this.data.orderId) return
+        
         this.setData({ loading: true })
         try {
-            const data = await DeliveryService.grabOrder(this.data.orderId) // Technically this gets the detail if already grabbed
-            // Actually in our Go API, POST /v1/delivery/grab/:order_id is for grabbing.
-            // GET /v1/delivery/order/:order_id is for fetching.
-            const delivery = await (require('../../../utils/request').request({
-                url: `/v1/delivery/order/${this.data.orderId}`,
-                method: 'GET'
-            }))
+            // 使用正确的获取详情接口，而不是抢单接口
+            const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId)
             
             this.setData({ 
                 delivery,
                 currentStep: this.mapStatusToStep(delivery.status)
             })
-        } catch (err) {
+        } catch (err: any) {
             logger.error('Fetch task detail failed', err)
-            wx.showToast({ title: '加载失败', icon: 'none' })
+            // 404 错误在 request.ts 中已经有全局提示，这里主要处理数据缺失逻辑
+            this.setData({ delivery: null })
         } finally {
             this.setData({ loading: false })
         }
@@ -54,9 +52,10 @@ Page({
     mapStatusToStep(status: string): number {
         const statusMap: Record<string, number> = {
             'assigned': 0,
-            'start_pickup': 1,
-            'picked_up': 2,
+            'picking': 1,
+            'picked': 2,
             'delivering': 2,
+            'delivered': 3,
             'completed': 3
         }
         return statusMap[status] ?? 0
@@ -73,27 +72,27 @@ Page({
         let actionMethod: any = null
 
         if (status === 'assigned') {
-            nextAction = '开始取餐'
+            nextAction = '到达商家'
             actionMethod = DeliveryService.startPickup
-        } else if (status === 'start_pickup') {
-            nextAction = '确认已取餐'
+        } else if (status === 'picking') {
+            nextAction = '确认取餐'
             actionMethod = DeliveryService.confirmPickup
-        } else if (status === 'picked_up') {
+        } else if (status === 'picked') {
             nextAction = '开始配送'
             actionMethod = DeliveryService.startDelivery
         } else if (status === 'delivering') {
-            nextAction = '确认已送达'
+            nextAction = '确认送达'
             actionMethod = DeliveryService.confirmDelivery
         }
 
         if (!actionMethod) return
 
         wx.showModal({
-            title: '状态变更',
-            content: `确定要 ${nextAction} 吗？`,
+            title: '状态更新',
+            content: `确定已完成 ${nextAction} 吗？`,
             success: async (res) => {
                 if (res.confirm) {
-                    wx.showLoading({ title: '处理中...' })
+                    wx.showLoading({ title: '同步中...' })
                     try {
                         const updated = await actionMethod(id)
                         this.setData({ 
@@ -102,8 +101,7 @@ Page({
                         })
                         wx.showToast({ title: '操作成功', icon: 'success' })
                         
-                        // 如果已完成，延迟返回或刷新
-                        if (updated.status === 'completed') {
+                        if (updated.status === 'completed' || updated.status === 'delivered') {
                             setTimeout(() => wx.navigateBack(), 1500)
                         }
                     } catch (err: any) {
@@ -131,7 +129,13 @@ Page({
     onCopyOrderNo() {
         wx.setClipboardData({
             data: String(this.data.orderId),
-            success: () => wx.showToast({ title: '已复制' })
+            success: () => wx.showToast({ title: '单号已复制' })
+        })
+    },
+
+    onBack() {
+        wx.navigateBack({ delta: 1 }).catch(() => {
+            wx.redirectTo({ url: '/pages/rider/dashboard/index' })
         })
     }
 })

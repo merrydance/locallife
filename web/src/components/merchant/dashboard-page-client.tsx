@@ -463,7 +463,7 @@ export function DashboardPageClient({
       if (type === 'close') {
         // 商户不再手动调用订单完成接口，直接释放桌台即可触发后端的关闭会话事务
         await apiPatch(`/tables/${table.id}/status`, { status: 'available' });
-        toast.success(`桌台 ${table.table_no} 结账完成并释放`);
+        toast.success(`桌台 ${table.table_no} 已释放并恢复空闲`);
       } else if (type === 'reset') {
         await apiPatch(`/tables/${table.id}/status`, { status: 'available' });
         toast.success(`桌台 ${table.table_no} 已完成清扫`);
@@ -536,12 +536,16 @@ export function DashboardPageClient({
               />
               {effectiveIsOpen ? "营业中" : "已打烊"}
             </button>
-            {effectiveWsConnected ? (
-              <div className="flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-700">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                实时
-              </div>
-            ) : null}
+            <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs transition-colors ${
+              effectiveWsConnected 
+                ? "bg-slate-100 text-slate-600" 
+                : "bg-rose-500/15 text-rose-700"
+            }`}>
+              <span className={`h-2 w-2 rounded-full ${
+                effectiveWsConnected ? "bg-emerald-500" : "bg-rose-500"
+              }`} />
+              {effectiveWsConnected ? "已连接" : "离线"}
+            </div>
           </>
         }
       />
@@ -827,7 +831,7 @@ export function DashboardPageClient({
                                       className="flex-1 h-7 text-[10px] font-bold rounded-md border-primary/20 text-primary hover:bg-primary/5"
                                       onClick={(e) => { e.stopPropagation(); handleCloseTable(table); }}
                                     >
-                                      <Receipt className="size-3 mr-1" /> 结账
+                                      <LogOut className="size-3 mr-1" /> 释放
                                     </Button>
                                     <Button 
                                       variant="ghost" 
@@ -848,19 +852,21 @@ export function DashboardPageClient({
                                     <Users className="size-3 mr-1" /> 签到
                                   </Button>
                                 ) : null}
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className={cn(
-                                    "h-7 px-2 text-[10px] font-medium rounded-md",
-                                    isOccupied || ((table.status === 'reserved' || table.todayReservation) && isReservationCheckInReady((table.current_reservation || table.todayReservation)?.reservation_time || ""))
-                                      ? "text-slate-400 hover:bg-slate-100" 
-                                      : "flex-1 text-slate-500 hover:bg-slate-100"
-                                  )}
-                                  onClick={(e) => { e.stopPropagation(); handleResetTable(table); }}
-                                >
-                                  <Sparkles className="size-3 mr-0.5" /> 清扫
-                                </Button>
+                                {!isOccupied && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className={cn(
+                                      "h-7 px-2 text-[10px] font-medium rounded-md",
+                                      (table.status === 'reserved' || table.todayReservation) && isReservationCheckInReady((table.current_reservation || table.todayReservation)?.reservation_time || "")
+                                        ? "text-slate-400 hover:bg-slate-100" 
+                                        : "flex-1 text-slate-500 hover:bg-slate-100"
+                                    )}
+                                    onClick={(e) => { e.stopPropagation(); handleResetTable(table); }}
+                                  >
+                                    <Sparkles className="size-3 mr-0.5" /> 清扫
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           );
@@ -945,7 +951,7 @@ export function DashboardPageClient({
                   onClick={() => updateTableStatus("available")}
                   disabled={loadingTableStatus !== null}
                 >
-                  清台结账
+                  释放桌台
                 </Button>
               ) : activeTable.status !== "available" ? (
                 <Button
@@ -981,15 +987,15 @@ export function DashboardPageClient({
         open={confirmConfig.open}
         onOpenChange={(open) => setConfirmConfig(prev => ({ ...prev, open }))}
         title={
-          confirmConfig.type === 'close' ? "结账退台确认" : "清扫确认"
+          confirmConfig.type === 'close' ? "释放桌台确认" : "清扫确认"
         }
         description={
           confirmConfig.type === 'close'
-            ? `确定要为 ${confirmConfig.table?.table_no} 桌进行结账吗？结账后系统将清空当前账单并将桌态设为空闲。`
+            ? `确定要释放 ${confirmConfig.table?.table_no} 桌吗？这将清空当前会话并将桌态恢复为空闲。`
             : `确定要将 ${confirmConfig.table?.table_no} 桌标记为已清扫吗？系统将重置桌态为空闲，准备迎接下一桌客人。`
         }
         confirmText={
-          confirmConfig.type === 'close' ? "确认结账" : "确认清扫"
+          confirmConfig.type === 'close' ? "确认释放" : "确认清扫"
         }
         variant={confirmConfig.type === 'close' ? "destructive" : "default"}
         onConfirm={executeAction}

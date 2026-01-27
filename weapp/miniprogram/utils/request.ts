@@ -206,7 +206,9 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         },
         fail: (err) => {
           requestManager.unregister(requestId)
-          reject(err)
+          // Ensure err is an object, not null or undefined
+          const errorInfo = err || { errMsg: 'wx.request failed with no error info' }
+          reject(errorInfo)
         }
       })
 
@@ -435,8 +437,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       throw error
     }
 
-    logger.error(`API请求失败: ${method} ${url}`, error, 'request')
-    const networkError = ErrorHandler.handleNetworkError(error, `request:${method}:${url}`)
+    logger.error(`API请求失败: ${method} ${url}`, error || 'Unknown error', 'request')
+    const networkError = ErrorHandler.handleNetworkError(error || new Error('Network request failed'), `request:${method}:${url}`)
 
     // 如果启用了重试
     if (retry) {
@@ -615,8 +617,8 @@ async function refreshTokenOnce(): Promise<void> {
     logger.info('开始wx.login重新登录', undefined, 'refreshTokenOnce')
     const code = await new Promise<string>((resolve, reject) => {
       wx.login({
-        success: (res) => res.code ? resolve(res.code) : reject(new Error('获取code失败')),
-        fail: reject,
+        success: (res) => res.code ? resolve(res.code) : reject(new Error('获取code失败: res.code missing')),
+        fail: (err) => reject(err || new Error('wx.login failed')),
         timeout: 5000
       })
     })

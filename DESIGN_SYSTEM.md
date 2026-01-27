@@ -92,11 +92,11 @@
 
 ```css
 .card {
-    background: var(--td-bg-color-container);
-    border-radius: var(--radius-md);
-    padding: var(--spacer-md);
-    margin-bottom: var(--spacer-md);
-    box-shadow: var(--shadow-sm); /* TDesign内置阴影变量 */
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm); /* TDesign内置阴影变量 */
 }
 ```
 
@@ -147,4 +147,53 @@
 
 ---
 
-_LocalLife Design System v1.0_
+## 6. 交互架构规范 (Interaction Architecture)
+
+为了提升感知性能并确保应用在弱网环境下的鲁棒性，LocalLife 采用 **App Shell
+(应用外壳) 架构**。
+
+### 6.1 应用外壳原则 (App Shell Architecture)
+
+- **实体先行**: 页面最外层的容器、导航栏 (Navbar)、Tab
+  切换栏、以及核心模块的“卡片底座”应不依赖后端数据直接显示。
+- **视觉连续性**:
+  数据加载不应导致页面整体结构的剧烈跳变。禁止在数据接口返回前使用 `wx:if`
+  销毁整个页面内容。
+- **数据解耦**: UI
+  与数据应为“容器与填充”的关系。即使没有数据，页面的“骨格”也应清晰可辨。
+
+### 6.2 骨架屏与预期管理 (Skeleton Screens)
+
+- **告别转菊花**: 禁止使用全屏 Loading 蒙层或旋转的“菊花图”。
+- **骨架占位**: 在动态列表（如订单列表、菜品列表）数据返回前，使用
+  `skeleton-card` 占位。
+  - **形状对齐**: 骨架屏的形状、高度应与渲染后的真实卡片尽量一致，防止布局闪烁
+    (Layout Shift)。
+  - **呼吸动画**: 骨架屏应包含微弱的流动感动画 (`shimmer`
+    效果)，告知用户系统正在运行。
+
+### 6.3 状态完备性 (Robustness & States)
+
+每个数据驱动的组件必须完整定义以下四种状态：
+
+1. **加载中 (Loading)**: 显示骨架屏。
+2. **正常 (Success)**: 渲染真实业务数据。
+3. **空数据 (Empty)**: 显示明确的 `t-empty`
+   占位，并提供“返回”或“重试”按钮，禁止白屏。
+4. **异常 (Error)**: 捕获报错（如
+   404/500），显示友好的错误提示，而不是任由页面塌陷。
+
+### 6.4 专业工具效率原则 (Rider-Specific Efficiency)
+
+针对骑手端等效率型应用：
+
+- **减法原则**:
+  移除所有对效率无助的“过度设计”（如聊天图标、复杂的加密掩码显示）。
+- **秒级触达**:
+  关键操作（如联系商家/用户）必须以最醒目的图标形式直接呈现在第一层级。
+- **大操纵杆布局**:
+  核心状态切换按钮应采用底部悬浮、全宽大按钮设计，适应单手盲操。
+
+---
+
+_LocalLife Design System v1.1_

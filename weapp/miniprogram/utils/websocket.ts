@@ -25,7 +25,7 @@ class WebSocketManager {
   private maxReconnectAttempts = 5;
   private isConnected = false;
   private forcedClose = false;
-
+  private isConnecting = false;
   private readonly eventBus = new EventBus();
 
   /**
@@ -39,11 +39,16 @@ class WebSocketManager {
       return;
     }
 
-    if (this.socket || this.isConnected) {
-      logger.info('WebSocket: Connection already exists', undefined, 'WS');
+    if (this.socket || this.isConnected || this.isConnecting) {
+      logger.info('WebSocket: Connection already exists or connecting', { 
+        socket: !!this.socket, 
+        isConnected: this.isConnected, 
+        isConnecting: this.isConnecting 
+      }, 'WS');
       return;
     }
 
+    this.isConnecting = true;
     this.forcedClose = false;
     const wsUrl = url || this.getDefaultUrl(token);
 
@@ -55,7 +60,9 @@ class WebSocketManager {
         logger.debug('WebSocket: Request sent successfully', undefined, 'WS');
       },
       fail: (err) => {
+        this.isConnecting = false;
         logger.error('WebSocket: Failed to request connection', err, 'WS');
+        this.socket = null;
         this.scheduleReconnect();
       }
     });
@@ -82,9 +89,11 @@ class WebSocketManager {
 
   /**
    * 监听指定类型的消息
+   * @returns 取消监听的函数
    */
   on(type: WSMessageType, callback: (data: any) => void) {
-    return this.eventBus.on(type, callback);
+    this.eventBus.on(type, callback);
+    return () => this.eventBus.off(type, callback);
   }
 
   private setupListeners() {
@@ -93,6 +102,7 @@ class WebSocketManager {
     this.socket.onOpen(() => {
       logger.info('✅ WebSocket: Connected', undefined, 'WS');
       this.isConnected = true;
+      this.isConnecting = false;
       this.reconnectAttempts = 0;
     });
 
@@ -128,6 +138,8 @@ class WebSocketManager {
     this.socket.onError((err) => {
       logger.error('WebSocket: Connection error', err, 'WS');
       this.isConnected = false;
+      this.isConnecting = false;
+      this.socket = null;
     });
   }
 
@@ -156,16 +168,13 @@ class WebSocketManager {
   }
 
   private getDefaultUrl(token: string): string {
-    // 动态判断环境
-    const accountInfo = wx.getAccountInfoSync?.();
-    const env = accountInfo?.miniProgram?.envVersion || 'release';
+    const { API_CONFIG } = require('../config/index');
+    const baseUrl = API_CONFIG.BASE_URL;
     
-    let host = 'api.example.com'; // 默认生产
-    if (env === 'develop' || env === 'trial') {
-      host = 'localhost:8080'; // 开发环境常用
-    }
-
-    return `ws://${host}/v1/notifications/ws?token=${token}`;
+    // 将 https:// 转换为 wss://, http:// 转换为 ws://
+    let wsBase = baseUrl.replace(/^http/, 'ws');
+    
+    return `${wsBase}/v1/ws?token=${token}`;
   }
 }
 

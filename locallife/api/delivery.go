@@ -52,6 +52,10 @@ type getRecommendedOrdersRequest struct {
 type recommendedOrderResponse struct {
 	OrderID            int64      `json:"order_id"`
 	MerchantID         int64      `json:"merchant_id"`
+	MerchantName       string     `json:"merchant_name,omitempty"`
+	MerchantAddress    string     `json:"merchant_address,omitempty"`
+	CustomerAddress    string     `json:"customer_address,omitempty"`
+	ItemCount          int        `json:"item_count,omitempty"`
 	TotalScore         int        `json:"total_score"`
 	DistanceScore      int        `json:"distance_score"`
 	RouteScore         int        `json:"route_score"`
@@ -248,6 +252,19 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 			ExpiresAt:          s.PoolOrder.ExpiresAt,
 			ExpectedDeliveryAt: &s.PoolOrder.ExpectedDeliveryAt,
 		}
+
+		// 补充商户和订单信息
+		if merchant, err := server.store.GetMerchant(ctx, s.PoolOrder.MerchantID); err == nil {
+			resp.MerchantName = merchant.Name
+			resp.MerchantAddress = merchant.Address
+		}
+		if delivery, err := server.store.GetDeliveryByOrderID(ctx, s.OrderID); err == nil {
+			resp.CustomerAddress = delivery.DeliveryAddress
+		}
+		if count, err := server.store.CountOrderItems(ctx, s.OrderID); err == nil {
+			resp.ItemCount = int(count)
+		}
+
 		// 添加真实距离（如果有）
 		if rd, ok := realDistances[s.OrderID]; ok {
 			resp.RealDistance = rd.Distance
@@ -303,33 +320,44 @@ type grabOrderRequest struct {
 }
 
 type deliveryResponse struct {
-	ID                  int64      `json:"id"`
-	OrderID             int64      `json:"order_id"`
-	RiderID             *int64     `json:"rider_id,omitempty"`
-	PickupAddress       string     `json:"pickup_address"`
-	PickupLongitude     float64    `json:"pickup_longitude"`
-	PickupLatitude      float64    `json:"pickup_latitude"`
-	PickupContact       string     `json:"pickup_contact,omitempty"`
-	PickupPhone         string     `json:"pickup_phone,omitempty"`
-	DeliveryAddress     string     `json:"delivery_address"`
-	DeliveryLongitude   float64    `json:"delivery_longitude"`
-	DeliveryLatitude    float64    `json:"delivery_latitude"`
-	DeliveryContact     string     `json:"delivery_contact,omitempty"`
-	DeliveryPhone       string     `json:"delivery_phone,omitempty"`
-	Distance            int32      `json:"distance"`
-	DeliveryFee         int64      `json:"delivery_fee"`
-	RiderEarnings       int64      `json:"rider_earnings"`
-	Status              string     `json:"status"`
-	EstimatedPickupAt   *time.Time `json:"estimated_pickup_at,omitempty"`
-	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at,omitempty"`
-	PickedAt            *time.Time `json:"picked_at,omitempty"`
-	DeliveredAt         *time.Time `json:"delivered_at,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
-	AssignedAt          *time.Time `json:"assigned_at,omitempty"`
-	CompletedAt         *time.Time `json:"completed_at,omitempty"`
+	ID                  int64          `json:"id"`
+	OrderID             int64          `json:"order_id"`
+	OrderNo             string         `json:"order_no,omitempty"`
+	RiderID             *int64         `json:"rider_id,omitempty"`
+	MerchantName        string         `json:"merchant_name,omitempty"`
+	PickupAddress       string         `json:"pickup_address"`
+	PickupLongitude     float64        `json:"pickup_longitude"`
+	PickupLatitude      float64        `json:"pickup_latitude"`
+	PickupContact       string         `json:"pickup_contact,omitempty"`
+	PickupPhone         string         `json:"pickup_phone,omitempty"`
+	DeliveryAddress     string         `json:"delivery_address"`
+	DeliveryLongitude   float64        `json:"delivery_longitude"`
+	DeliveryLatitude    float64        `json:"delivery_latitude"`
+	DeliveryContact     string         `json:"delivery_contact,omitempty"`
+	DeliveryPhone       string         `json:"delivery_phone,omitempty"`
+	Distance            int32          `json:"distance"`
+	DeliveryFee         int64          `json:"delivery_fee"`
+	RiderEarnings       int64          `json:"rider_earnings"`
+	FreezeAmount        int64          `json:"freeze_amount,omitempty"`
+	ItemCount           int            `json:"item_count,omitempty"`
+	Status              string         `json:"status"`
+	EstimatedPickupAt   *time.Time     `json:"estimated_pickup_at,omitempty"`
+	EstimatedDeliveryAt *time.Time     `json:"estimated_delivery_at,omitempty"`
+	PickedAt            *time.Time     `json:"picked_at,omitempty"`
+	DeliveredAt         *time.Time     `json:"delivered_at,omitempty"`
+	CreatedAt           time.Time      `json:"created_at"`
+	AssignedAt          *time.Time     `json:"assigned_at,omitempty"`
+	CompletedAt         *time.Time     `json:"completed_at,omitempty"`
+	Notes               string         `json:"notes,omitempty"`
+	Items               []deliveryItem `json:"items,omitempty"`
 }
 
-func newDeliveryResponse(d db.Delivery) deliveryResponse {
+type deliveryItem struct {
+	Name     string `json:"name"`
+	Quantity int32  `json:"quantity"`
+}
+
+func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) deliveryResponse {
 	pickupLng, _ := d.PickupLongitude.Float64Value()
 	pickupLat, _ := d.PickupLatitude.Float64Value()
 	deliveryLng, _ := d.DeliveryLongitude.Float64Value()
@@ -349,6 +377,27 @@ func newDeliveryResponse(d db.Delivery) deliveryResponse {
 		RiderEarnings:     d.RiderEarnings,
 		Status:            d.Status,
 		CreatedAt:         d.CreatedAt,
+	}
+
+	// 补充信息
+	if order, err := server.store.GetOrder(ctx, d.OrderID); err == nil {
+		resp.OrderNo = order.OrderNo
+		resp.FreezeAmount = orderFreezeAmount(order)
+		if merchant, err := server.store.GetMerchant(ctx, order.MerchantID); err == nil {
+			resp.MerchantName = merchant.Name
+		}
+		resp.Notes = order.Notes.String
+	}
+	if count, err := server.store.CountOrderItems(ctx, d.OrderID); err == nil {
+		resp.ItemCount = int(count)
+	}
+	if items, err := server.store.ListOrderItemsByOrder(ctx, d.OrderID); err == nil {
+		for _, item := range items {
+			resp.Items = append(resp.Items, deliveryItem{
+				Name:     item.Name,
+				Quantity: int32(item.Quantity),
+			})
+		}
 	}
 
 	if d.RiderID.Valid {
@@ -487,6 +536,10 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	// 获取配送单
 	delivery, err := server.store.GetDeliveryByOrderID(ctx, req.OrderID)
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("该订单配置异常(缺少配送单信息)，无法抢单。如果是Mock数据，请确保deliveries表有相应记录")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -571,11 +624,11 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	updatedDelivery, err := server.store.GetDelivery(ctx, result.Delivery.ID)
 	if err != nil {
 		// 即使获取失败也返回原结果
-		ctx.JSON(http.StatusOK, newDeliveryResponse(result.Delivery))
+		ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, result.Delivery))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newDeliveryResponse(updatedDelivery))
+	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updatedDelivery))
 }
 
 // updateDeliveryEstimatedTime 骑手接单后重新计算预估送达时间
@@ -819,7 +872,7 @@ func (server *Server) startPickup(ctx *gin.Context) {
 		fmt.Sprintf("订单%s骑手正在前往商家取餐", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, newDeliveryResponse(updated))
+	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }
 
 // confirmPickup godoc
@@ -932,7 +985,7 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		fmt.Sprintf("订单%s骑手已取到餐品，即将配送", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, newDeliveryResponse(updated))
+	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }
 
 // startDelivery godoc
@@ -1041,7 +1094,7 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 		fmt.Sprintf("订单%s骑手正在配送途中，请保持电话畅通", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, newDeliveryResponse(updated))
+	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }
 
 // confirmDelivery godoc
@@ -1136,7 +1189,7 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 		fmt.Sprintf("您的订单%s已送达，请确认收餐", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, newDeliveryResponse(result.Delivery))
+	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, result.Delivery))
 }
 
 // ==================== 顾客查询配送状态 ====================
@@ -1196,7 +1249,7 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newDeliveryResponse(delivery))
+	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, delivery))
 }
 
 // ==================== 骑手轨迹 ====================
@@ -1499,7 +1552,7 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 
 	var response []deliveryResponse
 	for _, d := range deliveries {
-		response = append(response, newDeliveryResponse(d))
+		response = append(response, server.newDeliveryResponse(ctx, d))
 	}
 
 	ctx.JSON(http.StatusOK, listMyDeliveriesResponse{
@@ -1544,7 +1597,7 @@ func (server *Server) listMyActiveDeliveries(ctx *gin.Context) {
 
 	var response []deliveryResponse
 	for _, d := range deliveries {
-		response = append(response, newDeliveryResponse(d))
+		response = append(response, server.newDeliveryResponse(ctx, d))
 	}
 
 	ctx.JSON(http.StatusOK, response)

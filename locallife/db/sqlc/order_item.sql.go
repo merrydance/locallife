@@ -23,6 +23,18 @@ type BatchCreateOrderItemsParams struct {
 	Customizations []byte      `json:"customizations"`
 }
 
+const countOrderItems = `-- name: CountOrderItems :one
+SELECT COALESCE(SUM(quantity), 0)::bigint FROM order_items
+WHERE order_id = $1
+`
+
+func (q *Queries) CountOrderItems(ctx context.Context, orderID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrderItems, orderID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createOrderItem = `-- name: CreateOrderItem :one
 INSERT INTO order_items (
     order_id,
