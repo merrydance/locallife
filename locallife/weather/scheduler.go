@@ -122,7 +122,7 @@ func (s *Scheduler) fetchRegionWeather(ctx context.Context, region db.GetRegions
 	}
 
 	// 4. 计算天气系数
-	coef := CalculateCoefficient(&weatherResp.Now, warnings)
+	coef := CalculateCoefficient(ctx, s.store, region.ID, &weatherResp.Now, warnings)
 
 	// 5. 保存到数据库
 	if err := s.saveToDatabase(ctx, region.ID, weatherResp, coef); err != nil {

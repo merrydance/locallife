@@ -1,6 +1,7 @@
 package weather
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,7 @@ func TestCalculateCoefficient_SunnyWeather(t *testing.T) {
 		Text: "晴",
 	}
 
-	coef := CalculateCoefficient(weather, nil)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, nil)
 
 	require.Equal(t, "sunny", coef.WeatherType)
 	require.Equal(t, 1.0, coef.Coefficient)
@@ -31,7 +32,7 @@ func TestCalculateCoefficient_LightRain(t *testing.T) {
 		Text: "小雨",
 	}
 
-	coef := CalculateCoefficient(weather, nil)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, nil)
 
 	require.Equal(t, "light_rain", coef.WeatherType)
 	require.Equal(t, 1.1, coef.Coefficient) // 小雨 1.1 倍
@@ -46,10 +47,10 @@ func TestCalculateCoefficient_HeavyRain(t *testing.T) {
 		Text: "暴雨",
 	}
 
-	coef := CalculateCoefficient(weather, nil)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, nil)
 
 	require.Equal(t, "heavy_rain", coef.WeatherType)
-	require.Equal(t, 1.5, coef.Coefficient) // 暴雨 1.5 倍
+	require.Equal(t, 1.8, coef.Coefficient) // 暴雨 1.8 倍
 	require.False(t, coef.SuspendDelivery)
 }
 
@@ -61,7 +62,7 @@ func TestCalculateCoefficient_SnowyWeather(t *testing.T) {
 		Text: "小雪",
 	}
 
-	coef := CalculateCoefficient(weather, nil)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, nil)
 
 	require.Equal(t, "light_snow", coef.WeatherType)
 	require.InDelta(t, 1.2, coef.Coefficient, 0.001) // 小雪 1.1 + 低温 0.1 = 1.2
@@ -83,7 +84,7 @@ func TestCalculateCoefficient_WithYellowWarning(t *testing.T) {
 		},
 	}
 
-	coef := CalculateCoefficient(weather, warnings)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, warnings)
 
 	require.Equal(t, 1.0, coef.Coefficient)        // 晴天无加价
 	require.Equal(t, 1.2, coef.WarningCoefficient) // 黄色预警 1.2
@@ -107,7 +108,7 @@ func TestCalculateCoefficient_WithOrangeWarning(t *testing.T) {
 		},
 	}
 
-	coef := CalculateCoefficient(weather, warnings)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, warnings)
 
 	require.Equal(t, 1.3, coef.Coefficient)        // 中雨 1.3 倍
 	require.Equal(t, 1.3, coef.WarningCoefficient) // 橙色预警 1.3
@@ -130,9 +131,9 @@ func TestCalculateCoefficient_WithRedWarning(t *testing.T) {
 		},
 	}
 
-	coef := CalculateCoefficient(weather, warnings)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, warnings)
 
-	require.Equal(t, 1.5, coef.Coefficient)        // 暴雨 1.5 倍
+	require.Equal(t, 1.8, coef.Coefficient)        // 暴雨 1.8 倍
 	require.Equal(t, 2.0, coef.WarningCoefficient) // 红色预警 2.0
 	require.True(t, coef.SuspendDelivery)          // 红色预警暂停配送
 	require.Equal(t, "暴雨", coef.WarningType)
@@ -146,7 +147,7 @@ func TestCalculateCoefficient_ExtremeWeather(t *testing.T) {
 		Text: "台风",
 	}
 
-	coef := CalculateCoefficient(weather, nil)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, nil)
 
 	require.Equal(t, "extreme", coef.WeatherType)
 	require.Equal(t, 2.0, coef.Coefficient) // 极端天气 2.0 倍
@@ -161,7 +162,7 @@ func TestCalculateCoefficient_CloudyWeather(t *testing.T) {
 		Text: "多云",
 	}
 
-	coef := CalculateCoefficient(weather, nil)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, nil)
 
 	require.Equal(t, "cloudy", coef.WeatherType)
 	require.Equal(t, 1.0, coef.Coefficient) // 多云无加价
@@ -176,7 +177,7 @@ func TestCalculateCoefficient_HighWind(t *testing.T) {
 		WindScale: "7",
 	}
 
-	coef := CalculateCoefficient(weather, nil)
+	coef := CalculateCoefficient(context.Background(), nil, 0, weather, nil)
 
 	require.Equal(t, "sunny", coef.WeatherType)
 	require.Equal(t, 1.15, coef.Coefficient) // 晴天 1.0 + 大风 0.15 = 1.15

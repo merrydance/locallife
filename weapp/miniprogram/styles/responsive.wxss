@@ -7,6 +7,7 @@
 .responsive-container {
   width: 100%;
   padding: 32rpx;
+  box-sizing: border-box;
 }
 
 /* 顾侧侧页面容器 */
@@ -14,14 +15,15 @@
   width: 100%;
   background: #fff;
   min-height: 100vh;
+  box-sizing: border-box;
 }
 
-/* 响应式网格 - 仅保留单列布局 */
+/* 响应式网格 - 移动端优化为双列布局 */
 .responsive-grid-2,
 .responsive-grid-3,
 .responsive-grid-4 {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 24rpx;
 }
 

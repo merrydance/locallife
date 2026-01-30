@@ -189,12 +189,16 @@ export class OperatorBasicManagementService {
      * @param endDate 结束日期
      */
     async getRegionStats(regionId: number, startDate?: string, endDate?: string): Promise<RegionStatsResponse> {
+        // 如果未提供日期，默认为最近30天
+        const end = endDate || new Date().toISOString().split('T')[0]
+        const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
         return request({
             url: `/v1/operator/regions/${regionId}/stats`,
             method: 'GET',
             data: {
-                start_date: startDate,
-                end_date: endDate
+                start_date: start,
+                end_date: end
             }
         })
     }
@@ -226,10 +230,18 @@ export class OperatorBasicManagementService {
         limit: number
         has_more: boolean
     }> {
+        // 确保有日期参数，默认为最近30天
+        const end = params.end_date || new Date().toISOString().split('T')[0]
+        const start = params.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
         return request({
             url: '/v1/operators/me/commission',
             method: 'GET',
-            data: params
+            data: {
+                ...params,
+                start_date: start,
+                end_date: end
+            }
         })
     }
 

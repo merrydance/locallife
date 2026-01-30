@@ -27,7 +27,6 @@
       "name": "operator",
       "pages": [
         "analytics/index",
-        "automation/index",
         "dashboard/index",
         "merchants/index",
         "rules/index",

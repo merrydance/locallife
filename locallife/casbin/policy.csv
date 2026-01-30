@@ -49,6 +49,7 @@ p, admin, /v1/groups/applications/:id/review, POST
 # Operator Policies - Regional management
 # =============================================================================
 # Regional Statistics
+p, operator, /v1/operator/regions, GET
 p, operator, /v1/operator/regions/:region_id/stats, GET
 p, operator, /v1/operator/regions/:region_id/peak-hours, POST
 p, operator, /v1/operator/regions/:region_id/peak-hours, GET
@@ -101,6 +102,10 @@ p, operator, /v1/delivery-fee/regions/:region_id/config, PATCH
 
 # Review Moderation
 p, operator, /v1/reviews/:id, DELETE
+
+# Rule Management
+p, operator, /v1/operator/rules, GET
+p, operator, /v1/operator/rules/:key, PATCH
 
 # =============================================================================
 # Merchant Owner Policies - Store management

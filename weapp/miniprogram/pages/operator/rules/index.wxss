@@ -1,6 +1,6 @@
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
+  background-color: var(--td-bg-color-page);
 }
 
 .loading {
@@ -10,13 +10,13 @@
 }
 
 .rules-list {
-  padding: 24rpx;
+  padding: var(--spacer-md);
 }
 
 .rules-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 @media (min-width: 1024rpx) {
@@ -32,48 +32,48 @@
 }
 
 .rule-card {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+  background-color: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm, 0 4rpx 12rpx rgba(0,0,0,0.05));
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  margin-bottom: var(--spacer-sm);
+  padding-bottom: var(--spacer-sm);
+  border-bottom: 1rpx solid var(--td-border-color, #F0F0F0);
 }
 
 .rule-name {
-  font-size: 30rpx;
+  font-size: 30rpx; /* Custom size close to heading */
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary, #333);
 }
 
 .value-row {
   display: flex;
   align-items: baseline;
-  gap: 8rpx;
-  margin-bottom: 12rpx;
+  gap: var(--spacer-xs);
+  margin-bottom: var(--spacer-sm);
 }
 
 .value {
-  font-size: 48rpx;
+  font-size: var(--font-size-display, 48rpx);
   font-weight: bold;
-  color: #0052D9;
+  color: var(--td-brand-color, #0052D9); /* Using brand color instead of specific blue if appropriate, otherwise primary */
 }
 
 .unit {
-  font-size: 24rpx;
-  color: #666;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary, #666);
 }
 
 .desc {
-  font-size: 26rpx;
-  color: #999;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-placeholder, #999);
   line-height: 1.4;
 }
 
@@ -87,13 +87,13 @@
 
 /* 骨架屏 */
 .skeleton-container {
-  padding: 24rpx;
+  padding: var(--spacer-md);
 }
 
 .rules-skeleton-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 @media (min-width: 1024rpx) {

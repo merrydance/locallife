@@ -1,6 +1,6 @@
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
+  background-color: var(--td-bg-color-page);
 }
 
 .loading {
@@ -10,13 +10,13 @@
 }
 
 .merchants-list {
-  padding: 24rpx;
+  padding: var(--spacer-md);
 }
 
 .merchants-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 @media (min-width: 1024rpx) {
@@ -32,57 +32,57 @@
 }
 
 .merchant-card {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+  background-color: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm, 0 4rpx 12rpx rgba(0,0,0,0.05));
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  margin-bottom: var(--spacer-sm);
+  padding-bottom: var(--spacer-sm);
+  border-bottom: 1rpx solid var(--td-border-color, #F0F0F0);
 }
 
 .merchant-name {
-  font-size: 30rpx;
+  font-size: 30rpx; /* Keeping custom size or use --font-size-heading (32) */
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary, #333);
 }
 
 .card-body {
-  margin-bottom: 16rpx;
+  margin-bottom: var(--spacer-sm);
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  padding: 8rpx 0;
-  font-size: 26rpx;
+  padding: var(--spacer-xs) 0;
+  font-size: var(--font-size-sm);
 }
 
 .label {
-  color: #666;
+  color: var(--td-text-color-secondary, #666);
 }
 
 .value {
-  color: #333;
+  color: var(--td-text-color-primary, #333);
   font-weight: 500;
 }
 
 .rating {
-  color: #FF9C00;
+  color: var(--td-warning-color, #FF9C00);
 }
 
 .card-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 16rpx;
-  padding-top: 16rpx;
-  border-top: 1rpx solid #F0F0F0;
+  gap: var(--spacer-sm);
+  padding-top: var(--spacer-sm);
+  border-top: 1rpx solid var(--td-border-color, #F0F0F0);
 }
 
 /* 异常状态 */
@@ -95,13 +95,13 @@
 
 /* 骨架屏 */
 .skeleton-container {
-  padding: 24rpx;
+  padding: var(--spacer-md);
 }
 
 .merchants-skeleton-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 @media (min-width: 1024rpx) {

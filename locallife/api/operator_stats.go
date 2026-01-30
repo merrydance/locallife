@@ -96,6 +96,66 @@ func (server *Server) getRegionStats(ctx *gin.Context) {
 	})
 }
 
+type listOperatorRegionsRequest struct {
+	Page  int32 `form:"page" binding:"omitempty,min=1"`
+	Limit int32 `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+// listOperatorRegions 获取运营商管理的区域列表
+// @Summary 获取管理的区域
+// @Description 获取当前运营商管理的所有区域
+// @Tags 运营商数据统计
+// @Accept json
+// @Produce json
+// @Param page query int false "页码"
+// @Param limit query int false "每页数量"
+// @Success 200 {object} map[string]interface{} "区域列表"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Security BearerAuth
+// @Router /v1/operator/regions [get]
+func (server *Server) listOperatorRegions(ctx *gin.Context) {
+	var req listOperatorRegionsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 默认分页参数
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+
+	// 获取运营商管理的区域ID
+	regionID, err := server.getOperatorRegionID(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
+	// 获取区域详情
+	region, err := server.store.GetRegion(ctx, regionID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 构造响应（当前运营商仅关联一个区域）
+	response := []regionResponse{newRegionResponse(region)}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"regions":     response,
+		"total":       len(response),
+		"total_count": len(response),
+		"page_id":     req.Page,
+		"page_size":   req.Limit,
+	})
+}
+
 // ==================== 区域商户排行 ====================
 
 type operatorMerchantRankingRequest struct {
@@ -590,4 +650,3 @@ func formatCommissionRate(rate float64) string {
 	// 使用 fmt.Sprintf 正确格式化佣金率（保留一位小数）
 	return fmt.Sprintf("%.1f%%", rate)
 }
-

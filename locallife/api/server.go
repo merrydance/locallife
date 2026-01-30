@@ -889,6 +889,7 @@ func (server *Server) setupRouter() {
 	operatorStatsGroup.Use(server.CasbinRoleMiddleware(RoleOperator), server.LoadOperatorMiddleware())
 	{
 		// 区域相关路由（需要额外验证区域管理权限）
+		operatorStatsGroup.GET("/regions", server.listOperatorRegions) // 获取管理的区域列表
 		operatorStatsGroup.GET("/regions/:region_id/stats", server.getRegionStats)
 		operatorStatsGroup.POST("/regions/:region_id/peak-hours", server.createPeakHourConfig)
 		operatorStatsGroup.GET("/regions/:region_id/peak-hours", server.listPeakHourConfigs)
@@ -917,6 +918,10 @@ func (server *Server) setupRouter() {
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
 		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
 		operatorStatsGroup.POST("/appeals/:id/review", server.reviewAppeal)
+
+		// 规则管理
+		operatorStatsGroup.GET("/rules", server.listOperatorRules)
+		operatorStatsGroup.PATCH("/rules/:key", server.updateOperatorRule)
 	}
 
 	// 运营商财务路由 (使用 /operators/me 路径)

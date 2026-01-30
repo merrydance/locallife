@@ -2,7 +2,7 @@
 
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
+  background-color: var(--td-bg-color-page);
 }
 
 .loading {
@@ -12,55 +12,55 @@
 }
 
 .content {
-  padding: 24rpx;
+  padding: var(--spacer-md);
 }
 
 .stats-grid {
-  margin-bottom: 24rpx;
+  margin-bottom: var(--spacer-md);
 }
 
-
 .stat-card {
-  background: #fff;
-  padding: 32rpx;
-  border-radius: 16rpx;
+  background-color: var(--td-bg-color-container);
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+  gap: var(--spacer-sm);
+  box-shadow: var(--shadow-sm, 0 4rpx 12rpx rgba(0,0,0,0.05));
 }
 
 .stat-card .label {
-  font-size: 26rpx;
-  color: #666;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary, #666);
 }
 
 .stat-card .value {
-  font-size: 40rpx;
+  font-size: 40rpx; /* Not in tokens exactly, keeping for emphasis */
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary, #333);
 }
 
 .section-title {
-  font-size: 32rpx;
+  font-size: var(--font-size-heading);
   font-weight: bold;
-  color: #333;
-  margin-bottom: 24rpx;
+  color: var(--td-text-color-primary, #333);
+  margin-bottom: var(--spacer-md);
 }
 
 .todo-section, .shortcuts-section {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 24rpx;
+  background-color: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm, 0 4rpx 12rpx rgba(0,0,0,0.05));
 }
 
 .approval-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #F0F0F0;
+  padding: var(--spacer-md) 0;
+  border-bottom: 1rpx solid var(--td-border-color, #F0F0F0);
 }
 
 .approval-item:last-child {
@@ -71,7 +71,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: var(--spacer-xs);
 }
 
 .tag {
@@ -79,38 +79,38 @@
 }
 
 .item-name {
-  font-size: 28rpx;
-  color: #333;
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary, #333);
   font-weight: 500;
 }
 
 .item-time {
-  font-size: 24rpx;
-  color: #999;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder, #999);
 }
 
 .item-actions {
   display: flex;
-  gap: 16rpx;
+  gap: var(--spacer-sm);
 }
 
 .shortcuts-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 .shortcut-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16rpx;
-  padding: 24rpx 0;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-md) 0;
 }
 
 .shortcut-item text {
-  font-size: 26rpx;
-  color: #333;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary, #333);
 }
 
 /* 异常状态 */
@@ -123,14 +123,14 @@
 
 /* 骨架屏 */
 .skeleton-container {
-  padding: 24rpx;
+  padding: var(--spacer-md);
 }
 
 .stats-skeleton {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24rpx;
-  margin-bottom: 24rpx;
+  gap: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
 }
 
 .stat-skeleton-item {
@@ -138,7 +138,7 @@
 }
 
 .section-skeleton {
-  margin-bottom: 24rpx;
+  margin-bottom: var(--spacer-md);
 }
 
 /* 动画 */
