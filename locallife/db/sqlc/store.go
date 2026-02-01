@@ -77,6 +77,8 @@ type Store interface {
 	// Group multi-store transactions
 	ApproveGroupApplicationTx(ctx context.Context, arg ApproveGroupApplicationTxParams) (ApproveGroupApplicationTxResult, error)
 	ApproveGroupJoinRequestTx(ctx context.Context, arg ApproveGroupJoinRequestTxParams) (ApproveGroupJoinRequestTxResult, error)
+	// Operator transactions
+	WithdrawOperatorTx(ctx context.Context, arg WithdrawOperatorTxParams) (WithdrawOperatorTxResult, error)
 }
 
 // SQLStore provides all functions to execute SQL queries and transactions

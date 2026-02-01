@@ -974,7 +974,15 @@ type Operator struct {
 	// 合同年限（1/2/3年等）
 	ContractYears int32 `json:"contract_years"`
 	// 微信平台收付通二级商户号（开户成功后返回）
-	SubMchID pgtype.Text `json:"sub_mch_id"`
+	SubMchID             pgtype.Text    `json:"sub_mch_id"`
+	Balance              int64          `json:"balance"`
+	WalletAccount        []byte         `json:"wallet_account"`
+	MerchantDeposit      int64          `json:"merchant_deposit"`
+	RiderDeposit         int64          `json:"rider_deposit"`
+	WeatherCoeffExtreme  pgtype.Numeric `json:"weather_coeff_extreme"`
+	WeatherCoeffHeavy    pgtype.Numeric `json:"weather_coeff_heavy"`
+	WeatherCoeffModerate pgtype.Numeric `json:"weather_coeff_moderate"`
+	WeatherCoeffLight    pgtype.Numeric `json:"weather_coeff_light"`
 }
 
 // 运营商入驻申请表，支持草稿保存和人工审核
@@ -1260,6 +1268,7 @@ type Region struct {
 	CreatedAt time.Time      `json:"created_at"`
 	// 和风天气城市ID，首次查询后缓存
 	QweatherLocationID pgtype.Text `json:"qweather_location_id"`
+	Status             string      `json:"status"`
 }
 
 type ReservationInventory struct {
@@ -1440,6 +1449,21 @@ type RiderProfile struct {
 	UpdatedAt     time.Time          `json:"updated_at"`
 	// 高值单资格积分：普通单+1，高值单-3，超时-5，餐损-10，≥0可接高值单
 	PremiumScore int16 `json:"premium_score"`
+}
+
+type SafetyReport struct {
+	ID              int64       `json:"id"`
+	ReporterID      int64       `json:"reporter_id"`
+	RegionID        int64       `json:"region_id"`
+	Title           string      `json:"title"`
+	Description     string      `json:"description"`
+	Level           string      `json:"level"`
+	MerchantIds     []int64     `json:"merchant_ids"`
+	Images          []string    `json:"images"`
+	Status          string      `json:"status"`
+	ResolutionNotes pgtype.Text `json:"resolution_notes"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
 type Session struct {
@@ -1787,4 +1811,16 @@ type WechatNotification struct {
 	// 通知处理完成时间
 	ProcessedAt pgtype.Timestamp `json:"processed_at"`
 	CreatedAt   pgtype.Timestamp `json:"created_at"`
+}
+
+type WithdrawalRecord struct {
+	ID          int64       `json:"id"`
+	UserID      int64       `json:"user_id"`
+	Amount      int64       `json:"amount"`
+	Status      string      `json:"status"`
+	Channel     string      `json:"channel"`
+	AccountInfo []byte      `json:"account_info"`
+	Reason      pgtype.Text `json:"reason"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
 }

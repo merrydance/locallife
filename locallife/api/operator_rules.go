@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -49,26 +48,9 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 	rules := []RuleItem{}
 
-	// 1. 商户入驻保证金 (从 platform_configs 获取，默认 5000)
-	merchantDeposit := "5000"
-	merchantConfig, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
-		ConfigKey: "MERCHANT_DEPOSIT",
-		ScopeType: "city",
-		ScopeID:   pgtype.Int8{Int64: operator.RegionID, Valid: true},
-	})
-	if err == nil {
-		var val string
-		// Try string first
-		if err := json.Unmarshal(merchantConfig.ConfigValue, &val); err == nil {
-			merchantDeposit = val
-		} else {
-			// Try number
-			var num float64
-			if err := json.Unmarshal(merchantConfig.ConfigValue, &num); err == nil {
-				merchantDeposit = fmt.Sprintf("%.0f", num)
-			}
-		}
-	}
+	// 1. 商户入驻保证金 (从 operator 表获取, 单位: 分 -> 元)
+	// MerchantDeposit is int64 (fen)
+	merchantDeposit := fmt.Sprintf("%.2f", float64(operator.MerchantDeposit)/100.0)
 
 	rules = append(rules, RuleItem{
 		ID:    "rule_1",
@@ -79,24 +61,9 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		Desc:  "商户入驻需缴纳的保证金金额",
 	})
 
-	// 2. 骑手入驻押金 (从 platform_configs 获取，默认 MinOnlineDeposit)
-	riderDeposit := fmt.Sprintf("%.0f", float64(MinOnlineDeposit)/100.0)
-	riderConfig, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
-		ConfigKey: "RIDER_DEPOSIT",
-		ScopeType: "city",
-		ScopeID:   pgtype.Int8{Int64: operator.RegionID, Valid: true},
-	})
-	if err == nil {
-		var val string
-		if err := json.Unmarshal(riderConfig.ConfigValue, &val); err == nil {
-			riderDeposit = val
-		} else {
-			var num float64
-			if err := json.Unmarshal(riderConfig.ConfigValue, &num); err == nil {
-				riderDeposit = fmt.Sprintf("%.0f", num)
-			}
-		}
-	}
+	// 2. 骑手入驻押金 (从 operator 表获取, 单位: 分 -> 元)
+	// RiderDeposit is int64 (fen)
+	riderDeposit := fmt.Sprintf("%.2f", float64(operator.RiderDeposit)/100.0)
 
 	rules = append(rules, RuleItem{
 		ID:    "rule_2",
@@ -206,90 +173,46 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		}
 	}
 
-	// 11. 恶劣天气加价倍数 (From platform_configs)
-	weatherExtreme := "2.0"
-	weConfig, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
-		ConfigKey: "WEATHER_COEFF_EXTREME",
-		ScopeType: "city",
-		ScopeID:   pgtype.Int8{Int64: operator.RegionID, Valid: true},
-	})
-	if err == nil {
-		var val float64
-		if err := json.Unmarshal(weConfig.ConfigValue, &val); err == nil {
-			weatherExtreme = fmt.Sprintf("%.2f", val)
-		}
-	}
+	// 11. 恶劣天气加价倍数
+	weatherExtreme := pgNumericToFloat64(operator.WeatherCoeffExtreme)
 	rules = append(rules, RuleItem{
 		ID:    "rule_11",
 		Name:  "极端天气倍数",
 		Key:   "WEATHER_COEFF_EXTREME",
-		Value: weatherExtreme,
+		Value: fmt.Sprintf("%.2f", weatherExtreme),
 		Unit:  "x",
 		Desc:  "台风/龙卷风等极端天气下的运费倍数",
 	})
 
 	// 12. 暴雨/雪加价倍数
-	weatherHeavy := "1.8"
-	whConfig, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
-		ConfigKey: "WEATHER_COEFF_HEAVY",
-		ScopeType: "city",
-		ScopeID:   pgtype.Int8{Int64: operator.RegionID, Valid: true},
-	})
-	if err == nil {
-		var val float64
-		if err := json.Unmarshal(whConfig.ConfigValue, &val); err == nil {
-			weatherHeavy = fmt.Sprintf("%.2f", val)
-		}
-	}
+	weatherHeavy := pgNumericToFloat64(operator.WeatherCoeffHeavy)
 	rules = append(rules, RuleItem{
 		ID:    "rule_12",
 		Name:  "暴雨雪倍数",
 		Key:   "WEATHER_COEFF_HEAVY",
-		Value: weatherHeavy,
+		Value: fmt.Sprintf("%.2f", weatherHeavy),
 		Unit:  "x",
 		Desc:  "暴雨/暴雪/特大暴雨下的运费倍数",
 	})
 
 	// 13. 中雨/雪加价倍数
-	weatherModerate := "1.3"
-	wmConfig, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
-		ConfigKey: "WEATHER_COEFF_MODERATE",
-		ScopeType: "city",
-		ScopeID:   pgtype.Int8{Int64: operator.RegionID, Valid: true},
-	})
-	if err == nil {
-		var val float64
-		if err := json.Unmarshal(wmConfig.ConfigValue, &val); err == nil {
-			weatherModerate = fmt.Sprintf("%.2f", val)
-		}
-	}
+	weatherModerate := pgNumericToFloat64(operator.WeatherCoeffModerate)
 	rules = append(rules, RuleItem{
 		ID:    "rule_13",
 		Name:  "中雨雪倍数",
 		Key:   "WEATHER_COEFF_MODERATE",
-		Value: weatherModerate,
+		Value: fmt.Sprintf("%.2f", weatherModerate),
 		Unit:  "x",
 		Desc:  "中雨/中雪/大雨/大雪下的运费倍数",
 	})
 
 	// 14. 小雨/雪加价倍数
-	weatherLight := "1.1"
-	wlConfig, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
-		ConfigKey: "WEATHER_COEFF_LIGHT",
-		ScopeType: "city",
-		ScopeID:   pgtype.Int8{Int64: operator.RegionID, Valid: true},
-	})
-	if err == nil {
-		var val float64
-		if err := json.Unmarshal(wlConfig.ConfigValue, &val); err == nil {
-			weatherLight = fmt.Sprintf("%.2f", val)
-		}
-	}
+	weatherLight := pgNumericToFloat64(operator.WeatherCoeffLight)
 	rules = append(rules, RuleItem{
 		ID:    "rule_14",
 		Name:  "小雨雪倍数",
 		Key:   "WEATHER_COEFF_LIGHT",
-		Value: weatherLight,
+		Value: fmt.Sprintf("%.2f", weatherLight),
 		Unit:  "x",
 		Desc:  "小雨/小雪下的运费倍数",
 	})
@@ -400,17 +323,20 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			return
 		}
 
-		// 存入 platform_configs
-		// 将数值存为 JSON Number
-		configValue, _ := json.Marshal(val)
-
-		arg := db.UpsertPlatformConfigParams{
-			ConfigKey:   key,
-			ConfigValue: configValue,
-			ScopeType:   "city",
-			ScopeID:     pgtype.Int8{Int64: operator.RegionID, Valid: true},
+		// Update operators table
+		// Convert to fen (int64)
+		valInt := int64(val * 100)
+		arg := db.UpdateOperatorRulesParams{
+			ID: operator.ID,
 		}
-		_, err = server.store.UpsertPlatformConfig(ctx, arg)
+
+		if key == "MERCHANT_DEPOSIT" {
+			arg.MerchantDeposit = pgtype.Int8{Int64: valInt, Valid: true}
+		} else {
+			arg.RiderDeposit = pgtype.Int8{Int64: valInt, Valid: true}
+		}
+
+		_, err = server.store.UpdateOperatorRules(ctx, arg)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -522,16 +448,24 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			return
 		}
 
-		// 存入 platform_configs
-		configValue, _ := json.Marshal(val)
-
-		arg := db.UpsertPlatformConfigParams{
-			ConfigKey:   key,
-			ConfigValue: configValue,
-			ScopeType:   "city",
-			ScopeID:     pgtype.Int8{Int64: operator.RegionID, Valid: true},
+		// Update operators table
+		arg := db.UpdateOperatorRulesParams{
+			ID: operator.ID,
 		}
-		_, err = server.store.UpsertPlatformConfig(ctx, arg)
+		valNumeric := float64ToPgNumeric(val)
+
+		switch key {
+		case "WEATHER_COEFF_EXTREME":
+			arg.WeatherCoeffExtreme = valNumeric
+		case "WEATHER_COEFF_HEAVY":
+			arg.WeatherCoeffHeavy = valNumeric
+		case "WEATHER_COEFF_MODERATE":
+			arg.WeatherCoeffModerate = valNumeric
+		case "WEATHER_COEFF_LIGHT":
+			arg.WeatherCoeffLight = valNumeric
+		}
+
+		_, err = server.store.UpdateOperatorRules(ctx, arg)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return

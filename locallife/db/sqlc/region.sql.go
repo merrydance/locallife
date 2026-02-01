@@ -22,7 +22,7 @@ INSERT INTO regions (
   latitude
 ) VALUES (
   $1, $2, $3, $4, $5, $6
-) RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id
+) RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status
 `
 
 type CreateRegionParams struct {
@@ -54,6 +54,7 @@ func (q *Queries) CreateRegion(ctx context.Context, arg CreateRegionParams) (Reg
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
@@ -69,7 +70,7 @@ func (q *Queries) DeleteRegion(ctx context.Context, id int64) error {
 }
 
 const getClosestRegion = `-- name: GetClosestRegion :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE level = 3
 ORDER BY (
     6371000 * acos(
@@ -100,12 +101,13 @@ func (q *Queries) GetClosestRegion(ctx context.Context, arg GetClosestRegionPara
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getRegion = `-- name: GetRegion :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE id = $1 LIMIT 1
 `
 
@@ -122,12 +124,13 @@ func (q *Queries) GetRegion(ctx context.Context, id int64) (Region, error) {
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getRegionByCode = `-- name: GetRegionByCode :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE code = $1 LIMIT 1
 `
 
@@ -144,12 +147,13 @@ func (q *Queries) GetRegionByCode(ctx context.Context, code string) (Region, err
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getRegionByNameAndLevel = `-- name: GetRegionByNameAndLevel :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE name = $1 AND level = $2 LIMIT 1
 `
 
@@ -171,12 +175,13 @@ func (q *Queries) GetRegionByNameAndLevel(ctx context.Context, arg GetRegionByNa
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getRegionByNameAndParent = `-- name: GetRegionByNameAndParent :one
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE name = $1 AND parent_id = $2 LIMIT 1
 `
 
@@ -198,6 +203,7 @@ func (q *Queries) GetRegionByNameAndParent(ctx context.Context, arg GetRegionByN
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }
@@ -249,7 +255,7 @@ func (q *Queries) GetRegionsWithDeliveryFeeConfig(ctx context.Context) ([]GetReg
 
 const listAvailableRegions = `-- name: ListAvailableRegions :many
 SELECT 
-  r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id,
+  r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id, r.status,
   p.name as parent_name
 FROM regions r
 LEFT JOIN regions p ON r.parent_id = p.id
@@ -287,6 +293,7 @@ type ListAvailableRegionsRow struct {
 	Latitude           pgtype.Numeric `json:"latitude"`
 	CreatedAt          time.Time      `json:"created_at"`
 	QweatherLocationID pgtype.Text    `json:"qweather_location_id"`
+	Status             string         `json:"status"`
 	ParentName         pgtype.Text    `json:"parent_name"`
 }
 
@@ -315,6 +322,7 @@ func (q *Queries) ListAvailableRegions(ctx context.Context, arg ListAvailableReg
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 			&i.ParentName,
 		); err != nil {
 			return nil, err
@@ -328,7 +336,7 @@ func (q *Queries) ListAvailableRegions(ctx context.Context, arg ListAvailableReg
 }
 
 const listRegionChildren = `-- name: ListRegionChildren :many
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE parent_id = $1
 ORDER BY id
 `
@@ -352,6 +360,7 @@ func (q *Queries) ListRegionChildren(ctx context.Context, parentID pgtype.Int8) 
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -364,7 +373,7 @@ func (q *Queries) ListRegionChildren(ctx context.Context, parentID pgtype.Int8) 
 }
 
 const listRegions = `-- name: ListRegions :many
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE 
   CASE 
     WHEN $3::bigint IS NULL THEN parent_id IS NULL
@@ -410,6 +419,7 @@ func (q *Queries) ListRegions(ctx context.Context, arg ListRegionsParams) ([]Reg
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -422,7 +432,7 @@ func (q *Queries) ListRegions(ctx context.Context, arg ListRegionsParams) ([]Reg
 }
 
 const searchRegionsByName = `-- name: SearchRegionsByName :many
-SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id FROM regions
+SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE name LIKE '%' || $1 || '%'
 ORDER BY level, id
 LIMIT $2
@@ -452,6 +462,7 @@ func (q *Queries) SearchRegionsByName(ctx context.Context, arg SearchRegionsByNa
 			&i.Latitude,
 			&i.CreatedAt,
 			&i.QweatherLocationID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -470,7 +481,7 @@ SET
   longitude = COALESCE($2, longitude),
   latitude = COALESCE($3, latitude)
 WHERE id = $4
-RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id
+RETURNING id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status
 `
 
 type UpdateRegionParams struct {
@@ -498,6 +509,7 @@ func (q *Queries) UpdateRegion(ctx context.Context, arg UpdateRegionParams) (Reg
 		&i.Latitude,
 		&i.CreatedAt,
 		&i.QweatherLocationID,
+		&i.Status,
 	)
 	return i, err
 }

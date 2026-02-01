@@ -1,0 +1,19 @@
+<custom-navbar title="食安熔断上报" showBack="{{true}}" />
+<view class="container" style="padding-top: 88px;">
+  <view class="form-card">
+    <t-input label="标题" placeholder="请输入事件标题" value="{{title}}" bindchange="onTitleChange" />
+    <t-textarea label="详细描述" placeholder="请描述事件经过和严重程度" value="{{description}}" bindchange="onDescChange" />
+    
+    <view class="form-item">
+      <view class="label">风险等级</view>
+      <t-radio-group value="{{level}}" bindchange="onLevelChange">
+        <t-radio value="low" label="低风险" />
+        <t-radio value="medium" label="中风险" />
+        <t-radio value="high" label="高风险" />
+        <t-radio value="critical" label="严重(熔断)" />
+      </t-radio-group>
+    </view>
+
+    <t-button theme="danger" block size="large" bindtap="onSubmit" disabled="{{!title || !description}}">提交报告</t-button>
+  </view>
+</view>

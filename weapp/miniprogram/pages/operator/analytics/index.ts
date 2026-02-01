@@ -1,5 +1,5 @@
 import { isLargeScreen } from '@/utils/responsive'
-import * as echarts from '@/libs/echarts'
+import * as echarts from '../libs/echarts'
 
 function initChart(canvas: any, width: number, height: number, dpr: number) {
   const chart = echarts.init(canvas, null, {

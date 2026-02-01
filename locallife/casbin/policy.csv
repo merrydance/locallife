@@ -53,6 +53,7 @@ p, operator, /v1/operator/regions, GET
 p, operator, /v1/operator/regions/:region_id/stats, GET
 p, operator, /v1/operator/regions/:region_id/peak-hours, POST
 p, operator, /v1/operator/regions/:region_id/peak-hours, GET
+p, operator, /v1/operator/stats/realtime, GET
 
 # Settlement Management
 p, operator, /v1/operator/settlements, GET
@@ -87,10 +88,12 @@ p, operator, /v1/admin/riders/:rider_id/reject, POST
 p, operator, /v1/operator/appeals, GET
 p, operator, /v1/operator/appeals/:id, GET
 p, operator, /v1/operator/appeals/:id/review, POST
+p, operator, /v1/operator/reports/safety, POST
 
 # Operator Finance
 p, operator, /v1/operators/me/finance/overview, GET
 p, operator, /v1/operators/me/commission, GET
+p, operator, /v1/operators/me/finance/withdraw, POST
 
 # Operator Ecommerce Applyment (WeChat Secondary Merchant)
 p, operator, /v1/operator/applyment/bindbank, POST

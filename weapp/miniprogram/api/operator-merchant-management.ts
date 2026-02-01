@@ -9,7 +9,7 @@ import { request } from '../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 商户状态枚举 */
-export type MerchantStatus = 'active' | 'suspended' | 'pending_approval' | 'rejected' | 'closed'
+export type MerchantStatus = 'approved' | 'suspended' | 'pending' | 'rejected' | 'closed'
 
 /** 商户类型枚举 */
 export type MerchantType = 'restaurant' | 'grocery' | 'pharmacy' | 'convenience' | 'other'
@@ -83,7 +83,7 @@ export interface OperatorMerchantDetailResponse {
         total_gmv: number
         avg_order_value: number
         completion_rate: number
-        response_time: number
+        responseTime: number
         dish_count: number
         active_dish_count: number
     }
@@ -258,7 +258,7 @@ export class MerchantAnalyticsService {
         const stats = merchant.stats
 
         // 订单效率 (0-100)
-        const orderEfficiency = Math.min(100, (stats.completion_rate + (100 - Math.min(stats.response_time / 60, 100))))
+        const orderEfficiency = Math.min(100, (stats.completion_rate + (100 - Math.min(stats.responseTime / 60, 100))))
 
         // 收入表现 (0-100)
         const avgOrderValue = stats.avg_order_value
@@ -292,8 +292,8 @@ export class MerchantAnalyticsService {
         if (merchant.rating >= 4.5) strengths.push('用户评价优秀')
         else if (merchant.rating < 3.5) weaknesses.push('用户评价较差')
 
-        if (stats.response_time <= 300) strengths.push('响应速度快') // 5分钟内
-        else if (stats.response_time > 900) weaknesses.push('响应速度慢') // 超过15分钟
+        if (stats.responseTime <= 300) strengths.push('响应速度快') // 5分钟内
+        else if (stats.responseTime > 900) weaknesses.push('响应速度慢') // 超过15分钟
 
         if (avgOrderValue >= 5000) strengths.push('客单价较高') // 50元以上
         else if (avgOrderValue < 2000) weaknesses.push('客单价偏低') // 20元以下
@@ -548,7 +548,7 @@ export class OperatorMerchantManagementAdapter {
                 totalGmv: data.stats.total_gmv,
                 avgOrderValue: data.stats.avg_order_value,
                 completionRate: data.stats.completion_rate,
-                responseTime: data.stats.response_time,
+                responseTime: data.stats.responseTime,
                 dishCount: data.stats.dish_count,
                 activeDishCount: data.stats.active_dish_count
             }
@@ -635,9 +635,9 @@ export async function getMerchantManagementDashboard(regionId?: number): Promise
     const total = merchantList.total ?? merchants.length
     const merchantSummary = {
         total,
-        active: merchants.filter(m => m.status === 'active').length,
+        active: merchants.filter(m => m.status === 'approved').length,
         suspended: merchants.filter(m => m.status === 'suspended').length,
-        pending: merchants.filter(m => m.status === 'pending_approval').length
+        pending: merchants.filter(m => m.status === 'pending').length
     }
 
     // 分析商户分类
@@ -728,7 +728,7 @@ function generateMerchantRecommendations(
     })
 
     // 基于商户状态的建议
-    if (merchant.status === 'pending_approval') {
+    if (merchant.status === 'pending') {
         recommendations.push('商户正在审核中，请耐心等待审核结果')
     }
 
@@ -877,9 +877,9 @@ export async function batchMerchantAction(
  */
 export function formatMerchantStatus(status: MerchantStatus): string {
     const statusMap: Record<MerchantStatus, string> = {
-        active: '正常营业',
+        approved: '正常营业',
         suspended: '暂停营业',
-        pending_approval: '待审核',
+        pending: '待审核',
         rejected: '审核拒绝',
         closed: '已关闭'
     }

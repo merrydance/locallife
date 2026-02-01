@@ -12,7 +12,7 @@ import { request } from '../utils/request'
 export type RegionStatus = 'active' | 'inactive' | 'pending'
 
 /** 运营商状态枚举 */
-export type OperatorStatus = 'active' | 'suspended' | 'pending_approval'
+export type OperatorStatus = 'active' | 'suspended' | 'pending'
 
 // ==================== 区域管理相关类型 ====================
 
@@ -157,6 +157,15 @@ export interface UpdateOperatorRequest extends Record<string, unknown> {
     commission_rate?: number
 }
 
+/** 食安熔断报告请求 */
+export interface SubmitSafetyReportRequest extends Record<string, unknown> {
+    title: string
+    description: string
+    merchant_ids?: number[]
+    images?: string[]
+    level: 'low' | 'medium' | 'high' | 'critical'
+}
+
 // ==================== 运营商基础管理服务类 ====================
 
 /**
@@ -264,6 +273,18 @@ export class OperatorBasicManagementService {
             url: '/v1/operators/me',
             method: 'PATCH',
             data: updateData
+        })
+    }
+
+    /**
+     * 提交食安熔断报告
+     * @param data 报告数据
+     */
+    async submitSafetyReport(data: SubmitSafetyReportRequest): Promise<void> {
+        return request({
+            url: '/v1/operator/reports/safety',
+            method: 'POST',
+            data
         })
     }
 }
@@ -773,7 +794,7 @@ export function formatOperatorStatus(status: OperatorStatus): string {
     const statusMap: Record<OperatorStatus, string> = {
         active: '正常',
         suspended: '暂停',
-        pending_approval: '待审核'
+        pending: '待审核'
     }
     return statusMap[status] || status
 }

@@ -151,8 +151,8 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 		"regions":     response,
 		"total":       len(response),
 		"total_count": len(response),
-		"page_id":     req.Page,
-		"page_size":   req.Limit,
+		"page":        req.Page,
+		"limit":       req.Limit,
 	})
 }
 
@@ -249,12 +249,13 @@ func (server *Server) getOperatorMerchantRanking(ctx *gin.Context) {
 // ==================== 区域骑手排行 ====================
 
 type operatorRiderRankingRow struct {
-	RiderID                int64  `json:"rider_id"`
-	RiderName              string `json:"rider_name"`
-	DeliveryCount          int32  `json:"delivery_count"`
-	CompletedCount         int32  `json:"completed_count"`
-	AvgDeliveryTimeSeconds int32  `json:"avg_delivery_time_seconds"`
-	TotalEarnings          int64  `json:"total_earnings"`
+	RiderID                int64   `json:"rider_id"`
+	RiderName              string  `json:"rider_name"`
+	DeliveryCount          int32   `json:"delivery_count"`
+	CompletedCount         int32   `json:"completed_count"`
+	AvgDeliveryTimeSeconds int32   `json:"avg_delivery_time_seconds"`
+	TotalEarnings          int64   `json:"total_earnings"`
+	CompletionRate         float64 `json:"completion_rate"`
 }
 
 // getOperatorRiderRanking 获取区域骑手排行
@@ -323,6 +324,10 @@ func (server *Server) getOperatorRiderRanking(ctx *gin.Context) {
 			CompletedCount:         rider.CompletedCount,
 			AvgDeliveryTimeSeconds: rider.AvgDeliveryTime,
 			TotalEarnings:          rider.TotalEarnings,
+			CompletionRate:         0,
+		}
+		if rider.DeliveryCount > 0 {
+			result[i].CompletionRate = float64(rider.CompletedCount) / float64(rider.DeliveryCount) * 100
 		}
 	}
 
@@ -482,8 +487,8 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 
 	// 查询累计统计（全部历史分账成功的订单）
 	// 使用一个很早的开始时间和很晚的结束时间来获取全部历史数据
-	allTimeStart := time.Date(2020, 1, 1, 0, 0, 0, 0, time.Local)
-	allTimeEnd := time.Date(2099, 12, 31, 23, 59, 59, 0, time.Local)
+	allTimeStart := time.Date(StatsStartYear, 1, 1, 0, 0, 0, 0, time.Local)
+	allTimeEnd := time.Date(StatsEndYear, 12, 31, 23, 59, 59, 0, time.Local)
 
 	totalStats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
 		ID:          regionID,
@@ -520,8 +525,6 @@ type operatorCommissionResponse struct {
 	Items      []operatorCommissionItem `json:"items"`
 	Total      int64                    `json:"total"`
 	TotalCount int64                    `json:"total_count"`
-	PageID     int32                    `json:"page_id"`
-	PageSize   int32                    `json:"page_size"`
 	Page       int32                    `json:"page"`
 	Limit      int32                    `json:"limit"`
 	Summary    struct {
@@ -591,8 +594,6 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	response := operatorCommissionResponse{
 		Items:      []operatorCommissionItem{},
 		TotalCount: int64(len(trends)),
-		PageID:     page,
-		PageSize:   limit,
 		Page:       page,
 		Limit:      limit,
 	}

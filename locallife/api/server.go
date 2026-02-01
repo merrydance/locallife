@@ -888,11 +888,15 @@ func (server *Server) setupRouter() {
 	operatorStatsGroup := authGroup.Group("/operator")
 	operatorStatsGroup.Use(server.CasbinRoleMiddleware(RoleOperator), server.LoadOperatorMiddleware())
 	{
+
 		// 区域相关路由（需要额外验证区域管理权限）
 		operatorStatsGroup.GET("/regions", server.listOperatorRegions) // 获取管理的区域列表
 		operatorStatsGroup.GET("/regions/:region_id/stats", server.getRegionStats)
 		operatorStatsGroup.POST("/regions/:region_id/peak-hours", server.createPeakHourConfig)
 		operatorStatsGroup.GET("/regions/:region_id/peak-hours", server.listPeakHourConfigs)
+
+		// 实时数据 (New)
+		operatorStatsGroup.GET("/stats/realtime", server.getOperatorRealtimeStats)
 
 		// 多维度分析
 		operatorStatsGroup.GET("/merchants/ranking", server.getOperatorMerchantRanking)
@@ -915,6 +919,17 @@ func (server *Server) setupRouter() {
 		operatorStatsGroup.POST("/riders/:id/resume", server.resumeOperatorRider)
 
 		// 申诉处理（运营商审核商户/骑手申诉）
+		// operatorStatsGroup.GET("/appeals", server.listOperatorAppeals) // Already exists or covered by our new file
+		// If collision, we will use our new one or check grep result.
+		// Assuming we simply add our new specific ones or keep existing if same name.
+		// Actually, let's wait for grep result in next turn to decide on 'listOperatorAppeals'.
+		// But I need to output something here.
+		// I will just add the safe ones for now: realtime and safety report.
+		// And withdraw.
+
+		// 食安熔断 (New)
+		operatorStatsGroup.POST("/reports/safety", server.submitSafetyReport)
+
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
 		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
 		operatorStatsGroup.POST("/appeals/:id/review", server.reviewAppeal)
@@ -930,6 +945,7 @@ func (server *Server) setupRouter() {
 	{
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
+		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
 	}
 
 	// M12: 平台统计BI路由

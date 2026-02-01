@@ -15,9 +15,9 @@
     <view class="filter-tabs">
       <t-tabs value="{{statusFilter}}" bind:change="onStatusFilterChange" t-class="tabs-container">
         <t-tab-panel label="全部" value="" />
-        <t-tab-panel label="正常" value="active" />
+        <t-tab-panel label="正常" value="approved" />
         <t-tab-panel label="暂停" value="suspended" />
-        <t-tab-panel label="待审核" value="pending_approval" />
+        <t-tab-panel label="待审核" value="pending" />
       </t-tabs>
     </view>
   </view>
@@ -61,7 +61,7 @@
                 <view class="merchant-info">
                   <text class="merchant-name">{{item.name}}</text>
                   <t-tag
-                    theme="{{item.status === 'active' ? 'success' : item.status === 'suspended' ? 'warning' : 'default'}}"
+                    theme="{{item.status === 'approved' ? 'success' : item.status === 'suspended' ? 'warning' : 'default'}}"
                     size="small"
                     variant="light-outline"
                   >
@@ -106,7 +106,7 @@
 
               <view class="merchant-actions">
                 <t-button
-                  wx:if="{{item.status === 'active'}}"
+                  wx:if="{{item.status === 'approved'}}"
                   theme="warning"
                   size="small"
                   variant="outline"

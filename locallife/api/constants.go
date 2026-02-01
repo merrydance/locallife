@@ -28,4 +28,15 @@ const (
 	// Dining Session Statuses
 	DiningSessionStatusOpen   = "open"
 	DiningSessionStatusClosed = "closed"
+
+	// Operator Rules Defaults
+	DefaultMerchantDeposit = "5000"
+	DefaultWeatherExtreme  = "2.0"
+	DefaultWeatherHeavy    = "1.8"
+	DefaultWeatherModerate = "1.3"
+	DefaultWeatherLight    = "1.1"
+
+	// Stats Constants
+	StatsStartYear = 2020
+	StatsEndYear   = 2099
 )

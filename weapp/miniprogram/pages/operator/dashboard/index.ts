@@ -1,19 +1,45 @@
 import { responsiveBehavior } from '@/utils/responsive'
-import { formatPriceNoSymbol } from '@/utils/util'
+import { formatPriceNoSymbol, formatPrice } from '@/utils/util'
 import { operatorBasicManagementService } from '../../../api/operator-basic-management'
+import { operatorAnalyticsService, OperatorAppealService } from '../../../api/operator-analytics'
 import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
+import { operatorRiderManagementService } from '../../../api/operator-rider-management'
+
+const appealService = new OperatorAppealService()
 
 Page({
   behaviors: [responsiveBehavior],
   data: {
+    // 基础统计
     stats: {
       total_gmv_display: '0.00',
       total_orders: 0,
       active_merchants: 0,
-      active_riders: 0
+      active_riders: 0,
+      today_gmv_display: '0.00',
+      today_orders: 0,
+      today_income_display: '0.00'
     },
-    finance: null as any,
+    
+    // 财务概览
+    finance: {
+      balance_display: '0.00',
+      total_income_display: '0.00',
+      current_month_income_display: '0.00'
+    },
+
+    // 筛选维度: day | week | month
+    timeDimension: 'day',
+    
+    // 待办事项
     pending_approvals: [] as any[],
+    pending_count: 0,
+    
+    // 排行榜
+    merchantRankings: [] as any[],
+    riderRankings: [] as any[],
+    rankingType: 'merchant', // merchant | rider
+
     loading: false,
     initialLoading: true,
     error: null as string | null,
@@ -21,12 +47,12 @@ Page({
   },
 
   onLoad() {
-    this.loadDashboardData()
+    this.initDashboard()
   },
 
   onShow() {
     if (!this.data.initialLoading) {
-      this.loadDashboardData()
+      this.refreshData()
     }
   },
 
@@ -34,97 +60,152 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
+  async initDashboard() {
+    this.setData({ initialLoading: true, error: null })
+    await this.loadDashboardData()
+    this.setData({ initialLoading: false })
+  },
+
+  async refreshData() {
+    await this.loadDashboardData()
+  },
+
+  /**
+   * 按时间维度加载指标和排行
+   */
   async loadDashboardData() {
-    if (this.data.loading && !this.data.initialLoading) return
-    this.setData({ loading: true, error: null })
+    if (this.data.loading) return
+    this.setData({ loading: true })
     
     try {
-      // 1. 并行获取基础数据
-      const [finance, merchantList, regions] = await Promise.all([
+      const { timeDimension } = this.data
+      const { startDate, endDate } = this.getDateRange(timeDimension)
+      
+      // 1. 并行获取各项数据
+      const [
+          financeOverview, 
+          realtimeStats, 
+          merchantsPending, 
+          ridersPending, 
+          merchantRanking, 
+          riderRanking,
+          dailyTrends,
+          appeals
+      ] = await Promise.all([
         operatorBasicManagementService.getFinanceOverview(),
-        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 100 }),
-        operatorBasicManagementService.getOperatorRegions({ limit: 100 })
+        operatorAnalyticsService.getRealtimeStats(),
+        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending' }),
+        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending' }),
+        operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
+        operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
+        operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate),
+        appealService.getAppealList({ page: 1, limit: 5, status: 'pending' })
       ])
 
-      // 2. 获取区域统计数据 (用于获取活跃骑手等实时指标)
-      // 聚合所有管理区域的数据
-      let activeRiders = 0
-      if (regions.regions && regions.regions.length > 0) {
-        const regionStatsPromises = regions.regions.map(region => 
-          operatorBasicManagementService.getRegionStats(region.id)
-        )
-        const regionStatsList = await Promise.all(regionStatsPromises)
-        
-        activeRiders = regionStatsList.reduce((sum, stats) => sum + (stats.active_rider_count || 0), 0)
-      }
-
-      // 3. 计算商户状态
-      const pendingMerchants = (merchantList.merchants || []).filter(m => m.status === 'pending_approval')
-      const activeMerchants = (merchantList.merchants || []).filter(m => m.status === 'active').length
+      // 格式化处理各维度数据，确保兼容性
+      const today = new Date().toISOString().split('T')[0]
+      const trends = Array.isArray(dailyTrends) ? dailyTrends : []
+      const todayTrend = trends.find(t => t.date === today) || { total_gmv: 0, order_count: 0, total_commission: 0 }
       
+      const merchantRankList = Array.isArray(merchantRanking) ? merchantRanking : []
+      const riderRankList = (Array.isArray(riderRanking) ? riderRanking : []).map(r => ({
+        ...r,
+        completion_rate: typeof r.completion_rate === 'number' ? r.completion_rate.toFixed(1) : '0.0'
+      }))
+
+      // 待办事项组合
+      const pendingItems = [
+        ...(merchantsPending.merchants || []).map(m => ({ id: m.id, type: 'MERCHANT', name: m.name, time: m.created_at })),
+        ...(ridersPending.riders || []).map(r => ({ id: r.id, type: 'RIDER', name: r.name, time: r.created_at })),
+        ...(appeals.appeals || []).map(a => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.title}`, time: a.created_at }))
+      ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+
       this.setData({
-        finance,
         stats: {
-          total_gmv_display: formatPriceNoSymbol(finance.current_month.total_gmv || 0),
-          total_orders: finance.current_month.total_orders || 0,
-          active_merchants: activeMerchants,
-          active_riders: activeRiders
+          total_gmv_display: formatPriceNoSymbol(financeOverview.total.total_gmv || 0),
+          total_orders: financeOverview.current_month.total_orders || 0,
+          active_merchants: realtimeStats.active_merchant_count,
+          active_riders: realtimeStats.active_rider_count,
+          today_gmv_display: formatPriceNoSymbol(todayTrend.total_gmv),
+          today_orders: todayTrend.order_count,
+          today_income_display: formatPriceNoSymbol(todayTrend.total_commission * 0.6)
         },
-        pending_approvals: pendingMerchants.map(m => ({
-          id: m.id,
-          type: 'MERCHANT_JOIN',
-          name: `商户入驻申请 - ${m.name || '未知商户'}`,
-          created_at: m.created_at
-        })),
-        loading: false,
-        initialLoading: false 
+        finance: {
+          balance_display: formatPriceNoSymbol(financeOverview.total.settled_commission * 0.6),
+          total_income_display: formatPriceNoSymbol(financeOverview.total.total_commission * 0.6),
+          current_month_income_display: formatPriceNoSymbol(financeOverview.current_month.total_commission * 0.6)
+        },
+        merchantRankings: merchantRankList,
+        riderRankings: riderRankList,
+        pending_approvals: pendingItems.slice(0, 5),
+        pending_count: pendingItems.length,
+        loading: false
       })
     } catch (error: any) {
       console.error('加载运营仪表盘失败:', error)
       this.setData({ 
         loading: false,
-        initialLoading: false,
-        error: error.message || '加载仪表盘数据失败'
+        error: error.message || '数据加载失败，请重试'
       })
     }
+  },
+
+  /**
+   * 获取日期范围
+   */
+  getDateRange(dimension: string) {
+    const end = new Date()
+    const start = new Date()
+    
+    if (dimension === 'day') {
+      start.setHours(0, 0, 0, 0)
+    } else if (dimension === 'week') {
+      start.setDate(end.getDate() - 7)
+    } else if (dimension === 'month') {
+      start.setMonth(end.getMonth() - 1)
+    }
+    
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: end.toISOString().split('T')[0]
+    }
+  },
+
+  /**
+   * 切换时间维度
+   */
+  onTimeDimensionChange(e: any) {
+    const dimension = e.detail.value
+    this.setData({ timeDimension: dimension }, () => {
+      this.loadDashboardData()
+    })
+  },
+
+  /**
+   * 切换排行榜类型
+   */
+  onRankingTypeChange(e: any) {
+    this.setData({ rankingType: e.detail.value })
   },
 
   onRetry() {
-    this.loadDashboardData()
+    this.initDashboard()
   },
 
-  async onApprove(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.currentTarget.dataset
-    try {
-      wx.showLoading({ title: '处理中' })
-      await operatorMerchantManagementService.resumeMerchant(id, { reason: '审批通过' })
-      wx.showToast({ title: '已通过', icon: 'success' })
-      this.loadDashboardData()
-    } catch (error) {
-      console.error('审批失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'error' })
-    } finally {
-      wx.hideLoading()
-    }
+  /**
+   * 处理待办点击
+   */
+  onPendingTap(e: any) {
+    const { id, type } = e.currentTarget.dataset
+    let url = ''
+    if (type === 'MERCHANT') url = `/pages/operator/merchants/detail/detail?id=${id}`
+    else if (type === 'RIDER') url = `/pages/operator/riders/detail/detail?id=${id}`
+    else if (type === 'APPEAL') url = `/pages/operator/appeals/detail/detail?id=${id}`
+    
+    if (url) wx.navigateTo({ url })
   },
 
-  async onReject(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.currentTarget.dataset
-    try {
-      wx.showLoading({ title: '处理中' })
-      // 拒绝入驻暂用挂起逻辑，或调用专门的审核拒绝API（若有）
-      await operatorMerchantManagementService.suspendMerchant(id, { 
-        reason: '审批拒绝',
-        duration_hours: 720
-      })
-      wx.showToast({ title: '已拒绝', icon: 'none' })
-      this.loadDashboardData()
-    } catch (error) {
-      console.error('拒绝失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'error' })
-    } finally {
-      wx.hideLoading()
-    }
+  onWithdrawTap() {
+    wx.navigateTo({ url: '/pages/operator/finance/withdraw' })
   }
 })
-

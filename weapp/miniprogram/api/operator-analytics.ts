@@ -19,6 +19,14 @@ export type AppealPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 // ==================== 区域统计相关类型 ====================
 
+/** 实时统计响应 - 对齐 api.operatorRealtimeStatsResponse */
+export interface OperatorRealtimeStatsResponse {
+    active_merchant_count: number
+    active_rider_count: number
+    pending_merchant_count: number
+    pending_rider_count: number
+}
+
 /** 区域统计响应 - 基于swagger api.operatorRegionStatsResponse */
 export interface OperatorRegionStatsResponse {
     region_id: number
@@ -263,6 +271,16 @@ export class OperatorAnalyticsService {
                 start_date: startDate,
                 end_date: endDate
             }
+        })
+    }
+
+    /**
+     * 获取实时统计数据
+     */
+    async getRealtimeStats(): Promise<OperatorRealtimeStatsResponse> {
+        return request({
+            url: '/v1/operator/stats/realtime',
+            method: 'GET'
         })
     }
 }

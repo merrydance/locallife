@@ -208,6 +208,7 @@ type Querier interface {
 	// 统计用户近N天的外卖订单数（用于行为回溯）
 	CountUserRecentTakeoutOrders(ctx context.Context, arg CountUserRecentTakeoutOrdersParams) (int64, error)
 	CountUserVouchersByStatus(ctx context.Context, userID int64) (CountUserVouchersByStatusRow, error)
+	CountWithdrawalRecords(ctx context.Context, userID int64) (int64, error)
 	// =====================================================================
 	// Appeal Queries - 申诉相关查询
 	// =====================================================================
@@ -367,6 +368,7 @@ type Querier interface {
 	// rider_profiles（骑手信任画像）
 	// ==========================================
 	CreateRiderProfile(ctx context.Context, riderID int64) (RiderProfile, error)
+	CreateSafetyReport(ctx context.Context, arg CreateSafetyReportParams) (SafetyReport, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateTable(ctx context.Context, arg CreateTableParams) (Table, error)
 	CreateTableReservation(ctx context.Context, arg CreateTableReservationParams) (TableReservation, error)
@@ -393,6 +395,7 @@ type Querier interface {
 	CreateWeatherCoefficient(ctx context.Context, arg CreateWeatherCoefficientParams) (WeatherCoefficient, error)
 	CreateWebLoginSession(ctx context.Context, arg CreateWebLoginSessionParams) (WebLoginSession, error)
 	CreateWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (WechatNotification, error)
+	CreateWithdrawalRecord(ctx context.Context, arg CreateWithdrawalRecordParams) (WithdrawalRecord, error)
 	DecrementMembershipBalance(ctx context.Context, arg DecrementMembershipBalanceParams) (MerchantMembership, error)
 	DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
 	// 从骑手押金扣款（原子操作：检查余额 + 扣款）
@@ -712,6 +715,7 @@ type Querier interface {
 	GetOperatorApplicationDraft(ctx context.Context, userID int64) (OperatorApplication, error)
 	GetOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
 	GetOperatorByUser(ctx context.Context, userID int64) (Operator, error)
+	GetOperatorForUpdate(ctx context.Context, id int64) (Operator, error)
 	// 运营商区域内商户排行（基于实际分账数据）
 	GetOperatorMerchantRanking(ctx context.Context, arg GetOperatorMerchantRankingParams) ([]GetOperatorMerchantRankingRow, error)
 	GetOperatorProfitSharingStats(ctx context.Context, arg GetOperatorProfitSharingStatsParams) (GetOperatorProfitSharingStatsRow, error)
@@ -854,6 +858,7 @@ type Querier interface {
 	// ============ Customer-side Room Queries (C端包间查询) ============
 	// 获取包间详情（含商户信息、主图、月销量）供顾客查看
 	GetRoomDetailForCustomer(ctx context.Context, id int64) (GetRoomDetailForCustomerRow, error)
+	GetSafetyReport(ctx context.Context, id int64) (SafetyReport, error)
 	GetSession(ctx context.Context, id int64) (Session, error)
 	GetSessionByAccessToken(ctx context.Context, accessToken string) (Session, error)
 	GetSessionByRefreshToken(ctx context.Context, arg GetSessionByRefreshTokenParams) (Session, error)
@@ -932,6 +937,7 @@ type Querier interface {
 	GetWebLoginSessionByPollToken(ctx context.Context, pollToken pgtype.Text) (WebLoginSession, error)
 	GetWechatAccessToken(ctx context.Context, appType string) (WechatAccessToken, error)
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
+	GetWithdrawalRecord(ctx context.Context, id int64) (WithdrawalRecord, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
 	IncrementMembershipBalance(ctx context.Context, arg IncrementMembershipBalanceParams) (MerchantMembership, error)
 	IncrementMerchantForeignObjectClaim(ctx context.Context, merchantID int64) error
@@ -1192,6 +1198,7 @@ type Querier interface {
 	// 按区域和状态列出骑手
 	ListRidersByRegionWithStatus(ctx context.Context, arg ListRidersByRegionWithStatusParams) ([]Rider, error)
 	ListRidersByStatus(ctx context.Context, arg ListRidersByStatusParams) ([]Rider, error)
+	ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
 	ListTableTags(ctx context.Context, tableID int64) ([]ListTableTagsRow, error)
@@ -1221,6 +1228,7 @@ type Querier interface {
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListWeatherCoefficients(ctx context.Context, arg ListWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
+	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
@@ -1301,6 +1309,7 @@ type Querier interface {
 	SetAddressAsDefault(ctx context.Context, arg SetAddressAsDefaultParams) (UserAddress, error)
 	// 先将用户的所有地址设为非默认
 	SetDefaultAddress(ctx context.Context, userID int64) error
+	SetOperatorWallet(ctx context.Context, arg SetOperatorWalletParams) error
 	// 先清除所有主图标记，再设置新的主图
 	SetPrimaryTableImage(ctx context.Context, tableID int64) error
 	SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error)
@@ -1321,6 +1330,7 @@ type Querier interface {
 	SumClaimAmountsByRider(ctx context.Context, dollar_1 []int64) ([]SumClaimAmountsByRiderRow, error)
 	SumReservationItemsTotal(ctx context.Context, reservationID int64) (int64, error)
 	SuspendMerchant(ctx context.Context, arg SuspendMerchantParams) error
+	SuspendRegion(ctx context.Context, id int64) error
 	SuspendRider(ctx context.Context, arg SuspendRiderParams) error
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
@@ -1417,8 +1427,10 @@ type Querier interface {
 	UpdateOperatorApplicationIDCardFront(ctx context.Context, arg UpdateOperatorApplicationIDCardFrontParams) (OperatorApplication, error)
 	// 更新申请的区域（仅草稿状态可修改）
 	UpdateOperatorApplicationRegion(ctx context.Context, arg UpdateOperatorApplicationRegionParams) (OperatorApplication, error)
+	UpdateOperatorBalance(ctx context.Context, arg UpdateOperatorBalanceParams) (Operator, error)
 	// 更新运营商区域状态（暂停/恢复）
 	UpdateOperatorRegionStatus(ctx context.Context, arg UpdateOperatorRegionStatusParams) (OperatorRegion, error)
+	UpdateOperatorRules(ctx context.Context, arg UpdateOperatorRulesParams) (Operator, error)
 	// 更新运营商状态（用于过期处理等）
 	UpdateOperatorStatus(ctx context.Context, arg UpdateOperatorStatusParams) (Operator, error)
 	// 更新运营商的微信二级商户号（开户成功后调用）
@@ -1487,6 +1499,7 @@ type Querier interface {
 	UpdateRiderStatus(ctx context.Context, arg UpdateRiderStatusParams) (Rider, error)
 	// 更新骑手的微信二级商户号
 	UpdateRiderSubMchID(ctx context.Context, arg UpdateRiderSubMchIDParams) (Rider, error)
+	UpdateSafetyReportStatus(ctx context.Context, arg UpdateSafetyReportStatusParams) (SafetyReport, error)
 	UpdateSessionTokens(ctx context.Context, arg UpdateSessionTokensParams) (Session, error)
 	UpdateSubOrderProfitSharingStatus(ctx context.Context, arg UpdateSubOrderProfitSharingStatusParams) (CombinedPaymentSubOrder, error)
 	UpdateTable(ctx context.Context, arg UpdateTableParams) (Table, error)
@@ -1498,6 +1511,7 @@ type Querier interface {
 	UpdateUserNotificationPreferences(ctx context.Context, arg UpdateUserNotificationPreferencesParams) (UserNotificationPreference, error)
 	UpdateUserRoleStatus(ctx context.Context, arg UpdateUserRoleStatusParams) (UserRole, error)
 	UpdateVoucher(ctx context.Context, arg UpdateVoucherParams) (Voucher, error)
+	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
 	// Group policies

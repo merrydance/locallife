@@ -1,0 +1,8 @@
+<custom-navbar title="提现申请" showBack="{{true}}" />
+<view class="container" style="padding-top: 88px;">
+  <view class="form-card">
+    <t-input label="提现金额" placeholder="请输入提现金额（元）" type="number" value="{{amount}}" bindchange="onAmountChange" suffix="元" />
+    <view class="tips">最低提现 1 元</view>
+    <t-button theme="primary" block size="large" bindtap="onSubmit" disabled="{{!amount}}">提交申请</t-button>
+  </view>
+</view>

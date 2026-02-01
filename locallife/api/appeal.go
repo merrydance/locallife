@@ -12,6 +12,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
 )
+
 // =============================================================================
 // Appeal API Handlers
 // 申诉功能 - 商户/骑手对索赔的申诉
@@ -216,11 +217,11 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"claims":    response,
-		"total":     total,
+		"claims":      response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 
@@ -467,11 +468,11 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"appeals":   response,
-		"total":     total,
+		"appeals":     response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 
@@ -634,11 +635,11 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"claims":    response,
-		"total":     total,
+		"claims":      response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 
@@ -893,11 +894,11 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"appeals":   response,
-		"total":     total,
+		"appeals":     response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 
@@ -983,9 +984,9 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 // ========================= Operator Appeals ============================
 
 type listOperatorAppealsRequest struct {
-	Status   *string `form:"status" binding:"omitempty,oneof=pending approved rejected"`
-	PageID   int32   `form:"page_id" binding:"required,min=1"`
-	PageSize int32   `form:"page_size" binding:"required,min=1,max=50"`
+	Status *string `form:"status" binding:"omitempty,oneof=pending approved rejected"`
+	Page   int32   `form:"page" binding:"omitempty,min=1"`
+	Limit  int32   `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
 // listOperatorAppeals 运营商查看区域内申诉列表
@@ -1017,7 +1018,15 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		return
 	}
 
-	offset := pageOffset(req.PageID, req.PageSize)
+	// 设置默认值
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 10
+	}
+
+	offset := pageOffset(req.Page, req.Limit)
 
 	var status string
 	if req.Status != nil {
@@ -1027,7 +1036,7 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 	appeals, err := server.store.ListOperatorAppeals(ctx, db.ListOperatorAppealsParams{
 		RegionID: operator.RegionID,
 		Column2:  status,
-		Limit:    req.PageSize,
+		Limit:    req.Limit,
 		Offset:   offset,
 	})
 	if err != nil {
@@ -1070,11 +1079,11 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"appeals":   response,
-		"total":     total,
+		"appeals":     response,
+		"total":       total,
 		"total_count": total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page":        req.Page,
+		"limit":       req.Limit,
 	})
 }
 
