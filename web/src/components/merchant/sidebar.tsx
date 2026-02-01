@@ -25,6 +25,7 @@ import {
   Boxes,
   Building2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -33,8 +34,24 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { cn } from "@/lib/utils";
 
+type MerchantSessionLike = ReturnType<typeof useMerchantSession>;
+
+type NavItem = {
+  label: string;
+  href: string;
+  activePrefix: string;
+  icon: LucideIcon;
+};
+
+type NavGroup = {
+  label: string;
+  description: string;
+  items: NavItem[];
+  shouldShow?: (session: MerchantSessionLike) => boolean;
+};
+
 // 导航分组
-const navGroups = [
+const navGroups: NavGroup[] = [
   {
     label: "日常运营",
     description: "每天开门使用",
@@ -146,7 +163,7 @@ const navGroups = [
   {
     label: "集团协同",
     description: "多门店管理",
-    shouldShow: (session: any) => !!session?.merchant?.group_id,
+    shouldShow: (session) => !!session?.merchant?.group_id,
     items: [
       {
         label: "集团中心",
@@ -261,7 +278,7 @@ export function MerchantSidebar() {
       {/* 导航分组 */}
       <nav className="flex-1 overflow-y-auto px-3 py-1">
         {navGroups.map((group, groupIndex) => {
-          if ((group as any).shouldShow && !(group as any).shouldShow(session)) {
+          if (group.shouldShow && !group.shouldShow(session)) {
             return null;
           }
           return (

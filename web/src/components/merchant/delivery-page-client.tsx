@@ -10,7 +10,6 @@ import {
   XCircle,
   RefreshCw,
   Calendar,
-  AlertCircle,
   ArrowLeft,
   Info
 } from "lucide-react";
@@ -19,7 +18,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 
-import type { DeliveryPromotionResponse, CreateDeliveryPromotionRequest, UpdateDeliveryPromotionRequest } from "@/types/delivery";
+import type { DeliveryPromotionResponse } from "@/types/delivery";
 
 export function DeliveryPageClient() {
   const session = useMerchantSession();
@@ -69,7 +67,7 @@ export function DeliveryPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [session?.merchant?.id, selectedPromo?.id]);
+  }, [session?.merchant?.id, selectedPromo]);
 
   useEffect(() => {
     loadPromotions();
@@ -151,20 +149,21 @@ export function DeliveryPageClient() {
       };
 
       if (isAdding) {
-        await apiPost(`/delivery-fee/merchants/${session.merchant.id}/promotions`, payload as any);
+        await apiPost(`/delivery-fee/merchants/${session.merchant.id}/promotions`, payload);
         toast.success("运费满返活动创建成功");
         setIsAdding(false);
       } else if (selectedPromo) {
         await apiPatch(`/delivery-fee/merchants/${session.merchant.id}/promotions/${selectedPromo.id}`, {
           ...payload,
           is_active: formData.is_active
-        } as any);
+        });
         toast.success("活动更新成功");
       }
       
       loadPromotions();
-    } catch (error: any) {
-      toast.error(error.message || "保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -184,8 +183,9 @@ export function DeliveryPageClient() {
       setSelectedPromo(null);
       setIsAdding(false);
       loadPromotions();
-    } catch (error: any) {
-      toast.error(error.message || "删除失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      toast.error(message);
     }
   };
 
@@ -205,7 +205,7 @@ export function DeliveryPageClient() {
       <PageContent>
         <div className="flex h-[calc(100vh-12rem)] gap-6">
           {/* Left Panel: List */}
-          <div className="w-1/3 min-w-[320px] flex flex-col bg-white rounded-xl border shadow-sm">
+          <div className="w-1/3 min-w-80 flex flex-col bg-white rounded-xl border shadow-sm">
             <div className="p-4 border-b space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">活动列表 ({promotions.length})</h3>

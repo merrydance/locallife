@@ -21,6 +21,7 @@ import {
   Wifi,
   WifiOff
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ import type {
 } from "@/types/kitchen";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 
-const ORDER_TYPE_MAP: Record<string, { label: string; icon: any; color: string }> = {
+const ORDER_TYPE_MAP: Record<string, { label: string; icon: LucideIcon; color: string }> = {
   takeout: { label: "外卖", icon: Package, color: "text-blue-500 bg-blue-50 border-blue-100" },
   dine_in: { label: "堂食", icon: UtensilsCrossed, color: "text-emerald-500 bg-emerald-50 border-emerald-100" },
   takeaway: { label: "自取", icon: Store, color: "text-amber-500 bg-amber-50 border-amber-100" },
@@ -68,7 +69,7 @@ type ColumnKey = "new_orders" | "preparing_orders" | "ready_orders";
 const COLUMNS: Array<{
   key: ColumnKey;
   title: string;
-  icon: any;
+  icon: LucideIcon;
   color: string;
   status: string;
 }> = [
@@ -89,7 +90,8 @@ export function KdsPageClient({ initialData }: Props) {
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const prevNewCountRef = useRef(initialData.stats.new_count);
-  const wakeLockRef = useRef<any>(null);
+  type WakeLockSentinelLike = { release: () => Promise<void> };
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
   // Settings Recovery
   useEffect(() => {
@@ -112,10 +114,11 @@ export function KdsPageClient({ initialData }: Props) {
   // Screen Wake Lock (Industrial Grade)
   useEffect(() => {
     const requestWakeLock = async () => {
-      if ('wakeLock' in navigator) {
+      const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> } };
+      if (nav.wakeLock) {
         try {
-          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        } catch (err) {}
+          wakeLockRef.current = await nav.wakeLock.request("screen");
+        } catch {}
       }
     };
     requestWakeLock();
@@ -163,8 +166,8 @@ export function KdsPageClient({ initialData }: Props) {
 
   // Real-time Event Bridge
   useEffect(() => {
-    const handleRealtime = (event: any) => {
-      const detail = event.detail;
+    const handleRealtime = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string }>).detail;
       // Listening for specific kitchen/order updates from WebSocket
       if (detail?.type === "new_order" || detail?.type === "order_update") {
         refresh(true);
@@ -188,8 +191,9 @@ export function KdsPageClient({ initialData }: Props) {
       await apiPost(`/kitchen/orders/${orderId}/${action}`);
       toast.success(action === "preparing" ? "开始制作" : "制作完成");
       refresh(true);
-    } catch (err: any) {
-      toast.error(err.message || "操作指令执行失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作指令执行失败";
+      toast.error(message);
     }
   };
 
@@ -376,7 +380,7 @@ export function KdsPageClient({ initialData }: Props) {
                                  <div className="mt-0.5 shrink-0 bg-amber-200 text-amber-700 rounded-md p-1">
                                    <Info className="h-3 w-3" />
                                  </div>
-                                 <span className="leading-relaxed">"{order.notes}"</span>
+                                 <span className="leading-relaxed">&ldquo;{order.notes}&rdquo;</span>
                                </div>
                              )}
 
@@ -542,7 +546,7 @@ export function KdsPageClient({ initialData }: Props) {
                    <div className="space-y-3">
                       <div className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">System Message</div>
                       <div className="p-5 bg-amber-50 rounded-2xl text-sm text-amber-900 italic border border-amber-100 leading-relaxed font-bold shadow-inner">
-                        "{selectedOrder.notes}"
+                        &ldquo;{selectedOrder.notes}&rdquo;
                       </div>
                    </div>
                  )}

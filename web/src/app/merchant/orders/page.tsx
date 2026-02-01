@@ -2,15 +2,6 @@ import { OrdersPageClient } from "@/components/merchant/orders-page-client";
 import { apiGet, formatDate } from "@/lib/api";
 import type { OrderResponse, OrderStatsResponse } from "@/types/order";
 
-type StatsOverview = {
-  total_orders: number;
-  total_sales: number;
-  total_days: number;
-  total_commission: number;
-  avg_daily_sales: number;
-};
-
-const fallbackOrders: OrderResponse[] = [];
 const fallbackStats: OrderStatsResponse = {
   pending_count: 0,
   paid_count: 0,

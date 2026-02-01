@@ -92,36 +92,39 @@ export function useConfirm(defaultOptions: UseConfirmOptions): UseConfirmReturn 
   const [state, setState] = React.useState<{
     open: boolean;
     options: UseConfirmOptions;
-    resolve: ((value: boolean) => void) | null;
   }>({
     open: false,
     options: defaultOptions,
-    resolve: null,
   });
+  const resolveRef = React.useRef<((value: boolean) => void) | null>(null);
 
   const confirm: ConfirmFunction = React.useCallback((overrideOptions = {}) => {
     return new Promise<boolean>((resolve) => {
+      resolveRef.current = resolve;
       setState({
         open: true,
         options: { ...defaultOptions, ...overrideOptions },
-        resolve,
       });
     });
   }, [defaultOptions]);
 
   const handleOpenChange = React.useCallback((open: boolean) => {
-    if (!open && state.resolve) {
-      state.resolve(false);
+    if (!open && resolveRef.current) {
+      resolveRef.current(false);
     }
-    setState((prev) => ({ ...prev, open, resolve: open ? prev.resolve : null }));
-  }, [state.resolve]);
+    if (!open) {
+      resolveRef.current = null;
+    }
+    setState((prev) => ({ ...prev, open }));
+  }, []);
 
   const handleConfirm = React.useCallback(() => {
-    if (state.resolve) {
-      state.resolve(true);
+    if (resolveRef.current) {
+      resolveRef.current(true);
     }
-    setState((prev) => ({ ...prev, open: false, resolve: null }));
-  }, [state.resolve]);
+    resolveRef.current = null;
+    setState((prev) => ({ ...prev, open: false }));
+  }, []);
 
   const ConfirmDialogComponent = React.useCallback(() => (
     <ConfirmDialog

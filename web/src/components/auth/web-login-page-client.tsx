@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { RefreshCw } from "lucide-react";
@@ -476,9 +477,11 @@ export function WebLoginPageClient() {
             <div className="relative group overflow-hidden rounded-xl bg-white shadow">
               {qrDataUrl ? (
                 <>
-                  <img
+                  <Image
                     src={qrDataUrl}
                     alt="Web 登录二维码"
+                    width={240}
+                    height={240}
                     className={cn(
                       "h-60 w-60 p-3 transition-all duration-300",
                       session?.status === "expired" && "blur-[6px] opacity-40 scale-105"

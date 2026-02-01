@@ -84,4 +84,4 @@ export interface CreateDishRequest {
   }[];
 }
 
-export interface UpdateDishRequest extends Partial<CreateDishRequest> {}
+export type UpdateDishRequest = Partial<CreateDishRequest>;

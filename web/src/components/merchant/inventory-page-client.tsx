@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
 import { 
   Search, 
   RefreshCw, 
@@ -11,16 +12,14 @@ import {
   Package,
   PackageCheck,
   PackageX,
-  ChevronRight,
   Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -406,7 +405,7 @@ export function InventoryPageClient() {
                         <div className="flex-1 flex items-center gap-4 min-w-0">
                           <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden shrink-0">
                              {dish.image_url ? (
-                               <img src={formatImageUrl(getMediaUrl(dish.image_url))} className="w-full h-full object-cover" />
+                               <Image src={formatImageUrl(getMediaUrl(dish.image_url))} alt={dish.name} width={48} height={48} className="w-full h-full object-cover" />
                              ) : (
                                <div className="w-full h-full flex items-center justify-center text-slate-300">
                                  <Package className="h-6 w-6" />
@@ -475,7 +474,7 @@ export function InventoryPageClient() {
                               <Badge 
                                 variant={available === 0 ? "destructive" : "outline"}
                                 className={cn(
-                                  "min-w-[40px] justify-center font-bold",
+                                  "min-w-10 justify-center font-bold",
                                   available === "∞" ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
                                   available === 0 ? "bg-rose-50 text-rose-600 border-rose-200" :
                                   "bg-slate-50 text-slate-600"

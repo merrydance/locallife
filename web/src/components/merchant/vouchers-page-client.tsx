@@ -6,11 +6,9 @@ import {
   Search,
   Plus,
   Trash2,
-  Edit,
   CheckCircle2,
   XCircle,
   RefreshCw,
-  Clock,
   Calendar,
   AlertCircle,
   Info,
@@ -83,7 +81,7 @@ export function VouchersPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [session?.merchant?.id, selectedVoucher?.id]);
+  }, [session?.merchant?.id, selectedVoucher]);
 
   useEffect(() => {
     loadVouchers();
@@ -182,7 +180,7 @@ export function VouchersPageClient() {
           valid_until: formData.valid_until + "T23:59:59Z",
           allowed_order_types: formData.allowed_order_types!,
         };
-        await apiPost(`/merchants/${session.merchant.id}/vouchers`, payload as any);
+        await apiPost(`/merchants/${session.merchant.id}/vouchers`, payload);
         toast.success("代金券创建成功");
         setIsAdding(false);
       } else if (selectedVoucher) {
@@ -197,13 +195,14 @@ export function VouchersPageClient() {
           is_active: formData.is_active,
           allowed_order_types: formData.allowed_order_types,
         };
-        await apiPatch(`/merchants/${session.merchant.id}/vouchers/${selectedVoucher.id}`, payload as any);
+        await apiPatch(`/merchants/${session.merchant.id}/vouchers/${selectedVoucher.id}`, payload);
         toast.success("代金券更新成功");
       }
       
       loadVouchers();
-    } catch (error: any) {
-      toast.error(error.message || "保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -223,8 +222,9 @@ export function VouchersPageClient() {
       setSelectedVoucher(null);
       setIsAdding(false);
       loadVouchers();
-    } catch (error: any) {
-      toast.error(error.message || "删除失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      toast.error(message);
     }
   };
 
@@ -255,7 +255,7 @@ export function VouchersPageClient() {
       <PageContent>
         <div className="flex h-[calc(100vh-12rem)] gap-6">
           {/* Left Panel: Voucher List */}
-          <div className="w-1/3 min-w-[320px] flex flex-col bg-white rounded-xl border shadow-sm">
+          <div className="w-1/3 min-w-80 flex flex-col bg-white rounded-xl border shadow-sm">
             <div className="p-4 border-b space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">代金券列表 ({vouchers.length})</h3>
@@ -583,7 +583,7 @@ export function VouchersPageClient() {
                       <div className="grid gap-2">
                         <Textarea 
                           placeholder="例如代金券不可与其他优惠同享，或仅限某些节假日不可用等细则..." 
-                          className="min-h-[120px] bg-slate-50/50 focus:bg-white p-4 resize-none shadow-sm"
+                          className="min-h-30 bg-slate-50/50 focus:bg-white p-4 resize-none shadow-sm"
                           value={formData.description || ""}
                           onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
                         />

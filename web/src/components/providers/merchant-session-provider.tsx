@@ -92,6 +92,7 @@ export function MerchantSessionProvider({
   const isConnectingRef = useRef(false);
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectDelayRef = useRef(1000);
+  const connectWebSocketRef = useRef<() => void>(() => {});
 
   const isOpen = status?.is_open ?? merchant?.is_open ?? false;
 
@@ -156,7 +157,7 @@ export function MerchantSessionProvider({
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = setTimeout(() => {
         console.log(`Attempting reconnect in ${reconnectDelayRef.current}ms...`);
-        connectWebSocket();
+        connectWebSocketRef.current();
         // Exponential backoff
         reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 1.5, 30000);
       }, reconnectDelayRef.current);
@@ -178,6 +179,10 @@ export function MerchantSessionProvider({
       }
     };
   }, []);
+
+  useEffect(() => {
+    connectWebSocketRef.current = connectWebSocket;
+  }, [connectWebSocket]);
 
   const setOpen = useCallback(
     async (nextOpen: boolean) => {
@@ -204,22 +209,28 @@ export function MerchantSessionProvider({
   }, [closeWebSocket]);
 
   useEffect(() => {
-    refresh().catch(() => {
-      setIsAuthenticated(false);
-      setIsReady(true);
-    });
+    const timer = setTimeout(() => {
+      refresh().catch(() => {
+        setIsAuthenticated(false);
+        setIsReady(true);
+      });
+    }, 0);
+    return () => clearTimeout(timer);
   }, [refresh]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      closeWebSocket();
-      return;
-    }
-    if (isOpen) {
-      connectWebSocket();
-    } else {
-      closeWebSocket();
-    }
+    const timer = setTimeout(() => {
+      if (!isAuthenticated) {
+        closeWebSocket();
+        return;
+      }
+      if (isOpen) {
+        connectWebSocket();
+      } else {
+        closeWebSocket();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [isAuthenticated, isOpen, connectWebSocket, closeWebSocket]);
 
   useEffect(() => {

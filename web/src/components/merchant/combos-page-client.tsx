@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Image from "next/image";
 import { 
   Search, 
   Plus, 
   Trash2, 
-  Edit, 
   Box, 
-  ShoppingBag,
   CheckCircle2,
   XCircle,
   RefreshCw,
@@ -21,9 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { getAuthToken, apiGet, apiPost, apiPatch, apiPut, apiDelete, formatAmount, getMediaUrl, formatImageUrl } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, formatAmount, getMediaUrl, formatImageUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 
@@ -36,7 +34,6 @@ interface CombosPageClientProps {
 
 export function CombosPageClient({ initialData }: CombosPageClientProps) {
   const [combos, setCombos] = useState<ComboSetResponse[]>(initialData);
-  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   
   // Selection & Editing
@@ -61,14 +58,11 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const loadCombos = async () => {
-    setLoading(true);
     try {
       const response = await apiGet<{ combo_sets: ComboSetResponse[] }>("/combos", { page_id: 1, page_size: 50 });
       setCombos(response.combo_sets || []);
     } catch (error) {
       console.error("Failed to load combos", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -107,8 +101,9 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
       setFormData(detail);
       setFormDishes(detail.dishes || []);
       setFormTagIds(detail.tags?.map(t => t.id) || []);
-    } catch (error) {
-      toast.error("加载套餐详情失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载套餐详情失败";
+      toast.error(message);
     }
   };
 
@@ -184,10 +179,10 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
       };
 
       if (isAdding) {
-        await apiPost("/combos", payload as any);
+        await apiPost("/combos", payload);
         toast.success("套餐创建成功");
       } else if (selectedCombo) {
-        await apiPut(`/combos/${selectedCombo.id}`, payload as any);
+        await apiPut(`/combos/${selectedCombo.id}`, payload);
         toast.success("套餐更新成功");
       }
       
@@ -200,8 +195,9 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
         setSelectedCombo(null);
         setFormData({});
       }
-    } catch (error: any) {
-      toast.error(error.message || "保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -221,8 +217,9 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
       setSelectedCombo(null);
       setIsAdding(false);
       loadCombos();
-    } catch (error) {
-      toast.error("删除失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      toast.error(message);
     }
   };
 
@@ -246,7 +243,7 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
       <PageContent>
         <div className="flex h-[calc(100vh-12rem)] gap-6">
           {/* Left Panel: Combo List */}
-          <div className="w-1/3 min-w-[320px] flex flex-col bg-white rounded-xl border shadow-sm">
+          <div className="w-1/3 min-w-80 flex flex-col bg-white rounded-xl border shadow-sm">
             <div className="p-4 border-b space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">套餐列表 ({combos.length})</h3>
@@ -430,9 +427,11 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
                                 <div className="flex items-center gap-3">
                                   <div className="h-12 w-12 rounded bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
                                      {item.dish_image_url ? (
-                                        <img 
+                                        <Image 
                                           src={formatImageUrl(getMediaUrl(item.dish_image_url))} 
                                           alt={item.dish_name} 
+                                          width={48}
+                                          height={48}
                                           className="h-full w-full object-cover"
                                         />
                                      ) : (
@@ -553,9 +552,11 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
                            {dish.image_url ? (
-                              <img 
+                              <Image 
                                 src={formatImageUrl(getMediaUrl(dish.image_url))} 
                                 alt={dish.name} 
+                                width={40}
+                                height={40}
                                 className="h-full w-full object-cover"
                               />
                            ) : (

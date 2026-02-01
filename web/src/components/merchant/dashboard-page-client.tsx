@@ -6,27 +6,17 @@ import {
   AlertCircle,
   Armchair,
   CheckCircle2,
-  ChevronRight,
-  Filter,
-  Home,
   Loader2,
-  MoreVertical,
-  Plus,
-  QrCode,
   RefreshCw,
-  Search,
   Users,
   XCircle,
   ArrowRightLeft,
   Clock,
-  Receipt,
   Sparkles,
-  Play,
   LogOut,
-  TrendingUp,
   Calendar,
-  Phone,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +41,7 @@ const ORDER_TYPE_LABELS: Record<string, string> = {
   reservation: "预订",
 };
 
-const TABLE_STATUS_MAP: Record<string, { label: string, variant: "default" | "secondary" | "destructive" | "outline", icon: any, colorClass: string }> = {
+const TABLE_STATUS_MAP: Record<string, { label: string, variant: "default" | "secondary" | "destructive" | "outline", icon: LucideIcon, colorClass: string }> = {
   available: { label: "空闲", variant: "secondary", icon: CheckCircle2, colorClass: "bg-emerald-500" },
   occupied: { label: "就餐中", variant: "default", icon: Armchair, colorClass: "bg-primary" },
   reserved: { label: "已预订", variant: "outline", icon: AlertCircle, colorClass: "bg-amber-500" },
@@ -59,9 +49,14 @@ const TABLE_STATUS_MAP: Record<string, { label: string, variant: "default" | "se
   disabled: { label: "停用", variant: "destructive", icon: XCircle, colorClass: "bg-muted-foreground" },
 };
 
-const TABLE_TYPE_MAP: Record<string, { label: string, icon: any }> = {
-  table: { label: "大厅桌台", icon: Armchair },
-  room: { label: "包间", icon: Home },
+type ReservationSnapshot = {
+  id: number;
+  table_id: number;
+  contact_name: string;
+  contact_phone: string;
+  guest_count: number;
+  reservation_time: string;
+  notes?: string;
 };
 
 export type DashboardOrder = {
@@ -202,7 +197,7 @@ export function DashboardPageClient({
         occupied: tables.filter((t) => t.status === "occupied").length,
       });
 
-      const resResp = await apiGet<{ reservations: any[] }>("/reservations/merchant/today");
+      const resResp = await apiGet<{ reservations: ReservationSnapshot[] }>("/reservations/merchant/today");
       const dayReservations = resResp.reservations || [];
       const nowTimeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -446,8 +441,9 @@ export function DashboardPageClient({
       );
       applyTableSnapshot(updated);
       toast.success(`桌台状态已更新为 ${TABLE_STATUS_MAP[status]?.label || status}`);
-    } catch (error: any) {
-      toast.error(error.message || "操作失败，请重试");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败，请重试";
+      toast.error(message);
     } finally {
       setLoadingTableStatus(null);
       setActiveTable(null);
@@ -469,8 +465,9 @@ export function DashboardPageClient({
         toast.success(`桌台 ${table.table_no} 已完成清扫`);
       }
       loadTables();
-    } catch (error: any) {
-      toast.error(error.message || "操作失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     } finally {
       setLoadingTableStatus(null);
       setConfirmConfig(prev => ({ ...prev, open: false }));
@@ -508,8 +505,9 @@ export function DashboardPageClient({
       });
       toast.success(`${reservation.contact_name} 的预订已签到入座`);
       loadTables();
-    } catch (error: any) {
-      toast.error(error.message || "签到失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "签到失败";
+      toast.error(message);
     }
   };
 
@@ -731,9 +729,6 @@ export function DashboardPageClient({
                       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-3">
                         {group.tables.map((table) => {
                           const statusInfo = TABLE_STATUS_MAP[table.status] || TABLE_STATUS_MAP.available;
-                          const typeInfo = TABLE_TYPE_MAP[table.table_type || "table"] || TABLE_TYPE_MAP.table;
-                          const StatusIcon = statusInfo.icon;
-                          const TypeIcon = typeInfo.icon;
                           const isOccupied = table.status === 'occupied';
 
                           return (
@@ -777,7 +772,7 @@ export function DashboardPageClient({
                                 </div>
 
                                 {/* Middle Content - Aligned with DineIn */}
-                                <div className="mt-2 min-h-[60px] flex flex-col justify-center">
+                                <div className="mt-2 min-h-15 flex flex-col justify-center">
                                   {isOccupied ? (
                                     <div className="space-y-2">
                                        <div className="flex justify-between text-[10px] font-medium">

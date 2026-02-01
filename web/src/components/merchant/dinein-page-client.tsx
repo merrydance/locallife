@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Image from "next/image";
 import { 
   RefreshCw, 
   Users, 
   Clock, 
   ArrowRightLeft, 
   LogOut, 
-  Play, 
   CheckCircle2, 
   AlertCircle,
   Armchair,
@@ -18,17 +18,15 @@ import {
   Receipt,
   ChevronRight,
   TrendingUp,
-  History,
   Calendar,
   Phone,
   Sparkles,
   UserCheck
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Dialog, 
   DialogContent, 
@@ -67,7 +65,7 @@ interface ReservationSummary {
   guest_count: number;
 }
 
-const STATUS_CONFIG: Record<TableStatus, { label: string; color: string; bgColor: string; icon: any; badgeVariant: "default" | "secondary" | "outline" | "destructive" }> = {
+const STATUS_CONFIG: Record<TableStatus, { label: string; color: string; bgColor: string; icon: LucideIcon; badgeVariant: "default" | "secondary" | "outline" | "destructive" }> = {
   available: { label: "空闲", color: "text-emerald-600", bgColor: "bg-emerald-50", icon: CheckCircle2, badgeVariant: "outline" },
   occupied: { label: "用餐中", color: "text-primary", bgColor: "bg-primary/5", icon: Armchair, badgeVariant: "default" },
   reserved: { label: "已预订", color: "text-amber-600", bgColor: "bg-amber-50", icon: AlertCircle, badgeVariant: "outline" },
@@ -218,8 +216,9 @@ export function DineInPageClient() {
       });
       toast.success(`${reservation.contact_name} 的预订已签到入座`);
       await loadData();
-    } catch (error: any) {
-      toast.error(error.message || "签到失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "签到失败";
+      toast.error(message);
     } finally {
       setActionLoading(null);
     }
@@ -240,8 +239,9 @@ export function DineInPageClient() {
         toast.success(`桌台 ${table.table_no} 已完成清扫`);
       }
       await loadData();
-    } catch (error: any) {
-      toast.error(error.message || "操作失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     } finally {
       setActionLoading(null);
       setConfirmConfig(prev => ({ ...prev, open: false }));
@@ -275,8 +275,9 @@ export function DineInPageClient() {
 
       toast.success(`桌台转移成功：${selectedTable.table_no} → ${tables.find(t => t.id === transferTargetId)?.table_no}`);
       await loadData();
-    } catch (error: any) {
-      toast.error(error.message || "转台失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "转台失败";
+      toast.error(message);
     } finally {
       setActionLoading(null);
     }
@@ -390,7 +391,7 @@ export function DineInPageClient() {
                 </Badge>
               </div>
               
-              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1 custom-scrollbar">
                 {recentReservations.length > 0 ? (
                   recentReservations.map((res) => (
                     <div key={res.id} className="bg-slate-50/50 p-2.5 rounded-lg border border-slate-100 hover:border-primary/30 transition-all group">
@@ -485,7 +486,7 @@ export function DineInPageClient() {
                             </Badge>
                           </div>
 
-                          <div className="mt-4 pt-4 border-t border-dashed min-h-[80px] flex flex-col justify-center">
+                          <div className="mt-4 pt-4 border-t border-dashed min-h-20 flex flex-col justify-center">
                              {isOccupied ? (
                                <div className="space-y-3">
                                   <div className="flex justify-between text-[11px] font-medium">
@@ -934,7 +935,7 @@ export function DineInPageClient() {
                         <div key={idx} className="flex gap-4 p-3 rounded-xl border border-slate-100 hover:border-primary/20 transition-all bg-slate-50/50">
                            <div className="size-16 rounded-lg bg-slate-200 overflow-hidden shrink-0 border border-white">
                               {item.image_url ? (
-                                <img src={item.image_url} className="size-full object-cover" alt={item.name} />
+                                <Image src={item.image_url} width={40} height={40} className="size-full object-cover" alt={item.name} />
                               ) : (
                                 <div className="size-full flex items-center justify-center bg-slate-100 text-slate-300"><ChefHat className="size-8" /></div>
                               )}

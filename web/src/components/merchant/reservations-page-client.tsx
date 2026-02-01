@@ -1,16 +1,14 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { 
   RefreshCw, 
   Calendar,
   Clock,
   Users,
   Utensils,
-  History,
-  Receipt,
-  AlertCircle,
   LayoutGrid, 
   List as ListIcon, 
   Phone, 
@@ -19,9 +17,7 @@ import {
 import { toast } from "sonner";
 import { 
   EventReservationNew, 
-  EventReservationUpdate,
-  ReservationStatusPaid,
-  ReservationStatusConfirmed
+  EventReservationUpdate
 } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,7 +75,6 @@ export function ReservationsPageClient({
   totalCount: initialTotalCount,
 }: ReservationsPageClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [tables, setTables] = useState<TableResponse[]>([]);
@@ -138,7 +133,7 @@ export function ReservationsPageClient({
         notes: "",
       }));
     }
-  }, [matchedReservation?.id]);
+  }, [matchedReservation]);
 
   const next6Days = useMemo(() => {
     const days = [];
@@ -157,12 +152,62 @@ export function ReservationsPageClient({
 
 
 
+  const loadMerchantProfile = useCallback(async () => {
+    try {
+      const profile = await apiGet<MerchantProfile>("/merchants/me");
+      setMerchant(profile);
+    } catch (error) {
+      console.error("Failed to load merchant profile:", error);
+    }
+  }, []);
+
+  const loadTables = useCallback(async () => {
+    setTableLoading(true);
+    try {
+      const data = await apiGet<{ tables: TableResponse[] }>("/tables", { page_size: 100 });
+      setTables(data.tables.filter(t => t.table_type === "room"));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载桌台失败";
+      toast.error(message);
+    } finally {
+      setTableLoading(false);
+    }
+  }, []);
+
+  const loadScheduleReservations = useCallback(async () => {
+    try {
+      const data = await apiGet<{ reservations: ReservationResponse[], total_count?: number }>("/reservations/merchant", { 
+        page_id: 1,
+        page_size: 200 
+      });
+      setScheduleReservations(data.reservations || []);
+      if (data.total_count !== undefined) {
+        setTotalCountState(data.total_count);
+      }
+    } catch (error) {
+      console.error("Failed to load schedule reservations:", error);
+    }
+  }, []);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const newStats = await apiGet<ReservationStatsResponse>("/reservations/merchant/stats");
+      setStatsState(newStats);
+    } catch (error) {
+      console.error("Failed to load stats:", error);
+    }
+  }, []);
+
   useEffect(() => {
     loadTables();
     loadScheduleReservations();
     loadMerchantProfile();
     loadStats();
-  }, []);
+  }, [loadTables, loadScheduleReservations, loadMerchantProfile, loadStats]);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([loadTables(), loadScheduleReservations(), loadStats(), loadMerchantProfile()]);
+  }, [loadTables, loadScheduleReservations, loadStats, loadMerchantProfile]);
 
   // 1. 监听 WebSocket 实时消息
   useEffect(() => {
@@ -192,70 +237,7 @@ export function ReservationsPageClient({
     return () => {
       window.removeEventListener("merchant-realtime", handleRealtimeMessage);
     };
-  }, []);
-
-
-
-  const loadMerchantProfile = async () => {
-    try {
-      const profile = await apiGet<MerchantProfile>("/merchants/me");
-      setMerchant(profile);
-    } catch (error) {
-      console.error("Failed to load merchant profile:", error);
-    }
-  };
-
-  const loadTables = async () => {
-    setTableLoading(true);
-    try {
-      const data = await apiGet<{ tables: TableResponse[] }>("/tables", { page_size: 100 });
-      setTables(data.tables.filter(t => t.table_type === "room"));
-    } catch (error) {
-      toast.error("加载桌台失败");
-    } finally {
-      setTableLoading(false);
-    }
-  };
-
-  const loadScheduleReservations = async () => {
-    try {
-      const data = await apiGet<{ reservations: ReservationResponse[], total_count?: number }>("/reservations/merchant", { 
-        page_id: 1,
-        page_size: 200 
-      });
-      setScheduleReservations(data.reservations || []);
-      if (data.total_count !== undefined) {
-        setTotalCountState(data.total_count);
-      }
-    } catch (error) {
-      console.error("Failed to load schedule reservations:", error);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const newStats = await apiGet<ReservationStatsResponse>("/reservations/merchant/stats");
-      setStatsState(newStats);
-    } catch (error) {
-      console.error("Failed to load stats:", error);
-    }
-  };
-
-  const refreshAll = async () => {
-    await Promise.all([loadTables(), loadScheduleReservations(), loadStats(), loadMerchantProfile()]);
-  };
-
-  const updateQuery = (next: Record<string, string | number | undefined>) => {
-    const params = new URLSearchParams(searchParams?.toString());
-    Object.entries(next).forEach(([key, value]) => {
-      if (value === undefined || value === "") {
-        params.delete(key);
-      } else {
-        params.set(key, String(value));
-      }
-    });
-    router.push(`/merchant/reservations?${params.toString()}`);
-  };
+  }, [refreshAll]);
 
   const timeSlots = useMemo(() => {
     if (!merchant || !merchant.business_hours || !formData.date) {
@@ -296,10 +278,6 @@ export function ReservationsPageClient({
     
     return { lunch, dinner };
   }, [merchant, formData.date]);
-
-  const handleDateChange = (newDate: string) => {
-    setFormData(f => ({ ...f, date: newDate }));
-  };
 
   const openCreateDialog = (tableId: number, targetDate?: string, preferredTime?: string) => {
     const targetDay = targetDate || formData.date;
@@ -348,8 +326,9 @@ export function ReservationsPageClient({
       setIsCreateOpen(false);
       await refreshAll();
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "创建失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "创建失败";
+      toast.error(message);
     } finally {
       setCreating(false);
     }
@@ -368,8 +347,9 @@ export function ReservationsPageClient({
       setIsCreateOpen(false);
       await refreshAll();
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "修改失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "修改失败";
+      toast.error(message);
     } finally {
       setCreating(false);
     }
@@ -385,8 +365,9 @@ export function ReservationsPageClient({
       setIsCancelConfirmOpen(false);
       await refreshAll();
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "取消失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "取消失败";
+      toast.error(message);
     } finally {
       setActionLoading(false);
     }
@@ -401,8 +382,9 @@ export function ReservationsPageClient({
       });
       toast.success("客人签到成功，已开台");
       await refreshAll();
-    } catch (error: any) {
-      toast.error(error.message || "签到失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "签到失败";
+      toast.error(message);
     } finally {
       setActionLoading(false);
     }
@@ -494,7 +476,7 @@ export function ReservationsPageClient({
                     <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> {table.current_reservation.reservation_time} 到访</span>
                    </div>
                    <div className="text-[10px] text-muted-foreground flex items-center justify-between">
-                    <span className="truncate max-w-[60px]">{table.current_reservation.contact_name}</span>
+                    <span className="truncate max-w-15">{table.current_reservation.contact_name}</span>
                     <span className="flex items-center gap-1 shrink-0"><Users className="h-2.5 w-2.5" /> {table.current_reservation.guest_count}人</span>
                   </div>
                 </div>
@@ -644,7 +626,7 @@ export function ReservationsPageClient({
                               {res.items.map((item, idx) => (
                                 <Badge key={idx} variant="secondary" className="bg-slate-50 border-slate-200 text-slate-700 font-medium pl-1 pr-2 py-1 h-auto flex items-center gap-1.5">
                                    {item.image_url && (
-                                     <img src={item.image_url} alt={item.name} className="w-5 h-5 rounded object-cover" />
+                                     <Image src={item.image_url} alt={item.name} width={20} height={20} className="w-5 h-5 rounded object-cover" />
                                    )}
                                    <span className="text-[10px] bg-slate-200 px-1 rounded text-slate-600 font-bold">x{item.quantity}</span>
                                    <span>{item.name}</span>
@@ -662,7 +644,7 @@ export function ReservationsPageClient({
       </PageContent>
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-         <DialogContent className="sm:max-w-[460px] rounded-3xl">
+         <DialogContent className="sm:max-w-115 rounded-3xl">
             <DialogHeader className="space-y-3">
                <DialogTitle className="text-2xl font-black tracking-tight">管理业务预订</DialogTitle>
                <DialogDescription className="font-medium">处理电话预约、线下留位等场景，支持新增、修改及取消。</DialogDescription>
@@ -686,7 +668,7 @@ export function ReservationsPageClient({
                   <div className="col-span-3 flex gap-3">
                      <Select value={formData.time} onValueChange={v => setFormData(f => ({...f, time: v}))}>
                         <SelectTrigger className="flex-1 h-11 rounded-xl border-2 font-bold focus:ring-primary shadow-sm"><SelectValue placeholder="进店时间" /></SelectTrigger>
-                        <SelectContent className="max-h-[320px] overflow-y-auto">
+                        <SelectContent className="max-h-80 overflow-y-auto">
                            {timeSlots.lunch.length > 0 && (
                              <>
                                <div className="p-2 text-[10px] font-bold text-muted-foreground bg-muted/30 rounded-md mb-1 px-3">午餐时段</div>

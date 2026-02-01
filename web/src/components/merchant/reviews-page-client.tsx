@@ -1,33 +1,24 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import Image from "next/image";
 import { 
   MessageSquare, 
   Search, 
   RefreshCw, 
   Reply, 
-  CheckCircle2, 
   Clock, 
   User, 
-  Calendar,
-  Image as ImageIcon,
-  MoreHorizontal,
-  ThumbsUp,
-  Filter,
   ArrowRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { 
   Dialog, 
   DialogContent, 
-  DialogHeader, 
   DialogTitle,
-  DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -35,14 +26,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle 
 } from "@/components/ui/card";
 import { 
   Tabs, 
-  TabsContent, 
   TabsList, 
   TabsTrigger 
 } from "@/components/ui/tabs";
@@ -69,13 +55,7 @@ export function ReviewsPageClient() {
   const [replyContent, setReplyContent] = useState("");
   const [submittingReply, setSubmittingReply] = useState(false);
 
-  useEffect(() => {
-    if (activeMerchant?.id) {
-      loadReviews();
-    }
-  }, [activeMerchant?.id, page]);
-
-  const loadReviews = async () => {
+    const loadReviews = useCallback(async () => {
     if (!activeMerchant?.id) return;
     setLoading(true);
     try {
@@ -85,12 +65,19 @@ export function ReviewsPageClient() {
       });
       setReviews(data.reviews || []);
       setTotalCount(data.total_count || 0);
-    } catch (error: any) {
-      toast.error(error.message || "加载评价列表失败");
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "加载评价列表失败";
+        toast.error(message);
     } finally {
       setLoading(false);
     }
-  };
+    }, [activeMerchant?.id, page, pageSize]);
+
+    useEffect(() => {
+      if (activeMerchant?.id) {
+        loadReviews();
+      }
+    }, [activeMerchant?.id, loadReviews]);
 
   const handleReply = async () => {
     if (!replyingReview || !replyContent) return;
@@ -101,8 +88,9 @@ export function ReviewsPageClient() {
       setReplyingReview(null);
       setReplyContent("");
       loadReviews();
-    } catch (error: any) {
-      toast.error(error.message || "回复失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "回复失败";
+      toast.error(message);
     } finally {
       setSubmittingReply(false);
     }
@@ -247,9 +235,11 @@ export function ReviewsPageClient() {
                                 key={index} 
                                 className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-white shadow-sm ring-1 ring-slate-100 cursor-zoom-in group/img"
                               >
-                                <img 
+                                <Image 
                                   src={getMediaUrl(url)} 
-                                  alt={`Review img ${index}`} 
+                                  alt={`评价图片 ${index + 1}`} 
+                                  width={96}
+                                  height={96}
                                   className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-110" 
                                 />
                                 <div className="absolute inset-0 bg-black/5 opacity-0 group-hover/img:opacity-100 transition-opacity" />
@@ -261,7 +251,7 @@ export function ReviewsPageClient() {
 
                       {/* Right Side: Merchant Reply Area */}
                       <div className={cn(
-                        "w-full md:w-[320px] lg:w-[400px] border-t md:border-t-0 md:border-l p-6 md:p-8 flex flex-col justify-center",
+                        "w-full md:w-80 lg:w-100 border-t md:border-t-0 md:border-l p-6 md:p-8 flex flex-col justify-center",
                         review.merchant_reply ? "bg-slate-50/50" : "bg-white"
                       )}>
                         {review.merchant_reply ? (
@@ -349,7 +339,7 @@ export function ReviewsPageClient() {
 
       {/* Reply Dialog */}
       <Dialog open={!!replyingReview} onOpenChange={(open) => !open && setReplyingReview(null)}>
-        <DialogContent className="sm:max-w-[500px] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+        <DialogContent className="sm:max-w-125 rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
           <div className="bg-slate-900 p-10 text-white relative overflow-hidden">
              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
              <div className="absolute bottom-0 left-0 w-48 h-48 bg-primary/5 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
@@ -391,7 +381,7 @@ export function ReviewsPageClient() {
                 placeholder="在此输入您的回复，例如：'非常感谢您的好评！您的支持是我们前进的动力...' 或 '很抱歉没能给您满意的体验，我们会继续改进...'"
                 value={replyContent}
                 onChange={(e) => setReplyContent(e.target.value)}
-                className="min-h-[160px] rounded-3xl border-slate-200 focus:ring-primary/20 focus:border-primary px-6 py-6 font-medium text-slate-700 resize-none transition-all placeholder:text-slate-300"
+                className="min-h-40 rounded-3xl border-slate-200 focus:ring-primary/20 focus:border-primary px-6 py-6 font-medium text-slate-700 resize-none transition-all placeholder:text-slate-300"
                 maxLength={500}
               />
             </div>

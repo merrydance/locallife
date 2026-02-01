@@ -3,8 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Wallet,
-  TrendingUp,
-  TrendingDown,
   Receipt,
   Clock,
   RefreshCw,
@@ -13,9 +11,6 @@ import {
   CircleDollarSign,
   ArrowRightLeft,
   BadgePercent,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -51,7 +46,7 @@ import {
   PageHeader,
   PageContent,
 } from "@/components/merchant/layout/page-shell";
-import { apiGet, formatAmount, formatDate, getRecentRange } from "@/lib/api";
+import { apiGet, formatAmount, getRecentRange } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   FinanceOverviewResponse,
@@ -65,7 +60,6 @@ import type {
   DailyFinanceResponse,
   SettlementItem,
   SettlementsResponse,
-  SettlementStatus,
 } from "@/types/finance";
 
 // 日期范围选项
@@ -192,8 +186,9 @@ export function FinancePageClient() {
         { start_date, end_date }
       );
       setOverview(data);
-    } catch (error: any) {
-      toast.error("加载财务概览失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载财务概览失败";
+      toast.error(message);
     }
   }, [start_date, end_date]);
 
@@ -205,8 +200,9 @@ export function FinancePageClient() {
         { start_date, end_date }
       );
       setDailyStats(data.daily_stats || []);
-    } catch (error: any) {
-      toast.error("加载每日汇总失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载每日汇总失败";
+      toast.error(message);
     }
   }, [start_date, end_date]);
 
@@ -220,8 +216,9 @@ export function FinancePageClient() {
       setOrders(data.orders || []);
       setOrdersTotalPages(data.total_pages || 1);
       setOrdersPage(page);
-    } catch (error: any) {
-      toast.error("加载订单明细失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载订单明细失败";
+      toast.error(message);
     }
   }, [start_date, end_date]);
 
@@ -238,8 +235,9 @@ export function FinancePageClient() {
         total_operator_fee: data.total_operator_fee || 0,
         total_service_fee: data.total_service_fee || 0,
       });
-    } catch (error: any) {
-      toast.error("加载服务费明细失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载服务费明细失败";
+      toast.error(message);
     }
   }, [start_date, end_date]);
 
@@ -257,15 +255,16 @@ export function FinancePageClient() {
         total_promo_orders: data.total_promo_orders || 0,
         total_promo_amount: data.total_promo_amount || 0,
       });
-    } catch (error: any) {
-      toast.error("加载满返支出失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载满返支出失败";
+      toast.error(message);
     }
   }, [start_date, end_date]);
 
   // 加载结算记录
   const loadSettlements = useCallback(async (page: number = 1, status?: string) => {
     try {
-      const params: Record<string, any> = { start_date, end_date, page, limit: 10 };
+      const params: Record<string, string | number> = { start_date, end_date, page, limit: 10 };
       if (status && status !== "all") {
         params.status = status;
       }
@@ -282,8 +281,9 @@ export function FinancePageClient() {
         total_platform_fee: data.total_platform_fee || 0,
         total_operator_fee: data.total_operator_fee || 0,
       });
-    } catch (error: any) {
-      toast.error("加载结算记录失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载结算记录失败";
+      toast.error(message);
     }
   }, [start_date, end_date]);
 
@@ -327,7 +327,7 @@ export function FinancePageClient() {
   // 初始加载
   useEffect(() => {
     loadTabData(activeTab);
-  }, [dateRange]);
+  }, [dateRange, activeTab, loadTabData]);
 
   // Tab 切换
   const handleTabChange = (tab: string) => {
@@ -920,7 +920,7 @@ export function FinancePageClient() {
                     loadSettlements(1, v);
                   }}
                 >
-                  <SelectTrigger className="w-[120px]">
+                  <SelectTrigger className="w-30">
                     <SelectValue placeholder="状态筛选" />
                   </SelectTrigger>
                   <SelectContent>

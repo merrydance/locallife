@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import Image from "next/image";
 import { 
   Users, 
   Search, 
@@ -11,32 +12,27 @@ import {
   Edit, 
   Copy, 
   Check, 
-  QrCode,
-  Info,
-  MoreVertical,
   User,
   Crown,
   Briefcase,
   ChefHat,
   Banknote,
   Clock,
-  ExternalLink
+  MoreVertical
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle,
   DialogFooter,
-  DialogDescription,
-  DialogTrigger
+  DialogDescription
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { 
@@ -58,7 +54,7 @@ import type {
   InviteCodeResponse 
 } from "@/types/staff";
 
-const ROLE_MAP: Record<string, { label: string; icon: any; color: string; bg: string }> = {
+const ROLE_MAP: Record<string, { label: string; icon: LucideIcon; color: string; bg: string }> = {
   owner: { label: "老板", icon: Crown, color: "text-amber-600", bg: "bg-amber-50" },
   manager: { label: "店长", icon: Briefcase, color: "text-blue-600", bg: "bg-blue-50" },
   chef: { label: "厨师长", icon: ChefHat, color: "text-orange-600", bg: "bg-orange-50" },
@@ -95,24 +91,25 @@ export function StaffPageClient() {
   // Delete State
   const [deletingStaff, setDeletingStaff] = useState<StaffResponse | null>(null);
 
-  useEffect(() => {
-    if (activeMerchant?.id) {
-      loadStaff();
-    }
-  }, [activeMerchant?.id]);
-
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     if (!activeMerchant?.id) return;
     setLoading(true);
     try {
       const data = await apiGet<ListMerchantStaffResponse>("/merchant/staff");
       setStaff(data.staff || []);
-    } catch (error: any) {
-      toast.error(error.message || "加载员工列表失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载员工列表失败";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeMerchant?.id]);
+
+  useEffect(() => {
+    if (activeMerchant?.id) {
+      loadStaff();
+    }
+  }, [activeMerchant?.id, loadStaff]);
 
   const generateInvite = async () => {
     if (!activeMerchant?.id) return;
@@ -130,8 +127,9 @@ export function StaffPageClient() {
       });
       setQrCodeUrl(url);
       setIsInviteOpen(true);
-    } catch (error: any) {
-      toast.error(error.message || "生成邀请码失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "生成邀请码失败";
+      toast.error(message);
     } finally {
       setGeneratingInvite(false);
     }
@@ -145,8 +143,9 @@ export function StaffPageClient() {
       toast.success("员工角色更新成功");
       setEditingStaff(null);
       loadStaff();
-    } catch (error: any) {
-      toast.error(error.message || "操作失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     } finally {
       setUpdatingRole(false);
     }
@@ -159,8 +158,9 @@ export function StaffPageClient() {
       toast.success("员工已移除（已设置为离职状态）");
       setDeletingStaff(null);
       loadStaff();
-    } catch (error: any) {
-      toast.error(error.message || "操作失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     }
   };
 
@@ -250,9 +250,9 @@ export function StaffPageClient() {
                     <div className="flex justify-between items-start mb-4">
                       <div className="relative">
                         <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm ring-1 ring-slate-100">
-                           {member.avatar_url ? (
-                             <img src={getMediaUrl(member.avatar_url)} alt="" className="w-full h-full object-cover" />
-                           ) : (
+                            {member.avatar_url ? (
+                              <Image src={getMediaUrl(member.avatar_url)} alt={member.full_name || "员工头像"} width={40} height={40} className="w-full h-full object-cover" />
+                            ) : (
                              <User className="h-8 w-8 text-slate-300" />
                            )}
                         </div>
@@ -295,7 +295,7 @@ export function StaffPageClient() {
 
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-black text-slate-900 truncate max-w-[120px]">{member.full_name}</h3>
+                        <h3 className="font-black text-slate-900 truncate max-w-30">{member.full_name}</h3>
                         <Badge variant={statusInfo.variant} className="text-[10px] h-5 px-1.5 rounded-md leading-none">
                           {statusInfo.label}
                         </Badge>
@@ -323,7 +323,7 @@ export function StaffPageClient() {
 
       {/* Invite Code Dialog */}
       <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-        <DialogContent className="sm:max-w-[420px] rounded-3xl p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-105 rounded-3xl p-0 overflow-hidden">
           <div className="bg-primary p-8 text-center text-white relative overflow-hidden">
              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
@@ -336,7 +336,7 @@ export function StaffPageClient() {
             <div className="flex flex-col items-center">
               <div className="relative group p-4 bg-white rounded-3xl border-2 border-dashed border-slate-200">
                 {qrCodeUrl ? (
-                  <img src={qrCodeUrl} alt="Invite QR" className="w-48 h-48 rounded-xl" />
+                  <Image src={qrCodeUrl} alt="员工邀请二维码" width={192} height={192} className="w-48 h-48 rounded-xl" />
                 ) : (
                   <div className="w-48 h-48 flex items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin opacity-20" /></div>
                 )}
@@ -375,7 +375,7 @@ export function StaffPageClient() {
 
       {/* Edit Role Dialog */}
       <Dialog open={!!editingStaff} onOpenChange={(open) => !open && setEditingStaff(null)}>
-        <DialogContent className="sm:max-w-[420px] rounded-3xl">
+        <DialogContent className="sm:max-w-105 rounded-3xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-black">分配员工权限</DialogTitle>
             <DialogDescription>

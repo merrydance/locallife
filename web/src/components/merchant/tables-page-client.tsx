@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Image from "next/image";
 import { 
   Search, 
   Plus, 
@@ -19,6 +20,7 @@ import {
   ImagePlus,
   X
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,14 +66,14 @@ import { apiGet, apiPost, apiPatch, apiPut, apiDelete, apiUpload, getMediaUrl, g
 import { cn } from "@/lib/utils";
 import type { TableResponse, TableType, TableStatus, TableTag, CreateTableRequest, TableImageResponse } from "@/types/table";
 
-const STATUS_MAP: Record<TableStatus, { label: string, variant: "default" | "secondary" | "destructive" | "outline", icon: any }> = {
+const STATUS_MAP: Record<TableStatus, { label: string, variant: "default" | "secondary" | "destructive" | "outline", icon: LucideIcon }> = {
   available: { label: "空闲", variant: "secondary", icon: CheckCircle2 },
   occupied: { label: "占用", variant: "default", icon: Armchair },
   reserved: { label: "已预定", variant: "outline", icon: AlertCircle },
   disabled: { label: "停用", variant: "destructive", icon: XCircle },
 };
 
-const TYPE_MAP: Record<TableType, { label: string, icon: any }> = {
+const TYPE_MAP: Record<TableType, { label: string, icon: LucideIcon }> = {
   table: { label: "大厅桌台", icon: Armchair },
   room: { label: "包间", icon: Home },
 };
@@ -121,7 +123,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
     try {
       const response = await apiGet<{ tables: TableResponse[] }>("/tables");
       setTables(response.tables || []);
-    } catch (error) {
+    } catch {
       toast.error("加载桌台失败");
     } finally {
       setLoading(false);
@@ -130,9 +132,9 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
 
   const loadTags = async () => {
     try {
-      const response = await apiGet<{ tags: any[] }>("/tags", { type: "table" });
-      setAvailableTags(response.tags.map(t => ({ id: t.id, name: t.name })));
-    } catch (error) {
+      const response = await apiGet<{ tags: TableTag[] }>("/tags", { type: "table" });
+      setAvailableTags(response.tags || []);
+    } catch {
       console.error("Failed to load tags");
     }
   };
@@ -169,8 +171,9 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
         setPendingImages(prev => [...prev, uploadRes.image_url]);
         toast.success("图片已暂存，保存桌台后将生效");
       }
-    } catch (error: any) {
-      toast.error(error.message || "上传失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "上传失败";
+      toast.error(message);
     } finally {
       setLoading(false);
       e.target.value = "";
@@ -188,8 +191,9 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
       await apiDelete(`/tables/${editingTable.id}/images/${deleteImageDialog.imageId}`);
       toast.success("图片已删除");
       loadTableImages(editingTable.id);
-    } catch (error: any) {
-      toast.error("删除失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      toast.error(message);
     }
   };
 
@@ -199,8 +203,9 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
       await apiPut(`/tables/${editingTable.id}/images/${imageId}/primary`, {});
       toast.success("已设为主图");
       loadTableImages(editingTable.id);
-    } catch (error: any) {
-      toast.error("设置失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "设置失败";
+      toast.error(message);
     }
   };
 
@@ -275,8 +280,9 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
       }
       setIsSheetOpen(false);
       loadTables();
-    } catch (error: any) {
-      toast.error(error.message || "保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -292,18 +298,9 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
       await apiDelete(`/tables/${deleteTableDialog.id}`);
       toast.success("桌台已删除");
       loadTables();
-    } catch (error: any) {
-      toast.error(error.message || "删除失败");
-    }
-  };
-
-  const handleUpdateStatus = async (id: number, status: TableStatus) => {
-    try {
-      await apiPatch(`/tables/${id}/status`, { status });
-      toast.success("状态已更新");
-      loadTables();
-    } catch (error: any) {
-      toast.error(error.message || "更新状态失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      toast.error(message);
     }
   };
 
@@ -373,7 +370,6 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
             {filteredTables.map(table => {
               const statusInfo = STATUS_MAP[table.status] || STATUS_MAP.available;
               const typeInfo = TYPE_MAP[table.table_type] || TYPE_MAP.table;
-              const StatusIcon = statusInfo.icon;
               const TypeIcon = typeInfo.icon;
 
               return (
@@ -474,7 +470,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
 
             {/* Add New Card Placeholder */}
             <Card 
-              className="border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer flex flex-col items-center justify-center p-6 h-full min-h-[160px]"
+              className="border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer flex flex-col items-center justify-center p-6 h-full min-h-40"
               onClick={handleAddTable}
             >
               <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center mb-3">
@@ -529,7 +525,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                     <Label htmlFor="table_type" className="text-sm font-semibold text-slate-700 uppercase tracking-wider">桌台类型</Label>
                     <Select 
                       value={formData.table_type} 
-                      onValueChange={(val: any) => setFormData({...formData, table_type: val})}
+                      onValueChange={(val: string) => setFormData({ ...formData, table_type: val as TableType })}
                     >
                       <SelectTrigger id="table_type" className="h-11 border-slate-200 bg-white">
                         <SelectValue placeholder="选择类型" />
@@ -609,9 +605,11 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                   {/* Existing Images */}
                   {tableImages.map((img) => (
                     <div key={img.id} className="relative aspect-4/3 group rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm transition-all hover:border-primary/50">
-                      <img 
+                      <Image 
                         src={getMediaUrl(img.image_url)} 
-                        alt="Table Environment" 
+                        alt="桌台实景" 
+                        width={400}
+                        height={300}
                         className="w-full h-full object-cover"
                       />
                       {img.is_primary && (
@@ -635,9 +633,11 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                   {/* Pending Images (Creation mode) */}
                   {!editingTable && pendingImages.map((url, idx) => (
                     <div key={`pending-${idx}`} className="relative aspect-4/3 rounded-2xl overflow-hidden border-2 border-primary/30 bg-slate-50 shadow-sm group">
-                      <img 
+                      <Image 
                         src={getMediaUrl(url)} 
-                        alt="Pending" 
+                        alt="待保存图片" 
+                        width={400}
+                        height={300}
                         className="w-full h-full object-cover opacity-80"
                       />
                       <div className="absolute top-2 left-2 bg-primary/80 text-white text-[8px] px-1.5 py-0.5 rounded font-bold uppercase">
@@ -717,7 +717,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
 
           <SheetFooter className="p-6 border-t bg-white/80 backdrop-blur-md shrink-0 flex items-center justify-end gap-3 z-20">
             <Button variant="ghost" onClick={() => setIsSheetOpen(false)} disabled={loading}>取消操作</Button>
-            <Button className="min-w-[140px] font-bold shadow-lg shadow-primary/20" onClick={handleSaveTable} disabled={loading}>
+            <Button className="min-w-35 font-bold shadow-lg shadow-primary/20" onClick={handleSaveTable} disabled={loading}>
               {loading ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> 正在提交...</> : "保存设置并发布"}
             </Button>
           </SheetFooter>
@@ -736,9 +736,11 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
           <div className="flex flex-col items-center justify-center py-6 gap-4">
             <div className="relative p-4 bg-white rounded-2xl shadow-inner border aspect-square w-64 flex items-center justify-center">
               {qrCodeDialog.table?.qr_code_url ? (
-                <img 
+                <Image 
                   src={getMediaUrl(qrCodeDialog.table.qr_code_url)} 
-                  alt="QR Code" 
+                  alt="桌台二维码" 
+                  width={256}
+                  height={256}
                   className="w-full h-full object-contain"
                 />
               ) : (
@@ -748,7 +750,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                 </div>
               )}
             </div>
-            <p className="text-xs text-center text-muted-foreground max-w-[240px]">
+            <p className="text-xs text-center text-muted-foreground max-w-60">
               顾客扫描此二维码即可进入点餐页面进行自助下单
             </p>
           </div>
@@ -785,7 +787,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                   input.value = "";
                   loadTags();
                   toast.success("标签已添加");
-                } catch (error) {
+                } catch {
                   toast.error("添加失败");
                 }
               }}>添加</Button>
@@ -850,7 +852,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
             await apiDelete(`/tags/${deleteTagDialog.tag.id}`);
             loadTags();
             toast.success("标签已删除");
-          } catch (error) {
+          } catch {
             toast.error("删除失败");
           }
         }}

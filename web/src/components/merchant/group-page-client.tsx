@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { 
-  Building2, 
   Users, 
   GitPullRequest, 
   Settings2, 
@@ -18,19 +18,14 @@ import {
   AlertCircle,
   ChevronRight,
   Clock,
-  Save,
-  Edit,
-  Trash2,
-  XCircle
+  Save
 } from "lucide-react";
 import { toast } from "sonner";
 import { 
   apiGet, 
   apiPost, 
-  apiPatch, 
   apiPut, 
-  getMediaUrl,
-  formatAmount 
+  getMediaUrl
 } from "@/lib/api";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -41,9 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Sheet,
   SheetContent,
@@ -88,7 +81,14 @@ export function GroupPageClient() {
   const [editingBrand, setEditingBrand] = useState<BrandResponse | null>(null);
   const [merchantConfigOpen, setMerchantConfigOpen] = useState(false);
   const [editingMerchant, setEditingMerchant] = useState<GroupMerchantResponse | null>(null);
-  const [merchantHours, setMerchantHours] = useState<any[]>([]);
+  type MerchantHour = {
+    day_name?: string;
+    day_of_week?: number;
+    is_closed?: boolean;
+    open_time?: string;
+    close_time?: string;
+  };
+  const [merchantHours, setMerchantHours] = useState<MerchantHour[]>([]);
   const [savingConfig, setSavingConfig] = useState(false);
   
   // Loading States
@@ -361,7 +361,7 @@ export function GroupPageClient() {
                 <div className="flex gap-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="搜索门店名称/地址..." className="pl-9 h-9 w-[260px]" />
+                    <Input placeholder="搜索门店名称/地址..." className="pl-9 h-9 w-65" />
                   </div>
                   <Button size="sm">
                     <Plus className="h-4 w-4 mr-1" />
@@ -375,7 +375,7 @@ export function GroupPageClient() {
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-lg border overflow-hidden bg-slate-100 shrink-0">
                         {merchant.logo_url ? (
-                          <img src={getMediaUrl(merchant.logo_url)} alt={merchant.name} className="w-full h-full object-cover" />
+                          <Image src={getMediaUrl(merchant.logo_url)} alt={merchant.name} width={48} height={48} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-400">
                             <Store className="h-6 w-6" />
@@ -405,10 +405,11 @@ export function GroupPageClient() {
                           setMerchantConfigOpen(true);
                           setSavingConfig(true);
                           try {
-                            const hours = await apiGet<{ hours: any[] }>(`/merchants/${merchant.id}/business-hours`);
+                            const hours = await apiGet<{ hours: MerchantHour[] }>(`/merchants/${merchant.id}/business-hours`);
                             setMerchantHours(hours.hours || []);
-                          } catch (err) {
-                            toast.error("加载门店时间失败");
+                          } catch (error: unknown) {
+                            const message = error instanceof Error ? error.message : "加载门店时间失败";
+                            toast.error(message);
                           } finally {
                             setSavingConfig(false);
                           }
@@ -473,7 +474,7 @@ export function GroupPageClient() {
                         )}
                       </div>
                       <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm italic text-slate-600">
-                        " {req.reason || "申请人未填写申请理由"} "
+                        &ldquo; {req.reason || "申请人未填写申请理由"} &rdquo;
                       </div>
                     </div>
                   ))}
@@ -508,7 +509,11 @@ export function GroupPageClient() {
                       <div key={brand.id} className="border rounded-xl p-4 space-y-3 hover:shadow-md transition-shadow">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border overflow-hidden">
-                            {brand.logo_url ? <img src={getMediaUrl(brand.logo_url)} className="w-full h-full object-cover" /> : <Tag className="h-5 w-5 text-slate-400" />}
+                            {brand.logo_url ? (
+                              <Image src={getMediaUrl(brand.logo_url)} alt={brand.name} width={40} height={40} className="w-full h-full object-cover" />
+                            ) : (
+                              <Tag className="h-5 w-5 text-slate-400" />
+                            )}
                           </div>
                           <h4 className="font-bold">{brand.name}</h4>
                         </div>
@@ -696,12 +701,13 @@ export function GroupPageClient() {
         toast.success("已驳回申请");
       }
       fetchGroupData();
-    } catch (err: any) {
-      toast.error(err.message || "操作失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     }
   }
 
-  async function handleUpdatePolicy(key: keyof GroupPoliciesResponse, value: string) {
+  function handleUpdatePolicy(key: keyof GroupPoliciesResponse, value: string) {
      if (!policies) return;
      setPolicies({ ...policies, [key]: value });
   }
@@ -709,10 +715,11 @@ export function GroupPageClient() {
   async function handleSavePolicies() {
     if (!policies || !groupId) return;
     try {
-      await apiPut(`/groups/${groupId}/policies`, policies as any);
+      await apiPut(`/groups/${groupId}/policies`, policies);
       toast.success("集团策略已更新");
-    } catch (err: any) {
-      toast.error(err.message || "更新政策失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "更新政策失败";
+      toast.error(message);
     }
   }
 }

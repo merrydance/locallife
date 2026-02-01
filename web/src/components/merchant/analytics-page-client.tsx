@@ -9,7 +9,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
   Area,
   PieChart,
   Pie,
@@ -26,7 +25,6 @@ import {
   ChefHat,
   Clock,
   PieChart as PieChartIcon,
-  ArrowUpRight,
   Utensils,
   Receipt,
   CalendarDays,
@@ -73,7 +71,6 @@ import type {
   CustomerStatRow,
   CustomerListResponse,
   FinanceOverviewResponse,
-  ORDER_TYPE_LABELS,
 } from "@/types/stats";
 
 // 图表配色
@@ -233,8 +230,9 @@ export function AnalyticsPageClient() {
       if (isRefresh) {
         toast.success("数据已刷新");
       }
-    } catch (error: any) {
-      toast.error(error.message || "数据加载失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "数据加载失败";
+      toast.error(message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -243,7 +241,7 @@ export function AnalyticsPageClient() {
 
   useEffect(() => {
     loadAllData();
-  }, [dateRange]);
+  }, [dateRange, loadAllData]);
 
   // 计算环比增长
   const getGrowth = (current: number = 0, prev: number = 0) => {
@@ -459,7 +457,7 @@ export function AnalyticsPageClient() {
                   {loading ? (
                     <ChartSkeleton />
                   ) : (
-                    <div className="h-[280px] w-full">
+                    <div className="h-70 w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={trendData}>
                           <defs>
@@ -513,8 +511,8 @@ export function AnalyticsPageClient() {
                               border: "none",
                               boxShadow: "0 4px 12px rgb(0 0 0 / 0.1)",
                             }}
-                            formatter={(value: any, name: any) => [
-                              name === "sales" ? `¥${value}` : value,
+                            formatter={(value?: number | string, name?: string) => [
+                              name === "sales" ? `¥${value ?? 0}` : `${value ?? 0}`,
                               name === "sales" ? "销售额" : "订单量",
                             ]}
                           />
@@ -553,7 +551,7 @@ export function AnalyticsPageClient() {
                     <ChartSkeleton height={200} />
                   ) : (
                     <>
-                      <div className="h-[160px] relative">
+                      <div className="h-40 relative">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
@@ -575,7 +573,7 @@ export function AnalyticsPageClient() {
                             </Pie>
                             <Tooltip
                               contentStyle={{ borderRadius: "8px" }}
-                              formatter={(value: any) => [`${value} 单`, "订单"]}
+                              formatter={(value) => [`${value ?? 0} 单`, "订单"]}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -686,7 +684,7 @@ export function AnalyticsPageClient() {
                   <CardDescription>按销量排名</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[400px] pr-4">
+                  <ScrollArea className="h-100 pr-4">
                     <div className="space-y-3">
                       {loading
                         ? Array(5)
@@ -760,7 +758,7 @@ export function AnalyticsPageClient() {
                     <ChartSkeleton height={200} />
                   ) : (
                     <>
-                      <div className="h-[200px] relative">
+                      <div className="h-50 relative">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
@@ -782,7 +780,7 @@ export function AnalyticsPageClient() {
                             </Pie>
                             <Tooltip
                               contentStyle={{ borderRadius: "8px" }}
-                              formatter={(value: any) => [`¥${value}`, "销售额"]}
+                              formatter={(value) => [`¥${value ?? 0}`, "销售额"]}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -843,7 +841,7 @@ export function AnalyticsPageClient() {
                 {loading ? (
                   <ChartSkeleton height={200} />
                 ) : (
-                  <div className="h-[200px] w-full">
+                  <div className="h-50 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={hourlyChartData}>
                         <CartesianGrid
@@ -866,12 +864,16 @@ export function AnalyticsPageClient() {
                         />
                         <Tooltip
                           contentStyle={{ borderRadius: "8px" }}
-                          formatter={(value: any, name: any) => [
-                            name === "order_count"
-                              ? `${value} 单`
-                              : `¥${formatAmount(value)}`,
-                            name === "order_count" ? "订单数" : "均单价",
-                          ]}
+                          formatter={(value, name) => {
+                            const safeValue = value ?? 0;
+
+                            return [
+                              name === "order_count"
+                                ? `${safeValue} 单`
+                                : `¥${formatAmount(Number(safeValue))}`,
+                              name === "order_count" ? "订单数" : "均单价",
+                            ];
+                          }}
                           labelFormatter={(label) => `${label}:00`}
                         />
                         <Bar dataKey="order_count" radius={[4, 4, 4, 4]}>
@@ -1109,7 +1111,7 @@ export function AnalyticsPageClient() {
                                 ))}
                             </TableRow>
                           ))
-                      : customerStats.map((customer, i) => (
+                        : customerStats.map((customer) => (
                           <TableRow key={customer.user_id}>
                             <TableCell>
                               <div className="flex items-center gap-3">

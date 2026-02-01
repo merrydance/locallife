@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { 
   Users, 
   Search, 
@@ -9,16 +10,15 @@ import {
   Minus, 
   History,
   Info,
-  ChevronRight,
   Wallet,
   ArrowUpCircle,
   ArrowDownCircle,
-  MessageSquare,
   Edit,
   Trash2,
   Calendar,
   Sparkles
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,8 +65,6 @@ export function MembersPageClient() {
   // Members List State
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<MemberResponse[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
   const pageSize = 20;
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -94,15 +92,7 @@ export function MembersPageClient() {
   const [adjustNotes, setAdjustNotes] = useState("");
   const [adjusting, setAdjusting] = useState(false);
 
-  useEffect(() => {
-    if (activeMerchant?.id) {
-      if (activeTab === "members") loadMembers();
-      if (activeTab === "rules") loadRules();
-      if (activeTab === "settings") loadSettings();
-    }
-  }, [activeMerchant?.id, activeTab]);
-
-  const loadMembers = async (pageToLoad = 1, append = false) => {
+  const loadMembers = useCallback(async (pageToLoad = 1, append = false) => {
     if (!activeMerchant?.id) return;
     setLoading(true);
     try {
@@ -115,14 +105,13 @@ export function MembersPageClient() {
       } else {
         setMembers(data.members);
       }
-      setTotal(data.total || 0);
-      setPage(pageToLoad);
-    } catch (error: any) {
-      toast.error(error.message || "加载会员列表失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载会员列表失败";
+      toast.error(message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeMerchant?.id]);
 
   const loadDetail = async (userId: number) => {
     if (!activeMerchant?.id) return;
@@ -132,38 +121,49 @@ export function MembersPageClient() {
         `/merchants/${activeMerchant.id}/members/${userId}`
       );
       setDetail(data);
-    } catch (error: any) {
-      toast.error(error.message || "加载会员详情失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载会员详情失败";
+      toast.error(message);
     } finally {
       setDetailLoading(false);
     }
   };
 
-  const loadRules = async () => {
+  const loadRules = useCallback(async () => {
     if (!activeMerchant?.id) return;
     setRulesLoading(true);
     try {
       const data = await apiGet<RechargeRuleResponse[]>(`/merchants/${activeMerchant.id}/recharge-rules`);
       setRules(data);
-    } catch (error: any) {
-      toast.error("加载充值规则失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载充值规则失败";
+      toast.error(message);
     } finally {
       setRulesLoading(false);
     }
-  };
+  }, [activeMerchant?.id]);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     if (!activeMerchant?.id) return;
     setSettingsLoading(true);
     try {
       const data = await apiGet<MembershipSettings>(`/merchants/me/membership-settings`);
       setSettings(data);
-    } catch (error: any) {
-      toast.error("加载会员设置失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "加载会员设置失败";
+      toast.error(message);
     } finally {
       setSettingsLoading(false);
     }
-  };
+  }, [activeMerchant?.id]);
+
+  useEffect(() => {
+    if (activeMerchant?.id) {
+      if (activeTab === "members") loadMembers();
+      if (activeTab === "rules") loadRules();
+      if (activeTab === "settings") loadSettings();
+    }
+  }, [activeMerchant?.id, activeTab, loadMembers, loadRules, loadSettings]);
 
   const handleMemberSelect = (userId: number) => {
     setSelectedMemberId(userId);
@@ -199,8 +199,9 @@ export function MembersPageClient() {
       
       loadMembers(1, false);
       if (selectedMemberId) loadDetail(selectedMemberId);
-    } catch (error: any) {
-      toast.error(error.message || "操作失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     } finally {
       setAdjusting(false);
     }
@@ -227,8 +228,9 @@ export function MembersPageClient() {
       toast.success("规则保存成功");
       setIsRuleDialogOpen(false);
       loadRules();
-    } catch (error: any) {
-      toast.error(error.message || "保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSavingRule(false);
     }
@@ -241,8 +243,9 @@ export function MembersPageClient() {
       toast.success("规则已删除");
       setDeleteRuleId(null);
       loadRules();
-    } catch (error: any) {
-      toast.error("删除失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      toast.error(message);
     }
   };
 
@@ -253,8 +256,9 @@ export function MembersPageClient() {
       await apiPut("/merchants/me/membership-settings", settings);
       toast.success("设置更新成功");
       loadSettings();
-    } catch (error: any) {
-      toast.error("保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSavingSettings(false);
     }
@@ -269,7 +273,7 @@ export function MembersPageClient() {
   }, [members, searchQuery]);
 
   const formatTxType = (type: string) => {
-    const map: Record<string, { label: string; color: string; icon: any }> = {
+    const map: Record<string, { label: string; color: string; icon: LucideIcon }> = {
       'recharge': { label: '充值', color: 'text-emerald-600', icon: ArrowUpCircle },
       'consume': { label: '消费', color: 'text-rose-600', icon: ArrowDownCircle },
       'refund': { label: '退款', color: 'text-emerald-600', icon: ArrowUpCircle },
@@ -327,7 +331,7 @@ export function MembersPageClient() {
 
           <TabsContent value="members">
             <div className="flex h-[calc(100vh-16rem)] gap-6">
-              <div className="w-1/3 min-w-[360px] flex flex-col bg-white rounded-xl border shadow-sm overflow-hidden">
+              <div className="w-1/3 min-w-90 flex flex-col bg-white rounded-xl border shadow-sm overflow-hidden">
                 <div className="p-4 border-b space-y-4 bg-slate-50/50">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -358,7 +362,11 @@ export function MembersPageClient() {
                         >
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
-                              {member.avatar_url ? <img src={member.avatar_url} alt="" className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-slate-400" />}
+                              {member.avatar_url ? (
+                                <Image src={member.avatar_url} alt={member.full_name || "会员头像"} width={40} height={40} className="w-full h-full object-cover" />
+                              ) : (
+                                <Users className="w-5 h-5 text-slate-400" />
+                              )}
                             </div>
                             <div className="flex flex-col">
                               <span className="font-medium text-slate-900">{member.full_name}</span>
@@ -384,7 +392,11 @@ export function MembersPageClient() {
                     <div className="p-6 border-b bg-slate-50/50 flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center overflow-hidden border">
-                          {detail.avatar_url ? <img src={detail.avatar_url} alt="" className="w-full h-full object-cover" /> : <Users className="w-8 h-8 text-slate-300" />}
+                          {detail.avatar_url ? (
+                            <Image src={detail.avatar_url} alt={detail.full_name || "会员头像"} width={64} height={64} className="w-full h-full object-cover" />
+                          ) : (
+                            <Users className="w-8 h-8 text-slate-300" />
+                          )}
                         </div>
                         <div>
                           <h2 className="text-xl font-bold text-slate-900">{detail.full_name}</h2>
@@ -668,7 +680,7 @@ export function MembersPageClient() {
       </PageContent>
 
       <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
-        <DialogContent className="sm:max-w-[420px] rounded-2xl">
+        <DialogContent className="sm:max-w-105 rounded-2xl">
           <DialogHeader className="space-y-2">
             <DialogTitle className="text-xl font-bold">手动调整会员余额</DialogTitle>
             <DialogDescription>此操作会直接修改会员余额，并记入人工流水。</DialogDescription>
@@ -720,7 +732,7 @@ export function MembersPageClient() {
       </Dialog>
 
       <Dialog open={isRuleDialogOpen} onOpenChange={setIsRuleDialogOpen}>
-        <DialogContent className="sm:max-w-[460px] rounded-2xl">
+        <DialogContent className="sm:max-w-115 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-black">{editingRule?.id ? '编辑充值规则' : '创建充值规则'}</DialogTitle>
             <DialogDescription>设置会员单次充值的金额以及对应的获赠金额。</DialogDescription>

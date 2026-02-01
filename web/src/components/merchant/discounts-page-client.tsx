@@ -6,14 +6,10 @@ import {
   Search,
   Plus,
   Trash2,
-  Edit,
   CheckCircle2,
   XCircle,
   RefreshCw,
-  Clock,
   Calendar,
-  AlertCircle,
-  Info,
   ArrowLeft
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -76,7 +72,7 @@ export function DiscountsPageClient() {
     } finally {
       setLoading(false);
     }
-  }, [session?.merchant?.id, selectedDiscount?.id]);
+  }, [session?.merchant?.id, selectedDiscount]);
 
   useEffect(() => {
     loadDiscounts();
@@ -171,7 +167,7 @@ export function DiscountsPageClient() {
           valid_from: formData.valid_from + "T00:00:00Z",
           valid_until: formData.valid_until + "T23:59:59Z",
         };
-        await apiPost(`/merchants/${session.merchant.id}/discounts`, payload as any);
+        await apiPost(`/merchants/${session.merchant.id}/discounts`, payload);
         toast.success("满减活动创建成功");
         setIsAdding(false);
       } else if (selectedDiscount) {
@@ -187,13 +183,14 @@ export function DiscountsPageClient() {
           valid_until: formData.valid_until + "T23:59:59Z",
           is_active: formData.is_active,
         };
-        await apiPatch(`/merchants/${session.merchant.id}/discounts/${selectedDiscount.id}`, payload as any);
+        await apiPatch(`/merchants/${session.merchant.id}/discounts/${selectedDiscount.id}`, payload);
         toast.success("满减活动更新成功");
       }
       
       loadDiscounts();
-    } catch (error: any) {
-      toast.error(error.message || "保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -213,8 +210,9 @@ export function DiscountsPageClient() {
       setSelectedDiscount(null);
       setIsAdding(false);
       loadDiscounts();
-    } catch (error: any) {
-      toast.error(error.message || "删除失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "删除失败";
+      toast.error(message);
     }
   };
 
@@ -234,7 +232,7 @@ export function DiscountsPageClient() {
       <PageContent>
         <div className="flex h-[calc(100vh-12rem)] gap-6">
           {/* Left Panel: Discount List */}
-          <div className="w-1/3 min-w-[320px] flex flex-col bg-white rounded-xl border shadow-sm">
+          <div className="w-1/3 min-w-80 flex flex-col bg-white rounded-xl border shadow-sm">
             <div className="p-4 border-b space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">活动列表 ({discounts.length})</h3>
@@ -565,7 +563,7 @@ export function DiscountsPageClient() {
                       <div className="grid gap-2">
                         <Textarea 
                           placeholder="例如：本满减活动仅限正餐时段使用，不与特价套餐同享等备注信息..." 
-                          className="min-h-[120px] bg-slate-50/50 focus:bg-white p-4 resize-none shadow-sm"
+                          className="min-h-30 bg-slate-50/50 focus:bg-white p-4 resize-none shadow-sm"
                           value={formData.description || ""}
                           onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
                         />

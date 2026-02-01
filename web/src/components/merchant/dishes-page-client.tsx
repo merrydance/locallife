@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, ChevronRight, Upload, GripVertical, Check, X, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { Plus, Search, Edit, Trash2, Upload, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,6 @@ import {
   DishCategory, 
   TagInfo, 
   CustomizationGroup,
-  CustomizationOption,
   CreateDishRequest 
 } from "@/types/dish";
 import { cn } from "@/lib/utils";
@@ -193,13 +193,13 @@ export function DishesPageClient() {
       };
 
       if (editDish.id) {
-        await apiPut(`/dishes/${editDish.id}`, payload as any);
+        await apiPut(`/dishes/${editDish.id}`, payload);
         // Backend updateDish doesn't include customizations, update them separately
         await apiPut(`/dishes/${editDish.id}/customizations`, { 
           groups: payload.customization_groups 
         });
       } else {
-        await apiPost("/dishes", payload as any);
+        await apiPost("/dishes", payload);
       }
       
       setIsEditing(false);
@@ -402,9 +402,11 @@ export function DishesPageClient() {
                       {/* Left: Image (Flush to 3 sides: top, bottom, left) */}
                       <div className="relative w-32 shrink-0 bg-muted border-r border-muted/50 overflow-hidden">
                         {dish.image_url ? (
-                          <img 
+                          <Image 
                             src={formatImageUrl(getMediaUrl(dish.image_url))} 
                             alt={dish.name} 
+                            width={128}
+                            height={112}
                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
                           />
                         ) : (
@@ -504,7 +506,7 @@ export function DishesPageClient() {
                 >
                   {editDish.image_url ? (
                     <>
-                      <img src={formatImageUrl(getMediaUrl(editDish.image_url))} className="w-full h-full object-cover" />
+                      <Image src={formatImageUrl(getMediaUrl(editDish.image_url))} alt="菜品图片" width={800} height={450} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
                         <span className="text-white text-sm font-medium flex items-center gap-2">
                           <Upload className="h-4 w-4" /> 更换图片
@@ -760,7 +762,7 @@ export function DishesPageClient() {
 
           <SheetFooter className="p-6 border-t bg-white/80 backdrop-blur-md shrink-0 flex items-center justify-end gap-3 z-20">
             <Button variant="ghost" onClick={() => setIsEditing(false)} disabled={saving}>关闭</Button>
-            <Button className="min-w-[140px] font-bold shadow-lg shadow-primary/20" onClick={handleSaveDish} disabled={saving || uploadingImage}>
+            <Button className="min-w-35 font-bold shadow-lg shadow-primary/20" onClick={handleSaveDish} disabled={saving || uploadingImage}>
               {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在提交...</> : "保存设置并发布"}
             </Button>
           </SheetFooter>

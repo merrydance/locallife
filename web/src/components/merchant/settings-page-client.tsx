@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { 
   Building2, 
   Clock, 
@@ -15,7 +16,6 @@ import {
   Image as ImageIcon,
   Loader2,
   RefreshCw,
-  MoreVertical,
   CheckCircle2,
   AlertCircle,
   XCircle
@@ -27,8 +27,7 @@ import {
   apiPatch, 
   apiPut, 
   apiDelete, 
-  getMediaUrl,
-  formatAmount 
+  getMediaUrl
 } from "@/lib/api";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -62,8 +61,7 @@ import type {
   BusinessHour, 
   CloudPrinter, 
   DisplayConfig,
-  Group,
-  GroupJoinRequest
+  Group
 } from "@/types/merchant-settings";
 
 export function MerchantSettingsPageClient() {
@@ -152,8 +150,9 @@ export function MerchantSettingsPageClient() {
       });
       setProfile(updated);
       toast.success("商户资料已更新");
-    } catch (error: any) {
-      toast.error(error.message || "保存失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -165,8 +164,9 @@ export function MerchantSettingsPageClient() {
       await apiPatch("/merchants/me/status", { is_open: isOpen });
       setProfile({ ...profile, is_open: isOpen });
       toast.success(isOpen ? "店铺已营业" : "店铺已打烊");
-    } catch (error: any) {
-      toast.error("更新状态失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "更新状态失败";
+      toast.error(message);
     }
   };
 
@@ -197,7 +197,7 @@ export function MerchantSettingsPageClient() {
         setProfile({ ...profile, logo_url: imageUrl });
       }
       toast.success("上传成功", { id: "upload" });
-    } catch (error) {
+    } catch {
       toast.error("上传失败", { id: "upload" });
     }
   };
@@ -206,9 +206,9 @@ export function MerchantSettingsPageClient() {
     if (!displayConfig) return;
     setSaving(true);
     try {
-      await apiPut("/merchant/display-config", displayConfig as any);
+      await apiPut("/merchant/display-config", displayConfig);
       toast.success("显示配置已保存");
-    } catch (error) {
+    } catch {
       toast.error("保存失败");
     } finally {
       setSaving(false);
@@ -231,17 +231,12 @@ export function MerchantSettingsPageClient() {
       });
       setBusinessHours(response.hours || []);
       toast.success("营业时间已更新");
-    } catch (error: any) {
-      toast.error(error.message || "更新营业时间失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "更新营业时间失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleUpdateHour = (index: number, updates: Partial<BusinessHour>) => {
-    const next = [...businessHours];
-    next[index] = { ...next[index], ...updates };
-    setBusinessHours(next);
   };
 
   const handleAddPrinter = () => {
@@ -269,17 +264,18 @@ export function MerchantSettingsPageClient() {
     setSaving(true);
     try {
       if (editingPrinter.id) {
-        await apiPut(`/merchant/devices/${editingPrinter.id}`, editingPrinter as any);
+        await apiPut(`/merchant/devices/${editingPrinter.id}`, editingPrinter);
         toast.success("打印机已更新");
       } else {
-        await apiPost("/merchant/devices", editingPrinter as any);
+        await apiPost("/merchant/devices", editingPrinter);
         toast.success("打印机已添加");
       }
       setPrinterModalOpen(false);
       const printersData = await apiGet<{ printers: CloudPrinter[] }>("/merchant/devices");
       setPrinters(printersData.printers || []);
-    } catch (error: any) {
-      toast.error(error.message || "请求失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -291,7 +287,7 @@ export function MerchantSettingsPageClient() {
       await apiDelete(`/merchant/devices/${deletePrinterConfirm}`);
       toast.success("打印机已删除");
       setPrinters(printers.filter(p => p.id !== deletePrinterConfirm));
-    } catch (error) {
+    } catch {
       toast.error("删除失败");
     } finally {
       setDeletePrinterConfirm(null);
@@ -303,7 +299,7 @@ export function MerchantSettingsPageClient() {
       await apiPut(`/merchant/devices/${id}`, { is_active: isActive });
       setPrinters(printers.map(p => p.id === id ? { ...p, is_active: isActive } : p));
       toast.success(isActive ? "已启用" : "已禁用");
-    } catch (error) {
+    } catch {
       toast.error("操作失败");
     }
   };
@@ -321,7 +317,7 @@ export function MerchantSettingsPageClient() {
       if ((results.groups || []).length === 0) {
         toast.info("未找到匹配的集团");
       }
-    } catch (error) {
+    } catch {
       toast.error("搜索集团失败");
     } finally {
       setSearchingGroups(false);
@@ -339,8 +335,9 @@ export function MerchantSettingsPageClient() {
       toast.success("申请已提交，请等待集团审核");
       setJoinReasonModal(null);
       setJoinReason("");
-    } catch (error: any) {
-      toast.error(error.message || "申请失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -452,7 +449,7 @@ export function MerchantSettingsPageClient() {
                           <Label htmlFor="description">店铺简介</Label>
                           <Textarea 
                             id="description" 
-                            className="min-h-[100px]"
+                            className="min-h-25"
                             value={profile?.description || ""} 
                             onChange={e => profile && setProfile({...profile, description: e.target.value})}
                             placeholder="向顾客介绍一下您的店铺..."
@@ -489,9 +486,11 @@ export function MerchantSettingsPageClient() {
                   <div className="p-6 flex flex-col items-center gap-6">
                     <div className="relative w-32 h-32 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group">
                       {profile?.logo_url ? (
-                        <img 
+                        <Image 
                           src={getMediaUrl(profile.logo_url)} 
-                          alt="Store Logo" 
+                          alt="店铺 Logo" 
+                          width={128}
+                          height={128}
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -1091,7 +1090,7 @@ export function MerchantSettingsPageClient() {
               placeholder="例如：希望统一品牌运营，使用集团配送资源..."
               value={joinReason}
               onChange={e => setJoinReason(e.target.value)}
-              className="min-h-[100px]"
+              className="min-h-25"
             />
           </div>
           <DialogFooter>
@@ -1105,7 +1104,7 @@ export function MerchantSettingsPageClient() {
       </Dialog>
 
       <Dialog open={printerModalOpen} onOpenChange={setPrinterModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-106.25">
           <DialogHeader>
             <DialogTitle>{editingPrinter?.id ? "编辑打印机" : "添加打印机"}</DialogTitle>
             <DialogDescription>
@@ -1128,7 +1127,12 @@ export function MerchantSettingsPageClient() {
                     <Label>连接协议</Label>
                     <Select 
                       value={editingPrinter?.printer_type} 
-                      onValueChange={(val: any) => setEditingPrinter({...editingPrinter, printer_type: val})}
+                      onValueChange={(val) =>
+                        setEditingPrinter({
+                          ...editingPrinter,
+                          printer_type: val as CloudPrinter["printer_type"],
+                        })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />

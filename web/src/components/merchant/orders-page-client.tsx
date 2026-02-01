@@ -1,21 +1,19 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { 
   Search, 
   RefreshCw, 
   Download, 
   Printer, 
-  MoreVertical, 
   ShoppingBag,
   User,
   Phone,
   MapPin,
   Clock,
-  ArrowRight,
   CheckCircle2,
-  XCircle,
   Truck,
   Coffee,
   AlertCircle
@@ -23,14 +21,14 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { apiGet, apiPost, formatAmount, formatDate } from "@/lib/api";
+import { apiGet, apiPost, formatAmount } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { OrderResponse, OrderStatsResponse } from "@/types/order";
 
@@ -96,15 +94,15 @@ export function OrdersPageClient({
   page,
   pageSize,
   status,
-  orderType,
+  orderType: _orderType,
   keyword,
 }: OrdersPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  void _orderType;
   
   const [orders, setOrders] = useState<OrderResponse[]>(initialOrders);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(initialOrders[0]?.id || null);
-  const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null);
   
@@ -120,9 +118,9 @@ export function OrdersPageClient({
   useEffect(() => {
     setOrders(initialOrders);
     if (initialOrders.length > 0 && !selectedOrderId) {
-      handleSelectOrder(initialOrders[0].id);
+      setSelectedOrderId(initialOrders[0].id);
     }
-  }, [initialOrders]);
+  }, [initialOrders, selectedOrderId]);
 
   // Load order detail when selection changes
   useEffect(() => {
@@ -136,7 +134,7 @@ export function OrdersPageClient({
     try {
       const data = await apiGet<OrderResponse>(`/merchant/orders/${id}`);
       setSelectedOrder(data);
-    } catch (error) {
+    } catch {
       toast.error("加载订单详情失败");
     } finally {
       setLoadingDetail(false);
@@ -172,8 +170,9 @@ export function OrdersPageClient({
         loadOrderDetail(orderId);
       }
       updateQuery({}); // Trigger server components refresh
-    } catch (error: any) {
-      toast.error(error.message || "操作失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "操作失败";
+      toast.error(message);
     }
   };
 
@@ -192,7 +191,7 @@ export function OrdersPageClient({
     setRejectDialogOpen(false);
   };
 
-  const toggleSelect = (e: React.MouseEvent, id: number) => {
+  const toggleSelect = (e: React.MouseEvent<HTMLElement>, id: number) => {
     e.stopPropagation();
     const next = new Set(selectedIds);
     if (next.has(id)) {
@@ -212,7 +211,6 @@ export function OrdersPageClient({
   };
 
   const batchAccept = async () => {
-    const ids = Array.from(selectedIds);
     const paidOrderIds = orders.filter(o => selectedIds.has(o.id) && o.status === "paid").map(o => o.id);
     
     if (paidOrderIds.length === 0) {
@@ -225,8 +223,9 @@ export function OrdersPageClient({
       toast.success(`已成功接收 ${paidOrderIds.length} 个订单`);
       setSelectedIds(new Set());
       updateQuery({});
-    } catch (error: any) {
-      toast.error("批量处理部分失败");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "批量处理部分失败";
+      toast.error(message);
     }
   };
 
@@ -316,7 +315,7 @@ export function OrdersPageClient({
 
         <div className="flex h-[calc(100vh-16rem)] gap-6">
           {/* Left Panel: Order List */}
-          <div className="w-1/3 min-w-[360px] flex flex-col bg-white rounded-xl border shadow-sm">
+          <div className="w-1/3 min-w-90 flex flex-col bg-white rounded-xl border shadow-sm">
             {/* Filter & Search */}
             <div className="p-4 border-b space-y-4">
               <div className="flex items-center justify-between">
@@ -382,7 +381,7 @@ export function OrdersPageClient({
                         <Checkbox 
                           checked={selectedIds.has(order.id)}
                           onCheckedChange={() => {}}
-                          onClick={(e) => toggleSelect(e as any, order.id)}
+                          onClick={(e) => toggleSelect(e, order.id)}
                           className="h-4 w-4"
                         />
                         <span className="font-bold text-slate-900 text-sm italic">#{order.order_no.slice(-4)}</span>
@@ -623,7 +622,7 @@ export function OrdersPageClient({
                                   <div className="flex items-center gap-3">
                                     <div className="h-10 w-10 rounded bg-slate-100 shrink-0 overflow-hidden border border-slate-200">
                                       {item.image_url ? (
-                                        <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                                        <Image src={item.image_url} alt={item.name} width={40} height={40} className="h-full w-full object-cover" />
                                       ) : (
                                         <div className="h-full w-full flex items-center justify-center text-slate-400">
                                           <ShoppingBag className="h-5 w-5 opacity-20" />
@@ -679,7 +678,7 @@ export function OrdersPageClient({
                         <section className="space-y-3">
                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">客户留言</h4>
                            <div className="bg-amber-50/50 border border-amber-100 text-amber-900 p-4 rounded-xl text-xs italic leading-relaxed">
-                            "{selectedOrder.notes}"
+                            &ldquo;{selectedOrder.notes}&rdquo;
                            </div>
                         </section>
                       )}
