@@ -67,14 +67,17 @@ export interface OperatorFinanceOverviewResponse {
         pending_commission: number    // 待分账佣金
         settled_commission: number    // 已完成分账佣金
         total_commission: number      // 平台佣金
+        operator_income: number       // 运营商可得金额（佣金 * 分成比例）
         total_gmv: number             // 区域总交易额
         total_orders: number          // 订单数
     }
     region_id: number                 // 区域ID
     region_name: string               // 区域名称
+    operator_share_ratio: number      // 运营商分成比例（如 0.6 表示 60%）
     total: {
         settled_commission: number    // 已结算
         total_commission: number      // 累计平台佣金
+        operator_income: number       // 累计运营商可得金额
         total_gmv: number             // 累计交易额
     }
     total_commission?: number

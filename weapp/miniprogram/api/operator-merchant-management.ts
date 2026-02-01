@@ -28,23 +28,28 @@ export interface ListOperatorMerchantsResponse {
     total?: number                               // 总数
 }
 
-/** 运营商商户项 - 基于swagger api.operatorMerchantItem */
+/** 运营商商户项 - 对齐后端 api.merchantListItem 结构 */
 export interface OperatorMerchantItem {
     id: number
     name: string
     phone: string
     address: string
-    region_id: number
-    region_name: string
-    category: string
-    type: MerchantType
-    status: MerchantStatus
-    rating: number
-    order_count: number
-    total_gmv: number
-    commission_amount: number
-    created_at: string
-    updated_at: string
+    status: string           // 商户状态
+    is_open: boolean         // 是否营业中
+    owner_user_id: number    // 店主用户ID
+    region_id: number        // 区域ID
+    latitude: number         // 纬度
+    longitude: number        // 经度
+    created_at: string       // 创建时间
+    // 以下字段后端暂未返回，标为可选
+    region_name?: string
+    category?: string
+    type?: MerchantType
+    rating?: number
+    order_count?: number
+    total_gmv?: number
+    commission_amount?: number
+    updated_at?: string
     last_active_at?: string
 }
 
@@ -377,13 +382,13 @@ export class MerchantAnalyticsService {
         }>()
 
         merchants.forEach(merchant => {
-            const category = merchant.category
+            const category = merchant.category || '未分类'
             const existing = categoryMap.get(category) || { count: 0, totalRating: 0, totalGmv: 0 }
 
             categoryMap.set(category, {
                 count: existing.count + 1,
-                totalRating: existing.totalRating + merchant.rating,
-                totalGmv: existing.totalGmv + merchant.total_gmv
+                totalRating: existing.totalRating + (merchant.rating || 0),
+                totalGmv: existing.totalGmv + (merchant.total_gmv || 0)
             })
         })
 
@@ -443,7 +448,7 @@ export class OperatorMerchantManagementAdapter {
         regionName: string
         category: string
         type: MerchantType
-        status: MerchantStatus
+        status: string
         rating: number
         orderCount: number
         totalGmv: number
@@ -458,16 +463,16 @@ export class OperatorMerchantManagementAdapter {
             phone: data.phone,
             address: data.address,
             regionId: data.region_id,
-            regionName: data.region_name,
-            category: data.category,
-            type: data.type,
+            regionName: data.region_name || '',
+            category: data.category || '未分类',
+            type: data.type || 'restaurant',
             status: data.status,
-            rating: data.rating,
-            orderCount: data.order_count,
-            totalGmv: data.total_gmv,
-            commissionAmount: data.commission_amount,
+            rating: data.rating || 0,
+            orderCount: data.order_count || 0,
+            totalGmv: data.total_gmv || 0,
+            commissionAmount: data.commission_amount || 0,
             createdAt: data.created_at,
-            updatedAt: data.updated_at,
+            updatedAt: data.updated_at || data.created_at,
             lastActiveAt: data.last_active_at
         }
     }

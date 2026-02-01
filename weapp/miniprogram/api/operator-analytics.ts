@@ -118,6 +118,7 @@ export interface OperatorDailyTrendItem {
     avg_order_value: number
     completion_rate: number
     total_commission: number
+    operator_income: number  // 运营商当日可得金额（后端计算）
     weather?: string
     special_events?: string[]
 }

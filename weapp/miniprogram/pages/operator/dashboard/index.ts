@@ -105,7 +105,8 @@ Page({
       // 格式化处理各维度数据，确保兼容性
       const today = new Date().toISOString().split('T')[0]
       const trends = Array.isArray(dailyTrends) ? dailyTrends : []
-      const todayTrend = trends.find(t => t.date === today) || { total_gmv: 0, order_count: 0, total_commission: 0 }
+      // 后端现在返回 operator_income 字段，直接使用无需前端计算
+      const todayTrend = trends.find(t => t.date === today) || { total_gmv: 0, order_count: 0, operator_income: 0 }
       
       const merchantRankList = Array.isArray(merchantRanking) ? merchantRanking : []
       const riderRankList = (Array.isArray(riderRanking) ? riderRanking : []).map(r => ({
@@ -128,12 +129,14 @@ Page({
           active_riders: realtimeStats.active_rider_count,
           today_gmv_display: formatPriceNoSymbol(todayTrend.total_gmv),
           today_orders: todayTrend.order_count,
-          today_income_display: formatPriceNoSymbol(todayTrend.total_commission * 0.6)
+          // 使用后端计算的运营商可得金额，不再前端硬编码分成比例
+          today_income_display: formatPriceNoSymbol(todayTrend.operator_income || 0)
         },
         finance: {
-          balance_display: formatPriceNoSymbol(financeOverview.total.settled_commission * 0.6),
-          total_income_display: formatPriceNoSymbol(financeOverview.total.total_commission * 0.6),
-          current_month_income_display: formatPriceNoSymbol(financeOverview.current_month.total_commission * 0.6)
+          // 使用后端返回的 operator_income 字段，遵循 SSOT 原则
+          balance_display: formatPriceNoSymbol(financeOverview.total.operator_income || 0),
+          total_income_display: formatPriceNoSymbol(financeOverview.total.operator_income || 0),
+          current_month_income_display: formatPriceNoSymbol(financeOverview.current_month.operator_income || 0)
         },
         merchantRankings: merchantRankList,
         riderRankings: riderRankList,

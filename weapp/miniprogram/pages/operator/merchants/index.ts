@@ -52,6 +52,8 @@ Page({
         page_size: 20
       })
 
+      // 直接使用后端返回的数据，不添加假数据
+      // 遵循 SSOT 原则：所有数据应来自后端
       const merchants = (result.merchants || []).map((m: OperatorMerchantItem) => ({
         id: m.id,
         name: m.name,
@@ -59,9 +61,8 @@ Page({
         status: m.status?.toUpperCase() || 'UNKNOWN',
         region_id: m.region_id,
         created_at: m.created_at,
-        owner: m.name.substring(0, 1) + '总', // Mock owner if missing
-        rating: 4.5, // Mock rating if missing
-        order_count: 120 // Mock count if missing
+        is_open: m.is_open,
+        address: m.address
       }))
 
       const newMerchants = reset ? merchants : [...this.data.merchants, ...merchants]

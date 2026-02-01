@@ -341,6 +341,7 @@ type regionDailyTrendRow struct {
 	OrderCount      int32  `json:"order_count"`
 	TotalGMV        int64  `json:"total_gmv"`
 	TotalCommission int64  `json:"total_commission"`
+	OperatorIncome  int64  `json:"operator_income"` // 运营商当日可得金额
 	ActiveMerchants int32  `json:"active_merchants"`
 	ActiveUsers     int32  `json:"active_users"`
 }
@@ -401,6 +402,7 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 			OrderCount:      trend.OrderCount,
 			TotalGMV:        trend.TotalGmv,
 			TotalCommission: trend.Commission,
+			OperatorIncome:  int64(float64(trend.Commission) * OperatorRevenueShareRatio),
 			ActiveMerchants: trend.ActiveMerchants,
 			ActiveUsers:     trend.ActiveUsers,
 		}
@@ -415,7 +417,8 @@ type operatorFinanceOverviewResponse struct {
 	// 当月统计
 	CurrentMonth struct {
 		TotalGMV          int64 `json:"total_gmv"`          // 区域总交易额
-		TotalCommission   int64 `json:"total_commission"`   // 平台佣金（运营商可分得 60%）
+		TotalCommission   int64 `json:"total_commission"`   // 平台佣金总额
+		OperatorIncome    int64 `json:"operator_income"`    // 运营商可得金额（佣金 * 分成比例）
 		TotalOrders       int32 `json:"total_orders"`       // 订单数
 		SettledCommission int64 `json:"settled_commission"` // 已完成分账佣金
 		PendingCommission int64 `json:"pending_commission"` // 待分账佣金（当月订单尚未分账部分）
@@ -425,12 +428,14 @@ type operatorFinanceOverviewResponse struct {
 	Total struct {
 		TotalGMV          int64 `json:"total_gmv"`          // 累计交易额
 		TotalCommission   int64 `json:"total_commission"`   // 累计平台佣金
+		OperatorIncome    int64 `json:"operator_income"`    // 累计运营商可得金额
 		SettledCommission int64 `json:"settled_commission"` // 已结算（分账完成）
 	} `json:"total"`
 
 	// 区域信息
-	RegionID   int64  `json:"region_id"`
-	RegionName string `json:"region_name"`
+	RegionID           int64   `json:"region_id"`
+	RegionName         string  `json:"region_name"`
+	OperatorShareRatio float64 `json:"operator_share_ratio"` // 运营商分成比例（如 0.6 表示 60%）
 }
 
 // getOperatorFinanceOverview 获取运营商财务概览
@@ -478,6 +483,7 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 	if err == nil {
 		response.CurrentMonth.TotalGMV = monthStats.TotalGmv
 		response.CurrentMonth.TotalCommission = monthStats.TotalCommission
+		response.CurrentMonth.OperatorIncome = int64(float64(monthStats.TotalCommission) * OperatorRevenueShareRatio)
 		response.CurrentMonth.TotalOrders = monthStats.TotalOrders
 		// 分账完成的佣金 = 统计的佣金（因为 GetRegionStats 只统计 status='finished' 的记录）
 		response.CurrentMonth.SettledCommission = monthStats.TotalCommission
@@ -498,8 +504,12 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 	if err == nil {
 		response.Total.TotalGMV = totalStats.TotalGmv
 		response.Total.TotalCommission = totalStats.TotalCommission
+		response.Total.OperatorIncome = int64(float64(totalStats.TotalCommission) * OperatorRevenueShareRatio)
 		response.Total.SettledCommission = totalStats.TotalCommission // 全部是已分账的
 	}
+
+	// 添加分成比例信息
+	response.OperatorShareRatio = OperatorRevenueShareRatio
 
 	ctx.JSON(http.StatusOK, response)
 }
@@ -625,7 +635,7 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 	// 转换数据
 	for _, trend := range trends[startIdx:endIdx] {
 		// 计算佣金率
-		rate := "3.0%"
+		rate := "N/A" // 没有交易时显示 N/A
 		if trend.TotalGmv > 0 {
 			actualRate := float64(trend.Commission) / float64(trend.TotalGmv) * 100
 			rate = formatCommissionRate(actualRate)
