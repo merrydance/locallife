@@ -208,6 +208,36 @@ func (q *Queries) GetRegionByNameAndParent(ctx context.Context, arg GetRegionByN
 	return i, err
 }
 
+const getRegionByProviderCode = `-- name: GetRegionByProviderCode :one
+SELECT r.id, r.code, r.name, r.level, r.parent_id, r.longitude, r.latitude, r.created_at, r.qweather_location_id, r.status FROM region_external_mappings rem
+JOIN regions r ON r.id = rem.region_id
+WHERE rem.provider = $1 AND rem.external_code = $2
+LIMIT 1
+`
+
+type GetRegionByProviderCodeParams struct {
+	Provider     string `json:"provider"`
+	ExternalCode string `json:"external_code"`
+}
+
+func (q *Queries) GetRegionByProviderCode(ctx context.Context, arg GetRegionByProviderCodeParams) (Region, error) {
+	row := q.db.QueryRow(ctx, getRegionByProviderCode, arg.Provider, arg.ExternalCode)
+	var i Region
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Level,
+		&i.ParentID,
+		&i.Longitude,
+		&i.Latitude,
+		&i.CreatedAt,
+		&i.QweatherLocationID,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getRegionsWithDeliveryFeeConfig = `-- name: GetRegionsWithDeliveryFeeConfig :many
 SELECT 
   r.id,
@@ -529,4 +559,46 @@ type UpdateRegionQweatherLocationIDParams struct {
 func (q *Queries) UpdateRegionQweatherLocationID(ctx context.Context, arg UpdateRegionQweatherLocationIDParams) error {
 	_, err := q.db.Exec(ctx, updateRegionQweatherLocationID, arg.ID, arg.QweatherLocationID)
 	return err
+}
+
+const upsertRegionExternalMapping = `-- name: UpsertRegionExternalMapping :one
+INSERT INTO region_external_mappings (
+  region_id,
+  provider,
+  external_code,
+  external_name
+) VALUES (
+  $1, $2, $3, $4
+)
+ON CONFLICT (provider, external_code)
+DO UPDATE SET
+  region_id = EXCLUDED.region_id,
+  external_name = EXCLUDED.external_name
+RETURNING id, region_id, provider, external_code, external_name, created_at
+`
+
+type UpsertRegionExternalMappingParams struct {
+	RegionID     int64       `json:"region_id"`
+	Provider     string      `json:"provider"`
+	ExternalCode string      `json:"external_code"`
+	ExternalName pgtype.Text `json:"external_name"`
+}
+
+func (q *Queries) UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error) {
+	row := q.db.QueryRow(ctx, upsertRegionExternalMapping,
+		arg.RegionID,
+		arg.Provider,
+		arg.ExternalCode,
+		arg.ExternalName,
+	)
+	var i RegionExternalMapping
+	err := row.Scan(
+		&i.ID,
+		&i.RegionID,
+		&i.Provider,
+		&i.ExternalCode,
+		&i.ExternalName,
+		&i.CreatedAt,
+	)
+	return i, err
 }

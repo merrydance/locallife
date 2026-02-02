@@ -193,7 +193,17 @@ func (server *Server) matchRegionID(ctx context.Context, lat, lon float64) (int6
 		res, err := server.mapClient.ReverseGeocode(ctx, maps.Location{Lat: lat, Lng: lon})
 		if err == nil {
 			if res.Adcode != "" {
-				// 先尝试 adcode 精确匹配（部分地图服务可返回行政区划码）
+				// 先尝试 provider + adcode 映射匹配
+				if res.Provider != "" {
+					region, err := server.store.GetRegionByProviderCode(ctx, db.GetRegionByProviderCodeParams{
+						Provider:     res.Provider,
+						ExternalCode: res.Adcode,
+					})
+					if err == nil {
+						return region.ID, nil
+					}
+				}
+				// 再尝试 adcode 精确匹配（部分地图服务可返回行政区划码）
 				region, err := server.store.GetRegionByCode(ctx, res.Adcode)
 				if err == nil {
 					return region.ID, nil

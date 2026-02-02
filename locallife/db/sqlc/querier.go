@@ -792,6 +792,7 @@ type Querier interface {
 	GetRegionByCode(ctx context.Context, code string) (Region, error)
 	GetRegionByNameAndLevel(ctx context.Context, arg GetRegionByNameAndLevelParams) (Region, error)
 	GetRegionByNameAndParent(ctx context.Context, arg GetRegionByNameAndParentParams) (Region, error)
+	GetRegionByProviderCode(ctx context.Context, arg GetRegionByProviderCodeParams) (Region, error)
 	// 区域对比分析
 	GetRegionComparison(ctx context.Context, arg GetRegionComparisonParams) ([]GetRegionComparisonRow, error)
 	// 区域日趋势（基于实际分账数据）
@@ -1519,6 +1520,7 @@ type Querier interface {
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
+	UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error)
 	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)
 	// ==========================================
 	// 设备指纹查询（M9欺诈检测）

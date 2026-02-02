@@ -1271,6 +1271,15 @@ type Region struct {
 	Status             string      `json:"status"`
 }
 
+type RegionExternalMapping struct {
+	ID           int64       `json:"id"`
+	RegionID     int64       `json:"region_id"`
+	Provider     string      `json:"provider"`
+	ExternalCode string      `json:"external_code"`
+	ExternalName pgtype.Text `json:"external_name"`
+	CreatedAt    time.Time   `json:"created_at"`
+}
+
 type ReservationInventory struct {
 	ID            int64              `json:"id"`
 	ReservationID int64              `json:"reservation_id"`

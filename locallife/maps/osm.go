@@ -220,6 +220,7 @@ func (c *OSMClient) ReverseGeocode(ctx context.Context, location Location) (*Rev
 		return nil, fmt.Errorf("nominatim reverse unmarshal: %w", err)
 	}
 	return &ReverseGeocodeResult{
+		Provider:         MapProviderOSM,
 		Address:          resp.DisplayName,
 		FormattedAddress: resp.DisplayName,
 		Province:         firstNonEmpty(resp.Address.State, resp.Address.City, resp.Address.County),

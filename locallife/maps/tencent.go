@@ -26,6 +26,12 @@ const (
 	reverseGeocodeURL = "/ws/geocoder/v1/" // 坐标转地址
 )
 
+const (
+	MapProviderTencent  = "tencent"
+	MapProviderOSM      = "osm"
+	MapProviderTianditu = "tianditu"
+)
+
 // TencentMapClient 腾讯地图客户端
 type TencentMapClient struct {
 	key        string
@@ -88,6 +94,7 @@ type GeocodeResult struct {
 
 // ReverseGeocodeResult 逆地理编码结果
 type ReverseGeocodeResult struct {
+	Provider         string `json:"provider"`
 	Address          string `json:"address"`
 	FormattedAddress string `json:"formatted_address"`
 	Province         string `json:"province"`
@@ -310,6 +317,7 @@ func (c *TencentMapClient) ReverseGeocode(ctx context.Context, location Location
 	}
 
 	return &ReverseGeocodeResult{
+		Provider:         MapProviderTencent,
 		Address:          result.Address,
 		FormattedAddress: result.FormattedAddress.Recommend,
 		Province:         result.AddressComponent.Province,

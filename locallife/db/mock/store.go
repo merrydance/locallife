@@ -7685,6 +7685,21 @@ func (mr *MockStoreMockRecorder) GetRegionByNameAndParent(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegionByNameAndParent", reflect.TypeOf((*MockStore)(nil).GetRegionByNameAndParent), ctx, arg)
 }
 
+// GetRegionByProviderCode mocks base method.
+func (m *MockStore) GetRegionByProviderCode(ctx context.Context, arg db.GetRegionByProviderCodeParams) (db.Region, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRegionByProviderCode", ctx, arg)
+	ret0, _ := ret[0].(db.Region)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRegionByProviderCode indicates an expected call of GetRegionByProviderCode.
+func (mr *MockStoreMockRecorder) GetRegionByProviderCode(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegionByProviderCode", reflect.TypeOf((*MockStore)(nil).GetRegionByProviderCode), ctx, arg)
+}
+
 // GetRegionComparison mocks base method.
 func (m *MockStore) GetRegionComparison(ctx context.Context, arg db.GetRegionComparisonParams) ([]db.GetRegionComparisonRow, error) {
 	m.ctrl.T.Helper()
@@ -15877,6 +15892,21 @@ func (m *MockStore) UpsertPlatformConfig(ctx context.Context, arg db.UpsertPlatf
 func (mr *MockStoreMockRecorder) UpsertPlatformConfig(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertPlatformConfig", reflect.TypeOf((*MockStore)(nil).UpsertPlatformConfig), ctx, arg)
+}
+
+// UpsertRegionExternalMapping mocks base method.
+func (m *MockStore) UpsertRegionExternalMapping(ctx context.Context, arg db.UpsertRegionExternalMappingParams) (db.RegionExternalMapping, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertRegionExternalMapping", ctx, arg)
+	ret0, _ := ret[0].(db.RegionExternalMapping)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertRegionExternalMapping indicates an expected call of UpsertRegionExternalMapping.
+func (mr *MockStoreMockRecorder) UpsertRegionExternalMapping(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertRegionExternalMapping", reflect.TypeOf((*MockStore)(nil).UpsertRegionExternalMapping), ctx, arg)
 }
 
 // UpsertReservationInventory mocks base method.

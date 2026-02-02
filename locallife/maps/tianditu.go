@@ -133,6 +133,7 @@ func (c *TiandituMapClient) ReverseGeocode(ctx context.Context, location Locatio
 	}
 
 	return &ReverseGeocodeResult{
+		Provider:         MapProviderTianditu,
 		Address:          resp.Result.FormattedAddress,
 		FormattedAddress: resp.Result.FormattedAddress,
 		Province:         resp.Result.AddressComponent.Province,
