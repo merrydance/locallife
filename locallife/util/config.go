@@ -51,6 +51,10 @@ type Config struct {
 	// 腾讯地图配置
 	TencentMapKey string `mapstructure:"TENCENT_MAP_KEY"` // 已废弃，保留占位
 
+	// 天地图配置（地理编码/逆地理编码兜底）
+	TiandituMapKey  string `mapstructure:"TIANDITU_MAP_KEY"`
+	TiandituBaseURL string `mapstructure:"TIANDITU_BASE_URL"`
+
 	// Web前端配置
 	WebBaseURL string `mapstructure:"WEB_BASE_URL"` // H5页面基础URL，用于分享功能
 

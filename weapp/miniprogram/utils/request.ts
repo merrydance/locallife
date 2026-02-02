@@ -13,7 +13,7 @@ export const API_BASE = API_CONFIG.BASE_URL
 interface RequestOptions {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-  data?: any
+  data?: unknown
   loading?: boolean
   loadingText?: string
   context?: string // 请求上下文,用于批量取消
@@ -26,7 +26,19 @@ interface RequestOptions {
 
 const cache = new CacheManager()
 
-export function uploadFile<T = any>(filePath: string, url: string = '/upload/image', name: string = 'file', formData: any = {}): Promise<T> {
+interface RefreshTokenPayload {
+  access_token: string
+  refresh_token?: string
+  access_token_expires_at?: string
+}
+
+type WechatLoginPayload = RefreshTokenPayload
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+export function uploadFile<T = unknown>(filePath: string, url: string = '/upload/image', name: string = 'file', formData: Record<string, unknown> = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const doUpload = () => {
       wx.uploadFile({
@@ -34,12 +46,13 @@ export function uploadFile<T = any>(filePath: string, url: string = '/upload/ima
         filePath,
         name,
         header: {
-          'Authorization': `Bearer ${getToken()}`
+          'Authorization': `Bearer ${getToken()}`,
+          'X-Response-Envelope': '1'
         },
-        formData: formData,
+        formData,
         success: (res) => {
           // wx.uploadFile returns data as string
-          let data: any
+          let data: unknown
           try {
             data = JSON.parse(res.data)
           } catch (e) {
@@ -49,19 +62,20 @@ export function uploadFile<T = any>(filePath: string, url: string = '/upload/ima
 
           if (res.statusCode === 200 || res.statusCode === 201) {
             // Verify code if it exists in envelope
-            if (data && typeof data === 'object' && data.code !== undefined) {
+            if (isRecord(data) && typeof data.code === 'number') {
               if (data.code === 0) {
-                logger.debug('文件上传成功', { url: url }, 'uploadFile')
+                logger.debug('文件上传成功', { url }, 'uploadFile')
                 // Return the data part as T, or the whole thing?
                 // request() returns response.data. 
                 // Existing uploadFile returned data.data.url string.
                 // To be generic, let's return data.data usually.
                 resolve(data.data as T)
               } else {
+                const message = typeof data.message === 'string' ? data.message : '上传失败'
                 reject(new AppError({
                   type: ErrorType.BUSINESS,
-                  message: `上传失败: ${data.message}`,
-                  userMessage: data.message
+                  message: `上传失败: ${message}`,
+                  userMessage: message
                 }))
               }
             } else {
@@ -74,7 +88,7 @@ export function uploadFile<T = any>(filePath: string, url: string = '/upload/ima
             performTokenRefresh(true).then(() => {
               // Retry upload
               doUpload()
-            }).catch((err) => {
+            }).catch((_err) => {
               clearToken()
               // User requested silent login, no redirect.
               reject(new AppError({
@@ -85,10 +99,16 @@ export function uploadFile<T = any>(filePath: string, url: string = '/upload/ima
             })
           } else {
             // 解析后端返回的错误信息
-            const errMsg = (data && data.message) || (data && data.error) || '文件上传失败'
-            const userMsg = (data && data.userMessage) || '文件上传失败'
+            const errMsg = isRecord(data) && typeof data.message === 'string'
+              ? data.message
+              : isRecord(data) && typeof data.error === 'string'
+                ? data.error
+                : '文件上传失败'
+            const userMsg = isRecord(data) && typeof data.userMessage === 'string'
+              ? data.userMessage
+              : '文件上传失败'
 
-            logger.warn(`上传失败 HTTP ${res.statusCode}`, { url: url, response: data }, 'uploadFile')
+            logger.warn(`上传失败 HTTP ${res.statusCode}`, { url, response: data }, 'uploadFile')
 
             reject(new AppError({
               type: ErrorType.NETWORK,
@@ -137,8 +157,6 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
       // 记录性能监控 - 缓存命中
       performanceMonitor.recordRequest(true)
-
-      // 后台静默刷新缓存（如果缓存即将过期）
       const cacheAge = cache.getAge(cacheKey)
       if (cacheAge && cacheAge > cacheTTL * 0.8) {
         logger.debug(`🔄 后台刷新缓存: ${url}`, undefined, 'request')
@@ -188,11 +206,12 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
     logger.debug(`API请求: ${method} ${url}`, { data, latitude, longitude, requestId }, 'request')
 
+    const requestData = data as WechatMiniprogram.IAnyObject | string | ArrayBuffer | undefined
     const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
       const task = wx.request({
         url: `${API_BASE}${url}`,
-        method: method as any,
-        data,
+        method: method as WechatMiniprogram.RequestOption['method'],
+        data: requestData,
         header: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getToken()}`,
@@ -252,8 +271,77 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       }, 'request')
 
       // 尝试从后端响应中提取错误信息
-      const responseData = result.data as any
-      const backendMessage = responseData?.message || responseData?.error || ''
+      const responseData = result.data as unknown
+      const envelopeCode = isRecord(responseData) && typeof responseData.code === 'number'
+        ? responseData.code
+        : undefined
+      const envelopeMessage = isRecord(responseData) && typeof responseData.message === 'string'
+        ? responseData.message
+        : undefined
+
+      const backendMessage = (() => {
+        if (envelopeMessage) return envelopeMessage
+        if (!isRecord(responseData)) return ''
+        if (typeof responseData.error === 'string') return responseData.error
+        const dataField = responseData.data
+        if (isRecord(dataField)) {
+          if (typeof dataField.error === 'string') return dataField.error
+          if (typeof dataField.message === 'string') return dataField.message
+        }
+        return ''
+      })()
+
+      if (envelopeCode !== undefined) {
+        let userMessage = backendMessage || '服务器响应异常,请稍后重试'
+        let errorDetail = `API ${envelopeCode}`
+        let errorType = ErrorType.BUSINESS
+
+        if (envelopeCode === ErrorCode.BAD_REQUEST) {
+          userMessage = backendMessage || '请求参数错误'
+          if (backendMessage === 'merchant is not accepting takeout orders') {
+            userMessage = '商户休息中～'
+          }
+          errorDetail = `参数错误(${envelopeCode}): ${backendMessage}`
+        } else if (envelopeCode === ErrorCode.CONFLICT) {
+          userMessage = backendMessage || '操作冲突，请稍后重试'
+          errorDetail = `冲突(${envelopeCode}): ${backendMessage}`
+        } else if (envelopeCode === ErrorCode.NOT_FOUND) {
+          userMessage = backendMessage || '服务暂时不可用,请稍后重试'
+          errorDetail = backendMessage ? `服务未找到(${envelopeCode}): ${backendMessage}` : `服务未找到(${envelopeCode})`
+        } else if (
+          envelopeCode === ErrorCode.BAD_GATEWAY ||
+          envelopeCode === ErrorCode.SERVICE_UNAVAILABLE ||
+          envelopeCode === ErrorCode.GATEWAY_TIMEOUT
+        ) {
+          userMessage = '服务暂时不可用,请稍后重试'
+          errorDetail = `网关错误(${envelopeCode})`
+          errorType = ErrorType.NETWORK
+        } else if (envelopeCode === ErrorCode.INTERNAL_ERROR) {
+          userMessage = '服务器内部错误,请稍后重试'
+          errorDetail = `服务器错误(${envelopeCode})`
+          errorType = ErrorType.NETWORK
+        } else if (envelopeCode === ErrorCode.UNAUTHORIZED) {
+          userMessage = '登录已过期,请重新登录'
+          errorDetail = `认证失败(${envelopeCode})`
+          errorType = ErrorType.AUTH
+        } else if (envelopeCode === ErrorCode.FORBIDDEN) {
+          userMessage = backendMessage || '无权限操作'
+          errorDetail = `权限不足(${envelopeCode}): ${backendMessage}`
+          errorType = ErrorType.PERMISSION
+        } else if (envelopeCode === ErrorCode.UNPROCESSABLE) {
+          userMessage = backendMessage || '请求语义错误'
+          errorDetail = `语义错误(${envelopeCode}): ${backendMessage}`
+        } else if (envelopeCode === ErrorCode.TOO_MANY_REQUESTS) {
+          userMessage = '请求过于频繁，请稍后重试'
+          errorDetail = `限流(${envelopeCode})`
+        }
+
+        throw new AppError({
+          type: errorType,
+          message: errorDetail,
+          userMessage
+        }, responseData)
+        }
 
       // 常见HTTP错误处理
       let userMessage = backendMessage || '服务器响应异常,请稍后重试'
@@ -377,7 +465,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       }
 
       return response.data
-    } else if (response.code === ErrorCode.TOKEN_EXPIRED) {
+    } else if (response.code === ErrorCode.TOKEN_EXPIRED || response.code === ErrorCode.UNAUTHORIZED) {
       // Token过期,自动静默刷新
       logger.warn('Token已过期,尝试自动刷新', undefined, 'request')
 
@@ -426,7 +514,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     }
 
     // 静默处理abort错误（并发请求被取消的正常情况）
-    const errMsg = (error as any)?.errMsg || ''
+    const errMsg = (error as { errMsg?: string })?.errMsg || ''
     if (errMsg.includes('abort')) {
       // abort是正常的并发控制，静默处理
       if (retry) {
@@ -529,18 +617,16 @@ async function performTokenRefresh(force: boolean = false): Promise<void> {
 
   logger.info('开始刷新Token', { force }, 'performTokenRefresh')
 
-  _refreshingPromise = new Promise<void>(async (resolve, reject) => {
-    try {
-      await refreshTokenWithTimeout()
-      resolve()
-    } catch (e) {
-      reject(e)
-    } finally {
-      // 延迟清除锁，防止瞬间并发穿透
-      setTimeout(() => {
-        _refreshingPromise = null
-      }, 500)
-    }
+  _refreshingPromise = new Promise<void>((resolve, reject) => {
+    refreshTokenWithTimeout()
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        // 延迟清除锁，防止瞬间并发穿透
+        setTimeout(() => {
+          _refreshingPromise = null
+        }, 500)
+      })
   })
 
   return _refreshingPromise
@@ -599,7 +685,7 @@ async function refreshTokenOnce(): Promise<void> {
           })
         })
 
-        const response = res.data as ApiResponse<any>
+        const response = res.data as ApiResponse<RefreshTokenPayload>
         if (res.statusCode === 200 && response.code === ErrorCode.SUCCESS && response.data?.access_token) {
           const d = response.data
           const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined
@@ -636,7 +722,7 @@ async function refreshTokenOnce(): Promise<void> {
       })
     })
 
-    const response2 = res2.data as ApiResponse<any>
+    const response2 = res2.data as ApiResponse<WechatLoginPayload>
     if (res2.statusCode === 200 && response2.code === ErrorCode.SUCCESS && response2.data?.access_token) {
       const d = response2.data
       const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined

@@ -146,7 +146,7 @@ WHERE
   AND m.deleted_at IS NULL
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
-  AND ($2::bigint IS NULL OR m.region_id = $2)
+  AND m.region_id = $2
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true
@@ -1881,7 +1881,7 @@ WHERE
   AND m.deleted_at IS NULL
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
-  AND ($6::bigint IS NULL OR m.region_id = $6)
+  AND m.region_id = $6
   AND d.deleted_at IS NULL
   AND d.is_online = true
   AND d.is_online = true

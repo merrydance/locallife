@@ -102,7 +102,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		}
 	}
 
-	// 创建 LBS 地图客户端（支持多级故障转移：OSM -> Tencent）
+	// 创建 LBS 地图客户端（支持多级故障转移：OSM -> Tianditu）
 	var mapClient maps.TencentMapClientInterface
 	var lbsProviders []maps.TencentMapClientInterface
 
@@ -116,9 +116,9 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		lbsProviders = append(lbsProviders, maps.NewOSMClient(config.OSMBaseURLBackup))
 	}
 
-	// 3. 腾讯地图作为最终云端兜底
-	if config.TencentMapKey != "" {
-		lbsProviders = append(lbsProviders, maps.NewTencentMapClient(config.TencentMapKey))
+	// 3. 天地图作为云端兜底（仅地理编码/逆地理编码）
+	if config.TiandituMapKey != "" {
+		lbsProviders = append(lbsProviders, maps.NewTiandituMapClient(config.TiandituMapKey, config.TiandituBaseURL))
 	}
 
 	if len(lbsProviders) > 0 {

@@ -58,6 +58,17 @@
   font-size: var(--font-size-xs);
 }
 
+.empty-entry {
+  padding: 40rpx 0 20rpx;
+}
+
+.empty-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding: 16rpx 48rpx 0;
+}
+
 .error-container {
   display: flex;
   flex-direction: column;

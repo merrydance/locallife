@@ -117,6 +117,18 @@ Page({
     }
   },
 
+  onMerchantRegister() {
+    wx.navigateTo({
+      url: '/pages/register/merchant/index'
+    })
+  },
+
+  onOperatorRegister() {
+    wx.navigateTo({
+      url: '/pages/register/operator/index'
+    })
+  },
+
   // ==================== Data Loading ====================
 
   async loadItems(reset = false) {

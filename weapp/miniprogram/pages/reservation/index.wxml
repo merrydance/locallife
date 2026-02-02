@@ -60,10 +60,14 @@
 
     <!-- Empty State -->
     <view wx:elif="{{itemList.length === 0 && !loading}}" class="empty-container">
-      <t-empty 
+      <t-empty
         icon="info-circle-filled"
-        description="暂无符合条件的搜索结果"
+        description="当前区域暂无可服务商户"
       />
+      <view class="empty-actions">
+        <t-button theme="primary" size="large" block bind:tap="onMerchantRegister">商户入驻</t-button>
+        <t-button variant="outline" size="large" block bind:tap="onOperatorRegister">运营商入驻</t-button>
+      </view>
     </view>
 
     <!-- Item List -->

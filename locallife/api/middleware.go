@@ -78,7 +78,7 @@ func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 
 		// 如果已超时且还未写响应，兜底返回 504。
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) && !c.Writer.Written() {
-			c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{"error": "request timeout"})
+			c.AbortWithStatusJSON(http.StatusGatewayTimeout, errorResponse(errors.New("request timeout")))
 		}
 	}
 }

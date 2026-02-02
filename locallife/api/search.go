@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -103,6 +105,45 @@ type searchComboResponse struct {
 	Tags                  []string `json:"tags,omitempty"`
 }
 
+func resolveUserLocation(ctx *gin.Context, reqLat, reqLng *float64) (*float64, *float64) {
+	if reqLat != nil && reqLng != nil {
+		return reqLat, reqLng
+	}
+
+	latHeader := ctx.GetHeader("X-User-Latitude")
+	lngHeader := ctx.GetHeader("X-User-Longitude")
+	if latHeader == "" || lngHeader == "" {
+		return nil, nil
+	}
+
+	lat, err := strconv.ParseFloat(latHeader, 64)
+	if err != nil {
+		return nil, nil
+	}
+	lng, err := strconv.ParseFloat(lngHeader, 64)
+	if err != nil {
+		return nil, nil
+	}
+
+	return &lat, &lng
+}
+
+func resolveRegionID(ctx *gin.Context, server *Server, reqRegionID *int64, userLat, userLng *float64) (pgtype.Int8, error) {
+	if reqRegionID != nil {
+		return pgtype.Int8{Int64: *reqRegionID, Valid: true}, nil
+	}
+
+	if userLat != nil && userLng != nil {
+		regionID, err := server.matchRegionID(ctx.Request.Context(), *userLat, *userLng)
+		if err != nil {
+			return pgtype.Int8{}, err
+		}
+		return pgtype.Int8{Int64: regionID, Valid: true}, nil
+	}
+
+	return pgtype.Int8{}, errors.New("region_id is required")
+}
+
 // searchDishes godoc
 // ... (comments remain same)
 // @Security BearerAuth
@@ -155,10 +196,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	}
 
 	// 准备位置参数（用于排序）
+	resolvedLat, resolvedLng := resolveUserLocation(ctx, req.UserLatitude, req.UserLongitude)
 	var userLat, userLng float64
-	if req.UserLatitude != nil && req.UserLongitude != nil {
-		userLat = *req.UserLatitude
-		userLng = *req.UserLongitude
+	if resolvedLat != nil && resolvedLng != nil {
+		userLat = *resolvedLat
+		userLng = *resolvedLng
 	}
 
 	// 准备TagID
@@ -167,10 +209,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		tagIDVal = *req.TagID
 	}
 
-	// 准备RegionID
-	var regionID pgtype.Int8
-	if req.RegionID != nil {
-		regionID = pgtype.Int8{Int64: *req.RegionID, Valid: true}
+	// 准备RegionID（全局搜索必须）
+	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	// 全局搜索 - 使用高效的单次数据库查询（仅搜索已批准商户的上架菜品）
@@ -199,7 +242,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	}
 
 	// 若用户提供位置，批量拉取路网距离覆盖直线距离
-	routeDistances := server.getRouteDistancesByMerchant(ctx, dishesToMerchantLocs(dishes), req.UserLatitude, req.UserLongitude)
+	routeDistances := server.getRouteDistancesByMerchant(ctx, dishesToMerchantLocs(dishes), resolvedLat, resolvedLng)
 
 	response := make([]searchDishResponse, len(dishes))
 	for i, dish := range dishes {
@@ -266,15 +309,17 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 准备位置参数（用于排序）
+	resolvedLat, resolvedLng := resolveUserLocation(ctx, req.UserLatitude, req.UserLongitude)
 	var userLat, userLng float64
-	if req.UserLatitude != nil && req.UserLongitude != nil {
-		userLat = *req.UserLatitude
-		userLng = *req.UserLongitude
+	if resolvedLat != nil && resolvedLng != nil {
+		userLat = *resolvedLat
+		userLng = *resolvedLng
 	}
 
-	var merchantRegionID pgtype.Int8
-	if req.RegionID != nil {
-		merchantRegionID = pgtype.Int8{Int64: *req.RegionID, Valid: true}
+	merchantRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	merchants, err := server.store.SearchMerchants(ctx, db.SearchMerchantsParams{
@@ -305,8 +350,8 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	}
 
 	// 如果用户提供了位置，计算精确距离（展示用）和运费
-	if req.UserLatitude != nil && req.UserLongitude != nil && server.mapClient != nil {
-		server.calculateSearchMerchantDistancesAndFees(ctx, response, *req.UserLatitude, *req.UserLongitude)
+	if resolvedLat != nil && resolvedLng != nil && server.mapClient != nil {
+		server.calculateSearchMerchantDistancesAndFees(ctx, response, *resolvedLat, *resolvedLng)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -345,16 +390,18 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 准备位置参数
+	resolvedLat, resolvedLng := resolveUserLocation(ctx, req.UserLatitude, req.UserLongitude)
 	var userLat, userLng float64
-	if req.UserLatitude != nil && req.UserLongitude != nil {
-		userLat = *req.UserLatitude
-		userLng = *req.UserLongitude
+	if resolvedLat != nil && resolvedLng != nil {
+		userLat = *resolvedLat
+		userLng = *resolvedLng
 	}
 
-	// 准备RegionID
-	var comboRegionID pgtype.Int8
-	if req.RegionID != nil {
-		comboRegionID = pgtype.Int8{Int64: *req.RegionID, Valid: true}
+	// 准备RegionID（全局搜索必须）
+	comboRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	// 执行搜索
@@ -381,7 +428,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 	}
 
 	// 若用户提供位置，批量拉取路网距离覆盖直线距离
-	routeDistances := server.getRouteDistancesByMerchant(ctx, combosToMerchantLocs(combos), req.UserLatitude, req.UserLongitude)
+	routeDistances := server.getRouteDistancesByMerchant(ctx, combosToMerchantLocs(combos), resolvedLat, resolvedLng)
 
 	response := make([]searchComboResponse, len(combos))
 	for i, row := range combos {

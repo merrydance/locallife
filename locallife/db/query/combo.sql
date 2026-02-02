@@ -339,7 +339,7 @@ LEFT JOIN LATERAL (
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
-  AND (sqlc.narg('region_id')::BIGINT IS NULL OR m.region_id = sqlc.narg('region_id'))
+  AND m.region_id = sqlc.narg('region_id')
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND (
@@ -361,7 +361,7 @@ JOIN merchants m ON cs.merchant_id = m.id
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
-  AND (sqlc.narg('region_id')::BIGINT IS NULL OR m.region_id = sqlc.narg('region_id'))
+  AND m.region_id = sqlc.narg('region_id')
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND (

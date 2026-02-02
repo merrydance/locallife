@@ -168,7 +168,7 @@ FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
-  AND (sqlc.narg('region_id')::BIGINT IS NULL OR m.region_id = sqlc.narg('region_id'))
+  AND m.region_id = sqlc.narg('region_id')
   AND (
     $3::text IS NULL
     OR m.name ILIKE '%' || $3 || '%'
@@ -184,7 +184,7 @@ OFFSET $1;
 SELECT COUNT(*) FROM merchants
 WHERE status = 'active'
   AND deleted_at IS NULL
-  AND (sqlc.narg('region_id')::BIGINT IS NULL OR region_id = sqlc.narg('region_id'))
+  AND region_id = sqlc.narg('region_id')
   AND name ILIKE '%' || $1 || '%';
 
 -- ==================== 商户标签关联 ====================

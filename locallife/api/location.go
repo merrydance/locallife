@@ -29,6 +29,8 @@ type reverseGeocodeAPIResponse struct {
 	Data    reverseGeocodeResponse `json:"data"`
 }
 
+var _ reverseGeocodeAPIResponse
+
 func parseLatitudeLongitude(ctx *gin.Context) (float64, float64, error) {
 	latStr := ctx.Query("latitude")
 	lngStr := ctx.Query("longitude")
@@ -93,6 +95,8 @@ type routeAPIResponse struct {
 	Data    maps.RouteResult `json:"data"`
 }
 
+var _ routeAPIResponse
+
 // reverseGeocode uses self-hosted OSM (Nominatim) to convert (lat,lng) into an address.
 // @Summary 逆地址解析
 // @Description 使用自建 OSM Nominatim 将经纬度解析为地址。
@@ -126,18 +130,14 @@ func (server *Server) reverseGeocode(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, reverseGeocodeAPIResponse{
-		Code:    0,
-		Message: "ok",
-		Data: reverseGeocodeResponse{
-			Address:          result.Address,
-			FormattedAddress: result.FormattedAddress,
-			Province:         result.Province,
-			City:             result.City,
-			District:         result.District,
-			Street:           result.Street,
-			StreetNumber:     result.StreetNumber,
-		},
+	ctx.JSON(http.StatusOK, reverseGeocodeResponse{
+		Address:          result.Address,
+		FormattedAddress: result.FormattedAddress,
+		Province:         result.Province,
+		City:             result.City,
+		District:         result.District,
+		Street:           result.Street,
+		StreetNumber:     result.StreetNumber,
 	})
 }
 
@@ -182,7 +182,7 @@ func (server *Server) getBicyclingRoute(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, routeAPIResponse{Code: 0, Message: "ok", Data: *route})
+	ctx.JSON(http.StatusOK, route)
 }
 
 // matchRegionID 根据经纬度匹配 region_id

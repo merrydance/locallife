@@ -114,7 +114,7 @@ const countSearchMerchants = `-- name: CountSearchMerchants :one
 SELECT COUNT(*) FROM merchants
 WHERE status = 'active'
   AND deleted_at IS NULL
-  AND ($2::BIGINT IS NULL OR region_id = $2)
+  AND region_id = $2
   AND name ILIKE '%' || $1 || '%'
 `
 
@@ -1774,7 +1774,7 @@ FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
-  AND ($6::BIGINT IS NULL OR m.region_id = $6)
+  AND m.region_id = $6
   AND (
     $3::text IS NULL
     OR m.name ILIKE '%' || $3 || '%'

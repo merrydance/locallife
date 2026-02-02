@@ -53,6 +53,13 @@
   font-size: var(--font-size-sm);
 }
 
+.empty-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm) var(--spacer-md) 0;
+}
+
 /* 筛选侧边栏 (Drawer) */
 .filter-drawer {
   width: 620rpx;

@@ -101,7 +101,7 @@ JOIN merchants m ON cs.merchant_id = m.id
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
-  AND ($2::BIGINT IS NULL OR m.region_id = $2)
+  AND m.region_id = $2
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND (
@@ -927,7 +927,7 @@ LEFT JOIN LATERAL (
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
-  AND ($6::BIGINT IS NULL OR m.region_id = $6)
+  AND m.region_id = $6
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
     AND (

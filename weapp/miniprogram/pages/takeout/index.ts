@@ -168,6 +168,18 @@ Page({
     })
   },
 
+  onMerchantRegister() {
+    wx.navigateTo({
+      url: '/pages/register/merchant/index'
+    })
+  },
+
+  onOperatorRegister() {
+    wx.navigateTo({
+      url: '/pages/register/operator/index'
+    })
+  },
+
   onShow() {
     logger.debug('[Takeout.onShow] 页面显示', {
       dishesCount: this.data.dishes.length,

@@ -1380,10 +1380,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			return
 		}
 		if blocked {
-			ctx.JSON(http.StatusForbidden, gin.H{
-				"error":   "外卖服务已被限制",
-				"message": "该账号存在异常索赔记录，外卖下单已被限制",
-			})
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("外卖服务已被限制：该账号存在异常索赔记录")))
 			return
 		}
 	}
