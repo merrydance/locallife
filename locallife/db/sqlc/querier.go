@@ -369,6 +369,12 @@ type Querier interface {
 	// rider_profiles（骑手信任画像）
 	// ==========================================
 	CreateRiderProfile(ctx context.Context, riderID int64) (RiderProfile, error)
+	// Phase1: 规则引擎基础查询（草案）
+	CreateRule(ctx context.Context, arg CreateRuleParams) (Rule, error)
+	CreateRuleAudit(ctx context.Context, arg CreateRuleAuditParams) (RuleAudit, error)
+	// Phase1: 规则命中审计查询（草案）
+	CreateRuleHit(ctx context.Context, arg CreateRuleHitParams) (RuleHit, error)
+	CreateRuleVersion(ctx context.Context, arg CreateRuleVersionParams) (RuleVersion, error)
 	CreateSafetyReport(ctx context.Context, arg CreateSafetyReportParams) (SafetyReport, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateTable(ctx context.Context, arg CreateTableParams) (Table, error)
@@ -860,6 +866,8 @@ type Querier interface {
 	// ============ Customer-side Room Queries (C端包间查询) ============
 	// 获取包间详情（含商户信息、主图、月销量）供顾客查看
 	GetRoomDetailForCustomer(ctx context.Context, id int64) (GetRoomDetailForCustomerRow, error)
+	GetRule(ctx context.Context, id int64) (Rule, error)
+	GetRuleVersion(ctx context.Context, id int64) (RuleVersion, error)
 	GetSafetyReport(ctx context.Context, id int64) (SafetyReport, error)
 	GetSession(ctx context.Context, id int64) (Session, error)
 	GetSessionByAccessToken(ctx context.Context, accessToken string) (Session, error)
@@ -961,6 +969,7 @@ type Querier interface {
 	ListActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
 	ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
 	ListActiveRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
+	ListActiveRuleVersions(ctx context.Context) ([]RuleVersion, error)
 	ListActiveVouchers(ctx context.Context, arg ListActiveVouchersParams) ([]Voucher, error)
 	ListAllDishIDs(ctx context.Context) ([]int64, error)
 	ListAllMerchantApplications(ctx context.Context, arg ListAllMerchantApplicationsParams) ([]MerchantApplication, error)
@@ -1200,6 +1209,11 @@ type Querier interface {
 	// 按区域和状态列出骑手
 	ListRidersByRegionWithStatus(ctx context.Context, arg ListRidersByRegionWithStatusParams) ([]Rider, error)
 	ListRidersByStatus(ctx context.Context, arg ListRidersByStatusParams) ([]Rider, error)
+	ListRuleHitsByRule(ctx context.Context, arg ListRuleHitsByRuleParams) ([]RuleHit, error)
+	ListRuleHitsByRuleAndRegion(ctx context.Context, arg ListRuleHitsByRuleAndRegionParams) ([]RuleHit, error)
+	ListRuleVersionsByRule(ctx context.Context, ruleID int64) ([]RuleVersion, error)
+	// Phase1: 规则读取查询（草案）
+	ListRules(ctx context.Context, arg ListRulesParams) ([]Rule, error)
 	ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
@@ -1501,6 +1515,8 @@ type Querier interface {
 	UpdateRiderStatus(ctx context.Context, arg UpdateRiderStatusParams) (Rider, error)
 	// 更新骑手的微信二级商户号
 	UpdateRiderSubMchID(ctx context.Context, arg UpdateRiderSubMchIDParams) (Rider, error)
+	UpdateRuleCurrentVersion(ctx context.Context, arg UpdateRuleCurrentVersionParams) (Rule, error)
+	UpdateRuleStatus(ctx context.Context, arg UpdateRuleStatusParams) (Rule, error)
 	UpdateSafetyReportStatus(ctx context.Context, arg UpdateSafetyReportStatusParams) (SafetyReport, error)
 	UpdateSessionTokens(ctx context.Context, arg UpdateSessionTokensParams) (Session, error)
 	UpdateSubOrderProfitSharingStatus(ctx context.Context, arg UpdateSubOrderProfitSharingStatusParams) (CombinedPaymentSubOrder, error)

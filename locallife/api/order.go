@@ -12,6 +12,7 @@ import (
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
@@ -865,6 +866,36 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	log.Info().Msg("[DEBUG] createOrder: merchant validated")
 
+	ruleDecision := rules.Decision{Action: "allow"}
+	if server.rulesEngine != nil && server.config.RulesEngineEnabled {
+		ruleInput := rules.Context{
+			Domain:     rules.DomainOrder,
+			RegionID:   merchant.RegionID,
+			MerchantID: merchant.ID,
+			UserID:     authPayload.UserID,
+			OrderType:  req.OrderType,
+			Metadata: map[string]interface{}{
+				"items_count": len(req.Items),
+				"use_balance": req.UseBalance,
+			},
+		}
+		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
+		ruleDecision = decision
+		if !decision.Allow {
+			reason := decision.Reason
+			if reason == "" {
+				reason = "order blocked by rule"
+			}
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New(reason)))
+			return
+		}
+	}
+
 	// P0安全: 堂食订单验证桌台归属商户
 	if req.OrderType == OrderTypeDineIn && req.TableID != nil {
 		table, err := server.store.GetTable(ctx, *req.TableID)
@@ -1332,7 +1363,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 					break
 				}
 			}
-			if !sceneAllowed {
+			if !sceneAllowed && !server.config.RulesEngineEnabled {
 				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户设置不允许在此场景使用余额支付")))
 				return
 			}
@@ -1373,7 +1404,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	// 外卖拒绝服务检查（仅外卖，不影响预订/堂食）
-	if req.OrderType == OrderTypeTakeout {
+	if req.OrderType == OrderTypeTakeout && !server.config.RulesEngineEnabled {
 		blocked, err := server.checkTakeoutBlocklist(ctx, authPayload.UserID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1487,23 +1518,41 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	// 堂食扫码点餐：若用户在外卖拒绝服务名单中，实时提醒商户后台
 	if req.OrderType == OrderTypeDineIn && server.wsHub != nil {
-		block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
-			EntityType: "user",
-			EntityID:   authPayload.UserID,
-		})
-		if err == nil {
+		if server.config.RulesEngineEnabled && ruleDecision.Action == "alert" {
+			message := ruleDecision.Reason
+			if message == "" {
+				message = "该顾客有多次恶意索赔记录，谨慎服务"
+			}
 			alertPayload, _ := json.Marshal(map[string]any{
-				"user_id":     authPayload.UserID,
-				"order_id":    txResult.Order.ID,
-				"order_no":    txResult.Order.OrderNo,
-				"reason_code": block.ReasonCode,
-				"message":     "该顾客有多次恶意索赔记录，谨慎服务",
+				"user_id":  authPayload.UserID,
+				"order_id": txResult.Order.ID,
+				"order_no": txResult.Order.OrderNo,
+				"message":  message,
 			})
 			server.wsHub.SendToMerchant(req.MerchantID, websocket.Message{
 				Type:      "merchant_user_risk_alert",
 				Data:      alertPayload,
 				Timestamp: time.Now(),
 			})
+		} else {
+			block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+				EntityType: "user",
+				EntityID:   authPayload.UserID,
+			})
+			if err == nil {
+				alertPayload, _ := json.Marshal(map[string]any{
+					"user_id":     authPayload.UserID,
+					"order_id":    txResult.Order.ID,
+					"order_no":    txResult.Order.OrderNo,
+					"reason_code": block.ReasonCode,
+					"message":     "该顾客有多次恶意索赔记录，谨慎服务",
+				})
+				server.wsHub.SendToMerchant(req.MerchantID, websocket.Message{
+					Type:      "merchant_user_risk_alert",
+					Data:      alertPayload,
+					Timestamp: time.Now(),
+				})
+			}
 		}
 	}
 

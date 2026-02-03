@@ -563,12 +563,12 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 			TargetID:    &regionID,
 			RegionID:    &regionID,
 			Metadata: map[string]any{
-				"reason":           "rider_region_mismatch",
-				"rider_region_id":  riderRegionID,
+				"reason":             "rider_region_mismatch",
+				"rider_region_id":    riderRegionID,
 				"merchant_region_id": regionID,
-				"order_id":         req.OrderID,
-				"path":             ctx.Request.URL.Path,
-				"method":           ctx.Request.Method,
+				"order_id":           req.OrderID,
+				"path":               ctx.Request.URL.Path,
+				"method":             ctx.Request.Method,
 			},
 		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("该订单不在您的服务区域内")))

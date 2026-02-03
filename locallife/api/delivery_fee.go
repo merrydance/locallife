@@ -531,13 +531,12 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 		TargetID:    &config.ID,
 		RegionID:    &config.RegionID,
 		Metadata: map[string]any{
-			"region_id":   config.RegionID,
-			"start_time":  req.StartTime,
-			"end_time":    req.EndTime,
-			"coefficient": req.Coefficient,
-			"days_of_week":
-				req.DaysOfWeek,
-			"is_active": true,
+			"region_id":    config.RegionID,
+			"start_time":   req.StartTime,
+			"end_time":     req.EndTime,
+			"coefficient":  req.Coefficient,
+			"days_of_week": req.DaysOfWeek,
+			"is_active":    true,
 		},
 	})
 
@@ -793,13 +792,13 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 		TargetID:    &promo.ID,
 		RegionID:    &merchant.RegionID,
 		Metadata: map[string]any{
-			"merchant_id":     promo.MerchantID,
-			"name":            promo.Name,
+			"merchant_id":      promo.MerchantID,
+			"name":             promo.Name,
 			"min_order_amount": promo.MinOrderAmount,
-			"discount_amount": promo.DiscountAmount,
-			"valid_from":      req.ValidFrom,
-			"valid_until":     req.ValidUntil,
-			"is_active":       promo.IsActive,
+			"discount_amount":  promo.DiscountAmount,
+			"valid_from":       req.ValidFrom,
+			"valid_until":      req.ValidUntil,
+			"is_active":        promo.IsActive,
 		},
 	})
 
@@ -1062,7 +1061,7 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 		TargetID:    &promo.ID,
 		RegionID:    &merchant.RegionID,
 		Metadata: map[string]any{
-			"merchant_id":     promo.MerchantID,
+			"merchant_id":    promo.MerchantID,
 			"updated_fields": updatedFields,
 		},
 	})

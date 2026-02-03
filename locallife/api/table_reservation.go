@@ -8,6 +8,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
@@ -448,23 +449,56 @@ func (server *Server) createReservation(ctx *gin.Context) {
 			Timestamp: time.Now(),
 		})
 
-		block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
-			EntityType: "user",
-			EntityID:   authPayload.UserID,
-		})
-		if err == nil {
-			alertPayload, _ := json.Marshal(map[string]any{
-				"user_id":        authPayload.UserID,
-				"reservation_id": result.Reservation.ID,
-				"merchant_id":    result.Reservation.MerchantID,
-				"reason_code":    block.ReasonCode,
-				"message":        "该顾客有多次恶意索赔记录，谨慎服务",
+		if server.config.RulesEngineEnabled && server.rulesEngine != nil {
+			merchant, err := server.store.GetMerchant(ctx, result.Reservation.MerchantID)
+			if err == nil {
+				ruleInput := rules.Context{
+					Domain:     rules.DomainReservation,
+					RegionID:   merchant.RegionID,
+					MerchantID: merchant.ID,
+					UserID:     authPayload.UserID,
+				}
+				decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
+				if err == nil {
+					server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
+					if decision.Action == "alert" {
+						message := decision.Reason
+						if message == "" {
+							message = "该顾客有多次恶意索赔记录，谨慎服务"
+						}
+						alertPayload, _ := json.Marshal(map[string]any{
+							"user_id":        authPayload.UserID,
+							"reservation_id": result.Reservation.ID,
+							"merchant_id":    result.Reservation.MerchantID,
+							"message":        message,
+						})
+						server.wsHub.SendToMerchant(result.Reservation.MerchantID, websocket.Message{
+							Type:      "merchant_user_risk_alert",
+							Data:      alertPayload,
+							Timestamp: time.Now(),
+						})
+					}
+				}
+			}
+		} else {
+			block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+				EntityType: "user",
+				EntityID:   authPayload.UserID,
 			})
-			server.wsHub.SendToMerchant(result.Reservation.MerchantID, websocket.Message{
-				Type:      "merchant_user_risk_alert",
-				Data:      alertPayload,
-				Timestamp: time.Now(),
-			})
+			if err == nil {
+				alertPayload, _ := json.Marshal(map[string]any{
+					"user_id":        authPayload.UserID,
+					"reservation_id": result.Reservation.ID,
+					"merchant_id":    result.Reservation.MerchantID,
+					"reason_code":    block.ReasonCode,
+					"message":        "该顾客有多次恶意索赔记录，谨慎服务",
+				})
+				server.wsHub.SendToMerchant(result.Reservation.MerchantID, websocket.Message{
+					Type:      "merchant_user_risk_alert",
+					Data:      alertPayload,
+					Timestamp: time.Now(),
+				})
+			}
 		}
 	}
 

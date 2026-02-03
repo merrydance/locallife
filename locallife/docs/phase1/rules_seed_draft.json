@@ -1,0 +1,91 @@
+[
+  {
+    "name": "takeout_blocklist_deny",
+    "category": "order",
+    "version": 1,
+    "status": "draft",
+    "priority": 10,
+    "scope": {"order_type": "takeout"},
+    "gray_config": {"region_id": [], "merchant_id": []},
+    "condition": {"behavior_blocklist": true},
+    "action": {"type": "deny", "reason": "外卖服务已被限制：该账号存在异常索赔记录"}
+  },
+  {
+    "name": "dinein_risk_alert",
+    "category": "order",
+    "version": 1,
+    "status": "draft",
+    "priority": 50,
+    "scope": {"order_type": "dine_in"},
+    "gray_config": {"region_id": [], "merchant_id": []},
+    "condition": {"behavior_blocklist": true},
+    "action": {"type": "alert", "message": "该顾客有多次恶意索赔记录，谨慎服务"}
+  },
+  {
+    "name": "reservation_risk_alert",
+    "category": "reservation",
+    "version": 1,
+    "status": "draft",
+    "priority": 50,
+    "scope": {},
+    "gray_config": {"region_id": [], "merchant_id": []},
+    "condition": {"behavior_blocklist": true},
+    "action": {"type": "alert", "message": "该顾客有多次恶意索赔记录，谨慎服务"}
+  },
+  {
+    "name": "rider_application_auto_review",
+    "category": "claim",
+    "version": 1,
+    "status": "draft",
+    "priority": 20,
+    "scope": {"domain": "rider_application"},
+    "gray_config": {"region_id": [], "user_id": []},
+    "condition": {
+      "health_cert_uploaded": true,
+      "idcard_ocr_valid": true,
+      "health_ocr_valid": true,
+      "idcard_not_expired": true,
+      "name_match": true
+    },
+    "action": {"type": "allow"}
+  },
+  {
+    "name": "rider_application_auto_reject",
+    "category": "claim",
+    "version": 1,
+    "status": "draft",
+    "priority": 21,
+    "scope": {"domain": "rider_application"},
+    "gray_config": {"region_id": [], "user_id": []},
+    "condition": {
+      "health_cert_uploaded": false,
+      "idcard_ocr_valid": true,
+      "health_ocr_valid": true,
+      "idcard_not_expired": true,
+      "name_match": true
+    },
+    "action": {"type": "deny", "reason": "健康证未上传"}
+  },
+  {
+    "name": "membership_balance_scene_guard",
+    "category": "payment",
+    "version": 1,
+    "status": "draft",
+    "priority": 30,
+    "scope": {},
+    "gray_config": {"region_id": [], "merchant_id": []},
+    "condition": {"use_balance": true, "balance_scene_allowed": true},
+    "action": {"type": "allow"}
+  },
+  {
+    "name": "membership_balance_scene_block",
+    "category": "payment",
+    "version": 1,
+    "status": "draft",
+    "priority": 31,
+    "scope": {},
+    "gray_config": {"region_id": [], "merchant_id": []},
+    "condition": {"use_balance": true, "balance_scene_allowed": false},
+    "action": {"type": "deny", "reason": "商户设置不允许在此场景使用余额支付"}
+  }
+]

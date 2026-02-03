@@ -116,13 +116,48 @@
 - [ ] 输出上线验收 checklist（性能/安全/合规/监控）
 
 ### 阶段 1：规则引擎与配置中心
-- [ ] 规则模型设计（范围/条件/动作/版本/灰度/审计）
-- [ ] 规则存储与版本化（表结构 + 迁移）
-- [ ] 规则执行入口（订单/预订/分账/索赔统一入口）
-- [ ] 规则命中审计与回放能力（可追溯）
-- [ ] 运营商规则配置 API（读写/发布/回滚）
-- [ ] 规则灰度发布与生效策略
+- [x] 规则模型设计（范围/条件/动作/版本/灰度/审计）
+  - 草案： [locallife/docs/phase1/rule_model.md](locallife/docs/phase1/rule_model.md)
+- [x] 规则存储与版本化（表结构 + 迁移）
+  - 草案： [locallife/docs/phase1/rule_storage.md](locallife/docs/phase1/rule_storage.md)
+  - 迁移： [locallife/db/migration/000110_add_rules_engine.up.sql](locallife/db/migration/000110_add_rules_engine.up.sql)
+  - SQL 查询草案： [locallife/db/query/rules.sql](locallife/db/query/rules.sql)
+- [x] 规则执行入口（订单/预订/分账/索赔统一入口）
+  - 草案： [locallife/docs/phase1/rule_execution.md](locallife/docs/phase1/rule_execution.md)
+  - 硬编码规则盘点： [locallife/docs/phase1/hardcoded_rules_inventory.md](locallife/docs/phase1/hardcoded_rules_inventory.md)
+  - 种子数据草案： [locallife/docs/phase1/rules_seed_draft.json](locallife/docs/phase1/rules_seed_draft.json)
+- [x] 规则命中审计与回放能力（可追溯）
+  - 草案： [locallife/docs/phase1/rule_audit_replay.md](locallife/docs/phase1/rule_audit_replay.md)
+  - 迁移： [locallife/db/migration/000111_add_rule_hits.up.sql](locallife/db/migration/000111_add_rule_hits.up.sql)
+  - SQL 查询草案： [locallife/db/query/rule_hits.sql](locallife/db/query/rule_hits.sql)
+- [x] 运营商规则配置 API（读写/发布/回滚）
+  - 草案： [locallife/docs/phase1/rule_admin_api.md](locallife/docs/phase1/rule_admin_api.md)
+  - 示例： [locallife/docs/phase1/rule_admin_api_examples.md](locallife/docs/phase1/rule_admin_api_examples.md)
+- [x] 规则灰度发布与生效策略
+  - 草案： [locallife/docs/phase1/rules_rollout.md](locallife/docs/phase1/rules_rollout.md)
 - [ ] 最小规则配置 UI（运营商端）
+  - 草案： [locallife/docs/phase1/rules_operator_ui.md](locallife/docs/phase1/rules_operator_ui.md)
+  - 代理 API 草案： [locallife/docs/phase1/rules_operator_proxy_api.md](locallife/docs/phase1/rules_operator_proxy_api.md)
+
+**规则种子导入（草案）**
+- [x] 规则种子导入流程草案
+  - [locallife/docs/phase1/rules_seed_import.md](locallife/docs/phase1/rules_seed_import.md)
+  - [locallife/docs/phase1/rules_seed_usage.md](locallife/docs/phase1/rules_seed_usage.md)
+  - [locallife/docs/phase1/rules_seed_import_sample.sql](locallife/docs/phase1/rules_seed_import_sample.sql)
+
+**阶段 1 执行记录（避免遗忘）**
+- [x] 规则模型草案与存储草案已补齐（2026-02-03）
+- [x] 规则引擎最小接入（Noop + 订单创建入口）（2026-02-03）
+- [x] 规则命中审计表与查询草案（2026-02-03）
+- [x] 规则引擎开关与 DB 引擎骨架（2026-02-03）
+- [x] 外卖拒单/预订风险提醒已接入规则引擎（2026-02-03）
+- [x] 会员余额场景限制已接入规则引擎（2026-02-03）
+- [x] 骑手申请自动审核已接入规则引擎旁路记录（2026-02-03）
+- [x] 规则灰度生效策略草案与种子导入草案（2026-02-03）
+- [x] 规则管理 API（读写/发布/禁用/回滚）与示例补齐（2026-02-03）
+- [x] 规则灰度发布与生效策略补充完善（2026-02-03）
+- [x] 规则种子导入流程与示例补充完善（2026-02-03）
+- [x] 运营商规则代理 API 草案与后端路由（2026-02-03）
 
 ### 阶段 2：支付分账闭环
 - [ ] 分账规则配置化（平台/运营商/商户/骑手比例与例外）

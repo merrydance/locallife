@@ -1476,6 +1476,64 @@ type RiderProfile struct {
 	PremiumScore int16 `json:"premium_score"`
 }
 
+// 规则主体表（Phase1 草案）
+type Rule struct {
+	ID               int64       `json:"id"`
+	Name             string      `json:"name"`
+	Category         string      `json:"category"`
+	Status           string      `json:"status"`
+	CurrentVersionID pgtype.Int8 `json:"current_version_id"`
+	CreatedBy        pgtype.Int8 `json:"created_by"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+}
+
+// 规则审计表（Phase1 草案）
+type RuleAudit struct {
+	ID            int64       `json:"id"`
+	RuleID        int64       `json:"rule_id"`
+	RuleVersionID pgtype.Int8 `json:"rule_version_id"`
+	Action        string      `json:"action"`
+	ActorID       pgtype.Int8 `json:"actor_id"`
+	ActorRole     pgtype.Text `json:"actor_role"`
+	Detail        []byte      `json:"detail"`
+	CreatedAt     time.Time   `json:"created_at"`
+}
+
+// 规则命中审计表（Phase1 草案）
+type RuleHit struct {
+	ID            int64       `json:"id"`
+	RuleID        int64       `json:"rule_id"`
+	RuleVersionID pgtype.Int8 `json:"rule_version_id"`
+	Domain        string      `json:"domain"`
+	Decision      string      `json:"decision"`
+	Reason        pgtype.Text `json:"reason"`
+	Inputs        []byte      `json:"inputs"`
+	Outputs       []byte      `json:"outputs"`
+	ActorID       pgtype.Int8 `json:"actor_id"`
+	ActorRole     pgtype.Text `json:"actor_role"`
+	RegionID      pgtype.Int8 `json:"region_id"`
+	MerchantID    pgtype.Int8 `json:"merchant_id"`
+	CreatedAt     time.Time   `json:"created_at"`
+}
+
+// 规则版本表（Phase1 草案）
+type RuleVersion struct {
+	ID          int64              `json:"id"`
+	RuleID      int64              `json:"rule_id"`
+	Version     int32              `json:"version"`
+	Status      string             `json:"status"`
+	Priority    int32              `json:"priority"`
+	Scope       []byte             `json:"scope"`
+	Condition   []byte             `json:"condition"`
+	Action      []byte             `json:"action"`
+	GrayConfig  []byte             `json:"gray_config"`
+	EffectiveAt pgtype.Timestamptz `json:"effective_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy   pgtype.Int8        `json:"created_by"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
 type SafetyReport struct {
 	ID              int64       `json:"id"`
 	ReporterID      int64       `json:"reporter_id"`

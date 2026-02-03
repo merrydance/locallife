@@ -3292,6 +3292,66 @@ func (mr *MockStoreMockRecorder) CreateRiderProfile(ctx, riderID any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderProfile", reflect.TypeOf((*MockStore)(nil).CreateRiderProfile), ctx, riderID)
 }
 
+// CreateRule mocks base method.
+func (m *MockStore) CreateRule(ctx context.Context, arg db.CreateRuleParams) (db.Rule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRule", ctx, arg)
+	ret0, _ := ret[0].(db.Rule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRule indicates an expected call of CreateRule.
+func (mr *MockStoreMockRecorder) CreateRule(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRule", reflect.TypeOf((*MockStore)(nil).CreateRule), ctx, arg)
+}
+
+// CreateRuleAudit mocks base method.
+func (m *MockStore) CreateRuleAudit(ctx context.Context, arg db.CreateRuleAuditParams) (db.RuleAudit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRuleAudit", ctx, arg)
+	ret0, _ := ret[0].(db.RuleAudit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRuleAudit indicates an expected call of CreateRuleAudit.
+func (mr *MockStoreMockRecorder) CreateRuleAudit(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRuleAudit", reflect.TypeOf((*MockStore)(nil).CreateRuleAudit), ctx, arg)
+}
+
+// CreateRuleHit mocks base method.
+func (m *MockStore) CreateRuleHit(ctx context.Context, arg db.CreateRuleHitParams) (db.RuleHit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRuleHit", ctx, arg)
+	ret0, _ := ret[0].(db.RuleHit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRuleHit indicates an expected call of CreateRuleHit.
+func (mr *MockStoreMockRecorder) CreateRuleHit(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRuleHit", reflect.TypeOf((*MockStore)(nil).CreateRuleHit), ctx, arg)
+}
+
+// CreateRuleVersion mocks base method.
+func (m *MockStore) CreateRuleVersion(ctx context.Context, arg db.CreateRuleVersionParams) (db.RuleVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRuleVersion", ctx, arg)
+	ret0, _ := ret[0].(db.RuleVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRuleVersion indicates an expected call of CreateRuleVersion.
+func (mr *MockStoreMockRecorder) CreateRuleVersion(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRuleVersion", reflect.TypeOf((*MockStore)(nil).CreateRuleVersion), ctx, arg)
+}
+
 // CreateSafetyReport mocks base method.
 func (m *MockStore) CreateSafetyReport(ctx context.Context, arg db.CreateSafetyReportParams) (db.SafetyReport, error) {
 	m.ctrl.T.Helper()
@@ -8240,6 +8300,36 @@ func (mr *MockStoreMockRecorder) GetRoomDetailForCustomer(ctx, id any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRoomDetailForCustomer", reflect.TypeOf((*MockStore)(nil).GetRoomDetailForCustomer), ctx, id)
 }
 
+// GetRule mocks base method.
+func (m *MockStore) GetRule(ctx context.Context, id int64) (db.Rule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRule", ctx, id)
+	ret0, _ := ret[0].(db.Rule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRule indicates an expected call of GetRule.
+func (mr *MockStoreMockRecorder) GetRule(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRule", reflect.TypeOf((*MockStore)(nil).GetRule), ctx, id)
+}
+
+// GetRuleVersion mocks base method.
+func (m *MockStore) GetRuleVersion(ctx context.Context, id int64) (db.RuleVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRuleVersion", ctx, id)
+	ret0, _ := ret[0].(db.RuleVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRuleVersion indicates an expected call of GetRuleVersion.
+func (mr *MockStoreMockRecorder) GetRuleVersion(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRuleVersion", reflect.TypeOf((*MockStore)(nil).GetRuleVersion), ctx, id)
+}
+
 // GetSafetyReport mocks base method.
 func (m *MockStore) GetSafetyReport(ctx context.Context, id int64) (db.SafetyReport, error) {
 	m.ctrl.T.Helper()
@@ -9389,6 +9479,21 @@ func (m *MockStore) ListActiveRechargeRules(ctx context.Context, merchantID int6
 func (mr *MockStoreMockRecorder) ListActiveRechargeRules(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveRechargeRules", reflect.TypeOf((*MockStore)(nil).ListActiveRechargeRules), ctx, merchantID)
+}
+
+// ListActiveRuleVersions mocks base method.
+func (m *MockStore) ListActiveRuleVersions(ctx context.Context) ([]db.RuleVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveRuleVersions", ctx)
+	ret0, _ := ret[0].([]db.RuleVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveRuleVersions indicates an expected call of ListActiveRuleVersions.
+func (mr *MockStoreMockRecorder) ListActiveRuleVersions(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveRuleVersions", reflect.TypeOf((*MockStore)(nil).ListActiveRuleVersions), ctx)
 }
 
 // ListActiveVouchers mocks base method.
@@ -11894,6 +11999,66 @@ func (m *MockStore) ListRidersByStatus(ctx context.Context, arg db.ListRidersByS
 func (mr *MockStoreMockRecorder) ListRidersByStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRidersByStatus", reflect.TypeOf((*MockStore)(nil).ListRidersByStatus), ctx, arg)
+}
+
+// ListRuleHitsByRule mocks base method.
+func (m *MockStore) ListRuleHitsByRule(ctx context.Context, arg db.ListRuleHitsByRuleParams) ([]db.RuleHit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRuleHitsByRule", ctx, arg)
+	ret0, _ := ret[0].([]db.RuleHit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRuleHitsByRule indicates an expected call of ListRuleHitsByRule.
+func (mr *MockStoreMockRecorder) ListRuleHitsByRule(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRuleHitsByRule", reflect.TypeOf((*MockStore)(nil).ListRuleHitsByRule), ctx, arg)
+}
+
+// ListRuleHitsByRuleAndRegion mocks base method.
+func (m *MockStore) ListRuleHitsByRuleAndRegion(ctx context.Context, arg db.ListRuleHitsByRuleAndRegionParams) ([]db.RuleHit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRuleHitsByRuleAndRegion", ctx, arg)
+	ret0, _ := ret[0].([]db.RuleHit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRuleHitsByRuleAndRegion indicates an expected call of ListRuleHitsByRuleAndRegion.
+func (mr *MockStoreMockRecorder) ListRuleHitsByRuleAndRegion(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRuleHitsByRuleAndRegion", reflect.TypeOf((*MockStore)(nil).ListRuleHitsByRuleAndRegion), ctx, arg)
+}
+
+// ListRuleVersionsByRule mocks base method.
+func (m *MockStore) ListRuleVersionsByRule(ctx context.Context, ruleID int64) ([]db.RuleVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRuleVersionsByRule", ctx, ruleID)
+	ret0, _ := ret[0].([]db.RuleVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRuleVersionsByRule indicates an expected call of ListRuleVersionsByRule.
+func (mr *MockStoreMockRecorder) ListRuleVersionsByRule(ctx, ruleID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRuleVersionsByRule", reflect.TypeOf((*MockStore)(nil).ListRuleVersionsByRule), ctx, ruleID)
+}
+
+// ListRules mocks base method.
+func (m *MockStore) ListRules(ctx context.Context, arg db.ListRulesParams) ([]db.Rule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRules", ctx, arg)
+	ret0, _ := ret[0].([]db.Rule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRules indicates an expected call of ListRules.
+func (mr *MockStoreMockRecorder) ListRules(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRules", reflect.TypeOf((*MockStore)(nil).ListRules), ctx, arg)
 }
 
 // ListSafetyReportsByRegion mocks base method.
@@ -15638,6 +15803,36 @@ func (m *MockStore) UpdateRiderSubMchID(ctx context.Context, arg db.UpdateRiderS
 func (mr *MockStoreMockRecorder) UpdateRiderSubMchID(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderSubMchID", reflect.TypeOf((*MockStore)(nil).UpdateRiderSubMchID), ctx, arg)
+}
+
+// UpdateRuleCurrentVersion mocks base method.
+func (m *MockStore) UpdateRuleCurrentVersion(ctx context.Context, arg db.UpdateRuleCurrentVersionParams) (db.Rule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRuleCurrentVersion", ctx, arg)
+	ret0, _ := ret[0].(db.Rule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRuleCurrentVersion indicates an expected call of UpdateRuleCurrentVersion.
+func (mr *MockStoreMockRecorder) UpdateRuleCurrentVersion(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRuleCurrentVersion", reflect.TypeOf((*MockStore)(nil).UpdateRuleCurrentVersion), ctx, arg)
+}
+
+// UpdateRuleStatus mocks base method.
+func (m *MockStore) UpdateRuleStatus(ctx context.Context, arg db.UpdateRuleStatusParams) (db.Rule, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRuleStatus", ctx, arg)
+	ret0, _ := ret[0].(db.Rule)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRuleStatus indicates an expected call of UpdateRuleStatus.
+func (mr *MockStoreMockRecorder) UpdateRuleStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRuleStatus", reflect.TypeOf((*MockStore)(nil).UpdateRuleStatus), ctx, arg)
 }
 
 // UpdateSafetyReportStatus mocks base method.

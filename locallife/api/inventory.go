@@ -106,9 +106,9 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 		TargetID:    &inventory.ID,
 		RegionID:    &merchant.RegionID,
 		Metadata: map[string]any{
-			"merchant_id":   merchant.ID,
-			"dish_id":       inventory.DishID,
-			"date":          inventory.Date.Time.Format("2006-01-02"),
+			"merchant_id":    merchant.ID,
+			"dish_id":        inventory.DishID,
+			"date":           inventory.Date.Time.Format("2006-01-02"),
 			"total_quantity": inventory.TotalQuantity,
 		},
 	})

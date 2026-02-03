@@ -14,6 +14,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/weather"
@@ -46,6 +47,7 @@ type Server struct {
 	wsPubSub          *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
 	deliveryBroadcast *logic.DeliveryBroadcastLogic
 	rateLimiter       *RateLimiter
+	rulesEngine       rules.Engine
 	router            *gin.Engine
 }
 
@@ -180,6 +182,11 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		}
 	}
 
+	var engine rules.Engine = rules.NewNoopEngine()
+	if config.RulesEngineEnabled {
+		engine = NewDBRulesEngine(store)
+	}
+
 	server := &Server{
 		config:          config,
 		store:           store,
@@ -193,6 +200,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		taskDistributor: taskDistributor,
 		wsHub:           wsHub,
 		wsPubSub:        wsPubSub,
+		rulesEngine:     engine,
 	}
 
 	if wsPubSub != nil {
@@ -944,6 +952,18 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
+
+		operatorRulesProxyGroup := operatorsGroup.Group("/rules")
+		{
+			operatorRulesProxyGroup.GET("", server.listOperatorRulesProxy)
+			operatorRulesProxyGroup.GET("/hits", server.listOperatorRuleHitsProxy)
+			operatorRulesProxyGroup.GET("/:id", server.getOperatorRuleProxy)
+			operatorRulesProxyGroup.POST("", server.createOperatorRuleProxy)
+			operatorRulesProxyGroup.POST("/:id/versions", server.createOperatorRuleVersionProxy)
+			operatorRulesProxyGroup.POST("/:id/publish", server.publishOperatorRuleProxy)
+			operatorRulesProxyGroup.POST("/:id/rollback", server.rollbackOperatorRuleProxy)
+			operatorRulesProxyGroup.POST("/:id/disable", server.disableOperatorRuleProxy)
+		}
 	}
 
 	// M12: 平台统计BI路由
@@ -961,6 +981,19 @@ func (server *Server) setupRouter() {
 		platformStatsGroup.GET("/riders/ranking", server.getRiderRanking)
 		platformStatsGroup.GET("/hourly", server.getHourlyDistribution)
 		platformStatsGroup.GET("/realtime", server.getRealtimeDashboard)
+	}
+
+	platformRulesGroup := authGroup.Group("/platform/rules")
+	platformRulesGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		platformRulesGroup.POST("", server.createRule)
+		platformRulesGroup.GET("", server.listRules)
+		platformRulesGroup.GET("/:id", server.getRule)
+		platformRulesGroup.POST("/:id/versions", server.createRuleVersion)
+		platformRulesGroup.POST("/:id/publish", server.publishRule)
+		platformRulesGroup.POST("/:id/disable", server.disableRule)
+		platformRulesGroup.POST("/:id/rollback", server.rollbackRule)
+		platformRulesGroup.GET("/hits", server.listRuleHits)
 	}
 
 	// 用户索赔路由

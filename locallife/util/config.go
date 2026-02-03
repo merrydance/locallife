@@ -70,6 +70,9 @@ type Config struct {
 	WebSocketReliableEnabled bool `mapstructure:"WS_RELIABLE_ENABLED"`
 	WebSocketReliablePercent int  `mapstructure:"WS_RELIABLE_PERCENT"`
 
+	// Rules engine toggle
+	RulesEngineEnabled bool `mapstructure:"RULES_ENGINE_ENABLED"`
+
 	// Geofence configs for delivery events
 	GeofenceRadiusMeters       int  `mapstructure:"GEOFENCE_RADIUS_M"`
 	GeofenceDwellMinSeconds    int  `mapstructure:"GEOFENCE_DWELL_MIN_SECONDS"`
@@ -96,6 +99,7 @@ func LoadConfig(path string) (config Config, err error) {
 	// WebSocket rollout defaults
 	viper.SetDefault("WS_RELIABLE_ENABLED", true)
 	viper.SetDefault("WS_RELIABLE_PERCENT", 100)
+	viper.SetDefault("RULES_ENGINE_ENABLED", false)
 	// Geofence defaults
 	viper.SetDefault("GEOFENCE_RADIUS_M", 80)
 	viper.SetDefault("GEOFENCE_DWELL_MIN_SECONDS", 60)

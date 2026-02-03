@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
@@ -574,6 +575,24 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 
 	// 自动审核：检查是否符合条件
 	approved, rejectReason := server.checkRiderApplicationApproval(app)
+	if server.config.RulesEngineEnabled && server.rulesEngine != nil {
+		ruleInput := rules.Context{
+			Domain: rules.DomainClaim,
+			UserID: authPayload.UserID,
+			Metadata: map[string]interface{}{
+				"domain":               "rider_application",
+				"health_cert_uploaded": app.HealthCertUrl.Valid && app.HealthCertUrl.String != "",
+				"idcard_ocr_valid":     len(app.IDCardOcr) > 0,
+				"health_ocr_valid":     len(app.HealthCertOcr) > 0,
+				"idcard_not_expired":   approved || rejectReason != "身份证已过期，请更换有效身份证后重新申请",
+				"name_match":           approved || rejectReason != "健康证姓名与身份证姓名不一致",
+			},
+		}
+		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
+		if err == nil {
+			server.recordRuleHit(ctx, ruleInput, decision, RoleRider)
+		}
+	}
 
 	if approved {
 		// 先提交再通过

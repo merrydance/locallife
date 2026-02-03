@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS rule_audits;
+DROP TABLE IF EXISTS rule_versions;
+DROP TABLE IF EXISTS rules;
