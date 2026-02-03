@@ -84,12 +84,12 @@ func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert Ale
 
 // 任务类型常量
 const (
-	TaskProcessPaymentSuccess      = "payment:process_success"
-	TaskProcessRefund              = "payment:initiate_refund"
-	TaskProcessRefundResult        = "payment:process_refund"
-	TaskProcessProfitSharing       = "payment:process_profit_sharing"
-	TaskProcessApplymentResult     = "payment:process_applyment_result"      // 进件结果处理
-	TaskProcessProfitSharingResult = "payment:process_profit_sharing_result" // 分账结果处理
+	TaskProcessPaymentSuccess            = "payment:process_success"
+	TaskProcessRefund                    = "payment:initiate_refund"
+	TaskProcessRefundResult              = "payment:process_refund"
+	TaskProcessProfitSharing             = "payment:process_profit_sharing"
+	TaskProcessApplymentResult           = "payment:process_applyment_result"             // 进件结果处理
+	TaskProcessProfitSharingResult       = "payment:process_profit_sharing_result"        // 分账结果处理
 	TaskProcessProfitSharingReturnResult = "payment:process_profit_sharing_return_result" // 分账回退结果处理
 )
 

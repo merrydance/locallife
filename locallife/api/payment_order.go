@@ -76,12 +76,12 @@ type createCombinedPaymentOrderRequest struct {
 }
 
 type combinedPaymentSubOrderResponse struct {
-	OrderID     int64  `json:"order_id"`
-	MerchantID  int64  `json:"merchant_id"`
-	SubMchID    string `json:"sub_mch_id"`
-	Amount      int64  `json:"amount"`
-	OutTradeNo  string `json:"out_trade_no"`
-	Description string `json:"description"`
+	OrderID             int64  `json:"order_id"`
+	MerchantID          int64  `json:"merchant_id"`
+	SubMchID            string `json:"sub_mch_id"`
+	Amount              int64  `json:"amount"`
+	OutTradeNo          string `json:"out_trade_no"`
+	Description         string `json:"description"`
 	ProfitSharingStatus string `json:"profit_sharing_status,omitempty"`
 	MerchantName        string `json:"merchant_name,omitempty"`
 	MerchantLogo        string `json:"merchant_logo,omitempty"`
@@ -89,13 +89,13 @@ type combinedPaymentSubOrderResponse struct {
 }
 
 type combinedPaymentOrderResponse struct {
-	ID                int64                           `json:"id"`
-	CombineOutTradeNo string                          `json:"combine_out_trade_no"`
-	TotalAmount       int64                           `json:"total_amount"`
-	Status            string                          `json:"status"`
-	PrepayID          *string                         `json:"prepay_id,omitempty"`
-	PayParams         *miniProgramPayParams           `json:"pay_params,omitempty"`
-	ExpiresAt         *time.Time                      `json:"expires_at,omitempty"`
+	ID                int64                             `json:"id"`
+	CombineOutTradeNo string                            `json:"combine_out_trade_no"`
+	TotalAmount       int64                             `json:"total_amount"`
+	Status            string                            `json:"status"`
+	PrepayID          *string                           `json:"prepay_id,omitempty"`
+	PayParams         *miniProgramPayParams             `json:"pay_params,omitempty"`
+	ExpiresAt         *time.Time                        `json:"expires_at,omitempty"`
 	SubOrders         []combinedPaymentSubOrderResponse `json:"sub_orders"`
 }
 
