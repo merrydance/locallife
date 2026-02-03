@@ -477,6 +477,8 @@ type Querier interface {
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
 	// 冻结用户余额（提现申请时）
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
+	// Phase3: abnormal stats aggregation queries
+	GetAbnormalStatsSummary(ctx context.Context, arg GetAbnormalStatsSummaryParams) (GetAbnormalStatsSummaryRow, error)
 	GetActiveBehaviorBlocklist(ctx context.Context, arg GetActiveBehaviorBlocklistParams) (BehaviorBlocklist, error)
 	GetActiveBillingGroupMember(ctx context.Context, arg GetActiveBillingGroupMemberParams) (BillingGroupMember, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
@@ -972,6 +974,7 @@ type Querier interface {
 	IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error)
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
+	ListAbnormalStatsDaily(ctx context.Context, arg ListAbnormalStatsDailyParams) ([]AbnormalStatsDaily, error)
 	ListActiveBehaviorBlocklists(ctx context.Context) ([]BehaviorBlocklist, error)
 	ListActiveCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]CloudPrinter, error)
 	ListActiveDeliveryFeeConfigs(ctx context.Context) ([]DeliveryFeeConfig, error)

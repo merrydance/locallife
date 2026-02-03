@@ -720,6 +720,7 @@ func (server *Server) setupRouter() {
 	{
 		merchantClaimsGroup.GET("/claims", server.listMerchantClaims)
 		merchantClaimsGroup.GET("/claims/:id", server.getMerchantClaimDetail)
+		merchantClaimsGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
 		merchantClaimsGroup.POST("/appeals", server.createMerchantAppeal)
 		merchantClaimsGroup.GET("/appeals", server.listMerchantAppeals)
 		merchantClaimsGroup.GET("/appeals/:id", server.getMerchantAppealDetail)
@@ -792,6 +793,7 @@ func (server *Server) setupRouter() {
 		// 骑手索赔与申诉
 		riderGroup.GET("/claims", server.listRiderClaims)
 		riderGroup.GET("/claims/:id", server.getRiderClaimDetail)
+		riderGroup.GET("/claims/behavior-summary", server.getRiderClaimBehaviorSummary)
 		riderGroup.POST("/appeals", server.createRiderAppeal)
 		riderGroup.GET("/appeals", server.listRiderAppeals)
 		riderGroup.GET("/appeals/:id", server.getRiderAppealDetail)

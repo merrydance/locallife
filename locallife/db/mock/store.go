@@ -4580,6 +4580,21 @@ func (mr *MockStoreMockRecorder) FreezeUserBalance(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FreezeUserBalance", reflect.TypeOf((*MockStore)(nil).FreezeUserBalance), ctx, arg)
 }
 
+// GetAbnormalStatsSummary mocks base method.
+func (m *MockStore) GetAbnormalStatsSummary(ctx context.Context, arg db.GetAbnormalStatsSummaryParams) (db.GetAbnormalStatsSummaryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAbnormalStatsSummary", ctx, arg)
+	ret0, _ := ret[0].(db.GetAbnormalStatsSummaryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAbnormalStatsSummary indicates an expected call of GetAbnormalStatsSummary.
+func (mr *MockStoreMockRecorder) GetAbnormalStatsSummary(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAbnormalStatsSummary", reflect.TypeOf((*MockStore)(nil).GetAbnormalStatsSummary), ctx, arg)
+}
+
 // GetActiveBehaviorBlocklist mocks base method.
 func (m *MockStore) GetActiveBehaviorBlocklist(ctx context.Context, arg db.GetActiveBehaviorBlocklistParams) (db.BehaviorBlocklist, error) {
 	m.ctrl.T.Helper()
@@ -9524,6 +9539,21 @@ func (m *MockStore) LinkMerchantDishCategory(ctx context.Context, arg db.LinkMer
 func (mr *MockStoreMockRecorder) LinkMerchantDishCategory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkMerchantDishCategory", reflect.TypeOf((*MockStore)(nil).LinkMerchantDishCategory), ctx, arg)
+}
+
+// ListAbnormalStatsDaily mocks base method.
+func (m *MockStore) ListAbnormalStatsDaily(ctx context.Context, arg db.ListAbnormalStatsDailyParams) ([]db.AbnormalStatsDaily, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListAbnormalStatsDaily", ctx, arg)
+	ret0, _ := ret[0].([]db.AbnormalStatsDaily)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListAbnormalStatsDaily indicates an expected call of ListAbnormalStatsDaily.
+func (mr *MockStoreMockRecorder) ListAbnormalStatsDaily(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAbnormalStatsDaily", reflect.TypeOf((*MockStore)(nil).ListAbnormalStatsDaily), ctx, arg)
 }
 
 // ListActiveBehaviorBlocklists mocks base method.

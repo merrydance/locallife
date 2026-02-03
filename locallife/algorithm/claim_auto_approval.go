@@ -147,20 +147,10 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 		go caa.recordUserWarning(ctx, userID, decision.Warning)
 
 	case ClaimBehaviorEvidenceRequired:
-		// 已被警告过：需要证据
-		if !hasEvidence {
-			// 未提交证据，要求提交
-			decision.Type = "evidence-required"
-			decision.Approved = false // 暂不赔付，等证据
-			decision.Amount = 0
-			decision.Reason = "需要提交证据"
-			decision.NeedsEvidence = true
-			decision.Warning = "您已被警告，请提交证据照片后重新提交索赔"
-		} else {
-			// 已提交证据，秒赔
-			decision.Type = ApprovalTypeInstant
-			decision.Reason = "已提交证据，秒赔"
-		}
+		// 免证据流程：已被警告过仍秒赔，但记录提示
+		decision.Type = ApprovalTypeInstant
+		decision.Reason = "已触发警告，仍秒赔"
+		decision.Warning = "您的索赔行为已触发警告，后续可能进入人工复核"
 
 	case ClaimBehaviorPlatformPay:
 		// 问题用户：照赔，但平台垫付
@@ -267,16 +257,16 @@ func (caa *ClaimAutoApproval) recordUserWarning(ctx context.Context, userID int6
 	if err != nil {
 		// 不存在，创建新记录
 		_, _ = caa.store.CreateUserClaimWarning(ctx, db.CreateUserClaimWarningParams{
-			UserID:           userID,
+			UserID:            userID,
 			LastWarningReason: pgtype.Text{String: reason, Valid: true},
-			RequiresEvidence: true, // 首次警告后，下次就需要证据
+			RequiresEvidence:  true, // 首次警告后，下次就需要证据
 		})
 	} else {
 		// 已存在，增加警告次数
 		_ = caa.store.IncrementUserClaimWarning(ctx, db.IncrementUserClaimWarningParams{
-			UserID:           userID,
+			UserID:            userID,
 			LastWarningReason: pgtype.Text{String: reason, Valid: true},
-			RequiresEvidence: true,
+			RequiresEvidence:  true,
 		})
 	}
 }
@@ -284,7 +274,7 @@ func (caa *ClaimAutoApproval) recordUserWarning(ctx context.Context, userID int6
 // recordPlatformPay 记录平台垫付
 func (caa *ClaimAutoApproval) recordPlatformPay(ctx context.Context, userID int64, reason string) {
 	_ = caa.store.IncrementUserPlatformPayCount(ctx, db.IncrementUserPlatformPayCountParams{
-		UserID:           userID,
+		UserID:            userID,
 		LastWarningReason: pgtype.Text{String: reason, Valid: true},
 	})
 }
@@ -316,7 +306,7 @@ func (caa *ClaimAutoApproval) triggerRejectService(ctx context.Context, userID i
 		BlockUntil: pgtype.Timestamptz{Time: blockUntil, Valid: true},
 		Status:     "active",
 	})
-	
+
 	// 发送通知给用户（站内通知）
 	// C端用户使用站内通知系统，用户打开小程序时可看到
 	// 微信订阅消息需要用户授权，由前端根据通知内容决定是否触发
@@ -324,11 +314,11 @@ func (caa *ClaimAutoApproval) triggerRejectService(ctx context.Context, userID i
 		_ = caa.notificationDistributor.SendUserNotification(
 			ctx,
 			userID,
-			"system",                                                    // notificationType
-			"账户状态变更通知",                                                 // title
+			"system",   // notificationType
+			"账户状态变更通知", // title
 			"由于您的账户存在异常索赔行为，服务已受到限制。如有疑问请联系客服。", // content
-			"user",                                                      // relatedType
-			userID,                                                      // relatedID
+			"user", // relatedType
+			userID, // relatedID
 		)
 	}
 }
@@ -395,7 +385,7 @@ func (caa *ClaimAutoApproval) CheckRiderDamageHistory(
 		// 2. 发送通知给骑手（风险警告）
 		go caa.sendNotification("rider", "餐损索赔警告",
 			fmt.Sprintf("您近7天内发生%d次餐损索赔，请注意配送安全", damageCount), riderID)
-		
+
 		// 注意：押金扣款已在 CreateClaimWithDecision 中即时执行，此处不重复扣款
 	}
 
@@ -511,7 +501,7 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 			delivery, deliveryErr := caa.store.GetDeliveryByOrderID(ctx, orderID)
 			if deliveryErr == nil && delivery.RiderID.Valid {
 				riderID := delivery.RiderID.Int64
-				
+
 				// 执行押金扣款并退款给用户（异步，不阻塞API响应）
 				// 使用原子事务：骑手押金扣款 → 用户余额入账
 				go func() {
@@ -605,7 +595,7 @@ func (caa *ClaimAutoApproval) handleSuspiciousPattern(
 			ctx,
 			userID,
 			"system",       // notificationType
-			"索赔风险提醒",      // title
+			"索赔风险提醒",       // title
 			warningMessage, // content
 			"claim",        // relatedType
 			claimID,        // relatedID

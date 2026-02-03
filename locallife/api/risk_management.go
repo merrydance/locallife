@@ -12,18 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
 )
 
 // SubmitClaimRequest 提交索赔请求
 type SubmitClaimRequest struct {
-	OrderID        int64    `json:"order_id" binding:"required,min=1"`
-	ClaimType      string   `json:"claim_type" binding:"required,oneof=foreign-object damage timeout food-safety"`
-	ClaimAmount    int64    `json:"claim_amount" binding:"required,min=1,max=100000000"` // 最高100万分(1万元)
-	ClaimReason    string   `json:"claim_reason" binding:"required,min=5,max=1000"`
-	EvidencePhotos []string `json:"evidence_photos,omitempty" binding:"omitempty,max=10,dive,url,max=500"`
-	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
+	OrderID           int64    `json:"order_id" binding:"required,min=1"`
+	ClaimType         string   `json:"claim_type" binding:"required,oneof=foreign-object damage timeout food-safety"`
+	ClaimAmount       int64    `json:"claim_amount" binding:"required,min=1,max=100000000"` // 最高100万分(1万元)
+	ClaimReason       string   `json:"claim_reason" binding:"required,min=5,max=1000"`
+	EvidencePhotos    []string `json:"evidence_photos,omitempty" binding:"omitempty,max=10,dive,url,max=500"`
+	DeviceFingerprint string   `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
 }
 
 // SubmitClaimResponse 索赔响应
@@ -109,7 +110,67 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
-	// 6. 获取配送费（超时索赔用）
+	// 6. 检查是否提交了证据
+	hasEvidence := len(req.EvidencePhotos) > 0
+
+	// 6.1 规则引擎判定（索赔/异常规则）
+	ruleDecision := rules.Decision{Action: "allow"}
+	if server.rulesEngine != nil && server.config.RulesEngineEnabled {
+		regionID := int64(0)
+		if merchant, err := server.store.GetMerchant(ctx, order.MerchantID); err == nil {
+			regionID = merchant.RegionID
+		}
+
+		metadata := map[string]interface{}{
+			"claim_type":          req.ClaimType,
+			"claim_amount":        req.ClaimAmount,
+			"order_amount":        order.TotalAmount,
+			"has_evidence":        hasEvidence,
+			"evidence_count":      len(req.EvidencePhotos),
+			"claim_reason_length": len(req.ClaimReason),
+			"device_fingerprint":  req.DeviceFingerprint,
+		}
+
+		if stats, err := server.store.GetUserClaimWindowStats(ctx, authPayload.UserID); err == nil {
+			metadata["takeout_orders_7d"] = stats.TakeoutOrders7d
+			metadata["claims_7d"] = stats.Claims7d
+			metadata["takeout_orders_30d"] = stats.TakeoutOrders30d
+			metadata["claims_30d"] = stats.Claims30d
+			if stats.TakeoutOrders7d > 0 {
+				metadata["claim_rate_7d"] = float64(stats.Claims7d) / float64(stats.TakeoutOrders7d)
+			}
+			if stats.TakeoutOrders30d > 0 {
+				metadata["claim_rate_30d"] = float64(stats.Claims30d) / float64(stats.TakeoutOrders30d)
+			}
+		}
+
+		ruleInput := rules.Context{
+			Domain:     rules.DomainClaim,
+			RegionID:   regionID,
+			MerchantID: order.MerchantID,
+			UserID:     authPayload.UserID,
+			OrderType:  order.OrderType,
+			Amount:     req.ClaimAmount,
+			Metadata:   metadata,
+		}
+		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
+		ruleDecision = decision
+		if !decision.Allow {
+			reason := decision.Reason
+			if reason == "" {
+				reason = "claim blocked by rule"
+			}
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New(reason)))
+			return
+		}
+	}
+
+	// 7. 获取配送费（超时索赔用）
 	var deliveryFee int64
 	if req.ClaimType == algorithm.ClaimTypeTimeout || req.ClaimType == algorithm.ClaimTypeDamage {
 		delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
@@ -117,9 +178,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			deliveryFee = delivery.DeliveryFee
 		}
 	}
-
-	// 7. 检查是否提交了证据
-	hasEvidence := len(req.EvidencePhotos) > 0
 
 	// 创建自动审核器
 	approver := algorithm.NewClaimAutoApproval(server.store, server.wsHub)
@@ -139,15 +197,36 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
-	// 如果需要证据但未提交，返回提示
-	if decision.NeedsEvidence && !hasEvidence {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error":          "需要提交证据",
-			"needs_evidence": true,
-			"message":        "您已被警告，请提交证据照片后重新提交索赔",
-		})
-		return
+	// 规则引擎结果覆盖（如需）
+	if ruleDecision.Action != "" && ruleDecision.Action != "allow" && ruleDecision.Action != "alert" {
+		switch ruleDecision.Action {
+		case "evidence-required":
+			decision.Type = "evidence-required"
+			decision.Approved = false
+			decision.Amount = 0
+			decision.Reason = ruleDecision.Reason
+			decision.NeedsEvidence = true
+		case "manual":
+			decision.Type = algorithm.ApprovalTypeManual
+			decision.Approved = false
+			decision.Amount = 0
+			decision.Reason = ruleDecision.Reason
+			decision.NeedsReview = true
+		case "platform-pay":
+			decision.Type = "platform-pay"
+			decision.CompensationSource = algorithm.CompensationSourcePlatform
+			if ruleDecision.Reason != "" {
+				decision.Reason = ruleDecision.Reason
+			}
+		case "instant", "auto":
+			decision.Type = ruleDecision.Action
+			if ruleDecision.Reason != "" {
+				decision.Reason = ruleDecision.Reason
+			}
+		}
 	}
+
+	// 免证据流程：不再阻断提交，仅记录提示信息
 
 	// 采集证据信息（事务内落库）
 	deviceID := ""
@@ -161,7 +240,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		addr := order.AddressID.Int64
 		addressID = &addr
 	}
-	
+
 	evidenceContext := &algorithm.ClaimEvidenceContext{
 		DeviceID:          deviceID,
 		DeviceFingerprint: req.DeviceFingerprint,

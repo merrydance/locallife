@@ -143,6 +143,60 @@ func matchRuleCondition(ctx context.Context, store db.Store, condition map[strin
 			}
 		}
 	}
+	if v, ok := condition["claim_type"]; ok {
+		if s, ok := v.(string); ok && s != "" {
+			if metaString(input.Metadata, "claim_type") != s {
+				return false, nil
+			}
+		}
+	}
+	if v, ok := condition["claim_type_in"]; ok {
+		if !matchStringSlice(v, metaString(input.Metadata, "claim_type")) {
+			return false, nil
+		}
+	}
+	if v, ok := condition["amount_gte"]; ok {
+		if !matchNumberGte(v, float64(input.Amount)) {
+			return false, nil
+		}
+	}
+	if v, ok := condition["amount_lte"]; ok {
+		if !matchNumberLte(v, float64(input.Amount)) {
+			return false, nil
+		}
+	}
+	if v, ok := condition["has_evidence"]; ok {
+		if want, ok := v.(bool); ok {
+			if want != boolMeta(input.Metadata, "has_evidence") {
+				return false, nil
+			}
+		}
+	}
+	if v, ok := condition["evidence_count_gte"]; ok {
+		if !matchNumberGte(v, metaNumber(input.Metadata, "evidence_count")) {
+			return false, nil
+		}
+	}
+	if v, ok := condition["claims_7d_gte"]; ok {
+		if !matchNumberGte(v, metaNumber(input.Metadata, "claims_7d")) {
+			return false, nil
+		}
+	}
+	if v, ok := condition["claims_30d_gte"]; ok {
+		if !matchNumberGte(v, metaNumber(input.Metadata, "claims_30d")) {
+			return false, nil
+		}
+	}
+	if v, ok := condition["claim_rate_7d_gte"]; ok {
+		if !matchNumberGte(v, metaNumber(input.Metadata, "claim_rate_7d")) {
+			return false, nil
+		}
+	}
+	if v, ok := condition["claim_rate_30d_gte"]; ok {
+		if !matchNumberGte(v, metaNumber(input.Metadata, "claim_rate_30d")) {
+			return false, nil
+		}
+	}
 	if v, ok := condition["use_balance"]; ok {
 		if enabled, ok := v.(bool); ok && enabled {
 			useBalance, ok := input.Metadata["use_balance"].(bool)
@@ -210,6 +264,108 @@ func boolMeta(meta map[string]interface{}, key string) bool {
 		}
 	}
 	return false
+}
+
+func metaString(meta map[string]interface{}, key string) string {
+	if meta == nil {
+		return ""
+	}
+	if v, ok := meta[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func metaNumber(meta map[string]interface{}, key string) float64 {
+	if meta == nil {
+		return 0
+	}
+	if v, ok := meta[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return n
+		case float32:
+			return float64(n)
+		case int:
+			return float64(n)
+		case int64:
+			return float64(n)
+		case int32:
+			return float64(n)
+		case uint:
+			return float64(n)
+		case uint64:
+			return float64(n)
+		case uint32:
+			return float64(n)
+		}
+	}
+	return 0
+}
+
+func matchNumberGte(value interface{}, actual float64) bool {
+	want, ok := toFloat64(value)
+	if !ok {
+		return true
+	}
+	return actual >= want
+}
+
+func matchNumberLte(value interface{}, actual float64) bool {
+	want, ok := toFloat64(value)
+	if !ok {
+		return true
+	}
+	return actual <= want
+}
+
+func toFloat64(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	default:
+		return 0, false
+	}
+}
+
+func matchStringSlice(value interface{}, target string) bool {
+	if target == "" {
+		return false
+	}
+	switch v := value.(type) {
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s == target {
+				return true
+			}
+		}
+		return false
+	case []string:
+		for _, item := range v {
+			if item == target {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 func checkActiveBehaviorBlocklist(ctx context.Context, store db.Store, userID int64) (bool, error) {

@@ -10,6 +10,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AbnormalStatsDaily struct {
+	ID             int64       `json:"id"`
+	StatDate       pgtype.Date `json:"stat_date"`
+	EntityType     string      `json:"entity_type"`
+	EntityID       int64       `json:"entity_id"`
+	TotalOrders    int32       `json:"total_orders"`
+	AbnormalClaims int32       `json:"abnormal_claims"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+}
+
 // 申诉表 - 商户/骑手对索赔的申诉
 type Appeal struct {
 	ID      int64 `json:"id"`
