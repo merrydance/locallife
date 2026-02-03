@@ -38,13 +38,13 @@ WHERE created_at >= $1
 `
 
 type CountDistinctUsersInClaimWindowParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 // 统计时间窗口内发起索赔的不同用户数
 func (q *Queries) CountDistinctUsersInClaimWindow(ctx context.Context, arg CountDistinctUsersInClaimWindowParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countDistinctUsersInClaimWindow, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, countDistinctUsersInClaimWindow, arg.StartAt, arg.EndAt)
 	var user_count int64
 	err := row.Scan(&user_count)
 	return user_count, err
@@ -1927,9 +1927,9 @@ ORDER BY c.created_at DESC
 `
 
 type ListClaimsByTimeWindowParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	ID          int64     `json:"id"`
+	StartAt   time.Time `json:"start_at"`
+	EndAt     time.Time `json:"end_at"`
+	ExcludeID int64     `json:"exclude_id"`
 }
 
 type ListClaimsByTimeWindowRow struct {
@@ -1960,7 +1960,7 @@ type ListClaimsByTimeWindowRow struct {
 // ==========================================
 // 查询指定时间窗口内的索赔（用于协同欺诈检测）
 func (q *Queries) ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTimeWindowParams) ([]ListClaimsByTimeWindowRow, error) {
-	rows, err := q.db.Query(ctx, listClaimsByTimeWindow, arg.CreatedAt, arg.CreatedAt_2, arg.ID)
+	rows, err := q.db.Query(ctx, listClaimsByTimeWindow, arg.StartAt, arg.EndAt, arg.ExcludeID)
 	if err != nil {
 		return nil, err
 	}

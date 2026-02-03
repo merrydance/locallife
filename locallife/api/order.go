@@ -3507,9 +3507,9 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
 
 	stats, err := server.store.GetOrderStats(ctx, db.GetOrderStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

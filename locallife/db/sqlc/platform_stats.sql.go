@@ -30,8 +30,8 @@ ORDER BY total_sales DESC
 `
 
 type GetCategoryStatsParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetCategoryStatsRow struct {
@@ -43,7 +43,7 @@ type GetCategoryStatsRow struct {
 
 // 分类销售统计
 func (q *Queries) GetCategoryStats(ctx context.Context, arg GetCategoryStatsParams) ([]GetCategoryStatsRow, error) {
-	rows, err := q.db.Query(ctx, getCategoryStats, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getCategoryStats, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -79,8 +79,8 @@ ORDER BY hour
 `
 
 type GetHourlyDistributionParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetHourlyDistributionRow struct {
@@ -91,7 +91,7 @@ type GetHourlyDistributionRow struct {
 
 // 订单时段分布
 func (q *Queries) GetHourlyDistribution(ctx context.Context, arg GetHourlyDistributionParams) ([]GetHourlyDistributionRow, error) {
-	rows, err := q.db.Query(ctx, getHourlyDistribution, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getHourlyDistribution, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +122,8 @@ ORDER BY date
 `
 
 type GetMerchantGrowthStatsParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetMerchantGrowthStatsRow struct {
@@ -133,7 +133,7 @@ type GetMerchantGrowthStatsRow struct {
 
 // 商户增长统计
 func (q *Queries) GetMerchantGrowthStats(ctx context.Context, arg GetMerchantGrowthStatsParams) ([]GetMerchantGrowthStatsRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantGrowthStats, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantGrowthStats, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -170,14 +170,14 @@ LEFT JOIN orders o ON o.merchant_id = m.id
 WHERE m.status = 'active'
 GROUP BY m.id, m.name, m.region_id, r.name
 ORDER BY total_sales DESC
-LIMIT $3 OFFSET $4
+LIMIT $4 OFFSET $3
 `
 
 type GetMerchantRankingParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
+	Offset  int32     `json:"offset"`
+	Limit   int32     `json:"limit"`
 }
 
 type GetMerchantRankingRow struct {
@@ -194,10 +194,10 @@ type GetMerchantRankingRow struct {
 // 商户销售排行
 func (q *Queries) GetMerchantRanking(ctx context.Context, arg GetMerchantRankingParams) ([]GetMerchantRankingRow, error) {
 	rows, err := q.db.Query(ctx, getMerchantRanking,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -243,8 +243,8 @@ ORDER BY date
 `
 
 type GetPlatformDailyStatsParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetPlatformDailyStatsRow struct {
@@ -260,7 +260,7 @@ type GetPlatformDailyStatsRow struct {
 
 // 平台日统计
 func (q *Queries) GetPlatformDailyStats(ctx context.Context, arg GetPlatformDailyStatsParams) ([]GetPlatformDailyStatsRow, error) {
-	rows, err := q.db.Query(ctx, getPlatformDailyStats, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getPlatformDailyStats, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -301,8 +301,8 @@ WHERE o.status NOT IN ('cancelled')
 `
 
 type GetPlatformOverviewParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetPlatformOverviewRow struct {
@@ -316,7 +316,7 @@ type GetPlatformOverviewRow struct {
 // M12: 平台端统计查询
 // 平台全局概览
 func (q *Queries) GetPlatformOverview(ctx context.Context, arg GetPlatformOverviewParams) (GetPlatformOverviewRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformOverview, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getPlatformOverview, arg.StartAt, arg.EndAt)
 	var i GetPlatformOverviewRow
 	err := row.Scan(
 		&i.TotalOrders,
@@ -390,8 +390,8 @@ ORDER BY total_gmv DESC
 `
 
 type GetRegionComparisonParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetRegionComparisonRow struct {
@@ -407,7 +407,7 @@ type GetRegionComparisonRow struct {
 
 // 区域对比分析
 func (q *Queries) GetRegionComparison(ctx context.Context, arg GetRegionComparisonParams) ([]GetRegionComparisonRow, error) {
-	rows, err := q.db.Query(ctx, getRegionComparison, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getRegionComparison, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -451,14 +451,14 @@ WHERE r.status = 'active'
 GROUP BY r.id, u.full_name, r.total_earnings
 HAVING COUNT(d.id) > 0
 ORDER BY completed_count DESC
-LIMIT $3 OFFSET $4
+LIMIT $4 OFFSET $3
 `
 
 type GetRiderPerformanceRankingParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
+	Offset  int32     `json:"offset"`
+	Limit   int32     `json:"limit"`
 }
 
 type GetRiderPerformanceRankingRow struct {
@@ -473,10 +473,10 @@ type GetRiderPerformanceRankingRow struct {
 // 骑手绩效排行(全平台)
 func (q *Queries) GetRiderPerformanceRanking(ctx context.Context, arg GetRiderPerformanceRankingParams) ([]GetRiderPerformanceRankingRow, error) {
 	rows, err := q.db.Query(ctx, getRiderPerformanceRanking,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -514,8 +514,8 @@ ORDER BY date
 `
 
 type GetUserGrowthStatsParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetUserGrowthStatsRow struct {
@@ -525,7 +525,7 @@ type GetUserGrowthStatsRow struct {
 
 // 用户增长统计
 func (q *Queries) GetUserGrowthStats(ctx context.Context, arg GetUserGrowthStatsParams) ([]GetUserGrowthStatsRow, error) {
-	rows, err := q.db.Query(ctx, getUserGrowthStats, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getUserGrowthStats, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}

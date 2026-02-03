@@ -90,9 +90,9 @@ func TestGetMerchantDailyStats(t *testing.T) {
 	endDate := today.Add(24 * time.Hour)
 
 	stats, err := testStore.GetMerchantDailyStats(context.Background(), GetMerchantDailyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	require.NoError(t, err)
 	require.Len(t, stats, 3) // 3天有数据
@@ -117,9 +117,9 @@ func TestGetMerchantDailyStats_Empty(t *testing.T) {
 
 	today := time.Now().Truncate(24 * time.Hour)
 	stats, err := testStore.GetMerchantDailyStats(context.Background(), GetMerchantDailyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 	require.Empty(t, stats)
@@ -154,9 +154,9 @@ func TestGetMerchantDailyStats_ExcludesPendingOrders(t *testing.T) {
 	require.NoError(t, err)
 
 	stats, err := testStore.GetMerchantDailyStats(context.Background(), GetMerchantDailyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 	require.Len(t, stats, 1)
@@ -180,9 +180,9 @@ func TestGetMerchantOverview(t *testing.T) {
 	createCompletedOrderForStats(t, user.ID, merchant.ID, 30000, "dine_in", yesterday)
 
 	overview, err := testStore.GetMerchantOverview(context.Background(), GetMerchantOverviewParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   yesterday,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    yesterday,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 
@@ -199,9 +199,9 @@ func TestGetMerchantOverview_Empty(t *testing.T) {
 	today := time.Now().Truncate(24 * time.Hour)
 
 	overview, err := testStore.GetMerchantOverview(context.Background(), GetMerchantOverviewParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 
@@ -236,9 +236,9 @@ func TestGetMerchantRepurchaseRate(t *testing.T) {
 	createCompletedOrderForStats(t, user3.ID, merchant.ID, 8000, "takeout", today)
 
 	rate, err := testStore.GetMerchantRepurchaseRate(context.Background(), GetMerchantRepurchaseRateParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 
@@ -266,9 +266,9 @@ func TestGetMerchantRepurchaseRate_AllRepeat(t *testing.T) {
 	createCompletedOrderForStats(t, user.ID, merchant.ID, 20000, "takeout", today)
 
 	rate, err := testStore.GetMerchantRepurchaseRate(context.Background(), GetMerchantRepurchaseRateParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 
@@ -292,9 +292,9 @@ func TestGetMerchantRepurchaseRate_NoRepeat(t *testing.T) {
 	createCompletedOrderForStats(t, user2.ID, merchant.ID, 20000, "takeout", today)
 
 	rate, err := testStore.GetMerchantRepurchaseRate(context.Background(), GetMerchantRepurchaseRateParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 
@@ -311,9 +311,9 @@ func TestGetMerchantRepurchaseRate_Empty(t *testing.T) {
 	today := time.Now().Truncate(24 * time.Hour)
 
 	rate, err := testStore.GetMerchantRepurchaseRate(context.Background(), GetMerchantRepurchaseRateParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 
@@ -373,9 +373,9 @@ func TestGetMerchantOrderSourceStats(t *testing.T) {
 	createCompletedOrderForStats(t, user.ID, merchant.ID, 50000, "dine_in", today)
 
 	stats, err := testStore.GetMerchantOrderSourceStats(context.Background(), GetMerchantOrderSourceStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 	require.Len(t, stats, 2) // 2种订单类型
@@ -410,9 +410,9 @@ func TestGetMerchantHourlyStats(t *testing.T) {
 	createCompletedOrderForStats(t, user.ID, merchant.ID, 30000, "dine_in", twoPM)
 
 	stats, err := testStore.GetMerchantHourlyStats(context.Background(), GetMerchantHourlyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   baseTime,
-		CreatedAt_2: baseTime.Add(24 * time.Hour),
+		MerchantID: merchant.ID,
+		StartAt:    baseTime,
+		EndAt:      baseTime.Add(24 * time.Hour),
 	})
 	require.NoError(t, err)
 	require.Len(t, stats, 2) // 2个小时有数据
@@ -457,10 +457,10 @@ func TestGetTopSellingDishes(t *testing.T) {
 	createOrderItemForStats(t, order2.ID, dish3.ID, 1, 5000)
 
 	topDishes, err := testStore.GetTopSellingDishes(context.Background(), GetTopSellingDishesParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
-		Limit:       10,
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
+		Limit:      10,
 	})
 	require.NoError(t, err)
 	require.Len(t, topDishes, 3)
@@ -496,10 +496,10 @@ func TestGetTopSellingDishes_WithLimit(t *testing.T) {
 
 	// 只取前2名
 	topDishes, err := testStore.GetTopSellingDishes(context.Background(), GetTopSellingDishesParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   today,
-		CreatedAt_2: today.Add(24 * time.Hour),
-		Limit:       2,
+		MerchantID: merchant.ID,
+		StartAt:    today,
+		EndAt:      today.Add(24 * time.Hour),
+		Limit:      2,
 	})
 	require.NoError(t, err)
 	require.Len(t, topDishes, 2)

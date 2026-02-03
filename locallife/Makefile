@@ -1,4 +1,4 @@
-DB_URL=postgresql:///locallife_dev?host=/var/run/postgresql&sslmode=disable
+DB_URL=postgresql:///ll?host=/var/run/postgresql&sslmode=disable
 
 ＃ network:
 #	docker network create bank-network

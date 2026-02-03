@@ -551,10 +551,10 @@ SELECT d.id FROM dishes d
 WHERE d.is_online = true 
   AND d.is_available = true
   AND d.deleted_at IS NULL
-  AND d.price >= $1
-  AND d.price <= $2
+  AND d.price >= sqlc.arg('min_price')
+  AND d.price <= sqlc.arg('max_price')
 ORDER BY d.created_at DESC
-LIMIT $3;
+LIMIT sqlc.arg('limit');
 
 -- name: GetUserPurchasedDishIDs :many
 -- 获取用户购买过的菜品ID（用于排除已购买）

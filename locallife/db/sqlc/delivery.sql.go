@@ -312,20 +312,20 @@ func (q *Queries) GetDeliveryForUpdate(ctx context.Context, id int64) (Delivery,
 const getRiderDailyEarnings = `-- name: GetRiderDailyEarnings :one
 SELECT COALESCE(SUM(rider_earnings), 0) AS daily_earnings
 FROM deliveries
-WHERE rider_id = $1 
+WHERE rider_id = $1
     AND status = 'completed'
     AND completed_at >= $2
     AND completed_at < $3
 `
 
 type GetRiderDailyEarningsParams struct {
-	RiderID       pgtype.Int8        `json:"rider_id"`
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	CompletedAt_2 pgtype.Timestamptz `json:"completed_at_2"`
+	RiderID pgtype.Int8        `json:"rider_id"`
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
 }
 
 func (q *Queries) GetRiderDailyEarnings(ctx context.Context, arg GetRiderDailyEarningsParams) (interface{}, error) {
-	row := q.db.QueryRow(ctx, getRiderDailyEarnings, arg.RiderID, arg.CompletedAt, arg.CompletedAt_2)
+	row := q.db.QueryRow(ctx, getRiderDailyEarnings, arg.RiderID, arg.StartAt, arg.EndAt)
 	var daily_earnings interface{}
 	err := row.Scan(&daily_earnings)
 	return daily_earnings, err

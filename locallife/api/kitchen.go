@@ -223,7 +223,7 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 	calcStartTime := now.AddDate(0, 0, -AvgPrepareTimeCalcDays)
 	avgPrepareTime, err := server.store.GetMerchantAvgPrepareTime(ctx, db.GetMerchantAvgPrepareTimeParams{
 		MerchantID: merchant.ID,
-		CreatedAt:  calcStartTime,
+		StartAt:    calcStartTime,
 	})
 	if err != nil || avgPrepareTime <= 0 {
 		// 如果没有历史数据或查询失败，使用默认值

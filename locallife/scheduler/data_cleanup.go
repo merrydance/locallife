@@ -2,8 +2,10 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/worker"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -54,8 +56,20 @@ func (s *DataCleanupScheduler) Start() error {
 		return err
 	}
 
+	// 每天凌晨2点40执行异常率告警检查
+	_, err = s.cron.AddFunc("0 40 2 * * *", s.checkAbnormalStatsAlerts)
+	if err != nil {
+		return err
+	}
+
 	// 每天凌晨3点执行优惠券过期标记
 	_, err = s.cron.AddFunc("0 0 3 * * *", s.markExpiredVouchers)
+	if err != nil {
+		return err
+	}
+
+	// 每天凌晨2点30执行异常统计回填（修正漂移）
+	_, err = s.cron.AddFunc("0 30 2 * * *", s.backfillAbnormalStatsDaily)
 	if err != nil {
 		return err
 	}
@@ -88,6 +102,117 @@ func (s *DataCleanupScheduler) cleanupExpiredWebLoginSessions() {
 	if count > 0 {
 		log.Info().Int64("count", count).Msg("expired web login sessions")
 	}
+
+}
+
+type abnormalAlertThresholds struct {
+	UserRate30d     float64 `json:"user_rate_30d"`
+	MerchantRate30d float64 `json:"merchant_rate_30d"`
+	RiderRate30d    float64 `json:"rider_rate_30d"`
+	MinClaims30d    int32   `json:"min_claims_30d"`
+	Limit           int32   `json:"limit"`
+}
+
+func (s *DataCleanupScheduler) getAbnormalAlertThresholds(ctx context.Context) abnormalAlertThresholds {
+	defaults := abnormalAlertThresholds{
+		UserRate30d:     0.35,
+		MerchantRate30d: 0.12,
+		RiderRate30d:    0.1,
+		MinClaims30d:    5,
+		Limit:           100,
+	}
+	config, err := s.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: "behavior_trace.alert_thresholds",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil || len(config.ConfigValue) == 0 {
+		return defaults
+	}
+	var payload abnormalAlertThresholds
+	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
+		return defaults
+	}
+	if payload.UserRate30d > 0 {
+		defaults.UserRate30d = payload.UserRate30d
+	}
+	if payload.MerchantRate30d > 0 {
+		defaults.MerchantRate30d = payload.MerchantRate30d
+	}
+	if payload.RiderRate30d > 0 {
+		defaults.RiderRate30d = payload.RiderRate30d
+	}
+	if payload.MinClaims30d > 0 {
+		defaults.MinClaims30d = payload.MinClaims30d
+	}
+	if payload.Limit > 0 {
+		defaults.Limit = payload.Limit
+	}
+	return defaults
+}
+func (s *DataCleanupScheduler) checkAbnormalStatsAlerts() {
+	ctx := context.Background()
+	thresholds := s.getAbnormalAlertThresholds(ctx)
+
+	now := time.Now()
+	start := now.AddDate(0, 0, -30)
+	startDate := pgtype.Date{Time: start, Valid: true}
+	endDate := pgtype.Date{Time: now, Valid: true}
+
+	s.checkEntityAbnormalAlerts(ctx, "user", startDate, endDate, thresholds.UserRate30d, thresholds.MinClaims30d, thresholds.Limit)
+	s.checkEntityAbnormalAlerts(ctx, "merchant", startDate, endDate, thresholds.MerchantRate30d, thresholds.MinClaims30d, thresholds.Limit)
+	s.checkEntityAbnormalAlerts(ctx, "rider", startDate, endDate, thresholds.RiderRate30d, thresholds.MinClaims30d, thresholds.Limit)
+}
+
+func (s *DataCleanupScheduler) checkEntityAbnormalAlerts(ctx context.Context, entityType string, startDate, endDate pgtype.Date, minRate float64, minClaims int32, limit int32) {
+	rows, err := s.store.ListAbnormalStatsAlerts(ctx, db.ListAbnormalStatsAlertsParams{
+		EntityType: entityType,
+		StartDate:  startDate,
+		EndDate:    endDate,
+		MinClaims:  minClaims,
+		MinRate:    minRate,
+		Limit:      limit,
+	})
+	if err != nil {
+		log.Error().Err(err).Str("entity_type", entityType).Msg("failed to list abnormal stats alerts")
+		return
+	}
+	for _, row := range rows {
+		metadata, _ := json.Marshal(map[string]interface{}{
+			"entity_type":     entityType,
+			"entity_id":       row.EntityID,
+			"total_orders":    row.TotalOrders,
+			"abnormal_claims": row.AbnormalClaims,
+			"abnormal_rate":   row.AbnormalRate,
+			"window_days":     30,
+			"min_rate":        minRate,
+			"min_claims":      minClaims,
+		})
+
+		var regionID pgtype.Int8
+		switch entityType {
+		case "merchant":
+			if merchant, err := s.store.GetMerchant(ctx, row.EntityID); err == nil {
+				regionID = pgtype.Int8{Int64: merchant.RegionID, Valid: true}
+			}
+		case "rider":
+			if rider, err := s.store.GetRider(ctx, row.EntityID); err == nil && rider.RegionID.Valid {
+				regionID = rider.RegionID
+			}
+		}
+
+		_, err := s.store.CreateAuditLog(ctx, db.CreateAuditLogParams{
+			ActorRole:  "system",
+			Action:     "abnormal_stats_alert",
+			TargetType: entityType,
+			TargetID:   pgtype.Int8{Int64: row.EntityID, Valid: true},
+			RegionID:   regionID,
+			Metadata:   metadata,
+		})
+		if err != nil {
+			log.Error().Err(err).Str("entity_type", entityType).Int64("entity_id", row.EntityID).Msg("failed to create abnormal stats alert")
+		}
+	}
 }
 
 // cleanupExpiredPaymentOrders 清理过期的支付订单
@@ -104,6 +229,28 @@ func (s *DataCleanupScheduler) cleanupExpiredPaymentOrders() {
 	if count > 0 {
 		log.Info().Int64("count", count).Msg("closed expired payment orders")
 	}
+}
+
+// backfillAbnormalStatsDaily 回填异常统计日表（默认回填最近3天）
+func (s *DataCleanupScheduler) backfillAbnormalStatsDaily() {
+	ctx := context.Background()
+	now := time.Now()
+	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	start := startOfToday.AddDate(0, 0, -3)
+	end := startOfToday.AddDate(0, 0, 1)
+
+	startDateParam := pgtype.Timestamptz{Time: start, Valid: true}
+	endDateParam := pgtype.Timestamptz{Time: end, Valid: true}
+
+	err := s.store.BackfillAbnormalStatsDaily(ctx, db.BackfillAbnormalStatsDailyParams{
+		CompletedAt:   startDateParam,
+		CompletedAt_2: endDateParam,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("failed to backfill abnormal stats daily")
+		return
+	}
+	log.Info().Str("start", start.Format("2006-01-02")).Str("end", end.Format("2006-01-02")).Msg("backfilled abnormal stats daily")
 }
 
 // cleanupStaleDeliveries 清理过期的配送单

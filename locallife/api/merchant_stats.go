@@ -78,9 +78,9 @@ func (server *Server) getMerchantDailyStats(ctx *gin.Context) {
 
 	// 查询日报统计
 	stats, err := server.store.GetMerchantDailyStats(ctx, db.GetMerchantDailyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -165,9 +165,9 @@ func (server *Server) getMerchantOverview(ctx *gin.Context) {
 
 	// 查询概览统计
 	overview, err := server.store.GetMerchantOverview(ctx, db.GetMerchantOverviewParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -252,10 +252,10 @@ func (server *Server) getTopSellingDishes(ctx *gin.Context) {
 
 	// 查询销量排行
 	dishes, err := server.store.GetTopSellingDishes(ctx, db.GetTopSellingDishesParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+		Limit:      req.Limit,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -582,9 +582,9 @@ func (server *Server) getMerchantHourlyStats(ctx *gin.Context) {
 	endDate = normalizeEndOfDay(endDate)
 
 	stats, err := server.store.GetMerchantHourlyStats(ctx, db.GetMerchantHourlyStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -656,9 +656,9 @@ func (server *Server) getMerchantOrderSourceStats(ctx *gin.Context) {
 	endDate = normalizeEndOfDay(endDate)
 
 	stats, err := server.store.GetMerchantOrderSourceStats(ctx, db.GetMerchantOrderSourceStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -731,9 +731,9 @@ func (server *Server) getMerchantRepurchaseRate(ctx *gin.Context) {
 	endDate = normalizeEndOfDay(endDate)
 
 	stats, err := server.store.GetMerchantRepurchaseRate(ctx, db.GetMerchantRepurchaseRateParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

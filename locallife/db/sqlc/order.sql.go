@@ -40,17 +40,18 @@ FROM orders
 WHERE merchant_id = $1
     AND delivery_fee_discount > 0
     AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3
+    AND created_at >= $2
+    AND created_at <= $3
 `
 
 type CountMerchantPromotionOrdersParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 func (q *Queries) CountMerchantPromotionOrders(ctx context.Context, arg CountMerchantPromotionOrdersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countMerchantPromotionOrders, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, countMerchantPromotionOrders, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -308,18 +309,18 @@ INNER JOIN order_status_logs osl ON o.id = osl.order_id
 WHERE o.merchant_id = $1
   AND o.paid_at IS NOT NULL
   AND osl.to_status = 'ready'
-  AND o.created_at >= $2
+        AND o.created_at >= $2
 `
 
 type GetMerchantAvgPrepareTimeParams struct {
 	MerchantID int64     `json:"merchant_id"`
-	CreatedAt  time.Time `json:"created_at"`
+	StartAt    time.Time `json:"start_at"`
 }
 
 // 计算商户近N天的平均出餐时间（分钟）
 // 通过订单支付时间到状态变为ready的时间差计算
 func (q *Queries) GetMerchantAvgPrepareTime(ctx context.Context, arg GetMerchantAvgPrepareTimeParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getMerchantAvgPrepareTime, arg.MerchantID, arg.CreatedAt)
+	row := q.db.QueryRow(ctx, getMerchantAvgPrepareTime, arg.MerchantID, arg.StartAt)
 	var avg_prepare_minutes int64
 	err := row.Scan(&avg_prepare_minutes)
 	return avg_prepare_minutes, err
@@ -334,15 +335,16 @@ FROM orders
 WHERE merchant_id = $1
         AND delivery_fee_discount > 0
         AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3
+    AND created_at >= $2
+    AND created_at <= $3
 GROUP BY DATE(created_at)
 ORDER BY date DESC
 `
 
 type GetMerchantDailyPromotionExpensesParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantDailyPromotionExpensesRow struct {
@@ -353,7 +355,7 @@ type GetMerchantDailyPromotionExpensesRow struct {
 
 // 商户每日满返支出汇总
 func (q *Queries) GetMerchantDailyPromotionExpenses(ctx context.Context, arg GetMerchantDailyPromotionExpensesParams) ([]GetMerchantDailyPromotionExpensesRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantDailyPromotionExpenses, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantDailyPromotionExpenses, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -380,13 +382,14 @@ SELECT
 FROM orders
 WHERE merchant_id = $1
     AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3
+    AND created_at >= $2
+    AND created_at <= $3
 `
 
 type GetMerchantPromotionExpensesParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantPromotionExpensesRow struct {
@@ -397,7 +400,7 @@ type GetMerchantPromotionExpensesRow struct {
 // ==================== 商户财务相关查询 ====================
 // 统计商户满返运费支出
 func (q *Queries) GetMerchantPromotionExpenses(ctx context.Context, arg GetMerchantPromotionExpensesParams) (GetMerchantPromotionExpensesRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantPromotionExpenses, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getMerchantPromotionExpenses, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetMerchantPromotionExpensesRow
 	err := row.Scan(&i.PromoOrderCount, &i.TotalDiscount)
 	return i, err
@@ -594,13 +597,15 @@ SELECT
     COUNT(*) FILTER (WHERE status IN ('completed', 'user_delivered')) as completed_count,
     COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count
 FROM orders
-WHERE merchant_id = $1 AND created_at >= $2 AND created_at <= $3
+WHERE merchant_id = $1
+    AND created_at >= $2
+    AND created_at <= $3
 `
 
 type GetOrderStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetOrderStatsRow struct {
@@ -614,7 +619,7 @@ type GetOrderStatsRow struct {
 }
 
 func (q *Queries) GetOrderStats(ctx context.Context, arg GetOrderStatsParams) (GetOrderStatsRow, error) {
-	row := q.db.QueryRow(ctx, getOrderStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getOrderStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetOrderStatsRow
 	err := row.Scan(
 		&i.PendingCount,
@@ -865,17 +870,18 @@ FROM orders
 WHERE merchant_id = $1
         AND delivery_fee_discount > 0
         AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3
+    AND created_at >= $2
+    AND created_at <= $3
 ORDER BY created_at DESC
-LIMIT $4 OFFSET $5
+LIMIT $5 OFFSET $4
 `
 
 type ListMerchantPromotionOrdersParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+	Offset     int32     `json:"offset"`
+	Limit      int32     `json:"limit"`
 }
 
 type ListMerchantPromotionOrdersRow struct {
@@ -894,10 +900,10 @@ type ListMerchantPromotionOrdersRow struct {
 func (q *Queries) ListMerchantPromotionOrders(ctx context.Context, arg ListMerchantPromotionOrdersParams) ([]ListMerchantPromotionOrdersRow, error) {
 	rows, err := q.db.Query(ctx, listMerchantPromotionOrders,
 		arg.MerchantID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

@@ -118,17 +118,18 @@ func (q *Queries) GetSessionByAccessToken(ctx context.Context, accessToken strin
 
 const getSessionByRefreshToken = `-- name: GetSessionByRefreshToken :one
 SELECT id, user_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, user_agent, client_ip, is_revoked, created_at FROM sessions
-WHERE refresh_token = $1 OR refresh_token = $2
+WHERE refresh_token = $1
+  OR refresh_token = $2
 LIMIT 1
 `
 
 type GetSessionByRefreshTokenParams struct {
-	RefreshToken   string `json:"refresh_token"`
-	RefreshToken_2 string `json:"refresh_token_2"`
+	RefreshToken         string `json:"refresh_token"`
+	RefreshTokenFallback string `json:"refresh_token_fallback"`
 }
 
 func (q *Queries) GetSessionByRefreshToken(ctx context.Context, arg GetSessionByRefreshTokenParams) (Session, error) {
-	row := q.db.QueryRow(ctx, getSessionByRefreshToken, arg.RefreshToken, arg.RefreshToken_2)
+	row := q.db.QueryRow(ctx, getSessionByRefreshToken, arg.RefreshToken, arg.RefreshTokenFallback)
 	var i Session
 	err := row.Scan(
 		&i.ID,

@@ -382,7 +382,7 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, arg Process
 			calcStartTime := now.AddDate(0, 0, -avgPrepareTimeCalcDays)
 			avgTime, err := q.GetMerchantAvgPrepareTime(ctx, GetMerchantAvgPrepareTimeParams{
 				MerchantID: merchant.ID,
-				CreatedAt:  calcStartTime,
+				StartAt:    calcStartTime,
 			})
 			if err == nil && avgTime > 0 {
 				maxPrepareTime = int16(avgTime)

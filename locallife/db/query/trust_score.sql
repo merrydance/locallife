@@ -481,9 +481,9 @@ LIMIT 50;
 SELECT c.*, o.address_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
-WHERE c.created_at >= $1
-  AND c.created_at <= $2
-  AND c.id != $3  -- 排除当前索赔
+WHERE c.created_at >= sqlc.arg('start_at')
+  AND c.created_at <= sqlc.arg('end_at')
+  AND c.id != sqlc.arg('exclude_id')  -- 排除当前索赔
 ORDER BY c.created_at DESC;
 
 -- name: GetClaimsWithSameAddress :many
@@ -500,8 +500,8 @@ ORDER BY c.created_at DESC;
 -- 统计时间窗口内发起索赔的不同用户数
 SELECT COUNT(DISTINCT user_id) as user_count
 FROM claims
-WHERE created_at >= $1
-  AND created_at <= $2;
+WHERE created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at');
 
 -- ==========================================
 -- 欺诈处理：损失返还

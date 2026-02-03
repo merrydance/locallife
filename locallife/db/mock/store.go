@@ -387,6 +387,20 @@ func (mr *MockStoreMockRecorder) AutoCloseMerchants(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AutoCloseMerchants", reflect.TypeOf((*MockStore)(nil).AutoCloseMerchants), ctx)
 }
 
+// BackfillAbnormalStatsDaily mocks base method.
+func (m *MockStore) BackfillAbnormalStatsDaily(ctx context.Context, arg db.BackfillAbnormalStatsDailyParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BackfillAbnormalStatsDaily", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BackfillAbnormalStatsDaily indicates an expected call of BackfillAbnormalStatsDaily.
+func (mr *MockStoreMockRecorder) BackfillAbnormalStatsDaily(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillAbnormalStatsDaily", reflect.TypeOf((*MockStore)(nil).BackfillAbnormalStatsDaily), ctx, arg)
+}
+
 // BatchCreateDailyInventory mocks base method.
 func (m *MockStore) BatchCreateDailyInventory(ctx context.Context, arg []db.BatchCreateDailyInventoryParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -9539,6 +9553,21 @@ func (m *MockStore) LinkMerchantDishCategory(ctx context.Context, arg db.LinkMer
 func (mr *MockStoreMockRecorder) LinkMerchantDishCategory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkMerchantDishCategory", reflect.TypeOf((*MockStore)(nil).LinkMerchantDishCategory), ctx, arg)
+}
+
+// ListAbnormalStatsAlerts mocks base method.
+func (m *MockStore) ListAbnormalStatsAlerts(ctx context.Context, arg db.ListAbnormalStatsAlertsParams) ([]db.ListAbnormalStatsAlertsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListAbnormalStatsAlerts", ctx, arg)
+	ret0, _ := ret[0].([]db.ListAbnormalStatsAlertsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListAbnormalStatsAlerts indicates an expected call of ListAbnormalStatsAlerts.
+func (mr *MockStoreMockRecorder) ListAbnormalStatsAlerts(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAbnormalStatsAlerts", reflect.TypeOf((*MockStore)(nil).ListAbnormalStatsAlerts), ctx, arg)
 }
 
 // ListAbnormalStatsDaily mocks base method.

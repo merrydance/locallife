@@ -56,8 +56,8 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 	}
 
 	session, err := server.store.GetSessionByRefreshToken(ctx, db.GetSessionByRefreshTokenParams{
-		RefreshToken:   refreshTokenHash,
-		RefreshToken_2: req.RefreshToken,
+		RefreshToken:         refreshTokenHash,
+		RefreshTokenFallback: req.RefreshToken,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {

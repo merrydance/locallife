@@ -789,10 +789,10 @@ func TestGetMerchantRankingAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantRanking(gomock.Any(), db.GetMerchantRankingParams{
-						CreatedAt:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						CreatedAt_2: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
-						Limit:       20,
-						Offset:      0,
+						StartAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:   time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+						Limit:   20,
+						Offset:  0,
 					}).
 					Return([]db.GetMerchantRankingRow{
 						{
@@ -844,10 +844,10 @@ func TestGetMerchantRankingAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantRanking(gomock.Any(), db.GetMerchantRankingParams{
-						CreatedAt:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						CreatedAt_2: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
-						Limit:       10,
-						Offset:      10, // (page-1) * limit = (2-1) * 10 = 10
+						StartAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:   time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+						Limit:   10,
+						Offset:  10, // (page-1) * limit = (2-1) * 10 = 10
 					}).
 					Return([]db.GetMerchantRankingRow{}, nil)
 			},
@@ -1165,10 +1165,10 @@ func TestGetRiderRankingAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetRiderPerformanceRanking(gomock.Any(), db.GetRiderPerformanceRankingParams{
-						CreatedAt:   time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						CreatedAt_2: time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
-						Limit:       20,
-						Offset:      0,
+						StartAt: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						EndAt:   time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC),
+						Limit:   20,
+						Offset:  0,
 					}).
 					Return([]db.GetRiderPerformanceRankingRow{
 						{

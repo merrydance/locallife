@@ -143,10 +143,10 @@ WHERE rider_id = $1 AND status = 'completed';
 -- name: GetRiderDailyEarnings :one
 SELECT COALESCE(SUM(rider_earnings), 0) AS daily_earnings
 FROM deliveries
-WHERE rider_id = $1 
+WHERE rider_id = sqlc.arg('rider_id')
     AND status = 'completed'
-    AND completed_at >= $2
-    AND completed_at < $3;
+    AND completed_at >= sqlc.arg('start_at')
+    AND completed_at < sqlc.arg('end_at');
 
 -- name: UpdateDeliveryEstimatedTime :one
 UPDATE deliveries

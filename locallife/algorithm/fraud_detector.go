@@ -281,9 +281,9 @@ func (fd *FraudDetector) DetectCoordinatedClaims(
 
 	// 查询同一时间窗口内的其他索赔
 	claimsInWindow, err := fd.store.ListClaimsByTimeWindow(ctx, db.ListClaimsByTimeWindowParams{
-		CreatedAt:   windowStart,
-		CreatedAt_2: windowEnd,
-		ID:          claimID,
+		StartAt:   windowStart,
+		EndAt:     windowEnd,
+		ExcludeID: claimID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to query claims in time window: %w", err)

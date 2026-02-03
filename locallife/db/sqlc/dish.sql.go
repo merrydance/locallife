@@ -625,15 +625,15 @@ LIMIT $3
 `
 
 type GetDishIDsByCuisinesParams struct {
-	Price   int64 `json:"price"`
-	Price_2 int64 `json:"price_2"`
-	Limit   int32 `json:"limit"`
+	MinPrice int64 `json:"min_price"`
+	MaxPrice int64 `json:"max_price"`
+	Limit    int32 `json:"limit"`
 }
 
 // 根据菜系获取菜品ID（用于基于偏好推荐）
 // 注：当前merchants表无cuisine_type字段，简化为按价格区间查询热门菜品
 func (q *Queries) GetDishIDsByCuisines(ctx context.Context, arg GetDishIDsByCuisinesParams) ([]int64, error) {
-	rows, err := q.db.Query(ctx, getDishIDsByCuisines, arg.Price, arg.Price_2, arg.Limit)
+	rows, err := q.db.Query(ctx, getDishIDsByCuisines, arg.MinPrice, arg.MaxPrice, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

@@ -73,9 +73,9 @@ func (server *Server) getRegionStats(ctx *gin.Context) {
 
 	// 查询区域统计
 	stats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		ID:          uri.RegionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		RegionID: uri.RegionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
 	})
 	if err != nil {
 		if isNotFoundError(err) {
@@ -220,11 +220,11 @@ func (server *Server) getOperatorMerchantRanking(ctx *gin.Context) {
 	}
 
 	merchants, err := server.store.GetOperatorMerchantRanking(ctx, db.GetOperatorMerchantRankingParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
+		Limit:    req.Limit,
+		Offset:   offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -304,11 +304,11 @@ func (server *Server) getOperatorRiderRanking(ctx *gin.Context) {
 	}
 
 	riders, err := server.store.GetOperatorRiderRanking(ctx, db.GetOperatorRiderRankingParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
+		Limit:    req.Limit,
+		Offset:   offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -386,9 +386,9 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 	}
 
 	trends, err := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -476,9 +476,9 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 
 	// 查询当月统计（从 profit_sharing_orders 实时计算，只统计分账成功的）
 	monthStats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		ID:          regionID,
-		CreatedAt:   monthStart,
-		CreatedAt_2: monthEnd,
+		RegionID: regionID,
+		StartAt:  monthStart,
+		EndAt:    monthEnd,
 	})
 	if err == nil {
 		response.CurrentMonth.TotalGMV = monthStats.TotalGmv
@@ -497,9 +497,9 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 	allTimeEnd := time.Date(StatsEndYear, 12, 31, 23, 59, 59, 0, time.Local)
 
 	totalStats, err := server.store.GetRegionStats(ctx, db.GetRegionStatsParams{
-		ID:          regionID,
-		CreatedAt:   allTimeStart,
-		CreatedAt_2: allTimeEnd,
+		RegionID: regionID,
+		StartAt:  allTimeStart,
+		EndAt:    allTimeEnd,
 	})
 	if err == nil {
 		response.Total.TotalGMV = totalStats.TotalGmv
@@ -592,9 +592,9 @@ func (server *Server) getOperatorCommission(ctx *gin.Context) {
 
 	// 获取每日佣金趋势数据
 	trends, err := server.store.GetRegionDailyTrend(ctx, db.GetRegionDailyTrendParams{
-		RegionID:    regionID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		RegionID: regionID,
+		StartAt:  startDate,
+		EndAt:    endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

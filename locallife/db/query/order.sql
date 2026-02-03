@@ -236,7 +236,9 @@ SELECT
     COUNT(*) FILTER (WHERE status IN ('completed', 'user_delivered')) as completed_count,
     COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count
 FROM orders
-WHERE merchant_id = $1 AND created_at >= $2 AND created_at <= $3;
+WHERE merchant_id = sqlc.arg(merchant_id)
+    AND created_at >= sqlc.arg(start_at)
+    AND created_at <= sqlc.arg(end_at);
 
 -- ==================== KDS 厨房显示系统查询 ====================
 
@@ -274,7 +276,7 @@ INNER JOIN order_status_logs osl ON o.id = osl.order_id
 WHERE o.merchant_id = $1
   AND o.paid_at IS NOT NULL
   AND osl.to_status = 'ready'
-  AND o.created_at >= $2;
+        AND o.created_at >= sqlc.arg('start_at');
 
 -- ==================== 商户财务相关查询 ====================
 
@@ -284,9 +286,10 @@ SELECT
     COUNT(*) FILTER (WHERE delivery_fee_discount > 0) as promo_order_count,
     COALESCE(SUM(delivery_fee_discount), 0)::bigint as total_discount
 FROM orders
-WHERE merchant_id = $1
+WHERE merchant_id = sqlc.arg(merchant_id)
     AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3;
+    AND created_at >= sqlc.arg(start_at)
+    AND created_at <= sqlc.arg(end_at);
 
 -- name: ListMerchantPromotionOrders :many
 -- 商户满返支出明细
@@ -301,20 +304,22 @@ SELECT
     created_at,
     completed_at
 FROM orders
-WHERE merchant_id = $1
+WHERE merchant_id = sqlc.arg('merchant_id')
         AND delivery_fee_discount > 0
         AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3
+    AND created_at >= sqlc.arg('start_at')
+    AND created_at <= sqlc.arg('end_at')
 ORDER BY created_at DESC
-LIMIT $4 OFFSET $5;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantPromotionOrders :one
 SELECT COUNT(*)::bigint
 FROM orders
-WHERE merchant_id = $1
+WHERE merchant_id = sqlc.arg('merchant_id')
     AND delivery_fee_discount > 0
     AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3;
+    AND created_at >= sqlc.arg('start_at')
+    AND created_at <= sqlc.arg('end_at');
 
 -- name: GetMerchantDailyPromotionExpenses :many
 -- 商户每日满返支出汇总
@@ -323,10 +328,11 @@ SELECT
     COUNT(*) as order_count,
     COALESCE(SUM(delivery_fee_discount), 0)::bigint as promotion_amount
 FROM orders
-WHERE merchant_id = $1
+WHERE merchant_id = sqlc.arg('merchant_id')
         AND delivery_fee_discount > 0
         AND status IN ('user_delivered', 'completed')
-  AND created_at >= $2 AND created_at <= $3
+    AND created_at >= sqlc.arg('start_at')
+    AND created_at <= sqlc.arg('end_at')
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
 

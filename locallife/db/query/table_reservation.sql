@@ -233,9 +233,9 @@ SELECT
     COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0) as total_deposit,
     COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0) as total_prepaid
 FROM table_reservations
-WHERE merchant_id = $1 
-  AND reservation_date >= $2 
-  AND reservation_date <= $3;
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND reservation_date >= sqlc.arg('start_date')
+  AND reservation_date <= sqlc.arg('end_date');
 
 -- name: CancelMerchantFutureReservations :execrows
 -- 商户熔断时自动取消所有未来的预订

@@ -20,13 +20,13 @@ WHERE merchant_id = $1
 `
 
 type CountMerchantFinanceOrdersParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 func (q *Queries) CountMerchantFinanceOrders(ctx context.Context, arg CountMerchantFinanceOrdersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countMerchantFinanceOrders, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, countMerchantFinanceOrders, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -40,13 +40,13 @@ WHERE merchant_id = $1
 `
 
 type CountMerchantSettlementsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 func (q *Queries) CountMerchantSettlements(ctx context.Context, arg CountMerchantSettlementsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countMerchantSettlements, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, countMerchantSettlements, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -61,18 +61,18 @@ WHERE merchant_id = $1
 `
 
 type CountMerchantSettlementsByStatusParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	Status     string    `json:"status"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 func (q *Queries) CountMerchantSettlementsByStatus(ctx context.Context, arg CountMerchantSettlementsByStatusParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countMerchantSettlementsByStatus,
 		arg.MerchantID,
 		arg.Status,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
+		arg.StartAt,
+		arg.EndAt,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -260,9 +260,9 @@ ORDER BY date DESC
 `
 
 type GetMerchantDailyFinanceParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantDailyFinanceRow struct {
@@ -275,7 +275,7 @@ type GetMerchantDailyFinanceRow struct {
 
 // 商户每日财务汇总
 func (q *Queries) GetMerchantDailyFinance(ctx context.Context, arg GetMerchantDailyFinanceParams) ([]GetMerchantDailyFinanceRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantDailyFinance, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantDailyFinance, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -315,9 +315,9 @@ WHERE merchant_id = $1
 `
 
 type GetMerchantFinanceOverviewParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantFinanceOverviewRow struct {
@@ -332,7 +332,7 @@ type GetMerchantFinanceOverviewRow struct {
 
 // 商户财务概览：统计收入、服务费、净收入
 func (q *Queries) GetMerchantFinanceOverview(ctx context.Context, arg GetMerchantFinanceOverviewParams) (GetMerchantFinanceOverviewRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantFinanceOverview, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getMerchantFinanceOverview, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetMerchantFinanceOverviewRow
 	err := row.Scan(
 		&i.CompletedOrders,
@@ -359,9 +359,9 @@ WHERE merchant_id = $1 AND status = 'finished'
 `
 
 type GetMerchantProfitSharingStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantProfitSharingStatsRow struct {
@@ -373,7 +373,7 @@ type GetMerchantProfitSharingStatsRow struct {
 }
 
 func (q *Queries) GetMerchantProfitSharingStats(ctx context.Context, arg GetMerchantProfitSharingStatsParams) (GetMerchantProfitSharingStatsRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantProfitSharingStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getMerchantProfitSharingStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetMerchantProfitSharingStatsRow
 	err := row.Scan(
 		&i.TotalOrders,
@@ -402,9 +402,9 @@ ORDER BY date DESC, order_source
 `
 
 type GetMerchantServiceFeeDetailParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantServiceFeeDetailRow struct {
@@ -418,7 +418,7 @@ type GetMerchantServiceFeeDetailRow struct {
 
 // 商户服务费明细
 func (q *Queries) GetMerchantServiceFeeDetail(ctx context.Context, arg GetMerchantServiceFeeDetailParams) ([]GetMerchantServiceFeeDetailRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantServiceFeeDetail, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantServiceFeeDetail, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -455,9 +455,9 @@ WHERE operator_id = $1 AND status = 'finished'
 `
 
 type GetOperatorProfitSharingStatsParams struct {
-	OperatorID  pgtype.Int8 `json:"operator_id"`
-	CreatedAt   time.Time   `json:"created_at"`
-	CreatedAt_2 time.Time   `json:"created_at_2"`
+	OperatorID pgtype.Int8 `json:"operator_id"`
+	StartAt    time.Time   `json:"start_at"`
+	EndAt      time.Time   `json:"end_at"`
 }
 
 type GetOperatorProfitSharingStatsRow struct {
@@ -467,7 +467,7 @@ type GetOperatorProfitSharingStatsRow struct {
 }
 
 func (q *Queries) GetOperatorProfitSharingStats(ctx context.Context, arg GetOperatorProfitSharingStatsParams) (GetOperatorProfitSharingStatsRow, error) {
-	row := q.db.QueryRow(ctx, getOperatorProfitSharingStats, arg.OperatorID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getOperatorProfitSharingStats, arg.OperatorID, arg.StartAt, arg.EndAt)
 	var i GetOperatorProfitSharingStatsRow
 	err := row.Scan(&i.TotalOrders, &i.TotalAmount, &i.TotalOperatorCommission)
 	return i, err
@@ -620,8 +620,8 @@ ORDER BY status
 `
 
 type GetProfitSharingReconciliationSummaryParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetProfitSharingReconciliationSummaryRow struct {
@@ -633,7 +633,7 @@ type GetProfitSharingReconciliationSummaryRow struct {
 }
 
 func (q *Queries) GetProfitSharingReconciliationSummary(ctx context.Context, arg GetProfitSharingReconciliationSummaryParams) ([]GetProfitSharingReconciliationSummaryRow, error) {
-	rows, err := q.db.Query(ctx, getProfitSharingReconciliationSummary, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getProfitSharingReconciliationSummary, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -671,8 +671,8 @@ WHERE created_at >= $1 AND created_at <= $2
 `
 
 type GetProfitSharingSlaSummaryParams struct {
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
 }
 
 type GetProfitSharingSlaSummaryRow struct {
@@ -685,7 +685,7 @@ type GetProfitSharingSlaSummaryRow struct {
 }
 
 func (q *Queries) GetProfitSharingSlaSummary(ctx context.Context, arg GetProfitSharingSlaSummaryParams) (GetProfitSharingSlaSummaryRow, error) {
-	row := q.db.QueryRow(ctx, getProfitSharingSlaSummary, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getProfitSharingSlaSummary, arg.StartAt, arg.EndAt)
 	var i GetProfitSharingSlaSummaryRow
 	err := row.Scan(
 		&i.TotalOrders,
@@ -712,9 +712,9 @@ ORDER BY date DESC
 `
 
 type GetRiderDailyIncomeParams struct {
-	RiderID     pgtype.Int8 `json:"rider_id"`
-	CreatedAt   time.Time   `json:"created_at"`
-	CreatedAt_2 time.Time   `json:"created_at_2"`
+	RiderID pgtype.Int8 `json:"rider_id"`
+	StartAt time.Time   `json:"start_at"`
+	EndAt   time.Time   `json:"end_at"`
 }
 
 type GetRiderDailyIncomeRow struct {
@@ -725,7 +725,7 @@ type GetRiderDailyIncomeRow struct {
 
 // 骑手每日收入汇总
 func (q *Queries) GetRiderDailyIncome(ctx context.Context, arg GetRiderDailyIncomeParams) ([]GetRiderDailyIncomeRow, error) {
-	rows, err := q.db.Query(ctx, getRiderDailyIncome, arg.RiderID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getRiderDailyIncome, arg.RiderID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -756,9 +756,9 @@ WHERE rider_id = $1 AND status = 'finished'
 `
 
 type GetRiderProfitSharingStatsParams struct {
-	RiderID     pgtype.Int8 `json:"rider_id"`
-	CreatedAt   time.Time   `json:"created_at"`
-	CreatedAt_2 time.Time   `json:"created_at_2"`
+	RiderID pgtype.Int8 `json:"rider_id"`
+	StartAt time.Time   `json:"start_at"`
+	EndAt   time.Time   `json:"end_at"`
 }
 
 type GetRiderProfitSharingStatsRow struct {
@@ -770,7 +770,7 @@ type GetRiderProfitSharingStatsRow struct {
 // ==================== 骑手分账查询 ====================
 // 骑手配送费收入统计
 func (q *Queries) GetRiderProfitSharingStats(ctx context.Context, arg GetRiderProfitSharingStatsParams) (GetRiderProfitSharingStatsRow, error) {
-	row := q.db.QueryRow(ctx, getRiderProfitSharingStats, arg.RiderID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getRiderProfitSharingStats, arg.RiderID, arg.StartAt, arg.EndAt)
 	var i GetRiderProfitSharingStatsRow
 	err := row.Scan(&i.TotalDeliveries, &i.TotalRiderIncome, &i.TotalDeliveryFee)
 	return i, err
@@ -794,15 +794,15 @@ JOIN payment_orders po ON po.id = p.payment_order_id
 WHERE p.merchant_id = $1
   AND p.created_at >= $2 AND p.created_at <= $3
 ORDER BY p.created_at DESC
-LIMIT $4 OFFSET $5
+LIMIT $5 OFFSET $4
 `
 
 type ListMerchantFinanceOrdersParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+	Offset     int32     `json:"offset"`
+	Limit      int32     `json:"limit"`
 }
 
 type ListMerchantFinanceOrdersRow struct {
@@ -823,10 +823,10 @@ type ListMerchantFinanceOrdersRow struct {
 func (q *Queries) ListMerchantFinanceOrders(ctx context.Context, arg ListMerchantFinanceOrdersParams) ([]ListMerchantFinanceOrdersRow, error) {
 	rows, err := q.db.Query(ctx, listMerchantFinanceOrders,
 		arg.MerchantID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -864,25 +864,25 @@ FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND created_at >= $2 AND created_at <= $3
 ORDER BY created_at DESC
-LIMIT $4 OFFSET $5
+LIMIT $5 OFFSET $4
 `
 
 type ListMerchantSettlementsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+	Offset     int32     `json:"offset"`
+	Limit      int32     `json:"limit"`
 }
 
 // 商户结算记录（带日期范围和状态筛选）
 func (q *Queries) ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ProfitSharingOrder, error) {
 	rows, err := q.db.Query(ctx, listMerchantSettlements,
 		arg.MerchantID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -930,16 +930,16 @@ WHERE merchant_id = $1
   AND status = $2
   AND created_at >= $3 AND created_at <= $4
 ORDER BY created_at DESC
-LIMIT $5 OFFSET $6
+LIMIT $6 OFFSET $5
 `
 
 type ListMerchantSettlementsByStatusParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
-	Offset      int32     `json:"offset"`
+	MerchantID int64     `json:"merchant_id"`
+	Status     string    `json:"status"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+	Offset     int32     `json:"offset"`
+	Limit      int32     `json:"limit"`
 }
 
 // 商户结算记录（带日期范围和状态筛选）
@@ -947,10 +947,10 @@ func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListM
 	rows, err := q.db.Query(ctx, listMerchantSettlementsByStatus,
 		arg.MerchantID,
 		arg.Status,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -1220,15 +1220,15 @@ JOIN merchants m ON m.id = p.merchant_id
 WHERE p.rider_id = $1
   AND p.created_at >= $2 AND p.created_at <= $3
 ORDER BY p.created_at DESC
-LIMIT $4 OFFSET $5
+LIMIT $5 OFFSET $4
 `
 
 type ListRiderProfitSharingOrdersParams struct {
-	RiderID     pgtype.Int8 `json:"rider_id"`
-	CreatedAt   time.Time   `json:"created_at"`
-	CreatedAt_2 time.Time   `json:"created_at_2"`
-	Limit       int32       `json:"limit"`
-	Offset      int32       `json:"offset"`
+	RiderID pgtype.Int8 `json:"rider_id"`
+	StartAt time.Time   `json:"start_at"`
+	EndAt   time.Time   `json:"end_at"`
+	Offset  int32       `json:"offset"`
+	Limit   int32       `json:"limit"`
 }
 
 type ListRiderProfitSharingOrdersRow struct {
@@ -1261,10 +1261,10 @@ type ListRiderProfitSharingOrdersRow struct {
 func (q *Queries) ListRiderProfitSharingOrders(ctx context.Context, arg ListRiderProfitSharingOrdersParams) ([]ListRiderProfitSharingOrdersRow, error) {
 	rows, err := q.db.Query(ctx, listRiderProfitSharingOrders,
 		arg.RiderID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
-		arg.Limit,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

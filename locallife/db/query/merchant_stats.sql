@@ -10,9 +10,9 @@ SELECT
     COUNT(*) FILTER (WHERE order_type = 'takeout')::int AS takeout_orders,
     COUNT(*) FILTER (WHERE order_type = 'dine_in')::int AS dine_in_orders
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
   AND status IN ('user_delivered', 'completed')
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
@@ -30,9 +30,9 @@ SELECT
         ELSE 0
     END AS avg_daily_sales
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
   AND status IN ('user_delivered', 'completed');
 
 -- name: GetTopSellingDishes :many
@@ -47,12 +47,12 @@ FROM order_items oi
 JOIN dishes d ON d.id = oi.dish_id
 JOIN orders o ON o.id = oi.order_id
 WHERE o.merchant_id = $1
-  AND o.created_at >= $2
-  AND o.created_at <= $3
+  AND o.created_at >= sqlc.arg('start_at')
+  AND o.created_at <= sqlc.arg('end_at')
   AND o.status IN ('user_delivered', 'completed')
 GROUP BY oi.dish_id, d.name, d.price
 ORDER BY total_sold DESC
-LIMIT $4;
+LIMIT sqlc.arg('limit');
 
 -- name: GetMerchantCustomerStats :many
 -- 顾客消费分析: 实时计算每个顾客的消费统计
@@ -81,7 +81,7 @@ ORDER BY
         WHEN sqlc.arg(order_by)::text = 'total_amount' THEN SUM(o.final_amount)
         ELSE EXTRACT(EPOCH FROM MAX(o.created_at))
     END DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantCustomers :one
 -- 统计商户的顾客总数
@@ -138,9 +138,9 @@ SELECT
     COALESCE(SUM(final_amount), 0)::bigint AS total_sales,
     COALESCE(AVG(final_amount), 0)::bigint AS avg_order_amount
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
   AND status IN ('user_delivered', 'completed')
 GROUP BY EXTRACT(HOUR FROM created_at)
 ORDER BY hour;
@@ -153,9 +153,9 @@ SELECT
     COALESCE(SUM(final_amount), 0)::bigint AS total_sales,
     COALESCE(AVG(final_amount), 0)::bigint AS avg_order_amount
 FROM orders
-WHERE merchant_id = $1
-  AND created_at >= $2
-  AND created_at <= $3
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at')
+  AND created_at <= sqlc.arg('end_at')
   AND status IN ('user_delivered', 'completed')
 GROUP BY order_type
 ORDER BY order_count DESC;
@@ -169,9 +169,9 @@ WITH customer_order_counts AS (
         user_id,
         COUNT(*) AS order_count
     FROM orders
-    WHERE merchant_id = $1
-      AND created_at >= $2
-      AND created_at <= $3
+    WHERE merchant_id = sqlc.arg('merchant_id')
+      AND created_at >= sqlc.arg('start_at')
+      AND created_at <= sqlc.arg('end_at')
       AND status IN ('user_delivered', 'completed')
     GROUP BY user_id
 )

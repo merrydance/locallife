@@ -54,8 +54,8 @@ func (server *Server) getPlatformOverview(ctx *gin.Context) {
 	}
 
 	stats, err := server.store.GetPlatformOverview(ctx, db.GetPlatformOverviewParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -126,8 +126,8 @@ func (server *Server) getPlatformDailyStats(ctx *gin.Context) {
 	}
 
 	stats, err := server.store.GetPlatformDailyStats(ctx, db.GetPlatformDailyStatsParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -205,8 +205,8 @@ func (server *Server) getPlatformProfitSharingReconciliation(ctx *gin.Context) {
 	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
 
 	rows, err := server.store.GetProfitSharingReconciliationSummary(ctx, db.GetProfitSharingReconciliationSummaryParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -282,8 +282,8 @@ func (server *Server) getPlatformProfitSharingSlaSummary(ctx *gin.Context) {
 	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
 
 	stats, err := server.store.GetProfitSharingSlaSummary(ctx, db.GetProfitSharingSlaSummaryParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -462,8 +462,8 @@ func (server *Server) getRegionComparison(ctx *gin.Context) {
 	}
 
 	regions, err := server.store.GetRegionComparison(ctx, db.GetRegionComparisonParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -560,10 +560,10 @@ func (server *Server) getMerchantRanking(ctx *gin.Context) {
 	}
 
 	merchants, err := server.store.GetMerchantRanking(ctx, db.GetMerchantRankingParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		StartAt: startDate,
+		EndAt:   endDate,
+		Limit:   req.Limit,
+		Offset:  offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -640,8 +640,8 @@ func (server *Server) getCategoryStats(ctx *gin.Context) {
 	}
 
 	categories, err := server.store.GetCategoryStats(ctx, db.GetCategoryStatsParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -710,8 +710,8 @@ func (server *Server) getUserGrowthStats(ctx *gin.Context) {
 	}
 
 	stats, err := server.store.GetUserGrowthStats(ctx, db.GetUserGrowthStatsParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -771,8 +771,8 @@ func (server *Server) getMerchantGrowthStats(ctx *gin.Context) {
 	}
 
 	stats, err := server.store.GetMerchantGrowthStats(ctx, db.GetMerchantGrowthStatsParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -854,10 +854,10 @@ func (server *Server) getRiderRanking(ctx *gin.Context) {
 	}
 
 	riders, err := server.store.GetRiderPerformanceRanking(ctx, db.GetRiderPerformanceRankingParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		StartAt: startDate,
+		EndAt:   endDate,
+		Limit:   req.Limit,
+		Offset:  offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -931,8 +931,8 @@ func (server *Server) getHourlyDistribution(ctx *gin.Context) {
 	}
 
 	hours, err := server.store.GetHourlyDistribution(ctx, db.GetHourlyDistributionParams{
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		StartAt: startDate,
+		EndAt:   endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

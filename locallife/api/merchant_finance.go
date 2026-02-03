@@ -86,9 +86,9 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 
 	// 查询分账统计
 	financeStats, err := server.store.GetMerchantFinanceOverview(ctx, db.GetMerchantFinanceOverviewParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -97,9 +97,9 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 
 	// 查询满返支出统计
 	promoStats, err := server.store.GetMerchantPromotionExpenses(ctx, db.GetMerchantPromotionExpensesParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -207,11 +207,11 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 
 	// 查询订单列表
 	orders, err := server.store.ListMerchantFinanceOrders(ctx, db.ListMerchantFinanceOrdersParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+		Limit:      req.Limit,
+		Offset:     offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -220,9 +220,9 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 
 	// 查询总数
 	totalCount, err := server.store.CountMerchantFinanceOrders(ctx, db.CountMerchantFinanceOrdersParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -332,9 +332,9 @@ func (server *Server) listMerchantServiceFees(ctx *gin.Context) {
 
 	// 查询服务费明细
 	fees, err := server.store.GetMerchantServiceFeeDetail(ctx, db.GetMerchantServiceFeeDetailParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -447,11 +447,11 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 
 	// 查询满返支出订单列表
 	orders, err := server.store.ListMerchantPromotionOrders(ctx, db.ListMerchantPromotionOrdersParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
-		Limit:       req.Limit,
-		Offset:      offset,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+		Limit:      req.Limit,
+		Offset:     offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -460,9 +460,9 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 
 	// 查询总数和汇总
 	totalCount, err := server.store.CountMerchantPromotionOrders(ctx, db.CountMerchantPromotionOrdersParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -471,9 +471,9 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 
 	// 查询汇总统计
 	stats, err := server.store.GetMerchantPromotionExpenses(ctx, db.GetMerchantPromotionExpensesParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -576,9 +576,9 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 
 	// 查询每日财务汇总
 	dailyStats, err := server.store.GetMerchantDailyFinance(ctx, db.GetMerchantDailyFinanceParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -690,12 +690,12 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 	if req.Status != nil {
 		// 带状态筛选的查询
 		orders, err = server.store.ListMerchantSettlementsByStatus(ctx, db.ListMerchantSettlementsByStatusParams{
-			MerchantID:  merchant.ID,
-			Status:      *req.Status,
-			CreatedAt:   startDate,
-			CreatedAt_2: endDate,
-			Limit:       req.Limit,
-			Offset:      offset,
+			MerchantID: merchant.ID,
+			Status:     *req.Status,
+			StartAt:    startDate,
+			EndAt:      endDate,
+			Limit:      req.Limit,
+			Offset:     offset,
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -703,19 +703,19 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		}
 
 		totalCount, err = server.store.CountMerchantSettlementsByStatus(ctx, db.CountMerchantSettlementsByStatusParams{
-			MerchantID:  merchant.ID,
-			Status:      *req.Status,
-			CreatedAt:   startDate,
-			CreatedAt_2: endDate,
+			MerchantID: merchant.ID,
+			Status:     *req.Status,
+			StartAt:    startDate,
+			EndAt:      endDate,
 		})
 	} else {
 		// 不带状态筛选的查询
 		orders, err = server.store.ListMerchantSettlements(ctx, db.ListMerchantSettlementsParams{
-			MerchantID:  merchant.ID,
-			CreatedAt:   startDate,
-			CreatedAt_2: endDate,
-			Limit:       req.Limit,
-			Offset:      offset,
+			MerchantID: merchant.ID,
+			StartAt:    startDate,
+			EndAt:      endDate,
+			Limit:      req.Limit,
+			Offset:     offset,
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -723,9 +723,9 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		}
 
 		totalCount, err = server.store.CountMerchantSettlements(ctx, db.CountMerchantSettlementsParams{
-			MerchantID:  merchant.ID,
-			CreatedAt:   startDate,
-			CreatedAt_2: endDate,
+			MerchantID: merchant.ID,
+			StartAt:    startDate,
+			EndAt:      endDate,
 		})
 	}
 	if err != nil {
@@ -735,9 +735,9 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 
 	// 查询统计（只统计已完成的）
 	stats, err := server.store.GetMerchantProfitSharingStats(ctx, db.GetMerchantProfitSharingStatsParams{
-		MerchantID:  merchant.ID,
-		CreatedAt:   startDate,
-		CreatedAt_2: endDate,
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -760,8 +760,6 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		result[i] = merchantSettlementItem{
 			ID:                 order.ID,
 			PaymentOrderID:     order.PaymentOrderID,
-			OrderSource:        order.OrderSource,
-			TotalAmount:        order.TotalAmount,
 			PlatformCommission: order.PlatformCommission,
 			OperatorCommission: order.OperatorCommission,
 			MerchantAmount:     order.MerchantAmount,
@@ -772,7 +770,6 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 			FinishedAt:         finishedAt,
 		}
 	}
-
 	ctx.JSON(http.StatusOK, gin.H{
 		"settlements":           result,
 		"total":                 totalCount,

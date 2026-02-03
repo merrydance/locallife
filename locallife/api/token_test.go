@@ -48,8 +48,8 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
-						RefreshToken:   refreshTokenHash,
-						RefreshToken_2: refreshToken,
+						RefreshToken:         refreshTokenHash,
+						RefreshTokenFallback: refreshToken,
 					})).
 					Times(1).
 					Return(session, nil)
@@ -146,8 +146,8 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
-						RefreshToken:   refreshTokenHash,
-						RefreshToken_2: refreshToken,
+						RefreshToken:         refreshTokenHash,
+						RefreshTokenFallback: refreshToken,
 					})).
 					Times(1).
 					Return(session, nil)
@@ -179,8 +179,8 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
-						RefreshToken:   refreshTokenHash,
-						RefreshToken_2: refreshToken,
+						RefreshToken:         refreshTokenHash,
+						RefreshTokenFallback: refreshToken,
 					})).
 					Times(1).
 					Return(session, nil)

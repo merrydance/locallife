@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,93 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
 )
+
+type behaviorWindowConfig struct {
+	Window7d  int `json:"window_7d"`
+	Window30d int `json:"window_30d"`
+}
+
+type behaviorThresholdConfig struct {
+	UserClaimRate7d      float64 `json:"user_claim_rate_7d"`
+	UserClaimRate30d     float64 `json:"user_claim_rate_30d"`
+	UserClaims7d         int32   `json:"user_claims_7d"`
+	UserClaims30d        int32   `json:"user_claims_30d"`
+	MerchantAbnormalRate float64 `json:"merchant_abnormal_rate_30d"`
+	RiderAbnormalRate    float64 `json:"rider_abnormal_rate_30d"`
+}
+
+func getBehaviorWindowDays(ctx *gin.Context, store db.Store) (int, int) {
+	window7d := 7
+	window30d := 30
+
+	config, err := store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: "behavior_trace.window_days",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil {
+		return window7d, window30d
+	}
+	if len(config.ConfigValue) == 0 {
+		return window7d, window30d
+	}
+	var payload behaviorWindowConfig
+	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
+		return window7d, window30d
+	}
+	if payload.Window7d > 0 {
+		window7d = payload.Window7d
+	}
+	if payload.Window30d > 0 {
+		window30d = payload.Window30d
+	}
+	return window7d, window30d
+}
+
+func getBehaviorThresholds(ctx *gin.Context, store db.Store) behaviorThresholdConfig {
+	thresholds := behaviorThresholdConfig{
+		UserClaimRate7d:      0.3,
+		UserClaimRate30d:     0.2,
+		UserClaims7d:         3,
+		UserClaims30d:        5,
+		MerchantAbnormalRate: 0.08,
+		RiderAbnormalRate:    0.06,
+	}
+
+	config, err := store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: "behavior_trace.abnormal_thresholds",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil || len(config.ConfigValue) == 0 {
+		return thresholds
+	}
+
+	var payload behaviorThresholdConfig
+	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
+		return thresholds
+	}
+
+	if payload.UserClaimRate7d > 0 {
+		thresholds.UserClaimRate7d = payload.UserClaimRate7d
+	}
+	if payload.UserClaimRate30d > 0 {
+		thresholds.UserClaimRate30d = payload.UserClaimRate30d
+	}
+	if payload.UserClaims7d > 0 {
+		thresholds.UserClaims7d = payload.UserClaims7d
+	}
+	if payload.UserClaims30d > 0 {
+		thresholds.UserClaims30d = payload.UserClaims30d
+	}
+	if payload.MerchantAbnormalRate > 0 {
+		thresholds.MerchantAbnormalRate = payload.MerchantAbnormalRate
+	}
+	if payload.RiderAbnormalRate > 0 {
+		thresholds.RiderAbnormalRate = payload.RiderAbnormalRate
+	}
+	return thresholds
+}
 
 // SubmitClaimRequest 提交索赔请求
 type SubmitClaimRequest struct {
@@ -120,7 +208,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		if merchant, err := server.store.GetMerchant(ctx, order.MerchantID); err == nil {
 			regionID = merchant.RegionID
 		}
-
 		metadata := map[string]interface{}{
 			"claim_type":          req.ClaimType,
 			"claim_amount":        req.ClaimAmount,
@@ -131,16 +218,78 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			"device_fingerprint":  req.DeviceFingerprint,
 		}
 
-		if stats, err := server.store.GetUserClaimWindowStats(ctx, authPayload.UserID); err == nil {
-			metadata["takeout_orders_7d"] = stats.TakeoutOrders7d
-			metadata["claims_7d"] = stats.Claims7d
-			metadata["takeout_orders_30d"] = stats.TakeoutOrders30d
-			metadata["claims_30d"] = stats.Claims30d
-			if stats.TakeoutOrders7d > 0 {
-				metadata["claim_rate_7d"] = float64(stats.Claims7d) / float64(stats.TakeoutOrders7d)
+		window7d, window30d := getBehaviorWindowDays(ctx, server.store)
+		thresholds := getBehaviorThresholds(ctx, server.store)
+		windowEnd := time.Now()
+		windowStart7d := windowEnd.AddDate(0, 0, -window7d)
+		windowStart30d := windowEnd.AddDate(0, 0, -window30d)
+
+		start7d := pgtype.Date{Time: windowStart7d, Valid: true}
+		endDate := pgtype.Date{Time: windowEnd, Valid: true}
+		start30d := pgtype.Date{Time: windowStart30d, Valid: true}
+
+		if summary7d, err := server.store.GetAbnormalStatsSummary(ctx, db.GetAbnormalStatsSummaryParams{
+			EntityType: "user",
+			EntityID:   authPayload.UserID,
+			StatDate:   start7d,
+			StatDate_2: endDate,
+		}); err == nil {
+			metadata["takeout_orders_7d"] = summary7d.TotalOrders
+			metadata["claims_7d"] = summary7d.AbnormalClaims
+			if summary7d.TotalOrders > 0 {
+				metadata["claim_rate_7d"] = float64(summary7d.AbnormalClaims) / float64(summary7d.TotalOrders)
 			}
-			if stats.TakeoutOrders30d > 0 {
-				metadata["claim_rate_30d"] = float64(stats.Claims30d) / float64(stats.TakeoutOrders30d)
+			metadata["user_claims_7d_exceeded"] = summary7d.AbnormalClaims >= thresholds.UserClaims7d
+			metadata["user_claim_rate_7d_exceeded"] = summary7d.TotalOrders > 0 && float64(summary7d.AbnormalClaims)/float64(summary7d.TotalOrders) >= thresholds.UserClaimRate7d
+		}
+
+		if summary30d, err := server.store.GetAbnormalStatsSummary(ctx, db.GetAbnormalStatsSummaryParams{
+			EntityType: "user",
+			EntityID:   authPayload.UserID,
+			StatDate:   start30d,
+			StatDate_2: endDate,
+		}); err == nil {
+			metadata["takeout_orders_30d"] = summary30d.TotalOrders
+			metadata["claims_30d"] = summary30d.AbnormalClaims
+			if summary30d.TotalOrders > 0 {
+				metadata["claim_rate_30d"] = float64(summary30d.AbnormalClaims) / float64(summary30d.TotalOrders)
+			}
+			metadata["user_claims_30d_exceeded"] = summary30d.AbnormalClaims >= thresholds.UserClaims30d
+			metadata["user_claim_rate_30d_exceeded"] = summary30d.TotalOrders > 0 && float64(summary30d.AbnormalClaims)/float64(summary30d.TotalOrders) >= thresholds.UserClaimRate30d
+		}
+
+		startDateParam := pgtype.Date{Time: windowStart30d, Valid: true}
+		endDateParam := endDate
+
+		if summary, err := server.store.GetAbnormalStatsSummary(ctx, db.GetAbnormalStatsSummaryParams{
+			EntityType: "merchant",
+			EntityID:   order.MerchantID,
+			StatDate:   startDateParam,
+			StatDate_2: endDateParam,
+		}); err == nil {
+			metadata["merchant_total_orders_30d"] = summary.TotalOrders
+			metadata["merchant_abnormal_claims_30d"] = summary.AbnormalClaims
+			if summary.TotalOrders > 0 {
+				metadata["merchant_abnormal_rate_30d"] = float64(summary.AbnormalClaims) / float64(summary.TotalOrders)
+			}
+			metadata["merchant_abnormal_rate_30d_exceeded"] = summary.TotalOrders > 0 && float64(summary.AbnormalClaims)/float64(summary.TotalOrders) >= thresholds.MerchantAbnormalRate
+		}
+
+		if delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID); err == nil && delivery.RiderID.Valid {
+			riderID := delivery.RiderID.Int64
+			metadata["rider_id"] = riderID
+			if summary, err := server.store.GetAbnormalStatsSummary(ctx, db.GetAbnormalStatsSummaryParams{
+				EntityType: "rider",
+				EntityID:   riderID,
+				StatDate:   startDateParam,
+				StatDate_2: endDateParam,
+			}); err == nil {
+				metadata["rider_total_orders_30d"] = summary.TotalOrders
+				metadata["rider_abnormal_claims_30d"] = summary.AbnormalClaims
+				if summary.TotalOrders > 0 {
+					metadata["rider_abnormal_rate_30d"] = float64(summary.AbnormalClaims) / float64(summary.TotalOrders)
+				}
+				metadata["rider_abnormal_rate_30d_exceeded"] = summary.TotalOrders > 0 && float64(summary.AbnormalClaims)/float64(summary.TotalOrders) >= thresholds.RiderAbnormalRate
 			}
 		}
 

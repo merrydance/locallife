@@ -197,6 +197,48 @@ func matchRuleCondition(ctx context.Context, store db.Store, condition map[strin
 			return false, nil
 		}
 	}
+	if v, ok := condition["user_claims_7d_exceeded"]; ok {
+		if want, ok := v.(bool); ok {
+			if want != boolMeta(input.Metadata, "user_claims_7d_exceeded") {
+				return false, nil
+			}
+		}
+	}
+	if v, ok := condition["user_claims_30d_exceeded"]; ok {
+		if want, ok := v.(bool); ok {
+			if want != boolMeta(input.Metadata, "user_claims_30d_exceeded") {
+				return false, nil
+			}
+		}
+	}
+	if v, ok := condition["user_claim_rate_7d_exceeded"]; ok {
+		if want, ok := v.(bool); ok {
+			if want != boolMeta(input.Metadata, "user_claim_rate_7d_exceeded") {
+				return false, nil
+			}
+		}
+	}
+	if v, ok := condition["user_claim_rate_30d_exceeded"]; ok {
+		if want, ok := v.(bool); ok {
+			if want != boolMeta(input.Metadata, "user_claim_rate_30d_exceeded") {
+				return false, nil
+			}
+		}
+	}
+	if v, ok := condition["merchant_abnormal_rate_30d_exceeded"]; ok {
+		if want, ok := v.(bool); ok {
+			if want != boolMeta(input.Metadata, "merchant_abnormal_rate_30d_exceeded") {
+				return false, nil
+			}
+		}
+	}
+	if v, ok := condition["rider_abnormal_rate_30d_exceeded"]; ok {
+		if want, ok := v.(bool); ok {
+			if want != boolMeta(input.Metadata, "rider_abnormal_rate_30d_exceeded") {
+				return false, nil
+			}
+		}
+	}
 	if v, ok := condition["use_balance"]; ok {
 		if enabled, ok := v.(bool); ok && enabled {
 			useBalance, ok := input.Metadata["use_balance"].(bool)

@@ -53,6 +53,7 @@ type Querier interface {
 	AssignDelivery(ctx context.Context, arg AssignDeliveryParams) (Delivery, error)
 	// 自动打烊（用于定时任务）
 	AutoCloseMerchants(ctx context.Context) ([]int64, error)
+	BackfillAbnormalStatsDaily(ctx context.Context, arg BackfillAbnormalStatsDailyParams) error
 	BatchCreateDailyInventory(ctx context.Context, arg []BatchCreateDailyInventoryParams) (int64, error)
 	BatchCreateOrderItems(ctx context.Context, arg []BatchCreateOrderItemsParams) (int64, error)
 	BatchCreateRiderLocations(ctx context.Context, arg []BatchCreateRiderLocationsParams) (int64, error)
@@ -974,6 +975,7 @@ type Querier interface {
 	IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error)
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
+	ListAbnormalStatsAlerts(ctx context.Context, arg ListAbnormalStatsAlertsParams) ([]ListAbnormalStatsAlertsRow, error)
 	ListAbnormalStatsDaily(ctx context.Context, arg ListAbnormalStatsDailyParams) ([]AbnormalStatsDaily, error)
 	ListActiveBehaviorBlocklists(ctx context.Context) ([]BehaviorBlocklist, error)
 	ListActiveCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]CloudPrinter, error)

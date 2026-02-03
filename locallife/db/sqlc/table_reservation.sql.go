@@ -424,15 +424,15 @@ SELECT
     COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0) as total_deposit,
     COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0) as total_prepaid
 FROM table_reservations
-WHERE merchant_id = $1 
-  AND reservation_date >= $2 
+WHERE merchant_id = $1
+  AND reservation_date >= $2
   AND reservation_date <= $3
 `
 
 type GetReservationStatsByDateRangeParams struct {
-	MerchantID        int64       `json:"merchant_id"`
-	ReservationDate   pgtype.Date `json:"reservation_date"`
-	ReservationDate_2 pgtype.Date `json:"reservation_date_2"`
+	MerchantID int64       `json:"merchant_id"`
+	StartDate  pgtype.Date `json:"start_date"`
+	EndDate    pgtype.Date `json:"end_date"`
 }
 
 type GetReservationStatsByDateRangeRow struct {
@@ -445,7 +445,7 @@ type GetReservationStatsByDateRangeRow struct {
 
 // Get reservation statistics for a merchant within date range
 func (q *Queries) GetReservationStatsByDateRange(ctx context.Context, arg GetReservationStatsByDateRangeParams) (GetReservationStatsByDateRangeRow, error) {
-	row := q.db.QueryRow(ctx, getReservationStatsByDateRange, arg.MerchantID, arg.ReservationDate, arg.ReservationDate_2)
+	row := q.db.QueryRow(ctx, getReservationStatsByDateRange, arg.MerchantID, arg.StartDate, arg.EndDate)
 	var i GetReservationStatsByDateRangeRow
 	err := row.Scan(
 		&i.TotalCount,

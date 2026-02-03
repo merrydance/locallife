@@ -3,11 +3,11 @@
 -- name: GetPlatformOverview :one
 -- 平台全局概览
 SELECT 
-    COUNT(DISTINCT CASE WHEN o.created_at >= $1 AND o.created_at <= $2 THEN o.id END)::int AS total_orders,
-    COALESCE(SUM(CASE WHEN o.created_at >= $1 AND o.created_at <= $2 AND o.status IN ('user_delivered', 'completed') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
-    COALESCE(SUM(CASE WHEN o.created_at >= $1 AND o.created_at <= $2 AND o.status IN ('user_delivered', 'completed') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
-    COUNT(DISTINCT CASE WHEN o.created_at >= $1 AND o.created_at <= $2 THEN o.merchant_id END)::int AS active_merchants,
-    COUNT(DISTINCT CASE WHEN o.created_at >= $1 AND o.created_at <= $2 THEN o.user_id END)::int AS active_users
+    COUNT(DISTINCT CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') THEN o.id END)::int AS total_orders,
+    COALESCE(SUM(CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') AND o.status IN ('user_delivered', 'completed') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
+    COALESCE(SUM(CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') AND o.status IN ('user_delivered', 'completed') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
+    COUNT(DISTINCT CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') THEN o.merchant_id END)::int AS active_merchants,
+    COUNT(DISTINCT CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') THEN o.user_id END)::int AS active_users
 FROM orders o
 WHERE o.status NOT IN ('cancelled');
 
@@ -23,7 +23,7 @@ SELECT
     COUNT(CASE WHEN o.order_type = 'takeout' THEN 1 END)::int AS takeout_orders,
     COUNT(CASE WHEN o.order_type = 'dine_in' THEN 1 END)::int AS dine_in_orders
 FROM orders o
-WHERE o.created_at >= $1 AND o.created_at <= $2
+WHERE o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at')
 GROUP BY DATE(o.created_at)
 ORDER BY date;
 
@@ -41,7 +41,7 @@ SELECT
 FROM regions r
 LEFT JOIN merchants m ON m.region_id = r.id AND m.status = 'active'
 LEFT JOIN orders o ON o.merchant_id = m.id 
-    AND o.created_at >= $1 AND o.created_at <= $2
+    AND o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at')
     AND o.status IN ('user_delivered', 'completed')
 GROUP BY r.id, r.name
 ORDER BY total_gmv DESC;
@@ -60,12 +60,12 @@ SELECT
 FROM merchants m
 JOIN regions r ON r.id = m.region_id
 LEFT JOIN orders o ON o.merchant_id = m.id 
-    AND o.created_at >= $1 AND o.created_at <= $2
+    AND o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at')
     AND o.status IN ('user_delivered', 'completed')
 WHERE m.status = 'active'
 GROUP BY m.id, m.name, m.region_id, r.name
 ORDER BY total_sales DESC
-LIMIT $3 OFFSET $4;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: GetCategoryStats :many
 -- 分类销售统计
@@ -78,7 +78,7 @@ FROM tags t
 JOIN merchant_tags mt ON mt.tag_id = t.id
 JOIN merchants m ON m.id = mt.merchant_id AND m.status = 'active'
 LEFT JOIN orders o ON o.merchant_id = m.id 
-    AND o.created_at >= $1 AND o.created_at <= $2
+    AND o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at')
     AND o.status IN ('user_delivered', 'completed')
 WHERE t.type = 'merchant'
 GROUP BY t.id, t.name
@@ -90,7 +90,7 @@ SELECT
     DATE(created_at) AS date,
     COUNT(*)::int AS new_users
 FROM users
-WHERE created_at >= $1 AND created_at <= $2
+WHERE created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 GROUP BY DATE(created_at)
 ORDER BY date;
 
@@ -100,7 +100,7 @@ SELECT
     DATE(created_at) AS date,
     COUNT(*)::int AS new_merchants
 FROM merchants
-WHERE created_at >= $1 AND created_at <= $2
+WHERE created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
   AND status = 'approved'
 GROUP BY DATE(created_at)
 ORDER BY date;
@@ -117,12 +117,12 @@ SELECT
 FROM riders r
 JOIN users u ON u.id = r.user_id
 LEFT JOIN deliveries d ON d.rider_id = r.id 
-    AND d.created_at >= $1 AND d.created_at <= $2
+    AND d.created_at >= sqlc.arg('start_at') AND d.created_at <= sqlc.arg('end_at')
 WHERE r.status = 'active'
 GROUP BY r.id, u.full_name, r.total_earnings
 HAVING COUNT(d.id) > 0
 ORDER BY completed_count DESC
-LIMIT $3 OFFSET $4;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: GetHourlyDistribution :many
 -- 订单时段分布
@@ -131,7 +131,7 @@ SELECT
     COUNT(*)::int AS order_count,
     COALESCE(SUM(CASE WHEN status IN ('user_delivered', 'completed') THEN final_amount ELSE 0 END), 0)::bigint AS total_gmv
 FROM orders
-WHERE created_at >= $1 AND created_at <= $2
+WHERE created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 GROUP BY EXTRACT(HOUR FROM created_at)
 ORDER BY hour;
 

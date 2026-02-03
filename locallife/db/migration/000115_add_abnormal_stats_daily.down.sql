@@ -1,6 +1,9 @@
 DROP TRIGGER IF EXISTS trg_claims_abnormal_stats_insert ON claims;
 DROP FUNCTION IF EXISTS trg_claims_abnormal_stats;
 
+DROP TRIGGER IF EXISTS trg_claims_abnormal_stats_update ON claims;
+DROP FUNCTION IF EXISTS trg_claims_abnormal_stats_update;
+
 DROP TRIGGER IF EXISTS trg_deliveries_abnormal_stats_update ON deliveries;
 DROP FUNCTION IF EXISTS trg_deliveries_abnormal_stats;
 

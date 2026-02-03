@@ -247,18 +247,18 @@ WHERE o.merchant_id = $1
 GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
 ORDER BY 
     CASE 
-        WHEN $4::text = 'total_orders' THEN COUNT(*)
-        WHEN $4::text = 'total_amount' THEN SUM(o.final_amount)
+        WHEN $2::text = 'total_orders' THEN COUNT(*)
+        WHEN $2::text = 'total_amount' THEN SUM(o.final_amount)
         ELSE EXTRACT(EPOCH FROM MAX(o.created_at))
     END DESC
-LIMIT $2 OFFSET $3
+LIMIT $4 OFFSET $3
 `
 
 type GetMerchantCustomerStatsParams struct {
 	MerchantID int64  `json:"merchant_id"`
-	Limit      int32  `json:"limit"`
-	Offset     int32  `json:"offset"`
 	OrderBy    string `json:"order_by"`
+	Offset     int32  `json:"offset"`
+	Limit      int32  `json:"limit"`
 }
 
 type GetMerchantCustomerStatsRow struct {
@@ -277,9 +277,9 @@ type GetMerchantCustomerStatsRow struct {
 func (q *Queries) GetMerchantCustomerStats(ctx context.Context, arg GetMerchantCustomerStatsParams) ([]GetMerchantCustomerStatsRow, error) {
 	rows, err := q.db.Query(ctx, getMerchantCustomerStats,
 		arg.MerchantID,
-		arg.Limit,
-		arg.Offset,
 		arg.OrderBy,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -328,9 +328,9 @@ ORDER BY date DESC
 `
 
 type GetMerchantDailyStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantDailyStatsRow struct {
@@ -345,7 +345,7 @@ type GetMerchantDailyStatsRow struct {
 // M12: 商户统计查询 (实时计算)
 // 商户日报: 按天聚合订单数据
 func (q *Queries) GetMerchantDailyStats(ctx context.Context, arg GetMerchantDailyStatsParams) ([]GetMerchantDailyStatsRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantDailyStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantDailyStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -503,9 +503,9 @@ ORDER BY hour
 `
 
 type GetMerchantHourlyStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantHourlyStatsRow struct {
@@ -517,7 +517,7 @@ type GetMerchantHourlyStatsRow struct {
 
 // 商户时段分析: 按小时统计订单分布
 func (q *Queries) GetMerchantHourlyStats(ctx context.Context, arg GetMerchantHourlyStatsParams) ([]GetMerchantHourlyStatsRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantHourlyStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantHourlyStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -634,9 +634,9 @@ ORDER BY order_count DESC
 `
 
 type GetMerchantOrderSourceStatsParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantOrderSourceStatsRow struct {
@@ -648,7 +648,7 @@ type GetMerchantOrderSourceStatsRow struct {
 
 // 订单来源分析
 func (q *Queries) GetMerchantOrderSourceStats(ctx context.Context, arg GetMerchantOrderSourceStatsParams) ([]GetMerchantOrderSourceStatsRow, error) {
-	rows, err := q.db.Query(ctx, getMerchantOrderSourceStats, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	rows, err := q.db.Query(ctx, getMerchantOrderSourceStats, arg.MerchantID, arg.StartAt, arg.EndAt)
 	if err != nil {
 		return nil, err
 	}
@@ -691,9 +691,9 @@ WHERE merchant_id = $1
 `
 
 type GetMerchantOverviewParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantOverviewRow struct {
@@ -706,7 +706,7 @@ type GetMerchantOverviewRow struct {
 
 // 商户概览: 指定日期范围的汇总统计
 func (q *Queries) GetMerchantOverview(ctx context.Context, arg GetMerchantOverviewParams) (GetMerchantOverviewRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantOverview, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getMerchantOverview, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetMerchantOverviewRow
 	err := row.Scan(
 		&i.TotalDays,
@@ -748,9 +748,9 @@ FROM customer_order_counts
 `
 
 type GetMerchantRepurchaseRateParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
 }
 
 type GetMerchantRepurchaseRateRow struct {
@@ -765,7 +765,7 @@ type GetMerchantRepurchaseRateRow struct {
 // 注意: repurchase_rate_percent 返回万分比(如 7550 表示 75.50%)，API层需除以100
 // 注意: avg_orders_per_user 返回百分比形式(如 235 表示 2.35次)，API层需除以100
 func (q *Queries) GetMerchantRepurchaseRate(ctx context.Context, arg GetMerchantRepurchaseRateParams) (GetMerchantRepurchaseRateRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantRepurchaseRate, arg.MerchantID, arg.CreatedAt, arg.CreatedAt_2)
+	row := q.db.QueryRow(ctx, getMerchantRepurchaseRate, arg.MerchantID, arg.StartAt, arg.EndAt)
 	var i GetMerchantRepurchaseRateRow
 	err := row.Scan(
 		&i.TotalCustomers,
@@ -797,10 +797,10 @@ LIMIT $4
 `
 
 type GetTopSellingDishesParams struct {
-	MerchantID  int64     `json:"merchant_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	CreatedAt_2 time.Time `json:"created_at_2"`
-	Limit       int32     `json:"limit"`
+	MerchantID int64     `json:"merchant_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+	Limit      int32     `json:"limit"`
 }
 
 type GetTopSellingDishesRow struct {
@@ -815,8 +815,8 @@ type GetTopSellingDishesRow struct {
 func (q *Queries) GetTopSellingDishes(ctx context.Context, arg GetTopSellingDishesParams) ([]GetTopSellingDishesRow, error) {
 	rows, err := q.db.Query(ctx, getTopSellingDishes,
 		arg.MerchantID,
-		arg.CreatedAt,
-		arg.CreatedAt_2,
+		arg.StartAt,
+		arg.EndAt,
 		arg.Limit,
 	)
 	if err != nil {

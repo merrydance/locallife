@@ -913,7 +913,7 @@ func (server *Server) computeDeliveryETA(ctx context.Context, merchantID int64, 
 	// 近 30 天平均出餐时间（分钟），仅在有数据时覆盖默认值
 	if avgPrep, err := server.store.GetMerchantAvgPrepareTime(ctx, db.GetMerchantAvgPrepareTimeParams{
 		MerchantID: merchantID,
-		CreatedAt:  time.Now().AddDate(0, 0, -prepareTimeLookbackDays),
+		StartAt:    time.Now().AddDate(0, 0, -prepareTimeLookbackDays),
 	}); err == nil && avgPrep > 0 {
 		res.PrepareMinutes = int32(avgPrep)
 	}

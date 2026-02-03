@@ -91,7 +91,7 @@ SELECT
     COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
     COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
 FROM profit_sharing_orders
-WHERE created_at >= $1 AND created_at <= $2
+WHERE created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 GROUP BY status
 ORDER BY status;
 
@@ -104,7 +104,7 @@ SELECT
   COALESCE(AVG(EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as avg_finish_seconds,
   COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as p95_finish_seconds
 FROM profit_sharing_orders
-WHERE created_at >= $1 AND created_at <= $2;
+WHERE created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: UpdateProfitSharingOrderToProcessing :one
 UPDATE profit_sharing_orders
@@ -137,8 +137,8 @@ SELECT
     COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
     COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
 FROM profit_sharing_orders
-WHERE merchant_id = $1 AND status = 'finished'
-  AND created_at >= $2 AND created_at <= $3;
+WHERE merchant_id = sqlc.arg('merchant_id') AND status = 'finished'
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: GetOperatorProfitSharingStats :one
 SELECT 
@@ -146,8 +146,8 @@ SELECT
     COALESCE(SUM(total_amount), 0)::bigint as total_amount,
     COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
 FROM profit_sharing_orders
-WHERE operator_id = $1 AND status = 'finished'
-  AND created_at >= $2 AND created_at <= $3;
+WHERE operator_id = sqlc.arg('operator_id') AND status = 'finished'
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: ListMerchantFinanceOrders :many
 -- 商户财务订单明细（带分账信息）
@@ -165,16 +165,16 @@ SELECT
     po.order_id
 FROM profit_sharing_orders p
 JOIN payment_orders po ON po.id = p.payment_order_id
-WHERE p.merchant_id = $1
-  AND p.created_at >= $2 AND p.created_at <= $3
+WHERE p.merchant_id = sqlc.arg('merchant_id')
+  AND p.created_at >= sqlc.arg('start_at') AND p.created_at <= sqlc.arg('end_at')
 ORDER BY p.created_at DESC
-LIMIT $4 OFFSET $5;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantFinanceOrders :one
 SELECT COUNT(*)::bigint
 FROM profit_sharing_orders
-WHERE merchant_id = $1
-  AND created_at >= $2 AND created_at <= $3;
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: GetMerchantFinanceOverview :one
 -- 商户财务概览：统计收入、服务费、净收入
@@ -187,8 +187,8 @@ SELECT
     COALESCE(SUM(CASE WHEN status = 'finished' THEN operator_commission ELSE 0 END), 0)::bigint as total_operator_fee,
     COALESCE(SUM(CASE WHEN status = 'pending' THEN merchant_amount ELSE 0 END), 0)::bigint as pending_income
 FROM profit_sharing_orders
-WHERE merchant_id = $1
-  AND created_at >= $2 AND created_at <= $3;
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: GetMerchantServiceFeeDetail :many
 -- 商户服务费明细
@@ -200,9 +200,9 @@ SELECT
     COALESCE(SUM(platform_commission), 0)::bigint as platform_fee,
     COALESCE(SUM(operator_commission), 0)::bigint as operator_fee
 FROM profit_sharing_orders
-WHERE merchant_id = $1
+WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'finished'
-  AND created_at >= $2 AND created_at <= $3
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 GROUP BY DATE(created_at), order_source
 ORDER BY date DESC, order_source;
 
@@ -215,9 +215,9 @@ SELECT
     COALESCE(SUM(merchant_amount), 0)::bigint as merchant_income,
     COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as total_fee
 FROM profit_sharing_orders
-WHERE merchant_id = $1
+WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'finished'
-  AND created_at >= $2 AND created_at <= $3
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
 
@@ -225,33 +225,33 @@ ORDER BY date DESC;
 -- 商户结算记录（带日期范围和状态筛选）
 SELECT *
 FROM profit_sharing_orders
-WHERE merchant_id = $1
-  AND created_at >= $2 AND created_at <= $3
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 ORDER BY created_at DESC
-LIMIT $4 OFFSET $5;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListMerchantSettlementsByStatus :many
 -- 商户结算记录（带日期范围和状态筛选）
 SELECT *
 FROM profit_sharing_orders
-WHERE merchant_id = $1
-  AND status = $2
-  AND created_at >= $3 AND created_at <= $4
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND status = sqlc.arg('status')
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 ORDER BY created_at DESC
-LIMIT $5 OFFSET $6;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantSettlements :one
 SELECT COUNT(*)::bigint
 FROM profit_sharing_orders
-WHERE merchant_id = $1
-  AND created_at >= $2 AND created_at <= $3;
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: CountMerchantSettlementsByStatus :one
 SELECT COUNT(*)::bigint
 FROM profit_sharing_orders
-WHERE merchant_id = $1
-  AND status = $2
-  AND created_at >= $3 AND created_at <= $4;
+WHERE merchant_id = sqlc.arg('merchant_id')
+  AND status = sqlc.arg('status')
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- ==================== 骑手分账查询 ====================
 
@@ -262,8 +262,8 @@ SELECT
     COALESCE(SUM(rider_amount), 0)::bigint as total_rider_income,
     COALESCE(SUM(delivery_fee), 0)::bigint as total_delivery_fee
 FROM profit_sharing_orders
-WHERE rider_id = $1 AND status = 'finished'
-  AND created_at >= $2 AND created_at <= $3;
+WHERE rider_id = sqlc.arg('rider_id') AND status = 'finished'
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: ListRiderProfitSharingOrders :many
 -- 骑手配送费明细
@@ -276,10 +276,10 @@ FROM profit_sharing_orders p
 JOIN payment_orders po ON po.id = p.payment_order_id
 JOIN orders o ON o.id = po.order_id
 JOIN merchants m ON m.id = p.merchant_id
-WHERE p.rider_id = $1
-  AND p.created_at >= $2 AND p.created_at <= $3
+WHERE p.rider_id = sqlc.arg('rider_id')
+  AND p.created_at >= sqlc.arg('start_at') AND p.created_at <= sqlc.arg('end_at')
 ORDER BY p.created_at DESC
-LIMIT $4 OFFSET $5;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: GetRiderDailyIncome :many
 -- 骑手每日收入汇总
@@ -288,8 +288,8 @@ SELECT
     COUNT(*) as delivery_count,
     COALESCE(SUM(rider_amount), 0)::bigint as daily_income
 FROM profit_sharing_orders
-WHERE rider_id = $1
+WHERE rider_id = sqlc.arg('rider_id')
   AND status = 'finished'
-  AND created_at >= $2 AND created_at <= $3
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 GROUP BY DATE(created_at)
 ORDER BY date DESC;

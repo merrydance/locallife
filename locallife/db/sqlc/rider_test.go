@@ -637,9 +637,9 @@ func TestBatchCreateRiderLocations(t *testing.T) {
 
 	// 验证数据已插入
 	storedLocations, err := testStore.ListRiderLocations(context.Background(), ListRiderLocationsParams{
-		RiderID:      rider.ID,
-		RecordedAt:   now.Add(-10 * time.Minute),
-		RecordedAt_2: now.Add(time.Minute),
+		RiderID: rider.ID,
+		StartAt: now.Add(-10 * time.Minute),
+		EndAt:   now.Add(time.Minute),
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(storedLocations), 3)
@@ -666,9 +666,9 @@ func TestListRiderLocations(t *testing.T) {
 	endTime := time.Now().Add(time.Second)
 
 	locations, err := testStore.ListRiderLocations(context.Background(), ListRiderLocationsParams{
-		RiderID:      rider.ID,
-		RecordedAt:   startTime.Add(-time.Second), // 稍早于开始时间
-		RecordedAt_2: endTime,
+		RiderID: rider.ID,
+		StartAt: startTime.Add(-time.Second), // 稍早于开始时间
+		EndAt:   endTime,
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(locations), 5)

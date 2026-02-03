@@ -21,7 +21,8 @@ WHERE access_token = $1 LIMIT 1;
 
 -- name: GetSessionByRefreshToken :one
 SELECT * FROM sessions
-WHERE refresh_token = $1 OR refresh_token = $2
+WHERE refresh_token = sqlc.arg('refresh_token')
+  OR refresh_token = sqlc.arg('refresh_token_fallback')
 LIMIT 1;
 
 -- name: UpdateSessionTokens :one
