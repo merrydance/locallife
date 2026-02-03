@@ -1,4 +1,4 @@
-import { getRefundById, RefundOrder } from '../../../api/payment-refund'
+import { getRefundById, getRefundReturns, ProfitSharingReturn, RefundOrder } from '../../../api/payment-refund'
 import { logger } from '../../../utils/logger'
 
 interface RefundProgress {
@@ -21,7 +21,8 @@ Page({
         statusText: '',
         statusClass: '',
         refundTypeText: '',
-        progress: [] as RefundProgress[]
+        progress: [] as RefundProgress[],
+        profitSharingReturns: [] as ProfitSharingReturn[]
     },
 
     onLoad(options: { id?: string }) {
@@ -37,6 +38,12 @@ Page({
         try {
             const refund = await getRefundById(this.data.refundId)
             this.processRefund(refund)
+            try {
+                const returns = await getRefundReturns(this.data.refundId)
+                this.setData({ profitSharingReturns: returns || [] })
+            } catch (returnErr) {
+                logger.warn('加载分账回退记录失败', returnErr, 'refund-detail.loadRefundDetail')
+            }
             this.setData({ initialLoading: false, loading: false })
         } catch (error) {
             logger.error('加载退款详情失败', error, 'refund-detail.loadRefundDetail')

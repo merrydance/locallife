@@ -55,6 +55,21 @@ export interface RefundOrder {
     processed_at?: string
 }
 
+export interface ProfitSharingReturn {
+    id: number
+    refund_order_id: number
+    out_order_no: string
+    out_return_no: string
+    return_mchid: string
+    amount: number
+    status: string
+    return_id?: string
+    fail_reason?: string
+    finished_at?: string
+    created_at: string
+    updated_at: string
+}
+
 export type Refund = RefundOrder
 
 export interface PaymentResult {
@@ -272,6 +287,16 @@ export const calculateDeliveryFee = async (params: CalculateDeliveryFeeRequest):
 export const getRefundById = async (id: number): Promise<RefundOrder> => {
     return request({
         url: `/v1/refunds/${id}`,
+        method: 'GET'
+    })
+}
+
+/**
+ * 获取退款关联的分账回退记录
+ */
+export const getRefundReturns = async (refundId: number): Promise<ProfitSharingReturn[]> => {
+    return request({
+        url: `/v1/refunds/${refundId}/returns`,
         method: 'GET'
     })
 }

@@ -1255,6 +1255,28 @@ type ProfitSharingOrder struct {
 	OperatorRate int32 `json:"operator_rate"`
 }
 
+// 分账回退记录表，退款前的分账回退流水
+type ProfitSharingReturn struct {
+	ID                   int64  `json:"id"`
+	RefundOrderID        int64  `json:"refund_order_id"`
+	ProfitSharingOrderID int64  `json:"profit_sharing_order_id"`
+	PaymentOrderID       int64  `json:"payment_order_id"`
+	SubMchid             string `json:"sub_mchid"`
+	OutOrderNo           string `json:"out_order_no"`
+	// 商户分账回退单号
+	OutReturnNo string `json:"out_return_no"`
+	// 回退接收方商户号（平台/运营商）
+	ReturnMchid string `json:"return_mchid"`
+	Amount      int64  `json:"amount"`
+	// 回退状态：pending/processing/success/failed
+	Status     string             `json:"status"`
+	ReturnID   pgtype.Text        `json:"return_id"`
+	FailReason pgtype.Text        `json:"fail_reason"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+}
+
 // M10: 充值规则表（充100送20等）
 type RechargeRule struct {
 	ID             int64              `json:"id"`

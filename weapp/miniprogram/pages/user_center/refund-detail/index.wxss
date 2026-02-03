@@ -81,6 +81,53 @@
   padding-left: 8rpx;
 }
 
+.refund-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.refund-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.refund-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.refund-card-amount {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.refund-card-status {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.refund-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.refund-reason {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.refund-time {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+}
+
 /* 进度步骤条 */
 .progress-box {
   background: #FFFFFF;

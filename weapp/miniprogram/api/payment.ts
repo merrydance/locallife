@@ -49,6 +49,34 @@ export interface PaymentOrderResponse {
     paid_at?: string
 }
 
+export interface CombinedPaymentSubOrderResponse {
+    order_id: number
+    merchant_id: number
+    sub_mch_id: string
+    amount: number
+    out_trade_no: string
+    description: string
+    profit_sharing_status?: string
+    merchant_name?: string
+    merchant_logo?: string
+    order_no?: string
+}
+
+export interface CombinedPaymentOrderResponse {
+    id: number
+    combine_out_trade_no: string
+    total_amount: number
+    status: PaymentStatus
+    prepay_id?: string
+    pay_params?: MiniProgramPayParams
+    expires_at?: string
+    sub_orders: CombinedPaymentSubOrderResponse[]
+}
+
+export interface CreateCombinedPaymentRequest {
+    order_ids: number[]
+}
+
 /** 创建支付请求 */
 export interface CreatePaymentRequest {
     order_id: number
@@ -123,6 +151,40 @@ export async function createPayment(paymentData: CreatePaymentRequest): Promise<
         url: '/v1/payments',
         method: 'POST',
         data: paymentData
+    })
+}
+
+/**
+ * 创建合单支付订单
+ * @param payload 合单支付数据
+ */
+export async function createCombinedPaymentOrder(payload: CreateCombinedPaymentRequest): Promise<CombinedPaymentOrderResponse> {
+    return request({
+        url: '/v1/payments/combined',
+        method: 'POST',
+        data: payload
+    })
+}
+
+/**
+ * 获取合单支付订单详情
+ * @param combinedPaymentId 合单支付订单ID
+ */
+export async function getCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
+    return request({
+        url: `/v1/payments/combined/${combinedPaymentId}`,
+        method: 'GET'
+    })
+}
+
+/**
+ * 关闭合单支付订单
+ * @param combinedPaymentId 合单支付订单ID
+ */
+export async function closeCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
+    return request({
+        url: `/v1/payments/combined/${combinedPaymentId}/close`,
+        method: 'POST'
     })
 }
 

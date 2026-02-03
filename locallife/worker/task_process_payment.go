@@ -90,6 +90,7 @@ const (
 	TaskProcessProfitSharing       = "payment:process_profit_sharing"
 	TaskProcessApplymentResult     = "payment:process_applyment_result"      // 进件结果处理
 	TaskProcessProfitSharingResult = "payment:process_profit_sharing_result" // 分账结果处理
+	TaskProcessProfitSharingReturnResult = "payment:process_profit_sharing_return_result" // 分账回退结果处理
 )
 
 // PaymentSuccessPayload 支付成功任务载荷
@@ -137,6 +138,16 @@ type ProfitSharingResultPayload struct {
 	Result               string `json:"result"`                  // 分账结果：SUCCESS/CLOSED/FAILED
 	FailReason           string `json:"fail_reason"`             // 失败原因
 	MerchantID           int64  `json:"merchant_id"`             // 商户ID
+}
+
+// ProfitSharingReturnResultPayload 分账回退结果处理任务载荷
+type ProfitSharingReturnResultPayload struct {
+	ProfitSharingReturnID int64  `json:"profit_sharing_return_id"`
+	OutReturnNo           string `json:"out_return_no"`
+	OutOrderNo            string `json:"out_order_no"`
+	SubMchID              string `json:"sub_mchid"`
+	RefundOrderID         int64  `json:"refund_order_id"`
+	RetryCount            int    `json:"retry_count"`
 }
 
 // DistributeTaskProcessPaymentSuccess 分发支付成功处理任务
@@ -297,6 +308,32 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharingResul
 		Int64("profit_sharing_order_id", payload.ProfitSharingOrderID).
 		Str("result", payload.Result).
 		Msg("enqueued profit sharing result task")
+
+	return nil
+}
+
+// DistributeTaskProcessProfitSharingReturnResult 分发分账回退结果处理任务
+func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharingReturnResult(
+	ctx context.Context,
+	payload *ProfitSharingReturnResultPayload,
+	opts ...asynq.Option,
+) error {
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	task := asynq.NewTask(TaskProcessProfitSharingReturnResult, jsonPayload, opts...)
+	info, err := distributor.enqueueTask(ctx, task)
+	if err != nil {
+		return fmt.Errorf("enqueue task: %w", err)
+	}
+
+	log.Info().
+		Str("type", task.Type()).
+		Str("queue", info.Queue).
+		Str("out_return_no", payload.OutReturnNo).
+		Msg("enqueued profit sharing return result task")
 
 	return nil
 }
@@ -692,21 +729,10 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 			return fmt.Errorf("update refund order to success: %w", err)
 		}
 
-		// ✅ P1-3: 同步更新支付订单状态为已退款
-		_, err = processor.store.UpdatePaymentOrderToRefunded(ctx, refundOrder.PaymentOrderID)
-		if err != nil {
-			return fmt.Errorf("update payment order to refunded: %w", err)
-		}
-
-		log.Info().
-			Str("out_refund_no", payload.OutRefundNo).
-			Int64("payment_order_id", refundOrder.PaymentOrderID).
-			Msg("refund success and payment order status synced")
-
-		// 🔔 发送退款成功通知
-		if processor.distributor != nil {
-			paymentOrder, err := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
-			if err == nil {
+		paymentOrder, err := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+		if err == nil {
+			_, _ = processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+			if processor.distributor != nil {
 				expiresAt := time.Now().Add(7 * 24 * time.Hour)
 				_ = processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
 					UserID:      paymentOrder.UserID,
@@ -1081,6 +1107,134 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		return fmt.Errorf("ecommerce client not configured")
 	}
 
+	if paymentOrder.PaymentType == "profit_sharing" {
+		profitSharingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+		if err != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("profit sharing order not found")
+		}
+		if !profitSharingOrder.SharingOrderID.Valid || profitSharingOrder.SharingOrderID.String == "" {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("profit sharing order id missing")
+		}
+
+		var operator db.Operator
+		if profitSharingOrder.OperatorCommission > 0 {
+			if !profitSharingOrder.OperatorID.Valid {
+				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				return fmt.Errorf("operator not found for profit sharing")
+			}
+			op, err := processor.store.GetOperator(ctx, profitSharingOrder.OperatorID.Int64)
+			if err != nil {
+				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				return fmt.Errorf("get operator: %w", err)
+			}
+			if !op.WechatMchID.Valid || op.WechatMchID.String == "" {
+				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				return fmt.Errorf("operator wechat mchid not configured")
+			}
+			operator = op
+		}
+
+		hasProcessing := false
+		processReturn := func(outReturnNo, returnMchID, description string, amount int64) error {
+			returnRecord, err := processor.store.CreateProfitSharingReturn(ctx, db.CreateProfitSharingReturnParams{
+				RefundOrderID:        refundOrder.ID,
+				ProfitSharingOrderID: profitSharingOrder.ID,
+				PaymentOrderID:       paymentOrder.ID,
+				SubMchid:             paymentConfig.SubMchID,
+				OutOrderNo:           profitSharingOrder.OutOrderNo,
+				OutReturnNo:          outReturnNo,
+				ReturnMchid:          returnMchID,
+				Amount:               amount,
+				Status:               "pending",
+			})
+			if err != nil {
+				return err
+			}
+
+			returnResp, err := processor.ecommerceClient.CreateProfitSharingReturn(ctx, &wechat.ProfitSharingReturnRequest{
+				SubMchID:    paymentConfig.SubMchID,
+				OrderID:     profitSharingOrder.SharingOrderID.String,
+				OutOrderNo:  profitSharingOrder.OutOrderNo,
+				OutReturnNo: outReturnNo,
+				ReturnMchID: returnMchID,
+				Amount:      amount,
+				Description: description,
+			})
+			if err != nil {
+				_, _ = processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+					ID:         returnRecord.ID,
+					FailReason: pgtype.Text{String: err.Error(), Valid: true},
+				})
+				return err
+			}
+
+			switch returnResp.Result {
+			case "SUCCESS":
+				if returnResp.ReturnID != "" {
+					_, _ = processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+						ID:       returnRecord.ID,
+						ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: true},
+					})
+				}
+				_, _ = processor.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID)
+			case "PROCESSING":
+				_, _ = processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+					ID:       returnRecord.ID,
+					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
+				})
+				if processor.distributor != nil {
+					_ = processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
+						ctx,
+						&ProfitSharingReturnResultPayload{
+							ProfitSharingReturnID: returnRecord.ID,
+							OutReturnNo:           returnRecord.OutReturnNo,
+							OutOrderNo:            returnRecord.OutOrderNo,
+							SubMchID:              returnRecord.SubMchid,
+							RefundOrderID:         returnRecord.RefundOrderID,
+							RetryCount:            0,
+						},
+						asynq.ProcessIn(processor.config.ProfitSharingReturnRetryInterval),
+					)
+				}
+				hasProcessing = true
+			case "FAILED":
+				_, _ = processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+					ID:         returnRecord.ID,
+					FailReason: pgtype.Text{String: returnResp.FailReason, Valid: returnResp.FailReason != ""},
+				})
+				return fmt.Errorf("profit sharing return failed")
+			default:
+				_, _ = processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+					ID:         returnRecord.ID,
+					FailReason: pgtype.Text{String: "unknown return result", Valid: true},
+				})
+				return fmt.Errorf("profit sharing return unknown result")
+			}
+
+			return nil
+		}
+
+		if profitSharingOrder.PlatformCommission > 0 {
+			outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
+			if err := processReturn(outReturnNo, processor.ecommerceClient.GetSpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission); err != nil {
+				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				return fmt.Errorf("profit sharing return failed")
+			}
+		}
+		if profitSharingOrder.OperatorCommission > 0 {
+			outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
+			if err := processReturn(outReturnNo, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
+				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				return fmt.Errorf("profit sharing return failed")
+			}
+		}
+		if hasProcessing {
+			return nil
+		}
+	}
+
 	// 调用微信退款 API
 	refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
 		SubMchID:     paymentConfig.SubMchID,
@@ -1420,6 +1574,186 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 				)
 			}
 		}
+	}
+
+	return nil
+}
+
+// ==================== 分账回退结果处理 ====================
+
+// ProcessTaskProfitSharingReturnResult 处理分账回退结果任务
+func (processor *RedisTaskProcessor) ProcessTaskProfitSharingReturnResult(ctx context.Context, task *asynq.Task) error {
+	var payload ProfitSharingReturnResultPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal payload: %w", asynq.SkipRetry)
+	}
+
+	if processor.ecommerceClient == nil {
+		return fmt.Errorf("ecommerce client not configured")
+	}
+
+	returnRecord, err := processor.store.GetProfitSharingReturnByOutReturnNo(ctx, payload.OutReturnNo)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return fmt.Errorf("profit sharing return not found: %w", asynq.SkipRetry)
+		}
+		return fmt.Errorf("get profit sharing return: %w", err)
+	}
+
+	resp, err := processor.ecommerceClient.QueryProfitSharingReturn(ctx, returnRecord.SubMchid, returnRecord.OutReturnNo, returnRecord.OutOrderNo)
+	if err != nil {
+		return fmt.Errorf("query profit sharing return: %w", err)
+	}
+
+	switch resp.Result {
+	case "PROCESSING":
+		_, _ = processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+			ID:       returnRecord.ID,
+			ReturnID: pgtype.Text{String: resp.ReturnID, Valid: resp.ReturnID != ""},
+		})
+		if payload.RetryCount+1 > processor.config.ProfitSharingReturnMaxRetries {
+			_, _ = processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+				ID:         returnRecord.ID,
+				FailReason: pgtype.Text{String: "max retries exceeded", Valid: true},
+			})
+			_, _ = processor.store.UpdateRefundOrderToFailed(ctx, returnRecord.RefundOrderID)
+			return nil
+		}
+		if processor.distributor != nil {
+			_ = processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
+				ctx,
+				&ProfitSharingReturnResultPayload{
+					ProfitSharingReturnID: returnRecord.ID,
+					OutReturnNo:           returnRecord.OutReturnNo,
+					OutOrderNo:            returnRecord.OutOrderNo,
+					SubMchID:              returnRecord.SubMchid,
+					RefundOrderID:         returnRecord.RefundOrderID,
+					RetryCount:            payload.RetryCount + 1,
+				},
+				asynq.ProcessIn(processor.config.ProfitSharingReturnRetryInterval),
+			)
+		}
+		return nil
+
+	case "SUCCESS":
+		if resp.ReturnID != "" {
+			_, _ = processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+				ID:       returnRecord.ID,
+				ReturnID: pgtype.Text{String: resp.ReturnID, Valid: true},
+			})
+		}
+		_, _ = processor.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID)
+		return processor.tryInitiateRefundAfterReturns(ctx, returnRecord.RefundOrderID)
+
+	case "FAILED":
+		_, _ = processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+			ID:         returnRecord.ID,
+			FailReason: pgtype.Text{String: resp.FailReason, Valid: resp.FailReason != ""},
+		})
+		_, _ = processor.store.UpdateRefundOrderToFailed(ctx, returnRecord.RefundOrderID)
+		return nil
+	default:
+		return fmt.Errorf("unknown profit sharing return result: %s", resp.Result)
+	}
+}
+
+func (processor *RedisTaskProcessor) tryInitiateRefundAfterReturns(ctx context.Context, refundOrderID int64) error {
+	refundOrder, err := processor.store.GetRefundOrder(ctx, refundOrderID)
+	if err != nil {
+		return fmt.Errorf("get refund order: %w", err)
+	}
+	if refundOrder.Status != "pending" {
+		return nil
+	}
+
+	totalCount, err := processor.store.CountProfitSharingReturnsByRefundOrder(ctx, refundOrderID)
+	if err != nil {
+		return fmt.Errorf("count profit sharing returns: %w", err)
+	}
+	if totalCount == 0 {
+		return nil
+	}
+
+	successCount, err := processor.store.CountProfitSharingReturnsByRefundOrderStatus(ctx, db.CountProfitSharingReturnsByRefundOrderStatusParams{
+		RefundOrderID: refundOrderID,
+		Status:        "success",
+	})
+	if err != nil {
+		return fmt.Errorf("count profit sharing returns success: %w", err)
+	}
+	failedCount, err := processor.store.CountProfitSharingReturnsByRefundOrderStatus(ctx, db.CountProfitSharingReturnsByRefundOrderStatusParams{
+		RefundOrderID: refundOrderID,
+		Status:        "failed",
+	})
+	if err != nil {
+		return fmt.Errorf("count profit sharing returns failed: %w", err)
+	}
+	if failedCount > 0 {
+		_, _ = processor.store.UpdateRefundOrderToFailed(ctx, refundOrderID)
+		return nil
+	}
+	if successCount < totalCount {
+		return nil
+	}
+
+	if processor.ecommerceClient == nil {
+		return fmt.Errorf("ecommerce client not configured")
+	}
+
+	paymentOrder, err := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+	if err != nil {
+		return fmt.Errorf("get payment order: %w", err)
+	}
+	if paymentOrder.Status != "paid" {
+		return nil
+	}
+
+	if !paymentOrder.OrderID.Valid {
+		return fmt.Errorf("payment order has no order id")
+	}
+
+	order, err := processor.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
+	if err != nil {
+		return fmt.Errorf("get order: %w", err)
+	}
+
+	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
+	if err != nil {
+		return fmt.Errorf("get merchant payment config: %w", err)
+	}
+	if paymentConfig.SubMchID == "" {
+		return fmt.Errorf("merchant sub mchid not configured")
+	}
+
+	reason := ""
+	if refundOrder.RefundReason.Valid {
+		reason = refundOrder.RefundReason.String
+	}
+
+	refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+		SubMchID:     paymentConfig.SubMchID,
+		OutTradeNo:   paymentOrder.OutTradeNo,
+		OutRefundNo:  refundOrder.OutRefundNo,
+		Reason:       reason,
+		RefundAmount: refundOrder.RefundAmount,
+		TotalAmount:  paymentOrder.Amount,
+	})
+	if err != nil {
+		_, _ = processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		return fmt.Errorf("call wechat refund API: %w", err)
+	}
+
+	switch refundResp.Status {
+	case wechat.RefundStatusSuccess:
+		_, _ = processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		_, _ = processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+	case wechat.RefundStatusProcessing:
+		_, _ = processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
+		})
+	default:
+		_, _ = processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 	}
 
 	return nil

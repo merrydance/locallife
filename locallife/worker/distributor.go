@@ -16,6 +16,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskCombinedPaymentOrderTimeout 分发合单支付超时任务
+	DistributeTaskCombinedPaymentOrderTimeout(
+		ctx context.Context,
+		payload *PayloadCombinedPaymentOrderTimeout,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskReservationPaymentTimeout 分发预定支付超时任务
 	DistributeTaskReservationPaymentTimeout(
 		ctx context.Context,
@@ -76,6 +83,13 @@ type TaskDistributor interface {
 	DistributeTaskProcessProfitSharingResult(
 		ctx context.Context,
 		payload *ProfitSharingResultPayload,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskProcessProfitSharingReturnResult 分发分账回退结果处理任务
+	DistributeTaskProcessProfitSharingReturnResult(
+		ctx context.Context,
+		payload *ProfitSharingReturnResultPayload,
 		opts ...asynq.Option,
 	) error
 

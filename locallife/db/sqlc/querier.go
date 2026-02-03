@@ -147,6 +147,8 @@ type Querier interface {
 	// 统计待审核申请数量
 	CountPendingOperatorApplications(ctx context.Context) (int64, error)
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
+	CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error)
+	CountProfitSharingReturnsByRefundOrderStatus(ctx context.Context, arg CountProfitSharingReturnsByRefundOrderStatusParams) (int32, error)
 	// 统计多个用户最近N天的索赔总数
 	CountRecentClaimsByUsers(ctx context.Context, arg CountRecentClaimsByUsersParams) (int64, error)
 	// 统计运营商区域内待人工审核的索赔数量
@@ -351,6 +353,7 @@ type Querier interface {
 	CreateProfitSharingOrder(ctx context.Context, arg CreateProfitSharingOrderParams) (ProfitSharingOrder, error)
 	// 简化版创建（不含骑手分账，用于堂食/自提订单）
 	CreateProfitSharingOrderSimple(ctx context.Context, arg CreateProfitSharingOrderSimpleParams) (ProfitSharingOrder, error)
+	CreateProfitSharingReturn(ctx context.Context, arg CreateProfitSharingReturnParams) (ProfitSharingReturn, error)
 	// Recharge Rules
 	CreateRechargeRule(ctx context.Context, arg CreateRechargeRuleParams) (RechargeRule, error)
 	CreateRecommendConfig(ctx context.Context, arg CreateRecommendConfigParams) (RecommendConfig, error)
@@ -786,6 +789,8 @@ type Querier interface {
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (ProfitSharingOrder, error)
 	GetProfitSharingOrderForUpdate(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	GetProfitSharingReconciliationSummary(ctx context.Context, arg GetProfitSharingReconciliationSummaryParams) ([]GetProfitSharingReconciliationSummaryRow, error)
+	GetProfitSharingReturn(ctx context.Context, id int64) (ProfitSharingReturn, error)
+	GetProfitSharingReturnByOutReturnNo(ctx context.Context, outReturnNo string) (ProfitSharingReturn, error)
 	GetProfitSharingSlaSummary(ctx context.Context, arg GetProfitSharingSlaSummaryParams) (GetProfitSharingSlaSummaryRow, error)
 	// 获取无投诉的高质量菜品ID列表
 	// 条件: 销量>=指定阈值, 近30天无投诉, 商户无食品安全事故
@@ -1170,6 +1175,7 @@ type Querier interface {
 	ListProfitSharingOrdersByOperator(ctx context.Context, arg ListProfitSharingOrdersByOperatorParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByStatus(ctx context.Context, arg ListProfitSharingOrdersByStatusParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersForRetry(ctx context.Context, arg ListProfitSharingOrdersForRetryParams) ([]ProfitSharingOrder, error)
+	ListProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) ([]ProfitSharingReturn, error)
 	ListRecentWeatherCoefficients(ctx context.Context, arg ListRecentWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListRecommendConfigs(ctx context.Context) ([]RecommendConfig, error)
 	ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]RefundOrder, error)
@@ -1485,6 +1491,9 @@ type Querier interface {
 	UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFinished(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToProcessing(ctx context.Context, arg UpdateProfitSharingOrderToProcessingParams) (ProfitSharingOrder, error)
+	UpdateProfitSharingReturnToFailed(ctx context.Context, arg UpdateProfitSharingReturnToFailedParams) (ProfitSharingReturn, error)
+	UpdateProfitSharingReturnToProcessing(ctx context.Context, arg UpdateProfitSharingReturnToProcessingParams) (ProfitSharingReturn, error)
+	UpdateProfitSharingReturnToSuccess(ctx context.Context, id int64) (ProfitSharingReturn, error)
 	UpdateRechargeRule(ctx context.Context, arg UpdateRechargeRuleParams) (RechargeRule, error)
 	UpdateRecommendConfig(ctx context.Context, arg UpdateRecommendConfigParams) (RecommendConfig, error)
 	UpdateRefundOrderToClosed(ctx context.Context, id int64) (RefundOrder, error)

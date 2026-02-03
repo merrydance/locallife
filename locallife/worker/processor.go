@@ -24,6 +24,8 @@ type TaskProcessor interface {
 	Shutdown()
 	// ProcessTaskPaymentOrderTimeout 处理支付订单超时任务
 	ProcessTaskPaymentOrderTimeout(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskCombinedPaymentOrderTimeout 处理合单支付超时任务
+	ProcessTaskCombinedPaymentOrderTimeout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationPaymentTimeout 处理预定支付超时任务
 	ProcessTaskReservationPaymentTimeout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationNoShowAlert 处理预定未到店提醒任务
@@ -34,6 +36,8 @@ type TaskProcessor interface {
 	ProcessTaskRefundResult(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskProfitSharing 处理分账任务
 	ProcessTaskProfitSharing(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskProfitSharingReturnResult 处理分账回退结果任务
+	ProcessTaskProfitSharingReturnResult(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
@@ -117,6 +121,7 @@ func (processor *RedisTaskProcessor) Start() error {
 
 	// 注册任务处理器
 	mux.HandleFunc(TaskPaymentOrderTimeout, processor.ProcessTaskPaymentOrderTimeout)
+	mux.HandleFunc(TaskCombinedPaymentOrderTimeout, processor.ProcessTaskCombinedPaymentOrderTimeout)
 	mux.HandleFunc(TaskReservationPaymentTimeout, processor.ProcessTaskReservationPaymentTimeout)
 	mux.HandleFunc(TaskOrderPaymentTimeout, processor.ProcessTaskOrderPaymentTimeout)
 	mux.HandleFunc(TaskReservationNoShowAlert, processor.ProcessTaskReservationNoShowAlert)
@@ -125,6 +130,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessRefundResult, processor.ProcessTaskRefundResult)
 	mux.HandleFunc(TaskProcessProfitSharing, processor.ProcessTaskProfitSharing)
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
+	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
 
 	// TrustScore系统任务
 	mux.HandleFunc(TypeHandleSuspiciousPattern, processor.HandleSuspiciousPattern)

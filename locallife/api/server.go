@@ -734,6 +734,9 @@ func (server *Server) setupRouter() {
 	paymentGroup := authGroup.Group("/payments")
 	{
 		paymentGroup.POST("", server.createPaymentOrder)
+		paymentGroup.POST("/combined", server.createCombinedPaymentOrder)
+		paymentGroup.GET("/combined/:id", server.getCombinedPaymentOrder)
+		paymentGroup.POST("/combined/:id/close", server.closeCombinedPaymentOrder)
 		paymentGroup.GET("", server.listPaymentOrders)
 		paymentGroup.GET("/:id", server.getPaymentOrder)
 		paymentGroup.POST("/:id/close", server.closePaymentOrder)
@@ -745,6 +748,7 @@ func (server *Server) setupRouter() {
 	{
 		refundGroup.POST("", server.createRefundOrder)
 		refundGroup.GET("/:id", server.getRefundOrder)
+		refundGroup.GET("/:id/returns", server.listProfitSharingReturnsByRefund)
 	}
 
 	// M8: 骑手管理路由

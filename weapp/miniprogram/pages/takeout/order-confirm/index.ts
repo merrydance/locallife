@@ -3,7 +3,7 @@ import { CartItemResponse } from '../../../api/cart'
 import { logger } from '../../../utils/logger'
 import AddressService, { Address } from '../../../api/address'
 import { createOrder, CreateOrderRequest, OrderItemRequest, OrderType } from '../../../api/order'
-import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
+import { createOrderPayment, createCombinedPaymentOrder, invokeWechatPay } from '../../../api/payment'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getPublicMerchantCombos, getPublicMerchantDishes } from '../../../api/merchant'
@@ -473,13 +473,7 @@ Page({
       if (ordersCreated.length === 1) {
         await this.handlePayment(ordersCreated[0])
       } else {
-        this.setData({ loading: false })
-        wx.showModal({
-          title: '订单已创建',
-          content: `已创建 ${ordersCreated.length} 个订单，当前不支持合单支付，请在订单列表逐单支付。`,
-          showCancel: false,
-          success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
-        })
+        await this.handleCombinedPayment(ordersCreated)
       }
     } catch (error) {
       logger.error('Create order failed:', error, 'Order-confirm')
@@ -516,6 +510,48 @@ Page({
     } catch (paymentError) {
       console.error('[Order-confirm] Payment creation failed:', paymentError)
       this.showPaymentDevModal(orderId)
+    }
+  },
+
+  async handleCombinedPayment(orderIds: number[]) {
+    try {
+      const combinedPayment = await createCombinedPaymentOrder({ order_ids: orderIds })
+
+      if (combinedPayment.pay_params) {
+        try {
+          await invokeWechatPay(combinedPayment.pay_params)
+          wx.showToast({ title: '支付成功', icon: 'success' })
+        } catch (err) {
+          console.log('[Order-confirm] Combined payment cancelled or failed:', err)
+          wx.showToast({ title: '支付取消', icon: 'none' })
+        } finally {
+          setTimeout(() => {
+            wx.redirectTo({ url: '/pages/orders/list/index' })
+          }, 1500)
+        }
+      } else if (combinedPayment.status === 'paid') {
+        wx.showToast({ title: '支付成功', icon: 'success' })
+        setTimeout(() => {
+          wx.redirectTo({ url: '/pages/orders/list/index' })
+        }, 1500)
+      } else {
+        wx.showModal({
+          title: '订单已创建',
+          content: '合单支付创建失败，请在订单列表逐单支付。',
+          showCancel: false,
+          success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
+        })
+      }
+    } catch (paymentError) {
+      console.error('[Order-confirm] Combined payment creation failed:', paymentError)
+      wx.showModal({
+        title: '订单已创建',
+        content: '合单支付创建失败，请在订单列表逐单支付。',
+        showCancel: false,
+        success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
+      })
+    } finally {
+      this.setData({ loading: false })
     }
   },
 

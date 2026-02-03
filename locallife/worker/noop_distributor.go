@@ -18,6 +18,10 @@ func (NoopTaskDistributor) DistributeTaskPaymentOrderTimeout(ctx context.Context
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskCombinedPaymentOrderTimeout(ctx context.Context, payload *PayloadCombinedPaymentOrderTimeout, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskReservationPaymentTimeout(ctx context.Context, payload *PayloadReservationPaymentTimeout, opts ...asynq.Option) error {
 	return nil
 }
@@ -51,6 +55,10 @@ func (NoopTaskDistributor) DistributeTaskProcessApplymentResult(ctx context.Cont
 }
 
 func (NoopTaskDistributor) DistributeTaskProcessProfitSharingResult(ctx context.Context, payload *ProfitSharingResultPayload, opts ...asynq.Option) error {
+	return nil
+}
+
+func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReturnResult(ctx context.Context, payload *ProfitSharingReturnResultPayload, opts ...asynq.Option) error {
 	return nil
 }
 
