@@ -98,14 +98,14 @@ INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND m.region_id = $1
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
   AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend <= $4)
 `
 
 type CountExploreNearbyRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
 	MaxMinimumSpend pgtype.Int8 `json:"max_minimum_spend"`
@@ -130,7 +130,7 @@ INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND m.region_id = $1
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
   AND ($4::BIGINT IS NULL OR t.minimum_spend IS NULL OR t.minimum_spend >= $4)
@@ -145,7 +145,7 @@ WHERE t.table_type = 'room'
 `
 
 type CountSearchRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
 	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
@@ -302,7 +302,7 @@ WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
   -- 按区域筛选
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  AND m.region_id = $1
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
@@ -316,7 +316,7 @@ OFFSET $6
 `
 
 type ExploreNearbyRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
 	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
@@ -999,8 +999,8 @@ INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  -- 按区域筛选（可选）
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  -- 按区域筛选（必选）
+  AND m.region_id = $1
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
@@ -1022,7 +1022,7 @@ OFFSET $8
 `
 
 type SearchRoomsParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
 	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
@@ -1124,8 +1124,8 @@ WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
   AND mt.tag_id = $1
-  -- 按区域筛选（可选）
-  AND ($2::BIGINT IS NULL OR m.region_id = $2)
+  -- 按区域筛选（必选）
+  AND m.region_id = $2
   -- 按人数筛选
   AND ($3::SMALLINT IS NULL OR t.capacity >= $3)
   AND ($4::SMALLINT IS NULL OR t.capacity <= $4)
@@ -1148,7 +1148,7 @@ OFFSET $9
 
 type SearchRoomsByMerchantTagParams struct {
 	TagID           int64       `json:"tag_id"`
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
 	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`
@@ -1248,8 +1248,8 @@ INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
-  -- 按区域筛选（可选）
-  AND ($1::BIGINT IS NULL OR m.region_id = $1)
+  -- 按区域筛选（必选）
+  AND m.region_id = $1
   -- 按人数筛选
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
@@ -1271,7 +1271,7 @@ OFFSET $8
 `
 
 type SearchRoomsWithImageParams struct {
-	RegionID        pgtype.Int8 `json:"region_id"`
+	RegionID        int64       `json:"region_id"`
 	MinCapacity     pgtype.Int2 `json:"min_capacity"`
 	MaxCapacity     pgtype.Int2 `json:"max_capacity"`
 	MinMinimumSpend pgtype.Int8 `json:"min_minimum_spend"`

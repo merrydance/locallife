@@ -170,6 +170,8 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 权限验证由中间件处理（CasbinRoleMiddleware + LoadOperatorMiddleware + ValidateOperatorRegionMiddleware）
 
 	arg := db.CreateDeliveryFeeConfigParams{
@@ -182,10 +184,12 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	}
 
 	// ValueRatio: 默认1%
-	if req.ValueRatio > 0 {
-		arg.ValueRatio.Scan(req.ValueRatio)
+	valueRatio := req.ValueRatio
+	if valueRatio > 0 {
+		arg.ValueRatio.Scan(valueRatio)
 	} else {
-		arg.ValueRatio.Scan(0.01)
+		valueRatio = 0.01
+		arg.ValueRatio.Scan(valueRatio)
 	}
 
 	if req.MaxFee != nil {
@@ -201,6 +205,25 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "delivery_fee_config_created",
+		TargetType:  "delivery_fee_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id":        config.RegionID,
+			"base_fee":         req.BaseFee,
+			"base_distance":    req.BaseDistance,
+			"extra_fee_per_km": req.ExtraFeePerKm,
+			"value_ratio":      valueRatio,
+			"max_fee":          req.MaxFee,
+			"min_fee":          req.MinFee,
+			"is_active":        true,
+		},
+	})
 
 	ctx.JSON(http.StatusCreated, newDeliveryFeeConfigResponse(config))
 }
@@ -285,6 +308,8 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 权限验证由中间件处理（CasbinRoleMiddleware + LoadOperatorMiddleware + ValidateOperatorRegionMiddleware）
 
 	// 获取现有配置
@@ -330,6 +355,42 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	updatedFields := map[string]any{}
+	if req.BaseFee != nil {
+		updatedFields["base_fee"] = *req.BaseFee
+	}
+	if req.BaseDistance != nil {
+		updatedFields["base_distance"] = *req.BaseDistance
+	}
+	if req.ExtraFeePerKm != nil {
+		updatedFields["extra_fee_per_km"] = *req.ExtraFeePerKm
+	}
+	if req.ValueRatio != nil {
+		updatedFields["value_ratio"] = *req.ValueRatio
+	}
+	if req.MaxFee != nil {
+		updatedFields["max_fee"] = *req.MaxFee
+	}
+	if req.MinFee != nil {
+		updatedFields["min_fee"] = *req.MinFee
+	}
+	if req.IsActive != nil {
+		updatedFields["is_active"] = *req.IsActive
+	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "delivery_fee_config_updated",
+		TargetType:  "delivery_fee_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id":      config.RegionID,
+			"updated_fields": updatedFields,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, newDeliveryFeeConfigResponse(config))
 }
@@ -427,6 +488,8 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 验证 operator 角色和区域权限
 	if _, err := server.checkOperatorManagesRegion(ctx, req.RegionID); err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(err))
@@ -459,6 +522,24 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "peak_hour_config_created",
+		TargetType:  "peak_hour_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id":   config.RegionID,
+			"start_time":  req.StartTime,
+			"end_time":    req.EndTime,
+			"coefficient": req.Coefficient,
+			"days_of_week":
+				req.DaysOfWeek,
+			"is_active": true,
+		},
+	})
 
 	ctx.JSON(http.StatusCreated, newPeakHourConfigResponse(config))
 }
@@ -528,6 +609,8 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 先获取配置以验证区域权限
 	config, err := server.store.GetPeakHourConfig(ctx, uri.ID)
 	if err != nil {
@@ -550,6 +633,18 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "operator",
+		Action:      "peak_hour_config_deleted",
+		TargetType:  "peak_hour_config",
+		TargetID:    &config.ID,
+		RegionID:    &config.RegionID,
+		Metadata: map[string]any{
+			"region_id": config.RegionID,
+		},
+	})
 
 	ctx.JSON(http.StatusNoContent, nil)
 }
@@ -631,6 +726,8 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
@@ -687,6 +784,24 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "delivery_promotion_created",
+		TargetType:  "delivery_promotion",
+		TargetID:    &promo.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":     promo.MerchantID,
+			"name":            promo.Name,
+			"min_order_amount": promo.MinOrderAmount,
+			"discount_amount": promo.DiscountAmount,
+			"valid_from":      req.ValidFrom,
+			"valid_until":     req.ValidUntil,
+			"is_active":       promo.IsActive,
+		},
+	})
 
 	ctx.JSON(http.StatusCreated, newDeliveryPromotionResponse(promo))
 }
@@ -768,6 +883,8 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
@@ -803,6 +920,19 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "delivery_promotion_deleted",
+		TargetType:  "delivery_promotion",
+		TargetID:    &promo.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": promo.MerchantID,
+			"name":        promo.Name,
+		},
+	})
+
 	ctx.JSON(http.StatusNoContent, nil)
 }
 
@@ -828,6 +958,8 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 验证商户权限
 	merchant, exists := GetMerchantFromContext(ctx)
@@ -901,6 +1033,39 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	updatedFields := map[string]any{}
+	if req.Name != nil {
+		updatedFields["name"] = *req.Name
+	}
+	if req.MinOrderAmount != nil {
+		updatedFields["min_order_amount"] = *req.MinOrderAmount
+	}
+	if req.DiscountAmount != nil {
+		updatedFields["discount_amount"] = *req.DiscountAmount
+	}
+	if req.ValidFrom != nil {
+		updatedFields["valid_from"] = *req.ValidFrom
+	}
+	if req.ValidUntil != nil {
+		updatedFields["valid_until"] = *req.ValidUntil
+	}
+	if req.IsActive != nil {
+		updatedFields["is_active"] = *req.IsActive
+	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "delivery_promotion_updated",
+		TargetType:  "delivery_promotion",
+		TargetID:    &promo.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":     promo.MerchantID,
+			"updated_fields": updatedFields,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, newDeliveryPromotionResponse(promo))
 }

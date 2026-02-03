@@ -98,6 +98,21 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 		return
 	}
 
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "inventory_created",
+		TargetType:  "daily_inventory",
+		TargetID:    &inventory.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":   merchant.ID,
+			"dish_id":       inventory.DishID,
+			"date":          inventory.Date.Time.Format("2006-01-02"),
+			"total_quantity": inventory.TotalQuantity,
+		},
+	})
+
 	ctx.JSON(http.StatusOK, dailyInventoryResponse{
 		ID:               inventory.ID,
 		MerchantID:       inventory.MerchantID,
@@ -268,6 +283,24 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 		return
 	}
 
+	if existing.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "daily_inventory",
+			TargetID:    &existing.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "inventory_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     existing.DishID,
+			},
+		})
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("inventory does not belong to your merchant")))
+		return
+	}
+
 	// 构造更新参数
 	params := db.UpdateDailyInventoryParams{
 		MerchantID: merchant.ID,
@@ -303,6 +336,29 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	updatedFields := map[string]any{}
+	if req.TotalQuantity != nil {
+		updatedFields["total_quantity"] = *req.TotalQuantity
+	}
+	if req.SoldQuantity != nil {
+		updatedFields["sold_quantity"] = *req.SoldQuantity
+	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "inventory_updated",
+		TargetType:  "daily_inventory",
+		TargetID:    &updated.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":    merchant.ID,
+			"dish_id":        updated.DishID,
+			"date":           updated.Date.Time.Format("2006-01-02"),
+			"updated_fields": updatedFields,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, dailyInventoryResponse{
 		ID:               updated.ID,
@@ -555,6 +611,24 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 		return
 	}
 
+	if existing.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "daily_inventory",
+			TargetID:    &existing.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "inventory_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     existing.DishID,
+			},
+		})
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("inventory does not belong to your merchant")))
+		return
+	}
+
 	// 构造更新参数
 	params := db.UpdateDailyInventoryParams{
 		MerchantID: merchant.ID,
@@ -583,6 +657,29 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	updatedFields := map[string]any{}
+	if req.TotalQuantity != nil {
+		updatedFields["total_quantity"] = *req.TotalQuantity
+	}
+	if req.SoldQuantity != nil {
+		updatedFields["sold_quantity"] = *req.SoldQuantity
+	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "inventory_updated",
+		TargetType:  "daily_inventory",
+		TargetID:    &updated.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":    merchant.ID,
+			"dish_id":        updated.DishID,
+			"date":           updated.Date.Time.Format("2006-01-02"),
+			"updated_fields": updatedFields,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, dailyInventoryResponse{
 		ID:               updated.ID,

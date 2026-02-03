@@ -585,6 +585,21 @@ func (server *Server) createDish(ctx *gin.Context) {
 		PrepareTime:         txResult.Dish.PrepareTime,
 		CustomizationGroups: customizationGroups,
 	})
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_created",
+		TargetType:  "dish",
+		TargetID:    &txResult.Dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": txResult.Dish.MerchantID,
+			"name":        txResult.Dish.Name,
+			"price":       txResult.Dish.Price,
+			"is_online":   txResult.Dish.IsOnline,
+		},
+	})
 }
 
 type listDishesRequest struct {
@@ -762,6 +777,19 @@ func (server *Server) getDish(ctx *gin.Context) {
 
 	// 验证菜品属于当前商户
 	if dish.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "dish",
+			TargetID:    &dish.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "dish_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     dish.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
 	}
@@ -950,6 +978,19 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	}
 
 	if dish.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "dish",
+			TargetID:    &dish.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "dish_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     dish.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
 	}
@@ -1052,6 +1093,41 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		})
 	}
 
+	updatedFields := map[string]any{}
+	if req.Name != "" {
+		updatedFields["name"] = req.Name
+	}
+	if req.Description != "" {
+		updatedFields["description"] = req.Description
+	}
+	if req.ImageURL != "" {
+		updatedFields["image_url"] = req.ImageURL
+	}
+	if req.CategoryID != nil {
+		updatedFields["category_id"] = *req.CategoryID
+	}
+	if req.Price != nil {
+		updatedFields["price"] = *req.Price
+	}
+	if req.MemberPrice != nil {
+		updatedFields["member_price"] = *req.MemberPrice
+	}
+	if req.IsAvailable != nil {
+		updatedFields["is_available"] = *req.IsAvailable
+	}
+	if req.IsOnline != nil {
+		updatedFields["is_online"] = *req.IsOnline
+	}
+	if req.SortOrder != nil {
+		updatedFields["sort_order"] = *req.SortOrder
+	}
+	if req.PrepareTime != nil {
+		updatedFields["prepare_time"] = *req.PrepareTime
+	}
+	if req.TagIDs != nil {
+		updatedFields["tag_ids"] = req.TagIDs
+	}
+
 	ctx.JSON(http.StatusOK, dishResponse{
 		ID:          txResult.Dish.ID,
 		MerchantID:  txResult.Dish.MerchantID,
@@ -1066,6 +1142,19 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		SortOrder:   txResult.Dish.SortOrder,
 		PrepareTime: txResult.Dish.PrepareTime,
 		Tags:        tags,
+	})
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_updated",
+		TargetType:  "dish",
+		TargetID:    &txResult.Dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id":    merchant.ID,
+			"updated_fields": updatedFields,
+		},
 	})
 }
 
@@ -1117,6 +1206,19 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	}
 
 	if dish.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "dish",
+			TargetID:    &dish.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "dish_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"dish_id":     dish.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
 	}
@@ -1134,6 +1236,19 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 		// 这里如果失败，我们只记日志，不影响主流程响应，因为菜品本身已经标记删除了
 		fmt.Printf("failed to remove dish %d from combos: %v\n", req.ID, err)
 	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_deleted",
+		TargetType:  "dish",
+		TargetID:    &dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": merchant.ID,
+			"name":        dish.Name,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "dish deleted successfully"})
 }
@@ -1281,6 +1396,19 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 		IsOnline: *req.IsOnline,
 		Message:  message,
 	})
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_status_updated",
+		TargetType:  "dish",
+		TargetID:    &dish.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": merchant.ID,
+			"is_online":   *req.IsOnline,
+		},
+	})
 }
 
 // batchUpdateDishStatus godoc
@@ -1371,6 +1499,21 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 		Updated: updated,
 		Failed:  failed,
 		Message: message,
+	})
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "dish_status_batch_updated",
+		TargetType:  "dish",
+		TargetID:    nil,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"merchant_id": merchant.ID,
+			"is_online":   *req.IsOnline,
+			"updated":     updated,
+			"failed":      failed,
+		},
 	})
 }
 

@@ -165,6 +165,25 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 			return
 		}
 
+		if merchant.RegionID == 0 {
+			server.writeAuditLog(ctx, auditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "region_access_denied",
+				TargetType:  "region",
+				RegionID:    nil,
+				Metadata: map[string]any{
+					"reason": "merchant_region_unset",
+					"path":   ctx.Request.URL.Path,
+					"method": ctx.Request.Method,
+				},
+			})
+			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+				errors.New("merchant region is not set"),
+			))
+			return
+		}
+
 		// 2. 获取用户在该商户的角色
 		var staffRole string
 

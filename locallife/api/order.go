@@ -2763,6 +2763,19 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "order",
+			TargetID:    &order.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "order_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"order_id":    order.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
 		return
 	}
@@ -2856,6 +2869,19 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "order",
+			TargetID:    &order.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "order_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"order_id":    order.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
 		return
 	}
@@ -2898,6 +2924,21 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 	})
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "order_accepted",
+		TargetType:  "order",
+		TargetID:    &updatedOrder.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"order_no":    updatedOrder.OrderNo,
+			"order_type":  updatedOrder.OrderType,
+			"from_status": order.Status,
+			"to_status":   updatedOrder.Status,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
 }
@@ -2968,6 +3009,19 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "order",
+			TargetID:    &order.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "order_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"order_id":    order.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
 		return
 	}
@@ -3012,6 +3066,22 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	})
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "order_rejected",
+		TargetType:  "order",
+		TargetID:    &updatedOrder.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"order_no":    updatedOrder.OrderNo,
+			"order_type":  updatedOrder.OrderType,
+			"from_status": order.Status,
+			"to_status":   updatedOrder.Status,
+			"reason":      bodyReq.Reason,
+		},
+	})
 
 	// 自动退款：获取支付订单并发起退款
 	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
@@ -3117,6 +3187,19 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "order",
+			TargetID:    &order.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":      "order_not_belong_to_merchant",
+				"merchant_id": merchant.ID,
+				"order_id":    order.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
 		return
 	}
@@ -3159,6 +3242,21 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 	})
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "order_ready",
+		TargetType:  "order",
+		TargetID:    &updatedOrder.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"order_no":    updatedOrder.OrderNo,
+			"order_type":  updatedOrder.OrderType,
+			"from_status": order.Status,
+			"to_status":   updatedOrder.Status,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
 }
@@ -3261,6 +3359,21 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 	})
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, completedOrder, "order_update")
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "order_completed",
+		TargetType:  "order",
+		TargetID:    &completedOrder.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"order_no":    completedOrder.OrderNo,
+			"order_type":  completedOrder.OrderType,
+			"from_status": order.Status,
+			"to_status":   completedOrder.Status,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, newOrderResponse(completedOrder))
 }

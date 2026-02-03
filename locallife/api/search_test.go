@@ -315,9 +315,9 @@ func TestSearchCombosAPI(t *testing.T) {
 
 				var response struct {
 					Combos   []searchComboResponse `json:"combos"`
-					Total    int64                `json:"total"`
-					PageID   int32                `json:"page_id"`
-					PageSize int32                `json:"page_size"`
+					Total    int64                 `json:"total"`
+					PageID   int32                 `json:"page_id"`
+					PageSize int32                 `json:"page_size"`
 				}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.Combos, 1)
@@ -388,7 +388,7 @@ func TestSearchRoomsAPI(t *testing.T) {
 	}{
 		{
 			name:  "OK",
-			query: "?reservation_date=2025-12-15&reservation_time=18:00&page_id=1&page_size=10",
+			query: "?reservation_date=2025-12-15&reservation_time=18:00&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchRoomsWithImage(gomock.Any(), gomock.Any()).
@@ -406,7 +406,7 @@ func TestSearchRoomsAPI(t *testing.T) {
 		},
 		{
 			name:  "OK_WithFilters",
-			query: "?reservation_date=2025-12-15&reservation_time=18:00&min_capacity=4&max_capacity=10&page_id=1&page_size=10",
+			query: "?reservation_date=2025-12-15&reservation_time=18:00&region_id=1&min_capacity=4&max_capacity=10&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchRoomsWithImage(gomock.Any(), gomock.Any()).
@@ -424,7 +424,7 @@ func TestSearchRoomsAPI(t *testing.T) {
 		},
 		{
 			name:  "OK_WithTagFilter",
-			query: "?reservation_date=2025-12-15&reservation_time=18:00&tag_id=1&page_id=1&page_size=10",
+			query: "?reservation_date=2025-12-15&reservation_time=18:00&region_id=1&tag_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchRoomsByMerchantTag(gomock.Any(), gomock.Any()).
@@ -533,7 +533,7 @@ func TestSearchRoomsAPI(t *testing.T) {
 		},
 		{
 			name:  "InternalError",
-			query: "?reservation_date=2025-12-15&reservation_time=18:00&page_id=1&page_size=10",
+			query: "?reservation_date=2025-12-15&reservation_time=18:00&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchRoomsWithImage(gomock.Any(), gomock.Any()).

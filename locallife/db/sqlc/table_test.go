@@ -735,7 +735,7 @@ func TestSearchRoomsWithImage(t *testing.T) {
 	result, err := testStore.SearchRoomsWithImage(context.Background(), SearchRoomsWithImageParams{
 		PageSize:   100,
 		PageOffset: 0,
-		RegionID:   pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+		RegionID:   merchant.RegionID,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, result, "should find at least one room")
@@ -769,6 +769,7 @@ func TestExploreNearbyRooms(t *testing.T) {
 
 	// 探索附近包间
 	result, err := testStore.ExploreNearbyRooms(context.Background(), ExploreNearbyRoomsParams{
+		RegionID:   merchant.RegionID,
 		PageSize:   10,
 		PageOffset: 0,
 	})

@@ -215,6 +215,7 @@ type Querier interface {
 	// =========================== 商户申诉 ===========================
 	// 创建申诉
 	CreateAppeal(ctx context.Context, arg CreateAppealParams) (Appeal, error)
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	// ==============================
 	// behavior_actions
 	// ==============================

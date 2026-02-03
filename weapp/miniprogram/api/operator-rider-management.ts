@@ -288,32 +288,6 @@ export class OperatorRiderManagementService {
             data: params
         })
     }
-
-    /**
-     * 暂停骑手
-     * @param riderId 骑手ID
-     * @param actionData 操作数据
-     */
-    async suspendRider(riderId: number, actionData: RiderActionRequest): Promise<void> {
-        return request({
-            url: `/v1/operator/riders/${riderId}/suspend`,
-            method: 'POST',
-            data: actionData
-        })
-    }
-
-    /**
-     * 恢复骑手
-     * @param riderId 骑手ID
-     * @param actionData 操作数据
-     */
-    async resumeRider(riderId: number, actionData: RiderActionRequest): Promise<void> {
-        return request({
-            url: `/v1/operator/riders/${riderId}/resume`,
-            method: 'POST',
-            data: actionData
-        })
-    }
 }
 
 // ==================== 骑手分析服务类 ====================

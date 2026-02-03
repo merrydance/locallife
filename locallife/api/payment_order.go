@@ -42,6 +42,7 @@ const (
 const (
 	PaymentStatusPending  = "pending"  // 待支付
 	PaymentStatusPaid     = "paid"     // 已支付
+	PaymentStatusFailed   = "failed"   // 支付失败
 	PaymentStatusRefunded = "refunded" // 已退款
 	PaymentStatusClosed   = "closed"   // 已关闭
 )
@@ -756,6 +757,20 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 	}
 
 	if order.MerchantID != merchant.ID {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_resource_access_denied",
+			TargetType:  "payment_order",
+			TargetID:    &paymentOrder.ID,
+			RegionID:    &merchant.RegionID,
+			Metadata: map[string]any{
+				"reason":           "payment_order_not_belong_to_merchant",
+				"merchant_id":      merchant.ID,
+				"order_id":         order.ID,
+				"payment_order_id": paymentOrder.ID,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
 		return
 	}
@@ -782,6 +797,23 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "refund_order_created",
+		TargetType:  "refund_order",
+		TargetID:    &refundOrder.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"order_id":         order.ID,
+			"payment_order_id": paymentOrder.ID,
+			"refund_type":      req.RefundType,
+			"refund_amount":    req.RefundAmount,
+			"refund_reason":    req.RefundReason,
+			"out_refund_no":    outRefundNo,
+		},
+	})
 
 	// 调用微信退款 API
 	if server.paymentClient != nil {

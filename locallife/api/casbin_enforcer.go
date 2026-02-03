@@ -511,6 +511,19 @@ func (server *Server) ValidateOperatorRegionMiddleware(regionParamName string) g
 		}
 
 		if !manages {
+			attemptRegionID := regionID
+			server.writeAuditLog(ctx, auditLogInput{
+				ActorUserID: operator.UserID,
+				ActorRole:   "operator",
+				Action:      "region_access_denied",
+				TargetType:  "region",
+				TargetID:    &attemptRegionID,
+				RegionID:    &attemptRegionID,
+				Metadata: map[string]any{
+					"path":   ctx.Request.URL.Path,
+					"method": ctx.Request.Method,
+				},
+			})
 			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 				errors.New("you don't have permission to manage this region"),
 			))

@@ -2,10 +2,7 @@ package api
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -48,13 +45,13 @@ type merchantListItem struct {
 }
 
 type listOperatorMerchantsResponse struct {
-	Merchants []merchantListItem `json:"merchants"`
-	Total     int64              `json:"total"`
-	TotalCount int64             `json:"total_count"`
-	PageID     int32             `json:"page_id"`
-	PageSize   int32             `json:"page_size"`
-	Page      int32              `json:"page"`
-	Limit     int32              `json:"limit"`
+	Merchants  []merchantListItem `json:"merchants"`
+	Total      int64              `json:"total"`
+	TotalCount int64              `json:"total_count"`
+	PageID     int32              `json:"page_id"`
+	PageSize   int32              `json:"page_size"`
+	Page       int32              `json:"page"`
+	Limit      int32              `json:"limit"`
 }
 
 // listOperatorMerchants 获取运营商管辖区域内的商户列表
@@ -162,13 +159,13 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listOperatorMerchantsResponse{
-		Merchants: result,
-		Total:     total,
+		Merchants:  result,
+		Total:      total,
 		TotalCount: total,
 		PageID:     req.Page,
 		PageSize:   req.Limit,
-		Page:      req.Page,
-		Limit:     req.Limit,
+		Page:       req.Page,
+		Limit:      req.Limit,
 	})
 }
 
@@ -254,167 +251,6 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 	})
 }
 
-// ==================== 暂停/恢复商户 ====================
-
-type suspendOperatorMerchantRequest struct {
-	Reason        string `json:"reason" binding:"required,min=5,max=500"`
-	DurationHours int    `json:"duration_hours" binding:"required,min=1,max=720"`
-}
-
-// suspendOperatorMerchant 运营商暂停商户
-// @Summary 暂停商户
-// @Description 运营商暂停其管辖区域内的商户，最长可暂停30天（720小时）
-// @Tags 运营商-商户骑手管理
-// @Accept json
-// @Produce json
-// @Param id path int true "商户ID"
-// @Param request body suspendOperatorMerchantRequest true "暂停原因和时长"
-// @Success 200 {object} MessageResponse "暂停成功"
-// @Failure 400 {object} errorMessage "请求参数错误"
-// @Failure 401 {object} errorMessage "未授权"
-// @Failure 403 {object} errorMessage "无权限"
-// @Failure 404 {object} errorMessage "商户不存在"
-// @Failure 500 {object} errorMessage "服务器错误"
-// @Security BearerAuth
-// @Router /v1/operator/merchants/{id}/suspend [post]
-func (server *Server) suspendOperatorMerchant(ctx *gin.Context) {
-	merchantIDStr := ctx.Param("id")
-	merchantID, err := strconv.ParseInt(merchantIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的商户ID")))
-		return
-	}
-
-	var req suspendOperatorMerchantRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取商户信息
-	merchant, err := server.store.GetMerchant(ctx, merchantID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证运营商是否管理该商户的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 检查商户当前状态
-	if merchant.Status == "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户已处于暂停状态")))
-		return
-	}
-
-	// 更新商户状态为暂停
-	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-		ID:     merchantID,
-		Status: "suspended",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 记录暂停信息到商户画像（用于审计追溯，忽略错误不影响主流程）
-	suspendUntil := time.Now().Add(time.Duration(req.DurationHours) * time.Hour)
-	_ = server.store.SuspendMerchant(ctx, db.SuspendMerchantParams{
-		MerchantID:    merchantID,
-		SuspendReason: pgtype.Text{String: req.Reason, Valid: true},
-		SuspendUntil:  pgtype.Timestamptz{Time: suspendUntil, Valid: true},
-	})
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":        fmt.Sprintf("商户 %d 已暂停 %d 小时", merchantID, req.DurationHours),
-		"reason":         req.Reason,
-		"duration_hours": req.DurationHours,
-	})
-}
-
-type resumeOperatorMerchantRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// resumeOperatorMerchant 运营商恢复商户
-// @Summary 恢复商户
-// @Description 运营商恢复其管辖区域内被暂停的商户
-// @Tags 运营商-商户骑手管理
-// @Accept json
-// @Produce json
-// @Param id path int true "商户ID"
-// @Param request body resumeOperatorMerchantRequest true "恢复原因"
-// @Success 200 {object} MessageResponse "恢复成功"
-// @Failure 400 {object} errorMessage "请求参数错误"
-// @Failure 401 {object} errorMessage "未授权"
-// @Failure 403 {object} errorMessage "无权限"
-// @Failure 404 {object} errorMessage "商户不存在"
-// @Failure 500 {object} errorMessage "服务器错误"
-// @Security BearerAuth
-// @Router /v1/operator/merchants/{id}/resume [post]
-func (server *Server) resumeOperatorMerchant(ctx *gin.Context) {
-	merchantIDStr := ctx.Param("id")
-	merchantID, err := strconv.ParseInt(merchantIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的商户ID")))
-		return
-	}
-
-	var req resumeOperatorMerchantRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取商户信息
-	merchant, err := server.store.GetMerchant(ctx, merchantID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证运营商是否管理该商户的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 检查商户当前状态
-	if merchant.Status != "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户未处于暂停状态")))
-		return
-	}
-
-	// 更新商户状态为正常
-	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-		ID:     merchantID,
-		Status: "approved",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 清除商户画像中的暂停信息（忽略错误不影响主流程）
-	_ = server.store.UnsuspendMerchant(ctx, merchantID)
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("商户 %d 已恢复上线", merchantID),
-		"reason":  req.Reason,
-	})
-}
-
 // ==================== 骑手列表查询 ====================
 
 type listOperatorRidersRequest struct {
@@ -438,13 +274,13 @@ type riderListItem struct {
 }
 
 type listOperatorRidersResponse struct {
-	Riders []riderListItem `json:"riders"`
-	Total  int64           `json:"total"`
-	TotalCount int64       `json:"total_count"`
-	PageID     int32       `json:"page_id"`
-	PageSize   int32       `json:"page_size"`
-	Page   int32           `json:"page"`
-	Limit  int32           `json:"limit"`
+	Riders     []riderListItem `json:"riders"`
+	Total      int64           `json:"total"`
+	TotalCount int64           `json:"total_count"`
+	PageID     int32           `json:"page_id"`
+	PageSize   int32           `json:"page_size"`
+	Page       int32           `json:"page"`
+	Limit      int32           `json:"limit"`
 }
 
 // listOperatorRiders 获取运营商管辖区域内的骑手列表
@@ -558,13 +394,13 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listOperatorRidersResponse{
-		Riders: result,
-		Total:  total,
+		Riders:     result,
+		Total:      total,
 		TotalCount: total,
 		PageID:     req.Page,
 		PageSize:   req.Limit,
-		Page:   req.Page,
-		Limit:  req.Limit,
+		Page:       req.Page,
+		Limit:      req.Limit,
 	})
 }
 
@@ -684,185 +520,4 @@ func maskIDCard(idCard string) string {
 		return idCard
 	}
 	return idCard[:6] + "********" + idCard[len(idCard)-4:]
-}
-
-// ==================== 暂停/恢复骑手 ====================
-
-type suspendOperatorRiderRequest struct {
-	Reason        string `json:"reason" binding:"required,min=5,max=500"`
-	DurationHours int    `json:"duration_hours" binding:"required,min=1,max=720"`
-}
-
-// suspendOperatorRider 运营商暂停骑手
-// @Summary 暂停骑手
-// @Description 运营商暂停其管辖区域内的骑手，最长可暂停30天（720小时）
-// @Tags 运营商-商户骑手管理
-// @Accept json
-// @Produce json
-// @Param id path int true "骑手ID"
-// @Param request body suspendOperatorRiderRequest true "暂停原因和时长"
-// @Success 200 {object} MessageResponse "暂停成功"
-// @Failure 400 {object} errorMessage "请求参数错误"
-// @Failure 401 {object} errorMessage "未授权"
-// @Failure 403 {object} errorMessage "无权限"
-// @Failure 404 {object} errorMessage "骑手不存在"
-// @Failure 500 {object} errorMessage "服务器错误"
-// @Security BearerAuth
-// @Router /v1/operator/riders/{id}/suspend [post]
-func (server *Server) suspendOperatorRider(ctx *gin.Context) {
-	riderIDStr := ctx.Param("id")
-	riderID, err := strconv.ParseInt(riderIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的骑手ID")))
-		return
-	}
-
-	var req suspendOperatorRiderRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取骑手信息
-	rider, err := server.store.GetRider(ctx, riderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证骑手有区域
-	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
-		return
-	}
-
-	// 验证运营商是否管理该骑手的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 检查骑手当前状态
-	if rider.Status == "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手已处于暂停状态")))
-		return
-	}
-
-	// 更新骑手状态为暂停
-	_, err = server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     riderID,
-		Status: "suspended",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 同时下线骑手
-	if rider.IsOnline {
-		_, _ = server.store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{
-			ID:       riderID,
-			IsOnline: false,
-		})
-	}
-
-	// 记录暂停信息到骑手画像（用于审计追溯，忽略错误不影响主流程）
-	suspendUntil := time.Now().Add(time.Duration(req.DurationHours) * time.Hour)
-	_ = server.store.SuspendRider(ctx, db.SuspendRiderParams{
-		RiderID:       riderID,
-		SuspendReason: pgtype.Text{String: req.Reason, Valid: true},
-		SuspendUntil:  pgtype.Timestamptz{Time: suspendUntil, Valid: true},
-	})
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":        fmt.Sprintf("骑手 %d 已暂停 %d 小时", riderID, req.DurationHours),
-		"reason":         req.Reason,
-		"duration_hours": req.DurationHours,
-	})
-}
-
-type resumeOperatorRiderRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// resumeOperatorRider 运营商恢复骑手
-// @Summary 恢复骑手
-// @Description 运营商恢复其管辖区域内被暂停的骑手
-// @Tags 运营商-商户骑手管理
-// @Accept json
-// @Produce json
-// @Param id path int true "骑手ID"
-// @Param request body resumeOperatorRiderRequest true "恢复原因"
-// @Success 200 {object} MessageResponse "恢复成功"
-// @Failure 400 {object} errorMessage "请求参数错误"
-// @Failure 401 {object} errorMessage "未授权"
-// @Failure 403 {object} errorMessage "无权限"
-// @Failure 404 {object} errorMessage "骑手不存在"
-// @Failure 500 {object} errorMessage "服务器错误"
-// @Security BearerAuth
-// @Router /v1/operator/riders/{id}/resume [post]
-func (server *Server) resumeOperatorRider(ctx *gin.Context) {
-	riderIDStr := ctx.Param("id")
-	riderID, err := strconv.ParseInt(riderIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的骑手ID")))
-		return
-	}
-
-	var req resumeOperatorRiderRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取骑手信息
-	rider, err := server.store.GetRider(ctx, riderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证骑手有区域
-	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
-		return
-	}
-
-	// 验证运营商是否管理该骑手的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 检查骑手当前状态
-	if rider.Status != "suspended" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未处于暂停状态")))
-		return
-	}
-
-	// 更新骑手状态为正常
-	_, err = server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     riderID,
-		Status: "active",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 清除骑手画像中的暂停信息（忽略错误不影响主流程）
-	_ = server.store.UnsuspendRider(ctx, riderID)
-
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("骑手 %d 已恢复上线资格", riderID),
-		"reason":  req.Reason,
-	})
 }

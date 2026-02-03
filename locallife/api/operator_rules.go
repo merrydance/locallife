@@ -480,6 +480,19 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		return
 	}
 
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: operator.UserID,
+		ActorRole:   "operator",
+		Action:      "operator_rule_updated",
+		TargetType:  "operator",
+		TargetID:    &operator.ID,
+		RegionID:    &operator.RegionID,
+		Metadata: map[string]any{
+			"key":   key,
+			"value": req.Value,
+		},
+	})
+
 	ctx.JSON(http.StatusOK, MessageResponse{Message: "修改成功"})
 }
 

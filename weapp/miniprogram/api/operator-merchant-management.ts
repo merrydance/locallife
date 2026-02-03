@@ -211,32 +211,6 @@ export class OperatorMerchantManagementService {
             data: params
         })
     }
-
-    /**
-     * 暂停商户
-     * @param merchantId 商户ID
-     * @param actionData 操作数据
-     */
-    async suspendMerchant(merchantId: number, actionData: MerchantActionRequest): Promise<void> {
-        return request({
-            url: `/v1/operator/merchants/${merchantId}/suspend`,
-            method: 'POST',
-            data: actionData
-        })
-    }
-
-    /**
-     * 恢复商户
-     * @param merchantId 商户ID
-     * @param actionData 操作数据
-     */
-    async resumeMerchant(merchantId: number, actionData: MerchantActionRequest): Promise<void> {
-        return request({
-            url: `/v1/operator/merchants/${merchantId}/resume`,
-            method: 'POST',
-            data: actionData
-        })
-    }
 }
 
 // ==================== 商户分析服务类 ====================

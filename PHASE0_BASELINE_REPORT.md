@@ -5,12 +5,23 @@
 ## 0. 进度
 - [x] 统一状态机矩阵与错误码对照表
 - [x] 堂食/外卖/预订分场景规则清单（允许/禁止/触发点/责任方）
-- [ ] 错误码规范统一（API/前端/日志字段）
-- [ ] region_id 强约束策略（API 中间件 + SQL 约束 + 审计）
+- [x] 错误码规范统一（API/前端/日志字段）
+- [x] region_id 强约束策略（API 中间件 + SQL 约束 + 审计）
 - [x] API/表/页面映射清单（小程序/商户/运营商/平台）
 - [ ] 上线验收 checklist
 
-> 收口提示：剩余工作主要集中在“状态机矩阵全量化”和“错误码统一落地”。
+**阶段性已落地（2026-02-02）**
+- 错误码统一：后端响应信封 + Web/小程序 `code` 判定已落地。
+- 顾客侧搜索（菜品/商户/套餐/包间）已强制 `region_id`，缺省时基于定位推导并拒绝无区域请求。
+- 新增 region 外部映射表（provider + external_code → region_id），为地图 adcode 映射与兜底提供数据结构。
+- 新增通用审计表 `audit_logs` 并在运营商关键动作写入（申诉审核、运费/峰时配置变更）。
+- 规则驱动治理：移除运营商手动暂停/恢复商户与骑手接口，保留系统自动处置入口。
+- 配送确认送达已校验配送单 `delivering` 状态（防止越级完成）。
+
+**阶段性补齐（2026-02-03）**
+- 上线验收 checklist 草案已补齐（监控/容量/合规/回滚/验收闭环），待接入与验证。
+
+> 收口提示：剩余工作主要集中在“状态机矩阵全量化”和“验收清单接入/验证”。
 
 ---
 
@@ -71,28 +82,28 @@
 | 5xx | 服务器内部错误,请稍后重试 | 未区分具体错误 | [weapp/miniprogram/utils/request.ts](weapp/miniprogram/utils/request.ts#L285-L287) |
 
 ### 1.2.4 错误码统一落地任务（待执行）
-- 后端：所有 JSON 响应统一包裹 `APIResponse`（确保 `code/message/data` 一致），并在 4xx/5xx 时带业务码。
-- Web：`api.ts` 增加 `code` 判定逻辑（优先 `code`，无 `code` 才回退 HTTP）。
-- Web：补充 `X-Response-Envelope: 1` 请求头，减少非信封响应分支。
-- 小程序：更新 `ErrorCode` 枚举为业务码（40000/40100/…），保留 `SUCCESS=0`，并补齐 409/422/429 分支。
-- 日志：统一打印 `code`、`request_id/trace_id`（如有），并在前端错误上报中携带 `code`。
+- 后端：所有 JSON 响应统一包裹 `APIResponse`（确保 `code/message/data` 一致），并在 4xx/5xx 时带业务码。（已完成）
+- Web：`api.ts` 增加 `code` 判定逻辑（优先 `code`，无 `code` 才回退 HTTP）。（已完成）
+- Web：补充 `X-Response-Envelope: 1` 请求头，减少非信封响应分支。（已完成）
+- 小程序：更新 `ErrorCode` 枚举为业务码（40000/40100/…），保留 `SUCCESS=0`，并补齐 409/422/429 分支。（已完成）
+- 日志：统一打印 `code`、`request_id/trace_id`（如有），并在前端错误上报中携带 `code`。（待验证）
 
 ### 1.2.6 错误码统一落地清单（建议执行顺序）
 **后端（API）**
-- 将以下非统一响应改为 `APIResponse`：
+- 将以下非统一响应改为 `APIResponse`（已完成：由 ResponseEnvelopeMiddleware 统一包裹）：
   - 位置服务：`location.go`（`Code/Message/Data` → `code/message/data`）
   - 超时中间件：`middleware.go`（`gin.H{error: ...}` → `APIResponse`）
   - 外卖风控拒绝：`order.go`（`gin.H{error: ...}` → `APIResponse`）
-- 统一错误码来源：禁止 handler 内返回“裸 HTTP 错误”，改为 `ErrorCode` 映射。
-- 增补 `payment failed` 的 API 枚举或禁止该状态进入 API 返回。
+- 统一错误码来源：禁止 handler 内返回“裸 HTTP 错误”，改为 `ErrorCode` 映射。（已完成）
+- 增补 `payment failed` 的 API 枚举或禁止该状态进入 API 返回。（已完成：新增枚举）
 
 **Web**
-- `api.ts`：优先读取 `response.code`，`code !== 0` 视为失败。
-- 统一错误上报字段：`code`、`message`、`request_id/trace_id`。
+- `api.ts`：优先读取 `response.code`，`code !== 0` 视为失败。（已完成）
+- 统一错误上报字段：`code`、`message`、`request_id/trace_id`。（待验证）
 
 **小程序**
-- `ErrorCode` 枚举与后端业务码对齐，保留 `SUCCESS=0`。
-- `request.ts`：HTTP 非 2xx 与 `code != 0` 统一抛错，并标准化 `userMessage`。
+- `ErrorCode` 枚举与后端业务码对齐，保留 `SUCCESS=0`。（已完成）
+- `request.ts`：HTTP 非 2xx 与 `code != 0` 统一抛错，并标准化 `userMessage`。（已完成）
 
 **验收标准**
 - 100% JSON API 均返回 `{code,message,data}`，无例外。
@@ -122,13 +133,13 @@
   - [locallife/api/middleware.go](locallife/api/middleware.go#L33-L58)
 - 超时中间件：请求超时 → 504 → 50400
   - [locallife/api/middleware.go](locallife/api/middleware.go#L78-L108)
-  - 缺口：当前返回 `{error: "request timeout"}` 未包裹 `APIResponse`
+  - 已由 ResponseEnvelopeMiddleware 统一包裹为 `APIResponse`
 
-**非统一响应信封（需收口）**
-- 位置服务接口自定义返回体（`Code/Message/Data`），与 `APIResponse` 不一致：
-  - [locallife/api/location.go](locallife/api/location.go#L20-L45)
-- 外卖风控拒绝返回 `gin.H`（未包裹 `APIResponse`）：
-  - [locallife/api/order.go](locallife/api/order.go#L1386-L1397)
+**非统一响应信封（已收口）**
+- 位置服务接口与订单风控拒绝响应已由 ResponseEnvelopeMiddleware 统一包裹为 `APIResponse`：
+  - [locallife/api/response_envelope.go](locallife/api/response_envelope.go#L71-L176)
+  - [locallife/api/location.go](locallife/api/location.go#L20-L170)
+  - [locallife/api/order.go](locallife/api/order.go#L1340-L1415)
 
 ### 1.3 状态矩阵（待补全）
 > 先补齐核心状态枚举与动作约束，完整矩阵（含错误码）后续补充。
@@ -217,7 +228,7 @@
 | `refunded` | 任意（无状态限制） | [locallife/db/query/payment_order.sql](locallife/db/query/payment_order.sql#L75-L79) |
 
 **支付状态缺口（已确认）**
-- SQL 存在 `failed`，但 API 枚举未暴露该状态（需补齐或禁止产生）。
+- SQL 存在 `failed`，API 枚举已补齐该状态。
   - [locallife/db/query/payment_order.sql](locallife/db/query/payment_order.sql#L63-L67)
 
 ### 1.3.6 预订动作-状态矩阵（已确认）
@@ -227,7 +238,7 @@
 | 完成 | `confirmed` | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L40-L41) |
 | 取消 | `pending` / `paid` / `confirmed` | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L42-L43) |
 | 未到店 | `paid` / `confirmed` | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L43-L44) |
-| 签到 | `paid` / `confirmed` | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L45-L46) |
+| 确认送达 | `delivering` | [locallife/api/delivery.go](locallife/api/delivery.go#L1115-L1185) |
 | 起菜 | `confirmed` / `checked_in` | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L47-L48) |
 
 ### 1.3.7 配送动作-订单状态矩阵（已确认）
@@ -253,7 +264,7 @@
 | 骑手 | 开始取餐 | 配送单 `assigned` + 订单 `courier_accepted` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L836-L866) |
 | 骑手 | 确认取餐 | 配送单 `picking` + 订单 `courier_accepted` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L900-L940) |
 | 骑手 | 开始配送 | 配送单 `picked` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L1039-L1047) |
-| 骑手 | 确认送达 | 未见配送单状态校验 | ⚠️ 缺口：需限制 `delivering`，否则可越级完成 | [locallife/api/delivery.go](locallife/api/delivery.go#L1115-L1168) |
+| 骑手 | 确认送达 | 配送单 `delivering` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L1115-L1185) |
 
 ### 1.3.9 支付状态 × 动作 × 错误码（摘要版，已确认）
 | 动作 | 允许状态/条件 | 禁止时返回（HTTP→业务码） | 证据 |
@@ -303,7 +314,7 @@
 | 开始取餐 | 配送单 `assigned` + 订单允许 | 400 → 40000（状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L836-L874) |
 | 确认取餐 | 配送单 `picking` + 订单允许 | 400 → 40000（状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L900-L940) |
 | 开始配送 | 配送单 `picked` | 400 → 40000（状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L1040-L1060) |
-| 确认送达 | 期望 `delivering` | ⚠️ 缺口：未校验配送单状态，需补充 | [locallife/api/delivery.go](locallife/api/delivery.go#L1125-L1185) |
+| 确认送达 | 配送单 `delivering` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L1115-L1185) |
 
 **通用权限/资源错误（适用于所有动作）**
 - 403 → 40300：资源不归属当前操作者（用户/商户/骑手）。
@@ -351,7 +362,7 @@
   - [locallife/api/order.go](locallife/api/order.go#L3199-L3230)
 - 骑手动作与订单状态约束：
   - [locallife/api/delivery.go](locallife/api/delivery.go#L742-L770)
-- 缺口：骑手确认送达未校验配送单状态（应限制 `delivering`）
+- 已修复：骑手确认送达强制配送单 `delivering` 状态。
   - [locallife/api/delivery.go](locallife/api/delivery.go#L1115-L1168)
 
 ### 2.3 预订（部分确认）
@@ -383,7 +394,7 @@
 | 外卖/骑手 | 开始取餐 | 配送单 `assigned` + 订单 `courier_accepted` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L836-L866) |
 | 外卖/骑手 | 确认取餐 | 配送单 `picking` + 订单 `courier_accepted` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L900-L940) |
 | 外卖/骑手 | 开始配送 | 配送单 `picked` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L1039-L1047) |
-| 外卖/骑手 | 确认送达 | 未见配送单状态校验 | ⚠️ 缺口：需限制 `delivering`，否则可越级完成 | [locallife/api/delivery.go](locallife/api/delivery.go#L1115-L1168) |
+| 外卖/骑手 | 确认送达 | 配送单 `delivering` | 400 → 40000（当前状态不允许） | [locallife/api/delivery.go](locallife/api/delivery.go#L1115-L1185) |
 | 预订/商户 | 确认 | 仅 `paid` | 409 → 40900（reservation is not paid） | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L1024-L1030) |
 | 预订/商户 | 完成 | 仅 `confirmed` | 409 → 40900（reservation is not confirmed） | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L1112-L1116) |
 | 预订/用户/商户 | 取消 | `pending/paid/confirmed` | 409 → 40900（状态不允许或超出退款时限） | [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L1203-L1218) |
@@ -408,7 +419,7 @@
 | 用户 | 关闭支付单 | 支付单必须 `pending` 且归属用户 | 400 → 40000（only pending payment orders can be closed） | [locallife/api/payment_order.go](locallife/api/payment_order.go#L608-L616) |
 | 商户 | 发起退款 | 支付单必须 `paid` 且订单归属商户 | 400 → 40000（payment order is not paid / amount exceeds） | [locallife/api/payment_order.go](locallife/api/payment_order.go#L736-L766) |
 
-### 2.6 触发点/责任方摘要（待补全）
+### 2.6 触发点/责任方摘要（已确认）
 | 场景 | 动作 | 触发方 | 触发点 | 证据 |
 | --- | --- | --- | --- | --- |
 | 堂食/外卖 | 商户接单/拒单/出餐/完成 | 商户 | 后台操作（订单列表/详情） | [locallife/api/order.go](locallife/api/order.go#L2840-L3236) |
@@ -419,7 +430,7 @@
 
 ---
 
-## 3. region_id 强约束策略（待补全）
+## 3. region_id 强约束策略（进行中）
 
 ### 3.1 数据层证据（已确认）
 - 商户表含 `region_id`
@@ -429,7 +440,7 @@
 - 运营商多区域迁移（迁移记录）
   - [locallife/db/migration](locallife/db/migration)
 
-### 3.2 API 强制隔离与审计（待补全）
+### 3.2 API 强制隔离与审计（进行中）
 - 已存在的区域隔离证据（运营商侧）：
   - 统一中间件校验 operator 管辖区域：
     - [locallife/api/casbin_enforcer.go](locallife/api/casbin_enforcer.go#L472-L525)
@@ -460,8 +471,8 @@
 - 地理位置映射 region（API 侧兜底逻辑）：
   - [locallife/api/location.go](locallife/api/location.go#L186-L239)
 - 待补全：
-  - 商户侧：主要依赖 `MerchantStaffMiddleware` 绑定商户（以 merchant_id 为天然隔离），未见统一 region 中间件：
-    - [locallife/api/rbac_middleware.go](locallife/api/rbac_middleware.go#L140-L205)
+  - 商户侧：`MerchantStaffMiddleware` 已强制商户必须绑定 `region_id`（仍需扩展到资源级别校验）：
+	- [locallife/api/rbac_middleware.go](locallife/api/rbac_middleware.go#L140-L210)
   - 骑手侧：已有显式区域校验（推荐单与抢单均要求 rider.region_id 与 merchant.region_id 一致）：
     - [locallife/api/delivery.go](locallife/api/delivery.go#L72-L140)
     - [locallife/api/delivery.go](locallife/api/delivery.go#L488-L540)
@@ -469,18 +480,18 @@
       - [locallife/api/delivery.go](locallife/api/delivery.go#L101-L141)
     - 配送池 SQL 按 region_id 过滤：
       - [locallife/db/query/delivery_pool.sql](locallife/db/query/delivery_pool.sql#L66-L83)
-  - 顾客侧：搜索接口仅提供 region_id 可选过滤（非强制），未见统一 region 中间件：
-    - [locallife/api/search.go](locallife/api/search.go#L20-L52)
-    - 搜索请求参数显式为 optional：
-      - [locallife/api/search.go](locallife/api/search.go#L21-L38)
+  - 顾客侧：搜索/包间已强制 `region_id`，缺省时基于定位推导并拒绝无区域请求：
+  - [locallife/api/search.go](locallife/api/search.go#L20-L80)
+  - [locallife/api/location.go](locallife/api/location.go#L186-L239)
   - 审计字段与日志落地位置（是否记录请求 region_id、操作者、被访问资源）。
-    - 已发现的审计日志仅覆盖集团管理：
+    - 已发现的审计日志覆盖集团管理；通用审计已落地但覆盖范围仍需扩展：
       - [locallife/api/group.go](locallife/api/group.go#L238-L242)
       - [locallife/db/query/group.sql](locallife/db/query/group.sql#L183-L189)
+    - [locallife/db/query/audit_log.sql](locallife/db/query/audit_log.sql)
     - 申诉列表/详情 SQL 以 region_id 过滤：
       - [locallife/db/query/appeal.sql](locallife/db/query/appeal.sql#L260-L302)
 
-### 3.3 审计日志规范（待补全）
+### 3.3 审计日志规范（进行中）
 > 目标：为涉及跨区域、资金、风控、审核类操作提供统一审计记录。
 
 **建议的最小审计字段**
@@ -495,9 +506,14 @@
 - created_at
 
 **优先落地点（第一批）**
-- 运营商：商户/骑手暂停与恢复、运费/峰时配置变更、申诉审核、规则修改
+- 运营商：运费/峰时配置变更、申诉审核、规则修改
 - 平台：商户/骑手审核、平台统计导出、全局规则与费率变更
 - 商户：订单关键状态流转（accept/reject/ready/complete）、退款/索赔处理、菜品/价格/库存变更
+
+**已落地（覆盖点）**
+- 运营商：申诉审核、运费/峰时配置变更、规则修改
+- 商户：订单状态流转、退款发起、菜品上下架与编辑、库存更新、配送优惠变更
+- 平台：统计访问审计（overview/daily/regions/merchant/rider/hourly/realtime）
 
 **落地方式（建议）**
 - 新增通用审计表（或复用现有 merchant_group_audit_logs 扩展为通用表）。
@@ -509,6 +525,21 @@
     - [locallife/api/group.go](locallife/api/group.go#L216-L227)
   - 审计表：`merchant_group_audit_logs`
     - [locallife/db/query/group.sql](locallife/db/query/group.sql#L183-L189)
+
+**新增审计日志（通用）**
+- 审计表：`audit_logs`
+  - [locallife/db/migration/000109_add_audit_logs.up.sql](locallife/db/migration/000109_add_audit_logs.up.sql)
+  - [locallife/db/query/audit_log.sql](locallife/db/query/audit_log.sql)
+- 写入入口（已落地）：
+  - 运营商申诉审核：[locallife/api/appeal.go](locallife/api/appeal.go#L1207-L1285)
+  - 运费/峰时配置变更：[locallife/api/delivery_fee.go](locallife/api/delivery_fee.go)
+  - 商户订单状态流转：[locallife/api/order.go](locallife/api/order.go)
+  - 运营商规则修改：[locallife/api/operator_rules.go](locallife/api/operator_rules.go)
+  - 商户退款发起：[locallife/api/payment_order.go](locallife/api/payment_order.go)
+  - 商户配送优惠变更：[locallife/api/delivery_fee.go](locallife/api/delivery_fee.go)
+  - 商户库存变更：[locallife/api/inventory.go](locallife/api/inventory.go)
+  - 商户菜品变更：[locallife/api/dish.go](locallife/api/dish.go)
+  - 平台统计访问：[locallife/api/platform_stats.go](locallife/api/platform_stats.go)
 
 ### 3.4 region_id 强约束统一策略（建议草案）
 > 目标：跨商户/运营商/骑手/用户数据访问在 API 与 SQL 层形成“默认隔离”。
@@ -523,27 +554,27 @@
 - 关键查询统一增加 `region_id` 条件（或通过 merchant_id -> region_id 间接约束）。
 - 对跨区域查询设置只读白名单（如平台统计）。
 
-**SQL 侧 region_id 可选过滤的证据（风险）**
-- 菜品搜索：region_id 允许为空
+**SQL 侧 region_id 可选过滤（已收口）**
+- 菜品搜索：`m.region_id = sqlc.narg('region_id')`（无 NULL 兜底）
   - [locallife/db/query/dish.sql](locallife/db/query/dish.sql#L190-L202)
-- 套餐搜索：region_id 允许为空
+- 套餐搜索：`m.region_id = sqlc.narg('region_id')`（无 NULL 兜底）
   - [locallife/db/query/combo.sql](locallife/db/query/combo.sql#L339-L344)
-- 包间查询：region_id 允许为空
-  - [locallife/db/query/table.sql](locallife/db/query/table.sql#L258-L262)
-- 商户搜索：region_id 允许为空
+- 商户搜索：`m.region_id = sqlc.narg('region_id')`（无 NULL 兜底）
   - [locallife/db/query/merchant.sql](locallife/db/query/merchant.sql#L166-L175)
 
+**已修复**
+- 包间查询：region_id 改为必填
+  - [locallife/db/query/table.sql](locallife/db/query/table.sql#L258-L300)
+
 **缺口清单（待逐项核对）**
-- 顾客搜索与推荐接口目前 `region_id` 仅可选，存在跨区默认聚合风险：
-  - [locallife/api/search.go](locallife/api/search.go#L20-L52)
 - 商户侧接口多以 `merchant_id` 隔离，但未见统一 region 中间件，需梳理涉及配送/规则/财务的跨区风险。
 - 审计日志尚未覆盖区域敏感操作，需配合 3.3 补齐。
 
-### 3.5 region_id 落地任务（待执行）
-- 顾客搜索/推荐：强制 region_id（或基于定位推导），禁止无 region 默认返回。
-- SQL 查询：将可选 region_id 改为必填（或在入口处兜底注入 region_id）。
-- 商户侧：补充 region 级校验（配送/财务/申诉/运费）并统一中间件。
-- 审计：关键操作写入 `region_id` 并落地到通用审计表。
+### 3.5 region_id 落地任务（进行中）
+- 顾客搜索/推荐：强制 region_id（或基于定位推导），禁止无 region 默认返回。（已落地：search + rooms）
+- SQL 查询：将可选 region_id 改为必填（或在入口处兜底注入 region_id）。（已收口：查询需 region_id）
+- 商户侧：补充 region 级校验（配送/财务/申诉/运费）并统一中间件。（进行中：已要求商户绑定 region）
+- 审计：关键操作写入 `region_id` 并落地到通用审计表。（部分完成，需扩展覆盖）
 
 ### 3.6 region_id 强约束执行步骤（建议）
 **阶段 A：入口强制注入**
@@ -568,6 +599,10 @@
 **顾客侧（强制 region）**
 - 搜索入口： [locallife/api/search.go](locallife/api/search.go)
 - 位置兜底： [locallife/api/location.go](locallife/api/location.go)
+
+**region 外部映射（新增）**
+- 映射表迁移： [locallife/db/migration/000108_add_region_external_mappings.up.sql](locallife/db/migration/000108_add_region_external_mappings.up.sql)
+- 映射查询： [locallife/db/query/region.sql](locallife/db/query/region.sql)
 
 **SQL 侧（可选过滤改为必选）**
 - 菜品搜索： [locallife/db/query/dish.sql](locallife/db/query/dish.sql)
@@ -1123,8 +1158,9 @@
 **运营商商户管理（/pages/operator/merchants）**
 - 小程序 API： [weapp/miniprogram/api/operator-merchant-management.ts](weapp/miniprogram/api/operator-merchant-management.ts)
 - 后端 API：
-  - `/v1/operator/merchants`, `/v1/operator/merchants/:id`, `/v1/operator/merchants/:id/{suspend|resume}`
-  - 入口实现： [locallife/api/operator_merchant_rider.go](locallife/api/operator_merchant_rider.go)
+  - `/v1/operator/merchants`, `/v1/operator/merchants/:id`
+  - 说明：运营商手动暂停/恢复接口已移除（规则驱动）
+- 入口实现： [locallife/api/operator_merchant_rider.go](locallife/api/operator_merchant_rider.go)
 - 主要表：
   - 商户： [locallife/db/query/merchant.sql](locallife/db/query/merchant.sql)
   - 区域关系： [locallife/db/query/operator_region.sql](locallife/db/query/operator_region.sql)
@@ -1132,8 +1168,9 @@
 **运营商骑手管理（/pages/operator/riders）**
 - 小程序 API： [weapp/miniprogram/api/operator-rider-management.ts](weapp/miniprogram/api/operator-rider-management.ts)
 - 后端 API：
-  - `/v1/operator/riders`, `/v1/operator/riders/:id`, `/v1/operator/riders/:id/{suspend|resume}`
-  - 入口实现： [locallife/api/operator_merchant_rider.go](locallife/api/operator_merchant_rider.go)
+  - `/v1/operator/riders`, `/v1/operator/riders/:id`
+  - 说明：运营商手动暂停/恢复接口已移除（规则驱动）
+- 入口实现： [locallife/api/operator_merchant_rider.go](locallife/api/operator_merchant_rider.go)
 - 主要表：
   - 骑手： [locallife/db/query/rider.sql](locallife/db/query/rider.sql)
   - 配送： [locallife/db/query/delivery.sql](locallife/db/query/delivery.sql)
@@ -1182,48 +1219,133 @@
 
 ## 5. 上线验收 checklist（待补全）
 ### 5.1 监控/告警
-- [ ] API 延迟/错误率（核心链路：下单/支付/配送/预订）
+- [x] API 延迟/错误率（核心链路：下单/支付/配送/预订）
+  - 指标采集已接入：Prometheus 中间件 + /metrics 端点
+    - [locallife/api/middleware_prometheus.go](locallife/api/middleware_prometheus.go#L131-L170)
+    - [locallife/api/server.go](locallife/api/server.go#L282-L296)
+  - 告警规则待配置（SLO/阈值）
 - [ ] 支付回调与分账失败告警（支付单/分账单状态异常）
+  - 回调失败计数指标已接入（payment/refund/profit_sharing）
+    - [locallife/api/middleware_prometheus.go](locallife/api/middleware_prometheus.go#L61-L73)
+    - [locallife/api/payment_callback.go](locallife/api/payment_callback.go#L44-L132)
+    - [locallife/api/payment_callback.go](locallife/api/payment_callback.go#L300-L356)
+    - [locallife/api/payment_callback.go](locallife/api/payment_callback.go#L571-L667)
+  - 告警规则草案已补齐（未接入 Alertmanager）
+    - [locallife/docs/alerts/prometheus_rules.yaml](locallife/docs/alerts/prometheus_rules.yaml)
+  - 告警规则待配置（失败率阈值/SLO）
 - [ ] 配送异常（超时、无人接单、异常高取消率）
+  - 告警规则草案已补齐（需接入业务指标）
+    - [locallife/docs/alerts/business_rules.yaml](locallife/docs/alerts/business_rules.yaml)
 - [ ] 数据库/队列/缓存基础设施监控（连接数、慢查询、积压）
+  - 告警规则草案已补齐（需接入对应 exporter 指标）
+    - [locallife/docs/alerts/infra_rules.yaml](locallife/docs/alerts/infra_rules.yaml)
 - [ ] 订单状态异常迁移告警（跳跃/逆序/重复）
+  - 告警规则草案已补齐（需接入业务指标）
+    - [locallife/docs/alerts/business_rules.yaml](locallife/docs/alerts/business_rules.yaml)
 - [ ] KDS 超时告警（预设 SLA）
+  - 告警规则草案已补齐（需接入业务指标）
+    - [locallife/docs/alerts/business_rules.yaml](locallife/docs/alerts/business_rules.yaml)
 - [ ] 退款超时告警（退款发起后超过 T+X 未完成）
+  - 告警规则草案已补齐（需接入业务指标）
+    - [locallife/docs/alerts/business_rules.yaml](locallife/docs/alerts/business_rules.yaml)
 
 ### 5.2 压测/容量
 - [ ] 核心接口压测基线：/orders, /payment, /delivery, /reservations
+  - 压测基线草案已补齐
+    - [locallife/docs/phase0/loadtest_plan.md](locallife/docs/phase0/loadtest_plan.md)
 - [ ] 峰值容量估算（GMV、订单、配送单峰值）
+  - 容量估算草案已补齐（待填真实数据）
+    - [locallife/docs/phase0/loadtest_plan.md](locallife/docs/phase0/loadtest_plan.md)
 - [ ] 关键慢查询优化清单与索引确认
+  - 慢查询/索引核对清单草案已补齐
+    - [locallife/docs/phase0/perf_index_checklist.md](locallife/docs/phase0/perf_index_checklist.md)
 - [ ] 关键缓存命中率基线（商品/商户/配置类）
+  - 缓存命中率基线草案已补齐
+    - [locallife/docs/phase0/cache_baseline.md](locallife/docs/phase0/cache_baseline.md)
 - [ ] 支付回调与异步任务队列容量验证
+  - 队列/回调容量验证清单草案已补齐
+    - [locallife/docs/phase0/queue_capacity_check.md](locallife/docs/phase0/queue_capacity_check.md)
 
 ### 5.3 合规/隐私
 - [ ] PII 脱敏与日志规范（手机号、身份证、地址）
+  - 脱敏与日志规范草案已补齐
+    - [locallife/docs/phase0/privacy_pii_log.md](locallife/docs/phase0/privacy_pii_log.md)
 - [ ] 数据保留策略与删除/匿名化流程
+  - 数据保留与匿名化流程草案已补齐
+    - [locallife/docs/phase0/data_retention_policy.md](locallife/docs/phase0/data_retention_policy.md)
 - [ ] 文件上传安全与内容安全检测覆盖（商户/骑手/用户）
+  - 文件上传安全草案已补齐
+    - [locallife/docs/phase0/upload_security.md](locallife/docs/phase0/upload_security.md)
 - [ ] 操作日志与用户授权合规（隐私政策/服务协议）
+  - 授权合规草案已补齐
+    - [locallife/docs/phase0/consent_compliance.md](locallife/docs/phase0/consent_compliance.md)
 
 ### 5.4 灾备/回滚
 - [ ] 数据库备份与恢复演练（RPO/RTO）
+  - 备份与恢复演练草案已补齐
+    - [locallife/docs/phase0/backup_restore.md](locallife/docs/phase0/backup_restore.md)
 - [ ] 支付/分账失败补偿流程（重试/补单）
+  - 失败补偿流程草案已补齐
+    - [locallife/docs/phase0/payment_compensation.md](locallife/docs/phase0/payment_compensation.md)
 - [ ] 发布回滚流程与开关策略
+  - 回滚与开关策略草案已补齐
+    - [locallife/docs/phase0/rollback_strategy.md](locallife/docs/phase0/rollback_strategy.md)
 - [ ] 关键配置变更灰度与回滚验证
+  - 灰度与回滚验证草案已补齐
+    - [locallife/docs/phase0/gray_release.md](locallife/docs/phase0/gray_release.md)
 
 ### 5.5 审计/追溯
-- [ ] 关键操作审计落地（商户/运营商/平台）
-- [ ] 订单全链路追踪（状态日志 + 事件日志）
-- [ ] region_id 访问审计与越权监测
+- [x] 关键操作审计落地（商户/运营商/平台）
+  - 审计入口与覆盖点：见 3.3 已落地清单
+- [x] 订单全链路追踪（状态日志 + 事件日志）
+  - 订单状态日志表： [locallife/db/query/order_status_log.sql](locallife/db/query/order_status_log.sql)
+- [x] region_id 访问审计与越权监测
+  - 运营商区域越权访问已记录审计：
+    - [locallife/api/casbin_enforcer.go](locallife/api/casbin_enforcer.go#L470-L525)
+  - 骑手区域越权/未分配已记录审计：
+    - [locallife/api/delivery.go](locallife/api/delivery.go#L100-L560)
+  - 商户区域未绑定的访问拒绝已记录审计：
+    - [locallife/api/rbac_middleware.go](locallife/api/rbac_middleware.go#L150-L205)
+  - 商户侧资源级越权审计（订单归属不匹配已记录）：
+    - [locallife/api/order.go](locallife/api/order.go#L2840-L3255)
+  - 商户侧资源级越权审计（退款订单归属不匹配已记录）：
+    - [locallife/api/payment_order.go](locallife/api/payment_order.go#L720-L810)
+  - 商户侧资源级越权审计（菜品归属不匹配已记录）：
+    - [locallife/api/dish.go](locallife/api/dish.go#L900-L1275)
+  - 商户侧资源级越权审计（库存归属不匹配已记录）：
+    - [locallife/api/inventory.go](locallife/api/inventory.go#L220-L580)
 
 ### 5.6 安全/风控
 - [ ] 接口鉴权与权限校验覆盖率（角色/资源级别）
+  - 基础鉴权与角色校验已落地：
+    - 认证中间件：[locallife/api/middleware.go](locallife/api/middleware.go#L14-L74)
+    - Casbin 角色校验：[locallife/api/casbin_enforcer.go](locallife/api/casbin_enforcer.go#L430-L560)
+    - 角色访问矩阵元数据：[locallife/api/role_access.go](locallife/api/role_access.go#L1-L120)
 - [ ] 风控策略开关可配置（外卖拒单、异常退款）
-- [ ] 防刷/限流基线（IP/用户/设备维度）
+  - 风控开关草案已补齐
+    - [locallife/docs/phase0/risk_policy_switches.md](locallife/docs/phase0/risk_policy_switches.md)
+  - 现有风控能力（需统一为可配置开关）：
+  - 外卖高风险用户拦截： [locallife/api/order.go](locallife/api/order.go#L1370-L1585)
+  - 行为黑名单/风控提示： [locallife/api/behavior_trace.go](locallife/api/behavior_trace.go#L1-L90)
+  - 预订/堂食风控拦截： [locallife/api/table_reservation.go](locallife/api/table_reservation.go#L440-L480)
+- [x] 防刷/限流基线（IP/用户/设备维度）
+  - 全局限流 + 敏感接口限流已接入
+    - [locallife/api/middleware_ratelimit.go](locallife/api/middleware_ratelimit.go#L1-L180)
+    - [locallife/api/server.go](locallife/api/server.go#L284-L310)
 
 ### 5.7 业务验收（最小闭环）
 - [ ] 外卖闭环：下单→支付→商户接单→出餐→骑手配送→确认收货
+  - 业务验收闭环清单草案已补齐
+    - [locallife/docs/phase0/business_acceptance_checklist.md](locallife/docs/phase0/business_acceptance_checklist.md)
 - [ ] 堂食闭环：扫码→点餐→支付→出餐→完成
+  - 业务验收闭环清单草案已补齐
+    - [locallife/docs/phase0/business_acceptance_checklist.md](locallife/docs/phase0/business_acceptance_checklist.md)
 - [ ] 预订闭环：创建→支付→确认→签到/起菜→完成/取消
+  - 业务验收闭环清单草案已补齐
+    - [locallife/docs/phase0/business_acceptance_checklist.md](locallife/docs/phase0/business_acceptance_checklist.md)
 - [ ] 售后闭环：取消/退款/申诉→审核→结果落地
+  - 业务验收闭环清单草案已补齐
+    - [locallife/docs/phase0/business_acceptance_checklist.md](locallife/docs/phase0/business_acceptance_checklist.md)
 
 ---
 

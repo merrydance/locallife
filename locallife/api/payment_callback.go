@@ -57,6 +57,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	// 读取请求体
 	body, status, err := readWebhookBody(ctx)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "read_body").Inc()
 		log.Error().Err(err).Msg("read payment notification body")
 		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -71,6 +72,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
 
 	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "signature").Inc()
 		log.Error().
 			Err(err).
 			Str("signature", signature).
@@ -86,6 +88,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	// 解析通知
 	var notification wechat.PaymentNotification
 	if err := json.Unmarshal(body, &notification); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "parse").Inc()
 		log.Error().Err(err).Msg("parse payment notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -121,6 +124,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	// 解密通知内容
 	resource, err := server.paymentClient.DecryptPaymentNotification(&notification)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt payment notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -149,6 +153,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 			return
 		}
 		log.Error().Err(err).Str("out_trade_no", resource.OutTradeNo).Msg("get payment order")
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "query_payment_order").Inc()
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "internal error",
@@ -187,6 +192,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		TransactionID: pgtype.Text{String: resource.TransactionID, Valid: true},
 	})
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "update_payment_order").Inc()
 		log.Error().Err(err).Int64("id", paymentOrder.ID).Msg("update payment order to paid")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -292,6 +298,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	// 读取请求体用于验签
 	body, status, err := readWebhookBody(ctx)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("refund", "read_body").Inc()
 		log.Error().Err(err).Msg("read refund notification body")
 		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -306,6 +313,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
 
 	if err := server.paymentClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("refund", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for refund notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -317,6 +325,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	// 解析通知
 	var notification wechat.PaymentNotification
 	if err := json.Unmarshal(body, &notification); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("refund", "parse").Inc()
 		log.Error().Err(err).Msg("parse refund notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -356,6 +365,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	// 解密通知内容
 	resource, err := server.paymentClient.DecryptRefundNotification(&notification)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("refund", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt refund notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -559,6 +569,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	// 读取请求体用于验签
 	body, status, err := readWebhookBody(ctx)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "read_body").Inc()
 		log.Error().Err(err).Msg("read profit sharing notification body")
 		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -573,6 +584,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
 
 	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for profit sharing notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -584,6 +596,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	// 解析通知
 	var notification wechat.PaymentNotification
 	if err := json.Unmarshal(body, &notification); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "parse").Inc()
 		log.Error().Err(err).Msg("parse profit sharing notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -621,6 +634,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	// 解密通知内容
 	resource, err := server.ecommerceClient.DecryptProfitSharingNotification(&notification)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt profit sharing notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -641,6 +655,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	// 查询分账订单
 	profitSharingOrder, err := server.store.GetProfitSharingOrderByOutOrderNo(ctx, resource.OutOrderNo)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "query_profit_sharing_order").Inc()
 		if isNotFoundError(err) {
 			log.Error().Str("out_order_no", resource.OutOrderNo).Msg("profit sharing order not found")
 			// 订单不存在，返回成功避免微信重试
@@ -673,6 +688,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	case "SUCCESS":
 		_, err = server.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID)
 		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "update_profit_sharing_order").Inc()
 			log.Error().Err(err).Int64("id", profitSharingOrder.ID).Msg("update profit sharing order to finished")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 				Code:    "FAIL",
@@ -688,6 +704,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	case "CLOSED", "FAILED":
 		_, err = server.store.UpdateProfitSharingOrderToFailed(ctx, profitSharingOrder.ID)
 		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "update_profit_sharing_order").Inc()
 			log.Error().Err(err).Int64("id", profitSharingOrder.ID).Msg("update profit sharing order to failed")
 		}
 		log.Error().

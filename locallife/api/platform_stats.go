@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/token"
 )
 
 // ==================== 平台全局概览 ====================
@@ -58,6 +59,19 @@ func (server *Server) getPlatformOverview(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_overview_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
 
 	ctx.JSON(http.StatusOK, platformOverviewResponse{
 		TotalOrders:     stats.TotalOrders,
@@ -117,6 +131,19 @@ func (server *Server) getPlatformDailyStats(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_daily_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
 
 	result := make([]platformDailyStatRow, len(stats))
 	for i, stat := range stats {
@@ -184,6 +211,19 @@ func (server *Server) getRegionComparison(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_regions_compared",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
 
 	result := make([]regionComparisonRow, len(regions))
 	for i, region := range regions {
@@ -272,6 +312,21 @@ func (server *Server) getMerchantRanking(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_merchant_ranking_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+			"page":       req.Page,
+			"limit":      req.Limit,
+		},
+	})
+
 	result := make([]merchantRankingRow, len(merchants))
 	for i, merchant := range merchants {
 		result[i] = merchantRankingRow{
@@ -335,6 +390,19 @@ func (server *Server) getCategoryStats(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_category_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
+
 	result := make([]categoryStatRow, len(categories))
 	for i, category := range categories {
 		result[i] = categoryStatRow{
@@ -392,6 +460,19 @@ func (server *Server) getUserGrowthStats(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_user_growth_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
+
 	result := make([]growthStatRow, len(stats))
 	for i, stat := range stats {
 		result[i] = growthStatRow{
@@ -439,6 +520,19 @@ func (server *Server) getMerchantGrowthStats(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_merchant_growth_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
 
 	result := make([]growthStatRow, len(stats))
 	for i, stat := range stats {
@@ -512,6 +606,21 @@ func (server *Server) getRiderRanking(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_rider_ranking_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+			"page":       req.Page,
+			"limit":      req.Limit,
+		},
+	})
+
 	result := make([]riderRankingRow, len(riders))
 	for i, rider := range riders {
 		result[i] = riderRankingRow{
@@ -572,6 +681,19 @@ func (server *Server) getHourlyDistribution(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_hourly_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
+
 	result := make([]hourlyDistributionRow, len(hours))
 	for i, hour := range hours {
 		result[i] = hourlyDistributionRow{
@@ -615,6 +737,16 @@ func (server *Server) getRealtimeDashboard(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_stats_realtime_viewed",
+		TargetType:  "platform_stats",
+		RegionID:    nil,
+		Metadata:    map[string]any{},
+	})
 
 	ctx.JSON(http.StatusOK, realtimeDashboardResponse{
 		Orders24h:          dashboard.Orders24h,

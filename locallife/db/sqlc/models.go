@@ -32,6 +32,22 @@ type Appeal struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type AuditLog struct {
+	ID          int64       `json:"id"`
+	ActorUserID pgtype.Int8 `json:"actor_user_id"`
+	ActorRole   string      `json:"actor_role"`
+	Action      string      `json:"action"`
+	TargetType  string      `json:"target_type"`
+	TargetID    pgtype.Int8 `json:"target_id"`
+	RegionID    pgtype.Int8 `json:"region_id"`
+	RequestID   pgtype.Text `json:"request_id"`
+	TraceID     pgtype.Text `json:"trace_id"`
+	ClientIp    pgtype.Text `json:"client_ip"`
+	UserAgent   pgtype.Text `json:"user_agent"`
+	Metadata    []byte      `json:"metadata"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
 type BehaviorAction struct {
 	ID           int64              `json:"id"`
 	DecisionID   int64              `json:"decision_id"`

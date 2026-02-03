@@ -67,17 +67,13 @@ p, operator, /v1/operator/riders/ranking, GET
 p, operator, /v1/operator/trend/daily, GET
 p, operator, /v1/operator/peak-hours/:id, DELETE
 
-# Merchant Management (List, Detail, Suspend, Resume)
+# Merchant Management (List, Detail)
 p, operator, /v1/operator/merchants, GET
 p, operator, /v1/operator/merchants/:id, GET
-p, operator, /v1/operator/merchants/:id/suspend, POST
-p, operator, /v1/operator/merchants/:id/resume, POST
 
-# Rider Management (List, Detail, Suspend, Resume)
+# Rider Management (List, Detail)
 p, operator, /v1/operator/riders, GET
 p, operator, /v1/operator/riders/:id, GET
-p, operator, /v1/operator/riders/:id/suspend, POST
-p, operator, /v1/operator/riders/:id/resume, POST
 
 # Rider Review (Operator)
 p, operator, /v1/admin/riders, GET

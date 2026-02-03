@@ -652,16 +652,18 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 // =============================================================================
 
 type searchRoomsRequest struct {
-	RegionID        *int64 `form:"region_id" binding:"omitempty,min=1"`            // 区域ID
-	MinCapacity     *int16 `form:"min_capacity" binding:"omitempty,min=1,max=100"` // 最小容纳人数
-	MaxCapacity     *int16 `form:"max_capacity" binding:"omitempty,min=1,max=100"` // 最大容纳人数
-	MaxMinimumSpend *int64 `form:"max_minimum_spend" binding:"omitempty,min=0"`    // 最大低消（分）
-	MinMinimumSpend *int64 `form:"min_minimum_spend" binding:"omitempty,min=0"`    // 最小低消（分）
-	ReservationDate string `form:"reservation_date" binding:"required"`            // 预订日期 YYYY-MM-DD
-	ReservationTime string `form:"reservation_time" binding:"required"`            // 预订时段 HH:MM
-	TagID           *int64 `form:"tag_id" binding:"omitempty,min=1"`               // 菜系/标签ID
-	PageID          int32  `form:"page_id" binding:"required,min=1"`               // 页码
-	PageSize        int32  `form:"page_size" binding:"required,min=1,max=50"`      // 每页数量
+	RegionID        *int64   `form:"region_id" binding:"omitempty,min=1"`            // 区域ID
+	MinCapacity     *int16   `form:"min_capacity" binding:"omitempty,min=1,max=100"` // 最小容纳人数
+	MaxCapacity     *int16   `form:"max_capacity" binding:"omitempty,min=1,max=100"` // 最大容纳人数
+	MaxMinimumSpend *int64   `form:"max_minimum_spend" binding:"omitempty,min=0"`    // 最大低消（分）
+	MinMinimumSpend *int64   `form:"min_minimum_spend" binding:"omitempty,min=0"`    // 最小低消（分）
+	ReservationDate string   `form:"reservation_date" binding:"required"`            // 预订日期 YYYY-MM-DD
+	ReservationTime string   `form:"reservation_time" binding:"required"`            // 预订时段 HH:MM
+	TagID           *int64   `form:"tag_id" binding:"omitempty,min=1"`               // 菜系/标签ID
+	PageID          int32    `form:"page_id" binding:"required,min=1"`               // 页码
+	PageSize        int32    `form:"page_size" binding:"required,min=1,max=50"`      // 每页数量
+	UserLatitude    *float64 `form:"user_latitude" binding:"omitempty"`              // 用户当前纬度
+	UserLongitude   *float64 `form:"user_longitude" binding:"omitempty"`             // 用户当前经度
 }
 
 type searchRoomResponse struct {
@@ -723,9 +725,12 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	offset := pageOffset(req.PageID, req.PageSize)
 
 	// 构建查询参数
-	var regionID pgtype.Int8
-	if req.RegionID != nil {
-		regionID = pgtype.Int8{Int64: *req.RegionID, Valid: true}
+	// 准备RegionID（必须）
+	resolvedLat, resolvedLng := resolveUserLocation(ctx, req.UserLatitude, req.UserLongitude)
+	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	var minCapacity, maxCapacity pgtype.Int2
@@ -751,7 +756,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	if req.TagID != nil {
 		searchResults, err := server.store.SearchRoomsByMerchantTag(ctx, db.SearchRoomsByMerchantTagParams{
 			TagID:           *req.TagID,
-			RegionID:        regionID,
+			RegionID:        regionID.Int64,
 			MinCapacity:     minCapacity,
 			MaxCapacity:     maxCapacity,
 			MinMinimumSpend: minMinimumSpend,
@@ -774,7 +779,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	} else {
 		// 不按标签搜索，使用带图片的查询
 		searchResults, err := server.store.SearchRoomsWithImage(ctx, db.SearchRoomsWithImageParams{
-			RegionID:        regionID,
+			RegionID:        regionID.Int64,
 			MinCapacity:     minCapacity,
 			MaxCapacity:     maxCapacity,
 			MinMinimumSpend: minMinimumSpend,
@@ -796,7 +801,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 
 		// 获取总数
 		total, err = server.store.CountSearchRooms(ctx, db.CountSearchRoomsParams{
-			RegionID:        regionID,
+			RegionID:        regionID.Int64,
 			MinCapacity:     minCapacity,
 			MaxCapacity:     maxCapacity,
 			MinMinimumSpend: minMinimumSpend,

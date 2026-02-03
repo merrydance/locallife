@@ -116,6 +116,18 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 
 	// 检查骑手是否已分配区域
 	if !rider.RegionID.Valid {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "rider",
+			Action:      "region_access_denied",
+			TargetType:  "region",
+			RegionID:    nil,
+			Metadata: map[string]any{
+				"reason": "rider_region_unassigned",
+				"path":   ctx.Request.URL.Path,
+				"method": ctx.Request.Method,
+			},
+		})
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您尚未分配服务区域，请联系管理员")))
 		return
 	}
@@ -478,6 +490,18 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 
 	// 检查骑手是否已分配区域
 	if !rider.RegionID.Valid {
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "rider",
+			Action:      "region_access_denied",
+			TargetType:  "region",
+			RegionID:    nil,
+			Metadata: map[string]any{
+				"reason": "rider_region_unassigned",
+				"path":   ctx.Request.URL.Path,
+				"method": ctx.Request.Method,
+			},
+		})
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您尚未分配服务区域，请联系管理员")))
 		return
 	}
@@ -529,6 +553,24 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 	if merchant.RegionID != rider.RegionID.Int64 {
+		regionID := merchant.RegionID
+		riderRegionID := rider.RegionID.Int64
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "rider",
+			Action:      "region_access_denied",
+			TargetType:  "region",
+			TargetID:    &regionID,
+			RegionID:    &regionID,
+			Metadata: map[string]any{
+				"reason":           "rider_region_mismatch",
+				"rider_region_id":  riderRegionID,
+				"merchant_region_id": regionID,
+				"order_id":         req.OrderID,
+				"path":             ctx.Request.URL.Path,
+				"method":           ctx.Request.Method,
+			},
+		})
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("该订单不在您的服务区域内")))
 		return
 	}
@@ -1135,6 +1177,11 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权操作此配送单")))
+		return
+	}
+
+	if delivery.Status != "delivering" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许确认送达", delivery.Status)))
 		return
 	}
 

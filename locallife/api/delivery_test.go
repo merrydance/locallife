@@ -1138,6 +1138,29 @@ func TestStartDeliveryAPI(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
+		{
+			name:       "BadRequest_InvalidStatus",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				invalidDelivery := delivery
+				invalidDelivery.Status = "picked"
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(invalidDelivery, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
 	}
 
 	for i := range testCases {

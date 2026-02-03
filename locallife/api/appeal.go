@@ -1267,6 +1267,27 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 		return
 	}
 
+	if payload, ok := ctx.Get(authorizationPayloadKey); ok {
+		actor := payload.(*token.Payload)
+		metadata := map[string]any{
+			"status":       req.Status,
+			"review_notes": req.ReviewNotes,
+		}
+		if req.CompensationAmount != nil {
+			metadata["compensation_amount"] = *req.CompensationAmount
+		}
+		regionID := appeal.RegionID
+		server.writeAuditLog(ctx, auditLogInput{
+			ActorUserID: actor.UserID,
+			ActorRole:   "operator",
+			Action:      "operator_appeal_reviewed",
+			TargetType:  "appeal",
+			TargetID:    &appealID,
+			RegionID:    &regionID,
+			Metadata:    metadata,
+		})
+	}
+
 	// 获取申诉后处理所需的信息
 	appealInfo, err := server.store.GetAppealForPostProcess(ctx, appealID)
 	if err != nil {
