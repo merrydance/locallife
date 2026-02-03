@@ -102,8 +102,8 @@ func TestListOperatorRulesProxyAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "Unauthorized",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			name:       "Unauthorized",
+			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
 			buildStubs: func(store *mockdb.MockStore) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -142,12 +142,12 @@ func TestCreateOperatorRuleVersionProxyAPI(t *testing.T) {
 	ruleID := int64(101)
 
 	body := map[string]interface{}{
-		"version":    1,
-		"status":     "published",
-		"priority":   10,
-		"scope":      map[string]interface{}{},
-		"condition":  map[string]interface{}{"behavior_blocklist": true},
-		"action":     map[string]interface{}{"type": "deny"},
+		"version":     1,
+		"status":      "published",
+		"priority":    10,
+		"scope":       map[string]interface{}{},
+		"condition":   map[string]interface{}{"behavior_blocklist": true},
+		"action":      map[string]interface{}{"type": "deny"},
 		"gray_config": map[string]interface{}{},
 	}
 
@@ -183,16 +183,16 @@ func TestCreateOperatorRuleVersionProxyAPI(t *testing.T) {
 			require.Equal(t, float64(operator.RegionID), grayIDs[0])
 
 			return db.RuleVersion{
-				ID:        999,
-				RuleID:    arg.RuleID,
-				Version:   arg.Version,
-				Status:    arg.Status,
-				Priority:  arg.Priority,
-				Scope:     arg.Scope,
-				Condition: arg.Condition,
-				Action:    arg.Action,
+				ID:         999,
+				RuleID:     arg.RuleID,
+				Version:    arg.Version,
+				Status:     arg.Status,
+				Priority:   arg.Priority,
+				Scope:      arg.Scope,
+				Condition:  arg.Condition,
+				Action:     arg.Action,
 				GrayConfig: arg.GrayConfig,
-				CreatedAt: time.Now(),
+				CreatedAt:  time.Now(),
 			}, nil
 		})
 

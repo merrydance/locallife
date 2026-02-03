@@ -3052,6 +3052,36 @@ func (mr *MockStoreMockRecorder) CreatePrintLog(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePrintLog", reflect.TypeOf((*MockStore)(nil).CreatePrintLog), ctx, arg)
 }
 
+// CreateProfitSharingConfig mocks base method.
+func (m *MockStore) CreateProfitSharingConfig(ctx context.Context, arg db.CreateProfitSharingConfigParams) (db.ProfitSharingConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateProfitSharingConfig", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateProfitSharingConfig indicates an expected call of CreateProfitSharingConfig.
+func (mr *MockStoreMockRecorder) CreateProfitSharingConfig(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProfitSharingConfig", reflect.TypeOf((*MockStore)(nil).CreateProfitSharingConfig), ctx, arg)
+}
+
+// CreateProfitSharingConfigTx mocks base method.
+func (m *MockStore) CreateProfitSharingConfigTx(ctx context.Context, arg db.CreateProfitSharingConfigTxParams) (db.CreateProfitSharingConfigTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateProfitSharingConfigTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateProfitSharingConfigTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateProfitSharingConfigTx indicates an expected call of CreateProfitSharingConfigTx.
+func (mr *MockStoreMockRecorder) CreateProfitSharingConfigTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProfitSharingConfigTx", reflect.TypeOf((*MockStore)(nil).CreateProfitSharingConfigTx), ctx, arg)
+}
+
 // CreateProfitSharingOrder mocks base method.
 func (m *MockStore) CreateProfitSharingOrder(ctx context.Context, arg db.CreateProfitSharingOrderParams) (db.ProfitSharingOrder, error) {
 	m.ctrl.T.Helper()
@@ -4608,6 +4638,21 @@ func (m *MockStore) GetActiveOperatorByRegion(ctx context.Context, regionID int6
 func (mr *MockStoreMockRecorder) GetActiveOperatorByRegion(ctx, regionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveOperatorByRegion", reflect.TypeOf((*MockStore)(nil).GetActiveOperatorByRegion), ctx, regionID)
+}
+
+// GetActiveProfitSharingConfig mocks base method.
+func (m *MockStore) GetActiveProfitSharingConfig(ctx context.Context, arg db.GetActiveProfitSharingConfigParams) (db.ProfitSharingConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveProfitSharingConfig", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveProfitSharingConfig indicates an expected call of GetActiveProfitSharingConfig.
+func (mr *MockStoreMockRecorder) GetActiveProfitSharingConfig(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveProfitSharingConfig", reflect.TypeOf((*MockStore)(nil).GetActiveProfitSharingConfig), ctx, arg)
 }
 
 // GetActiveRecommendConfig mocks base method.
@@ -7563,6 +7608,36 @@ func (m *MockStore) GetProfitSharingOrderForUpdate(ctx context.Context, id int64
 func (mr *MockStoreMockRecorder) GetProfitSharingOrderForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingOrderForUpdate", reflect.TypeOf((*MockStore)(nil).GetProfitSharingOrderForUpdate), ctx, id)
+}
+
+// GetProfitSharingReconciliationSummary mocks base method.
+func (m *MockStore) GetProfitSharingReconciliationSummary(ctx context.Context, arg db.GetProfitSharingReconciliationSummaryParams) ([]db.GetProfitSharingReconciliationSummaryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetProfitSharingReconciliationSummary", ctx, arg)
+	ret0, _ := ret[0].([]db.GetProfitSharingReconciliationSummaryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetProfitSharingReconciliationSummary indicates an expected call of GetProfitSharingReconciliationSummary.
+func (mr *MockStoreMockRecorder) GetProfitSharingReconciliationSummary(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingReconciliationSummary", reflect.TypeOf((*MockStore)(nil).GetProfitSharingReconciliationSummary), ctx, arg)
+}
+
+// GetProfitSharingSlaSummary mocks base method.
+func (m *MockStore) GetProfitSharingSlaSummary(ctx context.Context, arg db.GetProfitSharingSlaSummaryParams) (db.GetProfitSharingSlaSummaryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetProfitSharingSlaSummary", ctx, arg)
+	ret0, _ := ret[0].(db.GetProfitSharingSlaSummaryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetProfitSharingSlaSummary indicates an expected call of GetProfitSharingSlaSummary.
+func (mr *MockStoreMockRecorder) GetProfitSharingSlaSummary(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProfitSharingSlaSummary", reflect.TypeOf((*MockStore)(nil).GetProfitSharingSlaSummary), ctx, arg)
 }
 
 // GetQualityDishIDs mocks base method.
@@ -11461,6 +11536,51 @@ func (mr *MockStoreMockRecorder) ListPrintLogsByPrinter(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPrintLogsByPrinter", reflect.TypeOf((*MockStore)(nil).ListPrintLogsByPrinter), ctx, arg)
 }
 
+// ListProfitSharingConfigAudits mocks base method.
+func (m *MockStore) ListProfitSharingConfigAudits(ctx context.Context, arg db.ListProfitSharingConfigAuditsParams) ([]db.ProfitSharingConfigAudit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingConfigAudits", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingConfigAudit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingConfigAudits indicates an expected call of ListProfitSharingConfigAudits.
+func (mr *MockStoreMockRecorder) ListProfitSharingConfigAudits(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingConfigAudits", reflect.TypeOf((*MockStore)(nil).ListProfitSharingConfigAudits), ctx, arg)
+}
+
+// ListProfitSharingConfigs mocks base method.
+func (m *MockStore) ListProfitSharingConfigs(ctx context.Context, arg db.ListProfitSharingConfigsParams) ([]db.ProfitSharingConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingConfigs", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingConfigs indicates an expected call of ListProfitSharingConfigs.
+func (mr *MockStoreMockRecorder) ListProfitSharingConfigs(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingConfigs", reflect.TypeOf((*MockStore)(nil).ListProfitSharingConfigs), ctx, arg)
+}
+
+// ListProfitSharingConfigsForRegion mocks base method.
+func (m *MockStore) ListProfitSharingConfigsForRegion(ctx context.Context, arg db.ListProfitSharingConfigsForRegionParams) ([]db.ProfitSharingConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingConfigsForRegion", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingConfigsForRegion indicates an expected call of ListProfitSharingConfigsForRegion.
+func (mr *MockStoreMockRecorder) ListProfitSharingConfigsForRegion(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingConfigsForRegion", reflect.TypeOf((*MockStore)(nil).ListProfitSharingConfigsForRegion), ctx, arg)
+}
+
 // ListProfitSharingOrdersByMerchant mocks base method.
 func (m *MockStore) ListProfitSharingOrdersByMerchant(ctx context.Context, arg db.ListProfitSharingOrdersByMerchantParams) ([]db.ProfitSharingOrder, error) {
 	m.ctrl.T.Helper()
@@ -11504,6 +11624,21 @@ func (m *MockStore) ListProfitSharingOrdersByStatus(ctx context.Context, arg db.
 func (mr *MockStoreMockRecorder) ListProfitSharingOrdersByStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingOrdersByStatus", reflect.TypeOf((*MockStore)(nil).ListProfitSharingOrdersByStatus), ctx, arg)
+}
+
+// ListProfitSharingOrdersForRetry mocks base method.
+func (m *MockStore) ListProfitSharingOrdersForRetry(ctx context.Context, arg db.ListProfitSharingOrdersForRetryParams) ([]db.ProfitSharingOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingOrdersForRetry", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingOrdersForRetry indicates an expected call of ListProfitSharingOrdersForRetry.
+func (mr *MockStoreMockRecorder) ListProfitSharingOrdersForRetry(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingOrdersForRetry", reflect.TypeOf((*MockStore)(nil).ListProfitSharingOrdersForRetry), ctx, arg)
 }
 
 // ListRecentWeatherCoefficients mocks base method.
@@ -13489,6 +13624,20 @@ func (mr *MockStoreMockRecorder) SetPrimaryTableImage(ctx, tableID any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPrimaryTableImage", reflect.TypeOf((*MockStore)(nil).SetPrimaryTableImage), ctx, tableID)
 }
 
+// SetProfitSharingAuditActor mocks base method.
+func (m *MockStore) SetProfitSharingAuditActor(ctx context.Context, arg db.SetProfitSharingAuditActorParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetProfitSharingAuditActor", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetProfitSharingAuditActor indicates an expected call of SetProfitSharingAuditActor.
+func (mr *MockStoreMockRecorder) SetProfitSharingAuditActor(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetProfitSharingAuditActor", reflect.TypeOf((*MockStore)(nil).SetProfitSharingAuditActor), ctx, arg)
+}
+
 // SetTableImagePrimary mocks base method.
 func (m *MockStore) SetTableImagePrimary(ctx context.Context, id int64) (db.TableImage, error) {
 	m.ctrl.T.Helper()
@@ -15280,6 +15429,66 @@ func (m *MockStore) UpdatePrintLogStatus(ctx context.Context, arg db.UpdatePrint
 func (mr *MockStoreMockRecorder) UpdatePrintLogStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePrintLogStatus", reflect.TypeOf((*MockStore)(nil).UpdatePrintLogStatus), ctx, arg)
+}
+
+// UpdateProfitSharingConfig mocks base method.
+func (m *MockStore) UpdateProfitSharingConfig(ctx context.Context, arg db.UpdateProfitSharingConfigParams) (db.ProfitSharingConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfitSharingConfig", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfitSharingConfig indicates an expected call of UpdateProfitSharingConfig.
+func (mr *MockStoreMockRecorder) UpdateProfitSharingConfig(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingConfig", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingConfig), ctx, arg)
+}
+
+// UpdateProfitSharingConfigStatus mocks base method.
+func (m *MockStore) UpdateProfitSharingConfigStatus(ctx context.Context, arg db.UpdateProfitSharingConfigStatusParams) (db.ProfitSharingConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfitSharingConfigStatus", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfitSharingConfigStatus indicates an expected call of UpdateProfitSharingConfigStatus.
+func (mr *MockStoreMockRecorder) UpdateProfitSharingConfigStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingConfigStatus", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingConfigStatus), ctx, arg)
+}
+
+// UpdateProfitSharingConfigStatusTx mocks base method.
+func (m *MockStore) UpdateProfitSharingConfigStatusTx(ctx context.Context, arg db.UpdateProfitSharingConfigStatusTxParams) (db.UpdateProfitSharingConfigStatusTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfitSharingConfigStatusTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateProfitSharingConfigStatusTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfitSharingConfigStatusTx indicates an expected call of UpdateProfitSharingConfigStatusTx.
+func (mr *MockStoreMockRecorder) UpdateProfitSharingConfigStatusTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingConfigStatusTx", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingConfigStatusTx), ctx, arg)
+}
+
+// UpdateProfitSharingConfigTx mocks base method.
+func (m *MockStore) UpdateProfitSharingConfigTx(ctx context.Context, arg db.UpdateProfitSharingConfigTxParams) (db.UpdateProfitSharingConfigTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfitSharingConfigTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateProfitSharingConfigTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfitSharingConfigTx indicates an expected call of UpdateProfitSharingConfigTx.
+func (mr *MockStoreMockRecorder) UpdateProfitSharingConfigTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingConfigTx", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingConfigTx), ctx, arg)
 }
 
 // UpdateProfitSharingOrderToFailed mocks base method.

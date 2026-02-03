@@ -805,41 +805,55 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	// 获取运营商信息（根据配送地址所在区域）
 	var operator db.Operator
 	var hasOperator bool
-	var operatorCommission int64 = 0
-	var platformCommission int64 = 0
-	var merchantAmount = order.TotalAmount
+	regionID := merchant.RegionID
+	var operatorCommission int64
+	var platformCommission int64
+	merchantAmount := order.TotalAmount
 
-	// 只有外卖和预定才需要分账，堂食/打包商户全额收款
-	needProfitSharing := order.OrderType == "takeout" || order.OrderType == "reservation"
-
-	if needProfitSharing {
-		// 获取配送地址的区域ID
-		var regionID int64
-		if order.AddressID.Valid {
-			address, err := processor.store.GetUserAddress(ctx, order.AddressID.Int64)
-			if err == nil {
-				regionID = address.RegionID
-			}
-		}
-
-		// 查找运营商
-		if regionID > 0 {
-			op, err := processor.store.GetOperatorByRegion(ctx, regionID)
-			if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-				return fmt.Errorf("get operator: %w", err)
-			}
-
-			if err == nil {
-				operator = op
-				hasOperator = true
-				// 计算分账金额（单位：分）
-				// 平台 2%, 运营商 3%, 商户 95%
-				platformCommission = order.TotalAmount * 2 / 100
-				operatorCommission = order.TotalAmount * 3 / 100
-				merchantAmount = order.TotalAmount - platformCommission - operatorCommission
-			}
+	// 获取配送地址的区域ID（优先使用配送地址，否则回退商户区域）
+	if order.AddressID.Valid {
+		address, err := processor.store.GetUserAddress(ctx, order.AddressID.Int64)
+		if err == nil && address.RegionID > 0 {
+			regionID = address.RegionID
 		}
 	}
+
+	config, err := processor.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+		OrderSource: order.OrderType,
+		MerchantID:  pgtype.Int8{Int64: order.MerchantID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: regionID, Valid: regionID > 0},
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return fmt.Errorf("profit sharing config not found: %w", asynq.SkipRetry)
+		}
+		return fmt.Errorf("get profit sharing config: %w", err)
+	}
+
+	platformRate := config.PlatformRate
+	operatorRate := config.OperatorRate
+	riderEnabled := config.RiderEnabled
+
+	// 查找运营商
+	if regionID > 0 {
+		op, err := processor.store.GetOperatorByRegion(ctx, regionID)
+		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+			return fmt.Errorf("get operator: %w", err)
+		}
+
+		if err == nil {
+			operator = op
+			hasOperator = true
+		}
+	}
+
+	// 计算分账金额（单位：分）
+	platformCommission = order.TotalAmount * int64(platformRate) / 100
+	if hasOperator {
+		operatorCommission = order.TotalAmount * int64(operatorRate) / 100
+	}
+	merchantAmount = order.TotalAmount - platformCommission - operatorCommission
+	needProfitSharing := platformCommission > 0 || operatorCommission > 0
 
 	// 若已有分账记录，复用并尝试重试
 	existingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, payload.PaymentOrderID)
@@ -879,16 +893,27 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			operatorID = pgtype.Int8{Int64: operator.ID, Valid: true}
 		}
 
+		riderAmount := int64(0)
+		if riderEnabled && order.DeliveryFee > 0 {
+			riderAmount = order.DeliveryFee
+		}
 		profitSharingOrder, err = processor.store.CreateProfitSharingOrder(ctx, db.CreateProfitSharingOrderParams{
-			PaymentOrderID:     payload.PaymentOrderID,
-			MerchantID:         order.MerchantID,
-			OperatorID:         operatorID,
-			OrderSource:        order.OrderType,
-			TotalAmount:        order.TotalAmount,
-			PlatformCommission: platformCommission,
-			OperatorCommission: operatorCommission,
-			MerchantAmount:     merchantAmount,
-			OutOrderNo:         outOrderNo,
+			PaymentOrderID:      payload.PaymentOrderID,
+			MerchantID:          order.MerchantID,
+			OperatorID:          operatorID,
+			OrderSource:         order.OrderType,
+			TotalAmount:         order.TotalAmount,
+			DeliveryFee:         order.DeliveryFee,
+			RiderID:             pgtype.Int8{},
+			RiderAmount:         riderAmount,
+			DistributableAmount: order.TotalAmount,
+			PlatformRate:        platformRate,
+			OperatorRate:        operatorRate,
+			PlatformCommission:  platformCommission,
+			OperatorCommission:  operatorCommission,
+			MerchantAmount:      merchantAmount,
+			OutOrderNo:          outOrderNo,
+			Status:              "pending",
 		})
 		if err != nil {
 			return fmt.Errorf("create profit sharing order: %w", err)
@@ -902,6 +927,8 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		Int64("platform_commission", platformCommission).
 		Int64("operator_commission", operatorCommission).
 		Int64("merchant_amount", merchantAmount).
+		Int32("platform_rate", platformRate).
+		Int32("operator_rate", operatorRate).
 		Bool("need_profit_sharing", needProfitSharing).
 		Msg("profit sharing order created")
 

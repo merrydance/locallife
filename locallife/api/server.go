@@ -952,6 +952,7 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
+		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
 
 		operatorRulesProxyGroup := operatorsGroup.Group("/rules")
 		{
@@ -973,6 +974,9 @@ func (server *Server) setupRouter() {
 	{
 		platformStatsGroup.GET("/overview", server.getPlatformOverview)
 		platformStatsGroup.GET("/daily", server.getPlatformDailyStats)
+		platformStatsGroup.GET("/profit-sharing/reconciliation", server.getPlatformProfitSharingReconciliation)
+		platformStatsGroup.GET("/profit-sharing/sla", server.getPlatformProfitSharingSlaSummary)
+		platformStatsGroup.GET("/profit-sharing/config-audits", server.getPlatformProfitSharingConfigAudits)
 		platformStatsGroup.GET("/regions/compare", server.getRegionComparison)
 		platformStatsGroup.GET("/merchants/ranking", server.getMerchantRanking)
 		platformStatsGroup.GET("/categories", server.getCategoryStats)
@@ -981,6 +985,16 @@ func (server *Server) setupRouter() {
 		platformStatsGroup.GET("/riders/ranking", server.getRiderRanking)
 		platformStatsGroup.GET("/hourly", server.getHourlyDistribution)
 		platformStatsGroup.GET("/realtime", server.getRealtimeDashboard)
+	}
+
+	// 平台分账规则配置（管理）
+	platformProfitSharingGroup := authGroup.Group("/platform/profit-sharing")
+	platformProfitSharingGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		platformProfitSharingGroup.POST("/configs", server.createProfitSharingConfig)
+		platformProfitSharingGroup.GET("/configs", server.listProfitSharingConfigs)
+		platformProfitSharingGroup.PATCH("/configs/:id", server.updateProfitSharingConfig)
+		platformProfitSharingGroup.POST("/configs/:id/disable", server.disableProfitSharingConfig)
 	}
 
 	platformRulesGroup := authGroup.Group("/platform/rules")

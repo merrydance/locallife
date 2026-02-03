@@ -28,6 +28,11 @@ g, rider, customer
 # Platform Statistics
 p, admin, /v1/platform/stats/*, GET
 
+# Platform Profit Sharing Configs
+p, admin, /v1/platform/profit-sharing/*, GET
+p, admin, /v1/platform/profit-sharing/*, POST
+p, admin, /v1/platform/profit-sharing/*, PATCH
+
 # Rider Management
 p, admin, /v1/admin/riders, GET
 p, admin, /v1/admin/riders/:rider_id/approve, POST
@@ -90,6 +95,7 @@ p, operator, /v1/operator/reports/safety, POST
 p, operator, /v1/operators/me/finance/overview, GET
 p, operator, /v1/operators/me/commission, GET
 p, operator, /v1/operators/me/finance/withdraw, POST
+p, operator, /v1/operators/me/profit-sharing/configs, GET
 
 # Operator Ecommerce Applyment (WeChat Secondary Merchant)
 p, operator, /v1/operator/applyment/bindbank, POST

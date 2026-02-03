@@ -347,6 +347,7 @@ type Querier interface {
 	// ==============================
 	CreatePlatformConfig(ctx context.Context, arg CreatePlatformConfigParams) (PlatformConfig, error)
 	CreatePrintLog(ctx context.Context, arg CreatePrintLogParams) (PrintLog, error)
+	CreateProfitSharingConfig(ctx context.Context, arg CreateProfitSharingConfigParams) (ProfitSharingConfig, error)
 	CreateProfitSharingOrder(ctx context.Context, arg CreateProfitSharingOrderParams) (ProfitSharingOrder, error)
 	// 简化版创建（不含骑手分账，用于堂食/自提订单）
 	CreateProfitSharingOrderSimple(ctx context.Context, arg CreateProfitSharingOrderSimpleParams) (ProfitSharingOrder, error)
@@ -481,6 +482,8 @@ type Querier interface {
 	GetActiveFoodSafetyIncidents(ctx context.Context, limit int32) ([]FoodSafetyIncident, error)
 	// 根据区域获取运营商（通过operator_regions表，支持多区域）
 	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
+	// Phase2: 分账规则配置查询（草案）
+	GetActiveProfitSharingConfig(ctx context.Context, arg GetActiveProfitSharingConfigParams) (ProfitSharingConfig, error)
 	GetActiveRecommendConfig(ctx context.Context) (RecommendConfig, error)
 	// 获取申诉详情
 	GetAppeal(ctx context.Context, id int64) (Appeal, error)
@@ -782,6 +785,8 @@ type Querier interface {
 	GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrderNo string) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (ProfitSharingOrder, error)
 	GetProfitSharingOrderForUpdate(ctx context.Context, id int64) (ProfitSharingOrder, error)
+	GetProfitSharingReconciliationSummary(ctx context.Context, arg GetProfitSharingReconciliationSummaryParams) ([]GetProfitSharingReconciliationSummaryRow, error)
+	GetProfitSharingSlaSummary(ctx context.Context, arg GetProfitSharingSlaSummaryParams) (GetProfitSharingSlaSummaryRow, error)
 	// 获取无投诉的高质量菜品ID列表
 	// 条件: 销量>=指定阈值, 近30天无投诉, 商户无食品安全事故
 	GetQualityDishIDs(ctx context.Context, quantity int16) ([]int64, error)
@@ -1158,9 +1163,13 @@ type Querier interface {
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)
+	ListProfitSharingConfigAudits(ctx context.Context, arg ListProfitSharingConfigAuditsParams) ([]ProfitSharingConfigAudit, error)
+	ListProfitSharingConfigs(ctx context.Context, arg ListProfitSharingConfigsParams) ([]ProfitSharingConfig, error)
+	ListProfitSharingConfigsForRegion(ctx context.Context, arg ListProfitSharingConfigsForRegionParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingOrdersByMerchant(ctx context.Context, arg ListProfitSharingOrdersByMerchantParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByOperator(ctx context.Context, arg ListProfitSharingOrdersByOperatorParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByStatus(ctx context.Context, arg ListProfitSharingOrdersByStatusParams) ([]ProfitSharingOrder, error)
+	ListProfitSharingOrdersForRetry(ctx context.Context, arg ListProfitSharingOrdersForRetryParams) ([]ProfitSharingOrder, error)
 	ListRecentWeatherCoefficients(ctx context.Context, arg ListRecentWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListRecommendConfigs(ctx context.Context) ([]RecommendConfig, error)
 	ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]RefundOrder, error)
@@ -1328,6 +1337,7 @@ type Querier interface {
 	SetOperatorWallet(ctx context.Context, arg SetOperatorWalletParams) error
 	// 先清除所有主图标记，再设置新的主图
 	SetPrimaryTableImage(ctx context.Context, tableID int64) error
+	SetProfitSharingAuditActor(ctx context.Context, arg SetProfitSharingAuditActorParams) error
 	SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error)
 	// 设置用户需要提交证据
 	SetUserRequiresEvidence(ctx context.Context, arg SetUserRequiresEvidenceParams) error
@@ -1470,6 +1480,8 @@ type Querier interface {
 	UpdatePaymentOrderToRefunded(ctx context.Context, id int64) (PaymentOrder, error)
 	UpdatePeakHourConfig(ctx context.Context, arg UpdatePeakHourConfigParams) (PeakHourConfig, error)
 	UpdatePrintLogStatus(ctx context.Context, arg UpdatePrintLogStatusParams) (PrintLog, error)
+	UpdateProfitSharingConfig(ctx context.Context, arg UpdateProfitSharingConfigParams) (ProfitSharingConfig, error)
+	UpdateProfitSharingConfigStatus(ctx context.Context, arg UpdateProfitSharingConfigStatusParams) (ProfitSharingConfig, error)
 	UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFinished(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToProcessing(ctx context.Context, arg UpdateProfitSharingOrderToProcessingParams) (ProfitSharingOrder, error)

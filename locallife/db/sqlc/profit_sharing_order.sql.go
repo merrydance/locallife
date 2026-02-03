@@ -606,6 +606,98 @@ func (q *Queries) GetProfitSharingOrderForUpdate(ctx context.Context, id int64) 
 	return i, err
 }
 
+const getProfitSharingReconciliationSummary = `-- name: GetProfitSharingReconciliationSummary :many
+SELECT
+    status,
+    COUNT(*) as total_orders,
+    COALESCE(SUM(total_amount), 0)::bigint as total_amount,
+    COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
+    COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
+FROM profit_sharing_orders
+WHERE created_at >= $1 AND created_at <= $2
+GROUP BY status
+ORDER BY status
+`
+
+type GetProfitSharingReconciliationSummaryParams struct {
+	CreatedAt   time.Time `json:"created_at"`
+	CreatedAt_2 time.Time `json:"created_at_2"`
+}
+
+type GetProfitSharingReconciliationSummaryRow struct {
+	Status                  string `json:"status"`
+	TotalOrders             int64  `json:"total_orders"`
+	TotalAmount             int64  `json:"total_amount"`
+	TotalPlatformCommission int64  `json:"total_platform_commission"`
+	TotalOperatorCommission int64  `json:"total_operator_commission"`
+}
+
+func (q *Queries) GetProfitSharingReconciliationSummary(ctx context.Context, arg GetProfitSharingReconciliationSummaryParams) ([]GetProfitSharingReconciliationSummaryRow, error) {
+	rows, err := q.db.Query(ctx, getProfitSharingReconciliationSummary, arg.CreatedAt, arg.CreatedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetProfitSharingReconciliationSummaryRow{}
+	for rows.Next() {
+		var i GetProfitSharingReconciliationSummaryRow
+		if err := rows.Scan(
+			&i.Status,
+			&i.TotalOrders,
+			&i.TotalAmount,
+			&i.TotalPlatformCommission,
+			&i.TotalOperatorCommission,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getProfitSharingSlaSummary = `-- name: GetProfitSharingSlaSummary :one
+SELECT
+  COUNT(*) as total_orders,
+  COUNT(*) FILTER (WHERE status = 'finished') as finished_orders,
+  COUNT(*) FILTER (WHERE status = 'failed') as failed_orders,
+  COUNT(*) FILTER (WHERE status IN ('pending', 'processing')) as pending_orders,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as avg_finish_seconds,
+  COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as p95_finish_seconds
+FROM profit_sharing_orders
+WHERE created_at >= $1 AND created_at <= $2
+`
+
+type GetProfitSharingSlaSummaryParams struct {
+	CreatedAt   time.Time `json:"created_at"`
+	CreatedAt_2 time.Time `json:"created_at_2"`
+}
+
+type GetProfitSharingSlaSummaryRow struct {
+	TotalOrders      int64 `json:"total_orders"`
+	FinishedOrders   int64 `json:"finished_orders"`
+	FailedOrders     int64 `json:"failed_orders"`
+	PendingOrders    int64 `json:"pending_orders"`
+	AvgFinishSeconds int64 `json:"avg_finish_seconds"`
+	P95FinishSeconds int64 `json:"p95_finish_seconds"`
+}
+
+func (q *Queries) GetProfitSharingSlaSummary(ctx context.Context, arg GetProfitSharingSlaSummaryParams) (GetProfitSharingSlaSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getProfitSharingSlaSummary, arg.CreatedAt, arg.CreatedAt_2)
+	var i GetProfitSharingSlaSummaryRow
+	err := row.Scan(
+		&i.TotalOrders,
+		&i.FinishedOrders,
+		&i.FailedOrders,
+		&i.PendingOrders,
+		&i.AvgFinishSeconds,
+		&i.P95FinishSeconds,
+	)
+	return i, err
+}
+
 const getRiderDailyIncome = `-- name: GetRiderDailyIncome :many
 SELECT 
     DATE(created_at) AS date,
@@ -1022,6 +1114,60 @@ type ListProfitSharingOrdersByStatusParams struct {
 
 func (q *Queries) ListProfitSharingOrdersByStatus(ctx context.Context, arg ListProfitSharingOrdersByStatusParams) ([]ProfitSharingOrder, error) {
 	rows, err := q.db.Query(ctx, listProfitSharingOrdersByStatus, arg.Status, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProfitSharingOrder{}
+	for rows.Next() {
+		var i ProfitSharingOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentOrderID,
+			&i.MerchantID,
+			&i.OperatorID,
+			&i.OrderSource,
+			&i.TotalAmount,
+			&i.PlatformCommission,
+			&i.OperatorCommission,
+			&i.MerchantAmount,
+			&i.OutOrderNo,
+			&i.SharingOrderID,
+			&i.Status,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.DeliveryFee,
+			&i.RiderID,
+			&i.RiderAmount,
+			&i.DistributableAmount,
+			&i.PlatformRate,
+			&i.OperatorRate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProfitSharingOrdersForRetry = `-- name: ListProfitSharingOrdersForRetry :many
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+WHERE status IN ('pending', 'failed', 'processing')
+  AND created_at <= $1
+ORDER BY created_at ASC
+LIMIT $2
+`
+
+type ListProfitSharingOrdersForRetryParams struct {
+	CreatedAt time.Time `json:"created_at"`
+	Limit     int32     `json:"limit"`
+}
+
+func (q *Queries) ListProfitSharingOrdersForRetry(ctx context.Context, arg ListProfitSharingOrdersForRetryParams) ([]ProfitSharingOrder, error) {
+	rows, err := q.db.Query(ctx, listProfitSharingOrdersForRetry, arg.CreatedAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

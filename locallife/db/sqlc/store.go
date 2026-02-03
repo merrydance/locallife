@@ -79,6 +79,10 @@ type Store interface {
 	ApproveGroupJoinRequestTx(ctx context.Context, arg ApproveGroupJoinRequestTxParams) (ApproveGroupJoinRequestTxResult, error)
 	// Operator transactions
 	WithdrawOperatorTx(ctx context.Context, arg WithdrawOperatorTxParams) (WithdrawOperatorTxResult, error)
+	// Profit sharing config transactions
+	CreateProfitSharingConfigTx(ctx context.Context, arg CreateProfitSharingConfigTxParams) (CreateProfitSharingConfigTxResult, error)
+	UpdateProfitSharingConfigTx(ctx context.Context, arg UpdateProfitSharingConfigTxParams) (UpdateProfitSharingConfigTxResult, error)
+	UpdateProfitSharingConfigStatusTx(ctx context.Context, arg UpdateProfitSharingConfigStatusTxParams) (UpdateProfitSharingConfigStatusTxResult, error)
 }
 
 // SQLStore provides all functions to execute SQL queries and transactions

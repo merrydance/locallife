@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -160,6 +162,262 @@ func (server *Server) getPlatformDailyStats(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, result)
+}
+
+// ==================== 分账对账汇总 ====================
+
+type platformProfitSharingReconciliationRow struct {
+	Status                  string `json:"status"`
+	TotalOrders             int64  `json:"total_orders"`
+	TotalAmount             int64  `json:"total_amount"`
+	TotalPlatformCommission int64  `json:"total_platform_commission"`
+	TotalOperatorCommission int64  `json:"total_operator_commission"`
+}
+
+// getPlatformProfitSharingReconciliation 获取分账对账汇总
+// @Summary 获取分账对账汇总
+// @Description 获取指定时间范围内分账订单的对账汇总数据，按状态汇总订单数与金额
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param start_date query string true "开始日期 (格式: 2025-01-01)"
+// @Param end_date query string true "结束日期 (格式: 2025-01-31)"
+// @Security BearerAuth
+// @Success 200 {array} platformProfitSharingReconciliationRow "分账对账汇总"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /platform/stats/profit-sharing/reconciliation [get]
+func (server *Server) getPlatformProfitSharingReconciliation(ctx *gin.Context) {
+	var req getPlatformOverviewRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
+
+	rows, err := server.store.GetProfitSharingReconciliationSummary(ctx, db.GetProfitSharingReconciliationSummaryParams{
+		CreatedAt:   startDate,
+		CreatedAt_2: endDate,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_profit_sharing_reconciliation_viewed",
+		TargetType:  "profit_sharing_orders",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
+
+	result := make([]platformProfitSharingReconciliationRow, len(rows))
+	for i, row := range rows {
+		result[i] = platformProfitSharingReconciliationRow{
+			Status:                  row.Status,
+			TotalOrders:             row.TotalOrders,
+			TotalAmount:             row.TotalAmount,
+			TotalPlatformCommission: row.TotalPlatformCommission,
+			TotalOperatorCommission: row.TotalOperatorCommission,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, result)
+}
+
+// ==================== 分账 SLA 汇总 ====================
+
+type platformProfitSharingSlaSummaryResponse struct {
+	TotalOrders      int64 `json:"total_orders"`
+	FinishedOrders   int64 `json:"finished_orders"`
+	FailedOrders     int64 `json:"failed_orders"`
+	PendingOrders    int64 `json:"pending_orders"`
+	AvgFinishSeconds int64 `json:"avg_finish_seconds"`
+	P95FinishSeconds int64 `json:"p95_finish_seconds"`
+}
+
+// getPlatformProfitSharingSlaSummary 获取分账 SLA 汇总
+// @Summary 获取分账 SLA 汇总
+// @Description 获取指定时间范围内分账处理 SLA 统计（完成/失败/待处理与处理耗时）
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param start_date query string true "开始日期 (格式: 2025-01-01)"
+// @Param end_date query string true "结束日期 (格式: 2025-01-31)"
+// @Security BearerAuth
+// @Success 200 {object} platformProfitSharingSlaSummaryResponse "分账 SLA 汇总"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /platform/stats/profit-sharing/sla [get]
+func (server *Server) getPlatformProfitSharingSlaSummary(ctx *gin.Context) {
+	var req getPlatformOverviewRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
+
+	stats, err := server.store.GetProfitSharingSlaSummary(ctx, db.GetProfitSharingSlaSummaryParams{
+		CreatedAt:   startDate,
+		CreatedAt_2: endDate,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_profit_sharing_sla_viewed",
+		TargetType:  "profit_sharing_orders",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, platformProfitSharingSlaSummaryResponse{
+		TotalOrders:      stats.TotalOrders,
+		FinishedOrders:   stats.FinishedOrders,
+		FailedOrders:     stats.FailedOrders,
+		PendingOrders:    stats.PendingOrders,
+		AvgFinishSeconds: stats.AvgFinishSeconds,
+		P95FinishSeconds: stats.P95FinishSeconds,
+	})
+}
+
+// ==================== 分账规则审计 ====================
+
+type listProfitSharingConfigAuditsRequest struct {
+	ConfigID int64 `form:"config_id"`
+	Page     int32 `form:"page" binding:"omitempty,min=1"`
+	Limit    int32 `form:"limit" binding:"omitempty,min=1,max=200"`
+}
+
+type profitSharingConfigAuditItem struct {
+	ID        int64           `json:"id"`
+	ConfigID  int64           `json:"config_id"`
+	Action    string          `json:"action"`
+	ActorID   *int64          `json:"actor_id,omitempty"`
+	ActorRole *string         `json:"actor_role,omitempty"`
+	Detail    json.RawMessage `json:"detail"`
+	CreatedAt string          `json:"created_at"`
+}
+
+type listProfitSharingConfigAuditsResponse struct {
+	Items []profitSharingConfigAuditItem `json:"items"`
+	Page  int32                          `json:"page"`
+	Limit int32                          `json:"limit"`
+}
+
+// getPlatformProfitSharingConfigAudits 获取分账规则审计记录
+// @Summary 获取分账规则审计记录
+// @Description 获取分账规则配置的审计记录，支持按配置ID过滤
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param config_id query int false "配置ID"
+// @Param page query int false "页码" default(1) minimum(1)
+// @Param limit query int false "每页数量" default(20) minimum(1) maximum(200)
+// @Security BearerAuth
+// @Success 200 {object} listProfitSharingConfigAuditsResponse "审计记录列表"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /platform/stats/profit-sharing/config-audits [get]
+func (server *Server) getPlatformProfitSharingConfigAudits(ctx *gin.Context) {
+	var req listProfitSharingConfigAuditsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+
+	items, err := server.store.ListProfitSharingConfigAudits(ctx, db.ListProfitSharingConfigAuditsParams{
+		Column1: req.ConfigID,
+		Limit:   req.Limit,
+		Offset:  pageOffset(req.Page, req.Limit),
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, auditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_profit_sharing_config_audits_viewed",
+		TargetType:  "profit_sharing_configs",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"config_id": req.ConfigID,
+			"page":      req.Page,
+			"limit":     req.Limit,
+		},
+	})
+
+	responseItems := make([]profitSharingConfigAuditItem, len(items))
+	for i, item := range items {
+		var actorID *int64
+		if item.ActorID.Valid {
+			actorID = &item.ActorID.Int64
+		}
+		var actorRole *string
+		if item.ActorRole.Valid {
+			role := item.ActorRole.String
+			actorRole = &role
+		}
+		responseItems[i] = profitSharingConfigAuditItem{
+			ID:        item.ID,
+			ConfigID:  item.ConfigID,
+			Action:    item.Action,
+			ActorID:   actorID,
+			ActorRole: actorRole,
+			Detail:    json.RawMessage(item.Detail),
+			CreatedAt: item.CreatedAt.Format(time.RFC3339),
+		}
+	}
+
+	ctx.JSON(http.StatusOK, listProfitSharingConfigAuditsResponse{
+		Items: responseItems,
+		Page:  req.Page,
+		Limit: req.Limit,
+	})
 }
 
 // ==================== 区域对比分析 ====================

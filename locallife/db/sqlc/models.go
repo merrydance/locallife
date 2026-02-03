@@ -1197,6 +1197,35 @@ type PrintLog struct {
 	CreatedAt    time.Time          `json:"created_at"`
 }
 
+// 分账规则配置表（Phase2 草案）
+type ProfitSharingConfig struct {
+	ID           int64              `json:"id"`
+	Status       string             `json:"status"`
+	OrderSource  string             `json:"order_source"`
+	RegionID     pgtype.Int8        `json:"region_id"`
+	MerchantID   pgtype.Int8        `json:"merchant_id"`
+	PlatformRate int32              `json:"platform_rate"`
+	OperatorRate int32              `json:"operator_rate"`
+	RiderEnabled bool               `json:"rider_enabled"`
+	Priority     int32              `json:"priority"`
+	EffectiveAt  pgtype.Timestamptz `json:"effective_at"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy    pgtype.Int8        `json:"created_by"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+}
+
+// 分账规则配置审计表（Phase2 草案）
+type ProfitSharingConfigAudit struct {
+	ID        int64       `json:"id"`
+	ConfigID  int64       `json:"config_id"`
+	Action    string      `json:"action"`
+	ActorID   pgtype.Int8 `json:"actor_id"`
+	ActorRole pgtype.Text `json:"actor_role"`
+	Detail    []byte      `json:"detail"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
 type ProfitSharingOrder struct {
 	ID                 int64              `json:"id"`
 	PaymentOrderID     int64              `json:"payment_order_id"`

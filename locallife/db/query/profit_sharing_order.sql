@@ -76,6 +76,36 @@ WHERE status = $1
 ORDER BY created_at
 LIMIT $2 OFFSET $3;
 
+-- name: ListProfitSharingOrdersForRetry :many
+SELECT * FROM profit_sharing_orders
+WHERE status IN ('pending', 'failed', 'processing')
+  AND created_at <= $1
+ORDER BY created_at ASC
+LIMIT $2;
+
+-- name: GetProfitSharingReconciliationSummary :many
+SELECT
+    status,
+    COUNT(*) as total_orders,
+    COALESCE(SUM(total_amount), 0)::bigint as total_amount,
+    COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
+    COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
+FROM profit_sharing_orders
+WHERE created_at >= $1 AND created_at <= $2
+GROUP BY status
+ORDER BY status;
+
+-- name: GetProfitSharingSlaSummary :one
+SELECT
+  COUNT(*) as total_orders,
+  COUNT(*) FILTER (WHERE status = 'finished') as finished_orders,
+  COUNT(*) FILTER (WHERE status = 'failed') as failed_orders,
+  COUNT(*) FILTER (WHERE status IN ('pending', 'processing')) as pending_orders,
+  COALESCE(AVG(EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as avg_finish_seconds,
+  COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as p95_finish_seconds
+FROM profit_sharing_orders
+WHERE created_at >= $1 AND created_at <= $2;
+
 -- name: UpdateProfitSharingOrderToProcessing :one
 UPDATE profit_sharing_orders
 SET

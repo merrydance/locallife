@@ -42,6 +42,9 @@ g, rider, customer
 
 # Admin policies
 p, admin, /v1/platform/stats/*, GET
+p, admin, /v1/platform/profit-sharing/*, GET
+p, admin, /v1/platform/profit-sharing/*, POST
+p, admin, /v1/platform/profit-sharing/*, PATCH
 p, admin, /v1/admin/*, GET
 p, admin, /v1/admin/*, POST
 p, admin, /v1/groups, POST

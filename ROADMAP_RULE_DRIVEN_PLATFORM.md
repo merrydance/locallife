@@ -160,11 +160,16 @@
 - [x] 运营商规则代理 API 草案与后端路由（2026-02-03）
 
 ### 阶段 2：支付分账闭环
-- [ ] 分账规则配置化（平台/运营商/商户/骑手比例与例外）
-- [ ] 分账失败重试与补偿任务
-- [ ] 分账结果对账与差错处理流程
-- [ ] 分账 SLA 与延迟监控指标
-- [ ] 分账规则审计与变更记录
+- [x] 分账规则配置化（平台/运营商/商户/骑手比例与例外）
+  - 草案： [locallife/docs/phase2/profit_sharing_rules.md](locallife/docs/phase2/profit_sharing_rules.md)
+- [x] 分账失败重试与补偿任务
+  - 草案： [locallife/docs/phase2/profit_sharing_recovery.md](locallife/docs/phase2/profit_sharing_recovery.md)
+- [x] 分账结果对账与差错处理流程
+  - 草案： [locallife/docs/phase2/profit_sharing_reconciliation.md](locallife/docs/phase2/profit_sharing_reconciliation.md)
+- [x] 分账 SLA 与延迟监控指标
+  - 草案： [locallife/docs/phase2/profit_sharing_sla.md](locallife/docs/phase2/profit_sharing_sla.md)
+- [x] 分账规则审计与变更记录
+  - 草案： [locallife/docs/phase2/profit_sharing_audit.md](locallife/docs/phase2/profit_sharing_audit.md)
 
 ### 阶段 3：异常订单裁决闭环
 - [ ] 索赔/异常裁决规则统一到规则引擎
