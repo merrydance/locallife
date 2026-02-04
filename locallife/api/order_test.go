@@ -47,58 +47,58 @@ func dishWithCustomizationsFromDish(dish db.Dish) db.GetDishWithCustomizationsRo
 
 func orderWithDetailsFromOrder(order db.Order) db.GetOrderWithDetailsRow {
 	return db.GetOrderWithDetailsRow{
-		ID:                  order.ID,
-		OrderNo:             order.OrderNo,
-		UserID:              order.UserID,
-		MerchantID:          order.MerchantID,
-		OrderType:           order.OrderType,
-		AddressID:           order.AddressID,
-		DeliveryFee:         order.DeliveryFee,
-		DeliveryDistance:    order.DeliveryDistance,
-		TableID:             order.TableID,
-		ReservationID:       order.ReservationID,
-		Subtotal:            order.Subtotal,
-		DiscountAmount:      order.DiscountAmount,
-		DeliveryFeeDiscount: order.DeliveryFeeDiscount,
-		TotalAmount:         order.TotalAmount,
-		Status:              order.Status,
-		PaymentMethod:       order.PaymentMethod,
-		PaidAt:              order.PaidAt,
-		Notes:               order.Notes,
-		CreatedAt:           order.CreatedAt,
-		UpdatedAt:           order.UpdatedAt,
-		CompletedAt:         order.CompletedAt,
-		CancelledAt:         order.CancelledAt,
-		CancelReason:        order.CancelReason,
-		FinalAmount:         order.FinalAmount,
-		PlatformCommission:  order.PlatformCommission,
-		UserVoucherID:       order.UserVoucherID,
-		VoucherAmount:       order.VoucherAmount,
-		BalancePaid:         order.BalancePaid,
-		MembershipID:        order.MembershipID,
-		FulfillmentStatus:   order.FulfillmentStatus,
-		ReplacedByOrderID:   order.ReplacedByOrderID,
-		PickupCode:          order.PickupCode,
-		DispatchOrderID:     order.DispatchOrderID,
-		FlowID:              order.FlowID,
-		StatusHint:          order.StatusHint,
-		Badges:              order.Badges,
-		ExceptionState:      order.ExceptionState,
-		ClaimChannel:        order.ClaimChannel,
-		Overtime:            order.Overtime,
-		PrepStartAt:         order.PrepStartAt,
-		ReadyAt:             order.ReadyAt,
-		CourierAcceptAt:     order.CourierAcceptAt,
-		PickedAt:            order.PickedAt,
-		RiderDeliveredAt:    order.RiderDeliveredAt,
-		UserDeliveredAt:     order.UserDeliveredAt,
-		AutoUserDeliveredAt: order.AutoUserDeliveredAt,
-		MerchantName:        "",
-		MerchantPhone:       "",
-		MerchantAddress:     "",
-		DeliveryContactName: pgtype.Text{},
+		ID:                   order.ID,
+		OrderNo:              order.OrderNo,
+		UserID:               order.UserID,
+		MerchantID:           order.MerchantID,
+		OrderType:            order.OrderType,
+		AddressID:            order.AddressID,
+		DeliveryFee:          order.DeliveryFee,
+		DeliveryDistance:     order.DeliveryDistance,
+		TableID:              order.TableID,
+		ReservationID:        order.ReservationID,
+		Subtotal:             order.Subtotal,
+		DiscountAmount:       order.DiscountAmount,
+		DeliveryFeeDiscount:  order.DeliveryFeeDiscount,
+		TotalAmount:          order.TotalAmount,
+		Status:               order.Status,
+		PaymentMethod:        order.PaymentMethod,
+		PaidAt:               order.PaidAt,
+		Notes:                order.Notes,
+		CreatedAt:            order.CreatedAt,
+		UpdatedAt:            order.UpdatedAt,
+		CompletedAt:          order.CompletedAt,
+		CancelledAt:          order.CancelledAt,
+		CancelReason:         order.CancelReason,
+		FinalAmount:          order.FinalAmount,
+		PlatformCommission:   order.PlatformCommission,
+		UserVoucherID:        order.UserVoucherID,
+		VoucherAmount:        order.VoucherAmount,
+		BalancePaid:          order.BalancePaid,
+		MembershipID:         order.MembershipID,
+		FulfillmentStatus:    order.FulfillmentStatus,
+		ReplacedByOrderID:    order.ReplacedByOrderID,
+		PickupCode:           order.PickupCode,
+		DispatchOrderID:      order.DispatchOrderID,
+		FlowID:               order.FlowID,
+		StatusHint:           order.StatusHint,
+		Badges:               order.Badges,
+		ExceptionState:       order.ExceptionState,
+		ClaimChannel:         order.ClaimChannel,
+		Overtime:             order.Overtime,
+		PrepStartAt:          order.PrepStartAt,
+		ReadyAt:              order.ReadyAt,
+		CourierAcceptAt:      order.CourierAcceptAt,
+		PickedAt:             order.PickedAt,
+		RiderDeliveredAt:     order.RiderDeliveredAt,
+		UserDeliveredAt:      order.UserDeliveredAt,
+		AutoUserDeliveredAt:  order.AutoUserDeliveredAt,
+		MerchantName:         "",
+		MerchantPhone:        "",
+		MerchantAddress:      "",
+		DeliveryContactName:  pgtype.Text{},
 		DeliveryContactPhone: pgtype.Text{},
-		DeliveryAddress:     pgtype.Text{},
+		DeliveryAddress:      pgtype.Text{},
 	}
 }
 
@@ -145,12 +145,12 @@ func TestCreateOrderAPI(t *testing.T) {
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(recorder *httptest.ResponseRecorder)
 	}{
-			{
-				name: "DineInBillingGroupNotMember",
+		{
+			name: "DineInBillingGroupNotMember",
 			body: gin.H{
-				"merchant_id":     merchant.ID,
-				"order_type":      "dine_in",
-				"table_id":        table.ID,
+				"merchant_id":      merchant.ID,
+				"order_type":       "dine_in",
+				"table_id":         table.ID,
 				"billing_group_id": billingGroup.ID,
 				"items": []gin.H{
 					{
@@ -194,9 +194,9 @@ func TestCreateOrderAPI(t *testing.T) {
 		{
 			name: "DineInBillingGroupMismatch",
 			body: gin.H{
-				"merchant_id":     merchant.ID,
-				"order_type":      "dine_in",
-				"table_id":        table.ID,
+				"merchant_id":      merchant.ID,
+				"order_type":       "dine_in",
+				"table_id":         table.ID,
 				"billing_group_id": billingGroup.ID,
 				"items": []gin.H{
 					{
@@ -235,9 +235,9 @@ func TestCreateOrderAPI(t *testing.T) {
 		{
 			name: "DineInBillingGroupMemberOK",
 			body: gin.H{
-				"merchant_id":     merchant.ID,
-				"order_type":      "dine_in",
-				"table_id":        table.ID,
+				"merchant_id":      merchant.ID,
+				"order_type":       "dine_in",
+				"table_id":         table.ID,
 				"billing_group_id": billingGroup.ID,
 				"items": []gin.H{
 					{
@@ -1955,12 +1955,12 @@ func TestConfirmOrderAPI(t *testing.T) {
 					Times(1).
 					Return(deliveringOrder, nil)
 
-				userDeliveredOrder := order
-				userDeliveredOrder.Status = "user_delivered"
+				completedOrder := order
+				completedOrder.Status = "completed"
 				store.EXPECT().
-					UpdateOrderToUserDelivered(gomock.Any(), order.ID).
+					CompleteTakeoutOrderByUser(gomock.Any(), order.ID).
 					Times(1).
-					Return(userDeliveredOrder, nil)
+					Return(completedOrder, nil)
 				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -3982,14 +3982,14 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 							},
 						}, nil
 					})
-					store.EXPECT().
-						UpdateDiningSessionActiveOrder(gomock.Any(), gomock.Any()).
-						Times(1).
-						Return(session, nil)
-					store.EXPECT().
-						GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
-						Times(1).
-						Return(db.Cart{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					UpdateDiningSessionActiveOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(session, nil)
+				store.EXPECT().
+					GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -4189,7 +4189,7 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 		store.EXPECT().
 			GetCartByUserAndMerchant(gomock.Any(), gomock.Any()).
 			Times(1).
-					Return(db.Cart{}, db.ErrRecordNotFound)
+			Return(db.Cart{}, db.ErrRecordNotFound)
 
 		server := newTestServer(t, store)
 		recorder := httptest.NewRecorder()

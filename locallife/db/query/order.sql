@@ -206,6 +206,35 @@ SET
 WHERE id = $1 AND status IN ('rider_delivered', 'user_delivered')
 RETURNING *;
 
+-- name: CompleteTakeoutOrderByUser :one
+-- 用户点击完成（外卖）：直接进入 completed，并补齐 user_delivered_at
+UPDATE orders
+SET
+        status = 'completed',
+        fulfillment_status = 'completed',
+        user_delivered_at = COALESCE(user_delivered_at, now()),
+        completed_at = COALESCE(completed_at, now()),
+        updated_at = now()
+WHERE id = $1
+    AND order_type = 'takeout'
+    AND status IN ('rider_delivered', 'user_delivered')
+RETURNING *;
+
+-- name: AutoCompleteTakeoutOrder :one
+-- 系统自动完成（外卖）：1h 未手动完成且无索赔时触发，记录 auto_user_delivered_at
+UPDATE orders
+SET
+        status = 'completed',
+        fulfillment_status = 'completed',
+        user_delivered_at = COALESCE(user_delivered_at, now()),
+        auto_user_delivered_at = COALESCE(auto_user_delivered_at, now()),
+        completed_at = COALESCE(completed_at, now()),
+        updated_at = now()
+WHERE id = $1
+    AND order_type = 'takeout'
+    AND status IN ('rider_delivered', 'user_delivered')
+RETURNING *;
+
 -- name: UpdateOrderExceptionState :one
 UPDATE orders
 SET 
@@ -344,4 +373,15 @@ SELECT * FROM orders
 WHERE status = sqlc.arg('status')
   AND created_at < sqlc.arg('created_at')
 ORDER BY created_at ASC
+LIMIT sqlc.arg('limit');
+
+-- name: ListTakeoutOrdersDeliveredBefore :many
+-- 获取已送达但未完成超过一定时间的外卖订单（用于自动完成）
+SELECT * FROM orders
+WHERE order_type = 'takeout'
+    AND status IN ('rider_delivered', 'user_delivered')
+    AND rider_delivered_at IS NOT NULL
+    AND rider_delivered_at < sqlc.arg('delivered_before')
+    AND replaced_by_order_id IS NULL
+ORDER BY rider_delivered_at ASC
 LIMIT sqlc.arg('limit');

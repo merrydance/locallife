@@ -53,6 +53,8 @@ type Querier interface {
 	AssignDelivery(ctx context.Context, arg AssignDeliveryParams) (Delivery, error)
 	// 自动打烊（用于定时任务）
 	AutoCloseMerchants(ctx context.Context) ([]int64, error)
+	// 系统自动完成（外卖）：1h 未手动完成且无索赔时触发，记录 auto_user_delivered_at
+	AutoCompleteTakeoutOrder(ctx context.Context, id int64) (Order, error)
 	BackfillAbnormalStatsDaily(ctx context.Context, arg BackfillAbnormalStatsDailyParams) error
 	BatchCreateDailyInventory(ctx context.Context, arg []BatchCreateDailyInventoryParams) (int64, error)
 	BatchCreateOrderItems(ctx context.Context, arg []BatchCreateOrderItemsParams) (int64, error)
@@ -84,6 +86,8 @@ type Querier interface {
 	CloseDiningSession(ctx context.Context, id int64) (DiningSession, error)
 	// 批量关闭过期的 pending 支付订单
 	CloseExpiredPaymentOrders(ctx context.Context) (int64, error)
+	// 用户点击完成（外卖）：直接进入 completed，并补齐 user_delivered_at
+	CompleteTakeoutOrderByUser(ctx context.Context, id int64) (Order, error)
 	ConfirmFraudPattern(ctx context.Context, arg ConfirmFraudPatternParams) error
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
@@ -1251,6 +1255,8 @@ type Querier interface {
 	ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]Table, error)
 	ListTablesByTag(ctx context.Context, tagID int64) ([]Table, error)
 	ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, error)
+	// 获取已送达但未完成超过一定时间的外卖订单（用于自动完成）
+	ListTakeoutOrdersDeliveredBefore(ctx context.Context, arg ListTakeoutOrdersDeliveredBeforeParams) ([]Order, error)
 	// 获取今日预订列表
 	ListTodayReservationsByMerchant(ctx context.Context, merchantID int64) ([]ListTodayReservationsByMerchantRow, error)
 	ListUserActiveSessions(ctx context.Context, userID int64) ([]Session, error)

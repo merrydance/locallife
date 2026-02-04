@@ -2555,8 +2555,8 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 }
 
 // confirmOrder godoc
-// @Summary 确认收货
-// @Description 用户确认已收到订单（适用于外卖订单）
+// @Summary 确认收货并完成订单
+// @Description 用户确认已收到外卖订单，并将订单置为已完成（completed）
 // @Tags 订单管理
 // @Accept json
 // @Produce json
@@ -2603,13 +2603,20 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 		return
 	}
 
-	if order.Status != OrderStatusRiderDelivered {
+	// 已完成则幂等返回
+	if order.Status == OrderStatusCompleted {
+		ctx.JSON(http.StatusOK, newOrderResponse(order))
+		return
+	}
+
+	// 允许从 rider_delivered / user_delivered 进入 completed
+	if order.Status != OrderStatusRiderDelivered && order.Status != OrderStatusUserDelivered {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not ready for confirmation")))
 		return
 	}
 
-	// 更新订单状态为用户确认送达
-	updatedOrder, err := server.store.UpdateOrderToUserDelivered(ctx, order.ID)
+	// 更新订单状态为已完成（并补齐 user_delivered_at）
+	updatedOrder, err := server.store.CompleteTakeoutOrderByUser(ctx, order.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -2619,10 +2626,10 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 	_, _ = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
 		OrderID:      order.ID,
 		FromStatus:   pgtype.Text{String: order.Status, Valid: true},
-		ToStatus:     OrderStatusUserDelivered,
+		ToStatus:     OrderStatusCompleted,
 		OperatorID:   pgtype.Int8{Int64: authPayload.UserID, Valid: true},
 		OperatorType: pgtype.Text{String: "user", Valid: true},
-		Notes:        pgtype.Text{String: "用户确认收货", Valid: true},
+		Notes:        pgtype.Text{String: "用户确认收货并完成订单", Valid: true},
 	})
 
 	// 发送通知给商户和骑手
@@ -2646,6 +2653,20 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 			RelatedType: "order",
 			RelatedID:   order.ID,
 		})
+	}
+
+	// 完成触发分账（若是 profit_sharing）
+	if server.taskDistributor != nil {
+		po, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: "order",
+		})
+		if err == nil && po.Status == "paid" && po.PaymentType == "profit_sharing" {
+			_ = server.taskDistributor.DistributeTaskProcessProfitSharing(ctx, &worker.ProfitSharingPayload{
+				PaymentOrderID: po.ID,
+				OrderID:        order.ID,
+			})
+		}
 	}
 
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))

@@ -387,6 +387,21 @@ func (mr *MockStoreMockRecorder) AutoCloseMerchants(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AutoCloseMerchants", reflect.TypeOf((*MockStore)(nil).AutoCloseMerchants), ctx)
 }
 
+// AutoCompleteTakeoutOrder mocks base method.
+func (m *MockStore) AutoCompleteTakeoutOrder(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AutoCompleteTakeoutOrder", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AutoCompleteTakeoutOrder indicates an expected call of AutoCompleteTakeoutOrder.
+func (mr *MockStoreMockRecorder) AutoCompleteTakeoutOrder(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AutoCompleteTakeoutOrder", reflect.TypeOf((*MockStore)(nil).AutoCompleteTakeoutOrder), ctx, id)
+}
+
 // BackfillAbnormalStatsDaily mocks base method.
 func (m *MockStore) BackfillAbnormalStatsDaily(ctx context.Context, arg db.BackfillAbnormalStatsDailyParams) error {
 	m.ctrl.T.Helper()
@@ -830,6 +845,21 @@ func (m *MockStore) CompleteReservationTx(ctx context.Context, arg db.CompleteRe
 func (mr *MockStoreMockRecorder) CompleteReservationTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteReservationTx", reflect.TypeOf((*MockStore)(nil).CompleteReservationTx), ctx, arg)
+}
+
+// CompleteTakeoutOrderByUser mocks base method.
+func (m *MockStore) CompleteTakeoutOrderByUser(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteTakeoutOrderByUser", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteTakeoutOrderByUser indicates an expected call of CompleteTakeoutOrderByUser.
+func (mr *MockStoreMockRecorder) CompleteTakeoutOrderByUser(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTakeoutOrderByUser", reflect.TypeOf((*MockStore)(nil).CompleteTakeoutOrderByUser), ctx, id)
 }
 
 // ConfirmFraudPattern mocks base method.
@@ -12613,6 +12643,21 @@ func (m *MockStore) ListTags(ctx context.Context, arg db.ListTagsParams) ([]db.T
 func (mr *MockStoreMockRecorder) ListTags(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTags", reflect.TypeOf((*MockStore)(nil).ListTags), ctx, arg)
+}
+
+// ListTakeoutOrdersDeliveredBefore mocks base method.
+func (m *MockStore) ListTakeoutOrdersDeliveredBefore(ctx context.Context, arg db.ListTakeoutOrdersDeliveredBeforeParams) ([]db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTakeoutOrdersDeliveredBefore", ctx, arg)
+	ret0, _ := ret[0].([]db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTakeoutOrdersDeliveredBefore indicates an expected call of ListTakeoutOrdersDeliveredBefore.
+func (mr *MockStoreMockRecorder) ListTakeoutOrdersDeliveredBefore(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTakeoutOrdersDeliveredBefore", reflect.TypeOf((*MockStore)(nil).ListTakeoutOrdersDeliveredBefore), ctx, arg)
 }
 
 // ListTodayReservationsByMerchant mocks base method.

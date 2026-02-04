@@ -12,6 +12,147 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const autoCompleteTakeoutOrder = `-- name: AutoCompleteTakeoutOrder :one
+UPDATE orders
+SET
+        status = 'completed',
+        fulfillment_status = 'completed',
+        user_delivered_at = COALESCE(user_delivered_at, now()),
+        auto_user_delivered_at = COALESCE(auto_user_delivered_at, now()),
+        completed_at = COALESCE(completed_at, now()),
+        updated_at = now()
+WHERE id = $1
+    AND order_type = 'takeout'
+    AND status IN ('rider_delivered', 'user_delivered')
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+`
+
+// 系统自动完成（外卖）：1h 未手动完成且无索赔时触发，记录 auto_user_delivered_at
+func (q *Queries) AutoCompleteTakeoutOrder(ctx context.Context, id int64) (Order, error) {
+	row := q.db.QueryRow(ctx, autoCompleteTakeoutOrder, id)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.UserID,
+		&i.MerchantID,
+		&i.OrderType,
+		&i.AddressID,
+		&i.DeliveryFee,
+		&i.DeliveryDistance,
+		&i.TableID,
+		&i.ReservationID,
+		&i.Subtotal,
+		&i.DiscountAmount,
+		&i.DeliveryFeeDiscount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.PaymentMethod,
+		&i.PaidAt,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.FinalAmount,
+		&i.PlatformCommission,
+		&i.UserVoucherID,
+		&i.VoucherAmount,
+		&i.BalancePaid,
+		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
+		&i.PickupCode,
+		&i.DispatchOrderID,
+		&i.FlowID,
+		&i.StatusHint,
+		&i.Badges,
+		&i.ExceptionState,
+		&i.ClaimChannel,
+		&i.Overtime,
+		&i.PrepStartAt,
+		&i.ReadyAt,
+		&i.CourierAcceptAt,
+		&i.PickedAt,
+		&i.RiderDeliveredAt,
+		&i.UserDeliveredAt,
+		&i.AutoUserDeliveredAt,
+		&i.DeliveryDuration,
+	)
+	return i, err
+}
+
+const completeTakeoutOrderByUser = `-- name: CompleteTakeoutOrderByUser :one
+UPDATE orders
+SET
+        status = 'completed',
+        fulfillment_status = 'completed',
+        user_delivered_at = COALESCE(user_delivered_at, now()),
+        completed_at = COALESCE(completed_at, now()),
+        updated_at = now()
+WHERE id = $1
+    AND order_type = 'takeout'
+    AND status IN ('rider_delivered', 'user_delivered')
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+`
+
+// 用户点击完成（外卖）：直接进入 completed，并补齐 user_delivered_at
+func (q *Queries) CompleteTakeoutOrderByUser(ctx context.Context, id int64) (Order, error) {
+	row := q.db.QueryRow(ctx, completeTakeoutOrderByUser, id)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.UserID,
+		&i.MerchantID,
+		&i.OrderType,
+		&i.AddressID,
+		&i.DeliveryFee,
+		&i.DeliveryDistance,
+		&i.TableID,
+		&i.ReservationID,
+		&i.Subtotal,
+		&i.DiscountAmount,
+		&i.DeliveryFeeDiscount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.PaymentMethod,
+		&i.PaidAt,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.FinalAmount,
+		&i.PlatformCommission,
+		&i.UserVoucherID,
+		&i.VoucherAmount,
+		&i.BalancePaid,
+		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
+		&i.PickupCode,
+		&i.DispatchOrderID,
+		&i.FlowID,
+		&i.StatusHint,
+		&i.Badges,
+		&i.ExceptionState,
+		&i.ClaimChannel,
+		&i.Overtime,
+		&i.PrepStartAt,
+		&i.ReadyAt,
+		&i.CourierAcceptAt,
+		&i.PickedAt,
+		&i.RiderDeliveredAt,
+		&i.UserDeliveredAt,
+		&i.AutoUserDeliveredAt,
+		&i.DeliveryDuration,
+	)
+	return i, err
+}
+
 const countMerchantOrdersByStatusAfterTime = `-- name: CountMerchantOrdersByStatusAfterTime :one
 SELECT COUNT(*) FROM orders
 WHERE merchant_id = $1 
@@ -1637,6 +1778,91 @@ type ListPendingOrdersBeforeParams struct {
 // 获取超时未支付的 pending 订单（创建时间早于指定时间）
 func (q *Queries) ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error) {
 	rows, err := q.db.Query(ctx, listPendingOrdersBefore, arg.Status, arg.CreatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Order{}
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNo,
+			&i.UserID,
+			&i.MerchantID,
+			&i.OrderType,
+			&i.AddressID,
+			&i.DeliveryFee,
+			&i.DeliveryDistance,
+			&i.TableID,
+			&i.ReservationID,
+			&i.Subtotal,
+			&i.DiscountAmount,
+			&i.DeliveryFeeDiscount,
+			&i.TotalAmount,
+			&i.Status,
+			&i.PaymentMethod,
+			&i.PaidAt,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.CancelReason,
+			&i.FinalAmount,
+			&i.PlatformCommission,
+			&i.UserVoucherID,
+			&i.VoucherAmount,
+			&i.BalancePaid,
+			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
+			&i.PickupCode,
+			&i.DispatchOrderID,
+			&i.FlowID,
+			&i.StatusHint,
+			&i.Badges,
+			&i.ExceptionState,
+			&i.ClaimChannel,
+			&i.Overtime,
+			&i.PrepStartAt,
+			&i.ReadyAt,
+			&i.CourierAcceptAt,
+			&i.PickedAt,
+			&i.RiderDeliveredAt,
+			&i.UserDeliveredAt,
+			&i.AutoUserDeliveredAt,
+			&i.DeliveryDuration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTakeoutOrdersDeliveredBefore = `-- name: ListTakeoutOrdersDeliveredBefore :many
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+WHERE order_type = 'takeout'
+    AND status IN ('rider_delivered', 'user_delivered')
+    AND rider_delivered_at IS NOT NULL
+    AND rider_delivered_at < $1
+    AND replaced_by_order_id IS NULL
+ORDER BY rider_delivered_at ASC
+LIMIT $2
+`
+
+type ListTakeoutOrdersDeliveredBeforeParams struct {
+	DeliveredBefore pgtype.Timestamptz `json:"delivered_before"`
+	Limit           int32              `json:"limit"`
+}
+
+// 获取已送达但未完成超过一定时间的外卖订单（用于自动完成）
+func (q *Queries) ListTakeoutOrdersDeliveredBefore(ctx context.Context, arg ListTakeoutOrdersDeliveredBeforeParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listTakeoutOrdersDeliveredBefore, arg.DeliveredBefore, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
