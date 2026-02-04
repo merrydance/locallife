@@ -18,7 +18,7 @@ flowchart TB
     D --> E[支付: /v1/payments + /v1/webhooks/*]
     E --> F[异步兜底: worker+scheduler
 (支付/退款/分账/通知/超时/恢复)]
-    F --> G[售后: /v1/claims + /appeals]
+    F --> G[售后: /v1/claims + /v1/merchant/appeals + /v1/rider/appeals + /v1/operator/appeals]
     F --> H[运营治理: /v1/operator/* + /v1/platform/*]
   end
 
@@ -33,7 +33,7 @@ flowchart TB
   subgraph 主线B_外卖履约
     B1[购物车: /v1/cart/*] --> B2[下单: /v1/orders]
     B2 --> B3[支付成功事件] --> B4[商户接单: /v1/merchant/orders/*]
-    B4 --> B5[骑手抢单: /v1/delivery/grab]
+    B4 --> B5[骑手抢单: /v1/delivery/grab/:order_id]
     B5 --> B6[配送状态: /v1/delivery/*]
     B6 --> B7[确认收货: /v1/orders/:id/confirm]
   end
@@ -65,33 +65,33 @@ sequenceDiagram
   participant W as 微信支付
   participant Q as 异步队列/定时器(worker+scheduler)
 
-  U->>API: GET /scan/table (扫码识别桌台/商户)
+  U->>API: GET /v1/scan/table (扫码识别桌台/商户)
   API-->>U: 返回 table/merchant/session 线索
 
-  U->>API: POST /dining-sessions/open
+  U->>API: POST /v1/dining-sessions/open
   API-->>U: 返回 dining_session_id
 
-  U->>API: POST /orders (堂食/打包订单)
+  U->>API: POST /v1/orders (堂食/打包订单)
   API-->>U: 返回 order_id + 待支付信息
 
-  U->>API: POST /payments (创建支付单)
+  U->>API: POST /v1/payments (创建支付单)
   API-->>U: 返回支付参数
   U->>W: 发起支付(客户端)
 
-  W-->>API: POST /webhooks/wechat-pay/notify (支付回调)
+  W-->>API: POST /v1/webhooks/wechat-pay/notify (支付回调)
   API-->>W: 200 OK
   API-->>Q: 入队(支付成功后处理/通知/超时取消等)
 
-  M->>API: GET /merchant/orders (拉单)
-  M->>API: POST /merchant/orders/:id/accept
+  M->>API: GET /v1/merchant/orders (拉单)
+  M->>API: POST /v1/merchant/orders/:id/accept
   API-->>M: 接单成功
 
-  K->>API: GET /kitchen/orders (厨房看板)
-  K->>API: POST /kitchen/orders/:id/preparing
-  K->>API: POST /kitchen/orders/:id/ready
+  K->>API: GET /v1/kitchen/orders (厨房看板)
+  K->>API: POST /v1/kitchen/orders/:id/preparing
+  K->>API: POST /v1/kitchen/orders/:id/ready
 
-  U->>API: POST /orders/:id/confirm 或 checkout
-  API-->>U: 完成/结账结果
+  M->>API: POST /v1/dining-sessions/:id/checkout (结账离店)
+  API-->>M: 结账结果（会话关闭/桌台释放）
 
   Note over Q,API: 兜底：订单/支付超时取消、补偿重放、通知推送
 ```
@@ -111,30 +111,30 @@ sequenceDiagram
   participant WS as WebSocket(/v1/ws)
   participant Q as 异步队列/定时器(worker+scheduler)
 
-  U->>API: POST /cart/items (加购)
-  U->>API: POST /cart/calculate (试算)
-  U->>API: POST /orders (创建外卖订单)
+  U->>API: POST /v1/cart/items (加购)
+  U->>API: POST /v1/cart/calculate (试算)
+  U->>API: POST /v1/orders (创建外卖订单)
 
-  U->>API: POST /payments 或 /payments/combined
+  U->>API: POST /v1/payments 或 /v1/payments/combined
   U->>W: 发起支付(客户端)
-  W-->>API: POST /webhooks/*/notify (支付回调)
+  W-->>API: POST /v1/webhooks/*/notify (支付回调)
   API-->>Q: 入队 ProcessPaymentSuccess/通知/分账等
 
-  M->>API: GET /merchant/orders
-  M->>API: POST /merchant/orders/:id/accept
+  M->>API: GET /v1/merchant/orders
+  M->>API: POST /v1/merchant/orders/:id/accept
   API-->>WS: 推送订单状态给商户/骑手/用户(如已订阅)
 
-  R->>API: GET /delivery/recommend (推荐附近可接单)
-  R->>API: POST /delivery/grab/:order_id (抢单)
+  R->>API: GET /v1/delivery/recommend (推荐附近可接单)
+  R->>API: POST /v1/delivery/grab/:order_id (抢单)
   API-->>WS: 推送“已接单/骑手信息”
 
-  R->>API: POST /delivery/:delivery_id/start-pickup
-  R->>API: POST /delivery/:delivery_id/confirm-pickup
-  R->>API: POST /delivery/:delivery_id/start-delivery
-  R->>API: POST /delivery/:delivery_id/confirm-delivery
+  R->>API: POST /v1/delivery/:delivery_id/start-pickup
+  R->>API: POST /v1/delivery/:delivery_id/confirm-pickup
+  R->>API: POST /v1/delivery/:delivery_id/start-delivery
+  R->>API: POST /v1/delivery/:delivery_id/confirm-delivery
   API-->>WS: 推送轨迹/状态变更
 
-  U->>API: POST /orders/:id/confirm (确认收货)
+  U->>API: POST /v1/orders/:id/confirm (确认收货)
 
   Note over Q,API: 异常/风控：延时/异常上报→规则/风控任务→索赔/追偿/申诉
   Note over Q,API: 分账：收付通回调+重试补偿→对账/SLA 指标
@@ -153,27 +153,27 @@ sequenceDiagram
   participant W as 微信支付
   participant Q as 异步队列/定时器(worker+scheduler)
 
-  U->>API: GET /rooms/:id/availability (查日期/时段/人数)
+  U->>API: GET /v1/rooms/:id/availability (查日期/时段/人数)
   API-->>U: 可用/不可用 + 价格/规则
 
-  U->>API: POST /reservations (创建预订)
+  U->>API: POST /v1/reservations (创建预订)
   API-->>U: reservation_id + 待支付
 
-  U->>API: POST /payments (创建支付单)
+  U->>API: POST /v1/payments (创建支付单)
   U->>W: 发起支付(客户端)
-  W-->>API: POST /webhooks/wechat-pay/notify
+  W-->>API: POST /v1/webhooks/wechat-pay/notify
   API-->>Q: 入队(支付成功处理/超时/爽约提醒等)
 
-  M->>API: GET /reservations/merchant/today
-  M->>API: POST /reservations/:id/confirm (确认预订)
+  M->>API: GET /v1/reservations/merchant/today
+  M->>API: POST /v1/reservations/:id/confirm (确认预订)
 
-  U->>API: POST /reservations/:id/checkin (到店签到)
-  M->>API: POST /reservations/:id/start-cooking (起菜通知)
-  M->>API: POST /reservations/:id/complete (完结)
+  U->>API: POST /v1/reservations/:id/checkin (到店签到)
+  M->>API: POST /v1/reservations/:id/start-cooking (起菜通知)
+  M->>API: POST /v1/reservations/:id/complete (完结)
 
   alt 未到店
     Q-->>API: 触发未到店提醒/标记爽约(定时/任务)
-    M->>API: POST /reservations/:id/no-show
+    M->>API: POST /v1/reservations/:id/no-show
   end
 
   Note over Q,API: 兜底：预订支付超时关闭、爽约提醒、通知推送
@@ -192,20 +192,20 @@ sequenceDiagram
   participant Q as 异步队列/规则引擎
   participant PL as 平台(admin)
 
-  U->>API: POST /claims (提交索赔)
+  U->>API: POST /v1/claims (提交索赔)
   API-->>Q: 风控/行为追溯/规则裁决(自动)
   Q-->>API: 生成裁决结果 + 追偿单(如适用)
   API-->>U: 索赔状态/结果
 
   alt 不服裁决
-    U->>API: POST /merchant/appeals 或 /rider/appeals
-    OP->>API: GET /operator/appeals
-    OP->>API: POST /operator/appeals/:id/review
+    U->>API: POST /v1/merchant/appeals 或 /v1/rider/appeals
+    OP->>API: GET /v1/operator/appeals
+    OP->>API: POST /v1/operator/appeals/:id/review
     API-->>Q: 入队处理申诉结果(状态回写/通知)
   end
 
-  PL->>API: GET /platform/rules/hits (命中审计)
-  PL->>API: GET /platform/stats/* (监控与复盘)
+  PL->>API: GET /v1/platform/rules/hits (命中审计)
+  PL->>API: GET /v1/platform/stats/* (监控与复盘)
 ```
 
 ---
@@ -298,7 +298,7 @@ sequenceDiagram
 | 状态 | 典型触发/转移 | 关键入口 | 关键异步/补偿点 |
 |---|---|---|---|
 | `pending` | 支付成功后创建待分账 | webhook → `payment:process_profit_sharing` | profit sharing recovery scheduler（周期扫描 + 重试入队） |
-| `processing` | 已发起分账请求 | 微信分账回调 `/v1/webhooks/wechat-ecommerce/profit-sharing` | `payment:process_profit_sharing_result` |
+| `processing` | 已发起分账请求 | 微信分账回调 `/v1/webhooks/wechat-ecommerce/profit-sharing-notify` | `payment:process_profit_sharing_result` |
 | `finished` | 分账成功 | 只读 | 财务统计/对账 | 
 | `failed` | 分账失败 | 只读 | 告警 + 重试/人工介入 |
 
@@ -313,7 +313,7 @@ sequenceDiagram
 | 状态 | 典型触发/转移 | 关键入口 | 备注 |
 |---|---|---|---|
 | `pending` | 创建回退记录（退款前） | `/v1/refunds/:id/returns`（查询） | 内部任务驱动发起回退 |
-| `processing` | 已向微信发起回退 | 微信回退回调 `/v1/webhooks/wechat-ecommerce/profit-sharing`（或专用回退回调） | `payment:process_profit_sharing_return_result` |
+| `processing` | 已向微信发起回退 | 微信回退回调 `/v1/webhooks/wechat-ecommerce/profit-sharing-notify`（或专用回退回调） | `payment:process_profit_sharing_return_result` |
 | `success` | 回退成功 | 只读 | 允许继续完成退款 |
 | `failed` | 回退失败 | 只读 | 需告警/人工介入，避免“已分账却退款”不一致 |
 
@@ -499,3 +499,221 @@ sequenceDiagram
 - 支付超时：`reservation:payment_timeout` 取消 `pending` 预订并释放库存
 - 未到店/爽约：提醒任务触发后，商户可 `POST /v1/reservations/:id/no-show` → `no_show`
 - 取消与退款：用户/商户取消需与退款窗口（`refund_deadline`）与退款回调处理闭合；若涉及分账需回退流水闭环（见第 5.4/5.5 节）
+
+---
+
+## 7. 覆盖矩阵（文档 → 代码）
+
+> 目的：把本文档中的“旅程步骤/端点/兜底任务”逐条映射到代码真相源，便于联调与验收。
+>
+> 约定：
+> - **路由真相源**：[`api/server.go`](../../api/server.go)
+> - **异步真相源**：`worker/*`（Asynq task + scheduler）、`scheduler/*`（cron 类 scheduler）与 [`main.go`](../../main.go)（注册点）
+> - 覆盖状态：`OK`（实现且语义一致）/ `PARTIAL`（实现存在但口径/触发条件需关注）/ `MISSING`（文档有但代码未找到）
+
+### 7.1 主线A：堂食扫码点餐 覆盖矩阵
+
+| 步骤 | 端点/事件 | 代码入口（路由/handler） | 关键校验/状态机要点 | 兜底/补偿 | 覆盖状态 |
+|---|---|---|---|---|---|
+| 扫码识别桌台 | `GET /v1/scan/table` | `api/server.go` → [`api/scan.go`](../../api/scan.go) `scanTable` | 桌台/门店存在性 + 验证码（按实现） | 无 | OK |
+| 开台（用餐会话） | `POST /v1/dining-sessions/open` | `api/server.go` → [`api/dining_session.go`](../../api/dining_session.go) `openDiningSession` | 桌台占用/预订窗口/会话复用逻辑（按实现） | 无 | OK |
+| 下单（堂食） | `POST /v1/orders`（`order_type=dine_in`） | `api/server.go` → [`api/order.go`](../../api/order.go) `createOrder` | 创建后进入 `pending`；订单类型/桌台归属校验（按实现） | `order:payment_timeout`（见 7.4） | OK |
+| 创建支付单 | `POST /v1/payments` | `api/server.go` → [`api/payment_order.go`](../../api/payment_order.go) `createPaymentOrder` | business_type 与业务单一致性；金额/过期时间（按实现） | `payment_order:timeout`（见 7.4） | OK |
+| 支付回调 | `POST /v1/webhooks/wechat-pay/notify` | `api/server.go` → [`api/payment_callback.go`](../../api/payment_callback.go) `handlePaymentNotify` | 验签/幂等（按实现） | 入队 `payment:process_success` | OK |
+| 支付成功落库 | asynq：`payment:process_success` | [`worker/task_process_payment.go`](../../worker/task_process_payment.go) `ProcessTaskPaymentSuccess` → `store.ProcessPaymentSuccessTx` | 事务推进业务单状态（订单/预订/退款等） | 失败重试由 Asynq 承担（按配置） | OK |
+| 厨房推进制作 | `POST /v1/kitchen/orders/:id/preparing` | `api/server.go` → [`api/kitchen.go`](../../api/kitchen.go) `startPreparing` | 订单状态必须满足进入制作（按实现） | 无 | OK |
+| 厨房出餐 | `POST /v1/kitchen/orders/:id/ready` | `api/server.go` → [`api/kitchen.go`](../../api/kitchen.go) `markReady` | `paid|preparing` → `ready`（按实现） | 无 | OK |
+| 商户结账离店（终点） | `POST /v1/dining-sessions/:id/checkout` | `api/server.go` → [`api/dining_session.go`](../../api/dining_session.go) `checkoutDiningSession` | 会话归属商户；事务关闭会话+释放桌台（按实现） | WS 推送（见 7.5） | OK |
+
+### 7.2 主线B：外卖履约 覆盖矩阵
+
+| 步骤 | 端点/事件 | 代码入口（路由/handler） | 关键校验/状态机要点 | 兜底/补偿 | 覆盖状态 |
+|---|---|---|---|---|---|
+| 购物车/试算 | `POST /v1/cart/items`、`POST /v1/cart/calculate` | `api/server.go` → `api/cart.go`（按路由注册） | 门店/菜品/库存/优惠（按实现） | 无 | OK |
+| 下单（外卖） | `POST /v1/orders`（`order_type=takeout`） | `api/server.go` → [`api/order.go`](../../api/order.go) `createOrder` | 创建后 `pending`；配送地址/费用（按实现） | `order:payment_timeout`（见 7.4） | OK |
+| 创建支付单 | `POST /v1/payments` / `POST /v1/payments/combined` | `api/server.go` → [`api/payment_order.go`](../../api/payment_order.go) | 支付单与业务单绑定、金额校验（按实现） | `payment_order:timeout` / `combined_payment_order:timeout`（按实现） | OK |
+| 支付成功事件 | webhook + `payment:process_success` | [`api/payment_callback.go`](../../api/payment_callback.go) + [`worker/task_process_payment.go`](../../worker/task_process_payment.go) | 订单推进 `paid` 并触发通知（按实现） | recovery/重试由 Asynq 承担（按配置） | OK |
+| 商户接单/拒单 | `POST /v1/merchant/orders/:id/accept\|reject` | `api/server.go` → [`api/order.go`](../../api/order.go) `acceptMerchantOrder`/`rejectMerchantOrder` | 订单必须处于可接单状态（按实现） | 无 | OK |
+| 商户出餐就绪 | `POST /v1/merchant/orders/:id/ready` | `api/server.go` → [`api/order.go`](../../api/order.go) `readyMerchantOrder` | 状态必须为 `preparing`（按实现） | 无 | OK |
+| 骑手推荐/抢单 | `GET /v1/delivery/recommend`、`POST /v1/delivery/grab/:order_id` | `api/server.go` → [`api/delivery.go`](../../api/delivery.go) | 抢单对订单/配送单状态有前置校验（按实现） | 无 | OK |
+| 配送推进（取货/送达） | `POST /v1/delivery/:delivery_id/*` | `api/server.go` → [`api/delivery.go`](../../api/delivery.go) | `deliveries.status` 与 `orders.status` 联动校验（按实现） | 无 | OK |
+| 用户确认收货（终点） | `POST /v1/orders/:id/confirm` | `api/server.go` → [`api/order.go`](../../api/order.go) `confirmOrder` | 仅外卖；允许从 `rider_delivered|user_delivered` 收敛 `completed`；幂等 | “尽力触发”分账入队（profit_sharing） | OK |
+| 自动完成（无点击确认） | cron：`takeout-auto-complete` | [`main.go`](../../main.go) 注册 → [`scheduler/takeout_auto_complete.go`](../../scheduler/takeout_auto_complete.go) | 送达超过 1h 且“无索赔”自动完成（按实现） | 完成后同样尽力触发分账入队（按实现） | OK |
+
+### 7.3 主线C：包间预订 覆盖矩阵
+
+| 步骤 | 端点/事件 | 代码入口（路由/handler） | 关键校验/状态机要点 | 兜底/补偿 | 覆盖状态 |
+|---|---|---|---|---|---|
+| 查可用 | `GET /v1/rooms/:id/availability` | `api/server.go` → [`api/table.go`](../../api/table.go) `getRoomAvailability` | 时间段冲突/容量/营业（按实现） | 无 | OK |
+| 创建预订 | `POST /v1/reservations` | `api/server.go` → [`api/table_reservation.go`](../../api/table_reservation.go) `createReservation` | 房型校验 + 冲突校验 + 生成 `payment_deadline`（按实现） | `reservation:payment_timeout`（按实现） | OK |
+| 支付回调/成功处理 | 同 7.1/7.2 | [`api/payment_callback.go`](../../api/payment_callback.go) + [`worker/task_process_payment.go`](../../worker/task_process_payment.go) | 成功事务里推进预订相关状态（按实现） | Asynq 重试（按配置） | OK |
+| 商户确认预订 | `POST /v1/reservations/:id/confirm` | `api/server.go` → [`api/table_reservation.go`](../../api/table_reservation.go) `confirmReservation` | 必须已支付且状态允许 confirm（按实现） | no-show 提醒任务（按实现） | OK |
+| 到店签到 | `POST /v1/reservations/:id/checkin` | `api/server.go` → [`api/table_reservation.go`](../../api/table_reservation.go) `checkInReservation` | 签到窗口/归属校验（按实现） | 无 | OK |
+| 完结/爽约（终点） | `POST /v1/reservations/:id/complete\|no-show` | `api/server.go` → [`api/table_reservation.go`](../../api/table_reservation.go) | 终态收敛：`completed|no_show`（按实现） | 释放桌台/库存（按实现） | OK |
+
+### 7.4 共用兜底：支付超时 / 订单超时 / 分账恢复
+
+| 兜底项 | 触发条件 | 代码入口 | 行为 | 覆盖状态 |
+|---|---|---|---|---|
+| 订单支付超时取消 | 订单 `pending` 超过窗口（文档口径：30min） | [`api/order.go`](../../api/order.go) 入队 `order:payment_timeout` → [`worker/task_order_timeout.go`](../../worker/task_order_timeout.go) | 取消订单/释放资源（按实现） | OK |
+| 支付单超时关单 | `payment_orders.status=pending` 到期 | [`worker/task_payment_timeout.go`](../../worker/task_payment_timeout.go) `payment_order:timeout`（含合单 `combined_payment_order:timeout`） | 关闭支付单；必要时反向取消业务单（按实现） | OK |
+| scheduler 注册点 | 进程启动 | [`main.go`](../../main.go) `schedulerManager.Register(...)` | 注册 `order-timeout` / `profit-sharing-recovery` / `claim-recovery` / `takeout-auto-complete` 等 | OK |
+| 分账恢复扫描 | 有待分账记录且任务未入队/失败 | [`worker/profit_sharing_recovery_scheduler.go`](../../worker/profit_sharing_recovery_scheduler.go) | 周期扫描 + 重试入队（按实现） | OK |
+| 索赔追偿恢复扫描 | 索赔追偿逾期/需推进 | [`worker/claim_recovery_scheduler.go`](../../worker/claim_recovery_scheduler.go) | 周期扫描 + 标记逾期/推进（按实现） | OK |
+
+### 7.5 售后：索赔 / 申诉 / 通知（WS）
+
+| 场景 | 端点/事件 | 代码入口 | 关键口径 | 覆盖状态 |
+|---|---|---|---|---|
+| 用户索赔 | `POST /v1/claims` | `api/server.go` → [`api/risk_management.go`](../../api/risk_management.go) `SubmitClaim` | 仅 `completed` 订单允许索赔（口径对齐） | OK |
+| 商户申诉 | `GET/POST /v1/merchant/appeals` | `api/server.go` → [`api/appeal.go`](../../api/appeal.go) `createMerchantAppeal`/`listMerchantAppeals` | claim 必须可申诉、去重（按实现） | OK |
+| 骑手申诉 | `GET/POST /v1/rider/appeals` | `api/server.go` → [`api/appeal.go`](../../api/appeal.go) `createRiderAppeal`/`listRiderAppeals` | rider 侧申诉口径（按实现） | OK |
+| 运营处理申诉 | `GET /v1/operator/appeals` + `POST /v1/operator/appeals/:id/review` | `api/server.go` → [`api/appeal.go`](../../api/appeal.go) `listOperatorAppeals`/`reviewAppeal` | 审核/裁决会写入 appeal 结论；并“尽力”触发 `process_appeal_result` 任务（含 inline fallback） | OK |
+| 实时通知 | `GET /v1/ws`、`GET /v1/platform/ws` | `api/server.go` → [`api/notification.go`](../../api/notification.go) `handleWebSocket` / `handlePlatformWebSocket` | 事件推送（订单/会话/桌台等，按实现） | OK |
+
+### 7.6 风险清单（需要特别留意的“验收点”）
+
+1) **分账触发口径**：目前实现是“完成时尽力入队 + recovery scheduler 扫描补偿”。验收时需覆盖：完成路径（手动 confirm / 自动完成）两条都能触发或被恢复补偿。
+2) **支付成功 → 业务推进一致性**：`payment:process_success` 是关键中枢；验收建议覆盖：订单（堂食/外卖）与预订（Reservation）两类 business_type 的事务推进都能正确闭环。
+3) **兜底任务可观测性**：`order:payment_timeout` / `payment_order:timeout` / recovery schedulers 建议在联调环境观察日志与状态回写，避免“任务跑了但状态没动”的假阳性。
+
+---
+
+## 8. 验收用例清单（建议按此走通）
+
+> 目标：把第 7 节的“覆盖矩阵”落成可执行用例；每条用例都给出**动作**与**证据**（状态/字段/任务/日志）。
+>
+> 说明：本清单默认你有一套联调环境（可直连 DB + 能看 worker/scheduler 日志）。若没有，可先只跑 Happy Path，用日志/返回体做最小验收。
+
+### 8.1 主线A：堂食扫码点餐
+
+**TC-A1：开台 → 下单 → 支付成功 → 出餐 → 结账（Happy Path）**
+
+- 前置数据：存在桌台（table）与菜品；用户能鉴权。
+- 动作：
+  1. `GET /v1/scan/table`（拿到 table 信息与校验结果）
+  2. `POST /v1/dining-sessions/open`
+  3. `POST /v1/orders`（`order_type=dine_in`）
+  4. `POST /v1/payments`
+  5. 触发 `/v1/webhooks/wechat-pay/notify`（或使用联调支付真实回调）
+  6. `POST /v1/kitchen/orders/:id/preparing` → `POST /v1/kitchen/orders/:id/ready`
+  7. `POST /v1/dining-sessions/:id/checkout`
+- 证据（必须满足）：
+  - `payment:process_success` 在 worker 日志中被处理；订单状态推进到 `paid`（并产生相应状态日志）。
+  - 厨房状态推进合法：未 `paid` 时调用 preparing 应失败。
+  - `DiningSession.status=closed` 且桌台被释放（checkout 后 WS/查询可观测到）。
+
+**TC-A2：订单支付超时自动取消（兜底）**
+
+- 前置数据：创建一笔 `pending` 堂食订单，但不支付。
+- 动作：等待超时窗口或在联调环境中将订单的时间字段回拨到超时条件后，触发 `order:payment_timeout`（scheduler `order-timeout` 或 Asynq 任务消费）。
+- 证据：订单被取消（状态/取消原因可见），且不会进入厨房制作。
+
+### 8.2 主线B：外卖履约
+
+**TC-B1：外卖从下单到“用户手动完成”（Happy Path）**
+
+- 前置数据：用户地址可用；商户/骑手账号可用（或能模拟对应角色 token）。
+- 动作：
+  1. `POST /v1/cart/items` + `POST /v1/cart/calculate`
+  2. `POST /v1/orders`（`order_type=takeout`）
+  3. `POST /v1/payments`（或 `/v1/payments/combined`）+ 回调 `/v1/webhooks/wechat-pay/notify`
+  4. 商户：`POST /v1/merchant/orders/:id/accept` → `POST /v1/merchant/orders/:id/ready`
+  5. 骑手：`POST /v1/delivery/grab/:order_id`
+  6. 骑手：`POST /v1/delivery/:delivery_id/start-pickup` → `confirm-pickup` → `start-delivery` → `confirm-delivery`
+  7. 用户：`POST /v1/orders/:id/confirm`
+- 证据：
+  - 订单最终进入 `completed`（confirm 幂等：重复调用不应报错）。
+  - `deliveries.status` 走完整链路，且关键节点对 order.status 的前置校验严格生效。
+
+**TC-B2：外卖送达后 1 小时无索赔自动完成（兜底终点）**
+
+- 前置数据：订单已走到 `rider_delivered`，并确保该订单无索赔记录。
+- 动作：让送达时间满足 “超过 1 小时”（联调常用做法：回拨 delivered_at 或类似字段），然后等待或手动触发 scheduler `takeout-auto-complete` 扫描。
+- 证据：订单被自动推进为 `completed`（含自动完成时间字段写入）；且不会因为重复扫描产生异常。
+
+**TC-B3：完成后触发分账（profit_sharing）+ 恢复补偿**
+
+- 前置数据：创建一笔支付类型为 `profit_sharing` 的外卖订单，并完成到 `completed`（走 TC-B1 或 TC-B2）。
+- 动作：观察完成后是否“尽力入队”分账任务；并在入队失败/未触发的情况下，等待或手动触发 `profit-sharing-recovery` 扫描。
+- 证据：
+  - 分账记录（如 `profit_sharing_orders`/子单状态）从 `pending` 进入 `processing/finished`（按实现）；
+  - 或至少能看到 recovery scheduler 在日志中发现待分账并重试入队。
+
+### 8.3 主线C：包间预订
+
+**TC-C1：创建预订 → 支付 → 商户确认 → 签到 → 完结（Happy Path）**
+
+- 动作：`GET /v1/rooms/:id/availability` → `POST /v1/reservations` → `POST /v1/payments` + 回调 → `POST /v1/reservations/:id/confirm` → `POST /v1/reservations/:id/checkin` → `POST /v1/reservations/:id/complete`
+- 证据：预订状态最终进入 `completed`；桌台/库存被正确释放；重复 complete 应幂等或被状态机拒绝（按实现口径）。
+
+**TC-C2：预订支付超时取消（兜底）**
+
+- 前置数据：创建 `pending` 预订但不支付。
+- 动作：等待超时窗口或回拨 `payment_deadline`，触发 `reservation:payment_timeout`。
+- 证据：预订进入 `cancelled/expired`（按实现）且可用性恢复（再次 availability 不冲突）。
+
+### 8.4 售后：索赔与申诉闭环
+
+**TC-S1：只有 completed 订单可索赔（口径验收）**
+
+- 动作：
+  - 对一笔未完成订单提交 `POST /v1/claims`（应失败）
+  - 对一笔已完成订单提交 `POST /v1/claims`（应成功）
+- 证据：接口返回与 DB 状态一致；并能在后续商户/骑手侧看到对应售后入口数据。
+
+**TC-S2：申诉（merchant/rider）→ 运营审核 → 结果处理（含 inline fallback）**
+
+- 动作：商户或骑手提交申诉（`/v1/merchant/appeals` 或 `/v1/rider/appeals`）→ 运营 `/v1/operator/appeals/:id/review`。
+- 证据：
+  - appeal 状态被写入审核结论；
+  - `process_appeal_result` 被入队或 inline 执行成功（日志可见），并对 claim_recovery 等关联数据产生预期影响（按实现）。
+
+### 8.5 证据速查（DB / 日志）
+
+> 用于把每条用例的结果落到“可核对证据”。字段名以实际 schema 为准。
+
+**DB 快速查询（示例 SQL）**
+
+```sql
+-- 订单状态与关键时间
+SELECT id, order_type, status, payment_type, paid_at, delivered_at, completed_at
+FROM orders
+WHERE id = $1;
+
+-- 配送单状态
+SELECT id, order_id, status, rider_id, picked_at, delivered_at, completed_at
+FROM deliveries
+WHERE order_id = $1;
+
+-- 用餐会话状态
+SELECT id, status, table_id, opened_at, closed_at
+FROM dining_sessions
+WHERE id = $1;
+
+-- 预订状态
+SELECT id, status, payment_deadline, checkin_at, completed_at
+FROM reservations
+WHERE id = $1;
+
+-- 支付单状态
+SELECT id, business_type, business_id, status, amount, paid_at, expired_at
+FROM payment_orders
+WHERE id = $1;
+
+-- 索赔 / 申诉
+SELECT * FROM claims WHERE order_id = $1;
+SELECT * FROM appeals WHERE claim_id = $1 ORDER BY created_at DESC;
+
+-- 分账
+SELECT * FROM profit_sharing_orders WHERE payment_order_id = $1 ORDER BY created_at DESC;
+SELECT * FROM profit_sharing_returns WHERE payment_order_id = $1 ORDER BY created_at DESC;
+```
+
+**日志关键词（建议直接搜）**
+
+- 支付成功任务：`ProcessTaskPaymentSuccess`、`ProcessPaymentSuccessTx`
+- 外卖自动完成：`takeout auto complete`、`takeout-auto-complete`
+- 订单超时/支付超时：`order:payment_timeout`、`payment_order:timeout`
+- 分账恢复：`profit sharing recovery scheduler`、`profit-sharing-recovery`
+- 索赔追偿恢复：`claim recovery scheduler`、`claim-recovery`

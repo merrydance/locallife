@@ -1098,7 +1098,7 @@ type exceptionReportResponse struct {
 // @Failure 403 {object} ErrorResponse "非该订单骑手"
 // @Failure 404 {object} ErrorResponse "订单不存在"
 // @Failure 500 {object} ErrorResponse
-// @Router /rider/orders/{id}/delay [post]
+// @Router /v1/rider/orders/{id}/delay [post]
 // @Security BearerAuth
 func (server *Server) reportDelay(ctx *gin.Context) {
 	var uriReq riderOrderIDRequest
@@ -1198,7 +1198,7 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 // @Failure 403 {object} ErrorResponse "非该订单骑手"
 // @Failure 404 {object} ErrorResponse "订单不存在"
 // @Failure 500 {object} ErrorResponse
-// @Router /rider/orders/{id}/exception [post]
+// @Router /v1/rider/orders/{id}/exception [post]
 // @Security BearerAuth
 func (server *Server) reportException(ctx *gin.Context) {
 	var uriReq riderOrderIDRequest
