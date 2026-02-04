@@ -70,7 +70,6 @@ type appealResponse struct {
 	AppellantType      string     `json:"appellant_type"`
 	AppellantID        int64      `json:"appellant_id"`
 	Reason             string     `json:"reason"`
-	EvidenceURLs       []string   `json:"evidence_urls,omitempty"`
 	Status             string     `json:"status"`
 	ReviewerID         *int64     `json:"reviewer_id,omitempty"`
 	ReviewNotes        *string    `json:"review_notes,omitempty"`
@@ -91,9 +90,6 @@ func newAppealResponse(a db.Appeal) appealResponse {
 		Status:        a.Status,
 		RegionID:      a.RegionID,
 		CreatedAt:     a.CreatedAt,
-	}
-	if a.EvidenceUrls != nil {
-		resp.EvidenceURLs = a.EvidenceUrls
 	}
 	if a.ReviewerID.Valid {
 		resp.ReviewerID = &a.ReviewerID.Int64
@@ -131,7 +127,6 @@ type merchantClaimResponse struct {
 	ClaimAmount    int64      `json:"claim_amount"`
 	ApprovedAmount *int64     `json:"approved_amount,omitempty"`
 	Description    string     `json:"description"`
-	EvidenceURLs   []string   `json:"evidence_urls,omitempty"`
 	Status         string     `json:"status"`
 	CreatedAt      time.Time  `json:"created_at"`
 	ReviewedAt     *time.Time `json:"reviewed_at,omitempty"`
@@ -202,9 +197,6 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 		if c.ApprovedAmount.Valid {
 			response[i].ApprovedAmount = &c.ApprovedAmount.Int64
 		}
-		if c.EvidenceUrls != nil {
-			response[i].EvidenceURLs = c.EvidenceUrls
-		}
 		if c.ReviewedAt.Valid {
 			response[i].ReviewedAt = &c.ReviewedAt.Time
 		}
@@ -267,18 +259,17 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 	}
 
 	response := gin.H{
-		"id":            claim.ID,
-		"order_id":      claim.OrderID,
-		"order_no":      claim.OrderNo,
-		"order_amount":  claim.OrderAmount,
-		"user_phone":    claim.UserPhone.String,
-		"user_name":     claim.UserName,
-		"claim_type":    claim.ClaimType,
-		"claim_amount":  claim.ClaimAmount,
-		"description":   claim.Description,
-		"evidence_urls": claim.EvidenceUrls,
-		"status":        claim.Status,
-		"created_at":    claim.CreatedAt,
+		"id":           claim.ID,
+		"order_id":     claim.OrderID,
+		"order_no":     claim.OrderNo,
+		"order_amount": claim.OrderAmount,
+		"user_phone":   claim.UserPhone.String,
+		"user_name":    claim.UserName,
+		"claim_type":   claim.ClaimType,
+		"claim_amount": claim.ClaimAmount,
+		"description":  claim.Description,
+		"status":       claim.Status,
+		"created_at":   claim.CreatedAt,
 	}
 	if claim.ApprovedAmount.Valid {
 		response["approved_amount"] = claim.ApprovedAmount.Int64
@@ -301,9 +292,8 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 }
 
 type createMerchantAppealRequest struct {
-	ClaimID      int64    `json:"claim_id" binding:"required,min=1"`
-	Reason       string   `json:"reason" binding:"required,min=10,max=1000"`
-	EvidenceURLs []string `json:"evidence_urls" binding:"omitempty,max=10,dive,url,max=500"`
+	ClaimID int64  `json:"claim_id" binding:"required,min=1"`
+	Reason  string `json:"reason" binding:"required,min=10,max=1000"`
 }
 
 // createMerchantAppeal 商户提交申诉
@@ -365,23 +355,22 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		return
 	}
 
-	// 规范化证据图片URL
-	for i, url := range req.EvidenceURLs {
-		req.EvidenceURLs[i] = normalizeImageURLForStorage(url)
-	}
-
 	// 创建申诉
 	appeal, err := server.store.CreateAppeal(ctx, db.CreateAppealParams{
 		ClaimID:       req.ClaimID,
 		AppellantType: "merchant",
 		AppellantID:   merchant.ID,
 		Reason:        req.Reason,
-		EvidenceUrls:  req.EvidenceURLs,
 		RegionID:      claimInfo.RegionID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 标记追偿单为申诉中（避免逾期触发限制）
+	if recovery, recoveryErr := server.store.GetClaimRecoveryByClaimID(ctx, req.ClaimID); recoveryErr == nil {
+		_, _ = server.store.MarkClaimRecoveryAppealed(ctx, recovery.ID)
 	}
 
 	ctx.JSON(http.StatusCreated, newAppealResponse(appeal))
@@ -450,9 +439,6 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 			"status":            a.Status,
 			"created_at":        a.CreatedAt,
 		}
-		if a.EvidenceUrls != nil {
-			response[i]["evidence_urls"] = a.EvidenceUrls
-		}
 		if a.ReviewerID.Valid {
 			response[i]["reviewer_id"] = a.ReviewerID.Int64
 		}
@@ -518,20 +504,18 @@ func (server *Server) getMerchantAppealDetail(ctx *gin.Context) {
 	}
 
 	response := gin.H{
-		"id":                  appeal.ID,
-		"claim_id":            appeal.ClaimID,
-		"claim_type":          appeal.ClaimType,
-		"claim_amount":        appeal.ClaimAmount,
-		"claim_description":   appeal.ClaimDescription,
-		"claim_evidence_urls": appeal.ClaimEvidenceUrls,
-		"order_no":            appeal.OrderNo,
-		"order_amount":        appeal.OrderAmount,
-		"user_phone":          appeal.UserPhone.String,
-		"appellant_type":      appeal.AppellantType,
-		"reason":              appeal.Reason,
-		"evidence_urls":       appeal.EvidenceUrls,
-		"status":              appeal.Status,
-		"created_at":          appeal.CreatedAt,
+		"id":                appeal.ID,
+		"claim_id":          appeal.ClaimID,
+		"claim_type":        appeal.ClaimType,
+		"claim_amount":      appeal.ClaimAmount,
+		"claim_description": appeal.ClaimDescription,
+		"order_no":          appeal.OrderNo,
+		"order_amount":      appeal.OrderAmount,
+		"user_phone":        appeal.UserPhone.String,
+		"appellant_type":    appeal.AppellantType,
+		"reason":            appeal.Reason,
+		"status":            appeal.Status,
+		"created_at":        appeal.CreatedAt,
 	}
 	if appeal.ClaimApprovedAmount.Valid {
 		response["claim_approved_amount"] = appeal.ClaimApprovedAmount.Int64
@@ -620,9 +604,6 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 		if c.ApprovedAmount.Valid {
 			response[i].ApprovedAmount = &c.ApprovedAmount.Int64
 		}
-		if c.EvidenceUrls != nil {
-			response[i].EvidenceURLs = c.EvidenceUrls
-		}
 		if c.ReviewedAt.Valid {
 			response[i].ReviewedAt = &c.ReviewedAt.Time
 		}
@@ -685,18 +666,17 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 	}
 
 	response := gin.H{
-		"id":            claim.ID,
-		"order_id":      claim.OrderID,
-		"order_no":      claim.OrderNo,
-		"order_amount":  claim.OrderAmount,
-		"user_phone":    claim.UserPhone.String,
-		"user_name":     claim.UserName,
-		"claim_type":    claim.ClaimType,
-		"claim_amount":  claim.ClaimAmount,
-		"description":   claim.Description,
-		"evidence_urls": claim.EvidenceUrls,
-		"status":        claim.Status,
-		"created_at":    claim.CreatedAt,
+		"id":           claim.ID,
+		"order_id":     claim.OrderID,
+		"order_no":     claim.OrderNo,
+		"order_amount": claim.OrderAmount,
+		"user_phone":   claim.UserPhone.String,
+		"user_name":    claim.UserName,
+		"claim_type":   claim.ClaimType,
+		"claim_amount": claim.ClaimAmount,
+		"description":  claim.Description,
+		"status":       claim.Status,
+		"created_at":   claim.CreatedAt,
 	}
 	if claim.ApprovedAmount.Valid {
 		response["approved_amount"] = claim.ApprovedAmount.Int64
@@ -719,9 +699,8 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 }
 
 type createRiderAppealRequest struct {
-	ClaimID      int64    `json:"claim_id" binding:"required,min=1"`
-	Reason       string   `json:"reason" binding:"required,min=10,max=1000"`
-	EvidenceURLs []string `json:"evidence_urls" binding:"omitempty,max=10,dive,url,max=500"`
+	ClaimID int64  `json:"claim_id" binding:"required,min=1"`
+	Reason  string `json:"reason" binding:"required,min=10,max=1000"`
 }
 
 // createRiderAppeal 骑手提交申诉
@@ -796,23 +775,22 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 		return
 	}
 
-	// 规范化证据图片URL
-	for i, url := range req.EvidenceURLs {
-		req.EvidenceURLs[i] = normalizeImageURLForStorage(url)
-	}
-
 	// 创建申诉
 	appeal, err := server.store.CreateAppeal(ctx, db.CreateAppealParams{
 		ClaimID:       req.ClaimID,
 		AppellantType: "rider",
 		AppellantID:   rider.ID,
 		Reason:        req.Reason,
-		EvidenceUrls:  req.EvidenceURLs,
 		RegionID:      claimInfo.RegionID,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 标记追偿单为申诉中（避免逾期触发限制）
+	if recovery, recoveryErr := server.store.GetClaimRecoveryByClaimID(ctx, req.ClaimID); recoveryErr == nil {
+		_, _ = server.store.MarkClaimRecoveryAppealed(ctx, recovery.ID)
 	}
 
 	ctx.JSON(http.StatusCreated, newAppealResponse(appeal))
@@ -875,9 +853,6 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 			"reason":            a.Reason,
 			"status":            a.Status,
 			"created_at":        a.CreatedAt,
-		}
-		if a.EvidenceUrls != nil {
-			response[i]["evidence_urls"] = a.EvidenceUrls
 		}
 		if a.ReviewerID.Valid {
 			response[i]["reviewer_id"] = a.ReviewerID.Int64
@@ -944,20 +919,18 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 	}
 
 	response := gin.H{
-		"id":                  appeal.ID,
-		"claim_id":            appeal.ClaimID,
-		"claim_type":          appeal.ClaimType,
-		"claim_amount":        appeal.ClaimAmount,
-		"claim_description":   appeal.ClaimDescription,
-		"claim_evidence_urls": appeal.ClaimEvidenceUrls,
-		"order_no":            appeal.OrderNo,
-		"order_amount":        appeal.OrderAmount,
-		"user_phone":          appeal.UserPhone.String,
-		"appellant_type":      appeal.AppellantType,
-		"reason":              appeal.Reason,
-		"evidence_urls":       appeal.EvidenceUrls,
-		"status":              appeal.Status,
-		"created_at":          appeal.CreatedAt,
+		"id":                appeal.ID,
+		"claim_id":          appeal.ClaimID,
+		"claim_type":        appeal.ClaimType,
+		"claim_amount":      appeal.ClaimAmount,
+		"claim_description": appeal.ClaimDescription,
+		"order_no":          appeal.OrderNo,
+		"order_amount":      appeal.OrderAmount,
+		"user_phone":        appeal.UserPhone.String,
+		"appellant_type":    appeal.AppellantType,
+		"reason":            appeal.Reason,
+		"status":            appeal.Status,
+		"created_at":        appeal.CreatedAt,
 	}
 	if appeal.ClaimApprovedAmount.Valid {
 		response["claim_approved_amount"] = appeal.ClaimApprovedAmount.Int64
@@ -1070,9 +1043,6 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 			"status":            a.Status,
 			"created_at":        a.CreatedAt,
 		}
-		if a.EvidenceUrls != nil {
-			response[i]["evidence_urls"] = a.EvidenceUrls
-		}
 		if a.ReviewedAt.Valid {
 			response[i]["reviewed_at"] = a.ReviewedAt.Time
 		}
@@ -1129,30 +1099,28 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 	}
 
 	response := gin.H{
-		"id":                  appeal.ID,
-		"claim_id":            appeal.ClaimID,
-		"claim_type":          appeal.ClaimType,
-		"claim_amount":        appeal.ClaimAmount,
-		"claim_description":   appeal.ClaimDescription,
-		"claim_evidence_urls": appeal.ClaimEvidenceUrls,
-		"claim_status":        appeal.ClaimStatus,
-		"claim_created_at":    appeal.ClaimCreatedAt,
-		"order_no":            appeal.OrderNo,
-		"order_amount":        appeal.OrderAmount,
-		"order_status":        appeal.OrderStatus,
-		"order_created_at":    appeal.OrderCreatedAt,
-		"merchant_id":         appeal.MerchantID,
-		"merchant_name":       appeal.MerchantName,
-		"merchant_phone":      appeal.MerchantPhone,
-		"user_phone":          appeal.UserPhone.String,
-		"user_name":           appeal.UserName,
-		"appellant_type":      appeal.AppellantType,
-		"appellant_id":        appeal.AppellantID,
-		"reason":              appeal.Reason,
-		"evidence_urls":       appeal.EvidenceUrls,
-		"status":              appeal.Status,
-		"region_id":           appeal.RegionID,
-		"created_at":          appeal.CreatedAt,
+		"id":                appeal.ID,
+		"claim_id":          appeal.ClaimID,
+		"claim_type":        appeal.ClaimType,
+		"claim_amount":      appeal.ClaimAmount,
+		"claim_description": appeal.ClaimDescription,
+		"claim_status":      appeal.ClaimStatus,
+		"claim_created_at":  appeal.ClaimCreatedAt,
+		"order_no":          appeal.OrderNo,
+		"order_amount":      appeal.OrderAmount,
+		"order_status":      appeal.OrderStatus,
+		"order_created_at":  appeal.OrderCreatedAt,
+		"merchant_id":       appeal.MerchantID,
+		"merchant_name":     appeal.MerchantName,
+		"merchant_phone":    appeal.MerchantPhone,
+		"user_phone":        appeal.UserPhone.String,
+		"user_name":         appeal.UserName,
+		"appellant_type":    appeal.AppellantType,
+		"appellant_id":      appeal.AppellantID,
+		"reason":            appeal.Reason,
+		"status":            appeal.Status,
+		"region_id":         appeal.RegionID,
+		"created_at":        appeal.CreatedAt,
 	}
 	if appeal.ClaimApprovedAmount.Valid {
 		response["claim_approved_amount"] = appeal.ClaimApprovedAmount.Int64
@@ -1300,6 +1268,7 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 	// 分发异步任务处理后续逻辑（信用分更新、通知等）
 	taskPayload := &worker.ProcessAppealResultPayload{
 		AppealID:           appealID,
+		ClaimID:            appealInfo.ClaimID,
 		Status:             req.Status,
 		AppellantType:      appealInfo.AppellantType,
 		AppellantID:        appealInfo.AppellantID,
@@ -1328,6 +1297,17 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 }
 
 func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+	switch payload.Status {
+	case "approved":
+		if err := server.rollbackClaimRecoveryInline(ctx, payload); err != nil {
+			return err
+		}
+	case "rejected":
+		if err := server.resumeClaimRecoveryInline(ctx, payload); err != nil {
+			return err
+		}
+	}
+
 	appellantUserID, err := server.getAppellantUserID(ctx, payload.AppellantType, payload.AppellantID)
 	if err != nil {
 		return err
@@ -1366,6 +1346,88 @@ func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worke
 		return err
 	}
 
+	return nil
+}
+
+func (server *Server) rollbackClaimRecoveryInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+	if payload.ClaimID == 0 {
+		return nil
+	}
+
+	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
+	if err != nil {
+		return nil
+	}
+
+	_, _ = server.store.MarkClaimRecoveryWaived(ctx, recovery.ID)
+
+	if claim, claimErr := server.store.GetClaim(ctx, payload.ClaimID); claimErr == nil {
+		if _, err := server.store.ClaimRefundRollbackTx(ctx, db.ClaimRefundRollbackTxParams{
+			ClaimID: payload.ClaimID,
+			UserID:  claim.UserID,
+			Remark:  "appeal approved rollback",
+		}); err != nil {
+			return err
+		}
+	}
+
+	if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "merchant" {
+		order, orderErr := server.store.GetOrder(ctx, recovery.OrderID)
+		if orderErr != nil {
+			return orderErr
+		}
+		if recovery.Status == "paid" {
+			if _, err := server.store.GetMerchantSettlementAdjustmentByRelatedAndType(ctx, db.GetMerchantSettlementAdjustmentByRelatedAndTypeParams{
+				RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
+				RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
+				AdjustmentType: "claim_recovery_reversal",
+			}); err != nil {
+				_, err = server.store.CreateMerchantSettlementAdjustment(ctx, db.CreateMerchantSettlementAdjustmentParams{
+					MerchantID:     order.MerchantID,
+					AdjustmentType: "claim_recovery_reversal",
+					Amount:         recovery.RecoveryAmount,
+					Status:         "finished",
+					RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
+					RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
+					Note:           pgtype.Text{String: "claim recovery appeal rollback", Valid: true},
+					PostedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true},
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if err := server.store.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
+			return err
+		}
+	}
+
+	if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "rider" {
+		delivery, deliveryErr := server.store.GetDeliveryByOrderID(ctx, recovery.OrderID)
+		if deliveryErr != nil {
+			return deliveryErr
+		}
+		if delivery.RiderID.Valid {
+			if err := server.store.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (server *Server) resumeClaimRecoveryInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+	if payload.ClaimID == 0 {
+		return nil
+	}
+
+	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
+	if err != nil {
+		return nil
+	}
+
+	_, _ = server.store.MarkClaimRecoveryPending(ctx, recovery.ID)
 	return nil
 }
 

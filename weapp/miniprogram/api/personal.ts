@@ -220,7 +220,6 @@ export interface ClaimResponse {
     claim_type: string            // 申诉类型
     claim_amount: number          // 申诉金额（分）
     description: string
-    evidence_urls: string[]       // 证据图片URL
     status: string                // 状态
     approval_type?: string        // 审批类型
     approved_amount?: number      // 批准金额（分）
@@ -236,7 +235,6 @@ export interface CreateClaimRequest extends Record<string, unknown> {
     claim_type: string            // 申诉类型
     claim_amount: number          // 申诉金额（分）
     description: string
-    evidence_urls?: string[]      // 证据图片URL
 }
 
 export interface ListClaimsResponse {

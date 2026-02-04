@@ -66,7 +66,6 @@ export class RiderService {
     static async reportException(orderId: number, data: {
         exception_type: string
         description: string
-        evidence_urls?: string[]
     }): Promise<any> {
         return await request({
             url: `/v1/rider/orders/${orderId}/exception`,

@@ -15,7 +15,6 @@ type CreateClaimWithBehaviorTxParams struct {
 	UserID             int64
 	ClaimType          string
 	Description        string
-	EvidenceURLs       []string
 	ClaimAmount        int64
 	Status             string
 	ApprovalType       string
@@ -70,18 +69,19 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 		}
 
 		claimParams := CreateClaimParams{
-			OrderID:        arg.OrderID,
-			UserID:         arg.UserID,
-			ClaimType:      arg.ClaimType,
-			Description:    arg.Description,
-			EvidenceUrls:   arg.EvidenceURLs,
-			ClaimAmount:    arg.ClaimAmount,
-			Status:         arg.Status,
-			IsMalicious:    false,
-			LookbackResult: arg.LookbackResult,
-			CreatedAt:      time.Now(),
-			ApprovalType:   pgtype.Text{String: arg.ApprovalType, Valid: arg.ApprovalType != ""},
+			OrderID:            arg.OrderID,
+			UserID:             arg.UserID,
+			ClaimType:          arg.ClaimType,
+			Description:        arg.Description,
+			ClaimAmount:        arg.ClaimAmount,
+			Status:             arg.Status,
+			IsMalicious:        false,
+			LookbackResult:     arg.LookbackResult,
+			CreatedAt:          time.Now(),
+			ApprovalType:       pgtype.Text{String: arg.ApprovalType, Valid: arg.ApprovalType != ""},
 			AutoApprovalReason: pgtype.Text{String: arg.AutoApprovalReason, Valid: arg.AutoApprovalReason != ""},
+			DecisionVersion:    pgtype.Text{String: arg.DecisionVersion, Valid: arg.DecisionVersion != ""},
+			DecisionReason:     pgtype.Text{String: arg.TraceSummary, Valid: arg.TraceSummary != ""},
 		}
 		if arg.ApprovedAmount != nil {
 			claimParams.ApprovedAmount = pgtype.Int8{Int64: *arg.ApprovedAmount, Valid: true}
@@ -108,14 +108,20 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 			return err
 		}
 
-		evidenceItems := buildBehaviorEvidencePayloads(arg)
-		for _, item := range evidenceItems {
-			_, err = q.CreateBehaviorEvidence(ctx, CreateBehaviorEvidenceParams{
-				DecisionID:   decision.ID,
-				EvidenceType: item.EvidenceType,
-				Payload:      item.Payload,
+		// 记录行为动作（赔付动作）
+		if arg.ApprovedAmount != nil && *arg.ApprovedAmount > 0 {
+			detail, _ := json.Marshal(map[string]any{
+				"action":   "platform_payout",
+				"claim_id": claim.ID,
+				"amount":   *arg.ApprovedAmount,
 			})
-			if err != nil {
+			if _, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
+				DecisionID:   decision.ID,
+				ActionType:   "refund",
+				TargetEntity: "user",
+				Status:       "created",
+				Detail:       detail,
+			}); err != nil {
 				return err
 			}
 		}
@@ -139,43 +145,6 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 
 	return result, err
 }
-
-type behaviorEvidencePayload struct {
-	EvidenceType string
-	Payload      []byte
-}
-
-func buildBehaviorEvidencePayloads(arg CreateClaimWithBehaviorTxParams) []behaviorEvidencePayload {
-	items := make([]behaviorEvidencePayload, 0, 6)
-
-	if len(arg.EvidenceURLs) > 0 {
-		payload, _ := json.Marshal(map[string]any{"urls": arg.EvidenceURLs})
-		items = append(items, behaviorEvidencePayload{EvidenceType: "image", Payload: payload})
-	}
-	if arg.DeviceID != "" {
-		payload, _ := json.Marshal(map[string]any{"device_id": arg.DeviceID})
-		items = append(items, behaviorEvidencePayload{EvidenceType: "device", Payload: payload})
-	}
-	if arg.DeviceFingerprint != "" {
-		payload, _ := json.Marshal(map[string]any{"device_fingerprint": arg.DeviceFingerprint})
-		items = append(items, behaviorEvidencePayload{EvidenceType: "device", Payload: payload})
-	}
-	if arg.IPAddress != "" {
-		payload, _ := json.Marshal(map[string]any{"ip": arg.IPAddress})
-		items = append(items, behaviorEvidencePayload{EvidenceType: "ip", Payload: payload})
-	}
-	if arg.UserAgent != "" {
-		payload, _ := json.Marshal(map[string]any{"user_agent": arg.UserAgent})
-		items = append(items, behaviorEvidencePayload{EvidenceType: "user_agent", Payload: payload})
-	}
-	if arg.AddressID != nil {
-		payload, _ := json.Marshal(map[string]any{"address_id": *arg.AddressID})
-		items = append(items, behaviorEvidencePayload{EvidenceType: "address", Payload: payload})
-	}
-
-	return items
-}
-
 func createTraceSnapshot(ctx context.Context, q *Queries, decisionID int64, windowDays int32, totalOrders int32, totalClaims int32) error {
 	abnormalRate := 0.0
 	if totalOrders > 0 {

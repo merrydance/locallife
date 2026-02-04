@@ -42,20 +42,30 @@
           <text class="value content">{{appeal.reason || '无详细说明'}}</text>
         </view>
         
-        <view class="images-section" wx:if="{{appeal.evidence_urls && appeal.evidence_urls.length > 0}}">
-          <text class="label">证明材料</text>
-          <view class="images-grid">
-            <image 
-              wx:for="{{appeal.evidence_urls}}" 
-              wx:key="*this" 
-              src="{{item}}" 
-              mode="aspectFill" 
-              class="img" 
-              bindtap="onPreviewImage" 
-              data-url="{{item}}" 
-            />
-          </view>
+      </view>
+
+      <view class="card" wx:if="{{recovery}}">
+        <view class="section-title">追偿单</view>
+        <view class="row">
+          <text class="label">追偿状态</text>
+          <text class="value">{{recovery.status}}</text>
         </view>
+        <view class="row">
+          <text class="label">追偿金额</text>
+          <text class="value">{{recovery.recovery_amount}}分</text>
+        </view>
+        <view class="row">
+          <text class="label">到期时间</text>
+          <text class="value">{{recovery.due_at}}</text>
+        </view>
+        <t-button
+          wx:if="{{recovery.status === 'pending' || recovery.status === 'overdue'}}"
+          theme="primary"
+          variant="outline"
+          block
+          loading="{{recoverySubmitting}}"
+          bindtap="onWaiveRecovery"
+        >核销追偿</t-button>
       </view>
 
       <view class="card input-card" wx:if="{{appeal.status === 'pending'}}">

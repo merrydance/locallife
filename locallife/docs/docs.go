@@ -23482,10 +23482,6 @@ const docTemplate = `{
                     "description": "merchant, rider, platform",
                     "type": "string"
                 },
-                "needs_evidence": {
-                    "description": "是否需要证据",
-                    "type": "boolean"
-                },
                 "reason": {
                     "type": "string"
                 },
@@ -23494,7 +23490,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "instant, auto, manual, evidence-required, platform-pay",
+                    "description": "instant, auto, manual, platform-pay",
                     "type": "string"
                 },
                 "warning": {
@@ -23759,12 +23755,6 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
-                },
-                "evidence_urls": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 },
                 "id": {
                     "type": "integer"
@@ -24399,12 +24389,6 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
-                "evidence_urls": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "id": {
                     "type": "integer"
                 },
@@ -24994,13 +24978,6 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1
                 },
-                "evidence_urls": {
-                    "type": "array",
-                    "maxItems": 10,
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "reason": {
                     "type": "string",
                     "maxLength": 1000,
@@ -25362,13 +25339,6 @@ const docTemplate = `{
                 "claim_id": {
                     "type": "integer",
                     "minimum": 1
-                },
-                "evidence_urls": {
-                    "type": "array",
-                    "maxItems": 10,
-                    "items": {
-                        "type": "string"
-                    }
                 },
                 "reason": {
                     "type": "string",
@@ -26295,13 +26265,6 @@ const docTemplate = `{
                     "maxLength": 500,
                     "minLength": 5
                 },
-                "evidence_urls": {
-                    "description": "证据图片URL",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "exception_type": {
                     "description": "异常类型",
                     "type": "string",
@@ -26320,12 +26283,6 @@ const docTemplate = `{
             "properties": {
                 "description": {
                     "type": "string"
-                },
-                "evidence_urls": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 },
                 "exception_type": {
                     "type": "string"

@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
+	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 const (
@@ -90,6 +93,13 @@ func (processor *RedisTaskProcessor) HandleCheckMerchantForeignObject(ctx contex
 		// 实际生产中可以通过消息队列或数据库标记触发通知
 		// 这里记录日志，实际通知由定时任务扫描处理
 		// TODO: 可以改为调用通知服务发送站内信/短信
+		// 异物高发：触发外卖熔断（不影响堂食）
+		reason := fmt.Sprintf("foreign object claims high: %d in %d days", result.ForeignObjectNum, result.WindowDays)
+		_ = processor.store.SuspendMerchantTakeout(ctx, db.SuspendMerchantTakeoutParams{
+			MerchantID:           payload.MerchantID,
+			TakeoutSuspendReason: pgtype.Text{String: reason, Valid: true},
+			TakeoutSuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+		})
 	}
 
 	return nil

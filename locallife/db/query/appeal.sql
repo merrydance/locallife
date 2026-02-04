@@ -10,11 +10,10 @@ INSERT INTO appeals (
     claim_id,
     appellant_type,
     appellant_id,
-    reason,
-    evidence_urls,
+  reason,
     region_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5
 ) RETURNING *;
 
 -- name: GetAppeal :one
@@ -38,7 +37,6 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
     c.created_at AS claim_created_at,
     o.order_no,
@@ -86,7 +84,6 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
@@ -179,7 +176,6 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
@@ -284,7 +280,6 @@ SELECT
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
     c.lookback_result,
     c.created_at AS claim_created_at,

@@ -239,39 +239,6 @@ func (q *Queries) CreateBehaviorDecision(ctx context.Context, arg CreateBehavior
 	return i, err
 }
 
-const createBehaviorEvidence = `-- name: CreateBehaviorEvidence :one
-
-INSERT INTO behavior_evidence (
-    decision_id,
-    evidence_type,
-    payload
-) VALUES (
-    $1, $2, $3
-) RETURNING id, decision_id, evidence_type, payload, created_at
-`
-
-type CreateBehaviorEvidenceParams struct {
-	DecisionID   int64  `json:"decision_id"`
-	EvidenceType string `json:"evidence_type"`
-	Payload      []byte `json:"payload"`
-}
-
-// ==============================
-// behavior_evidence
-// ==============================
-func (q *Queries) CreateBehaviorEvidence(ctx context.Context, arg CreateBehaviorEvidenceParams) (BehaviorEvidence, error) {
-	row := q.db.QueryRow(ctx, createBehaviorEvidence, arg.DecisionID, arg.EvidenceType, arg.Payload)
-	var i BehaviorEvidence
-	err := row.Scan(
-		&i.ID,
-		&i.DecisionID,
-		&i.EvidenceType,
-		&i.Payload,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const createBehaviorTraceSnapshot = `-- name: CreateBehaviorTraceSnapshot :one
 INSERT INTO behavior_trace_snapshots (
     decision_id,
@@ -613,38 +580,6 @@ func (q *Queries) ListBehaviorDecisionsByOrder(ctx context.Context, orderID int6
 			&i.TraceSummary,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listBehaviorEvidenceByDecision = `-- name: ListBehaviorEvidenceByDecision :many
-SELECT id, decision_id, evidence_type, payload, created_at FROM behavior_evidence
-WHERE decision_id = $1
-ORDER BY created_at ASC
-`
-
-func (q *Queries) ListBehaviorEvidenceByDecision(ctx context.Context, decisionID int64) ([]BehaviorEvidence, error) {
-	rows, err := q.db.Query(ctx, listBehaviorEvidenceByDecision, decisionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []BehaviorEvidence{}
-	for rows.Next() {
-		var i BehaviorEvidence
-		if err := rows.Scan(
-			&i.ID,
-			&i.DecisionID,
-			&i.EvidenceType,
-			&i.Payload,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

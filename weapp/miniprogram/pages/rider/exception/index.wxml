@@ -81,18 +81,6 @@
       />
     </view>
 
-    <view class="form-section">
-      <view class="label">图片证据</view>
-      <t-upload
-        media-type="{{['image']}}"
-        max="{{3}}"
-        files="{{formData.images}}"
-        bind:add="onAddImage"
-        bind:remove="onRemoveImage"
-      />
-      <view class="upload-tip">请拍摄包含订单小票或配送现场的图片（最多3张）</view>
-    </view>
-
     <view class="form-actions">
       <t-button theme="primary" size="large" block shape="round" bindtap="onSubmit">提交上报</t-button>
     </view>

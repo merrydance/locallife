@@ -23,6 +23,9 @@ export type ClaimType = 'refund' | 'compensation' | 'quality_issue' | 'delivery_
 /** 审批类型枚举 */
 export type ApprovalType = 'full' | 'partial' | 'rejected'
 
+/** 追偿单状态枚举 */
+export type ClaimRecoveryStatus = 'pending' | 'paid' | 'overdue' | 'waived' | 'appealed'
+
 // ==================== 申诉管理相关类型 ====================
 
 /** 申诉响应 - 基于swagger api.appealResponse */
@@ -32,7 +35,6 @@ export interface AppealResponse {
     appellant_type: AppellantType
     claim_id: number
     reason: string
-    evidence_urls: string[]
     status: AppealStatus
     region_id: number
     compensation_amount?: number
@@ -47,7 +49,6 @@ export interface AppealResponse {
 export interface CreateAppealRequest extends Record<string, unknown> {
     claim_id: number
     reason: string
-    evidence_urls?: string[]
 }
 
 /** 申诉列表查询参数 */
@@ -69,13 +70,25 @@ export interface ClaimResponse {
     claim_amount: number
     approved_amount?: number
     approval_type?: ApprovalType
-    evidence_urls: string[]
     status: ClaimStatus
     is_malicious: boolean
     review_notes?: string
     reviewer_id?: number
     created_at: string
     reviewed_at?: string
+}
+
+/** 追偿单响应 */
+export interface ClaimRecoveryResponse {
+    id: number
+    claim_id: number
+    order_id: number
+    responsible_party: string
+    recovery_target?: string
+    recovery_amount: number
+    status: ClaimRecoveryStatus
+    due_at: string
+    updated_at: string
 }
 
 /** 索赔列表查询参数 */
@@ -228,6 +241,66 @@ export class ClaimManagementService {
             url: '/v1/claims',
             method: 'GET',
             data: params
+        })
+    }
+
+    /**
+     * 获取商户追偿单详情
+     */
+    async getMerchantClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+        return request({
+            url: `/v1/merchant/claims/${claimId}/recovery`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 商户支付追偿单
+     */
+    async payMerchantClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+        return request({
+            url: `/v1/merchant/claims/${claimId}/recovery/pay`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 获取骑手追偿单详情
+     */
+    async getRiderClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+        return request({
+            url: `/v1/rider/claims/${claimId}/recovery`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 骑手支付追偿单
+     */
+    async payRiderClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+        return request({
+            url: `/v1/rider/claims/${claimId}/recovery/pay`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 运营商获取追偿单详情
+     */
+    async getOperatorClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+        return request({
+            url: `/v1/operator/claims/${claimId}/recovery`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 运营商核销追偿单
+     */
+    async waiveOperatorClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+        return request({
+            url: `/v1/operator/claims/${claimId}/recovery/waive`,
+            method: 'POST'
         })
     }
 
@@ -422,7 +495,6 @@ export class AppealsCustomerServiceAdapter {
         appellantType: AppellantType
         claimId: number
         reason: string
-        evidenceUrls: string[]
         status: AppealStatus
         regionId: number
         compensationAmount?: number
@@ -438,7 +510,6 @@ export class AppealsCustomerServiceAdapter {
             appellantType: data.appellant_type,
             claimId: data.claim_id,
             reason: data.reason,
-            evidenceUrls: data.evidence_urls,
             status: data.status,
             regionId: data.region_id,
             compensationAmount: data.compensation_amount,
@@ -462,7 +533,6 @@ export class AppealsCustomerServiceAdapter {
         claimAmount: number
         approvedAmount?: number
         approvalType?: ApprovalType
-        evidenceUrls: string[]
         status: ClaimStatus
         isMalicious: boolean
         reviewNotes?: string
@@ -479,7 +549,6 @@ export class AppealsCustomerServiceAdapter {
             claimAmount: data.claim_amount,
             approvedAmount: data.approved_amount,
             approvalType: data.approval_type,
-            evidenceUrls: data.evidence_urls,
             status: data.status,
             isMalicious: data.is_malicious,
             reviewNotes: data.review_notes,
@@ -524,12 +593,10 @@ export class AppealsCustomerServiceAdapter {
     static adaptCreateAppealRequest(data: {
         claimId: number
         reason: string
-        evidenceUrls?: string[]
     }): CreateAppealRequest {
         return {
             claim_id: data.claimId,
-            reason: data.reason,
-            evidence_urls: data.evidenceUrls
+            reason: data.reason
         }
     }
 }

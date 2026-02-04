@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,8 @@ type behaviorThresholdConfig struct {
 	MerchantAbnormalRate float64 `json:"merchant_abnormal_rate_30d"`
 	RiderAbnormalRate    float64 `json:"rider_abnormal_rate_30d"`
 }
+
+var manualReviewEnabled = false
 
 func getBehaviorWindowDays(ctx *gin.Context, store db.Store) (int, int) {
 	window7d := 7
@@ -107,29 +110,27 @@ func getBehaviorThresholds(ctx *gin.Context, store db.Store) behaviorThresholdCo
 
 // SubmitClaimRequest 提交索赔请求
 type SubmitClaimRequest struct {
-	OrderID           int64    `json:"order_id" binding:"required,min=1"`
-	ClaimType         string   `json:"claim_type" binding:"required,oneof=foreign-object damage timeout food-safety"`
-	ClaimAmount       int64    `json:"claim_amount" binding:"required,min=1,max=100000000"` // 最高100万分(1万元)
-	ClaimReason       string   `json:"claim_reason" binding:"required,min=5,max=1000"`
-	EvidencePhotos    []string `json:"evidence_photos,omitempty" binding:"omitempty,max=10,dive,url,max=500"`
-	DeviceFingerprint string   `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
+	OrderID           int64  `json:"order_id" binding:"required,min=1"`
+	ClaimType         string `json:"claim_type" binding:"required,oneof=foreign-object damage timeout food-safety"`
+	ClaimAmount       int64  `json:"claim_amount" binding:"required,min=1,max=100000000"` // 最高100万分(1万元)
+	ClaimReason       string `json:"claim_reason" binding:"required,min=5,max=1000"`
+	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
 }
 
 // SubmitClaimResponse 索赔响应
 type SubmitClaimResponse struct {
 	ClaimID            int64   `json:"claim_id"`
-	Status             string  `json:"status"` // instant, auto, manual, evidence-required, platform-pay
+	Status             string  `json:"status"` // instant, auto, manual, platform-pay
 	ApprovedAmount     *int64  `json:"approved_amount,omitempty"`
 	CompensationSource string  `json:"compensation_source,omitempty"` // merchant, rider, platform
 	Reason             string  `json:"reason"`
-	RefundETA          *string `json:"refund_eta,omitempty"`     // 秒赔/自动通过时提供预计到账时间
-	Warning            *string `json:"warning,omitempty"`        // 警告信息
-	NeedsEvidence      bool    `json:"needs_evidence,omitempty"` // 是否需要证据
+	RefundETA          *string `json:"refund_eta,omitempty"` // 秒赔/自动通过时提供预计到账时间
+	Warning            *string `json:"warning,omitempty"`    // 警告信息
 }
 
 // SubmitClaim 提交索赔
 // @Summary 提交索赔
-// @Description 用户为已完成的订单提交索赔申请。系统基于行为追溯规则进行评估，决定秒赔、需证据或平台垫付。
+// @Description 用户为已完成的订单提交索赔申请。系统基于行为追溯规则进行评估，决定秒赔或平台垫付。
 // @Tags 索赔管理
 // @Accept json
 // @Produce json
@@ -176,6 +177,18 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
+	// 3.1 行为黑名单拦截（拒绝服务用户）
+	if _, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   authPayload.UserID,
+	}); err == nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("账户存在异常行为限制，无法提交索赔")))
+		return
+	} else if !errors.Is(err, db.ErrRecordNotFound) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	// 4. 检查是否已存在该订单的索赔（幂等性检查）
 	existingClaims, err := server.store.ListUserClaimsInPeriod(ctx, db.ListUserClaimsInPeriodParams{
 		UserID:    authPayload.UserID,
@@ -198,9 +211,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
-	// 6. 检查是否提交了证据
-	hasEvidence := len(req.EvidencePhotos) > 0
-
 	// 6.1 规则引擎判定（索赔/异常规则）
 	ruleDecision := rules.Decision{Action: "allow"}
 	if server.rulesEngine != nil && server.config.RulesEngineEnabled {
@@ -212,8 +222,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			"claim_type":          req.ClaimType,
 			"claim_amount":        req.ClaimAmount,
 			"order_amount":        order.TotalAmount,
-			"has_evidence":        hasEvidence,
-			"evidence_count":      len(req.EvidencePhotos),
 			"claim_reason_length": len(req.ClaimReason),
 			"device_fingerprint":  req.DeviceFingerprint,
 		}
@@ -274,6 +282,19 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			}
 			metadata["merchant_abnormal_rate_30d_exceeded"] = summary.TotalOrders > 0 && float64(summary.AbnormalClaims)/float64(summary.TotalOrders) >= thresholds.MerchantAbnormalRate
 		}
+		if summary7d, err := server.store.GetAbnormalStatsSummary(ctx, db.GetAbnormalStatsSummaryParams{
+			EntityType: "merchant",
+			EntityID:   order.MerchantID,
+			StatDate:   start7d,
+			StatDate_2: endDate,
+		}); err == nil {
+			metadata["merchant_total_orders_7d"] = summary7d.TotalOrders
+			metadata["merchant_abnormal_claims_7d"] = summary7d.AbnormalClaims
+			if summary7d.TotalOrders > 0 {
+				metadata["merchant_abnormal_rate_7d"] = float64(summary7d.AbnormalClaims) / float64(summary7d.TotalOrders)
+			}
+			metadata["merchant_abnormal_rate_7d_exceeded"] = summary7d.TotalOrders > 0 && float64(summary7d.AbnormalClaims)/float64(summary7d.TotalOrders) >= thresholds.MerchantAbnormalRate
+		}
 
 		if delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID); err == nil && delivery.RiderID.Valid {
 			riderID := delivery.RiderID.Int64
@@ -290,6 +311,19 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 					metadata["rider_abnormal_rate_30d"] = float64(summary.AbnormalClaims) / float64(summary.TotalOrders)
 				}
 				metadata["rider_abnormal_rate_30d_exceeded"] = summary.TotalOrders > 0 && float64(summary.AbnormalClaims)/float64(summary.TotalOrders) >= thresholds.RiderAbnormalRate
+			}
+			if summary7d, err := server.store.GetAbnormalStatsSummary(ctx, db.GetAbnormalStatsSummaryParams{
+				EntityType: "rider",
+				EntityID:   riderID,
+				StatDate:   start7d,
+				StatDate_2: endDate,
+			}); err == nil {
+				metadata["rider_total_orders_7d"] = summary7d.TotalOrders
+				metadata["rider_abnormal_claims_7d"] = summary7d.AbnormalClaims
+				if summary7d.TotalOrders > 0 {
+					metadata["rider_abnormal_rate_7d"] = float64(summary7d.AbnormalClaims) / float64(summary7d.TotalOrders)
+				}
+				metadata["rider_abnormal_rate_7d_exceeded"] = summary7d.TotalOrders > 0 && float64(summary7d.AbnormalClaims)/float64(summary7d.TotalOrders) >= thresholds.RiderAbnormalRate
 			}
 		}
 
@@ -339,7 +373,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		req.ClaimAmount,
 		deliveryFee,
 		req.ClaimType,
-		hasEvidence,
 	)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("evaluate claim: %w", err)))
@@ -349,12 +382,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	// 规则引擎结果覆盖（如需）
 	if ruleDecision.Action != "" && ruleDecision.Action != "allow" && ruleDecision.Action != "alert" {
 		switch ruleDecision.Action {
-		case "evidence-required":
-			decision.Type = "evidence-required"
-			decision.Approved = false
-			decision.Amount = 0
-			decision.Reason = ruleDecision.Reason
-			decision.NeedsEvidence = true
 		case "manual":
 			decision.Type = algorithm.ApprovalTypeManual
 			decision.Approved = false
@@ -374,8 +401,11 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			}
 		}
 	}
-
-	// 免证据流程：不再阻断提交，仅记录提示信息
+	if ruleDecision.Meta != nil {
+		if v, ok := ruleDecision.Meta["decision_reason"].(string); ok && v != "" && decision.Reason == "" {
+			decision.Reason = v
+		}
+	}
 
 	// 采集证据信息（事务内落库）
 	deviceID := ""
@@ -406,7 +436,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		authPayload.UserID,
 		req.ClaimType,
 		req.ClaimReason,
-		req.EvidencePhotos,
 		decision.Amount, // 使用决策后的金额（超时可能只赔运费）
 		decision,
 		evidenceContext,
@@ -416,13 +445,119 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
+	// 平台先行赔付（异步，不阻塞响应）
+	if decision.Approved && decision.Amount > 0 {
+		go func() {
+			_, refundErr := server.store.ClaimRefundTx(context.Background(), db.ClaimRefundTxParams{
+				ClaimID:    claim.ID,
+				UserID:     authPayload.UserID,
+				Amount:     decision.Amount,
+				SourceType: "platform",
+				SourceID:   0,
+				Remark:     "platform payout",
+			})
+			if refundErr != nil {
+				fmt.Printf("claim refund failed: claim_id=%d, user_id=%d, err=%v\n", claim.ID, authPayload.UserID, refundErr)
+			}
+		}()
+	}
+
+	// 生成追偿单（责任方为商户/骑手且需要追偿）
+	responsibleParty := "unknown"
+	recoveryTarget := ""
+	recoveryRequired := false
+	recoveryAmount := decision.Amount
+	if ruleDecision.Meta != nil {
+		if v, ok := ruleDecision.Meta["responsible_party"].(string); ok && v != "" {
+			responsibleParty = v
+		}
+		if v, ok := ruleDecision.Meta["recovery_required"].(bool); ok {
+			recoveryRequired = v
+		}
+		if v, ok := ruleDecision.Meta["recovery_target"].(string); ok && v != "" {
+			recoveryTarget = v
+		}
+		if v, ok := ruleDecision.Meta["recovery_amount"].(float64); ok {
+			recoveryAmount = int64(v)
+		}
+		if v, ok := ruleDecision.Meta["recovery_amount"].(int64); ok {
+			recoveryAmount = v
+		}
+	}
+	if responsibleParty == "platform_fallback" {
+		userSafe := !boolMeta(ruleDecision.Meta, "user_claims_7d_exceeded") &&
+			!boolMeta(ruleDecision.Meta, "user_claims_30d_exceeded") &&
+			!boolMeta(ruleDecision.Meta, "user_claim_rate_7d_exceeded") &&
+			!boolMeta(ruleDecision.Meta, "user_claim_rate_30d_exceeded")
+		merchantSafe := !boolMeta(ruleDecision.Meta, "merchant_abnormal_rate_7d_exceeded") &&
+			!boolMeta(ruleDecision.Meta, "merchant_abnormal_rate_30d_exceeded")
+		riderSafe := !boolMeta(ruleDecision.Meta, "rider_abnormal_rate_7d_exceeded") &&
+			!boolMeta(ruleDecision.Meta, "rider_abnormal_rate_30d_exceeded")
+		if userSafe && merchantSafe && riderSafe {
+			decision.CompensationSource = algorithm.CompensationSourcePlatform
+			decision.Type = "platform-pay"
+			recoveryRequired = false
+			recoveryTarget = ""
+		} else {
+			responsibleParty = "unknown"
+		}
+	}
+	if responsibleParty == "unknown" && decision.CompensationSource != "" {
+		switch decision.CompensationSource {
+		case algorithm.CompensationSourceMerchant:
+			responsibleParty = "merchant"
+		case algorithm.CompensationSourceRider:
+			responsibleParty = "rider"
+		case algorithm.CompensationSourcePlatform:
+			responsibleParty = "platform_fallback"
+		}
+	}
+	if responsibleParty == "platform_fallback" {
+		recoveryRequired = false
+		recoveryTarget = ""
+	}
+	if !recoveryRequired {
+		recoveryRequired = responsibleParty == "merchant" || responsibleParty == "rider"
+	}
+	if recoveryTarget == "" && (responsibleParty == "merchant" || responsibleParty == "rider") {
+		recoveryTarget = responsibleParty
+	}
+	if recoveryAmount <= 0 {
+		recoveryAmount = decision.Amount
+	}
+	if decision.Approved && recoveryRequired && (recoveryTarget == "merchant" || recoveryTarget == "rider") {
+		decisionSnapshot := map[string]any{
+			"decision_type":       decision.Type,
+			"decision_reason":     decision.Reason,
+			"behavior_status":     decision.BehaviorStatus,
+			"compensation_source": decision.CompensationSource,
+			"rule_action":         ruleDecision.Action,
+			"rule_reason":         ruleDecision.Reason,
+			"rule_meta":           ruleDecision.Meta,
+			"responsible_party":   responsibleParty,
+			"recovery_target":     recoveryTarget,
+			"recovery_amount":     recoveryAmount,
+		}
+		decisionSnapshotJSON, _ := json.Marshal(decisionSnapshot)
+		dueAt := time.Now().Add(24 * time.Hour)
+		_, _ = server.store.CreateClaimRecovery(ctx, db.CreateClaimRecoveryParams{
+			ClaimID:          claim.ID,
+			OrderID:          req.OrderID,
+			ResponsibleParty: responsibleParty,
+			RecoveryTarget:   pgtype.Text{String: recoveryTarget, Valid: recoveryTarget != ""},
+			RecoveryAmount:   recoveryAmount,
+			Status:           "pending",
+			DueAt:            dueAt,
+			DecisionSnapshot: decisionSnapshotJSON,
+		})
+	}
+
 	// 构造响应
 	resp := SubmitClaimResponse{
 		ClaimID:            claim.ID,
 		Status:             decision.Type,
 		CompensationSource: decision.CompensationSource,
 		Reason:             decision.Reason,
-		NeedsEvidence:      decision.NeedsEvidence,
 	}
 
 	if decision.Approved {
@@ -496,6 +631,11 @@ type ReviewClaimRequest struct {
 // @Router /v1/claims/{id}/review [patch]
 // @Security BearerAuth
 func (server *Server) ReviewClaim(ctx *gin.Context) {
+	if !manualReviewEnabled {
+		ctx.JSON(http.StatusGone, errorResponse(errors.New("manual review disabled; claims are auto-adjudicated")))
+		return
+	}
+
 	claimIDStr := ctx.Param("id")
 	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
 	if err != nil {
@@ -595,13 +735,12 @@ func (server *Server) ReviewClaim(ctx *gin.Context) {
 
 // ReportFoodSafetyRequest 上报食安请求
 type ReportFoodSafetyRequest struct {
-	ReporterID     int64  `json:"reporter_id" binding:"required,min=1"`
-	MerchantID     int64  `json:"merchant_id" binding:"required,min=1"`
-	OrderID        int64  `json:"order_id" binding:"required,min=1"`
-	IncidentType   string `json:"incident_type" binding:"required,oneof=foreign-object contamination expired"`
-	Description    string `json:"description" binding:"required,min=10,max=1000"`
-	EvidencePhotos string `json:"evidence_photos" binding:"required,url,max=500"` // 食安必须有证据
-	SeverityLevel  int16  `json:"severity_level" binding:"required,min=1,max=5"`
+	ReporterID    int64  `json:"reporter_id" binding:"required,min=1"`
+	MerchantID    int64  `json:"merchant_id" binding:"required,min=1"`
+	OrderID       int64  `json:"order_id" binding:"required,min=1"`
+	IncidentType  string `json:"incident_type" binding:"required,oneof=foreign-object contamination expired"`
+	Description   string `json:"description" binding:"required,min=10,max=1000"`
+	SeverityLevel int16  `json:"severity_level" binding:"required,min=1,max=5"`
 }
 
 // ReportFoodSafetyResponse 食安上报响应
@@ -640,13 +779,12 @@ func (server *Server) ReportFoodSafety(ctx *gin.Context) {
 	// 创建食安处理器
 	handler := algorithm.NewFoodSafetyHandler(server.store, server.wsHub)
 
-	// 评估食安举报
-	evidencePhotos := []string{req.EvidencePhotos}
+	// 评估食安举报（无证据输入）
 	result, err := handler.EvaluateFoodSafetyReport(
 		ctx,
 		req.ReporterID,
 		req.MerchantID,
-		evidencePhotos,
+		nil,
 	)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("evaluate food safety report for order %d: %w", req.OrderID, err)))
@@ -660,7 +798,6 @@ func (server *Server) ReportFoodSafety(ctx *gin.Context) {
 		OrderID:          req.OrderID,
 		IncidentType:     req.IncidentType,
 		Description:      req.Description,
-		EvidenceUrls:     evidencePhotos,
 		OrderSnapshot:    []byte{},
 		MerchantSnapshot: []byte{},
 		RiderSnapshot:    []byte{},
@@ -990,7 +1127,6 @@ type claimResponse struct {
 	OrderID        int64      `json:"order_id"`
 	ClaimType      string     `json:"claim_type"`
 	Description    string     `json:"description"`
-	EvidenceURLs   []string   `json:"evidence_urls,omitempty"`
 	ClaimAmount    int64      `json:"claim_amount"`
 	ApprovedAmount *int64     `json:"approved_amount,omitempty"`
 	Status         string     `json:"status"`
@@ -1030,11 +1166,6 @@ func newClaimResponse(claim db.Claim) claimResponse {
 	}
 	if claim.ReviewedAt.Valid {
 		resp.ReviewedAt = &claim.ReviewedAt.Time
-	}
-
-	// 解析证据URL数组
-	if len(claim.EvidenceUrls) > 0 {
-		resp.EvidenceURLs = claim.EvidenceUrls
 	}
 
 	return resp

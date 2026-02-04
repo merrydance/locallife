@@ -74,24 +74,6 @@ SET decision_status = $2,
 WHERE id = $1;
 
 -- ==============================
--- behavior_evidence
--- ==============================
-
--- name: CreateBehaviorEvidence :one
-INSERT INTO behavior_evidence (
-    decision_id,
-    evidence_type,
-    payload
-) VALUES (
-    $1, $2, $3
-) RETURNING *;
-
--- name: ListBehaviorEvidenceByDecision :many
-SELECT * FROM behavior_evidence
-WHERE decision_id = $1
-ORDER BY created_at ASC;
-
--- ==============================
 -- behavior_trace_snapshots
 -- ==============================
 

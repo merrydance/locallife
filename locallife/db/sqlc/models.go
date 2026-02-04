@@ -28,13 +28,12 @@ type Appeal struct {
 	// 申诉人类型：merchant=商户, rider=骑手
 	AppellantType string `json:"appellant_type"`
 	// 申诉人ID（商户ID或骑手ID）
-	AppellantID  int64              `json:"appellant_id"`
-	Reason       string             `json:"reason"`
-	EvidenceUrls []string           `json:"evidence_urls"`
-	Status       string             `json:"status"`
-	ReviewerID   pgtype.Int8        `json:"reviewer_id"`
-	ReviewNotes  pgtype.Text        `json:"review_notes"`
-	ReviewedAt   pgtype.Timestamptz `json:"reviewed_at"`
+	AppellantID int64              `json:"appellant_id"`
+	Reason      string             `json:"reason"`
+	Status      string             `json:"status"`
+	ReviewerID  pgtype.Int8        `json:"reviewer_id"`
+	ReviewNotes pgtype.Text        `json:"review_notes"`
+	ReviewedAt  pgtype.Timestamptz `json:"reviewed_at"`
 	// 补偿金额（申诉成功时平台垫付给申诉人）
 	CompensationAmount pgtype.Int8        `json:"compensation_amount"`
 	CompensatedAt      pgtype.Timestamptz `json:"compensated_at"`
@@ -107,14 +106,6 @@ type BehaviorDecision struct {
 	TraceSummary       pgtype.Text `json:"trace_summary"`
 	CreatedAt          time.Time   `json:"created_at"`
 	UpdatedAt          time.Time   `json:"updated_at"`
-}
-
-type BehaviorEvidence struct {
-	ID           int64     `json:"id"`
-	DecisionID   int64     `json:"decision_id"`
-	EvidenceType string    `json:"evidence_type"`
-	Payload      []byte    `json:"payload"`
-	CreatedAt    time.Time `json:"created_at"`
 }
 
 type BehaviorTraceSnapshot struct {
@@ -222,7 +213,6 @@ type Claim struct {
 	UserID         int64       `json:"user_id"`
 	ClaimType      string      `json:"claim_type"`
 	Description    string      `json:"description"`
-	EvidenceUrls   []string    `json:"evidence_urls"`
 	ClaimAmount    int64       `json:"claim_amount"`
 	ApprovedAmount pgtype.Int8 `json:"approved_amount"`
 	Status         string      `json:"status"`
@@ -238,6 +228,22 @@ type Claim struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
+}
+
+type ClaimRecovery struct {
+	ID               int64       `json:"id"`
+	ClaimID          int64       `json:"claim_id"`
+	OrderID          int64       `json:"order_id"`
+	ResponsibleParty string      `json:"responsible_party"`
+	RecoveryTarget   pgtype.Text `json:"recovery_target"`
+	RecoveryAmount   int64       `json:"recovery_amount"`
+	Status           string      `json:"status"`
+	DueAt            time.Time   `json:"due_at"`
+	DecisionSnapshot []byte      `json:"decision_snapshot"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
 }
 
 type CloudPrinter struct {
@@ -582,8 +588,6 @@ type FoodSafetyIncident struct {
 	UserID       int64  `json:"user_id"`
 	IncidentType string `json:"incident_type"`
 	Description  string `json:"description"`
-	// 食安必须有证据（照片、描述）
-	EvidenceUrls []string `json:"evidence_urls"`
 	// 订单完整快照（所有字段）用于事故溯源
 	OrderSnapshot []byte `json:"order_snapshot"`
 	// 商户快照（菜单、当班员工）
@@ -935,6 +939,31 @@ type MerchantProfile struct {
 	SuspendedAt   pgtype.Timestamptz `json:"suspended_at"`
 	SuspendUntil  pgtype.Timestamptz `json:"suspend_until"`
 	UpdatedAt     time.Time          `json:"updated_at"`
+	// 是否暂停外卖接单（追偿逾期/经营限制）
+	IsTakeoutSuspended bool `json:"is_takeout_suspended"`
+	// 外卖暂停原因
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendedAt   pgtype.Timestamptz `json:"takeout_suspended_at"`
+	// 外卖暂停截止时间
+	TakeoutSuspendUntil pgtype.Timestamptz `json:"takeout_suspend_until"`
+}
+
+// 商户结算调整流水（追偿真实扣款/回滚）
+type MerchantSettlementAdjustment struct {
+	ID         int64 `json:"id"`
+	MerchantID int64 `json:"merchant_id"`
+	// 调整类型：claim_recovery_charge/claim_recovery_reversal
+	AdjustmentType string `json:"adjustment_type"`
+	// 调整金额（分，扣款为负，回滚为正）
+	Amount int64 `json:"amount"`
+	// 状态：finished=已入账，reversed=已冲正
+	Status      string             `json:"status"`
+	RelatedType pgtype.Text        `json:"related_type"`
+	RelatedID   pgtype.Int8        `json:"related_id"`
+	Note        pgtype.Text        `json:"note"`
+	PostedAt    pgtype.Timestamptz `json:"posted_at"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 // 商户员工表 - 管理商户与用户的关联关系及角色

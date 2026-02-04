@@ -127,6 +127,8 @@ type Querier interface {
 	// 统计商户在某时间后特定状态的订单数
 	CountMerchantOrdersByStatusAfterTime(ctx context.Context, arg CountMerchantOrdersByStatusAfterTimeParams) (int64, error)
 	CountMerchantPromotionOrders(ctx context.Context, arg CountMerchantPromotionOrdersParams) (int64, error)
+	CountMerchantSettlementAdjustments(ctx context.Context, arg CountMerchantSettlementAdjustmentsParams) (int64, error)
+	CountMerchantSettlementTimeline(ctx context.Context, arg CountMerchantSettlementTimelineParams) (int64, error)
 	CountMerchantSettlements(ctx context.Context, arg CountMerchantSettlementsParams) (int64, error)
 	CountMerchantSettlementsByStatus(ctx context.Context, arg CountMerchantSettlementsByStatusParams) (int64, error)
 	CountMerchantStaff(ctx context.Context, merchantID int64) (int64, error)
@@ -235,10 +237,6 @@ type Querier interface {
 	// behavior_decisions
 	// ==============================
 	CreateBehaviorDecision(ctx context.Context, arg CreateBehaviorDecisionParams) (BehaviorDecision, error)
-	// ==============================
-	// behavior_evidence
-	// ==============================
-	CreateBehaviorEvidence(ctx context.Context, arg CreateBehaviorEvidenceParams) (BehaviorEvidence, error)
 	CreateBehaviorTraceSnapshot(ctx context.Context, arg CreateBehaviorTraceSnapshotParams) (BehaviorTraceSnapshot, error)
 	// Billing groups
 	CreateBillingGroup(ctx context.Context, arg CreateBillingGroupParams) (BillingGroup, error)
@@ -254,6 +252,8 @@ type Querier interface {
 	// claims（索赔记录）
 	// ==========================================
 	CreateClaim(ctx context.Context, arg CreateClaimParams) (Claim, error)
+	// Claim recovery queries
+	CreateClaimRecovery(ctx context.Context, arg CreateClaimRecoveryParams) (ClaimRecovery, error)
 	CreateCloudPrinter(ctx context.Context, arg CreateCloudPrinterParams) (CloudPrinter, error)
 	// ==================== 合单支付主表查询 ====================
 	CreateCombinedPaymentOrder(ctx context.Context, arg CreateCombinedPaymentOrderParams) (CombinedPaymentOrder, error)
@@ -330,7 +330,9 @@ type Querier interface {
 	// ==========================================
 	// merchant_profiles（商户信任画像）
 	// ==========================================
-	CreateMerchantProfile(ctx context.Context, merchantID int64) (MerchantProfile, error)
+	CreateMerchantProfile(ctx context.Context, merchantID int64) (CreateMerchantProfileRow, error)
+	// Merchant settlement adjustment queries
+	CreateMerchantSettlementAdjustment(ctx context.Context, arg CreateMerchantSettlementAdjustmentParams) (MerchantSettlementAdjustment, error)
 	// 商户员工管理查询
 	CreateMerchantStaff(ctx context.Context, arg CreateMerchantStaffParams) (MerchantStaff, error)
 	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
@@ -522,6 +524,7 @@ type Querier interface {
 	// 获取索赔信息（用于创建申诉时验证）
 	GetClaimForAppeal(ctx context.Context, id int64) (GetClaimForAppealRow, error)
 	GetClaimForUpdate(ctx context.Context, id int64) (Claim, error)
+	GetClaimRecoveryByClaimID(ctx context.Context, claimID int64) (ClaimRecovery, error)
 	// 获取索赔详情（包含订单、商户、用户信息）
 	GetClaimWithDetails(ctx context.Context, id int64) (GetClaimWithDetailsRow, error)
 	// ==========================================
@@ -695,8 +698,8 @@ type Querier interface {
 	GetMerchantOverview(ctx context.Context, arg GetMerchantOverviewParams) (GetMerchantOverviewRow, error)
 	GetMerchantPaymentConfig(ctx context.Context, merchantID int64) (MerchantPaymentConfig, error)
 	GetMerchantPaymentConfigBySubMchID(ctx context.Context, subMchID string) (MerchantPaymentConfig, error)
-	GetMerchantProfile(ctx context.Context, merchantID int64) (MerchantProfile, error)
-	GetMerchantProfileForUpdate(ctx context.Context, merchantID int64) (MerchantProfile, error)
+	GetMerchantProfile(ctx context.Context, merchantID int64) (GetMerchantProfileRow, error)
+	GetMerchantProfileForUpdate(ctx context.Context, merchantID int64) (GetMerchantProfileForUpdateRow, error)
 	GetMerchantProfitSharingStats(ctx context.Context, arg GetMerchantProfitSharingStatsParams) (GetMerchantProfitSharingStatsRow, error)
 	// ==================== 商户财务相关查询 ====================
 	// 统计商户满返运费支出
@@ -710,6 +713,7 @@ type Querier interface {
 	GetMerchantRepurchaseRate(ctx context.Context, arg GetMerchantRepurchaseRateParams) (GetMerchantRepurchaseRateRow, error)
 	// 商户服务费明细
 	GetMerchantServiceFeeDetail(ctx context.Context, arg GetMerchantServiceFeeDetailParams) ([]GetMerchantServiceFeeDetailRow, error)
+	GetMerchantSettlementAdjustmentByRelatedAndType(ctx context.Context, arg GetMerchantSettlementAdjustmentByRelatedAndTypeParams) (MerchantSettlementAdjustment, error)
 	GetMerchantStaff(ctx context.Context, arg GetMerchantStaffParams) (MerchantStaff, error)
 	GetMerchantStaffByID(ctx context.Context, id int64) (MerchantStaff, error)
 	// ==================== 高级查询（使用JOIN和聚合）====================
@@ -909,6 +913,8 @@ type Querier interface {
 	GetUserBalanceForUpdate(ctx context.Context, userID int64) (UserBalance, error)
 	// 根据关联信息获取日志（用于幂等检查）
 	GetUserBalanceLogByRelated(ctx context.Context, arg GetUserBalanceLogByRelatedParams) (UserBalanceLog, error)
+	// 根据关联信息和类型获取日志（用于幂等检查/回滚）
+	GetUserBalanceLogByRelatedAndType(ctx context.Context, arg GetUserBalanceLogByRelatedAndTypeParams) (UserBalanceLog, error)
 	// 获取用户行为统计（用于索赔判定）
 	GetUserBehaviorStats(ctx context.Context, userID int64) (GetUserBehaviorStatsRow, error)
 	GetUserByPhone(ctx context.Context, phone pgtype.Text) (User, error)
@@ -1002,7 +1008,6 @@ type Querier interface {
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)
 	ListBehaviorDecisionsByOrder(ctx context.Context, orderID int64) ([]BehaviorDecision, error)
-	ListBehaviorEvidenceByDecision(ctx context.Context, decisionID int64) ([]BehaviorEvidence, error)
 	ListBehaviorTraceSnapshotsByDecision(ctx context.Context, decisionID int64) ([]BehaviorTraceSnapshot, error)
 	ListBillingGroupOrdersByGroup(ctx context.Context, billingGroupID int64) ([]BillingGroupOrder, error)
 	ListBillingGroupsBySession(ctx context.Context, diningSessionID int64) ([]BillingGroup, error)
@@ -1052,6 +1057,7 @@ type Querier interface {
 	ListDishesByMerchant(ctx context.Context, arg ListDishesByMerchantParams) ([]Dish, error)
 	// 获取商户上架菜品（用于扫码点餐菜单展示）
 	ListDishesForMenu(ctx context.Context, merchantID int64) ([]ListDishesForMenuRow, error)
+	ListDueClaimRecoveries(ctx context.Context, arg ListDueClaimRecoveriesParams) ([]ClaimRecovery, error)
 	ListEcommerceApplymentsByStatus(ctx context.Context, arg ListEcommerceApplymentsByStatusParams) ([]EcommerceApplyment, error)
 	ListEcommerceApplymentsBySubject(ctx context.Context, arg ListEcommerceApplymentsBySubjectParams) ([]EcommerceApplyment, error)
 	// 列出已过期的运营商
@@ -1088,6 +1094,7 @@ type Querier interface {
 	ListMerchantClaimsByTypeInPeriod(ctx context.Context, arg ListMerchantClaimsByTypeInPeriodParams) ([]Claim, error)
 	// 商户查看收到的索赔列表（未申诉的+已申诉的）
 	ListMerchantClaimsForMerchant(ctx context.Context, arg ListMerchantClaimsForMerchantParams) ([]ListMerchantClaimsForMerchantRow, error)
+	ListMerchantDailySettlementAdjustments(ctx context.Context, arg ListMerchantDailySettlementAdjustmentsParams) ([]ListMerchantDailySettlementAdjustmentsRow, error)
 	ListMerchantDiscountRules(ctx context.Context, arg ListMerchantDiscountRulesParams) ([]DiscountRule, error)
 	// 商户财务订单明细（带分账信息）
 	ListMerchantFinanceOrders(ctx context.Context, arg ListMerchantFinanceOrdersParams) ([]ListMerchantFinanceOrdersRow, error)
@@ -1104,6 +1111,8 @@ type Querier interface {
 	ListMerchantRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
 	// 获取商户的包间列表（含主图、月销量）供顾客查看
 	ListMerchantRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListMerchantRoomsForCustomerRow, error)
+	ListMerchantSettlementAdjustments(ctx context.Context, arg ListMerchantSettlementAdjustmentsParams) ([]MerchantSettlementAdjustment, error)
+	ListMerchantSettlementTimeline(ctx context.Context, arg ListMerchantSettlementTimelineParams) ([]ListMerchantSettlementTimelineRow, error)
 	// 商户结算记录（带日期范围和状态筛选）
 	ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ProfitSharingOrder, error)
 	// 商户结算记录（带日期范围和状态筛选）
@@ -1266,6 +1275,11 @@ type Querier interface {
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
+	MarkClaimRecoveryAppealed(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkClaimRecoveryOverdue(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkClaimRecoveryPaid(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkClaimRecoveryPending(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkClaimRecoveryWaived(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
@@ -1365,14 +1379,17 @@ type Querier interface {
 	SumClaimAmountsByMerchant(ctx context.Context, dollar_1 []int64) ([]SumClaimAmountsByMerchantRow, error)
 	// 按骑手统计索赔损失金额（餐损类型）
 	SumClaimAmountsByRider(ctx context.Context, dollar_1 []int64) ([]SumClaimAmountsByRiderRow, error)
+	SumMerchantSettlementAdjustments(ctx context.Context, arg SumMerchantSettlementAdjustmentsParams) (int64, error)
 	SumReservationItemsTotal(ctx context.Context, reservationID int64) (int64, error)
 	SuspendMerchant(ctx context.Context, arg SuspendMerchantParams) error
+	SuspendMerchantTakeout(ctx context.Context, arg SuspendMerchantTakeoutParams) error
 	SuspendRegion(ctx context.Context, id int64) error
 	SuspendRider(ctx context.Context, arg SuspendRiderParams) error
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
 	UnlinkMerchantDishCategory(ctx context.Context, arg UnlinkMerchantDishCategoryParams) error
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
+	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
 	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error

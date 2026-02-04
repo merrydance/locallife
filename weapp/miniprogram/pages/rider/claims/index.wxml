@@ -12,15 +12,6 @@
       maxlength="200"
       indicator
     />
-    <view class="image-uploader">
-      <view class="upload-btn" bindtap="onAddImage">
-        <t-icon name="add" size="48rpx" color="#999" />
-        <text>上传凭证</text>
-      </view>
-      <view wx:for="{{form.images}}" wx:key="*this" class="image-preview">
-        <t-image src="{{item}}" mode="aspectFill" width="160rpx" height="160rpx" />
-      </view>
-    </view>
     <t-button theme="primary" block loading="{{submitting}}" bindtap="onSubmit">提交上报</t-button>
   </view>
 
@@ -44,6 +35,24 @@
           </view>
           <text class="claim-desc">{{item.description}}</text>
           <text class="claim-time">{{item.created_at}}</text>
+          <view wx:if="{{item.recoveryStatus}}" class="claim-recovery">
+            <view class="recovery-row">
+              <text class="recovery-label">追偿状态</text>
+              <text class="recovery-value">{{item.recoveryStatus}}</text>
+            </view>
+            <view class="recovery-row" wx:if="{{item.recoveryAmount}}">
+              <text class="recovery-label">追偿金额</text>
+              <text class="recovery-value">{{item.recoveryAmount}}分</text>
+            </view>
+            <t-button
+              wx:if="{{item.recoveryStatus === 'pending' || item.recoveryStatus === 'overdue'}}"
+              theme="primary"
+              size="small"
+              loading="{{recoveryPaying[item.id]}}"
+              data-claim-id="{{item.id}}"
+              bindtap="onPayRecovery"
+            >支付追偿</t-button>
+          </view>
         </view>
       </view>
     </view>

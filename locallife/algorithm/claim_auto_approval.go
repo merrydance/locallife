@@ -66,8 +66,8 @@ func (caa *ClaimAutoApproval) SetNotificationDistributor(distributor Notificatio
 
 // EvaluateClaim 评估索赔申请（新设计）
 // 核心逻辑：
-// 1. 食安 → 人工审核
-// 2. 其他类型 → 检查用户行为 → 决定是否秒赔/需证据/平台垫付
+// 1. 食安 → 平台先赔付（不走人工审核）
+// 2. 其他类型 → 检查用户行为 → 决定是否秒赔/平台垫付
 func (caa *ClaimAutoApproval) EvaluateClaim(
 	ctx context.Context,
 	userID int64,
@@ -75,18 +75,16 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 	claimAmount int64,
 	deliveryFee int64,
 	claimType string,
-	hasEvidence bool, // 是否提交了证据照片
 ) (*Decision, error) {
-	// Step 1: 食安索赔 → 人工审核
+	// Step 1: 食安索赔 → 平台先赔付（不走人工审核）
 	if claimType == ClaimTypeFoodSafety {
 		return &Decision{
-			Type:               ApprovalTypeManual,
-			Approved:           false, // 需要人工审核后才赔付
-			Amount:             0,
-			Reason:             "食安索赔需人工审核",
+			Type:               ApprovalTypeAuto,
+			Approved:           true,
+			Amount:             claimAmount,
+			Reason:             "食安索赔平台先行赔付",
 			CompensationSource: CompensationSourceMerchant,
-			NeedsReview:        true,
-			ReviewMessage:      "食安索赔需要人工审核，退全款+医药费另议",
+			BehaviorStatus:     ClaimBehaviorNormal,
 		}, nil
 	}
 
@@ -136,21 +134,21 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 		decision.Reason = "正常用户秒赔"
 
 	case ClaimBehaviorWarned:
-		// 首次触发警告（5单3索赔）：秒赔 + 警告
 		decision.Type = ApprovalTypeInstant
-		decision.Reason = "首次警告，本次秒赔"
-		decision.Warning = fmt.Sprintf(
-			"您近3个月%d笔外卖订单中已索赔%d次，下次索赔需提交证据照片",
-			behaviorResult.TakeoutOrders, behaviorResult.ClaimCount+1)
-		decision.ShouldWarn = true
-		// 记录警告
-		go caa.recordUserWarning(ctx, userID, decision.Warning)
-
-	case ClaimBehaviorEvidenceRequired:
-		// 免证据流程：已被警告过仍秒赔，但记录提示
-		decision.Type = ApprovalTypeInstant
-		decision.Reason = "已触发警告，仍秒赔"
-		decision.Warning = "您的索赔行为已触发警告，后续可能进入人工复核"
+		if behaviorResult.ShouldWarn {
+			// 首次触发警告（5单3索赔）：秒赔 + 警告
+			decision.Reason = "首次警告，本次秒赔"
+			decision.Warning = fmt.Sprintf(
+				"您近3个月%d笔外卖订单中已索赔%d次，后续索赔将进入平台行为回溯审计",
+				behaviorResult.TakeoutOrders, behaviorResult.ClaimCount+1)
+			decision.ShouldWarn = true
+			// 记录警告
+			go caa.recordUserWarning(ctx, userID, decision.Warning)
+		} else {
+			// 已被警告：仍秒赔，但记录提示
+			decision.Reason = "已触发警告，仍秒赔"
+			decision.Warning = "您的索赔行为已触发警告，后续索赔将进入平台行为回溯审计"
+		}
 
 	case ClaimBehaviorPlatformPay:
 		// 问题用户：照赔，但平台垫付
@@ -198,15 +196,7 @@ func (caa *ClaimAutoApproval) CheckUserClaimBehavior(ctx context.Context, userID
 	}
 
 	// 判定状态
-	// 1. 已被要求提交证据
-	if stats.RequiresEvidence {
-		result.Status = ClaimBehaviorEvidenceRequired
-		result.NeedsEvidence = true
-		result.Message = "已被警告，需要提交证据"
-		return result, nil
-	}
-
-	// 2. 平台垫付次数>=2次 → 拒绝服务
+	// 1. 平台垫付次数>=2次 → 拒绝服务
 	if stats.PlatformPayCount >= 2 {
 		result.Status = ClaimBehaviorRejectService
 		result.RejectService = true
@@ -214,12 +204,18 @@ func (caa *ClaimAutoApproval) CheckUserClaimBehavior(ctx context.Context, userID
 		return result, nil
 	}
 
-	// 3. 已有警告+继续触发条件 → 需要证据或平台垫付
+	// 2. 已有平台垫付记录：持续平台垫付
+	if stats.PlatformPayCount > 0 {
+		result.Status = ClaimBehaviorPlatformPay
+		result.Message = "问题用户，平台垫付"
+		return result, nil
+	}
+
+	// 3. 已有警告/标记：进入平台行为回溯审计
 	if stats.WarningCount > 0 {
-		// 已被警告，需要证据
-		result.Status = ClaimBehaviorEvidenceRequired
-		result.NeedsEvidence = true
-		result.Message = "已被警告，需要提交证据"
+		result.Status = ClaimBehaviorWarned
+		result.ShouldWarn = false
+		result.Message = "已被警告，进入平台行为回溯审计"
 		return result, nil
 	}
 
@@ -259,14 +255,14 @@ func (caa *ClaimAutoApproval) recordUserWarning(ctx context.Context, userID int6
 		_, _ = caa.store.CreateUserClaimWarning(ctx, db.CreateUserClaimWarningParams{
 			UserID:            userID,
 			LastWarningReason: pgtype.Text{String: reason, Valid: true},
-			RequiresEvidence:  true, // 首次警告后，下次就需要证据
+			RequiresEvidence:  false,
 		})
 	} else {
 		// 已存在，增加警告次数
 		_ = caa.store.IncrementUserClaimWarning(ctx, db.IncrementUserClaimWarningParams{
 			UserID:            userID,
 			LastWarningReason: pgtype.Text{String: reason, Valid: true},
-			RequiresEvidence:  true,
+			RequiresEvidence:  false,
 		})
 	}
 }
@@ -351,7 +347,7 @@ func (caa *ClaimAutoApproval) getRejectServiceCooldownDays(ctx context.Context) 
 // CheckRiderDamageHistory 检查骑手餐损历史（异步）
 // 触发条件：骑手被索赔餐损时异步调用
 // 功能：检查7天内餐损次数，达到阈值则记录并通知
-// 注意：押金扣款已在 CreateClaimWithDecision 中即时执行，此处只处理风险记录
+// 注意：追偿单与结算调整在索赔链路执行，此处只处理风险记录
 func (caa *ClaimAutoApproval) CheckRiderDamageHistory(
 	ctx context.Context,
 	riderID int64,
@@ -382,11 +378,19 @@ func (caa *ClaimAutoApproval) CheckRiderDamageHistory(
 			return err
 		}
 
-		// 2. 发送通知给骑手（风险警告）
+		// 2. 餐损高发：暂停接单
+		reason := fmt.Sprintf("damage claims high: %d in 7 days", damageCount)
+		_ = caa.store.SuspendRider(ctx, db.SuspendRiderParams{
+			RiderID:       riderID,
+			SuspendReason: pgtype.Text{String: reason, Valid: true},
+			SuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+		})
+
+		// 3. 发送通知给骑手（风险警告）
 		go caa.sendNotification("rider", "餐损索赔警告",
 			fmt.Sprintf("您近7天内发生%d次餐损索赔，请注意配送安全", damageCount), riderID)
 
-		// 注意：押金扣款已在 CreateClaimWithDecision 中即时执行，此处不重复扣款
+		// 注意：追偿单与结算调整在索赔链路执行，此处不重复处理
 	}
 
 	return nil
@@ -399,11 +403,10 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecision(
 	userID int64,
 	claimType string,
 	description string,
-	evidenceURLs []string,
 	claimAmount int64,
 	decision *Decision,
 ) (*db.Claim, error) {
-	return caa.CreateClaimWithDecisionAndEvidence(ctx, orderID, userID, claimType, description, evidenceURLs, claimAmount, decision, nil)
+	return caa.CreateClaimWithDecisionAndEvidence(ctx, orderID, userID, claimType, description, claimAmount, decision, nil)
 }
 
 // CreateClaimWithDecisionAndEvidence 根据决策创建索赔记录（含行为追溯证据）
@@ -413,7 +416,6 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	userID int64,
 	claimType string,
 	description string,
-	evidenceURLs []string,
 	claimAmount int64,
 	decision *Decision,
 	evidenceContext *ClaimEvidenceContext,
@@ -440,9 +442,6 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	case ApprovalTypeManual:
 		// 人工审核（食安）
 		status = ClaimStatusManualReview
-	case "evidence-required":
-		// 需要证据，暂不批准
-		status = ClaimStatusPending
 	default:
 		if decision.Approved {
 			status = ClaimStatusAutoApproved
@@ -460,12 +459,23 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 		evidenceArg = *evidenceContext
 	}
 
+	responsibleParty := "unknown"
+	if decision.CompensationSource != "" {
+		switch decision.CompensationSource {
+		case CompensationSourceMerchant:
+			responsibleParty = "merchant"
+		case CompensationSourceRider:
+			responsibleParty = "rider"
+		case CompensationSourcePlatform:
+			responsibleParty = "platform_fallback"
+		}
+	}
+
 	result, err := caa.store.CreateClaimWithBehaviorTx(ctx, db.CreateClaimWithBehaviorTxParams{
 		OrderID:            orderID,
 		UserID:             userID,
 		ClaimType:          claimType,
 		Description:        description,
-		EvidenceURLs:       evidenceURLs,
 		ClaimAmount:        claimAmount,
 		Status:             status,
 		ApprovalType:       decision.Type,
@@ -474,7 +484,7 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 		LookbackResult:     lookbackJSON,
 		DecisionVersion:    "v1",
 		ReasonCodes:        reasonCodes,
-		ResponsibleParty:   "unknown",
+		ResponsibleParty:   responsibleParty,
 		CompensationSource: decision.CompensationSource,
 		TraceSummary:       decision.Reason,
 		DeviceID:           evidenceArg.DeviceID,
@@ -489,57 +499,6 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	}
 
 	claim := result.Claim
-
-	// ========================================
-	// 骑手押金扣款（餐损/超时）
-	// ========================================
-	// 如果赔付来源是骑手押金，且已批准，则即时扣款
-	if decision.Approved && decision.CompensationSource == CompensationSourceRider && decision.Amount > 0 {
-		// 获取骑手ID
-		order, orderErr := caa.store.GetOrder(ctx, orderID)
-		if orderErr == nil && order.OrderType == "takeout" {
-			delivery, deliveryErr := caa.store.GetDeliveryByOrderID(ctx, orderID)
-			if deliveryErr == nil && delivery.RiderID.Valid {
-				riderID := delivery.RiderID.Int64
-
-				// 执行押金扣款并退款给用户（异步，不阻塞API响应）
-				// 使用原子事务：骑手押金扣款 → 用户余额入账
-				go func() {
-					deductCtx := context.Background()
-					result, deductErr := caa.store.DeductRiderDepositAndRefundTx(deductCtx, db.DeductRiderDepositAndRefundTxParams{
-						RiderID:   riderID,
-						UserID:    userID,
-						ClaimID:   claim.ID,
-						Amount:    decision.Amount,
-						ClaimType: claimType,
-					})
-					if deductErr != nil {
-						// 押金不足或其他错误
-						// 记录日志，后续由定时任务处理欠款或暂停接单
-						fmt.Printf("Failed to deduct rider deposit and refund: riderID=%d, userID=%d, amount=%d, err=%v\n",
-							riderID, userID, decision.Amount, deductErr)
-					} else {
-						// 发送通知给骑手
-						caa.sendNotification("rider", "押金扣款通知",
-							fmt.Sprintf("您有一笔%s索赔，押金已扣款%d分（索赔ID: %d）", claimType, decision.Amount, claim.ID),
-							riderID)
-						// 发送通知给用户（余额到账）
-						if caa.notificationDistributor != nil {
-							_ = caa.notificationDistributor.SendUserNotification(
-								deductCtx,
-								userID,
-								"order",
-								"索赔退款到账",
-								fmt.Sprintf("您的%s索赔已处理完成，%d分已退还至您的账户余额（当前余额: %d分）", claimType, decision.Amount, result.UserBalance.Balance),
-								"claim",
-								claim.ID,
-							)
-						}
-					}
-				}()
-			}
-		}
-	}
 
 	// 餐损/食安赔付后的事后处理
 	if (claimType == ClaimTypeDamage || claimType == ClaimTypeFoodSafety) && decision.NeedsReview {

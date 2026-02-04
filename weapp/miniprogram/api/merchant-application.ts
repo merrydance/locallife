@@ -466,17 +466,6 @@ export function getApplicationStatusDescription(status: string): string {
     return statusMap[status] || '未知状态'
 }
 
-// ==================== 商户申诉相关类型定义 ====================
-
-/**
- * 创建商户申诉请求 - 对齐 api.createMerchantAppealRequest
- */
-export interface CreateMerchantAppealRequest extends Record<string, unknown> {
-    claim_id: number                             // 索赔ID（必填，最小值1）
-    evidence_urls?: string[]                     // 证据图片URL列表（最多10个）
-    reason: string                               // 申诉原因（必填，10-1000字符）
-}
-
 // 兼容性导出
 export default {
     // 申请管理

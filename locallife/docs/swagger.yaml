@@ -394,16 +394,13 @@ definitions:
       compensation_source:
         description: merchant, rider, platform
         type: string
-      needs_evidence:
-        description: 是否需要证据
-        type: boolean
       reason:
         type: string
       refund_eta:
         description: 秒赔/自动通过时提供预计到账时间
         type: string
       status:
-        description: instant, auto, manual, evidence-required, platform-pay
+        description: instant, auto, manual, platform-pay
         type: string
       warning:
         description: 警告信息
@@ -592,10 +589,6 @@ definitions:
         type: integer
       created_at:
         type: string
-      evidence_urls:
-        items:
-          type: string
-        type: array
       id:
         type: integer
       reason:
@@ -1031,10 +1024,6 @@ definitions:
         type: string
       description:
         type: string
-      evidence_urls:
-        items:
-          type: string
-        type: array
       id:
         type: integer
       is_malicious:
@@ -1450,11 +1439,6 @@ definitions:
       claim_id:
         minimum: 1
         type: integer
-      evidence_urls:
-        items:
-          type: string
-        maxItems: 10
-        type: array
       reason:
         maxLength: 1000
         minLength: 10
@@ -1726,11 +1710,6 @@ definitions:
       claim_id:
         minimum: 1
         type: integer
-      evidence_urls:
-        items:
-          type: string
-        maxItems: 10
-        type: array
       reason:
         maxLength: 1000
         minLength: 10
@@ -2366,11 +2345,6 @@ definitions:
         maxLength: 500
         minLength: 5
         type: string
-      evidence_urls:
-        description: 证据图片URL
-        items:
-          type: string
-        type: array
       exception_type:
         description: 异常类型
         enum:
@@ -2388,10 +2362,6 @@ definitions:
     properties:
       description:
         type: string
-      evidence_urls:
-        items:
-          type: string
-        type: array
       exception_type:
         type: string
       id:

@@ -30,30 +30,29 @@ const (
 
 // Claim behavior statuses
 const (
-	ClaimBehaviorNormal           = "normal"
-	ClaimBehaviorWarned           = "warned"
-	ClaimBehaviorEvidenceRequired = "evidence-required"
-	ClaimBehaviorPlatformPay       = "platform-pay"
-	ClaimBehaviorRejectService     = "reject-service"
+	ClaimBehaviorNormal        = "normal"
+	ClaimBehaviorWarned        = "warned"
+	ClaimBehaviorPlatformPay   = "platform-pay"
+	ClaimBehaviorRejectService = "reject-service"
 )
 
 // Claim statuses
 const (
-	ClaimStatusPending       = "pending"
-	ClaimStatusAutoApproved  = "auto-approved"
-	ClaimStatusManualReview  = "manual-review"
+	ClaimStatusPending      = "pending"
+	ClaimStatusAutoApproved = "auto-approved"
+	ClaimStatusManualReview = "manual-review"
 )
 
 // Behavior thresholds
 const (
-	ClaimWarningOrderCount  = 5
-	ClaimWarningClaimCount  = 3
-	ClaimWarningRatio       = 0.6
-	DamageIncidentsIn7Days  = 3
-	FoodSafetyReportsIn1Hour = 3
+	ClaimWarningOrderCount          = 5
+	ClaimWarningClaimCount          = 3
+	ClaimWarningRatio               = 0.6
+	DamageIncidentsIn7Days          = 3
+	FoodSafetyReportsIn1Hour        = 3
 	MerchantForeignObjectWindowDays = 7
-	MerchantForeignObjectWarningNum  = 3
-	HighMatchCount = 2
+	MerchantForeignObjectWarningNum = 3
+	HighMatchCount                  = 2
 )
 
 // Time windows
@@ -76,7 +75,6 @@ type Decision struct {
 	ReviewMessage      string          `json:"review_message,omitempty"`
 	Warning            string          `json:"warning,omitempty"`
 	ShouldWarn         bool            `json:"should_warn,omitempty"`
-	NeedsEvidence      bool            `json:"needs_evidence,omitempty"`
 	LookbackData       *LookbackResult `json:"lookback_data,omitempty"`
 }
 
@@ -88,7 +86,6 @@ type ClaimBehaviorResult struct {
 	WarningCount  int     `json:"warning_count"`
 	ClaimRatio    float64 `json:"claim_ratio"`
 	Status        string  `json:"status"`
-	NeedsEvidence bool    `json:"needs_evidence,omitempty"`
 	ShouldWarn    bool    `json:"should_warn,omitempty"`
 	RejectService bool    `json:"reject_service,omitempty"`
 	Message       string  `json:"message,omitempty"`
@@ -96,13 +93,13 @@ type ClaimBehaviorResult struct {
 
 // LookbackResult 回溯检查结果
 type LookbackResult struct {
-	Period        string    `json:"period,omitempty"`
-	OrdersChecked int       `json:"orders_checked"`
-	Orders        []int64   `json:"orders"`
-	ClaimsFound   int       `json:"claims_found"`
+	Period        string     `json:"period,omitempty"`
+	OrdersChecked int        `json:"orders_checked"`
+	Orders        []int64    `json:"orders"`
+	ClaimsFound   int        `json:"claims_found"`
 	Claims        []db.Claim `json:"claims"`
-	Merchants     []int64   `json:"merchants"`
-	Riders        []int64   `json:"riders"`
+	Merchants     []int64    `json:"merchants"`
+	Riders        []int64    `json:"riders"`
 }
 
 // CorrelationResult 索赔相关性检查结果

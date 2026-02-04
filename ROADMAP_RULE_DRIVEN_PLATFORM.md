@@ -172,11 +172,18 @@
   - 草案： [locallife/docs/phase2/profit_sharing_audit.md](locallife/docs/phase2/profit_sharing_audit.md)
 
 ### 阶段 3：异常订单裁决闭环
-- [ ] 索赔/异常裁决规则统一到规则引擎
-- [ ] 证据链采集与存证规范
-- [ ] 行为追溯数据口径统一（设备/地址/频次）
-- [ ] 自动裁决覆盖率指标与例外路径
-- [ ] 人工复核仅保留“审计复核”路径
+- [ ] 索赔/异常裁决规则统一到规则引擎（仅行为驱动，无证据依赖）
+- [ ] 责任方裁决与自动执行（判定用户/商户/骑手责任后自动退款/扣款）
+- [ ] 平台兜底规则（仅当用户、商户、骑手均无明显异常时触发）
+- [ ] 规则驱动淘汰/警示（商户异物/食安高发、骑手餐损/超时高发）
+- [ ] 追偿单机制与逾期限制接单（商户不影响堂食）
+- [ ] 无证据裁决数据规范（行为追溯与裁决摘要）
+  - 规范： [locallife/docs/phase3/behavior_trace_schema.md](locallife/docs/phase3/behavior_trace_schema.md)
+- [x] 行为追溯数据口径统一（设备/地址/频次）
+  - 规范： [locallife/docs/phase3/behavior_trace_schema.md](locallife/docs/phase3/behavior_trace_schema.md)
+- [x] 自动裁决覆盖率指标与例外路径
+  - 规范： [locallife/docs/phase3/auto_adjudication_metrics.md](locallife/docs/phase3/auto_adjudication_metrics.md)
+- [ ] 移除人工复核主流程（仅保留审计旁路，不参与裁决）
 
 ### 阶段 4：运营商与平台控制台
 - [ ] 运营商控制台（规则配置/商户审核/分账复核）

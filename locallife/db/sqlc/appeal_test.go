@@ -43,7 +43,6 @@ func createRandomAppeal(t *testing.T, claimID, appellantID int64, appellantType 
 		AppellantType: appellantType,
 		AppellantID:   appellantID,
 		Reason:        "我方不存在问题",
-		EvidenceUrls:  []string{"https://example.com/evidence1.jpg"},
 		RegionID:      regionID,
 	}
 
@@ -70,7 +69,6 @@ func TestCreateAppeal(t *testing.T) {
 	require.Equal(t, merchant.ID, appeal.AppellantID)
 	require.Equal(t, "pending", appeal.Status)
 	require.NotEmpty(t, appeal.Reason)
-	require.Len(t, appeal.EvidenceUrls, 1)
 }
 
 func TestCreateAppeal_DuplicateClaimShouldFail(t *testing.T) {

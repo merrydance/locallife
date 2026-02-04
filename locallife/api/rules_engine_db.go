@@ -165,18 +165,6 @@ func matchRuleCondition(ctx context.Context, store db.Store, condition map[strin
 			return false, nil
 		}
 	}
-	if v, ok := condition["has_evidence"]; ok {
-		if want, ok := v.(bool); ok {
-			if want != boolMeta(input.Metadata, "has_evidence") {
-				return false, nil
-			}
-		}
-	}
-	if v, ok := condition["evidence_count_gte"]; ok {
-		if !matchNumberGte(v, metaNumber(input.Metadata, "evidence_count")) {
-			return false, nil
-		}
-	}
 	if v, ok := condition["claims_7d_gte"]; ok {
 		if !matchNumberGte(v, metaNumber(input.Metadata, "claims_7d")) {
 			return false, nil
@@ -460,11 +448,13 @@ func buildDecisionFromAction(action map[string]interface{}) rules.Decision {
 	if reason == "" {
 		reason, _ = action["message"].(string)
 	}
+	meta, _ := action["meta"].(map[string]interface{})
 
 	decision := rules.Decision{
 		Allow:  true,
 		Action: "allow",
 		Reason: reason,
+		Meta:   meta,
 	}
 	if typeValue != "" {
 		decision.Action = typeValue

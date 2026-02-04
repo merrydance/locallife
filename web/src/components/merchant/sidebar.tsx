@@ -24,6 +24,7 @@ import {
   UserCog,
   Boxes,
   Building2,
+  Receipt,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +104,12 @@ const navGroups: NavGroup[] = [
         href: "/merchant/finance",
         activePrefix: "/merchant/finance",
         icon: Wallet,
+      },
+      {
+        label: "索赔追偿",
+        href: "/merchant/claims",
+        activePrefix: "/merchant/claims",
+        icon: Receipt,
       },
       {
         label: "评价管理",

@@ -1,14 +1,21 @@
-import { operatorAppealReviewService, AppealResponse } from '../../../../api/appeals-customer-service';
+import {
+    operatorAppealReviewService,
+    claimManagementService,
+    AppealResponse,
+    ClaimRecoveryResponse
+} from '../../../../api/appeals-customer-service';
 
 Page({
     data: {
         id: 0,
         appeal: null as AppealResponse | null,
+        recovery: null as ClaimRecoveryResponse | null,
         replyContent: '',
         showRejectDialog: false,
         initialLoading: true,
         loading: false,
         submitting: false,
+        recoverySubmitting: false,
         error: null as string | null,
         navBarHeight: 88,
     },
@@ -38,6 +45,9 @@ Page({
                 loading: false,
                 initialLoading: false
             });
+            if (appeal.claim_id) {
+                await this.loadRecovery(appeal.claim_id);
+            }
         } catch (error) {
             console.error('加载详情失败:', error);
             this.setData({ 
@@ -45,6 +55,15 @@ Page({
                 initialLoading: false,
                 error: '加载详情失败'
             });
+        }
+    },
+
+    async loadRecovery(claimId: number) {
+        try {
+            const recovery = await claimManagementService.getOperatorClaimRecovery(claimId);
+            this.setData({ recovery });
+        } catch (error) {
+            this.setData({ recovery: null });
         }
     },
 
@@ -96,6 +115,26 @@ Page({
             wx.showToast({ title: error.message || '处理失败', icon: 'none' });
         } finally {
             this.setData({ submitting: false });
+            wx.hideLoading();
+        }
+    },
+
+    async onWaiveRecovery() {
+        const { appeal } = this.data;
+        if (!appeal?.claim_id) {
+            return;
+        }
+
+        try {
+            this.setData({ recoverySubmitting: true });
+            wx.showLoading({ title: '处理中...', mask: true });
+            await claimManagementService.waiveOperatorClaimRecovery(appeal.claim_id);
+            wx.showToast({ title: '已核销', icon: 'success' });
+            await this.loadRecovery(appeal.claim_id);
+        } catch (error: any) {
+            wx.showToast({ title: error.message || '核销失败', icon: 'none' });
+        } finally {
+            this.setData({ recoverySubmitting: false });
             wx.hideLoading();
         }
     }

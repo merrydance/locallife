@@ -166,6 +166,7 @@ func main() {
 	schedulerManager.Register("session-cleanup", session.NewScheduler(store))
 	schedulerManager.Register("payment-recovery", worker.NewPaymentRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor))
 	schedulerManager.StartAll(ctx, waitGroup)

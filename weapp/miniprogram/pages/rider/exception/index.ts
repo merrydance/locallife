@@ -17,8 +17,7 @@ Page({
     formData: {
       orderId: 0,
       type: 'customer_unreachable',
-      description: '',
-      images: [] as string[]
+      description: ''
     },
     
     typeOptions: [
@@ -92,24 +91,6 @@ Page({
   },
 
   /**
-   * 图片上传
-   */
-  onAddImage(e: any) {
-    const { files } = e.detail
-    // 实际生产环境应在此调用 upload api
-    this.setData({
-      'formData.images': [...this.data.formData.images, ...files.map((f: any) => f.url || f.path)]
-    })
-  },
-
-  onRemoveImage(e: any) {
-    const { index } = e.detail
-    const images = [...this.data.formData.images]
-    images.splice(index, 1)
-    this.setData({ 'formData.images': images })
-  },
-
-  /**
    * 提交上报
    */
   async onSubmit() {
@@ -127,8 +108,7 @@ Page({
     try {
       await RiderService.reportException(formData.orderId, {
         exception_type: formData.type,
-        description: formData.description,
-        evidence_urls: formData.images
+        description: formData.description
       })
       
       wx.showToast({ title: '上报成功', icon: 'success' })

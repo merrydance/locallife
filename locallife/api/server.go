@@ -721,6 +721,8 @@ func (server *Server) setupRouter() {
 		merchantClaimsGroup.GET("/claims", server.listMerchantClaims)
 		merchantClaimsGroup.GET("/claims/:id", server.getMerchantClaimDetail)
 		merchantClaimsGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
+		merchantClaimsGroup.GET("/claims/:id/recovery", server.getMerchantClaimRecovery)
+		merchantClaimsGroup.POST("/claims/:id/recovery/pay", server.payMerchantClaimRecovery)
 		merchantClaimsGroup.POST("/appeals", server.createMerchantAppeal)
 		merchantClaimsGroup.GET("/appeals", server.listMerchantAppeals)
 		merchantClaimsGroup.GET("/appeals/:id", server.getMerchantAppealDetail)
@@ -794,6 +796,8 @@ func (server *Server) setupRouter() {
 		riderGroup.GET("/claims", server.listRiderClaims)
 		riderGroup.GET("/claims/:id", server.getRiderClaimDetail)
 		riderGroup.GET("/claims/behavior-summary", server.getRiderClaimBehaviorSummary)
+		riderGroup.GET("/claims/:id/recovery", server.getRiderClaimRecovery)
+		riderGroup.POST("/claims/:id/recovery/pay", server.payRiderClaimRecovery)
 		riderGroup.POST("/appeals", server.createRiderAppeal)
 		riderGroup.GET("/appeals", server.listRiderAppeals)
 		riderGroup.GET("/appeals/:id", server.getRiderAppealDetail)
@@ -877,6 +881,7 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/promotions", server.listMerchantPromotionExpenses)
 		merchantFinanceGroup.GET("/daily", server.listMerchantDailyFinance)
 		merchantFinanceGroup.GET("/settlements", server.listMerchantSettlements)
+		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
 	}
 
 	// 商户设备管理路由
@@ -945,6 +950,8 @@ func (server *Server) setupRouter() {
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
 		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
 		operatorStatsGroup.POST("/appeals/:id/review", server.reviewAppeal)
+		operatorStatsGroup.GET("/claims/:id/recovery", server.getOperatorClaimRecovery)
+		operatorStatsGroup.POST("/claims/:id/recovery/waive", server.waiveClaimRecovery)
 
 		// 规则管理
 		operatorStatsGroup.GET("/rules", server.listOperatorRules)
@@ -1022,7 +1029,7 @@ func (server *Server) setupRouter() {
 		claimsGroup.POST("", server.SubmitClaim)
 		claimsGroup.GET("", server.ListUserClaims)
 		claimsGroup.GET("/:id", server.GetClaimDetail)
-		claimsGroup.PATCH("/:id/review", server.ReviewClaim)
+		// ReviewClaim 入口停止使用：裁决全自动，仅保留审计旁路
 	}
 
 	// 食安上报路由

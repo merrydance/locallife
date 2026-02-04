@@ -3,9 +3,13 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/rs/zerolog/log"
 )
 
@@ -16,6 +20,7 @@ const (
 // ProcessAppealResultPayload 处理申诉审核结果的任务载荷
 type ProcessAppealResultPayload struct {
 	AppealID           int64  `json:"appeal_id"`
+	ClaimID            int64  `json:"claim_id"`
 	Status             string `json:"status"`              // approved / rejected
 	AppellantType      string `json:"appellant_type"`      // merchant / rider
 	AppellantID        int64  `json:"appellant_id"`        // 商户ID或骑手ID
@@ -67,11 +72,19 @@ func (processor *RedisTaskProcessor) ProcessTaskProcessAppealResult(ctx context.
 		Msg("processing appeal result")
 
 	// 申诉成功的后续处理
-	if payload.Status == "approved" {
+	switch payload.Status {
+	case "approved":
+		if err := processor.rollbackClaimRecovery(ctx, payload); err != nil {
+			log.Error().Err(err).Msg("failed to rollback claim recovery")
+		}
 		// 1. 降低索赔用户（恶意投诉）的信用分
 		if err := processor.penalizeClaimant(ctx, payload); err != nil {
 			log.Error().Err(err).Msg("failed to penalize claimant trust score")
 			// 不中断，继续处理通知
+		}
+	case "rejected":
+		if err := processor.resumeClaimRecovery(ctx, payload); err != nil {
+			log.Error().Err(err).Msg("failed to resume claim recovery")
 		}
 	}
 
@@ -96,8 +109,165 @@ func (processor *RedisTaskProcessor) ProcessTaskProcessAppealResult(ctx context.
 // penalizeClaimant 惩罚恶意索赔用户的信用分
 // 设计：申诉成功 = 确认恶意 = 固定扣10分（相当于系统发现两次）
 func (processor *RedisTaskProcessor) penalizeClaimant(ctx context.Context, payload ProcessAppealResultPayload) error {
-	_ = ctx
-	_ = payload
+	userID := payload.ClaimantUserID
+	if userID == 0 && payload.ClaimID != 0 {
+		if claim, err := processor.store.GetClaim(ctx, payload.ClaimID); err == nil {
+			userID = claim.UserID
+		}
+	}
+	if userID == 0 {
+		return nil
+	}
+
+	if _, err := processor.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   userID,
+	}); err == nil {
+		return nil
+	} else if !errors.Is(err, db.ErrRecordNotFound) {
+		return err
+	}
+
+	blockDays := int64(14)
+	if days := processor.getRejectServiceCooldownDays(ctx); days > 0 {
+		blockDays = days
+	}
+	blockUntil := time.Now().AddDate(0, 0, int(blockDays))
+
+	if _, err := processor.store.CreateBehaviorBlocklist(ctx, db.CreateBehaviorBlocklistParams{
+		EntityType: "user",
+		EntityID:   userID,
+		ReasonCode: "malicious-claim",
+		BlockUntil: pgtype.Timestamptz{Time: blockUntil, Valid: true},
+		Status:     "active",
+	}); err != nil {
+		return err
+	}
+
+	if _, err := processor.store.GetUserClaimWarningStatus(ctx, userID); err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			_, _ = processor.store.CreateUserClaimWarning(ctx, db.CreateUserClaimWarningParams{
+				UserID:            userID,
+				LastWarningReason: pgtype.Text{String: "appeal approved: malicious claim", Valid: true},
+				RequiresEvidence:  false,
+			})
+			return nil
+		}
+		return err
+	}
+
+	_ = processor.store.IncrementUserClaimWarning(ctx, db.IncrementUserClaimWarningParams{
+		UserID:            userID,
+		LastWarningReason: pgtype.Text{String: "appeal approved: malicious claim", Valid: true},
+		RequiresEvidence:  false,
+	})
+	return nil
+}
+
+func (processor *RedisTaskProcessor) getRejectServiceCooldownDays(ctx context.Context) int64 {
+	config, err := processor.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: "behavior_trace.reject_service_cooldown_days",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil {
+		return 0
+	}
+
+	var payload struct {
+		Days int64 `json:"days"`
+	}
+	if jsonErr := json.Unmarshal(config.ConfigValue, &payload); jsonErr == nil && payload.Days > 0 {
+		return payload.Days
+	}
+	return 0
+}
+
+func (processor *RedisTaskProcessor) rollbackClaimRecovery(ctx context.Context, payload ProcessAppealResultPayload) error {
+	if payload.ClaimID == 0 {
+		return nil
+	}
+
+	recovery, err := processor.store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
+	if err != nil {
+		return nil
+	}
+
+	_, _ = processor.store.MarkClaimRecoveryWaived(ctx, recovery.ID)
+
+	userID := payload.ClaimantUserID
+	if userID == 0 {
+		if claim, claimErr := processor.store.GetClaim(ctx, payload.ClaimID); claimErr == nil {
+			userID = claim.UserID
+		}
+	}
+	if userID != 0 {
+		if _, err := processor.store.ClaimRefundRollbackTx(ctx, db.ClaimRefundRollbackTxParams{
+			ClaimID: payload.ClaimID,
+			UserID:  userID,
+			Remark:  "appeal approved rollback",
+		}); err != nil {
+			return err
+		}
+	}
+
+	if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "merchant" {
+		order, orderErr := processor.store.GetOrder(ctx, recovery.OrderID)
+		if orderErr != nil {
+			return orderErr
+		}
+		if recovery.Status == "paid" {
+			if _, err := processor.store.GetMerchantSettlementAdjustmentByRelatedAndType(ctx, db.GetMerchantSettlementAdjustmentByRelatedAndTypeParams{
+				RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
+				RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
+				AdjustmentType: "claim_recovery_reversal",
+			}); err != nil {
+				_, err = processor.store.CreateMerchantSettlementAdjustment(ctx, db.CreateMerchantSettlementAdjustmentParams{
+					MerchantID:     order.MerchantID,
+					AdjustmentType: "claim_recovery_reversal",
+					Amount:         recovery.RecoveryAmount,
+					Status:         "finished",
+					RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
+					RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
+					Note:           pgtype.Text{String: "claim recovery appeal rollback", Valid: true},
+					PostedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true},
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if err := processor.store.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
+			return err
+		}
+	}
+
+	if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "rider" {
+		delivery, deliveryErr := processor.store.GetDeliveryByOrderID(ctx, recovery.OrderID)
+		if deliveryErr != nil {
+			return deliveryErr
+		}
+		if delivery.RiderID.Valid {
+			if err := processor.store.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (processor *RedisTaskProcessor) resumeClaimRecovery(ctx context.Context, payload ProcessAppealResultPayload) error {
+	if payload.ClaimID == 0 {
+		return nil
+	}
+
+	recovery, err := processor.store.GetClaimRecoveryByClaimID(ctx, payload.ClaimID)
+	if err != nil {
+		return nil
+	}
+
+	_, _ = processor.store.MarkClaimRecoveryPending(ctx, recovery.ID)
 	return nil
 }
 

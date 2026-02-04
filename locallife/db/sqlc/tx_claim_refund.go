@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -97,24 +98,125 @@ func (store *SQLStore) ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParam
 }
 
 // ==========================================
+// 索赔退款回滚事务（申诉成立）
+// ==========================================
+
+// ClaimRefundRollbackTxParams 索赔退款回滚参数
+type ClaimRefundRollbackTxParams struct {
+	ClaimID int64  // 索赔ID
+	UserID  int64  // 用户ID
+	Remark  string // 备注
+}
+
+// ClaimRefundRollbackTxResult 索赔退款回滚结果
+type ClaimRefundRollbackTxResult struct {
+	UserBalance UserBalance
+	BalanceLog  UserBalanceLog
+}
+
+// ClaimRefundRollbackTx 索赔退款回滚事务
+// 将索赔退款从用户余额中扣回（幂等）
+func (store *SQLStore) ClaimRefundRollbackTx(ctx context.Context, arg ClaimRefundRollbackTxParams) (ClaimRefundRollbackTxResult, error) {
+	var result ClaimRefundRollbackTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		refundLog, err := q.GetUserBalanceLogByRelatedAndType(ctx, GetUserBalanceLogByRelatedAndTypeParams{
+			RelatedType: pgtype.Text{String: "claim", Valid: true},
+			RelatedID:   pgtype.Int8{Int64: arg.ClaimID, Valid: true},
+			Type:        "claim_refund",
+		})
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return nil
+			}
+			return fmt.Errorf("get refund log: %w", err)
+		}
+
+		reversalLog, err := q.GetUserBalanceLogByRelatedAndType(ctx, GetUserBalanceLogByRelatedAndTypeParams{
+			RelatedType: pgtype.Text{String: "claim", Valid: true},
+			RelatedID:   pgtype.Int8{Int64: arg.ClaimID, Valid: true},
+			Type:        "claim_refund_reversal",
+		})
+		if err == nil && reversalLog.ID > 0 {
+			result.BalanceLog = reversalLog
+			balance, _ := q.GetUserBalance(ctx, arg.UserID)
+			result.UserBalance = balance
+			return nil
+		}
+		if err != nil && err != pgx.ErrNoRows {
+			return fmt.Errorf("get reversal log: %w", err)
+		}
+
+		if refundLog.Amount <= 0 {
+			return nil
+		}
+
+		balance, err := q.GetUserBalanceForUpdate(ctx, arg.UserID)
+		if err != nil {
+			return fmt.Errorf("get user balance: %w", err)
+		}
+
+		balanceBefore := balance.Balance
+		balance, err = q.DeductUserBalance(ctx, DeductUserBalanceParams{
+			UserID:  arg.UserID,
+			Balance: refundLog.Amount,
+		})
+		if err != nil {
+			return fmt.Errorf("deduct user balance: %w", err)
+		}
+		result.UserBalance = balance
+
+		remark := arg.Remark
+		if remark == "" {
+			remark = "claim refund rollback"
+		}
+
+		sourceType := refundLog.SourceType.String
+		sourceTypeValid := refundLog.SourceType.Valid && sourceType != ""
+		sourceID := refundLog.SourceID.Int64
+		sourceIDValid := refundLog.SourceID.Valid && sourceID > 0
+
+		result.BalanceLog, err = q.CreateUserBalanceLog(ctx, CreateUserBalanceLogParams{
+			UserID:        arg.UserID,
+			Type:          "claim_refund_reversal",
+			Amount:        refundLog.Amount,
+			BalanceBefore: balanceBefore,
+			BalanceAfter:  balance.Balance,
+			RelatedType:   pgtype.Text{String: "claim", Valid: true},
+			RelatedID:     pgtype.Int8{Int64: arg.ClaimID, Valid: true},
+			SourceType:    pgtype.Text{String: sourceType, Valid: sourceTypeValid},
+			SourceID:      pgtype.Int8{Int64: sourceID, Valid: sourceIDValid},
+			Remark:        pgtype.Text{String: remark, Valid: remark != ""},
+		})
+		if err != nil {
+			return fmt.Errorf("create balance log: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// ==========================================
 // 骑手押金扣款并退款给用户的完整事务
 // ==========================================
 
 // DeductRiderDepositAndRefundTxParams 骑手押金扣款并退款参数
 type DeductRiderDepositAndRefundTxParams struct {
-	RiderID    int64  // 骑手ID
-	UserID     int64  // 用户ID（退款接收方）
-	ClaimID    int64  // 索赔ID
-	Amount     int64  // 扣款/退款金额（分）
-	ClaimType  string // 索赔类型
+	RiderID   int64  // 骑手ID
+	UserID    int64  // 用户ID（退款接收方）
+	ClaimID   int64  // 索赔ID
+	Amount    int64  // 扣款/退款金额（分）
+	ClaimType string // 索赔类型
 }
 
 // DeductRiderDepositAndRefundTxResult 骑手押金扣款并退款结果
 type DeductRiderDepositAndRefundTxResult struct {
-	Rider          Rider          // 更新后的骑手信息
-	DepositLog     RiderDeposit   // 押金扣款记录
-	UserBalance    UserBalance    // 更新后的用户余额
-	BalanceLog     UserBalanceLog // 余额变动日志
+	Rider       Rider          // 更新后的骑手信息
+	DepositLog  RiderDeposit   // 押金扣款记录
+	UserBalance UserBalance    // 更新后的用户余额
+	BalanceLog  UserBalanceLog // 余额变动日志
 }
 
 // DeductRiderDepositAndRefundTx 骑手押金扣款并退款给用户

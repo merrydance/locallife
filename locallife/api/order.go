@@ -864,6 +864,17 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		return
 	}
 
+	if req.OrderType == OrderTypeTakeout {
+		if merchantProfile, err := server.store.GetMerchantProfile(ctx, merchant.ID); err == nil && merchantProfile.IsTakeoutSuspended {
+			ctx.JSON(http.StatusForbidden, gin.H{
+				"error":          "merchant takeout ordering is suspended",
+				"suspend_reason": merchantProfile.TakeoutSuspendReason.String,
+				"suspend_until":  merchantProfile.TakeoutSuspendUntil.Time,
+			})
+			return
+		}
+	}
+
 	log.Info().Msg("[DEBUG] createOrder: merchant validated")
 
 	ruleDecision := rules.Decision{Action: "allow"}

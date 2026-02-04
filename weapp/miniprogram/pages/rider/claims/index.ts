@@ -1,5 +1,11 @@
 import { riderExceptionHandlingService } from '../../../api/rider-exception-handling'
-import { appealManagementService, CreateAppealRequest, ClaimResponse } from '../../../api/appeals-customer-service'
+import {
+  appealManagementService,
+  claimManagementService,
+  ClaimRecoveryResponse,
+  ClaimResponse,
+  CreateAppealRequest
+} from '../../../api/appeals-customer-service'
 
 interface ClaimDisplay {
   id: number
@@ -8,6 +14,9 @@ interface ClaimDisplay {
   description: string
   status: string
   created_at: string
+  recoveryStatus?: string
+  recoveryAmount?: number
+  recoveryTarget?: string
 }
 
 Page({
@@ -17,8 +26,7 @@ Page({
     form: {
       type: '',
       typeLabel: '',
-      description: '',
-      images: [] as string[]
+      description: ''
     },
     types: [
       { label: '商家出餐慢', value: 'MERCHANT_DELAY' },
@@ -29,7 +37,8 @@ Page({
     showTypePicker: false,
     navBarHeight: 88,
     loading: false,
-    submitting: false
+    submitting: false,
+    recoveryPaying: {} as Record<number, boolean>
   },
 
   onLoad(options: any) {
@@ -55,14 +64,28 @@ Page({
         page_size: 20
       })
 
-      const claims: ClaimDisplay[] = response.claims.map((c: ClaimResponse) => ({
-        id: c.id,
-        task_id: c.order_id?.toString(),
-        type: c.claim_type,
-        description: c.description,
-        status: c.status,
-        created_at: c.created_at
-      }))
+      const claims: ClaimDisplay[] = await Promise.all(
+        response.claims.map(async (c: ClaimResponse) => {
+          let recovery: ClaimRecoveryResponse | null = null
+          try {
+            recovery = await claimManagementService.getRiderClaimRecovery(c.id)
+          } catch (error) {
+            recovery = null
+          }
+
+          return {
+            id: c.id,
+            task_id: c.order_id?.toString(),
+            type: c.claim_type,
+            description: c.description,
+            status: c.status,
+            created_at: c.created_at,
+            recoveryStatus: recovery?.status,
+            recoveryAmount: recovery?.recovery_amount,
+            recoveryTarget: recovery?.recovery_target
+          }
+        })
+      )
 
       this.setData({
         claims,
@@ -97,17 +120,25 @@ Page({
     this.setData({ 'form.description': e.detail.value })
   },
 
-  onAddImage() {
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      success: (res) => {
-        const { images } = this.data.form
-        this.setData({
-          'form.images': [...images, res.tempFiles[0].tempFilePath]
-        })
-      }
-    })
+  async onPayRecovery(e: WechatMiniprogram.CustomEvent) {
+    const claimId = Number(e.currentTarget.dataset.claimId)
+    if (!claimId) {
+      return
+    }
+
+    const payingMap = { ...this.data.recoveryPaying, [claimId]: true }
+    this.setData({ recoveryPaying: payingMap })
+    try {
+      await claimManagementService.payRiderClaimRecovery(claimId)
+      wx.showToast({ title: '追偿已支付', icon: 'success' })
+      this.loadClaims()
+    } catch (error) {
+      console.error('支付追偿失败:', error)
+      wx.showToast({ title: '支付失败', icon: 'error' })
+    } finally {
+      const nextMap = { ...this.data.recoveryPaying, [claimId]: false }
+      this.setData({ recoveryPaying: nextMap })
+    }
   },
 
   async onSubmit() {
@@ -122,7 +153,6 @@ Page({
       // 创建申诉
       const appealData: CreateAppealRequest = {
         claim_id: taskId ? Number(taskId) : 0,
-        evidence_urls: form.images,
         reason: `[${form.type}] ${form.description}`
       }
 
@@ -130,7 +160,7 @@ Page({
 
       wx.showToast({ title: '提交成功', icon: 'success' })
       this.setData({
-        form: { type: '', typeLabel: '', description: '', images: [] },
+        form: { type: '', typeLabel: '', description: '' },
         submitting: false
       })
       this.loadClaims()

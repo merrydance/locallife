@@ -29,7 +29,6 @@ func randomAppeal(claimID, appellantID, regionID int64, appellantType string) db
 		AppellantType: appellantType,
 		AppellantID:   appellantID,
 		Reason:        "订单包装完好，顾客收货时已当面核对",
-		EvidenceUrls:  []string{"https://example.com/appeal_evidence.jpg"},
 		Status:        "pending",
 		RegionID:      regionID,
 		CreatedAt:     time.Now(),
@@ -227,9 +226,8 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "订单包装完好，顾客收货时已当面核对",
-				"evidence_urls": []string{"https://example.com/evidence.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "订单包装完好，顾客收货时已当面核对",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -270,9 +268,8 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "ClaimNotFound",
 			body: gin.H{
-				"claim_id":      99999,
-				"reason":        "这是一个充分的测试申诉理由",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
+				"claim_id": 99999,
+				"reason":   "这是一个充分的测试申诉理由",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -295,9 +292,8 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "AppealAlreadyExists",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "这是一个充分的测试申诉理由",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "这是一个充分的测试申诉理由",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -328,9 +324,8 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "ClaimNotBelongToMerchant",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "这是一个充分的测试申诉理由",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "这是一个充分的测试申诉理由",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -356,24 +351,8 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		{
 			name: "ReasonTooShort",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "短",
-				"evidence_urls": []string{"https://example.com/e.jpg"},
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidEvidenceURL",
-			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "这是一个有效的申诉理由",
-				"evidence_urls": []string{"not-a-valid-url"},
+				"claim_id": claim.ID,
+				"reason":   "短",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -535,9 +514,8 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "因恶劣天气导致配送延迟，非骑手原因",
-				"evidence_urls": []string{"https://example.com/weather.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -573,9 +551,8 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		{
 			name: "NotRider",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "因恶劣天气导致配送延迟，非骑手原因",
-				"evidence_urls": []string{"https://example.com/weather.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -593,9 +570,8 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		{
 			name: "ClaimNotRelatedToRider",
 			body: gin.H{
-				"claim_id":      claim.ID,
-				"reason":        "因恶劣天气导致配送延迟，非骑手原因",
-				"evidence_urls": []string{"https://example.com/weather.jpg"},
+				"claim_id": claim.ID,
+				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)

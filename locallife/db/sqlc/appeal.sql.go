@@ -120,21 +120,19 @@ INSERT INTO appeals (
     claim_id,
     appellant_type,
     appellant_id,
-    reason,
-    evidence_urls,
+  reason,
     region_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-) RETURNING id, claim_id, appellant_type, appellant_id, reason, evidence_urls, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at
+  $1, $2, $3, $4, $5
+) RETURNING id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at
 `
 
 type CreateAppealParams struct {
-	ClaimID       int64    `json:"claim_id"`
-	AppellantType string   `json:"appellant_type"`
-	AppellantID   int64    `json:"appellant_id"`
-	Reason        string   `json:"reason"`
-	EvidenceUrls  []string `json:"evidence_urls"`
-	RegionID      int64    `json:"region_id"`
+	ClaimID       int64  `json:"claim_id"`
+	AppellantType string `json:"appellant_type"`
+	AppellantID   int64  `json:"appellant_id"`
+	Reason        string `json:"reason"`
+	RegionID      int64  `json:"region_id"`
 }
 
 // =====================================================================
@@ -148,7 +146,6 @@ func (q *Queries) CreateAppeal(ctx context.Context, arg CreateAppealParams) (App
 		arg.AppellantType,
 		arg.AppellantID,
 		arg.Reason,
-		arg.EvidenceUrls,
 		arg.RegionID,
 	)
 	var i Appeal
@@ -158,7 +155,6 @@ func (q *Queries) CreateAppeal(ctx context.Context, arg CreateAppealParams) (App
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,
@@ -172,7 +168,7 @@ func (q *Queries) CreateAppeal(ctx context.Context, arg CreateAppealParams) (App
 }
 
 const getAppeal = `-- name: GetAppeal :one
-SELECT id, claim_id, appellant_type, appellant_id, reason, evidence_urls, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
+SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
 WHERE id = $1
 LIMIT 1
 `
@@ -187,7 +183,6 @@ func (q *Queries) GetAppeal(ctx context.Context, id int64) (Appeal, error) {
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,
@@ -201,7 +196,7 @@ func (q *Queries) GetAppeal(ctx context.Context, id int64) (Appeal, error) {
 }
 
 const getAppealByClaim = `-- name: GetAppealByClaim :one
-SELECT id, claim_id, appellant_type, appellant_id, reason, evidence_urls, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
+SELECT id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at FROM appeals
 WHERE claim_id = $1
   AND appellant_type = $2
 LIMIT 1
@@ -222,7 +217,6 @@ func (q *Queries) GetAppealByClaim(ctx context.Context, arg GetAppealByClaimPara
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,
@@ -300,12 +294,11 @@ func (q *Queries) GetAppealForPostProcess(ctx context.Context, id int64) (GetApp
 
 const getAppealWithDetails = `-- name: GetAppealWithDetails :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.evidence_urls, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
     c.created_at AS claim_created_at,
     o.order_no,
@@ -328,7 +321,6 @@ type GetAppealWithDetailsRow struct {
 	AppellantType       string             `json:"appellant_type"`
 	AppellantID         int64              `json:"appellant_id"`
 	Reason              string             `json:"reason"`
-	EvidenceUrls        []string           `json:"evidence_urls"`
 	Status              string             `json:"status"`
 	ReviewerID          pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes         pgtype.Text        `json:"review_notes"`
@@ -341,7 +333,6 @@ type GetAppealWithDetailsRow struct {
 	ClaimAmount         int64              `json:"claim_amount"`
 	ClaimApprovedAmount pgtype.Int8        `json:"claim_approved_amount"`
 	ClaimDescription    string             `json:"claim_description"`
-	ClaimEvidenceUrls   []string           `json:"claim_evidence_urls"`
 	ClaimStatus         string             `json:"claim_status"`
 	ClaimCreatedAt      time.Time          `json:"claim_created_at"`
 	OrderNo             string             `json:"order_no"`
@@ -362,7 +353,6 @@ func (q *Queries) GetAppealWithDetails(ctx context.Context, id int64) (GetAppeal
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,
@@ -375,7 +365,6 @@ func (q *Queries) GetAppealWithDetails(ctx context.Context, id int64) (GetAppeal
 		&i.ClaimAmount,
 		&i.ClaimApprovedAmount,
 		&i.ClaimDescription,
-		&i.ClaimEvidenceUrls,
 		&i.ClaimStatus,
 		&i.ClaimCreatedAt,
 		&i.OrderNo,
@@ -390,7 +379,7 @@ func (q *Queries) GetAppealWithDetails(ctx context.Context, id int64) (GetAppeal
 
 const getClaimForAppeal = `-- name: GetClaimForAppeal :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.merchant_id,
     m.region_id,
     d.rider_id
@@ -409,7 +398,6 @@ type GetClaimForAppealRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
@@ -423,6 +411,8 @@ type GetClaimForAppealRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	MerchantID         int64              `json:"merchant_id"`
 	RegionID           int64              `json:"region_id"`
 	RiderID            pgtype.Int8        `json:"rider_id"`
@@ -438,7 +428,6 @@ func (q *Queries) GetClaimForAppeal(ctx context.Context, id int64) (GetClaimForA
 		&i.UserID,
 		&i.ClaimType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.ClaimAmount,
 		&i.ApprovedAmount,
 		&i.Status,
@@ -452,6 +441,8 @@ func (q *Queries) GetClaimForAppeal(ctx context.Context, id int64) (GetClaimForA
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
 		&i.MerchantID,
 		&i.RegionID,
 		&i.RiderID,
@@ -461,12 +452,11 @@ func (q *Queries) GetClaimForAppeal(ctx context.Context, id int64) (GetClaimForA
 
 const getMerchantAppealDetail = `-- name: GetMerchantAppealDetail :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.evidence_urls, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
@@ -491,7 +481,6 @@ type GetMerchantAppealDetailRow struct {
 	AppellantType       string             `json:"appellant_type"`
 	AppellantID         int64              `json:"appellant_id"`
 	Reason              string             `json:"reason"`
-	EvidenceUrls        []string           `json:"evidence_urls"`
 	Status              string             `json:"status"`
 	ReviewerID          pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes         pgtype.Text        `json:"review_notes"`
@@ -504,7 +493,6 @@ type GetMerchantAppealDetailRow struct {
 	ClaimAmount         int64              `json:"claim_amount"`
 	ClaimApprovedAmount pgtype.Int8        `json:"claim_approved_amount"`
 	ClaimDescription    string             `json:"claim_description"`
-	ClaimEvidenceUrls   []string           `json:"claim_evidence_urls"`
 	OrderNo             string             `json:"order_no"`
 	OrderAmount         int64              `json:"order_amount"`
 	UserPhone           pgtype.Text        `json:"user_phone"`
@@ -520,7 +508,6 @@ func (q *Queries) GetMerchantAppealDetail(ctx context.Context, arg GetMerchantAp
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,
@@ -533,7 +520,6 @@ func (q *Queries) GetMerchantAppealDetail(ctx context.Context, arg GetMerchantAp
 		&i.ClaimAmount,
 		&i.ClaimApprovedAmount,
 		&i.ClaimDescription,
-		&i.ClaimEvidenceUrls,
 		&i.OrderNo,
 		&i.OrderAmount,
 		&i.UserPhone,
@@ -543,7 +529,7 @@ func (q *Queries) GetMerchantAppealDetail(ctx context.Context, arg GetMerchantAp
 
 const getMerchantClaimDetailForMerchant = `-- name: GetMerchantClaimDetailForMerchant :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -573,7 +559,6 @@ type GetMerchantClaimDetailForMerchantRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
@@ -587,6 +572,8 @@ type GetMerchantClaimDetailForMerchantRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	OrderNo            string             `json:"order_no"`
 	OrderAmount        int64              `json:"order_amount"`
 	OrderCreatedAt     time.Time          `json:"order_created_at"`
@@ -608,7 +595,6 @@ func (q *Queries) GetMerchantClaimDetailForMerchant(ctx context.Context, arg Get
 		&i.UserID,
 		&i.ClaimType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.ClaimAmount,
 		&i.ApprovedAmount,
 		&i.Status,
@@ -622,6 +608,8 @@ func (q *Queries) GetMerchantClaimDetailForMerchant(ctx context.Context, arg Get
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
 		&i.OrderNo,
 		&i.OrderAmount,
 		&i.OrderCreatedAt,
@@ -637,12 +625,11 @@ func (q *Queries) GetMerchantClaimDetailForMerchant(ctx context.Context, arg Get
 
 const getOperatorAppealDetail = `-- name: GetOperatorAppealDetail :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.evidence_urls, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     c.status AS claim_status,
     c.lookback_result,
     c.created_at AS claim_created_at,
@@ -678,7 +665,6 @@ type GetOperatorAppealDetailRow struct {
 	AppellantType       string             `json:"appellant_type"`
 	AppellantID         int64              `json:"appellant_id"`
 	Reason              string             `json:"reason"`
-	EvidenceUrls        []string           `json:"evidence_urls"`
 	Status              string             `json:"status"`
 	ReviewerID          pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes         pgtype.Text        `json:"review_notes"`
@@ -691,7 +677,6 @@ type GetOperatorAppealDetailRow struct {
 	ClaimAmount         int64              `json:"claim_amount"`
 	ClaimApprovedAmount pgtype.Int8        `json:"claim_approved_amount"`
 	ClaimDescription    string             `json:"claim_description"`
-	ClaimEvidenceUrls   []string           `json:"claim_evidence_urls"`
 	ClaimStatus         string             `json:"claim_status"`
 	LookbackResult      []byte             `json:"lookback_result"`
 	ClaimCreatedAt      time.Time          `json:"claim_created_at"`
@@ -717,7 +702,6 @@ func (q *Queries) GetOperatorAppealDetail(ctx context.Context, arg GetOperatorAp
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,
@@ -730,7 +714,6 @@ func (q *Queries) GetOperatorAppealDetail(ctx context.Context, arg GetOperatorAp
 		&i.ClaimAmount,
 		&i.ClaimApprovedAmount,
 		&i.ClaimDescription,
-		&i.ClaimEvidenceUrls,
 		&i.ClaimStatus,
 		&i.LookbackResult,
 		&i.ClaimCreatedAt,
@@ -750,12 +733,11 @@ func (q *Queries) GetOperatorAppealDetail(ctx context.Context, arg GetOperatorAp
 
 const getRiderAppealDetail = `-- name: GetRiderAppealDetail :one
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.evidence_urls, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.approved_amount AS claim_approved_amount,
     c.description AS claim_description,
-    c.evidence_urls AS claim_evidence_urls,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone
@@ -780,7 +762,6 @@ type GetRiderAppealDetailRow struct {
 	AppellantType       string             `json:"appellant_type"`
 	AppellantID         int64              `json:"appellant_id"`
 	Reason              string             `json:"reason"`
-	EvidenceUrls        []string           `json:"evidence_urls"`
 	Status              string             `json:"status"`
 	ReviewerID          pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes         pgtype.Text        `json:"review_notes"`
@@ -793,7 +774,6 @@ type GetRiderAppealDetailRow struct {
 	ClaimAmount         int64              `json:"claim_amount"`
 	ClaimApprovedAmount pgtype.Int8        `json:"claim_approved_amount"`
 	ClaimDescription    string             `json:"claim_description"`
-	ClaimEvidenceUrls   []string           `json:"claim_evidence_urls"`
 	OrderNo             string             `json:"order_no"`
 	OrderAmount         int64              `json:"order_amount"`
 	UserPhone           pgtype.Text        `json:"user_phone"`
@@ -809,7 +789,6 @@ func (q *Queries) GetRiderAppealDetail(ctx context.Context, arg GetRiderAppealDe
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,
@@ -822,7 +801,6 @@ func (q *Queries) GetRiderAppealDetail(ctx context.Context, arg GetRiderAppealDe
 		&i.ClaimAmount,
 		&i.ClaimApprovedAmount,
 		&i.ClaimDescription,
-		&i.ClaimEvidenceUrls,
 		&i.OrderNo,
 		&i.OrderAmount,
 		&i.UserPhone,
@@ -832,7 +810,7 @@ func (q *Queries) GetRiderAppealDetail(ctx context.Context, arg GetRiderAppealDe
 
 const getRiderClaimDetailForRider = `-- name: GetRiderClaimDetailForRider :one
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     o.created_at AS order_created_at,
@@ -863,7 +841,6 @@ type GetRiderClaimDetailForRiderRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
@@ -877,6 +854,8 @@ type GetRiderClaimDetailForRiderRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	OrderNo            string             `json:"order_no"`
 	OrderAmount        int64              `json:"order_amount"`
 	OrderCreatedAt     time.Time          `json:"order_created_at"`
@@ -898,7 +877,6 @@ func (q *Queries) GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderC
 		&i.UserID,
 		&i.ClaimType,
 		&i.Description,
-		&i.EvidenceUrls,
 		&i.ClaimAmount,
 		&i.ApprovedAmount,
 		&i.Status,
@@ -912,6 +890,8 @@ func (q *Queries) GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderC
 		&i.CreatedAt,
 		&i.ReviewedAt,
 		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
 		&i.OrderNo,
 		&i.OrderAmount,
 		&i.OrderCreatedAt,
@@ -928,7 +908,7 @@ func (q *Queries) GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderC
 const listMerchantAppealsForMerchant = `-- name: ListMerchantAppealsForMerchant :many
 
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.evidence_urls, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -954,7 +934,6 @@ type ListMerchantAppealsForMerchantRow struct {
 	AppellantType      string             `json:"appellant_type"`
 	AppellantID        int64              `json:"appellant_id"`
 	Reason             string             `json:"reason"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	Status             string             `json:"status"`
 	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes        pgtype.Text        `json:"review_notes"`
@@ -986,7 +965,6 @@ func (q *Queries) ListMerchantAppealsForMerchant(ctx context.Context, arg ListMe
 			&i.AppellantType,
 			&i.AppellantID,
 			&i.Reason,
-			&i.EvidenceUrls,
 			&i.Status,
 			&i.ReviewerID,
 			&i.ReviewNotes,
@@ -1012,7 +990,7 @@ func (q *Queries) ListMerchantAppealsForMerchant(ctx context.Context, arg ListMe
 
 const listMerchantClaimsForMerchant = `-- name: ListMerchantClaimsForMerchant :many
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -1041,7 +1019,6 @@ type ListMerchantClaimsForMerchantRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
@@ -1055,6 +1032,8 @@ type ListMerchantClaimsForMerchantRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	OrderNo            string             `json:"order_no"`
 	OrderAmount        int64              `json:"order_amount"`
 	UserPhone          pgtype.Text        `json:"user_phone"`
@@ -1079,7 +1058,6 @@ func (q *Queries) ListMerchantClaimsForMerchant(ctx context.Context, arg ListMer
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
@@ -1093,6 +1071,8 @@ func (q *Queries) ListMerchantClaimsForMerchant(ctx context.Context, arg ListMer
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 			&i.OrderNo,
 			&i.OrderAmount,
 			&i.UserPhone,
@@ -1113,7 +1093,7 @@ func (q *Queries) ListMerchantClaimsForMerchant(ctx context.Context, arg ListMer
 const listOperatorAppeals = `-- name: ListOperatorAppeals :many
 
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.evidence_urls, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -1149,7 +1129,6 @@ type ListOperatorAppealsRow struct {
 	AppellantType      string             `json:"appellant_type"`
 	AppellantID        int64              `json:"appellant_id"`
 	Reason             string             `json:"reason"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	Status             string             `json:"status"`
 	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes        pgtype.Text        `json:"review_notes"`
@@ -1189,7 +1168,6 @@ func (q *Queries) ListOperatorAppeals(ctx context.Context, arg ListOperatorAppea
 			&i.AppellantType,
 			&i.AppellantID,
 			&i.Reason,
-			&i.EvidenceUrls,
 			&i.Status,
 			&i.ReviewerID,
 			&i.ReviewNotes,
@@ -1219,7 +1197,7 @@ func (q *Queries) ListOperatorAppeals(ctx context.Context, arg ListOperatorAppea
 const listRiderAppeals = `-- name: ListRiderAppeals :many
 
 SELECT 
-    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.evidence_urls, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
+    a.id, a.claim_id, a.appellant_type, a.appellant_id, a.reason, a.status, a.reviewer_id, a.review_notes, a.reviewed_at, a.compensation_amount, a.compensated_at, a.region_id, a.created_at,
     c.claim_type,
     c.claim_amount,
     c.description AS claim_description,
@@ -1245,7 +1223,6 @@ type ListRiderAppealsRow struct {
 	AppellantType      string             `json:"appellant_type"`
 	AppellantID        int64              `json:"appellant_id"`
 	Reason             string             `json:"reason"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	Status             string             `json:"status"`
 	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
 	ReviewNotes        pgtype.Text        `json:"review_notes"`
@@ -1277,7 +1254,6 @@ func (q *Queries) ListRiderAppeals(ctx context.Context, arg ListRiderAppealsPara
 			&i.AppellantType,
 			&i.AppellantID,
 			&i.Reason,
-			&i.EvidenceUrls,
 			&i.Status,
 			&i.ReviewerID,
 			&i.ReviewNotes,
@@ -1303,7 +1279,7 @@ func (q *Queries) ListRiderAppeals(ctx context.Context, arg ListRiderAppealsPara
 
 const listRiderClaimsForRider = `-- name: ListRiderClaimsForRider :many
 SELECT 
-    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.evidence_urls, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at,
+    c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,
     o.total_amount AS order_amount,
     u.phone AS user_phone,
@@ -1333,7 +1309,6 @@ type ListRiderClaimsForRiderRow struct {
 	UserID             int64              `json:"user_id"`
 	ClaimType          string             `json:"claim_type"`
 	Description        string             `json:"description"`
-	EvidenceUrls       []string           `json:"evidence_urls"`
 	ClaimAmount        int64              `json:"claim_amount"`
 	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
 	Status             string             `json:"status"`
@@ -1347,6 +1322,8 @@ type ListRiderClaimsForRiderRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
 	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	DecisionVersion    pgtype.Text        `json:"decision_version"`
+	DecisionReason     pgtype.Text        `json:"decision_reason"`
 	OrderNo            string             `json:"order_no"`
 	OrderAmount        int64              `json:"order_amount"`
 	UserPhone          pgtype.Text        `json:"user_phone"`
@@ -1371,7 +1348,6 @@ func (q *Queries) ListRiderClaimsForRider(ctx context.Context, arg ListRiderClai
 			&i.UserID,
 			&i.ClaimType,
 			&i.Description,
-			&i.EvidenceUrls,
 			&i.ClaimAmount,
 			&i.ApprovedAmount,
 			&i.Status,
@@ -1385,6 +1361,8 @@ func (q *Queries) ListRiderClaimsForRider(ctx context.Context, arg ListRiderClai
 			&i.CreatedAt,
 			&i.ReviewedAt,
 			&i.PaidAt,
+			&i.DecisionVersion,
+			&i.DecisionReason,
 			&i.OrderNo,
 			&i.OrderAmount,
 			&i.UserPhone,
@@ -1412,7 +1390,7 @@ SET status = $1,
     compensated_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE NULL END
 WHERE id = $5
   AND status = 'pending'
-RETURNING id, claim_id, appellant_type, appellant_id, reason, evidence_urls, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at
+RETURNING id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at
 `
 
 type ReviewAppealParams struct {
@@ -1439,7 +1417,6 @@ func (q *Queries) ReviewAppeal(ctx context.Context, arg ReviewAppealParams) (App
 		&i.AppellantType,
 		&i.AppellantID,
 		&i.Reason,
-		&i.EvidenceUrls,
 		&i.Status,
 		&i.ReviewerID,
 		&i.ReviewNotes,

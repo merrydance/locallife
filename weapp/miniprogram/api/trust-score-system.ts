@@ -161,16 +161,14 @@ export interface SubmitClaimRequest extends Record<string, unknown> {
     claim_type: 'foreign-object' | 'damage' | 'timeout' | 'food-safety'  // 索赔类型（必填）
     claim_amount: number                         // 索赔金额（分，1-100000000，必填）
     claim_reason: string                         // 索赔原因（5-1000字符，必填）
-    evidence_photos?: string[]                   // 证据图片（最多10张）
 }
 
 /** 提交索赔响应 - 对齐 api.SubmitClaimResponse */
 export interface SubmitClaimResponse {
     claim_id: number                             // 索赔ID
-    status: string                               // 状态：instant, auto, manual, evidence-required, platform-pay
+    status: string                               // 状态：instant, auto, manual, platform-pay
     approved_amount?: number                     // 批准金额（分）
     compensation_source?: string                 // 赔偿来源：merchant, rider, platform
-    needs_evidence?: boolean                     // 是否需要证据
     refund_eta?: string                          // 预计到账时间
     reason?: string                              // 原因
     warning?: string                             // 警告信息

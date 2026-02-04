@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -106,14 +107,25 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 		return
 	}
 
+	adjustmentTotal, err := server.store.SumMerchantSettlementAdjustments(ctx, db.SumMerchantSettlementAdjustmentsParams{
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	totalServiceFee := financeStats.TotalPlatformFee + financeStats.TotalOperatorFee
-	netIncome := financeStats.TotalIncome - promoStats.TotalDiscount
+	totalIncome := financeStats.TotalIncome + adjustmentTotal
+	netIncome := totalIncome - promoStats.TotalDiscount
 
 	resp := financeOverviewResponse{
 		CompletedOrders:   financeStats.CompletedOrders,
 		PendingOrders:     financeStats.PendingOrders,
 		TotalGMV:          financeStats.TotalGmv,
-		TotalIncome:       financeStats.TotalIncome,
+		TotalIncome:       totalIncome,
 		TotalPlatformFee:  financeStats.TotalPlatformFee,
 		TotalOperatorFee:  financeStats.TotalOperatorFee,
 		TotalServiceFee:   totalServiceFee,
@@ -585,17 +597,46 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 		return
 	}
 
-	// 转换响应
-	result := make([]dailyFinanceItem, len(dailyStats))
-	for i, stat := range dailyStats {
-		result[i] = dailyFinanceItem{
-			Date:           stat.Date.Time.Format("2006-01-02"),
+	adjustments, err := server.store.ListMerchantDailySettlementAdjustments(ctx, db.ListMerchantDailySettlementAdjustmentsParams{
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resultMap := make(map[string]*dailyFinanceItem)
+	for _, stat := range dailyStats {
+		dateKey := stat.Date.Time.Format("2006-01-02")
+		resultMap[dateKey] = &dailyFinanceItem{
+			Date:           dateKey,
 			OrderCount:     stat.OrderCount,
 			TotalGMV:       stat.TotalGmv,
 			MerchantIncome: stat.MerchantIncome,
 			TotalFee:       stat.TotalFee,
 		}
 	}
+
+	for _, adj := range adjustments {
+		dateKey := adj.Date.Time.Format("2006-01-02")
+		item, ok := resultMap[dateKey]
+		if !ok {
+			item = &dailyFinanceItem{Date: dateKey}
+			resultMap[dateKey] = item
+		}
+		item.MerchantIncome += adj.TotalAdjustment
+	}
+
+	result := make([]dailyFinanceItem, 0, len(resultMap))
+	for _, item := range resultMap {
+		result = append(result, *item)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Date > result[j].Date
+	})
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"daily_stats": result,
@@ -625,6 +666,32 @@ type merchantSettlementItem struct {
 	Status             string `json:"status"`
 	CreatedAt          string `json:"created_at"`
 	FinishedAt         string `json:"finished_at,omitempty"`
+}
+
+type listMerchantSettlementTimelineRequest struct {
+	StartDate string `form:"start_date" binding:"required"`
+	EndDate   string `form:"end_date" binding:"required"`
+	Page      int32  `form:"page" binding:"omitempty,min=1"`
+	Limit     int32  `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+type merchantSettlementTimelineItem struct {
+	RecordType         string `json:"record_type"`
+	ID                 int64  `json:"id"`
+	PaymentOrderID     int64  `json:"payment_order_id"`
+	OrderSource        string `json:"order_source"`
+	TotalAmount        int64  `json:"total_amount"`
+	PlatformCommission int64  `json:"platform_commission"`
+	OperatorCommission int64  `json:"operator_commission"`
+	MerchantAmount     int64  `json:"merchant_amount"`
+	OutOrderNo         string `json:"out_order_no"`
+	SharingOrderID     string `json:"sharing_order_id,omitempty"`
+	Status             string `json:"status"`
+	CreatedAt          string `json:"created_at"`
+	FinishedAt         string `json:"finished_at,omitempty"`
+	AdjustmentType     string `json:"adjustment_type,omitempty"`
+	RelatedType        string `json:"related_type,omitempty"`
+	RelatedID          int64  `json:"related_id,omitempty"`
 }
 
 // listMerchantSettlements 获取商户结算记录（分账订单列表）
@@ -783,5 +850,141 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		"total_merchant_amount": stats.TotalMerchantAmount,
 		"total_platform_fee":    stats.TotalPlatformCommission,
 		"total_operator_fee":    stats.TotalOperatorCommission,
+	})
+}
+
+// listMerchantSettlementTimeline 获取商户结算流水（分账记录 + 调整项）
+// @Summary 获取结算流水
+// @Description 商户查看结算流水，包含分账记录与结算调整
+// @Tags 商户财务管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param start_date query string true "开始日期" example(2025-11-01)
+// @Param end_date query string true "结束日期" example(2025-11-30)
+// @Param page query int false "页码" default(1) minimum(1)
+// @Param limit query int false "每页数量" default(20) minimum(1) maximum(100)
+// @Success 200 {object} map[string]interface{} "成功返回结算流水"
+// @Failure 400 {object} map[string]interface{} "参数错误或日期格式错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 404 {object} map[string]interface{} "商户不存在"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /v1/merchant/finance/settlement-timeline [get]
+func (server *Server) listMerchantSettlementTimeline(ctx *gin.Context) {
+	var req listMerchantSettlementTimelineRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	offset := pageOffset(req.Page, req.Limit)
+
+	rows, err := server.store.ListMerchantSettlementTimeline(ctx, db.ListMerchantSettlementTimelineParams{
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+		Limit:      req.Limit,
+		Offset:     offset,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	totalCount, err := server.store.CountMerchantSettlementTimeline(ctx, db.CountMerchantSettlementTimelineParams{
+		MerchantID: merchant.ID,
+		StartAt:    startDate,
+		EndAt:      endDate,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	result := make([]merchantSettlementTimelineItem, len(rows))
+	for i, row := range rows {
+		finishedAt := ""
+		if row.FinishedAt.Valid {
+			finishedAt = row.FinishedAt.Time.Format(time.RFC3339)
+		}
+
+		sharingOrderID := ""
+		if row.SharingOrderID.Valid {
+			sharingOrderID = row.SharingOrderID.String
+		}
+
+		adjustmentType := ""
+		if row.AdjustmentType.Valid {
+			adjustmentType = row.AdjustmentType.String
+		}
+
+		relatedType := ""
+		if row.RelatedType.Valid {
+			relatedType = row.RelatedType.String
+		}
+
+		relatedID := int64(0)
+		if row.RelatedID.Valid {
+			relatedID = row.RelatedID.Int64
+		}
+
+		item := merchantSettlementTimelineItem{
+			RecordType:         row.RecordType,
+			ID:                 row.ID,
+			PaymentOrderID:     row.PaymentOrderID,
+			OrderSource:        row.OrderSource,
+			TotalAmount:        row.TotalAmount,
+			PlatformCommission: row.PlatformCommission,
+			OperatorCommission: row.OperatorCommission,
+			MerchantAmount:     row.MerchantAmount,
+			OutOrderNo:         row.OutOrderNo,
+			SharingOrderID:     sharingOrderID,
+			Status:             row.Status,
+			CreatedAt:          row.CreatedAt.Format(time.RFC3339),
+			FinishedAt:         finishedAt,
+			AdjustmentType:     adjustmentType,
+			RelatedType:        relatedType,
+			RelatedID:          relatedID,
+		}
+
+		result[i] = item
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"timeline":    result,
+		"total":       totalCount,
+		"total_count": totalCount,
+		"page_id":     req.Page,
+		"page_size":   req.Limit,
+		"page":        req.Page,
+		"limit":       req.Limit,
+		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
 	})
 }

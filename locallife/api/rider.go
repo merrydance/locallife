@@ -1063,9 +1063,8 @@ type delayReportRequest struct {
 }
 
 type exceptionReportRequest struct {
-	ExceptionType string   `json:"exception_type" binding:"required,oneof=customer_unreachable merchant_not_ready weather_issue road_blocked other"` // 异常类型
-	Description   string   `json:"description" binding:"required,min=5,max=500"`                                                                     // 异常描述
-	EvidenceURLs  []string `json:"evidence_urls"`                                                                                                    // 证据图片URL
+	ExceptionType string `json:"exception_type" binding:"required,oneof=customer_unreachable merchant_not_ready weather_issue road_blocked other"` // 异常类型
+	Description   string `json:"description" binding:"required,min=5,max=500"`                                                                     // 异常描述
 }
 
 type delayReportResponse struct {
@@ -1081,7 +1080,6 @@ type exceptionReportResponse struct {
 	OrderID       int64     `json:"order_id"`
 	ExceptionType string    `json:"exception_type"`
 	Description   string    `json:"description"`
-	EvidenceURLs  []string  `json:"evidence_urls"`
 	Status        string    `json:"status"` // pending, resolved, dismissed
 	ReportedAt    time.Time `json:"reported_at"`
 }
@@ -1249,9 +1247,6 @@ func (server *Server) reportException(ctx *gin.Context) {
 
 	// 构建异常描述
 	exceptionDesc := fmt.Sprintf("异常类型: %s, 描述: %s", getExceptionTypeName(req.ExceptionType), req.Description)
-	if len(req.EvidenceURLs) > 0 {
-		exceptionDesc += fmt.Sprintf(", 证据: %v", req.EvidenceURLs)
-	}
 
 	// 记录异常日志
 	_, err = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
@@ -1285,7 +1280,6 @@ func (server *Server) reportException(ctx *gin.Context) {
 		OrderID:       order.ID,
 		ExceptionType: req.ExceptionType,
 		Description:   req.Description,
-		EvidenceURLs:  req.EvidenceURLs,
 		Status:        "pending",
 		ReportedAt:    time.Now(),
 	}

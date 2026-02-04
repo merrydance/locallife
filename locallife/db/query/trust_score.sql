@@ -10,15 +10,17 @@ INSERT INTO merchant_profiles (
   merchant_id
 ) VALUES (
   $1
-) RETURNING *;
+) RETURNING id, merchant_id, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, is_takeout_suspended, takeout_suspend_reason, takeout_suspended_at, takeout_suspend_until, updated_at;
 
 -- name: GetMerchantProfile :one
-SELECT * FROM merchant_profiles
+SELECT id, merchant_id, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, is_takeout_suspended, takeout_suspend_reason, takeout_suspended_at, takeout_suspend_until, updated_at
+FROM merchant_profiles
 WHERE merchant_id = $1
 LIMIT 1;
 
 -- name: GetMerchantProfileForUpdate :one
-SELECT * FROM merchant_profiles
+SELECT id, merchant_id, total_orders, total_sales, completed_orders, total_claims, foreign_object_claims, food_safety_incidents, timeout_count, refuse_order_count, recent_7d_claims, recent_7d_incidents, recent_30d_claims, recent_30d_incidents, recent_30d_timeouts, recent_90d_claims, recent_90d_incidents, is_suspended, suspend_reason, suspended_at, suspend_until, is_takeout_suspended, takeout_suspend_reason, takeout_suspended_at, takeout_suspend_until, updated_at
+FROM merchant_profiles
 WHERE merchant_id = $1
 LIMIT 1
 FOR UPDATE;
@@ -44,6 +46,10 @@ SET total_orders = COALESCE(sqlc.narg('total_orders'), total_orders),
     suspend_reason = COALESCE(sqlc.narg('suspend_reason'), suspend_reason),
     suspended_at = COALESCE(sqlc.narg('suspended_at'), suspended_at),
     suspend_until = COALESCE(sqlc.narg('suspend_until'), suspend_until),
+    is_takeout_suspended = COALESCE(sqlc.narg('is_takeout_suspended'), is_takeout_suspended),
+    takeout_suspend_reason = COALESCE(sqlc.narg('takeout_suspend_reason'), takeout_suspend_reason),
+    takeout_suspended_at = COALESCE(sqlc.narg('takeout_suspended_at'), takeout_suspended_at),
+    takeout_suspend_until = COALESCE(sqlc.narg('takeout_suspend_until'), takeout_suspend_until),
     updated_at = NOW()
 WHERE merchant_id = $1;
 
@@ -66,12 +72,30 @@ SET is_suspended = true,
     updated_at = NOW()
 WHERE merchant_id = $1;
 
+-- name: SuspendMerchantTakeout :exec
+UPDATE merchant_profiles
+SET is_takeout_suspended = true,
+    takeout_suspend_reason = $2,
+    takeout_suspended_at = NOW(),
+    takeout_suspend_until = $3,
+    updated_at = NOW()
+WHERE merchant_id = $1;
+
 -- name: UnsuspendMerchant :exec
 UPDATE merchant_profiles
 SET is_suspended = false,
     suspend_reason = NULL,
     suspended_at = NULL,
     suspend_until = NULL,
+    updated_at = NOW()
+WHERE merchant_id = $1;
+
+-- name: UnsuspendMerchantTakeout :exec
+UPDATE merchant_profiles
+SET is_takeout_suspended = false,
+    takeout_suspend_reason = NULL,
+    takeout_suspended_at = NULL,
+    takeout_suspend_until = NULL,
     updated_at = NOW()
 WHERE merchant_id = $1;
 
@@ -159,7 +183,6 @@ INSERT INTO claims (
     user_id,
     claim_type,
     description,
-    evidence_urls,
     claim_amount,
     approved_amount,
     status,
@@ -170,11 +193,13 @@ INSERT INTO claims (
     rejection_reason,
     reviewer_id,
     review_notes,
+    decision_version,
+    decision_reason,
     created_at,
     reviewed_at,
     paid_at
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
 ) RETURNING *;
 
 -- name: GetClaim :one
@@ -269,7 +294,6 @@ INSERT INTO food_safety_incidents (
     user_id,
     incident_type,
     description,
-    evidence_urls,
     order_snapshot,
     merchant_snapshot,
     rider_snapshot,
@@ -279,7 +303,7 @@ INSERT INTO food_safety_incidents (
     created_at,
     resolved_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 ) RETURNING *;
 
 -- name: GetFoodSafetyIncident :one

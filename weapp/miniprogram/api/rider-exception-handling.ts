@@ -38,7 +38,6 @@ export type DelayStatus = 'pending' | 'acknowledged'
 export interface ExceptionReportRequest extends Record<string, unknown> {
     exception_type: ExceptionType
     description: string
-    evidence_urls?: string[]
 }
 
 /** 异常上报响应 - 基于swagger api.exceptionReportResponse */
@@ -47,7 +46,6 @@ export interface ExceptionReportResponse {
     order_id: number
     exception_type: ExceptionType
     description: string
-    evidence_urls: string[]
     status: ExceptionStatus
     reported_at: string
 }
@@ -247,14 +245,13 @@ export class ExceptionHandlingUtils {
                 description: '其他影响配送的异常情况',
                 actions: [
                     '详细描述异常情况',
-                    '提供相关证据材料',
                     '联系平台客服协助',
                     '确保顾客和商户知情'
                 ],
                 preventionTips: [
                     '提高风险意识',
                     '遇到问题及时沟通',
-                    '保留相关证据'
+                    '保留相关沟通记录'
                 ]
             }
         }
@@ -277,10 +274,6 @@ export class ExceptionHandlingUtils {
 
         if (exceptionData.description.length > 500) {
             return { valid: false, message: '异常描述不能超过500个字符' }
-        }
-
-        if (exceptionData.evidence_urls && exceptionData.evidence_urls.length > 9) {
-            return { valid: false, message: '证据图片不能超过9张' }
         }
 
         return { valid: true }
@@ -367,12 +360,10 @@ export class RiderExceptionHandlingAdapter {
     static adaptExceptionReportRequest(data: {
         exceptionType: ExceptionType
         description: string
-        evidenceUrls?: string[]
     }): ExceptionReportRequest {
         return {
             exception_type: data.exceptionType,
-            description: data.description,
-            evidence_urls: data.evidenceUrls
+            description: data.description
         }
     }
 
@@ -384,7 +375,6 @@ export class RiderExceptionHandlingAdapter {
         orderId: number
         exceptionType: ExceptionType
         description: string
-        evidenceUrls: string[]
         status: ExceptionStatus
         reportedAt: string
     } {
@@ -393,7 +383,6 @@ export class RiderExceptionHandlingAdapter {
             orderId: data.order_id,
             exceptionType: data.exception_type,
             description: data.description,
-            evidenceUrls: data.evidence_urls,
             status: data.status,
             reportedAt: data.reported_at
         }
