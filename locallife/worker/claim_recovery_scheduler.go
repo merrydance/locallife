@@ -91,9 +91,9 @@ func (s *ClaimRecoveryScheduler) runOnce() {
 			}
 			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, updated.OrderID); err == nil && len(decisions) > 0 {
 				detail, _ := json.Marshal(map[string]any{
-					"action":       "suspend_takeout",
-					"merchant_id":  order.MerchantID,
-					"recovery_id":  updated.ID,
+					"action":        "suspend_takeout",
+					"merchant_id":   order.MerchantID,
+					"recovery_id":   updated.ID,
 					"suspend_until": suspendUntil.Time,
 				})
 				_, _ = s.store.CreateBehaviorAction(ctx, db.CreateBehaviorActionParams{
@@ -121,9 +121,9 @@ func (s *ClaimRecoveryScheduler) runOnce() {
 			}
 			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, updated.OrderID); err == nil && len(decisions) > 0 {
 				detail, _ := json.Marshal(map[string]any{
-					"action":       "suspend_rider",
-					"rider_id":     delivery.RiderID.Int64,
-					"recovery_id":  updated.ID,
+					"action":        "suspend_rider",
+					"rider_id":      delivery.RiderID.Int64,
+					"recovery_id":   updated.ID,
 					"suspend_until": suspendUntil.Time,
 				})
 				_, _ = s.store.CreateBehaviorAction(ctx, db.CreateBehaviorActionParams{
