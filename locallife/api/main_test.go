@@ -164,11 +164,12 @@ func initTestCasbin() error {
 
 func newTestServer(t *testing.T, store db.Store) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
 
-	server, err := NewServer(config, store, nil, nil)
+	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
 	require.NoError(t, err)
 
 	return server
@@ -177,6 +178,7 @@ func newTestServer(t *testing.T, store db.Store) *Server {
 // newTestServerWithWechat creates a test server with a mock wechat client
 func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interface{}) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
@@ -188,6 +190,7 @@ func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interfac
 		config:          config,
 		store:           store,
 		tokenMaker:      tokenMaker,
+		auditWriter:     NewNoopAuditWriter(),
 		wechatClient:    wechatClient.(wechat.WechatClient),
 		weatherCache:    nil,
 		taskDistributor: nil,
@@ -200,6 +203,7 @@ func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interfac
 // newTestServerWithPayment creates a test server with a mock payment client
 func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat.PaymentClientInterface) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
@@ -211,6 +215,7 @@ func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat
 		config:          config,
 		store:           store,
 		tokenMaker:      tokenMaker,
+		auditWriter:     NewNoopAuditWriter(),
 		wechatClient:    nil,
 		paymentClient:   paymentClient,
 		weatherCache:    nil,
@@ -224,6 +229,7 @@ func newTestServerWithPayment(t *testing.T, store db.Store, paymentClient wechat
 // newTestServerWithTaskDistributor creates a test server with a mock task distributor
 func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistributor worker.TaskDistributor) *Server {
 	config := util.Config{
+		Environment:         "test",
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
 	}
@@ -235,6 +241,7 @@ func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistribu
 		config:          config,
 		store:           store,
 		tokenMaker:      tokenMaker,
+		auditWriter:     NewNoopAuditWriter(),
 		wechatClient:    nil,
 		paymentClient:   nil,
 		weatherCache:    nil,

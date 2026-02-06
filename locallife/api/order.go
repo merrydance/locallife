@@ -2844,7 +2844,7 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -2950,7 +2950,7 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -3006,7 +3006,7 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "order_accepted",
@@ -3090,7 +3090,7 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -3148,7 +3148,7 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "order_rejected",
@@ -3268,7 +3268,7 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 
 	// 验证订单属于当前商户
 	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -3324,7 +3324,7 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "order_ready",
@@ -3441,7 +3441,7 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 
 	server.pushMerchantOrderSnapshot(ctx, merchant.ID, completedOrder, "order_update")
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "order_completed",

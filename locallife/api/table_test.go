@@ -1344,16 +1344,39 @@ func TestGetRoomAvailabilityAPI(t *testing.T) {
 					ListReservationsByTableAndDate(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.TableReservation{}, nil)
+
+				// 商户营业时间：午餐 11:00-13:00，晚餐 17:00-20:00（30分钟间隔将产生 12 个 time slots）
+				store.EXPECT().
+					ListMerchantBusinessHours(gomock.Any(), gomock.Eq(room.MerchantID)).
+					Times(1).
+					Return([]db.MerchantBusinessHour{
+						{
+							MerchantID:  room.MerchantID,
+							DayOfWeek:   3, // 2025-01-15 是周三
+							OpenTime:    pgtype.Time{Microseconds: 11 * 60 * 60 * 1_000_000, Valid: true},
+							CloseTime:   pgtype.Time{Microseconds: 13 * 60 * 60 * 1_000_000, Valid: true},
+							IsClosed:    false,
+							SpecialDate: pgtype.Date{Valid: false},
+						},
+						{
+							MerchantID:  room.MerchantID,
+							DayOfWeek:   3,
+							OpenTime:    pgtype.Time{Microseconds: 17 * 60 * 60 * 1_000_000, Valid: true},
+							CloseTime:   pgtype.Time{Microseconds: 20 * 60 * 60 * 1_000_000, Valid: true},
+							IsClosed:    false,
+							SpecialDate: pgtype.Date{Valid: false},
+						},
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				// 验证返回的时间段数量 (午餐 11:00-13:00 + 晚餐 17:00-20:00, 每30分钟)
+				// 验证返回的时间段数量 (午餐 11:00-13:00 + 晚餐 17:00-20:00, 每30分钟；按可用“开始时间”生成，不包含关店时刻)
 				data, err := io.ReadAll(recorder.Body)
 				require.NoError(t, err)
 				var resp roomAvailabilityResponse
 				requireUnmarshalAPIResponseData(t, data, &resp)
-				require.Equal(t, 12, len(resp.TimeSlots)) // 11:00-13:00 共5个，17:00-20:00 共7个
+				require.Equal(t, 10, len(resp.TimeSlots)) // 11:00-13:00 共4个，17:00-20:00 共6个
 				require.Equal(t, "2025-01-15", resp.Date)
 			},
 		},

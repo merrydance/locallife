@@ -116,7 +116,7 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 
 	// 检查骑手是否已分配区域
 	if !rider.RegionID.Valid {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "rider",
 			Action:      "region_access_denied",
@@ -490,7 +490,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 
 	// 检查骑手是否已分配区域
 	if !rider.RegionID.Valid {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "rider",
 			Action:      "region_access_denied",
@@ -555,7 +555,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	if merchant.RegionID != rider.RegionID.Int64 {
 		regionID := merchant.RegionID
 		riderRegionID := rider.RegionID.Int64
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "rider",
 			Action:      "region_access_denied",

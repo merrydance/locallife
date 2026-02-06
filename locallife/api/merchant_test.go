@@ -316,6 +316,7 @@ func randomMerchant(ownerID int64) db.Merchant {
 	return db.Merchant{
 		ID:          util.RandomInt(1, 1000),
 		OwnerUserID: ownerID,
+		RegionID:    util.RandomInt(1, 1000),
 		Name:        util.RandomString(10),
 		Description: pgtype.Text{String: util.RandomString(50), Valid: true},
 		Phone:       "13800138000",

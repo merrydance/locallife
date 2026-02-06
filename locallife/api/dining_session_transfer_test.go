@@ -34,7 +34,8 @@ func randomDiningSession(merchantID, tableID, userID int64) db.DiningSession {
 
 func TestTransferDiningSessionTableAPI(t *testing.T) {
 	user, _ := randomUser(t)
-	merchant := randomMerchant(user.ID)
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
 	fromTable := randomTable(merchant.ID)
 	toTable := randomTable(merchant.ID)
 
@@ -69,14 +70,14 @@ func TestTransferDiningSessionTableAPI(t *testing.T) {
 					Return(session, nil)
 
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					GetMerchant(gomock.Any(), gomock.Eq(session.MerchantID)).
 					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+					Return(merchant, nil)
 
 				store.EXPECT().
-					GetMerchantStaff(gomock.Any(), gomock.Any()).
+					CheckUserHasMerchantAccess(gomock.Any(), gomock.Eq(db.CheckUserHasMerchantAccessParams{MerchantID: session.MerchantID, UserID: user.ID})).
 					Times(1).
-					Return(db.MerchantStaff{}, db.ErrRecordNotFound)
+					Return(false, nil)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(toTable.ID)).
@@ -121,14 +122,14 @@ func TestTransferDiningSessionTableAPI(t *testing.T) {
 					Return(session, nil)
 
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID+1)).
+					GetMerchant(gomock.Any(), gomock.Eq(session.MerchantID)).
 					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+					Return(merchant, nil)
 
 				store.EXPECT().
-					GetMerchantStaff(gomock.Any(), gomock.Any()).
+					CheckUserHasMerchantAccess(gomock.Any(), gomock.Eq(db.CheckUserHasMerchantAccessParams{MerchantID: session.MerchantID, UserID: user.ID + 1})).
 					Times(1).
-					Return(db.MerchantStaff{}, db.ErrRecordNotFound)
+					Return(false, nil)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Any()).
@@ -157,14 +158,14 @@ func TestTransferDiningSessionTableAPI(t *testing.T) {
 					Return(session, nil)
 
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					GetMerchant(gomock.Any(), gomock.Eq(session.MerchantID)).
 					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+					Return(merchant, nil)
 
 				store.EXPECT().
-					GetMerchantStaff(gomock.Any(), gomock.Any()).
+					CheckUserHasMerchantAccess(gomock.Any(), gomock.Eq(db.CheckUserHasMerchantAccessParams{MerchantID: session.MerchantID, UserID: user.ID})).
 					Times(1).
-					Return(db.MerchantStaff{}, db.ErrRecordNotFound)
+					Return(false, nil)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(toTable.ID)).
@@ -200,14 +201,14 @@ func TestTransferDiningSessionTableAPI(t *testing.T) {
 					Return(session, nil)
 
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					GetMerchant(gomock.Any(), gomock.Eq(session.MerchantID)).
 					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+					Return(merchant, nil)
 
 				store.EXPECT().
-					GetMerchantStaff(gomock.Any(), gomock.Any()).
+					CheckUserHasMerchantAccess(gomock.Any(), gomock.Eq(db.CheckUserHasMerchantAccessParams{MerchantID: session.MerchantID, UserID: user.ID})).
 					Times(1).
-					Return(db.MerchantStaff{}, db.ErrRecordNotFound)
+					Return(false, nil)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(toTable.ID)).

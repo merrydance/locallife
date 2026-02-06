@@ -51,6 +51,12 @@ func (s *TakeoutAutoCompleteScheduler) Stop() {
 	log.Info().Msg("takeout auto-complete scheduler stopped")
 }
 
+// RunOnce triggers a single scan cycle.
+// Useful for integration tests and manual runs.
+func (s *TakeoutAutoCompleteScheduler) RunOnce() {
+	s.autoCompleteTakeoutOrders()
+}
+
 func (s *TakeoutAutoCompleteScheduler) autoCompleteTakeoutOrders() {
 	ctx := context.Background()
 

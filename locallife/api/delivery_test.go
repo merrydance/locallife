@@ -213,10 +213,11 @@ func TestGrabOrderAPI(t *testing.T) {
 					ID:          merchantID,
 					OwnerUserID: util.RandomInt(1, 1000),
 					RegionID:    rider.RegionID.Int64, // 匹配骑手区域
+					Name:        util.RandomString(10),
 				}
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				existingDelivery := randomDelivery(orderID, 0)
@@ -242,8 +243,18 @@ func TestGrabOrderAPI(t *testing.T) {
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 
 				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(merchant.OwnerUserID)).
@@ -403,8 +414,23 @@ func TestConfirmPickupAPI(t *testing.T) {
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 
 				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
@@ -626,8 +652,23 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 
 				store.EXPECT().
 					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
@@ -892,8 +933,23 @@ func TestStartPickupAPI(t *testing.T) {
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 
 				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
@@ -1065,8 +1121,23 @@ func TestStartDeliveryAPI(t *testing.T) {
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 
 				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
@@ -1151,7 +1222,7 @@ func TestStartDeliveryAPI(t *testing.T) {
 					Return(rider, nil)
 
 				invalidDelivery := delivery
-				invalidDelivery.Status = "picked"
+				invalidDelivery.Status = "delivering"
 				store.EXPECT().
 					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
 					Times(1).
@@ -1238,8 +1309,23 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
+					Times(2).
 					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
 
 				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).

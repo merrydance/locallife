@@ -17,7 +17,7 @@ type UpdateOrderStatusTxParams struct {
 	NewStatus    string
 	OldStatus    string // 用于日志记录
 	OperatorID   int64
-	OperatorType string // "user", "merchant", "system"
+	OperatorType string // "user", "merchant", "system", "rider"
 	Notes        string // 可选备注
 	// 可选履约状态变更，nil 表示不变
 	NewFulfillmentStatus *string

@@ -259,7 +259,7 @@ UPDATE claim_recoveries
 SET status = 'waived',
     updated_at = NOW()
 WHERE id = $1
-  AND status IN ('pending', 'overdue')
+  AND status IN ('pending', 'overdue', 'appealed')
 RETURNING id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at
 `
 

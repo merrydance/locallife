@@ -206,7 +206,7 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "operator",
 		Action:      "delivery_fee_config_created",
@@ -379,7 +379,7 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 		updatedFields["is_active"] = *req.IsActive
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "operator",
 		Action:      "delivery_fee_config_updated",
@@ -523,7 +523,7 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "operator",
 		Action:      "peak_hour_config_created",
@@ -633,7 +633,7 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "operator",
 		Action:      "peak_hour_config_deleted",
@@ -784,7 +784,7 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "delivery_promotion_created",
@@ -919,7 +919,7 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "delivery_promotion_deleted",
@@ -1053,7 +1053,7 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 		updatedFields["is_active"] = *req.IsActive
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "delivery_promotion_updated",

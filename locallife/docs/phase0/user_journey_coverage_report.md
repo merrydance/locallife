@@ -13,3 +13,14 @@
 
 - 这是**文档 → 代码**的单向约束：确保文档里提到的端点不会‘空跑’。
 - 若需要反向约束（代码新增端点必须补文档），可以在后续版本加白名单/标签体系。
+
+## Handler 静态审计覆盖度
+
+- doc endpoints: 65
+- doc actions (METHOD + /v1/... occurrences): 47
+- matched route registrations: 230
+- resolved handler names: 230
+- resolved handler defs (*Server methods): 230
+- analyzed handlers: 230
+- suspicious findings: 0
+- skipped: no handler name=0, no handler def=0

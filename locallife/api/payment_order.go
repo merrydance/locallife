@@ -1301,7 +1301,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 	}
 
 	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -1342,7 +1342,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "refund_order_created",

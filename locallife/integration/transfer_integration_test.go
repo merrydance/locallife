@@ -48,9 +48,17 @@ m = g(r.sub, p.sub) && keyMatch2(r.obj, p.obj) && r.act == p.act
 const testCasbinPolicyDef = `
 # Role inheritance
 g, customer, customer
+g, operator, operator
 
 # Customer policies
 p, customer, /v1/dining-sessions/*, POST
+
+# Operator policies
+p, operator, /v1/operator/appeals, GET
+p, operator, /v1/operator/appeals/*, GET
+p, operator, /v1/operator/appeals/*, POST
+p, operator, /v1/operator/claims/*/recovery/waive, POST
+p, operator, /v1/operator/claims/*/recovery, GET
 `
 
 var (
@@ -146,13 +154,14 @@ func initIntegrationServer(t *testing.T) (*api.Server, *db.SQLStore) {
 		integrationStore = db.NewStore(connPool).(*db.SQLStore)
 
 		config := util.Config{
+			Environment:         "test",
 			TokenSymmetricKey:   util.RandomString(32),
 			AccessTokenDuration: time.Minute,
 		}
 		integrationTokenMaker, err = token.NewPasetoMaker(config.TokenSymmetricKey)
 		require.NoError(t, err)
 
-		server, err := api.NewServer(config, integrationStore, nil, nil)
+		server, err := api.NewServer(config, integrationStore, nil, nil, nil)
 		require.NoError(t, err)
 		integrationServer = server
 	})
@@ -172,6 +181,26 @@ func enforceTestCasbin(t *testing.T) {
 func resetIntegrationData(t *testing.T) {
 	_, err := integrationPool.Exec(context.Background(), `
 		TRUNCATE TABLE
+			notifications,
+			user_notification_preferences,
+			order_status_logs,
+			profit_sharing_returns,
+			profit_sharing_orders,
+			delivery_pool,
+			deliveries,
+			rider_deposits,
+			rider_locations,
+			riders,
+			payment_orders,
+			order_items,
+			orders,
+			carts,
+			cart_items,
+			user_addresses,
+			dish_tags,
+			dish_ingredients,
+			dishes,
+			merchant_profiles,
 			table_transfer_logs,
 			billing_group_orders,
 			billing_group_members,
@@ -307,6 +336,22 @@ func createIntegrationTable(t *testing.T, store *db.SQLStore, merchantID int64, 
 		QrCodeUrl:      pgtype.Text{Valid: false},
 		Status:         "available",
 		AccessCodeHash: accessCodeHash,
+	})
+	require.NoError(t, err)
+	return table
+}
+
+func createIntegrationRoomTable(t *testing.T, store *db.SQLStore, merchantID int64) db.Table {
+	table, err := store.CreateTable(context.Background(), db.CreateTableParams{
+		MerchantID:     merchantID,
+		TableNo:        util.RandomString(4),
+		TableType:      "room",
+		Capacity:       8,
+		Description:    pgtype.Text{String: "集成测试包间", Valid: true},
+		MinimumSpend:   pgtype.Int8{Valid: false},
+		QrCodeUrl:      pgtype.Text{Valid: false},
+		Status:         "available",
+		AccessCodeHash: pgtype.Text{Valid: false},
 	})
 	require.NoError(t, err)
 	return table

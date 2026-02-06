@@ -227,12 +227,9 @@ func (processor *RedisTaskProcessor) tryWebSocketPush(ctx context.Context, userI
 			}
 			payload, _ := json.Marshal(pushMsg)
 			channel := fmt.Sprintf("notification:rider:%d", riderID)
-			if err := processor.redisClient.Publish(ctx, channel, payload).Err(); err != nil {
-				log.Error().Err(err).Int64("rider_id", riderID).Msg("publish to redis failed")
-			} else {
-				pushed = true
-				log.Debug().Int64("rider_id", riderID).Msg("published notification push request to Redis")
-			}
+			processor.publishWSMessage(ctx, channel, payload)
+			pushed = true
+			log.Debug().Int64("rider_id", riderID).Msg("published notification push request to Redis")
 			break
 		}
 	}
@@ -250,12 +247,9 @@ func (processor *RedisTaskProcessor) tryWebSocketPush(ctx context.Context, userI
 			}
 			payload, _ := json.Marshal(pushMsg)
 			channel := fmt.Sprintf("notification:merchant:%d", merchantID)
-			if err := processor.redisClient.Publish(ctx, channel, payload).Err(); err != nil {
-				log.Error().Err(err).Int64("merchant_id", merchantID).Msg("publish to redis failed")
-			} else {
-				pushed = true
-				log.Debug().Int64("merchant_id", merchantID).Msg("published notification push request to Redis")
-			}
+			processor.publishWSMessage(ctx, channel, payload)
+			pushed = true
+			log.Debug().Int64("merchant_id", merchantID).Msg("published notification push request to Redis")
 			break
 		}
 	}

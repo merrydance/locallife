@@ -818,6 +818,7 @@ func randomMerchantForPromo(userID int64) db.Merchant {
 	return db.Merchant{
 		ID:          util.RandomInt(1, 1000),
 		OwnerUserID: userID,
+		RegionID:    util.RandomInt(1, 100),
 		Name:        util.RandomString(10),
 		Phone:       util.RandomString(11),
 		Address:     util.RandomString(20),

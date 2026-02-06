@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -47,6 +47,11 @@ func (s *PaymentRecoveryScheduler) Start() error {
 
 	go s.runOnce()
 	return nil
+}
+
+// RunOnce triggers a single recovery scan.
+func (s *PaymentRecoveryScheduler) RunOnce() {
+	s.runOnce()
 }
 
 // Stop stops the scheduler.

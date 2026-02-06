@@ -38,7 +38,7 @@ func isReservationStatusAllowed(status string, action string) bool {
 	case reservationActionConfirm:
 		return status == ReservationStatusPaid
 	case reservationActionComplete:
-		return status == ReservationStatusConfirmed
+		return status == ReservationStatusConfirmed || status == ReservationStatusCheckedIn
 	case reservationActionCancel:
 		return status == ReservationStatusPending || status == ReservationStatusPaid || status == ReservationStatusConfirmed
 	case reservationActionNoShow:
@@ -1146,7 +1146,7 @@ func (server *Server) completeReservation(ctx *gin.Context) {
 
 	// 检查状态
 	if !isReservationStatusAllowed(reservation.Status, reservationActionComplete) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not confirmed")))
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not confirmed or checked in")))
 		return
 	}
 
@@ -1296,10 +1296,15 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 				// 生成退款单号
 				outRefundNo := generateOutRefundNo()
 
+				refundType := paymentOrder.PaymentType
+				if refundType == PaymentTypeNative {
+					refundType = PaymentTypeMiniProgram
+				}
+
 				// 创建退款订单
 				refundOrder, err := server.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
 					PaymentOrderID: paymentOrder.ID,
-					RefundType:     "full",
+					RefundType:     refundType,
 					RefundAmount:   refundAmount,
 					RefundReason:   pgtype.Text{String: "预定取消退款", Valid: true},
 					OutRefundNo:    outRefundNo,

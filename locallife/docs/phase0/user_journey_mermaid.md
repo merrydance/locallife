@@ -352,6 +352,9 @@ sequenceDiagram
 
 **终点定义（验收口径）**：订单到达 `completed`。
 
+**核查标记（2026-02-05）**：已完成代码核查；集成测试已覆盖 B1/B2/B3 + B1-Webhook（支付回调链路）+ B4(支付单超时) + B5(回调丢失补偿) + B6(订单支付超时)，见 [integration/takeout_journey_integration_test.go](integration/takeout_journey_integration_test.go)。
+**核查标记（2026-02-06）**：集成测试已补齐 B0（购物车加购/查询/试算、合单支付创建/查询/关闭、骑手推荐列表）与 B7（商户拒单触发退款处理中），见 [integration/takeout_journey_integration_test.go](integration/takeout_journey_integration_test.go)。
+
 - 手动终点：用户在送达后点击“确认收货/完成”（`POST /v1/orders/:id/confirm`）收敛到 `completed`
 - 自动终点：若用户未点击完成且无索赔，则系统在“送达后 1 小时”自动收敛到 `completed`
 
@@ -432,6 +435,8 @@ sequenceDiagram
 
 ### 6.2 旅程A：堂食扫码点餐（从开台到结账离店）
 
+**核查标记（2026-02-06）**：集成测试已覆盖 A0（扫码入口）、A1（开台→下单→支付回调→出餐→结账离店）、A2（桌台码错误拒绝开台）、A3（商户无预订代客开台被拒）、A4（非商户结账被拒）、A5（堂食订单支付超时自动取消），见 [integration/takeout_journey_integration_test.go](integration/takeout_journey_integration_test.go)。
+
 **适用业务场景**：顾客扫码入座 → 开台（用餐会话）→ 下单支付 → 出餐 → 商户结账离店。
 
 **终点定义（验收口径）**：用餐会话 `DiningSession.status=closed`（桌台释放 + 账单组关闭）。订单可在 `ready/completed` 等状态并存，但离店结账必须收敛到会话关闭。
@@ -466,6 +471,8 @@ sequenceDiagram
 - 商户/厨房重复点击：状态机校验应阻止非法推进（例如未 paid 就 preparing）
 
 ### 6.3 旅程C：包间预订（从创建预订到到店完结/爽约）
+
+**核查标记（2026-02-06）**：集成测试已覆盖 C1（包间可用性查询）、C2-C5（创建预订→支付回调→商户确认→签到→完结）、C2起菜通知、C3商户今日预订列表以及异常链路（支付超时取消、商户标记未到店、退款截止前取消退款、退款截止后取消被拒、退款回调通知入队、未支付签到被拒、未支付确认被拒），见 [integration/takeout_journey_integration_test.go](integration/takeout_journey_integration_test.go)。
 
 **适用业务场景**：用户预订包间（定金/全款）→ 支付 → 商户确认 → 到店（可开台）→ 完结或爽约。
 
@@ -563,6 +570,8 @@ sequenceDiagram
 
 ### 7.5 售后：索赔 / 申诉 / 通知（WS）
 
+**核查标记（2026-02-06）**：集成测试已覆盖 D1（完成订单后提交索赔并落库）、D2（商户申诉提交）、D3（骑手申诉提交）、D4（运营商审核申诉）、D5（申诉审核后的追偿回滚与通知落库）、D6（申诉驳回后的追偿恢复与通知落库）、D7（申诉审核任务入队）、D8（申诉处理任务执行）、D9（申诉处理任务驳回分支）、D10（商户支付追偿单）、D11（运营商核销追偿单）、D12（骑手支付追偿单）、D13（运营商查看追偿单）、D14（商户查看追偿单）、D15（骑手查看追偿单）、D16（商户越权查看追偿单拒绝）、D17（骑手越权查看追偿单拒绝）、D18（跨区域运营商查看追偿单拒绝）、D19（商户查看不存在追偿单）、D20（骑手查看不存在追偿单）、D21（运营商查看不存在追偿单）、D22（商户支付后查看追偿单）、D23（骑手支付后查看追偿单）、D24（运营商核销后查看追偿单）、D25（商户越权查看申诉详情拒绝）、D26（骑手越权查看申诉详情拒绝）、D27（跨区域运营商查看申诉详情拒绝）、D28（跨区域运营商审核申诉拒绝）、D29（申诉重复审核返回 400）、D30（商户重复申诉返回 409）、D31（骑手重复申诉返回已存在申诉）、D32（不同骑手重复申诉返回 403）、D33（运营商按状态筛选申诉列表）、D34（运营商按状态筛选返回空列表）、D35（商户申诉列表空结果）、D36（骑手申诉列表空结果）、D37（运营商申诉列表分页）、D38（商户申诉列表分页）、D39（骑手申诉列表分页）、D40（运营商列表非法状态返回 400）、D41（商户列表非法分页返回 400）、D42（骑手列表非法分页返回 400）、D43（运营商列表默认分页参数）、D44（商户列表超限 page_size 返回 400）、D45（骑手列表超限 page_size 返回 400）、D46（商户申诉详情非法 ID 返回 400）、D47（骑手申诉详情非法 ID 返回 400）、D48（运营商申诉详情非法 ID 返回 400），见 [integration/takeout_journey_integration_test.go](integration/takeout_journey_integration_test.go)。
+
 | 场景 | 端点/事件 | 代码入口 | 关键口径 | 覆盖状态 |
 |---|---|---|---|---|
 | 用户索赔 | `POST /v1/claims` | `api/server.go` → [`api/risk_management.go`](../../api/risk_management.go) `SubmitClaim` | 仅 `completed` 订单允许索赔（口径对齐） | OK |
@@ -629,7 +638,7 @@ sequenceDiagram
 **TC-B2：外卖送达后 1 小时无索赔自动完成（兜底终点）**
 
 - 前置数据：订单已走到 `rider_delivered`，并确保该订单无索赔记录。
-- 动作：让送达时间满足 “超过 1 小时”（联调常用做法：回拨 delivered_at 或类似字段），然后等待或手动触发 scheduler `takeout-auto-complete` 扫描。
+- 动作：让送达时间满足 “超过 1 小时”（联调常用做法：回拨 `orders.rider_delivered_at`；若从配送单视角则是 `deliveries.delivered_at`），然后等待或手动触发 scheduler `takeout-auto-complete` 扫描。
 - 证据：订单被自动推进为 `completed`（含自动完成时间字段写入）；且不会因为重复扫描产生异常。
 
 **TC-B3：完成后触发分账（profit_sharing）+ 恢复补偿**
@@ -677,7 +686,7 @@ sequenceDiagram
 
 ```sql
 -- 订单状态与关键时间
-SELECT id, order_type, status, payment_type, paid_at, delivered_at, completed_at
+SELECT id, order_type, status, payment_type, paid_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, completed_at
 FROM orders
 WHERE id = $1;
 

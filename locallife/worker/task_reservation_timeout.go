@@ -179,18 +179,19 @@ func (p *RedisTaskProcessor) ProcessTaskReservationNoShowAlert(ctx context.Conte
 		"contact_phone":    reservation.ContactPhone,
 	})
 
-	// 4. 发送 WebSocket 推送给商户（通过 Redis Pub/Sub）
-	err = websocket.PublishNotificationPush(ctx, p.redisClient, "merchant", reservation.MerchantID, websocket.Message{
-		Type:      "reservation_no_show_alert",
-		Data:      json.RawMessage(data),
-		Timestamp: time.Now(),
-	})
-
-	if err != nil {
-		log.Error().Err(err).Int64("reservation_id", payload.ReservationID).Msg("failed to publish no-show alert to redis")
-		return err
+	// 4. 发送 WebSocket 推送给商户（通过 Pub/Sub 发布器）
+	pushMsg := websocket.NotificationPushMessage{
+		EntityType: "merchant",
+		EntityID:   reservation.MerchantID,
+		Message: websocket.Message{
+			Type:      "reservation_no_show_alert",
+			Data:      json.RawMessage(data),
+			Timestamp: time.Now(),
+		},
 	}
-
-	log.Info().Int64("reservation_id", payload.ReservationID).Msg("reservation no-show alert sent successfully")
+	payloadBytes, _ := json.Marshal(pushMsg)
+	channel := fmt.Sprintf("notification:merchant:%d", reservation.MerchantID)
+	p.publishWSMessage(ctx, channel, payloadBytes)
+	log.Info().Int64("reservation_id", payload.ReservationID).Msg("reservation no-show alert publish attempted")
 	return nil
 }

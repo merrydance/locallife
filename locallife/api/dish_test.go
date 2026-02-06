@@ -725,6 +725,11 @@ func TestDeleteDishAPI(t *testing.T) {
 					DeleteDish(gomock.Any(), gomock.Eq(dish.ID)).
 					Times(1).
 					Return(nil)
+
+				store.EXPECT().
+					RemoveDishFromAllCombos(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

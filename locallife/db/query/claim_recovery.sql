@@ -51,7 +51,7 @@ UPDATE claim_recoveries
 SET status = 'waived',
     updated_at = NOW()
 WHERE id = $1
-  AND status IN ('pending', 'overdue')
+  AND status IN ('pending', 'overdue', 'appealed')
 RETURNING *;
 
 -- name: MarkClaimRecoveryAppealed :one

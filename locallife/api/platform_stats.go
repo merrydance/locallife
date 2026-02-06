@@ -63,7 +63,7 @@ func (server *Server) getPlatformOverview(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_overview_viewed",
@@ -135,7 +135,7 @@ func (server *Server) getPlatformDailyStats(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_daily_viewed",
@@ -214,7 +214,7 @@ func (server *Server) getPlatformProfitSharingReconciliation(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_profit_sharing_reconciliation_viewed",
@@ -291,7 +291,7 @@ func (server *Server) getPlatformProfitSharingSlaSummary(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_profit_sharing_sla_viewed",
@@ -378,7 +378,7 @@ func (server *Server) getPlatformProfitSharingConfigAudits(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_profit_sharing_config_audits_viewed",
@@ -471,7 +471,7 @@ func (server *Server) getRegionComparison(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_regions_compared",
@@ -571,7 +571,7 @@ func (server *Server) getMerchantRanking(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_merchant_ranking_viewed",
@@ -649,7 +649,7 @@ func (server *Server) getCategoryStats(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_category_viewed",
@@ -719,7 +719,7 @@ func (server *Server) getUserGrowthStats(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_user_growth_viewed",
@@ -780,7 +780,7 @@ func (server *Server) getMerchantGrowthStats(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_merchant_growth_viewed",
@@ -865,7 +865,7 @@ func (server *Server) getRiderRanking(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_rider_ranking_viewed",
@@ -940,7 +940,7 @@ func (server *Server) getHourlyDistribution(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_hourly_viewed",
@@ -997,7 +997,7 @@ func (server *Server) getRealtimeDashboard(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "platform",
 		Action:      "platform_stats_realtime_viewed",

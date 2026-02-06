@@ -90,8 +90,8 @@ func TestCreateGroupApplicationDraftAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "NoAuth",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			name:       "NoAuth",
+			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
 			buildStubs: func(store *mockdb.MockStore) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -508,8 +508,9 @@ func TestApproveGroupJoinRequestAPI(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	url := "/v1/groups/" + strconv.FormatInt(groupID, 10) + "/join-requests/" + strconv.FormatInt(requestID, 10) + "/approve"
-	request, err := http.NewRequest(http.MethodPost, url, nil)
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(`{}`)))
 	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
 
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 	server.router.ServeHTTP(recorder, request)

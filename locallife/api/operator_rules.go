@@ -64,7 +64,6 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	// 2. 骑手入驻押金 (从 operator 表获取, 单位: 分 -> 元)
 	// RiderDeposit is int64 (fen)
 	riderDeposit := fmt.Sprintf("%.2f", float64(operator.RiderDeposit)/100.0)
-
 	rules = append(rules, RuleItem{
 		ID:    "rule_2",
 		Name:  "骑手入驻押金",
@@ -480,7 +479,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: operator.UserID,
 		ActorRole:   "operator",
 		Action:      "operator_rule_updated",

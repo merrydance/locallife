@@ -217,6 +217,11 @@ func TestGetComboSetAPI(t *testing.T) {
 					GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
 					Times(1).
 					Return(detailsRow, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), combo.MerchantID).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -398,6 +403,11 @@ func TestListComboSetsAPI(t *testing.T) {
 					})).
 					Times(1).
 					Return(int64(n), nil)
+
+				store.EXPECT().
+					GetComboMemberImagesByCombos(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.GetComboMemberImagesByCombosRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

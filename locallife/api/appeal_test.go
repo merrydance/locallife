@@ -255,6 +255,11 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 					CreateAppeal(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(appeal, nil)
+
+				store.EXPECT().
+					GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
+					Times(1).
+					Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -543,6 +548,11 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 					CreateAppeal(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(appeal, nil)
+
+				store.EXPECT().
+					GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
+					Times(1).
+					Return(db.ClaimRecovery{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)

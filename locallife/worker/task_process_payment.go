@@ -53,8 +53,8 @@ type AlertData struct {
 
 // publishAlert 通过 Redis Pub/Sub 发布告警
 func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert AlertData) {
-	if processor.redisClient == nil {
-		log.Warn().Msg("redis client not configured, cannot publish alert")
+	if processor.pubSubPublisher == nil {
+		log.Warn().Msg("pubsub publisher not configured, cannot publish alert")
 		return
 	}
 
@@ -71,7 +71,7 @@ func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert Ale
 		return
 	}
 
-	if err := processor.redisClient.Publish(ctx, AlertChannel, wsMessageJSON).Err(); err != nil {
+	if err := processor.pubSubPublisher.Publish(ctx, AlertChannel, wsMessageJSON); err != nil {
 		log.Error().Err(err).Str("alert_type", string(alert.AlertType)).Msg("failed to publish alert to redis")
 	} else {
 		log.Info().
@@ -79,6 +79,17 @@ func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert Ale
 			Str("level", string(alert.Level)).
 			Str("title", alert.Title).
 			Msg("alert published to Redis")
+	}
+}
+
+func (processor *RedisTaskProcessor) publishWSMessage(ctx context.Context, channel string, payload []byte) {
+	if processor.pubSubPublisher == nil {
+		log.Warn().Str("channel", channel).Msg("pubsub publisher not configured, skip ws publish")
+		return
+	}
+
+	if err := processor.pubSubPublisher.Publish(ctx, channel, payload); err != nil {
+		log.Error().Err(err).Str("channel", channel).Msg("publish ws message failed")
 	}
 }
 
@@ -471,9 +482,7 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 	}
 	wsMessageJSON, _ := json.Marshal(pushMsg)
 	channel := fmt.Sprintf("notification:merchant:%d", merchant.ID)
-	if err := processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err(); err != nil {
-		log.Error().Err(err).Int64("merchant_id", merchant.ID).Msg("publish new order ws message failed")
-	}
+	processor.publishWSMessage(ctx, channel, wsMessageJSON)
 }
 
 type orderItemSnapshot struct {
@@ -684,7 +693,7 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 			}
 			wsMessageJSON, _ := json.Marshal(pushMsg)
 			channel := fmt.Sprintf("notification:rider:%d", riderID)
-			_ = processor.redisClient.Publish(ctx, channel, wsMessageJSON).Err()
+			processor.publishWSMessage(ctx, channel, wsMessageJSON)
 		}
 	}
 

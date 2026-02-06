@@ -878,6 +878,16 @@ func TestCalculateCartAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				store.EXPECT().
+					ListActiveDiscountRules(gomock.Any(), merchant.ID).
+					Times(1).
+					Return([]db.DiscountRule{}, nil)
+
+				store.EXPECT().
+					GetDeliveryFeeConfigByRegion(gomock.Any(), int64(0)).
+					Times(1).
+					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
 						UserID:     user.ID,
 						MerchantID: merchant.ID,
@@ -890,6 +900,14 @@ func TestCalculateCartAPI(t *testing.T) {
 					ListCartItems(gomock.Any(), cart.ID).
 					Times(1).
 					Return([]db.ListCartItemsRow{listRow}, nil)
+
+				store.EXPECT().
+					GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					}).
+					Times(1).
+					Return(db.MerchantMembership{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

@@ -991,11 +991,11 @@ type MerchantTag struct {
 type Notification struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"user_id"`
-	// 通知类型：order/payment/delivery/system/food_safety
+	// 通知类型（事件标识，小写字母/数字/下划线，如 order_completed, delivery_delay 等）
 	Type    string `json:"type"`
 	Title   string `json:"title"`
 	Content string `json:"content"`
-	// 关联实体类型，用于跳转
+	// 关联实体类型（小写字母/数字/下划线，如 order, delivery, appeal 等）
 	RelatedType pgtype.Text `json:"related_type"`
 	RelatedID   pgtype.Int8 `json:"related_id"`
 	// 扩展数据JSON，用于前端渲染

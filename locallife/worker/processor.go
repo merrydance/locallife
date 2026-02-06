@@ -9,6 +9,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
@@ -46,7 +47,7 @@ type RedisTaskProcessor struct {
 	distributor       TaskDistributor                 // 用于在任务中分发后续任务
 	wechatClient      wechat.WechatClient             // 微信小程序客户端（用于证照OCR等）
 	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通客户端（分账）
-	redisClient       *redis.Client                   // Redis客户端（用于Pub/Sub推送通知）
+	pubSubPublisher   websocket.PubSubPublisher       // Pub/Sub 发布器（用于推送通知）
 	deliveryBroadcast *logic.DeliveryBroadcastLogic
 	config            util.Config
 }
@@ -88,6 +89,7 @@ func NewRedisTaskProcessor(
 		Password: redisOpt.Password,
 		DB:       redisOpt.DB,
 	})
+	pubSubPublisher := websocket.NewRedisPublisher(redisClient)
 
 	return &RedisTaskProcessor{
 		server:            server,
@@ -95,7 +97,7 @@ func NewRedisTaskProcessor(
 		distributor:       distributor,
 		wechatClient:      wechatClient,
 		ecommerceClient:   ecommerceClient,
-		redisClient:       redisClient,
+		pubSubPublisher:   pubSubPublisher,
 		deliveryBroadcast: deliveryBroadcast,
 		config:            config,
 	}
@@ -113,6 +115,7 @@ func NewTestTaskProcessor(
 		distributor:     distributor,
 		wechatClient:    wechatClient,
 		ecommerceClient: ecommerceClient,
+		pubSubPublisher: websocket.NoopPublisher{},
 	}
 }
 

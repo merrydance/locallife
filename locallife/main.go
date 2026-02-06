@@ -278,7 +278,7 @@ func runGinServer(
 	weatherCache weather.WeatherCache,
 	taskDistributor worker.TaskDistributor,
 ) {
-	server, err := api.NewServer(config, store, weatherCache, taskDistributor)
+	server, err := api.NewServer(config, store, weatherCache, taskDistributor, nil)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot create server")
 	}

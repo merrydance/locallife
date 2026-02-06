@@ -17,6 +17,34 @@ const (
 	channelPlatformAlerts = "notification:platform:alerts" // 平台告警频道
 )
 
+// PubSubPublisher abstracts Redis Pub/Sub publish for DI.
+type PubSubPublisher interface {
+	Publish(ctx context.Context, channel string, payload []byte) error
+}
+
+// RedisPublisher publishes messages via Redis.
+type RedisPublisher struct {
+	client *redis.Client
+}
+
+func NewRedisPublisher(client *redis.Client) *RedisPublisher {
+	return &RedisPublisher{client: client}
+}
+
+func (p *RedisPublisher) Publish(ctx context.Context, channel string, payload []byte) error {
+	if p == nil || p.client == nil {
+		return nil
+	}
+	return p.client.Publish(ctx, channel, payload).Err()
+}
+
+// NoopPublisher drops messages.
+type NoopPublisher struct{}
+
+func (NoopPublisher) Publish(ctx context.Context, channel string, payload []byte) error {
+	return nil
+}
+
 // PubSubManager 管理Redis Pub/Sub，用于跨进程通知推送
 type PubSubManager struct {
 	redisClient *redis.Client

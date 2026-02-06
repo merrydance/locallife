@@ -19,6 +19,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -40,13 +41,23 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				startAt, err := time.Parse("2006-01-02", "2025-11-01")
+				require.NoError(t, err)
+				endAt, err := time.Parse("2006-01-02", "2025-11-30")
+				require.NoError(t, err)
+				endAt = endAt.Add(24*time.Hour - time.Nanosecond)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(2).
 					Return(merchant, nil)
 
 				store.EXPECT().
-					GetMerchantFinanceOverview(gomock.Any(), gomock.Any()).
+					GetMerchantFinanceOverview(gomock.Any(), gomock.Eq(db.GetMerchantFinanceOverviewParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+					})).
 					Times(1).
 					Return(db.GetMerchantFinanceOverviewRow{
 						CompletedOrders:  100,
@@ -59,12 +70,25 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 					}, nil)
 
 				store.EXPECT().
-					GetMerchantPromotionExpenses(gomock.Any(), gomock.Any()).
+					GetMerchantPromotionExpenses(gomock.Any(), gomock.Eq(db.GetMerchantPromotionExpensesParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+					})).
 					Times(1).
 					Return(db.GetMerchantPromotionExpensesRow{
 						PromoOrderCount: 10,
 						TotalDiscount:   10000,
 					}, nil)
+
+				store.EXPECT().
+					SumMerchantSettlementAdjustments(gomock.Any(), gomock.Eq(db.SumMerchantSettlementAdjustmentsParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+					})).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -97,7 +121,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -113,7 +137,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -129,7 +153,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -145,7 +169,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -161,7 +185,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -196,6 +220,7 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -217,13 +242,25 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				startAt, err := time.Parse("2006-01-02", "2025-11-01")
+				require.NoError(t, err)
+				endAt, err := time.Parse("2006-01-02", "2025-11-30")
+				require.NoError(t, err)
+				endAt = endAt.Add(24*time.Hour - time.Nanosecond)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(2).
 					Return(merchant, nil)
 
 				store.EXPECT().
-					ListMerchantFinanceOrders(gomock.Any(), gomock.Any()).
+					ListMerchantFinanceOrders(gomock.Any(), gomock.Eq(db.ListMerchantFinanceOrdersParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+						Offset:     0,
+						Limit:      20,
+					})).
 					Times(1).
 					Return([]db.ListMerchantFinanceOrdersRow{
 						{
@@ -241,7 +278,11 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 					}, nil)
 
 				store.EXPECT().
-					CountMerchantFinanceOrders(gomock.Any(), gomock.Any()).
+					CountMerchantFinanceOrders(gomock.Any(), gomock.Eq(db.CountMerchantFinanceOrdersParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+					})).
 					Times(1).
 					Return(int64(1), nil)
 			},
@@ -261,18 +302,34 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				startAt, err := time.Parse("2006-01-02", "2025-11-01")
+				require.NoError(t, err)
+				endAt, err := time.Parse("2006-01-02", "2025-11-30")
+				require.NoError(t, err)
+				endAt = endAt.Add(24*time.Hour - time.Nanosecond)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(2).
 					Return(merchant, nil)
 
 				store.EXPECT().
-					ListMerchantFinanceOrders(gomock.Any(), gomock.Any()).
+					ListMerchantFinanceOrders(gomock.Any(), gomock.Eq(db.ListMerchantFinanceOrdersParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+						Offset:     10,
+						Limit:      10,
+					})).
 					Times(1).
 					Return([]db.ListMerchantFinanceOrdersRow{}, nil)
 
 				store.EXPECT().
-					CountMerchantFinanceOrders(gomock.Any(), gomock.Any()).
+					CountMerchantFinanceOrders(gomock.Any(), gomock.Eq(db.CountMerchantFinanceOrdersParams{
+						MerchantID: merchant.ID,
+						StartAt:    startAt,
+						EndAt:      endAt,
+					})).
 					Times(1).
 					Return(int64(15), nil)
 			},
@@ -295,7 +352,7 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -311,7 +368,7 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(1).
 					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -348,6 +405,7 @@ func TestListMerchantServiceFeesAPI(t *testing.T) {
 		ID:          1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
+		RegionID:    1,
 		Status:      "approved",
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
@@ -367,13 +425,22 @@ func TestListMerchantServiceFeesAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				startAt, err := time.Parse("2006-01-02", "2025-11-01")
+				require.NoError(t, err)
+				endAt, err := time.Parse("2006-01-02", "2025-11-30")
+				require.NoError(t, err)
+				endAt = endAt.Add(24*time.Hour - time.Nanosecond)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
+					Times(2).
 					Return(merchant, nil)
 
 				store.EXPECT().
-					GetMerchantServiceFeeDetail(gomock.Any(), gomock.Any()).
+					GetMerchantServiceFeeDetail(
+						gomock.Any(),
+						gomock.Eq(db.GetMerchantServiceFeeDetailParams{MerchantID: merchant.ID, StartAt: startAt, EndAt: endAt}),
+					).
 					Times(1).
 					Return([]db.GetMerchantServiceFeeDetailRow{
 						{

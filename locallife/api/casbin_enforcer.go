@@ -512,7 +512,7 @@ func (server *Server) ValidateOperatorRegionMiddleware(regionParamName string) g
 
 		if !manages {
 			attemptRegionID := regionID
-			server.writeAuditLog(ctx, auditLogInput{
+			server.writeAuditLog(ctx, AuditLogInput{
 				ActorUserID: operator.UserID,
 				ActorRole:   "operator",
 				Action:      "region_access_denied",

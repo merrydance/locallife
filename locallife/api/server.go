@@ -36,6 +36,7 @@ type Server struct {
 	config            util.Config
 	store             db.Store
 	tokenMaker        token.Maker
+	auditWriter       AuditWriter
 	wechatClient      wechat.WechatClient
 	paymentClient     wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
 	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
@@ -51,8 +52,23 @@ type Server struct {
 	router            *gin.Engine
 }
 
+// SetPaymentClientForTest injects a payment client in tests.
+func (server *Server) SetPaymentClientForTest(client wechat.PaymentClientInterface) {
+	server.paymentClient = client
+}
+
+// SetTaskDistributorForTest injects a task distributor in tests.
+func (server *Server) SetTaskDistributorForTest(distributor worker.TaskDistributor) {
+	server.taskDistributor = distributor
+}
+
+// SetEcommerceClientForTest injects an ecommerce client in tests.
+func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInterface) {
+	server.ecommerceClient = client
+}
+
 // NewServer creates a new HTTP server and set up routing.
-func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherCache, taskDistributor worker.TaskDistributor) (*Server, error) {
+func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherCache, taskDistributor worker.TaskDistributor, auditWriter AuditWriter) (*Server, error) {
 	tokenMaker, err := token.NewPasetoMaker(config.TokenSymmetricKey)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create token maker: %w", err)
@@ -187,10 +203,15 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		engine = NewDBRulesEngine(store)
 	}
 
+	if auditWriter == nil {
+		auditWriter = NewDBAuditWriter(store)
+	}
+
 	server := &Server{
 		config:          config,
 		store:           store,
 		tokenMaker:      tokenMaker,
+		auditWriter:     auditWriter,
 		wechatClient:    wechatClient,
 		paymentClient:   paymentClient,
 		ecommerceClient: ecommerceClient,
@@ -293,9 +314,14 @@ func (server *Server) setupRouter() {
 	router.Use(PrometheusMiddleware())
 
 	// 🛡️ 速率限制中间件（防止 DDoS）
-	rateLimiter := NewRateLimiter(DefaultRateLimiterConfig())
-	server.rateLimiter = rateLimiter
-	router.Use(rateLimiter.Middleware())
+	// 说明：集成测试在同一进程内会快速串行/并行触发大量请求，
+	// 为避免 429 干扰业务旅程验收，在 test 环境禁用该中间件。
+	var rateLimiter *RateLimiter
+	if server.config.Environment != "test" {
+		rateLimiter = NewRateLimiter(DefaultRateLimiterConfig())
+		server.rateLimiter = rateLimiter
+		router.Use(rateLimiter.Middleware())
+	}
 
 	// 🕐 全局超时中间件：防止慢查询、外部API卡死导致goroutine泄漏
 	router.Use(TimeoutMiddleware(30 * time.Second))
@@ -323,7 +349,9 @@ func (server *Server) setupRouter() {
 
 	// 微信认证路由(无需认证，但需要额外的速率限制)
 	authPublicGroup := v1.Group("/auth")
-	authPublicGroup.Use(rateLimiter.SensitiveAPIMiddleware(10)) // 敏感 API 更严格限制：每分钟 10 次
+	if rateLimiter != nil {
+		authPublicGroup.Use(rateLimiter.SensitiveAPIMiddleware(10)) // 敏感 API 更严格限制：每分钟 10 次
+	}
 	authPublicGroup.POST("/wechat-login", server.wechatLogin)
 	authPublicGroup.POST("/refresh", server.renewAccessToken)
 	authPublicGroup.POST("/web-login/sessions", server.createWebLoginSession)
@@ -360,7 +388,9 @@ func (server *Server) setupRouter() {
 
 	// 搜索路由
 	searchGroup := authGroup.Group("/search")
-	searchGroup.Use(rateLimiter.SensitiveAPIMiddleware(60)) // 搜索接口限流：每分钟 60 次/客户端
+	if rateLimiter != nil {
+		searchGroup.Use(rateLimiter.SensitiveAPIMiddleware(60)) // 搜索接口限流：每分钟 60 次/客户端
+	}
 	{
 		searchGroup.GET("/dishes", server.searchDishes)
 		searchGroup.GET("/merchants", server.searchMerchants)
@@ -373,7 +403,9 @@ func (server *Server) setupRouter() {
 
 	// 扫码点餐路由
 	scanGroup := authGroup.Group("/scan")
-	scanGroup.Use(rateLimiter.SensitiveAPIMiddleware(60)) // 扫码接口限流：每分钟 60 次/客户端
+	if rateLimiter != nil {
+		scanGroup.Use(rateLimiter.SensitiveAPIMiddleware(60)) // 扫码接口限流：每分钟 60 次/客户端
+	}
 	{
 		scanGroup.GET("/table", server.scanTable)
 	}

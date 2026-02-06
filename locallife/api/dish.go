@@ -586,7 +586,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 		CustomizationGroups: customizationGroups,
 	})
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "dish_created",
@@ -777,7 +777,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 
 	// 验证菜品属于当前商户
 	if dish.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -978,7 +978,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	}
 
 	if dish.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -1144,7 +1144,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		Tags:        tags,
 	})
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "dish_updated",
@@ -1206,7 +1206,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	}
 
 	if dish.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -1237,7 +1237,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 		fmt.Printf("failed to remove dish %d from combos: %v\n", req.ID, err)
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "dish_deleted",
@@ -1397,7 +1397,7 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 		Message:  message,
 	})
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "dish_status_updated",
@@ -1501,7 +1501,7 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 		Message: message,
 	})
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "dish_status_batch_updated",

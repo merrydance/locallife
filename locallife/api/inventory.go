@@ -98,7 +98,7 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 		return
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "inventory_created",
@@ -284,7 +284,7 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 	}
 
 	if existing.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -345,7 +345,7 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 		updatedFields["sold_quantity"] = *req.SoldQuantity
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "inventory_updated",
@@ -612,7 +612,7 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 	}
 
 	if existing.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: authPayload.UserID,
 			ActorRole:   "merchant",
 			Action:      "merchant_resource_access_denied",
@@ -666,7 +666,7 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 		updatedFields["sold_quantity"] = *req.SoldQuantity
 	}
 
-	server.writeAuditLog(ctx, auditLogInput{
+	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
 		Action:      "inventory_updated",

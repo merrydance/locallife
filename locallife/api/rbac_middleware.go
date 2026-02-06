@@ -166,7 +166,7 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		}
 
 		if merchant.RegionID == 0 {
-			server.writeAuditLog(ctx, auditLogInput{
+			server.writeAuditLog(ctx, AuditLogInput{
 				ActorUserID: authPayload.UserID,
 				ActorRole:   "merchant",
 				Action:      "region_access_denied",

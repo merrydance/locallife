@@ -55,6 +55,12 @@ func (s *ProfitSharingRecoveryScheduler) Stop() {
 	log.Info().Msg("profit sharing recovery scheduler stopped")
 }
 
+// RunOnce triggers a single scan cycle.
+// Useful for integration tests and manual runs.
+func (s *ProfitSharingRecoveryScheduler) RunOnce() {
+	s.runOnce()
+}
+
 func (s *ProfitSharingRecoveryScheduler) runOnce() {
 	if s.distributor == nil {
 		log.Warn().Msg("task distributor not configured, skip profit sharing recovery")

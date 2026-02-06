@@ -1245,7 +1245,7 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 			metadata["compensation_amount"] = *req.CompensationAmount
 		}
 		regionID := appeal.RegionID
-		server.writeAuditLog(ctx, auditLogInput{
+		server.writeAuditLog(ctx, AuditLogInput{
 			ActorUserID: actor.UserID,
 			ActorRole:   "operator",
 			Action:      "operator_appeal_reviewed",
