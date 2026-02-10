@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -1373,7 +1374,7 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 	}
 
 	// 获取会员信息
-	membership, err := server.store.GetMembershipByMerchantAndUserForUpdate(ctx, db.GetMembershipByMerchantAndUserForUpdateParams{
+	membership, err := server.store.GetMembershipByMerchantAndUser(ctx, db.GetMembershipByMerchantAndUserParams{
 		MerchantID: merchant.ID,
 		UserID:     uriReq.UserID,
 	})
@@ -1386,47 +1387,19 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		return
 	}
 
-	var updatedMembership db.MerchantMembership
-	var txType string
-
-	if bodyReq.Amount > 0 {
-		// 增加余额（退款/充值调整）
-		updatedMembership, err = server.store.IncrementMembershipBalance(ctx, db.IncrementMembershipBalanceParams{
-			ID:      membership.ID,
-			Balance: bodyReq.Amount,
-		})
-		txType = "adjustment_credit"
-	} else {
-		// 扣减余额
-		if membership.Balance < -bodyReq.Amount {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("insufficient balance")))
-			return
-		}
-		updatedMembership, err = server.store.DecrementMembershipBalance(ctx, db.DecrementMembershipBalanceParams{
-			ID:      membership.ID,
-			Balance: -bodyReq.Amount,
-		})
-		txType = "adjustment_debit"
-	}
-
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 记录交易流水
-	_, err = server.store.CreateMembershipTransaction(ctx, db.CreateMembershipTransactionParams{
-		MembershipID:   membership.ID,
-		Type:           txType,
-		Amount:         bodyReq.Amount,
-		BalanceAfter:   updatedMembership.Balance,
-		RelatedOrderID: pgtype.Int8{},
-		RechargeRuleID: pgtype.Int8{},
-		Notes:          pgtype.Text{String: bodyReq.Notes, Valid: true},
+	// 使用原子事务调整余额 (P1-007 修复)
+	result, err := server.store.AdjustMemberBalanceTx(ctx, db.AdjustMemberBalanceTxParams{
+		MembershipID: membership.ID,
+		Amount:       bodyReq.Amount,
+		Notes:        bodyReq.Notes,
 	})
 	if err != nil {
-		// 流水记录失败不影响主流程
-		fmt.Printf("failed to create transaction log: %v\n", err)
+		if strings.Contains(err.Error(), "余额不足") {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
 	// 获取用户信息用于响应
@@ -1445,10 +1418,10 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 		FullName:       user.FullName,
 		Phone:          phone,
 		AvatarURL:      avatarURL,
-		MembershipID:   updatedMembership.ID,
-		Balance:        updatedMembership.Balance,
-		TotalRecharged: updatedMembership.TotalRecharged,
-		TotalConsumed:  updatedMembership.TotalConsumed,
-		CreatedAt:      updatedMembership.CreatedAt,
+		MembershipID:   result.Membership.ID,
+		Balance:        result.Membership.Balance,
+		TotalRecharged: result.Membership.TotalRecharged,
+		TotalConsumed:  result.Membership.TotalConsumed,
+		CreatedAt:      result.Membership.CreatedAt,
 	})
 }

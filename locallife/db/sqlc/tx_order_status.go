@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -213,6 +214,48 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 			}
 		}
 
+		// 2.2 P1-059 修复：取消订单时回滚会员余额支付（原子性保证）
+		if result.Order.BalancePaid > 0 && result.Order.MembershipID.Valid {
+			membership, err := q.GetMembershipForUpdate(ctx, result.Order.MembershipID.Int64)
+			if err != nil {
+				if !errors.Is(err, ErrRecordNotFound) {
+					return fmt.Errorf("get membership for balance rollback: %w", err)
+				}
+				// 会员卡已删除，记录日志但不阻塞取消流程
+			} else {
+				// 回滚余额：加回已支付金额
+				newBalance := membership.Balance + result.Order.BalancePaid
+				newTotalConsumed := membership.TotalConsumed - result.Order.BalancePaid
+				if newTotalConsumed < 0 {
+					newTotalConsumed = 0
+				}
+
+				_, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
+					ID:             membership.ID,
+					Balance:        newBalance,
+					TotalRecharged: membership.TotalRecharged,
+					TotalConsumed:  newTotalConsumed,
+				})
+				if err != nil {
+					return fmt.Errorf("rollback membership balance: %w", err)
+				}
+
+				// 创建退款流水记录
+				_, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
+					MembershipID:   membership.ID,
+					Type:           "refund",
+					Amount:         result.Order.BalancePaid,
+					BalanceAfter:   newBalance,
+					RelatedOrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
+					RechargeRuleID: pgtype.Int8{},
+					Notes:          pgtype.Text{String: fmt.Sprintf("订单取消退回余额: %s", result.Order.OrderNo), Valid: true},
+				})
+				if err != nil {
+					return fmt.Errorf("create membership refund transaction: %w", err)
+				}
+			}
+		}
+
 		// 3. 若订单之前处于已支付状态，恢复已售库存
 		if arg.OldStatus == OrderStatusPaid {
 			inventoryDate := pgtype.Date{Time: time.Now(), Valid: true}
@@ -225,6 +268,11 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 					inventoryDate = reservation.ReservationDate
 				}
 			}
+
+			// P1-028 修复：按 DishID 排序防止并发死锁
+			sort.Slice(orderItems, func(i, j int) bool {
+				return orderItems[i].DishID.Int64 < orderItems[j].DishID.Int64
+			})
 
 			for _, item := range orderItems {
 				if !item.DishID.Valid {

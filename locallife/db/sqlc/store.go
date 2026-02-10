@@ -37,6 +37,7 @@ type Store interface {
 	RechargeTx(ctx context.Context, arg RechargeTxParams) (RechargeTxResult, error)
 	ConsumeTx(ctx context.Context, arg ConsumeTxParams) (ConsumeTxResult, error)
 	RefundTx(ctx context.Context, arg RefundTxParams) (RefundTxResult, error)
+	AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemberBalanceTxParams) (AdjustMemberBalanceTxResult, error)
 	// M10: Voucher transactions
 	ClaimVoucherTx(ctx context.Context, arg ClaimVoucherTxParams) (ClaimVoucherTxResult, error)
 	UseVoucherTx(ctx context.Context, arg UseVoucherTxParams) (UseVoucherTxResult, error)
@@ -84,6 +85,10 @@ type Store interface {
 	CreateProfitSharingConfigTx(ctx context.Context, arg CreateProfitSharingConfigTxParams) (CreateProfitSharingConfigTxResult, error)
 	UpdateProfitSharingConfigTx(ctx context.Context, arg UpdateProfitSharingConfigTxParams) (UpdateProfitSharingConfigTxResult, error)
 	UpdateProfitSharingConfigStatusTx(ctx context.Context, arg UpdateProfitSharingConfigStatusTxParams) (UpdateProfitSharingConfigStatusTxResult, error)
+	// Session transactions
+	RefreshSessionTx(ctx context.Context, arg RefreshSessionTxParams) (RefreshSessionTxResult, error)
+	// Order replacement transaction
+	ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxParams) (ReplaceOrderTxResult, error)
 }
 
 // SQLStore provides all functions to execute SQL queries and transactions

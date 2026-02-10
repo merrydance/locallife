@@ -2,10 +2,10 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 
@@ -279,7 +279,7 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 		return
 	}
 
-	// 获取订单
+	// 获取订单（仅用于归属校验）
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -296,19 +296,14 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 		return
 	}
 
-	// 验证订单状态
-	if order.Status != "paid" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in paid status")))
-		return
-	}
-
-	// 更新订单状态为 preparing，同时推进履约状态
-	updatedOrder, err := server.store.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-		ID:                uri.OrderID,
-		Status:            "preparing",
-		FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusPreparing, Valid: true},
-	})
+	// P1-035 修复：使用带状态条件的原子 UPDATE，防止并发竞态
+	// WHERE id = $1 AND status = 'paid'，如果状态不匹配则返回 no rows
+	updatedOrder, err := server.store.UpdateOrderToPreparing(ctx, uri.OrderID)
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in paid status or already being processed")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -358,7 +353,7 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 		return
 	}
 
-	// 获取订单
+	// 获取订单（仅用于归属校验和通知）
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -375,22 +370,27 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 		return
 	}
 
-	// 验证订单状态
-	if order.Status != "preparing" && order.Status != "paid" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in preparing or paid status")))
-		return
-	}
-
-	// 更新订单状态为 ready，并同步履约状态
-	updatedOrder, err := server.store.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-		ID:                uri.OrderID,
-		Status:            "ready",
-		FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusReady, Valid: true},
-	})
+	// P1-035 修复：使用带状态条件的原子 UPDATE，防止并发竞态
+	// WHERE id = $1 AND status IN ('paid', 'preparing')，如果状态不匹配则返回 no rows
+	updatedOrder, err := server.store.UpdateOrderToReady(ctx, uri.OrderID)
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in preparing or paid status, or already being processed")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	// 发送出餐通知给用户
+	_ = server.SendNotification(ctx, SendNotificationParams{
+		UserID:      order.UserID,
+		Title:       "您的订单已出餐",
+		Content:     fmt.Sprintf("订单 %s 已准备就绪，请及时取餐/等待配送", order.OrderNo),
+		Type:        "order_ready",
+		RelatedType: "order",
+		RelatedID:   order.ID,
+	})
 
 	// 转换为厨房订单响应
 	ko, err := server.convertToKitchenOrder(ctx, updatedOrder)

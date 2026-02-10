@@ -442,7 +442,7 @@ func (server *Server) setupRouter() {
 	// M1: 用户相关路由
 	authGroup.GET("/users/me", server.getCurrentUser)
 	authGroup.PATCH("/users/me", server.updateCurrentUser)
-	authGroup.POST("/auth/bind-phone", server.bindPhone)
+
 	authGroup.POST("/auth/web-login/confirm", server.confirmWebLoginSession)
 
 	// M2: 用户地址路由

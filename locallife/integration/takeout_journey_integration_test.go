@@ -600,10 +600,9 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 			"order_ids": []int64{orderID},
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments/combined", body, customer.ID)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("create combined payment failed: %s", rec.Body.String())
-		}
+		require.Equalf(t, http.StatusOK, rec.Code, "create combined payment failed: %s", rec.Body.String())
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &combined)
+		require.Greaterf(t, combined.ID, int64(0), "create combined payment returned empty id: %s", rec.Body.String())
 		require.Equal(t, "pending", combined.Status)
 		require.Equal(t, order.TotalAmount, combined.TotalAmount)
 		require.Len(t, combined.SubOrders, 1)
@@ -614,7 +613,7 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 	{
 		url := fmt.Sprintf("/v1/payments/combined/%d", combined.ID)
 		rec := doGET(t, server, url, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equalf(t, http.StatusOK, rec.Code, "get combined payment failed: %s", rec.Body.String())
 		var detail combinedPaymentOrderResponse
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &detail)
 		require.Equal(t, combined.ID, detail.ID)
@@ -627,7 +626,7 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 	{
 		url := fmt.Sprintf("/v1/payments/combined/%d/close", combined.ID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equalf(t, http.StatusOK, rec.Code, "close combined payment failed: %s", rec.Body.String())
 		var closed combinedPaymentOrderResponse
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &closed)
 		require.Equal(t, "closed", closed.Status)

@@ -252,6 +252,21 @@ func (mr *MockStoreMockRecorder) AddUserBalance(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddUserBalance", reflect.TypeOf((*MockStore)(nil).AddUserBalance), ctx, arg)
 }
 
+// AdjustMemberBalanceTx mocks base method.
+func (m *MockStore) AdjustMemberBalanceTx(ctx context.Context, arg db.AdjustMemberBalanceTxParams) (db.AdjustMemberBalanceTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdjustMemberBalanceTx", ctx, arg)
+	ret0, _ := ret[0].(db.AdjustMemberBalanceTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdjustMemberBalanceTx indicates an expected call of AdjustMemberBalanceTx.
+func (mr *MockStoreMockRecorder) AdjustMemberBalanceTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdjustMemberBalanceTx", reflect.TypeOf((*MockStore)(nil).AdjustMemberBalanceTx), ctx, arg)
+}
+
 // ApproveGroupApplicationTx mocks base method.
 func (m *MockStore) ApproveGroupApplicationTx(ctx context.Context, arg db.ApproveGroupApplicationTxParams) (db.ApproveGroupApplicationTxResult, error) {
 	m.ctrl.T.Helper()
@@ -1624,6 +1639,21 @@ func (m *MockStore) CountRecentClaimsByUsers(ctx context.Context, arg db.CountRe
 func (mr *MockStoreMockRecorder) CountRecentClaimsByUsers(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRecentClaimsByUsers", reflect.TypeOf((*MockStore)(nil).CountRecentClaimsByUsers), ctx, arg)
+}
+
+// CountRecentOrderStatusLogs mocks base method.
+func (m *MockStore) CountRecentOrderStatusLogs(ctx context.Context, arg db.CountRecentOrderStatusLogsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountRecentOrderStatusLogs", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountRecentOrderStatusLogs indicates an expected call of CountRecentOrderStatusLogs.
+func (mr *MockStoreMockRecorder) CountRecentOrderStatusLogs(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRecentOrderStatusLogs", reflect.TypeOf((*MockStore)(nil).CountRecentOrderStatusLogs), ctx, arg)
 }
 
 // CountRegionPendingClaims mocks base method.
@@ -5659,6 +5689,21 @@ func (mr *MockStoreMockRecorder) GetDeliveryPoolByOrderID(ctx, orderID any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeliveryPoolByOrderID", reflect.TypeOf((*MockStore)(nil).GetDeliveryPoolByOrderID), ctx, orderID)
 }
 
+// GetDeliveryPoolByOrderIDForUpdate mocks base method.
+func (m *MockStore) GetDeliveryPoolByOrderIDForUpdate(ctx context.Context, orderID int64) (db.DeliveryPool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeliveryPoolByOrderIDForUpdate", ctx, orderID)
+	ret0, _ := ret[0].(db.DeliveryPool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDeliveryPoolByOrderIDForUpdate indicates an expected call of GetDeliveryPoolByOrderIDForUpdate.
+func (mr *MockStoreMockRecorder) GetDeliveryPoolByOrderIDForUpdate(ctx, orderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeliveryPoolByOrderIDForUpdate", reflect.TypeOf((*MockStore)(nil).GetDeliveryPoolByOrderIDForUpdate), ctx, orderID)
+}
+
 // GetDeliveryPoolItem mocks base method.
 func (m *MockStore) GetDeliveryPoolItem(ctx context.Context, id int64) (db.DeliveryPool, error) {
 	m.ctrl.T.Helper()
@@ -8687,6 +8732,21 @@ func (m *MockStore) GetSessionByRefreshToken(ctx context.Context, arg db.GetSess
 func (mr *MockStoreMockRecorder) GetSessionByRefreshToken(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSessionByRefreshToken", reflect.TypeOf((*MockStore)(nil).GetSessionByRefreshToken), ctx, arg)
+}
+
+// GetSessionByRefreshTokenForUpdate mocks base method.
+func (m *MockStore) GetSessionByRefreshTokenForUpdate(ctx context.Context, arg db.GetSessionByRefreshTokenForUpdateParams) (db.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSessionByRefreshTokenForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSessionByRefreshTokenForUpdate indicates an expected call of GetSessionByRefreshTokenForUpdate.
+func (mr *MockStoreMockRecorder) GetSessionByRefreshTokenForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSessionByRefreshTokenForUpdate", reflect.TypeOf((*MockStore)(nil).GetSessionByRefreshTokenForUpdate), ctx, arg)
 }
 
 // GetSystemTagByName mocks base method.
@@ -13227,6 +13287,21 @@ func (mr *MockStoreMockRecorder) RecordBrowseHistory(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordBrowseHistory", reflect.TypeOf((*MockStore)(nil).RecordBrowseHistory), ctx, arg)
 }
 
+// RefreshSessionTx mocks base method.
+func (m *MockStore) RefreshSessionTx(ctx context.Context, arg db.RefreshSessionTxParams) (db.RefreshSessionTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshSessionTx", ctx, arg)
+	ret0, _ := ret[0].(db.RefreshSessionTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshSessionTx indicates an expected call of RefreshSessionTx.
+func (mr *MockStoreMockRecorder) RefreshSessionTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshSessionTx", reflect.TypeOf((*MockStore)(nil).RefreshSessionTx), ctx, arg)
+}
+
 // RefundTx mocks base method.
 func (m *MockStore) RefundTx(ctx context.Context, arg db.RefundTxParams) (db.RefundTxResult, error) {
 	m.ctrl.T.Helper()
@@ -13567,6 +13642,21 @@ func (m *MockStore) RenewOperatorContract(ctx context.Context, arg db.RenewOpera
 func (mr *MockStoreMockRecorder) RenewOperatorContract(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewOperatorContract", reflect.TypeOf((*MockStore)(nil).RenewOperatorContract), ctx, arg)
+}
+
+// ReplaceOrderTx mocks base method.
+func (m *MockStore) ReplaceOrderTx(ctx context.Context, arg db.ReplaceOrderTxParams) (db.ReplaceOrderTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplaceOrderTx", ctx, arg)
+	ret0, _ := ret[0].(db.ReplaceOrderTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplaceOrderTx indicates an expected call of ReplaceOrderTx.
+func (mr *MockStoreMockRecorder) ReplaceOrderTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceOrderTx", reflect.TypeOf((*MockStore)(nil).ReplaceOrderTx), ctx, arg)
 }
 
 // ReplaceReservationItemsTx mocks base method.
@@ -14477,6 +14567,21 @@ func (m *MockStore) UpdateCartItem(ctx context.Context, arg db.UpdateCartItemPar
 func (mr *MockStoreMockRecorder) UpdateCartItem(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCartItem", reflect.TypeOf((*MockStore)(nil).UpdateCartItem), ctx, arg)
+}
+
+// UpdateCartItemQuantityRelative mocks base method.
+func (m *MockStore) UpdateCartItemQuantityRelative(ctx context.Context, arg db.UpdateCartItemQuantityRelativeParams) (db.CartItem, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCartItemQuantityRelative", ctx, arg)
+	ret0, _ := ret[0].(db.CartItem)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateCartItemQuantityRelative indicates an expected call of UpdateCartItemQuantityRelative.
+func (mr *MockStoreMockRecorder) UpdateCartItemQuantityRelative(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCartItemQuantityRelative", reflect.TypeOf((*MockStore)(nil).UpdateCartItemQuantityRelative), ctx, arg)
 }
 
 // UpdateClaimLookbackResult mocks base method.
@@ -15741,6 +15846,36 @@ func (m *MockStore) UpdateOrderToPicked(ctx context.Context, id int64) (db.Order
 func (mr *MockStoreMockRecorder) UpdateOrderToPicked(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToPicked", reflect.TypeOf((*MockStore)(nil).UpdateOrderToPicked), ctx, id)
+}
+
+// UpdateOrderToPreparing mocks base method.
+func (m *MockStore) UpdateOrderToPreparing(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderToPreparing", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderToPreparing indicates an expected call of UpdateOrderToPreparing.
+func (mr *MockStoreMockRecorder) UpdateOrderToPreparing(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToPreparing", reflect.TypeOf((*MockStore)(nil).UpdateOrderToPreparing), ctx, id)
+}
+
+// UpdateOrderToReady mocks base method.
+func (m *MockStore) UpdateOrderToReady(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateOrderToReady", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateOrderToReady indicates an expected call of UpdateOrderToReady.
+func (mr *MockStoreMockRecorder) UpdateOrderToReady(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderToReady", reflect.TypeOf((*MockStore)(nil).UpdateOrderToReady), ctx, id)
 }
 
 // UpdateOrderToRiderDelivered mocks base method.

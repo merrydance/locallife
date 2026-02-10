@@ -78,6 +78,10 @@ func (NoopTaskDistributor) DistributeTaskProcessAppealResult(ctx context.Context
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskClaimRefund(ctx context.Context, payload *ClaimRefundPayload, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, imagePath string, opts ...asynq.Option) error {
 	return nil
 }

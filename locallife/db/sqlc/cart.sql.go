@@ -897,3 +897,32 @@ func (q *Queries) UpdateCartItem(ctx context.Context, arg UpdateCartItemParams) 
 	)
 	return i, err
 }
+
+const updateCartItemQuantityRelative = `-- name: UpdateCartItemQuantityRelative :one
+UPDATE cart_items
+SET quantity = quantity + $1
+WHERE id = $2 AND quantity + $1 <= 99
+RETURNING id, cart_id, dish_id, combo_id, quantity, customizations, created_at, updated_at
+`
+
+type UpdateCartItemQuantityRelativeParams struct {
+	Amount int16 `json:"amount"`
+	ID     int64 `json:"id"`
+}
+
+// P1-016 修复：在数据库层确保数量不超过上限（原子性保证）
+func (q *Queries) UpdateCartItemQuantityRelative(ctx context.Context, arg UpdateCartItemQuantityRelativeParams) (CartItem, error) {
+	row := q.db.QueryRow(ctx, updateCartItemQuantityRelative, arg.Amount, arg.ID)
+	var i CartItem
+	err := row.Scan(
+		&i.ID,
+		&i.CartID,
+		&i.DishID,
+		&i.ComboID,
+		&i.Quantity,
+		&i.Customizations,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

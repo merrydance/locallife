@@ -319,14 +319,14 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 			return
 		}
 
-		// 预订签到时间窗口：预订时间前后各30分钟 (商户操作不限制时间窗口)
+		// P1-023 修复：使用常量替代硬编码魔法数字
 		if !isMerchant {
 			scheduledAt := util.CombineDateAndTime(reservation.ReservationDate.Time, reservation.ReservationTime.Microseconds)
-			if now.Before(scheduledAt.Add(-30 * time.Minute)) {
+			if now.Before(scheduledAt.Add(-time.Duration(ReservationCheckInEarlyMinutes) * time.Minute)) {
 				ctx.JSON(http.StatusConflict, errorResponse(errors.New("too early to check in for reservation")))
 				return
 			}
-			if now.After(scheduledAt.Add(30 * time.Minute)) {
+			if now.After(scheduledAt.Add(time.Duration(ReservationCheckInLateMinutes) * time.Minute)) {
 				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation check-in window has passed")))
 				return
 			}

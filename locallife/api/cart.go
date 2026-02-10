@@ -471,16 +471,22 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 			Customizations: customizations,
 		})
 		if err == nil {
-			newQuantity := existingItem.Quantity + req.Quantity
-			if newQuantity < 1 || newQuantity > 99 {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("quantity exceeds limit")))
+			// P1-016 修复：数据库层已有上限保护（WHERE quantity + amount <= 99）
+			// 此处预检仅为给出友好提示
+			if existingItem.Quantity+req.Quantity > CartItemMaxQuantity {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("单品数量不能超过%d", CartItemMaxQuantity)))
 				return
 			}
-			_, err = server.store.UpdateCartItem(ctx, db.UpdateCartItemParams{
-				ID:       existingItem.ID,
-				Quantity: pgtype.Int2{Int16: newQuantity, Valid: true},
+			_, err = server.store.UpdateCartItemQuantityRelative(ctx, db.UpdateCartItemQuantityRelativeParams{
+				ID:     existingItem.ID,
+				Amount: req.Quantity,
 			})
 			if err != nil {
+				if isNotFoundError(err) {
+					// SQL WHERE 条件不满足（并发超限）
+					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("单品数量不能超过%d", CartItemMaxQuantity)))
+					return
+				}
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update cart item quantity: %w", err)))
 				return
 			}
@@ -495,16 +501,20 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 			ComboID: pgtype.Int8{Int64: *req.ComboID, Valid: true},
 		})
 		if err == nil {
-			newQuantity := existingItem.Quantity + req.Quantity
-			if newQuantity < 1 || newQuantity > 99 {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("quantity exceeds limit")))
+			// P1-016 修复：预检给出友好提示
+			if existingItem.Quantity+req.Quantity > CartItemMaxQuantity {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("单品数量不能超过%d", CartItemMaxQuantity)))
 				return
 			}
-			_, err = server.store.UpdateCartItem(ctx, db.UpdateCartItemParams{
-				ID:       existingItem.ID,
-				Quantity: pgtype.Int2{Int16: newQuantity, Valid: true},
+			_, err = server.store.UpdateCartItemQuantityRelative(ctx, db.UpdateCartItemQuantityRelativeParams{
+				ID:     existingItem.ID,
+				Amount: req.Quantity,
 			})
 			if err != nil {
+				if isNotFoundError(err) {
+					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("单品数量不能超过%d", CartItemMaxQuantity)))
+					return
+				}
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update cart item quantity: %w", err)))
 				return
 			}
@@ -622,8 +632,8 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 	}
 
 	if req.Quantity != nil {
-		if *req.Quantity < 1 || *req.Quantity > 99 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("quantity must be between 1 and 99")))
+		if *req.Quantity < 1 || int(*req.Quantity) > CartItemMaxQuantity {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("quantity must be between 1 and %d", CartItemMaxQuantity)))
 			return
 		}
 		updateParams.Quantity = pgtype.Int2{Int16: *req.Quantity, Valid: true}

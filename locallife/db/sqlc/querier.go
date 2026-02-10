@@ -158,6 +158,8 @@ type Querier interface {
 	CountProfitSharingReturnsByRefundOrderStatus(ctx context.Context, arg CountProfitSharingReturnsByRefundOrderStatusParams) (int32, error)
 	// 统计多个用户最近N天的索赔总数
 	CountRecentClaimsByUsers(ctx context.Context, arg CountRecentClaimsByUsersParams) (int64, error)
+	// 统计指定订单在指定时间后的特定类型日志数量（用于速率限制）
+	CountRecentOrderStatusLogs(ctx context.Context, arg CountRecentOrderStatusLogsParams) (int64, error)
 	// 统计运营商区域内待人工审核的索赔数量
 	CountRegionPendingClaims(ctx context.Context, regionID int64) (int64, error)
 	CountReservationItems(ctx context.Context, reservationID int64) (int64, error)
@@ -577,6 +579,7 @@ type Querier interface {
 	GetDeliveryForUpdate(ctx context.Context, id int64) (Delivery, error)
 	GetDeliveryLatestLocation(ctx context.Context, deliveryID pgtype.Int8) (RiderLocation, error)
 	GetDeliveryPoolByOrderID(ctx context.Context, orderID int64) (DeliveryPool, error)
+	GetDeliveryPoolByOrderIDForUpdate(ctx context.Context, orderID int64) (DeliveryPool, error)
 	GetDeliveryPoolItem(ctx context.Context, id int64) (DeliveryPool, error)
 	GetDeliveryPoolItemForUpdate(ctx context.Context, id int64) (DeliveryPool, error)
 	GetDeliveryPromotion(ctx context.Context, id int64) (MerchantDeliveryPromotion, error)
@@ -893,6 +896,8 @@ type Querier interface {
 	GetSession(ctx context.Context, id int64) (Session, error)
 	GetSessionByAccessToken(ctx context.Context, accessToken string) (Session, error)
 	GetSessionByRefreshToken(ctx context.Context, arg GetSessionByRefreshTokenParams) (Session, error)
+	// P1-012 修复：加行锁防止并发刷新
+	GetSessionByRefreshTokenForUpdate(ctx context.Context, arg GetSessionByRefreshTokenForUpdateParams) (Session, error)
 	// 根据名称获取系统标签
 	GetSystemTagByName(ctx context.Context, name string) (Tag, error)
 	GetTable(ctx context.Context, id int64) (Table, error)
@@ -1404,6 +1409,8 @@ type Querier interface {
 	UpdateBillingGroupStatus(ctx context.Context, arg UpdateBillingGroupStatusParams) (BillingGroup, error)
 	UpdateBusinessHour(ctx context.Context, arg UpdateBusinessHourParams) (MerchantBusinessHour, error)
 	UpdateCartItem(ctx context.Context, arg UpdateCartItemParams) (CartItem, error)
+	// P1-016 修复：在数据库层确保数量不超过上限（原子性保证）
+	UpdateCartItemQuantityRelative(ctx context.Context, arg UpdateCartItemQuantityRelativeParams) (CartItem, error)
 	UpdateClaimLookbackResult(ctx context.Context, arg UpdateClaimLookbackResultParams) error
 	UpdateClaimStatus(ctx context.Context, arg UpdateClaimStatusParams) error
 	UpdateCloudPrinter(ctx context.Context, arg UpdateCloudPrinterParams) (CloudPrinter, error)
@@ -1504,6 +1511,10 @@ type Querier interface {
 	UpdateOrderToDelivering(ctx context.Context, id int64) (Order, error)
 	UpdateOrderToPaid(ctx context.Context, arg UpdateOrderToPaidParams) (Order, error)
 	UpdateOrderToPicked(ctx context.Context, id int64) (Order, error)
+	// P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
+	UpdateOrderToPreparing(ctx context.Context, id int64) (Order, error)
+	// P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
+	UpdateOrderToReady(ctx context.Context, id int64) (Order, error)
 	UpdateOrderToRiderDelivered(ctx context.Context, id int64) (Order, error)
 	UpdateOrderToUserDelivered(ctx context.Context, id int64) (Order, error)
 	UpdatePaymentOrderPrepayId(ctx context.Context, arg UpdatePaymentOrderPrepayIdParams) (PaymentOrder, error)

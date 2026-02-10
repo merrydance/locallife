@@ -247,3 +247,82 @@ func (store *SQLStore) RefundTx(ctx context.Context, arg RefundTxParams) (Refund
 
 	return result, err
 }
+
+// ==================== 商户调整余额事务 ====================
+
+// AdjustMemberBalanceTxParams 商户调整会员余额事务参数
+type AdjustMemberBalanceTxParams struct {
+	MembershipID int64
+	Amount       int64  // 正数增加，负数减少
+	Notes        string // 调整备注
+}
+
+// AdjustMemberBalanceTxResult 商户调整会员余额事务结果
+type AdjustMemberBalanceTxResult struct {
+	Membership  MerchantMembership
+	Transaction MembershipTransaction
+}
+
+// AdjustMemberBalanceTx 在单一事务内完成余额调整和流水记录
+// 解决 P1-007: 余额变动与流水记录非原子问题
+func (store *SQLStore) AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemberBalanceTxParams) (AdjustMemberBalanceTxResult, error) {
+	var result AdjustMemberBalanceTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		// 1. 使用 FOR UPDATE 锁定会员记录，获取最新余额
+		membership, err := q.GetMembershipForUpdate(ctx, arg.MembershipID)
+		if err != nil {
+			return fmt.Errorf("get membership for update: %w", err)
+		}
+
+		// 2. 计算新余额并验证
+		newBalance := membership.Balance + arg.Amount
+		if newBalance < 0 {
+			return fmt.Errorf("余额不足，当前余额 %d 分，需扣减 %d 分", membership.Balance, -arg.Amount)
+		}
+
+		// 3. 计算新的累计充值/消费
+		var newTotalRecharged, newTotalConsumed int64
+		var txType string
+		if arg.Amount > 0 {
+			newTotalRecharged = membership.TotalRecharged + arg.Amount
+			newTotalConsumed = membership.TotalConsumed
+			txType = "adjustment_credit"
+		} else {
+			newTotalRecharged = membership.TotalRecharged
+			newTotalConsumed = membership.TotalConsumed + (-arg.Amount)
+			txType = "adjustment_debit"
+		}
+
+		// 4. 更新余额（原子操作）
+		result.Membership, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
+			ID:             arg.MembershipID,
+			Balance:        newBalance,
+			TotalRecharged: newTotalRecharged,
+			TotalConsumed:  newTotalConsumed,
+		})
+		if err != nil {
+			return fmt.Errorf("update membership balance: %w", err)
+		}
+
+		// 5. 创建流水记录（同一事务内，保证原子性）
+		result.Transaction, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
+			MembershipID:   arg.MembershipID,
+			Type:           txType,
+			Amount:         arg.Amount,
+			BalanceAfter:   newBalance,
+			RelatedOrderID: pgtype.Int8{},
+			RechargeRuleID: pgtype.Int8{},
+			Notes:          pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""},
+		})
+		if err != nil {
+			return fmt.Errorf("create membership transaction: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}

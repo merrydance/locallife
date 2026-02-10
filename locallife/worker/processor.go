@@ -39,6 +39,8 @@ type TaskProcessor interface {
 	ProcessTaskProfitSharing(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskProfitSharingReturnResult 处理分账回退结果任务
 	ProcessTaskProfitSharingReturnResult(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskClaimRefund 处理索赔退款任务
+	ProcessTaskClaimRefund(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
@@ -142,6 +144,9 @@ func (processor *RedisTaskProcessor) Start() error {
 
 	// 申诉处理任务
 	mux.HandleFunc(TaskProcessAppealResult, processor.ProcessTaskProcessAppealResult)
+
+	// 索赔退款任务
+	mux.HandleFunc(TaskClaimRefund, processor.ProcessTaskClaimRefund)
 
 	// 进件/分账结果处理任务
 	mux.HandleFunc(TaskProcessApplymentResult, processor.ProcessTaskApplymentResult)

@@ -15,9 +15,9 @@ import (
 )
 
 type wechatLoginRequest struct {
-	Code       string `json:"code" binding:"required,min=1,max=256"`
-	DeviceID   string `json:"device_id" binding:"required,min=1,max=128"`
-	DeviceType string `json:"device_type" binding:"required,oneof=ios android miniprogram h5"`
+	Code              string `json:"code" binding:"required,min=1,max=256"`
+	DeviceID          string `json:"device_id" binding:"required,min=1,max=128"`
+	DeviceType        string `json:"device_type" binding:"required,oneof=ios android miniprogram h5"`
 	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
 }
 
@@ -85,10 +85,10 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 
 	// 记录设备信息（用于M9欺诈检测）
 	deviceArg := db.UpsertUserDeviceParams{
-		UserID:     user.ID,
-		DeviceID:   req.DeviceID,
+		UserID:            user.ID,
+		DeviceID:          req.DeviceID,
 		DeviceFingerprint: pgtype.Text{String: req.DeviceFingerprint, Valid: req.DeviceFingerprint != ""},
-		DeviceType: req.DeviceType,
+		DeviceType:        req.DeviceType,
 	}
 	_, err = server.store.UpsertUserDevice(ctx, deviceArg)
 	if err != nil {
@@ -166,60 +166,4 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		User:                  newUserResponse(user, roles),
 	}
 	ctx.JSON(http.StatusOK, rsp)
-}
-
-type bindPhoneRequest struct {
-	Phone string `json:"phone" binding:"required"`
-}
-
-func (server *Server) bindPhone(ctx *gin.Context) {
-	var req bindPhoneRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 检查手机号是否已被其他用户使用
-	existingUser, err := server.store.GetUserByPhone(ctx, pgtype.Text{
-		String: req.Phone,
-		Valid:  true,
-	})
-	if err != nil && !isNotFoundError(err) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to check phone availability: %w", err)))
-		return
-	}
-	if err == nil && existingUser.ID != authPayload.UserID {
-		ctx.JSON(http.StatusConflict, errorResponse(fmt.Errorf("phone number already in use")))
-		return
-	}
-
-	arg := db.UpdateUserParams{
-		ID: authPayload.UserID,
-		Phone: pgtype.Text{
-			String: req.Phone,
-			Valid:  true,
-		},
-	}
-
-	user, err := server.store.UpdateUser(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update user phone: %w", err)))
-		return
-	}
-
-	// 获取用户角色
-	userRoles, err := server.store.ListUserRoles(ctx, user.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list user roles: %w", err)))
-		return
-	}
-
-	roles := make([]string, len(userRoles))
-	for i, r := range userRoles {
-		roles[i] = r.Role
-	}
-
-	ctx.JSON(http.StatusOK, newUserResponse(user, roles))
 }

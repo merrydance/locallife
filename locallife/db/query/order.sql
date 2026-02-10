@@ -291,6 +291,28 @@ WHERE merchant_id = $1
 SELECT COUNT(*)::bigint FROM order_status_logs
 WHERE order_id = $1 AND notes LIKE '%催单%';
 
+-- name: UpdateOrderToPreparing :one
+-- P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
+UPDATE orders
+SET 
+    status = 'preparing',
+    fulfillment_status = 'preparing',
+    prep_start_at = COALESCE(prep_start_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status = 'paid'
+RETURNING *;
+
+-- name: UpdateOrderToReady :one
+-- P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
+UPDATE orders
+SET 
+    status = 'ready',
+    fulfillment_status = 'ready',
+    ready_at = COALESCE(ready_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status IN ('paid', 'preparing')
+RETURNING *;
+
 -- name: GetMerchantAvgPrepareTime :one
 -- 计算商户近N天的平均出餐时间（分钟）
 -- 通过订单支付时间到状态变为ready的时间差计算

@@ -171,7 +171,16 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 			return fmt.Errorf("get rider for update: %w", err)
 		}
 
-		// 2. 再次检查押金是否充足（在事务内检查，确保并发安全）
+		// 2. 锁定并检查订单池（关键修复 P0-001：防止并发抢单）
+		_, err = q.GetDeliveryPoolByOrderIDForUpdate(ctx, arg.OrderID)
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("手慢了，订单已被抢走")
+			}
+			return fmt.Errorf("lock delivery pool: %w", err)
+		}
+
+		// 3. 再次检查押金是否充足（在事务内检查，确保并发安全）
 		availableDeposit := rider.DepositAmount - rider.FrozenDeposit
 		if availableDeposit < arg.FreezeAmount {
 			return fmt.Errorf("押金余额不足，无法接单")
@@ -234,11 +243,11 @@ type CompleteDeliveryTxParams struct {
 
 // CompleteDeliveryTxResult contains the result of the complete delivery transaction
 type CompleteDeliveryTxResult struct {
-	Delivery              Delivery
-	DepositLog            RiderDeposit
-	PremiumScoreLog       *RiderPremiumScoreLog // 高值单资格积分变更记录
-	NewPremiumScore       int16                 // 更新后的高值单资格积分
-	Order                 Order
+	Delivery        Delivery
+	DepositLog      RiderDeposit
+	PremiumScoreLog *RiderPremiumScoreLog // 高值单资格积分变更记录
+	NewPremiumScore int16                 // 更新后的高值单资格积分
+	Order           Order
 }
 
 // 高值单阈值：运费 >= 10 元（1000分）

@@ -55,37 +55,7 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 		return
 	}
 
-	session, err := server.store.GetSessionByRefreshToken(ctx, db.GetSessionByRefreshTokenParams{
-		RefreshToken:         refreshTokenHash,
-		RefreshTokenFallback: req.RefreshToken,
-	})
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(err))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if session.IsRevoked {
-		err := fmt.Errorf("revoked session")
-		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
-		return
-	}
-
-	if session.UserID != refreshPayload.UserID {
-		err := fmt.Errorf("incorrect session user")
-		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
-		return
-	}
-
-	if time.Now().After(session.RefreshTokenExpiresAt) {
-		err := fmt.Errorf("expired refresh token")
-		ctx.JSON(http.StatusUnauthorized, errorResponse(err))
-		return
-	}
-
+	// 先生成新 token（不涉及 DB 写操作）
 	accessToken, accessPayload, err := server.tokenMaker.CreateToken(
 		refreshPayload.UserID,
 		server.config.AccessTokenDuration,
@@ -117,15 +87,34 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 		return
 	}
 
-	_, err = server.store.UpdateSessionTokens(ctx, db.UpdateSessionTokensParams{
-		ID:                    session.ID,
-		AccessToken:           accessTokenHash,
-		RefreshToken:          newRefreshTokenHash,
+	// P1-012 修复：使用事务 + FOR UPDATE 原子地刷新会话
+	// 防止并发刷新导致多个有效 token
+	result, err := server.store.RefreshSessionTx(ctx, db.RefreshSessionTxParams{
+		RefreshToken:          refreshTokenHash,
+		RefreshTokenFallback:  req.RefreshToken,
+		NewAccessToken:        accessTokenHash,
+		NewRefreshToken:       newRefreshTokenHash,
 		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
 		RefreshTokenExpiresAt: newRefreshPayload.ExpiredAt,
 	})
 	if err != nil {
+		// 区分不同的错误类型
+		errMsg := err.Error()
+		if errMsg == "session is revoked" || errMsg == "refresh token expired" {
+			ctx.JSON(http.StatusUnauthorized, errorResponse(err))
+			return
+		}
+		if errors.Is(err, db.ErrRecordNotFound) || errMsg == "session not found: "+db.ErrRecordNotFound.Error() {
+			ctx.JSON(http.StatusNotFound, errorResponse(err))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 验证会话所有者
+	if result.Session.UserID != refreshPayload.UserID {
+		ctx.JSON(http.StatusUnauthorized, errorResponse(fmt.Errorf("incorrect session user")))
 		return
 	}
 

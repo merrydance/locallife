@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countRecentOrderStatusLogs = `-- name: CountRecentOrderStatusLogs :one
+SELECT COUNT(*)::bigint FROM order_status_logs
+WHERE order_id = $1
+  AND notes = $2
+  AND created_at >= $3
+`
+
+type CountRecentOrderStatusLogsParams struct {
+	OrderID   int64       `json:"order_id"`
+	Notes     pgtype.Text `json:"notes"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+// 统计指定订单在指定时间后的特定类型日志数量（用于速率限制）
+func (q *Queries) CountRecentOrderStatusLogs(ctx context.Context, arg CountRecentOrderStatusLogsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRecentOrderStatusLogs, arg.OrderID, arg.Notes, arg.CreatedAt)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createOrderStatusLog = `-- name: CreateOrderStatusLog :one
 INSERT INTO order_status_logs (
     order_id,

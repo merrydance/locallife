@@ -119,6 +119,34 @@ func (q *Queries) GetDeliveryPoolByOrderID(ctx context.Context, orderID int64) (
 	return i, err
 }
 
+const getDeliveryPoolByOrderIDForUpdate = `-- name: GetDeliveryPoolByOrderIDForUpdate :one
+SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
+WHERE order_id = $1 LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) GetDeliveryPoolByOrderIDForUpdate(ctx context.Context, orderID int64) (DeliveryPool, error) {
+	row := q.db.QueryRow(ctx, getDeliveryPoolByOrderIDForUpdate, orderID)
+	var i DeliveryPool
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.MerchantID,
+		&i.PickupLongitude,
+		&i.PickupLatitude,
+		&i.DeliveryLongitude,
+		&i.DeliveryLatitude,
+		&i.Distance,
+		&i.DeliveryFee,
+		&i.ExpectedPickupAt,
+		&i.ExpiresAt,
+		&i.Priority,
+		&i.CreatedAt,
+		&i.ExpectedDeliveryAt,
+	)
+	return i, err
+}
+
 const getDeliveryPoolItem = `-- name: GetDeliveryPoolItem :one
 SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at FROM delivery_pool
 WHERE id = $1 LIMIT 1

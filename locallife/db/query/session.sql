@@ -25,6 +25,14 @@ WHERE refresh_token = sqlc.arg('refresh_token')
   OR refresh_token = sqlc.arg('refresh_token_fallback')
 LIMIT 1;
 
+-- name: GetSessionByRefreshTokenForUpdate :one
+-- P1-012 修复：加行锁防止并发刷新
+SELECT * FROM sessions
+WHERE refresh_token = sqlc.arg('refresh_token')
+  OR refresh_token = sqlc.arg('refresh_token_fallback')
+LIMIT 1
+FOR UPDATE;
+
 -- name: UpdateSessionTokens :one
 UPDATE sessions
 SET access_token = $2,

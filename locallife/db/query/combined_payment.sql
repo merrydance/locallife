@@ -135,7 +135,7 @@ SELECT
                 'id', s.id,
                 'order_id', s.order_id,
                 'merchant_id', s.merchant_id,
-                'sub_mchid', s.sub_mchid,
+                'sub_mch_id', s.sub_mchid,
                 'amount', s.amount,
                 'out_trade_no', s.out_trade_no,
                 'description', s.description,

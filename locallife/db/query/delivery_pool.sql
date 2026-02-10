@@ -29,6 +29,11 @@ SELECT * FROM delivery_pool
 WHERE id = $1 LIMIT 1
 FOR UPDATE;
 
+-- name: GetDeliveryPoolByOrderIDForUpdate :one
+SELECT * FROM delivery_pool
+WHERE order_id = $1 LIMIT 1
+FOR UPDATE;
+
 -- name: RemoveFromDeliveryPool :exec
 DELETE FROM delivery_pool
 WHERE order_id = $1;

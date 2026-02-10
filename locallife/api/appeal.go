@@ -341,6 +341,13 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		return
 	}
 
+	// P1-010 修复：检查申诉窗口期（索赔后7天内可申诉）
+	appealDeadline := claimInfo.CreatedAt.Add(time.Duration(AppealWindowDays) * 24 * time.Hour)
+	if time.Now().After(appealDeadline) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("申诉窗口期已过（索赔后7天内可申诉）")))
+		return
+	}
+
 	// 检查是否已有申诉
 	exists, err := server.store.CheckAppealExists(ctx, db.CheckAppealExistsParams{
 		ClaimID:       req.ClaimID,
@@ -746,6 +753,13 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 	// 验证骑手是否是该订单的配送员
 	if !claimInfo.RiderID.Valid || claimInfo.RiderID.Int64 != rider.ID {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this claim is not related to your deliveries")))
+		return
+	}
+
+	// P1-010 修复：检查申诉窗口期（索赔后7天内可申诉）
+	appealDeadline := claimInfo.CreatedAt.Add(time.Duration(AppealWindowDays) * 24 * time.Hour)
+	if time.Now().After(appealDeadline) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("申诉窗口期已过（索赔后7天内可申诉）")))
 		return
 	}
 

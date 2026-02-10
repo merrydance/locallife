@@ -2548,6 +2548,140 @@ func (q *Queries) UpdateOrderToPicked(ctx context.Context, id int64) (Order, err
 	return i, err
 }
 
+const updateOrderToPreparing = `-- name: UpdateOrderToPreparing :one
+UPDATE orders
+SET 
+    status = 'preparing',
+    fulfillment_status = 'preparing',
+    prep_start_at = COALESCE(prep_start_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status = 'paid'
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+`
+
+// P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
+func (q *Queries) UpdateOrderToPreparing(ctx context.Context, id int64) (Order, error) {
+	row := q.db.QueryRow(ctx, updateOrderToPreparing, id)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.UserID,
+		&i.MerchantID,
+		&i.OrderType,
+		&i.AddressID,
+		&i.DeliveryFee,
+		&i.DeliveryDistance,
+		&i.TableID,
+		&i.ReservationID,
+		&i.Subtotal,
+		&i.DiscountAmount,
+		&i.DeliveryFeeDiscount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.PaymentMethod,
+		&i.PaidAt,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.FinalAmount,
+		&i.PlatformCommission,
+		&i.UserVoucherID,
+		&i.VoucherAmount,
+		&i.BalancePaid,
+		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
+		&i.PickupCode,
+		&i.DispatchOrderID,
+		&i.FlowID,
+		&i.StatusHint,
+		&i.Badges,
+		&i.ExceptionState,
+		&i.ClaimChannel,
+		&i.Overtime,
+		&i.PrepStartAt,
+		&i.ReadyAt,
+		&i.CourierAcceptAt,
+		&i.PickedAt,
+		&i.RiderDeliveredAt,
+		&i.UserDeliveredAt,
+		&i.AutoUserDeliveredAt,
+		&i.DeliveryDuration,
+	)
+	return i, err
+}
+
+const updateOrderToReady = `-- name: UpdateOrderToReady :one
+UPDATE orders
+SET 
+    status = 'ready',
+    fulfillment_status = 'ready',
+    ready_at = COALESCE(ready_at, now()),
+    updated_at = now()
+WHERE id = $1 AND status IN ('paid', 'preparing')
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+`
+
+// P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
+func (q *Queries) UpdateOrderToReady(ctx context.Context, id int64) (Order, error) {
+	row := q.db.QueryRow(ctx, updateOrderToReady, id)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.UserID,
+		&i.MerchantID,
+		&i.OrderType,
+		&i.AddressID,
+		&i.DeliveryFee,
+		&i.DeliveryDistance,
+		&i.TableID,
+		&i.ReservationID,
+		&i.Subtotal,
+		&i.DiscountAmount,
+		&i.DeliveryFeeDiscount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.PaymentMethod,
+		&i.PaidAt,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.FinalAmount,
+		&i.PlatformCommission,
+		&i.UserVoucherID,
+		&i.VoucherAmount,
+		&i.BalancePaid,
+		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
+		&i.PickupCode,
+		&i.DispatchOrderID,
+		&i.FlowID,
+		&i.StatusHint,
+		&i.Badges,
+		&i.ExceptionState,
+		&i.ClaimChannel,
+		&i.Overtime,
+		&i.PrepStartAt,
+		&i.ReadyAt,
+		&i.CourierAcceptAt,
+		&i.PickedAt,
+		&i.RiderDeliveredAt,
+		&i.UserDeliveredAt,
+		&i.AutoUserDeliveredAt,
+		&i.DeliveryDuration,
+	)
+	return i, err
+}
+
 const updateOrderToRiderDelivered = `-- name: UpdateOrderToRiderDelivered :one
 UPDATE orders
 SET 

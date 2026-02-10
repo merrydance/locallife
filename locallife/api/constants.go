@@ -39,4 +39,28 @@ const (
 	// 运营商从平台佣金中可分得的比例
 	// 业务规则：平台抽佣 5%，运营商获取其中 3 个点，即 3/5 = 60%
 	OperatorRevenueShareRatio = 0.6
+
+	// Rate Limit Constants (速率限制相关常量)
+	// P1-019 修复：催单频率限制
+	UrgeOrderRateLimitWindowSeconds = 300 // 5分钟窗口
+	UrgeOrderRateLimitMaxCount      = 3   // 窗口内最多3次
+
+	// Geofencing Constants (地理围栏相关常量)
+	// P1-003 修复：骑手抢单最大距离（米）
+	MaxGrabOrderDistanceMeters = 5000 // 5公里
+	// P1-005 修复：配送确认半径（米）
+	DeliveryConfirmRadiusMeters = 500 // 500米
+
+	// Appeal Constants (申诉相关常量)
+	// P1-010 修复：申诉有效期窗口
+	AppealWindowDays = 7 // 索赔后7天内可申诉
+
+	// Reservation Constants (预订相关常量)
+	// P1-023 修复：签到时间窗口
+	ReservationCheckInEarlyMinutes = 30 // 可提前签到时间（分钟）
+	ReservationCheckInLateMinutes  = 30 // 迟到容忍时间（分钟）
+
+	// Cart Constants (购物车相关常量)
+	// P1-016 修复：单品最大数量
+	CartItemMaxQuantity = 99
 )

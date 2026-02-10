@@ -447,19 +447,35 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 
 	// 平台先行赔付（异步，不阻塞响应）
 	if decision.Approved && decision.Amount > 0 {
-		go func() {
-			_, refundErr := server.store.ClaimRefundTx(context.Background(), db.ClaimRefundTxParams{
+		if server.taskDistributor != nil {
+			// P2-001 修复: 使用 TaskQueue 保证退款可靠执行
+			err := server.taskDistributor.DistributeTaskClaimRefund(ctx, &worker.ClaimRefundPayload{
 				ClaimID:    claim.ID,
 				UserID:     authPayload.UserID,
 				Amount:     decision.Amount,
 				SourceType: "platform",
 				SourceID:   0,
 				Remark:     "platform payout",
-			})
-			if refundErr != nil {
-				fmt.Printf("claim refund failed: claim_id=%d, user_id=%d, err=%v\n", claim.ID, authPayload.UserID, refundErr)
+			}, asynq.Queue(worker.QueueCritical))
+			if err != nil {
+				fmt.Printf("failed to enqueue claim refund task: %v\n", err)
 			}
-		}()
+		} else {
+			// Fallback (测试环境或无Redis): 使用原有的 goroutine
+			go func() {
+				_, refundErr := server.store.ClaimRefundTx(context.Background(), db.ClaimRefundTxParams{
+					ClaimID:    claim.ID,
+					UserID:     authPayload.UserID,
+					Amount:     decision.Amount,
+					SourceType: "platform",
+					SourceID:   0,
+					Remark:     "platform payout",
+				})
+				if refundErr != nil {
+					fmt.Printf("claim refund failed: claim_id=%d, user_id=%d, err=%v\n", claim.ID, authPayload.UserID, refundErr)
+				}
+			}()
+		}
 	}
 
 	// 生成追偿单（责任方为商户/骑手且需要追偿）

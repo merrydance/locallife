@@ -1215,12 +1215,12 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			}
 		}
 
-		// 选择落库的运费：优先使用前端正数，其次使用服务端兜底
+		// 选择落库的运费：优先使用服务端兜底，其次使用前端正数
 		if deliveryFee <= 0 && serverFee > 0 {
 			deliveryFee = serverFee
 			deliveryFeeDiscount = serverFeeDiscount
 		} else if deliveryFee > 0 && serverFee > 0 {
-			// 若差异较大，记录日志，仍以前端为主避免 0 元问题
+			// 若差异较大(>10元或>10%)，强制使用服务端计算结果，防止篡改
 			if feeDiffSignificant(deliveryFee, serverFee) {
 				log.Warn().
 					Int64("merchant_id", req.MerchantID).
@@ -1229,11 +1229,20 @@ func (server *Server) createOrder(ctx *gin.Context) {
 					Int64("server_fee", serverFee).
 					Int64("client_discount", deliveryFeeDiscount).
 					Int64("server_discount", serverFeeDiscount).
-					Msg("createOrder: delivery fee mismatch, keeping client value")
-			}
-			// 补全优惠折扣（前端未带时）
-			if deliveryFeeDiscount == 0 {
+					Msg("createOrder: delivery fee mismatch, overwriting with server value")
+
+				deliveryFee = serverFee
 				deliveryFeeDiscount = serverFeeDiscount
+			} else {
+				// 差异不大，信任前端基础运费，但需严格校验折扣
+				// 优惠折扣必须与服务端一致（允许微小误差，防止前端篡改折扣）
+				if feeDiffSignificant(deliveryFeeDiscount, serverFeeDiscount) {
+					log.Warn().
+						Int64("client_discount", deliveryFeeDiscount).
+						Int64("server_discount", serverFeeDiscount).
+						Msg("createOrder: delivery fee discount mismatch, overwriting with server value")
+					deliveryFeeDiscount = serverFeeDiscount
+				}
 			}
 		}
 
@@ -1526,6 +1535,15 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	resp := newOrderResponse(txResult.Order)
+
+	// 分发订单支付超时任务 (30分钟后执行)
+	if server.taskDistributor != nil && txResult.Order.Status == OrderStatusPending {
+		_ = server.taskDistributor.DistributeTaskOrderPaymentTimeout(
+			ctx,
+			&worker.PayloadOrderPaymentTimeout{OrderID: txResult.Order.ID},
+			asynq.ProcessIn(worker.OrderPaymentTimeoutMinutes*time.Minute),
+		)
+	}
 
 	// 堂食扫码点餐：若用户在外卖拒绝服务名单中，实时提醒商户后台
 	if req.OrderType == OrderTypeDineIn && server.wsHub != nil {
@@ -2236,6 +2254,21 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 		return
 	}
 
+	// P1-019 修复：催单频率限制（每5分钟最多3次）
+	// 使用订单状态日志统计最近催单次数
+	recentUrgeCount, err := server.store.CountRecentOrderStatusLogs(ctx, db.CountRecentOrderStatusLogsParams{
+		OrderID:   order.ID,
+		Notes:     pgtype.Text{String: "用户催单", Valid: true},
+		CreatedAt: time.Now().Add(-time.Duration(UrgeOrderRateLimitWindowSeconds) * time.Second),
+	})
+	if err == nil && recentUrgeCount >= int64(UrgeOrderRateLimitMaxCount) {
+		ctx.JSON(http.StatusTooManyRequests, errorResponse(fmt.Errorf(
+			"催单过于频繁，请%d分钟后再试",
+			UrgeOrderRateLimitWindowSeconds/60,
+		)))
+		return
+	}
+
 	// 验证订单状态允许催单（已支付、制作中、待取餐、配送中）
 	allowedStatuses := map[string]bool{
 		OrderStatusPaid:            true,
@@ -2457,26 +2490,18 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 		arg.Notes = pgtype.Text{String: req.Notes, Valid: true}
 	}
 
-	createTx, err := server.store.CreateOrderTx(ctx, db.CreateOrderTxParams{
+	// P1-020 修复：使用事务原子地创建新订单并标记旧订单
+	replaceTx, err := server.store.ReplaceOrderTx(ctx, db.ReplaceOrderTxParams{
 		CreateOrderParams: arg,
 		Items:             items,
+		OldOrderID:        oldOrder.ID,
+		CancelReason:      "replaced by new order",
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	newOrder := createTx.Order
-
-	// 标记旧订单为被替换
-	_, err = server.store.MarkOrderReplaced(ctx, db.MarkOrderReplacedParams{
-		ID:                oldOrder.ID,
-		ReplacedByOrderID: pgtype.Int8{Int64: newOrder.ID, Valid: true},
-		CancelReason:      pgtype.Text{String: "replaced by new order", Valid: true},
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	newOrder := replaceTx.NewOrder
 
 	var paymentOrderID *int64
 	refundInitiated := false

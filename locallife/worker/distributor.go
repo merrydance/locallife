@@ -121,6 +121,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskClaimRefund 分发索赔退款任务
+	DistributeTaskClaimRefund(
+		ctx context.Context,
+		payload *ClaimRefundPayload,
+		opts ...asynq.Option,
+	) error
+
 	// ==================== 商户入驻证照OCR（异步） ====================
 
 	// DistributeTaskMerchantApplicationBusinessLicenseOCR 分发营业执照OCR任务

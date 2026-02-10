@@ -244,3 +244,10 @@ JOIN merchants m ON m.id = c.merchant_id
 LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = m.id
 WHERE c.user_id = $1 AND c.id = ANY($2::bigint[])
 ORDER BY c.updated_at DESC;
+
+-- name: UpdateCartItemQuantityRelative :one
+-- P1-016 修复：在数据库层确保数量不超过上限（原子性保证）
+UPDATE cart_items
+SET quantity = quantity + sqlc.arg('amount')
+WHERE id = sqlc.arg('id') AND quantity + sqlc.arg('amount') <= 99
+RETURNING *;

@@ -575,6 +575,27 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 
+	// P1-003 修复：骑手距离校验
+	// 确保骑手上报了有效位置且在商户附近
+	riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
+	riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
+	merchantLng, merchantLngOk := floatFromNumeric(merchant.Longitude)
+	merchantLat, merchantLatOk := floatFromNumeric(merchant.Latitude)
+
+	if riderLngOk && riderLatOk && merchantLngOk && merchantLatOk {
+		riderLoc := algorithm.Location{Longitude: riderLng, Latitude: riderLat}
+		merchantLoc := algorithm.Location{Longitude: merchantLng, Latitude: merchantLat}
+		distance := algorithm.HaversineDistance(riderLoc, merchantLoc)
+
+		if distance > MaxGrabOrderDistanceMeters {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
+				"您距离商户太远（%.1f公里），请靠近后再抢单",
+				float64(distance)/1000,
+			)))
+			return
+		}
+	}
+
 	// 获取配送单
 	delivery, err := server.store.GetDeliveryByOrderID(ctx, req.OrderID)
 	if err != nil {
@@ -1183,6 +1204,28 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 	if delivery.Status != "delivering" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许确认送达", delivery.Status)))
 		return
+	}
+
+	// P1-005 修复：配送确认地理围栏检查
+	// 确保骑手在配送地址附近
+	riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
+	riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
+	deliveryLng, deliveryLngOk := floatFromNumeric(delivery.DeliveryLongitude)
+	deliveryLat, deliveryLatOk := floatFromNumeric(delivery.DeliveryLatitude)
+
+	if riderLngOk && riderLatOk && deliveryLngOk && deliveryLatOk {
+		riderLoc := algorithm.Location{Longitude: riderLng, Latitude: riderLat}
+		deliveryLoc := algorithm.Location{Longitude: deliveryLng, Latitude: deliveryLat}
+		distance := algorithm.HaversineDistance(riderLoc, deliveryLoc)
+
+		if distance > DeliveryConfirmRadiusMeters {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
+				"您距离配送地址%.0f米，请靠近后确认送达（需在%d米内）",
+				float64(distance),
+				DeliveryConfirmRadiusMeters,
+			)))
+			return
+		}
 	}
 
 	order, err := server.store.GetOrder(ctx, delivery.OrderID)

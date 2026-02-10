@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -415,6 +417,75 @@ func (server *Server) createReservation(ctx *gin.Context) {
 	// 构建事务参数（包含菜品项）
 	txArg := db.CreateReservationTxParams{
 		CreateTableReservationParams: arg,
+		AfterLock: func(ctx context.Context, q *db.Queries) error {
+			// P0-002 修复：在锁内进行二次冲突校验
+			// 1. 获取已有预订
+			existingReservations, err := q.ListReservationsByTableAndDate(ctx, db.ListReservationsByTableAndDateParams{
+				TableID:         req.TableID,
+				ReservationDate: pgDate,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to list existing reservations: %w", err)
+			}
+
+			// 2. 获取商户营业时间配置 (用于冲突判断规则)
+			businessHours, err := q.ListMerchantBusinessHours(ctx, table.MerchantID)
+			config := util.DefaultConfig
+			if err == nil {
+				dayOfWeek := int32(reservationDate.Weekday())
+				var todayHours []db.MerchantBusinessHour
+				for _, bh := range businessHours {
+					if bh.SpecialDate.Valid && bh.SpecialDate.Time.Format("2006-01-02") == reservationDate.Format("2006-01-02") {
+						todayHours = append(todayHours, bh)
+					}
+				}
+				if len(todayHours) == 0 {
+					for _, bh := range businessHours {
+						if !bh.SpecialDate.Valid && bh.DayOfWeek == dayOfWeek {
+							todayHours = append(todayHours, bh)
+						}
+					}
+				}
+
+				if len(todayHours) > 0 {
+					h1 := todayHours[0]
+					config.LunchStart = int(h1.OpenTime.Microseconds/1000000/3600*100) + int(h1.OpenTime.Microseconds/1000000%3600/60)
+					config.LunchEnd = int(h1.CloseTime.Microseconds/1000000/3600*100) + int(h1.CloseTime.Microseconds/1000000%3600/60)
+					config.DinnerStart = 0
+					config.DinnerEnd = 0
+
+					if len(todayHours) > 1 {
+						h2 := todayHours[1]
+						config.DinnerStart = int(h2.OpenTime.Microseconds/1000000/3600*100) + int(h2.OpenTime.Microseconds/1000000%3600/60)
+						config.DinnerEnd = int(h2.CloseTime.Microseconds/1000000/3600*100) + int(h2.CloseTime.Microseconds/1000000%3600/60)
+					} else if config.LunchStart >= 1500 {
+						config.DinnerStart = config.LunchStart
+						config.DinnerEnd = config.LunchEnd
+						config.LunchStart = 0
+						config.LunchEnd = 0
+					}
+				}
+			}
+
+			// 3. 检查冲突
+			newDateTime := time.Date(reservationDate.Year(), reservationDate.Month(), reservationDate.Day(), reservationTime.Hour(), reservationTime.Minute(), 0, 0, reservationDate.Location())
+
+			for _, r := range existingReservations {
+				if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
+					continue
+				}
+				if !r.ReservationTime.Valid {
+					continue
+				}
+
+				existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
+
+				if util.AreReservationsConflictingWithConfig(newDateTime, existingTime, config) {
+					return fmt.Errorf("该时间段刚刚被抢订，请选择其他时间")
+				}
+			}
+			return nil
+		},
 	}
 
 	// 全款模式添加菜品明细
@@ -433,6 +504,10 @@ func (server *Server) createReservation(ctx *gin.Context) {
 	// 使用事务创建预定和菜品明细
 	result, err := server.store.CreateReservationTx(ctx, txArg)
 	if err != nil {
+		if strings.Contains(err.Error(), "刚被抢订") { // Handle custom error
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段刚刚被抢订，请选择其他时间")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1258,12 +1333,13 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 		currentReservationID = table.CurrentReservationID
 	}
 
-	// 使用事务执行取消操作：更新预定状态 + 释放桌台
+	// P1-029 修复：使用事务执行取消操作，同时释放库存（原子性保证）
 	result, err := server.store.CancelReservationTx(ctx, db.CancelReservationTxParams{
 		ReservationID:        uriReq.ID,
 		TableID:              reservation.TableID,
 		CancelReason:         req.Reason,
 		CurrentReservationID: currentReservationID,
+		ReleaseInventory:     true, // P1-029: 在同一事务中释放库存
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1333,13 +1409,6 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 				}
 			}
 		}
-	}
-
-	if err := server.store.ReleaseReservationInventoryTx(ctx, db.ReleaseReservationInventoryTxParams{
-		ReservationID: reservation.ID,
-	}); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
 	}
 
 	ctx.JSON(http.StatusOK, newReservationResponse(result.Reservation))
@@ -2166,6 +2235,35 @@ func (server *Server) checkInReservation(ctx *gin.Context) {
 	if !isReservationStatusAllowed(reservation.Status, reservationActionCheckIn) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("only paid or confirmed reservations can be checked in")))
 		return
+	}
+
+	// P1-023 修复：签到时间窗口检查（使用常量替代硬编码）
+	if reservation.ReservationDate.Valid && reservation.ReservationTime.Valid {
+		hours := reservation.ReservationTime.Microseconds / 1000000 / 3600
+		minutes := (reservation.ReservationTime.Microseconds / 1000000 % 3600) / 60
+		reservationDateTime := time.Date(
+			reservation.ReservationDate.Time.Year(),
+			reservation.ReservationDate.Time.Month(),
+			reservation.ReservationDate.Time.Day(),
+			int(hours), int(minutes), 0, 0, time.Local,
+		)
+
+		now := time.Now()
+		earlyLimit := reservationDateTime.Add(-time.Duration(ReservationCheckInEarlyMinutes) * time.Minute)
+		lateLimit := reservationDateTime.Add(time.Duration(ReservationCheckInLateMinutes) * time.Minute)
+
+		if now.Before(earlyLimit) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
+				"尚未到签到时间，请在预订时间前%d分钟内签到", ReservationCheckInEarlyMinutes,
+			)))
+			return
+		}
+		if now.After(lateLimit) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
+				"已超过签到时间%d分钟，请联系商户", ReservationCheckInLateMinutes,
+			)))
+			return
+		}
 	}
 
 	// 更新状态为已签到

@@ -141,6 +141,12 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		return
 	}
 
+	// P1-022 修复：检查商户实时营业状态
+	if !merchant.IsOpen {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("商户当前未营业")))
+		return
+	}
+
 	// 2. 获取桌台信息
 	table, err := server.store.GetTableByMerchantAndNo(ctx, db.GetTableByMerchantAndNoParams{
 		MerchantID: req.MerchantID,
