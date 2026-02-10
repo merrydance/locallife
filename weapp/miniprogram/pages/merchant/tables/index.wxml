@@ -1,0 +1,59 @@
+<custom-navbar title="桌台管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="tabs-container" sticky offsetTop="{{navBarHeight}}">
+    <t-tab-panel label="全部" value="all" />
+    <t-tab-panel label="普通桌台" value="table" />
+    <t-tab-panel label="包间" value="room" />
+  </t-tabs>
+
+  <view class="content-section">
+    <view wx:if="{{loading}}" class="loading-state">
+      <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
+    </view>
+
+    <t-empty wx:elif="{{!tables.length}}" icon="info-circle" description="暂无桌台数据" />
+
+    <view wx:else class="table-grid">
+      <view 
+        class="table-card {{item.status}}" 
+        wx:for="{{tables}}" 
+        wx:key="id"
+        bindtap="onTableClick"
+        data-id="{{item.id}}"
+      >
+        <view class="table-header">
+          <text class="table-no">{{item.table_no}}</text>
+          <t-tag size="extra-small" variant="light" theme="{{item.statusTheme}}">{{item.statusLabel}}</t-tag>
+        </view>
+        
+        <view class="table-body">
+          <view class="capacity">
+            <t-icon name="user" size="24rpx" />
+            <text>{{item.capacity}}人桌</text>
+          </view>
+          <view class="type-label">{{item.table_type === 'room' ? '包间' : '大厅'}}</view>
+        </view>
+
+        <view class="table-footer" wx:if="{{item.status === 'occupied' || item.status === 'reserved'}}">
+           <t-button 
+            size="extra-small" 
+            theme="primary" 
+            variant="outline" 
+            catchtap="onReleaseTable" 
+            data-id="{{item.id}}" 
+            data-no="{{item.table_no}}"
+           >手动释放</t-button>
+        </view>
+        <view class="table-footer" wx:else>
+           <t-icon name="qrcode" size="32rpx" color="var(--td-text-color-placeholder)" catchtap="onShowQRCode" data-url="{{item.qr_code_url}}" />
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 悬浮添加按钮 (可选逻辑) -->
+  <t-fab icon="add" bind:click="onAddTable" />
+</view>
+
+<t-dialog id="t-dialog" />

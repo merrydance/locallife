@@ -1,161 +1,96 @@
-<!--扫码点餐入口页面-->
-<custom-navbar title="扫码点餐" showBack="{{false}}" bind:navheight="onNavHeight" />
+<custom-navbar title="扫码点餐" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <!-- 1. 骨架屏 (加载状态) -->
-  <view wx:if="{{loading}}" class="skeleton-container">
-    <!-- Merchant Header Skeleton -->
-    <view class="skeleton-merchant-header skeleton-animate"></view>
-    
-    <!-- Table Card Skeleton -->
-    <view class="skeleton-card skeleton-animate" style="height: 300rpx; margin-bottom: 32rpx;"></view>
-    
-    <!-- Buttons Skeleton -->
-    <view class="skeleton-btn skeleton-animate" style="height: 88rpx; margin-bottom: 24rpx;"></view>
-    <view class="skeleton-sub-btns" style="display: flex; gap: 24rpx;">
-      <view class="skeleton-btn skeleton-animate" style="flex: 1; height: 80rpx;"></view>
-      <view class="skeleton-btn skeleton-animate" style="flex: 1; height: 80rpx;"></view>
-    </view>
-    
-    <!-- Info List Skeleton -->
-    <view class="skeleton-info-list" style="margin-top: 48rpx;">
-       <view class="skeleton-line skeleton-animate w-80 mb-24"></view>
-       <view class="skeleton-line skeleton-animate w-60 mb-24"></view>
-       <view class="skeleton-line skeleton-animate w-70 mb-24"></view>
-    </view>
+  <!-- 1. 加载状态 -->
+  <view wx:if="{{loading}}" class="skeleton-wrap">
+    <t-skeleton theme="paragraph" animation="gradient" />
+    <t-skeleton theme="paragraph" animation="gradient" style="margin-top: 32rpx;" />
   </view>
 
-  <!-- 2. 错误状态 -->
-  <view wx:elif="{{error}}" class="error-container">
-    <t-empty icon="error-circle" description="{{error}}" />
-    <t-button theme="primary" variant="outline" size="medium" bindtap="rescan" style="margin-top: 24rpx;">重新扫码</t-button>
-  </view>
+  <block wx:else>
+    <!-- 2. 错误状态 -->
+    <view wx:if="{{error}}" class="error-wrap">
+      <t-empty icon="info-circle" description="{{error}}">
+        <t-button slot="action" theme="primary" size="small" variant="outline" bindtap="rescan">重新扫码</t-button>
+      </t-empty>
+    </view>
 
-  <!-- 3. 正常内容 -->
-  <view wx:else class="content animate-fade-in">
-    <!-- 商户头部 -->
-    <view class="merchant-header">
-      <image class="merchant-logo" src="{{merchantInfo.logo_url}}" mode="aspectFill"></image>
-      <view class="merchant-info">
-        <text class="merchant-name">{{merchantInfo.name}}</text>
-        <text class="merchant-category">{{merchantInfo.category}}</text>
-        <view class="merchant-rating">
-          <view class="stars">
-            <block wx:for="{{5}}" wx:key="index">
-              <text class="star {{index < merchantInfo.rating ? 'filled' : ''}}">★</text>
-            </block>
+    <!-- 3. 主界面 -->
+    <view wx:else class="content-animate">
+      <!-- 商户信息卡片 -->
+      <view class="merchant-card">
+        <image class="merchant-cover" src="{{merchantInfo.cover_image || '/assets/images/merchant_default_cover.jpg'}}" mode="aspectFill" />
+        <view class="merchant-info">
+          <t-avatar image="{{merchantInfo.logo_url}}" size="large" class="merchant-logo" />
+          <view class="merchant-detail">
+            <view class="merchant-name">{{merchantInfo.name}}</view>
+            <view class="merchant-tags">
+              <view class="tag">支持外卖</view>
+              <view class="tag">支持预订</view>
+            </view>
           </view>
-          <text class="rating-text">{{merchantInfo.rating}}</text>
         </view>
       </view>
-      <view class="merchant-action" bindtap="viewMerchantInfo">
-        <text class="action-text">查看详情</text>
-        <text class="action-arrow">></text>
-      </view>
-    </view>
 
-    <!-- 桌台信息卡片 -->
-    <view class="table-card">
-      <view class="table-header">
-        <view class="table-number">
-          <text class="table-label">桌号</text>
-          <text class="table-value">{{tableInfo.table_no}}</text>
-        </view>
-        <view class="table-capacity">
-          <text class="capacity-icon">👥</text>
-          <text class="capacity-text">{{tableInfo.capacity}}人桌</text>
-        </view>
-      </view>
-      
-      <view class="table-status">
-        <view class="status-indicator {{tableInfo.status}}"></view>
-        <text class="status-text">
-          {{tableInfo.status === 'available' ? '可用' : 
-            tableInfo.status === 'occupied' ? '使用中' : '已预订'}}
-        </text>
-      </view>
-
-      <!-- 桌台状态说明 -->
-      <view class="table-tips">
-        <text class="tips-icon">💡</text>
-        <text class="tips-text">
-          {{tableInfo.status === 'available' ? '您可以开始点餐了' : 
-            tableInfo.status === 'occupied' ? '此桌正在使用中，请确认是否为您的桌台' : 
-            '此桌已被预订，请联系服务员'}}
-        </text>
-      </view>
-    </view>
-
-    <!-- 操作按钮 -->
-    <view class="action-buttons">
-      <button 
-        class="start-dining-btn {{tableInfo.status !== 'available' ? 'disabled' : ''}}" 
-        bindtap="startDining"
-        disabled="{{tableInfo.status !== 'available'}}"
-      >
-        {{tableInfo.status === 'available' ? '开始点餐' : '桌台不可用'}}
-      </button>
-      
-      <view class="secondary-actions">
-        <button class="secondary-btn" bindtap="rescan">重新扫码</button>
-        <button class="secondary-btn" open-type="share">分享给好友</button>
-      </view>
-    </view>
-
-    <!-- 商户营业信息 -->
-    <view class="business-info">
-      <view class="info-item">
-        <text class="info-label">营业时间</text>
-        <text class="info-value">{{merchantInfo.business_hours || '09:00-22:00'}}</text>
-      </view>
-      <view class="info-item">
-        <text class="info-label">联系电话</text>
-        <text class="info-value">{{merchantInfo.phone || '暂无'}}</text>
-      </view>
-      <view class="info-item">
-        <text class="info-label">商户地址</text>
-        <text class="info-value">{{merchantInfo.address || '暂无'}}</text>
-      </view>
-    </view>
-
-    <!-- 服务推广广告位 -->
-    <view class="service-promotion">
-      <view class="promotion-header">
-        <text class="promotion-title">🎉 更多便民服务</text>
-      </view>
-      <view class="promotion-services">
-        <view class="service-card takeout" bindtap="goToTakeout">
-          <view class="service-icon">🚚</view>
-          <view class="service-info">
-            <text class="service-name">外卖配送</text>
-            <text class="service-desc">足不出户，美食到家</text>
+      <!-- 桌台核心操作区 -->
+      <view class="table-action-card">
+        <view class="table-header">
+          <t-icon name="root-list" size="48rpx" color="var(--td-brand-color)" />
+          <view class="table-no-box">
+            <text class="table-label">当前桌号</text>
+            <text class="table-no">{{tableInfo.table_no}}</text>
           </view>
-          <view class="service-arrow">></view>
-        </view>
-        
-        <view class="service-card reservation" bindtap="goToReservation">
-          <view class="service-icon">🏠</view>
-          <view class="service-info">
-            <text class="service-name">包间预定</text>
-            <text class="service-desc">聚餐聚会，提前预约</text>
+          <view class="table-status {{tableInfo.status === 'occupied' ? 'is-occupied' : 'is-idle'}}">
+            {{tableInfo.status === 'occupied' ? '占用中' : '空闲'}}
           </view>
-          <view class="service-arrow">></view>
+        </view>
+
+        <view class="tips">
+          <t-icon name="info-circle" size="32rpx" />
+          <text>确认桌号无误后，点击下方按钮开始点餐</text>
+        </view>
+
+        <t-button block size="large" theme="primary" shape="round" t-class="btn-start" bindtap="startDining">
+          开始点餐
+        </t-button>
+
+        <view class="secondary-actions">
+          <view class="action-item" bindtap="goToTakeout">
+            <t-icon name="order-adjustment-column" size="40rpx" />
+            <text>改点外卖</text>
+          </view>
+          <t-divider layout="vertical" />
+          <view class="action-item" bindtap="goToReservation">
+            <t-icon name="calendar" size="40rpx" />
+            <text>预订包间</text>
+          </view>
         </view>
       </view>
     </view>
-  </view>
-  
-  <view wx:if="{{showTransferDialog}}" class="transfer-mask">
-    <view class="transfer-dialog">
-      <view class="dialog-title">发现进行中的用餐</view>
-      <view class="dialog-desc">检测到您在本门店有进行中的用餐，是否换桌到当前桌台？</view>
-      <view wx:if="{{!activeSession.reservation_id}}" class="dialog-input">
-        <input type="text" placeholder="请输入桌台验证码" value="{{transferCode}}" bindinput="onTransferCodeInput" />
+  </block>
+
+  <!-- 换桌确认弹窗 -->
+  <t-dialog
+    visible="{{showTransferDialog}}"
+    title="检测到已有订单"
+    confirm-btn="{{ { content: '确认换桌', variant: 'base', loading: transferSubmitting } }}"
+    cancel-btn="取消"
+    bind:confirm="confirmTransfer"
+    bind:cancel="cancelTransfer"
+  >
+    <view slot="content" class="dialog-content">
+      <view class="dialog-text">
+        您在 <text class="highlight">{{activeSession.table_no}}号桌</text> 有进行中的订单，是否将订单转至当前 <text class="highlight">{{tableInfo.table_no}}号桌</text>？
       </view>
-      <view class="dialog-actions">
-        <button class="btn cancel" bindtap="cancelTransfer">暂不换桌</button>
-        <button class="btn confirm" loading="{{transferSubmitting}}" bindtap="confirmTransfer">确认换桌</button>
-      </view>
+      <t-input
+        wx:if="{{!activeSession.reservation_id}}"
+        label="桌台验证码"
+        placeholder="请输入当前桌台码"
+        value="{{transferCode}}"
+        bind:change="onTransferCodeInput"
+        borderless
+        class="transfer-input"
+      />
     </view>
-  </view>
+  </t-dialog>
 </view>

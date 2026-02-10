@@ -84,6 +84,15 @@ export class Navigation {
   }
 
   /**
+   * 跳转到支付成功页
+   */
+  static toPaymentSuccess(params: { orderId: string; orderNo: string; amount: string }) {
+    wx.redirectTo({
+      url: `/pages/orders/success/index?orderId=${params.orderId}&orderNo=${params.orderNo}&amount=${params.amount}`
+    })
+  }
+
+  /**
      * 跳转到订单列表页
      */
   static toOrderList(tab?: 'all' | 'pending' | 'completed') {

@@ -1,44 +1,90 @@
-<custom-navbar title="规则配置" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="平台规则配置" showBack="{{true}}" />
 
-<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
-  <view class="content">
-    <!-- 错误状态 -->
-    <view wx:if="{{error && !initialLoading}}" class="error-container">
-      <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
-      </t-empty>
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <!-- 左侧/顶部 分类控制 -->
+  <view class="sidebar-tabs">
+    <view 
+      wx:for="{{categories}}" 
+      wx:key="value" 
+      class="side-tab {{activeCategory === item.value ? 'active' : ''}}"
+      bindtap="switchCategory"
+      data-val="{{item.value}}"
+    >
+      <t-icon name="{{item.icon}}" size="40rpx" />
+      <text>{{item.label}}</text>
     </view>
+  </view>
 
-    <block wx:else>
-      <!-- Loading (Skeleton) -->
-      <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
-        <view class="rules-skeleton-grid">
-          <card-skeleton wx:for="{{3}}" wx:key="index" t-class="rule-skeleton-item" />
-        </view>
+  <!-- 主体内容区 -->
+  <scroll-view scroll-y class="rules-content" refresher-enabled bindrefresherrefresh="loadRules" refresher-triggered="{{loading}}">
+    <view class="content-inner">
+      <view class="welcome-header">
+        <view class="title">规则策略中心</view>
+        <view class="subtitle">调整平台核心参数，变更即刻生效，请谨慎操作。</view>
       </view>
 
-      <view wx:else class="animate-fade-in">
-        <view class="rules-list" wx:if="{{rules.length > 0}}">
-          <view class="rules-grid">
-            <view wx:for="{{rules}}" wx:key="id" class="rule-card">
-              <view class="card-header">
-                <text class="rule-name">{{item.name}}</text>
-                <t-button size="small" theme="primary" variant="text" data-id="{{item.id}}" bindtap="onEditRule">修改</t-button>
+      <view class="rules-list animate-fade-in">
+        <block wx:if="{{categorizedRules[activeCategory].length > 0}}">
+          <view 
+            class="rule-card" 
+            wx:for="{{categorizedRules[activeCategory]}}" 
+            wx:key="id"
+          >
+            <view class="rule-icon">
+              <t-icon name="{{item.icon}}" size="48rpx" color="#0052D9" />
+            </view>
+            <view class="rule-info">
+              <view class="rule-top">
+                <text class="name">{{item.name}}</text>
+                <view class="current-badge">当前值</view>
               </view>
-              
-              <view class="card-body">
-                <view class="value-row">
-                  <text class="value">{{item.value}}</text>
-                  <text class="unit">{{item.unit}}</text>
-                </view>
-                <text class="desc">{{item.desc}}</text>
+              <view class="value-row">
+                <text class="num">{{item.value}}</text>
+                <text class="unit">{{item.unit}}</text>
               </view>
+              <text class="desc">{{item.desc}}</text>
+            </view>
+            <view class="edit-btn" bindtap="onEditRule" data-id="{{item.id}}">
+              <t-icon name="edit" size="32rpx" />
+              <text>修改</text>
             </view>
           </view>
+        </block>
+        <view class="empty-box" wx:elif="{{!initialLoading}}">
+           <t-empty icon="info-circle" description="该分类下暂无规则" />
         </view>
-        
-        <t-empty wx:else icon="info-circle" description="暂无规则配置" />
       </view>
-    </block>
-  </view>
+    </view>
+  </scroll-view>
+
+  <!-- 统一编辑弹窗 -->
+  <t-dialog
+    visible="{{showEdit}}"
+    title="修改规则属性"
+    confirm-btn="{{ { content: '保存修改', theme: 'primary' } }}"
+    cancel-btn="取消"
+    bind:confirm="confirmEdit"
+    bind:cancel="onCloseEdit"
+  >
+    <view slot="content" class="dialog-content">
+      <view class="edit-target">
+        <text class="target-name">{{editingRule.name}}</text>
+        <text class="target-desc">{{editingRule.desc}}</text>
+      </view>
+      <view class="input-section">
+        <t-input
+          value="{{newValue}}"
+          placeholder="请输入新的规则数值"
+          label="规则数值"
+          suffix="{{editingRule.unit}}"
+          align="right"
+          bind:change="onValueChange"
+        />
+      </view>
+      <view class="warning-tip">
+        <t-icon name="error-circle" size="28rpx" />
+        <text>警告：修改平台核心参数可能影响业务成交及佣金计算。</text>
+      </view>
+    </view>
+  </t-dialog>
 </view>

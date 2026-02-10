@@ -12,6 +12,7 @@
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-sticky": "tdesign-miniprogram/sticky/sticky",
         "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
         "t-divider": "tdesign-miniprogram/divider/divider",
         "custom-navbar": "/components/custom-navbar/index"
     },

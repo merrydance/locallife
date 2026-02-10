@@ -1225,7 +1225,7 @@ type Querier interface {
 	// 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 	ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error)
 	ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMerchantParams) ([]Review, error)
-	ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]Review, error)
+	ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]ListReviewsByUserRow, error)
 	ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]Delivery, error)
 	// =========================== 骑手视角 ===========================
 	// 骑手查询自己的申诉列表

@@ -1,0 +1,110 @@
+<custom-navbar title="{{isEdit ? '编辑菜品' : '新增菜品'}}" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <t-message id="t-message" />
+  
+  <view class="form-section">
+    <!-- 图片上传 -->
+    <view class="upload-wrap">
+      <view class="form-label">菜品图片</view>
+      <t-upload
+        media-type="{{['image']}}"
+        max="{{1}}"
+        files="{{fileList}}"
+        bind:add="onImageAdd"
+        bind:remove="onImageRemove"
+      />
+    </view>
+
+    <!-- 基础信息 -->
+    <t-cell-group theme="card">
+      <t-input
+        label="菜品名称"
+        placeholder="请输入菜品名称"
+        value="{{formData.name}}"
+        bind:change="onInputChange"
+        data-field="name"
+        required
+      />
+      
+      <t-cell title="菜品分类" arrow bind:tap="showCategoryPicker" note="{{selectedCategoryName || '请选择分类'}}" />
+      
+      <t-input
+        label="价格(元)"
+        type="digit"
+        placeholder="0.00"
+        value="{{displayPrice}}"
+        bind:change="onPriceChange"
+        required
+      />
+      
+      <t-input
+        label="会员价(元)"
+        type="digit"
+        placeholder="可选"
+        value="{{displayMemberPrice}}"
+        bind:change="onMemberPriceChange"
+      />
+    </t-cell-group>
+
+    <!-- 详细描述 -->
+    <view class="textarea-wrap card-wrap">
+      <view class="form-label">详情描述</view>
+      <t-textarea
+        placeholder="请输入菜品详细介绍..."
+        value="{{formData.description}}"
+        bind:change="onInputChange"
+        data-field="description"
+        bordered
+        maxlength="200"
+        indicator
+      />
+    </view>
+
+    <!-- 销售状态 -->
+    <t-cell-group theme="card">
+      <t-cell title="是否上架">
+        <t-switch
+          slot="note"
+          value="{{formData.is_online}}"
+          bind:change="onSwitchChange"
+          data-field="is_online"
+        />
+      </t-cell>
+      <t-cell title="库存储备可用">
+        <t-switch
+          slot="note"
+          value="{{formData.is_available}}"
+          bind:change="onSwitchChange"
+          data-field="is_available"
+        />
+      </t-cell>
+      <t-input
+        label="预估出餐(分)"
+        type="number"
+        placeholder="15"
+        value="{{formData.prepare_time}}"
+        bind:change="onInputChange"
+        data-field="prepare_time"
+      />
+    </t-cell-group>
+  </view>
+
+  <!-- 底部操作栏 -->
+  <view class="footer-bar {{isIPhoneX ? 'iphone-x' : ''}}">
+    <t-button block size="large" theme="primary" loading="{{submitting}}" bind:tap="onSubmit">
+      保存提交
+    </t-button>
+  </view>
+
+  <!-- 分类选择器 -->
+  <t-picker
+    visible="{{categoryVisible}}"
+    value="{{[formData.category_id]}}"
+    title="选择菜品分类"
+    bind:confirm="onCategoryConfirm"
+    bind:cancel="onCategoryCancel"
+  >
+    <t-picker-item options="{{categoryOptions}}" />
+  </t-picker>
+</view>

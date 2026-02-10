@@ -1,0 +1,90 @@
+.page-container {
+  background-color: var(--td-bg-color-page);
+  min-height: 100vh;
+  padding-bottom: 120rpx;
+}
+
+.tabs-container {
+  background-color: #fff !important;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+}
+
+.content-section {
+  padding: 32rpx 24rpx;
+}
+
+.table-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+}
+
+.table-card {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.03);
+  position: relative;
+  transition: all 0.2s ease;
+  border: 4rpx solid transparent;
+}
+
+.table-card.occupied {
+  border-color: rgba(var(--td-error-color-rgb), 0.1);
+}
+
+.table-card.reserved {
+  border-color: rgba(var(--td-warning-color-rgb), 0.1);
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.table-no {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  font-family: 'Outfit', sans-serif;
+}
+
+.table-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.capacity {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.type-label {
+  font-size: 20rpx;
+  color: var(--td-text-color-placeholder);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: 2rpx 12rpx;
+  border-radius: 4rpx;
+}
+
+.table-footer {
+  margin-top: 8rpx;
+  display: flex;
+  justify-content: flex-end;
+  height: 48rpx;
+  align-items: center;
+}
+
+.loading-state {
+  padding: 200rpx 0;
+  display: flex;
+  justify-content: center;
+}

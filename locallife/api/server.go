@@ -1143,6 +1143,9 @@ func (server *Server) setupRouter() {
 		// 查询评价详情
 		reviewsGroup.GET("/:id", server.getReview)
 
+		// 根据订单ID查询评价
+		reviewsGroup.GET("/orders/:id", server.getReviewByOrder)
+
 		// 查询用户的评价列表
 		reviewsGroup.GET("/me", server.listUserReviews)
 

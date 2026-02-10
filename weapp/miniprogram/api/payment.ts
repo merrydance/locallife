@@ -280,6 +280,10 @@ export async function processPayment(orderId: number, businessType: BusinessType
         // 2. 调起微信支付
         if (payment.pay_params) {
             await invokeWechatPay(payment.pay_params)
+            
+            // 3. 轮询支付状态，确保后端已接收到回调并更新
+            // 微信回调通常在秒级，这里轮询最大等待 10s 左右
+            await pollPaymentStatus(payment.id, 5, 2000)
         } else {
             throw new Error('支付参数缺失')
         }

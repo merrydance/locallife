@@ -7,6 +7,7 @@ import { ReservationService, ReservationStatus, ReservationListParams, Reservati
 import { logger } from '../../../utils/logger'
 import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
 import { processPayment } from '../../../api/payment'
+import Navigation from '../../../utils/navigation'
 
 // 状态筛选选项
 const STATUS_TABS = [
@@ -166,8 +167,14 @@ Page({
         try {
              // 预订支付通常是定金，这里的objectType可能是 'reservation'
             await processPayment(id, 'reservation')
-            wx.showToast({ title: '支付成功', icon: 'success' })
-            setTimeout(() => this.loadReservations(true), 1000)
+            
+            // 找到对应的预订数据用于展示
+            const res = this.data.reservations.find(r => r.id === id)
+            Navigation.toPaymentSuccess({
+                orderId: String(id),
+                orderNo: String(id), // 预订号暂用ID
+                amount: res?.depositDisplay?.replace('¥', '') || '0.00'
+            })
         } catch (error) {
             logger.error('支付失败', error, 'Reservations.onPay')
             wx.showToast({ title: '支付未完成', icon: 'none' })

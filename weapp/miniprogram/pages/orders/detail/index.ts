@@ -1,3 +1,4 @@
+import Navigation from '../../../utils/navigation'
 import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
 import { getOrderDetail, confirmOrder, cancelOrder, urgeOrder, OrderResponse, OrderType } from '../../../api/order'
@@ -6,6 +7,7 @@ import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
 import { ReservationService, ReservationResponse } from '../../../api/reservation'
+import ReviewService from '../../../api/review'
 
 // 取消原因选项
 const CANCEL_REASONS = [
@@ -34,6 +36,8 @@ Page({
     showPayButton: false,
     showUrgeButton: false,
     showContactButton: true, // 总是显示联系客服/商家
+    showReviewButton: false,
+    isReviewed: false,
     
     lastUrgeTime: 0,  // 上次催单时间
     urgeCountdown: 0  // 催单倒计时（秒）
@@ -99,8 +103,14 @@ Page({
         showConfirmButton,
         showCancelButton,
         showPayButton,
-        showUrgeButton
+        showUrgeButton,
+        showReviewButton: orderDTO.status === 'completed'
       })
+
+      // 检查评价状态
+      if (orderDTO.status === 'completed') {
+        this.checkReviewStatus()
+      }
 
       // 检查催单冷却时间
       this.checkUrgeCooldown()
@@ -297,8 +307,18 @@ Page({
     wx.showLoading({ title: '拉起支付...' })
     try {
       await processPayment(parseInt(orderId), 'order')
-      wx.showToast({ title: '支付成功', icon: 'success' })
-      this.loadOrderDetail()
+      
+      const { order } = this.data
+      if (order) {
+        Navigation.toPaymentSuccess({
+          orderId,
+          orderNo: order.orderNo,
+          amount: (order.payableAmount / 100).toFixed(2)
+        })
+      } else {
+        wx.showToast({ title: '支付成功', icon: 'success' })
+        this.loadOrderDetail()
+      }
     } catch (error) {
       logger.error('支付失败', error, 'Detail.onPayOrder')
       wx.showToast({ title: '支付未完成', icon: 'none' })
@@ -326,8 +346,26 @@ Page({
     })
   },
   
+  async checkReviewStatus() {
+    try {
+      const review = await ReviewService.getReviewByOrderId(parseInt(this.data.orderId))
+      if (review && review.id) {
+        this.setData({ isReviewed: true })
+      }
+    } catch (error) {
+       // 404 is normal here, means not reviewed
+       this.setData({ isReviewed: false })
+    }
+  },
+
   onReview() {
-     // TODO: 评价功能
-     wx.showToast({ title: '评价功能开发中', icon: 'none' })
+    const { orderId, isReviewed } = this.data
+    if (isReviewed) {
+        wx.navigateTo({ url: '/pages/user_center/reviews/index' })
+        return
+    }
+    wx.navigateTo({
+      url: `/pages/user_center/reviews/create/index?orderId=${orderId}`
+    })
   }
 })

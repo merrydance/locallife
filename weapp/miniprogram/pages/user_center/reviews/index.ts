@@ -1,5 +1,7 @@
 import ReviewService, { Review } from '../../../api/review'
 import { formatTime } from '../../../utils/util'
+import { logger } from '../../../utils/logger'
+import { getStableBarHeights } from '../../../utils/responsive'
 import { ErrorHandler } from '../../../utils/error-handler'
 
 interface ReviewDisplay {
@@ -21,32 +23,23 @@ Page({
     navBarHeight: 88,
     loading: false,
     initialLoading: true,
-    error: null as string | null,
+    refreshing: false,
     page: 1,
     pageSize: 10,
     hasMore: true
   },
 
   onLoad() {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
     this.loadReviews(true)
   },
 
-  onShow() {
-    // If we have items, perform silent refresh
-    if (this.data.reviews.length > 0) {
-      // this.loadReviews(true) // Optional: might be too aggressive
-    }
-  },
-
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
-  },
-
   async loadReviews(reset = false) {
-    if (this.data.loading && !this.data.initialLoading) return
+    if (this.data.loading && !this.data.initialLoading && !this.data.refreshing) return
     if (!reset && !this.data.hasMore) return
 
-    this.setData({ loading: true, error: null })
+    this.setData({ loading: true })
 
     try {
       const page = reset ? 1 : this.data.page
@@ -55,8 +48,8 @@ Page({
       const newReviews: ReviewDisplay[] = res.reviews.map((r: Review) => ({
         id: r.id,
         merchantId: r.merchant_id,
-        merchantName: `商户 ${r.merchant_id}`, // Backend missing name, placeholder
-        logoUrl: '/assets/icons/shop.svg',      // Backend missing logo, placeholder
+        merchantName: r.merchant_name || `商户 #${r.merchant_id}`,
+        logoUrl: r.merchant_logo || '/assets/icons/shop.svg',
         content: r.content,
         images: r.images || [],
         createdAt: formatTime(new Date(r.created_at)),
@@ -72,21 +65,18 @@ Page({
         page: page + 1,
         hasMore: newReviews.length === this.data.pageSize, 
         loading: false,
-        initialLoading: false
+        initialLoading: false,
+        refreshing: false
       })
     } catch (error) {
-      ErrorHandler.handle(error, 'Reviews.list')
+      ErrorHandler.handle(error, 'Reviews.listMyReviews')
       this.setData({ 
         loading: false,
         initialLoading: false,
-        error: '加载评价列表失败'
+        refreshing: false
       })
       if (reset) this.setData({ reviews: [] })
     }
-  },
-
-  onRetry() {
-    this.loadReviews(true)
   },
 
   onReachBottom() {
@@ -94,24 +84,21 @@ Page({
   },
 
   onPullDownRefresh() {
+    this.setData({ refreshing: true })
     this.loadReviews(true).then(() => {
       wx.stopPullDownRefresh()
     })
   },
 
-  onItemClick(e: WechatMiniprogram.BaseEvent) {
-    // Navigate to merchant detail? Or Order detail?
-    // Given we don't have review detail page, maybe Merchant.
-    const id = e.currentTarget.dataset.id
-    const item = this.data.reviews.find(r => r.id === id)
-    if (item) {
-        wx.navigateTo({
-            url: `/pages/takeout/restaurant-detail/index?id=${item.merchantId}`
-        })
-    }
+  onMerchantClick(e: any) {
+    const { id } = e.currentTarget.dataset
+    if (!id) return
+    wx.navigateTo({
+        url: `/pages/takeout/restaurant-detail/index?id=${id}`
+    })
   },
 
-  onImagePreview(e: WechatMiniprogram.BaseEvent) {
+  onImagePreview(e: any) {
     const { urls, current } = e.currentTarget.dataset
     wx.previewImage({
         urls,

@@ -25,9 +25,10 @@ func pgNumericToFloat64(n pgtype.Numeric) float64 {
 // ==================== 商户列表查询 ====================
 
 type listOperatorMerchantsRequest struct {
-	Status string `form:"status" binding:"omitempty,oneof=pending approved rejected suspended"`
-	Page   int32  `form:"page" binding:"omitempty,min=1"`
-	Limit  int32  `form:"limit" binding:"omitempty,min=1,max=100"`
+	Status   string `form:"status" binding:"omitempty,oneof=pending approved rejected suspended"`
+	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
+	Page     int32  `form:"page" binding:"omitempty,min=1"`
+	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
 type merchantListItem struct {
@@ -92,10 +93,21 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 		return
 	}
 
-	// 获取运营商管理的区域
-	if operator.RegionID == 0 {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-		return
+	// 确定目标区域 ID
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		// 默认使用主区域
+		if operator.RegionID == 0 {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
+			return
+		}
+		targetRegionID = operator.RegionID
+	} else {
+		// 验证是否有权管理该特定区域
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
 	}
 
 	offset := pageOffset(req.Page, req.Limit)
@@ -107,7 +119,7 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 
 	if req.Status == "" {
 		merchants, err = server.store.ListMerchantsByRegion(ctx, db.ListMerchantsByRegionParams{
-			RegionID: operator.RegionID,
+			RegionID: targetRegionID,
 			Limit:    req.Limit,
 			Offset:   offset,
 		})
@@ -116,10 +128,10 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 			return
 		}
 
-		total, err = server.store.CountMerchantsByRegion(ctx, operator.RegionID)
+		total, err = server.store.CountMerchantsByRegion(ctx, targetRegionID)
 	} else {
 		merchants, err = server.store.ListMerchantsByRegionWithStatus(ctx, db.ListMerchantsByRegionWithStatusParams{
-			RegionID: operator.RegionID,
+			RegionID: targetRegionID,
 			Column2:  req.Status,
 			Limit:    req.Limit,
 			Offset:   offset,
@@ -130,7 +142,7 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 		}
 
 		total, err = server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
-			RegionID: operator.RegionID,
+			RegionID: targetRegionID,
 			Column2:  req.Status,
 		})
 	}
@@ -254,9 +266,10 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 // ==================== 骑手列表查询 ====================
 
 type listOperatorRidersRequest struct {
-	Status string `form:"status" binding:"omitempty,oneof=pending active suspended deactivated"`
-	Page   int32  `form:"page" binding:"omitempty,min=1"`
-	Limit  int32  `form:"limit" binding:"omitempty,min=1,max=100"`
+	Status   string `form:"status" binding:"omitempty,oneof=pending active suspended deactivated"`
+	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
+	Page     int32  `form:"page" binding:"omitempty,min=1"`
+	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
 type riderListItem struct {
@@ -306,6 +319,13 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		return
 	}
 
+	// 从中间件获取运营商信息
+	operator, ok := GetOperatorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
+		return
+	}
+
 	// 设置默认值
 	if req.Page == 0 {
 		req.Page = 1
@@ -314,21 +334,25 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 从中间件获取运营商信息
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
-		return
-	}
-
-	// 获取运营商管理的区域
-	if operator.RegionID == 0 {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
-		return
+	// 确定目标区域 ID
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		// 默认使用主区域
+		if operator.RegionID == 0 {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
+			return
+		}
+		targetRegionID = operator.RegionID
+	} else {
+		// 验证是否有权管理该特定区域
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
 	}
 
 	offset := pageOffset(req.Page, req.Limit)
-	regionID := pgtype.Int8{Int64: operator.RegionID, Valid: true}
+	regionID := pgtype.Int8{Int64: targetRegionID, Valid: true}
 
 	// 查询骑手列表
 	var riders []db.Rider

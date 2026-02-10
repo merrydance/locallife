@@ -12316,10 +12316,10 @@ func (mr *MockStoreMockRecorder) ListReviewsByMerchant(ctx, arg any) *gomock.Cal
 }
 
 // ListReviewsByUser mocks base method.
-func (m *MockStore) ListReviewsByUser(ctx context.Context, arg db.ListReviewsByUserParams) ([]db.Review, error) {
+func (m *MockStore) ListReviewsByUser(ctx context.Context, arg db.ListReviewsByUserParams) ([]db.ListReviewsByUserRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListReviewsByUser", ctx, arg)
-	ret0, _ := ret[0].([]db.Review)
+	ret0, _ := ret[0].([]db.ListReviewsByUserRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

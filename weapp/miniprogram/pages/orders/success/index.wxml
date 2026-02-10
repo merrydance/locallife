@@ -1,0 +1,32 @@
+<custom-navbar title="支付成功" showBack="{{false}}" />
+
+<view class="container" style="padding-top: {{navBarHeight}}px">
+  <view class="success-wrap">
+    <t-result
+      theme="success"
+      title="支付成功"
+      description="您的订单已支付完成，商家正在处理中"
+    />
+
+    <view class="order-info-card">
+      <view class="info-item">
+        <text class="label">支付金额</text>
+        <text class="value price">¥{{amount}}</text>
+      </view>
+      <view class="info-item">
+        <text class="label">订单编号</text>
+        <text class="value">{{orderNo}}</text>
+      </view>
+    </view>
+
+    <view class="action-btns">
+      <t-button theme="primary" block size="large" shape="round" bindtap="onViewOrder">查看订单</t-button>
+      <t-button theme="default" variant="outline" block size="large" shape="round" bindtap="onGoHome" style="margin-top: 32rpx;">返回首页</t-button>
+    </view>
+  </view>
+
+  <view class="recommend-section">
+     <view class="section-title">可能感兴趣</view>
+     <view class="recommend-tips">支付成功后，您可以在“我的评价”中查看历史订单详情。</view>
+  </view>
+</view>

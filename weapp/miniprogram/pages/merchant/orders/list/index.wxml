@@ -1,0 +1,109 @@
+<custom-navbar title="订单管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <!-- 状态筛选 -->
+  <t-tabs value="{{currentStatus}}" bind:change="onTabChange" t-class="tabs-container" sticky offsetTop="{{navBarHeight}}">
+    <t-tab-panel label="待接单" value="paid" />
+    <t-tab-panel label="制作中" value="preparing" />
+    <t-tab-panel label="待取餐" value="ready" />
+    <t-tab-panel label="今日完成" value="completed" />
+    <t-tab-panel label="全部" value="" />
+  </t-tabs>
+
+  <view class="list-section">
+    <view wx:if="{{loading && !orders.length}}" class="loading-state">
+      <t-loading theme="circular" size="40rpx" text="获取订单中..." vertical />
+    </view>
+
+    <t-empty wx:elif="{{!loading && !orders.length}}" icon="info-circle" description="暂无相关订单" />
+
+    <block wx:else>
+      <view class="order-card" wx:for="{{orders}}" wx:key="id" bindtap="onViewDetail" data-id="{{item.id}}">
+        <!-- 头部：订单号 + 类型标签 -->
+        <view class="card-header">
+          <view class="order-no-row">
+            <text class="type-tag {{item.order_type}}">{{item.order_type_label}}</text>
+            <text class="order-no">#{{item.order_no_short}}</text>
+          </view>
+          <view class="status-label" style="color: {{item.status_color}}">{{item.status_label}}</view>
+        </view>
+
+        <!-- 内容：商品列表预览 -->
+        <view class="card-content">
+          <view class="dish-list">
+            <view class="dish-item" wx:for="{{item.items}}" wx:for-item="dish" wx:key="id">
+              <text class="dish-name">{{dish.name}}</text>
+              <text class="dish-qty">x{{dish.quantity}}</text>
+            </view>
+          </view>
+          
+          <view class="order-meta">
+            <view class="customer-info" wx:if="{{item.order_type === 'takeout'}}">
+              <t-icon name="location" size="28rpx" />
+              <text>{{item.address_summary || '外卖配送'}}</text>
+            </view>
+            <view class="customer-info" wx:else>
+              <t-icon name="user" size="28rpx" />
+              <text>{{item.table_no ? item.table_no + '号桌' : (item.customer_name || '顾客')}}</text>
+            </view>
+            <view class="time-info">{{item.time_label}}</view>
+          </view>
+
+          <view class="order-total-row">
+             <view class="notes" wx:if="{{item.notes}}">
+               <t-tag theme="warning" variant="light" size="extra-small">备注</t-tag>
+               <text>{{item.notes}}</text>
+             </view>
+             <view class="total-info">
+               合计 <text class="total-price">¥{{item.total_amount / 100}}</text>
+             </view>
+          </view>
+        </view>
+
+        <!-- 操作栏 -->
+        <view class="card-actions" catchtap="preventBubble">
+          <t-button 
+            wx:if="{{item.status === 'paid'}}" 
+            block 
+            theme="primary" 
+            size="small" 
+            bind:tap="onAcceptOrder" 
+            data-id="{{item.id}}"
+            loading="{{item.submitting}}"
+          >
+            接单制作
+          </t-button>
+          
+          <t-button 
+            wx:if="{{item.status === 'preparing'}}" 
+            block 
+            theme="primary" 
+            variant="outline"
+            size="small" 
+            bind:tap="onMarkReady" 
+            data-id="{{item.id}}"
+            loading="{{item.submitting}}"
+          >
+            制作完成
+          </t-button>
+
+          <t-button 
+            wx:if="{{item.status === 'ready' && (item.order_type === 'dine_in' || item.order_type === 'takeaway')}}" 
+            block 
+            theme="success" 
+            size="small" 
+            bind:tap="onCompleteOrder" 
+            data-id="{{item.id}}"
+            loading="{{item.submitting}}"
+          >
+            确认送达/核销
+          </t-button>
+        </view>
+      </view>
+    </block>
+
+    <view wx:if="{{hasMore}}" class="load-more" bindtap="loadOrders">
+      <text>{{loading ? '正在加载...' : '加载更多'}}</text>
+    </view>
+  </view>
+</view>

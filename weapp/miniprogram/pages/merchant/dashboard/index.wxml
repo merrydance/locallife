@@ -1,0 +1,119 @@
+<custom-navbar title="商户工作台" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <t-skeleton 
+    loading="{{initialLoading}}" 
+    rowCol="{{ [{ width: '100%', height: '300rpx' }] }}" 
+    t-class="skeleton-header"
+  >
+    <!-- 1. 营业状态切换与商户名称 -->
+    <view class="merchant-header-card">
+      <view class="header-top">
+        <view class="merchant-profile">
+          <t-icon name="avatar" size="48rpx" color="rgba(255,255,255,0.8)" />
+          <view class="merchant-name">{{merchantInfo.name || '核心商圈店'}}</view>
+          <view class="status-tag {{isOpen ? 'tag-open' : 'tag-closed'}}">
+            {{isOpen ? '营业中' : '休息中'}}
+          </view>
+        </view>
+        <view class="setting-entry" bindtap="onGoToSettings">
+          <t-icon name="setting" size="40rpx" color="#fff" />
+        </view>
+      </view>
+
+      <!-- 今日核心指标 -->
+      <view class="stats-grid">
+        <view class="stats-item">
+          <text class="stats-label">今日营业额</text>
+          <text class="stats-value">¥{{todayStats.revenue / 100}}</text>
+        </view>
+        <view class="stats-item">
+          <text class="stats-label">今日订单</text>
+          <text class="stats-value">{{todayStats.orderCount}}</text>
+        </view>
+        <view class="stats-item">
+          <text class="stats-label">实付客单</text>
+          <text class="stats-value">¥{{todayStats.avgOrderPrice / 100}}</text>
+        </view>
+      </view>
+    </view>
+  </t-skeleton>
+
+  <!-- 2. 在线开关 (粘性设计) -->
+  <t-sticky offsetTop="{{navBarHeight}}">
+    <view class="ops-bar-container">
+      <view class="ops-bar {{isOpen ? 'is-open' : 'is-closed'}}">
+        <view class="ops-info">
+          <t-icon name="{{isOpen ? 'check-circle' : 'error-circle'}}" size="32rpx" />
+          <text class="ops-text">{{isOpen ? '正在接收订单中' : '已暂停接单'}}</text>
+        </view>
+        <t-button size="extra-small" theme="primary" variant="outline" bind:tap="onToggleBusiness">
+          {{isOpen ? '打烊' : '开门'}}
+        </t-button>
+      </view>
+    </view>
+  </t-sticky>
+
+  <t-skeleton 
+    loading="{{initialLoading}}" 
+    theme="paragraph"
+    t-class="skeleton-body"
+    rowCol="{{ [1, 1, { width: '100%', height: '400rpx' }, 1, 1] }}"
+  >
+    <!-- 3. 功能矩阵 (Grid) -->
+    <view class="card-section">
+      <view class="card-title">经营助手</view>
+      <t-grid column="{{4}}" border="{{false}}" theme="card">
+        <t-grid-item text="菜品管理" icon="view-module" bind:tap="onManageDishes" />
+        <t-grid-item text="房费库存" icon="calendar" bind:tap="onManageInventory" />
+        <t-grid-item text="评价管理" icon="chat" bind:tap="onManageReviews" />
+        <t-grid-item text="营销配置" icon="gift" bind:tap="onManagePromotions" />
+        <t-grid-item text="财务流水" icon="money" bind:tap="onFinanceInfo" />
+        <t-grid-item text="打印设置" icon="print" bind:tap="onPrinterSettings" />
+        <t-grid-item text="多店管理" icon="root-list" bind:tap="onManageChain" />
+        <t-grid-item text="运营分析" icon="chart-bar" bind:tap="onGoToAnalytics" />
+      </t-grid>
+    </view>
+
+    <!-- 4. 实时待处理事项 -->
+    <view class="card-section">
+      <view class="card-title">待处理事项</view>
+      <view class="pending-list">
+        <t-cell-group theme="card">
+          <t-cell title="待接外卖单" arrow hover bind:tap="onPendingTakeout">
+            <t-badge count="{{pendingCounts.takeout}}" slot="note" />
+            <t-icon name="assignment" slot="left-icon" />
+          </t-cell>
+          <t-cell title="待确认预定" arrow hover bind:tap="onPendingReservations">
+            <t-badge count="{{pendingCounts.reservation}}" slot="note" />
+            <t-icon name="calendar-event" slot="left-icon" />
+          </t-cell>
+          <t-cell title="异常配送订单" arrow hover bind:tap="onExceptionOrders">
+            <t-badge count="{{pendingCounts.exceptions}}" dot slot="note" />
+            <t-icon name="error-circle" slot="left-icon" color="var(--td-error-color)" />
+          </t-cell>
+        </t-cell-group>
+      </view>
+    </view>
+
+    <!-- 5. 趋势简报 (Placeholder for ECharts) -->
+    <view class="card-section">
+      <view class="card-title">近7日营收趋势</view>
+      <view class="chart-container">
+        <ec-canvas id="revenue-chart" canvas-id="revenue-chart" ec="{{ ec }}"></ec-canvas>
+      </view>
+
+      <view class="card-title" style="margin-top: 32rpx;">昨日热销排行</view>
+      <view class="ranking-list card-section">
+        <view class="ranking-item" wx:for="{{hotDishes}}" wx:key="id">
+          <view class="rank-num {{index < 3 ? 'top-three' : ''}}">{{index + 1}}</view>
+          <view class="dish-info">
+            <text class="dish-name">{{item.name}}</text>
+            <text class="dish-sales">销量 {{item.sales}}</text>
+          </view>
+          <view class="dish-revenue">¥{{item.revenue / 100}}</view>
+        </view>
+      </view>
+    </view>
+  </t-skeleton>
+</view>

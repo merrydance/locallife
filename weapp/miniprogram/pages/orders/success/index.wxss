@@ -1,0 +1,68 @@
+.container {
+  min-height: 100vh;
+  background-color: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.success-wrap {
+  padding: 60rpx 40rpx;
+  flex: 1;
+}
+
+.order-info-card {
+  margin-top: 60rpx;
+  background: #f9f9f9;
+  border-radius: 16rpx;
+  padding: 32rpx;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.label {
+  color: #666;
+  font-size: 28rpx;
+}
+
+.value {
+  color: #333;
+  font-size: 28rpx;
+  font-weight: 500;
+}
+
+.value.price {
+  color: #fa4126;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.action-btns {
+  margin-top: 80rpx;
+}
+
+.recommend-section {
+  padding: 40rpx;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+  border-top: 20rpx solid #f6f6f6;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.recommend-tips {
+  font-size: 26rpx;
+  color: #999;
+  line-height: 1.6;
+}

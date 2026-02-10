@@ -1,10 +1,13 @@
 {
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-empty": "tdesign-miniprogram/empty/empty",
-        "list-skeleton": "/components/list-skeleton/index",
-        "card-skeleton": "/components/card-skeleton/index"
-    }
+  "usingComponents": {
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-textarea": "tdesign-miniprogram/textarea/textarea",
+    "t-upload": "tdesign-miniprogram/upload/upload",
+    "t-message": "tdesign-miniprogram/message/message",
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "t-divider": "tdesign-miniprogram/divider/divider",
+    "custom-navbar": "/components/custom-navbar/custom-navbar"
+  },
+  "navigationStyle": "custom"
 }

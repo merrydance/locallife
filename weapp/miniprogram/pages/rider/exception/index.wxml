@@ -1,88 +1,154 @@
 <custom-navbar title="异常报备" showBack="{{true}}" />
 
-<scroll-view 
-  scroll-y 
-  class="page-container" 
-  style="padding-top: {{navBarHeight}}px; padding-bottom: 120rpx;"
->
-  <view class="content" wx:if="{{!showForm}}">
-    <!-- 1. 历史记录 -->
-    <view class="section-title">报备记录</view>
-    <view class="history-list" wx:if="{{historyApps.length > 0}}">
-      <view class="history-card" wx:for="{{historyApps}}" wx:key="id">
-        <view class="card-header">
-          <t-tag size="small" theme="{{item.status === 'resolved' ? 'success' : (item.status === 'dismissed' ? 'default' : 'warning')}}" variant="light-outline">
-            {{item.status === 'resolved' ? '已处理' : (item.status === 'dismissed' ? '已驳回' : '处理中')}}
-          </t-tag>
-          <text class="time">{{item.created_at}}</text>
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <!-- 顶部状态栏 -->
+  <view class="status-tabs">
+    <view 
+      class="tab-item {{activeTab === 'report' ? 'active' : ''}}" 
+      bindtap="switchTab" 
+      data-tab="report"
+    >异常报备</view>
+    <view 
+      class="tab-item {{activeTab === 'history' ? 'active' : ''}}" 
+      bindtap="switchTab" 
+      data-tab="history"
+    >报备历史</view>
+    <view class="tab-line" style="transform: translateX({{activeTab === 'report' ? '0' : '100%'}})"></view>
+  </view>
+
+  <scroll-view 
+    scroll-y 
+    class="scroll-area"
+    refresher-enabled="{{true}}"
+    refresher-triggered="{{loading}}"
+    bindrefresherrefresh="onRefresh"
+  >
+    <!-- 1. 新增报备表单 -->
+    <view class="form-wrapper {{activeTab === 'report' ? 'show' : ''}}">
+      <view class="card-group">
+        <view class="group-title">
+          <t-icon name="assignment" size="32rpx" /> 相关订单
         </view>
-        <view class="card-body">
-          <view class="type">类型：{{item.exception_type}}</view>
-          <view class="desc">{{item.description}}</view>
-        </view>
-        <view class="card-footer" wx:if="{{item.result}}">
-          反馈：{{item.result}}
+        <view class="order-selector-box">
+          <scroll-view scroll-x class="order-scroll">
+            <view 
+              class="order-card {{formData.orderId === item.order_id ? 'active' : ''}}" 
+              wx:for="{{activeOrders}}" 
+              wx:key="order_id"
+              bindtap="onSelectOrder"
+              data-id="{{item.order_id}}"
+            >
+              <view class="order-no">单号: {{item.order_id}}</view>
+              <view class="order-merchant">{{item.merchant_name || '未知商户'}}</view>
+              <view class="active-dot" wx:if="{{formData.orderId === item.order_id}}"></view>
+            </view>
+            <view wx:if="{{activeOrders.length === 0}}" class="empty-orders">
+              <t-icon name="info-circle" size="40rpx" color="#999" />
+              <text>当前暂无可报备配送单</text>
+            </view>
+          </scroll-view>
         </view>
       </view>
-    </view>
-    <t-empty wx:else icon="info-circle" description="暂无报备记录" />
 
-    <!-- 底部悬浮按钮 -->
-    <view class="fab-btn" bindtap="onOpenForm">
-      <t-icon name="add" size="48rpx" color="#fff" />
-    </view>
-  </view>
-
-  <!-- 2. 新增报备表单 -->
-  <view class="form-container" wx:else>
-    <view class="form-header">
-      <text class="form-title">新增异常报备</text>
-      <t-icon name="close" size="40rpx" bindtap="onCloseForm" />
-    </view>
-
-    <view class="form-section">
-      <view class="label">选择关联订单 <text class="required">*</text></view>
-      <scroll-view scroll-x class="order-selector">
-        <view 
-          class="order-chip {{formData.orderId === item.order_id ? 'active' : ''}}" 
-          wx:for="{{activeOrders}}" 
-          wx:key="order_id"
-          bindtap="onSelectOrder"
-          data-id="{{item.order_id}}"
-        >
-          单号: {{item.order_id}}
+      <view class="card-group">
+        <view class="group-title">
+          <t-icon name="view-module" size="32rpx" /> 异常类型
         </view>
-        <view wx:if="{{activeOrders.length === 0}}" class="no-orders-tip">暂无进行中的订单</view>
-      </scroll-view>
+        <view class="type-grid">
+          <view 
+            class="type-item {{formData.type === item.value ? 'active' : ''}}"
+            wx:for="{{typeOptions}}"
+            wx:key="value"
+            bindtap="onTypeSelect"
+            data-value="{{item.value}}"
+          >
+            <view class="type-icon-box">
+               <t-icon name="{{item.icon || 'error'}}" size="48rpx" />
+            </view>
+            <text>{{item.label}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="card-group">
+        <view class="group-title">
+          <t-icon name="edit-1" size="32rpx" /> 详情描述
+        </view>
+        <view class="textarea-box">
+          <t-textarea 
+            placeholder="请详细描述现场情况，方便平台核实及后续申诉（如：客户电话关机、商家闭店等）" 
+            disable-default-padding
+            maxlength="300" 
+            indicator
+            value="{{formData.description}}"
+            bind:change="onDescriptionChange"
+            t-class="custom-textarea"
+          />
+        </view>
+      </view>
+
+      <view class="card-group">
+        <view class="group-title">
+          <t-icon name="image" size="32rpx" /> 现场照片 (可选)
+        </view>
+        <view class="upload-box">
+          <t-upload
+            media-type="{{['image']}}"
+            files="{{fileList}}"
+            gridConfig="{{ { column: 3 } }}"
+            bind:add="onAddImage"
+            bind:remove="onRemoveImage"
+          />
+        </view>
+      </view>
+
+      <view class="submit-footer">
+        <t-button 
+          theme="primary" 
+          size="large" 
+          block 
+          shape="round" 
+          bindtap="onSubmit"
+          loading="{{submitting}}"
+          disabled="{{!formData.orderId || !formData.description}}"
+        >立即上报</t-button>
+        <view class="notice">上报后，平台将在2小时内完成初审</view>
+      </view>
     </view>
 
-    <view class="form-section">
-      <view class="label">异常类型 <text class="required">*</text></view>
-      <t-radio-group value="{{formData.type}}" bind:change="onTypeChange" t-class="radio-group-custom">
-        <t-radio 
-          wx:for="{{typeOptions}}" 
-          wx:key="value" 
-          value="{{item.value}}" 
-          label="{{item.label}}" 
-          icon="dot"
-        />
-      </t-radio-group>
+    <!-- 2. 报备历史 -->
+    <view class="history-wrapper {{activeTab === 'history' ? 'show' : ''}}">
+      <view class="history-list" wx:if="{{historyApps.length > 0}}">
+        <view class="history-item" wx:for="{{historyApps}}" wx:key="id">
+          <view class="history-header">
+            <view class="history-type">
+              <t-icon name="error-circle" size="32rpx" color="#FA5151" />
+              <text>{{item.type_label || item.exception_type}}</text>
+            </view>
+            <view class="history-status {{item.status}}">
+              {{item.status_label}}
+            </view>
+          </view>
+          <view class="history-body">
+            <view class="info-row">
+              <text class="label">配送单号：</text>
+              <text class="value">{{item.order_id}}</text>
+            </view>
+            <view class="info-row">
+              <text class="label">上报时间：</text>
+              <text class="value">{{item.created_at}}</text>
+            </view>
+            <view class="desc-content">{{item.description}}</view>
+          </view>
+          <view class="history-footer" wx:if="{{item.resolution}}">
+            <view class="res-title">处理反馈：</view>
+            <view class="res-body">{{item.resolution}}</view>
+          </view>
+        </view>
+      </view>
+      <view class="empty-state" wx:else>
+        <t-empty icon="info-circle" description="暂无报备历史" />
+      </view>
     </view>
-
-    <view class="form-section">
-      <view class="label">详情描述 <text class="required">*</text></view>
-      <t-textarea 
-        placeholder="请详细描述现场情况，方便客服核实..." 
-        bordered 
-        maxlength="200" 
-        indicator
-        value="{{formData.description}}"
-        bind:change="onDescriptionChange"
-      />
-    </view>
-
-    <view class="form-actions">
-      <t-button theme="primary" size="large" block shape="round" bindtap="onSubmit">提交上报</t-button>
-    </view>
-  </view>
-</scroll-view>
+  </scroll-view>
+</view>

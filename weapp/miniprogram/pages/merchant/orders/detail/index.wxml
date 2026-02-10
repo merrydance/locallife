@@ -1,0 +1,111 @@
+<custom-navbar title="订单详情" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{loading}}" class="loading-state">
+    <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
+  </view>
+
+  <block wx:elif="{{order}}">
+    <!-- 状态横幅 -->
+    <view class="status-banner" style="background-color: {{order.status_color}}">
+      <view class="status-main">
+        <t-icon name="{{order.status_icon}}" size="48rpx" />
+        <text class="status-text">{{order.status_label}}</text>
+      </view>
+      <view class="status-desc">{{order.status_desc}}</view>
+    </view>
+
+    <view class="content-section">
+      <!-- 配送信息 / 桌台信息 -->
+      <view class="card-wrap info-card">
+        <view class="card-title">履行信息</view>
+        <view class="info-row" wx:if="{{order.order_type === 'takeout'}}">
+          <view class="info-label">送货地址</view>
+          <view class="info-value">
+            <view class="address-text">{{order.address_detail || '地址信息加载中'}}</view>
+            <view class="contact-text">{{order.customer_name}} {{order.customer_phone}}</view>
+          </view>
+          <view class="call-btn" bindtap="onCallCustomer">
+            <t-icon name="phone" size="40rpx" color="var(--td-brand-color)" />
+          </view>
+        </view>
+        <view class="info-row" wx:else>
+          <view class="info-label">就餐位置</view>
+          <view class="info-value">
+            <view class="table-text">{{order.table_no}}号桌</view>
+            <view class="type-text">{{order.order_type_label}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 商品清单 -->
+      <view class="card-wrap items-card">
+        <view class="card-title">商品清单</view>
+        <view class="dish-item" wx:for="{{order.items}}" wx:key="id">
+          <t-image src="{{item.image_url}}" mode="aspectFill" width="100rpx" height="100rpx" shape="round" />
+          <view class="dish-info">
+            <view class="dish-name-row">
+              <text class="dish-name">{{item.name}}</text>
+              <text class="dish-price">¥{{item.unit_price / 100}}</text>
+            </view>
+            <view class="dish-specs" wx:if="{{item.customizations.length}}">
+              <text wx:for="{{item.customizations}}" wx:for-item="spec" wx:key="index">{{spec.option_name}} </text>
+            </view>
+            <view class="dish-qty">x{{item.quantity}}</view>
+          </view>
+        </view>
+        <t-divider />
+        <view class="price-summary">
+          <view class="summary-row">
+            <text>商品小计</text>
+            <text>¥{{order.subtotal / 100}}</text>
+          </view>
+          <view class="summary-row" wx:if="{{order.delivery_fee}}">
+            <text>配送费</text>
+            <text>¥{{order.delivery_fee / 100}}</text>
+          </view>
+          <view class="summary-row total-row">
+            <text>实付金额</text>
+            <text class="total-val">¥{{order.total_amount / 100}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 订单说明 -->
+      <view class="card-wrap detail-card">
+        <t-cell title="订单编号" note="{{order.order_no}}" bordered="{{false}}" />
+        <t-cell title="下单时间" note="{{order.created_at_fmt}}" bordered="{{false}}" />
+        <t-cell title="支付方式" note="{{order.payment_method_label}}" bordered="{{false}}" />
+        <t-cell wx:if="{{order.notes}}" title="备注信息" note="{{order.notes}}" note-class="notes-text" bordered="{{false}}" />
+      </view>
+
+      <!-- 时间线 (简化) -->
+      <view class="card-wrap timeline-card">
+        <view class="card-title">订单进度</view>
+        <t-steps layout="vertical" current="{{order.step_current}}" theme="dot">
+          <t-step-item title="订单提交" content="{{order.created_at_fmt}}" />
+          <t-step-item title="已支付" content="{{order.paid_at_fmt}}" />
+          <t-step-item title="正在制作" content="{{order.accept_at_fmt}}" />
+          <t-step-item title="制作完成" content="{{order.ready_at_fmt}}" />
+          <t-step-item title="配送中/已核销" content="{{order.completed_at_fmt}}" />
+        </t-steps>
+      </view>
+    </view>
+  </block>
+
+  <!-- 底部操作按钮 -->
+  <view class="footer-bar {{isIPhoneX ? 'iphone-x' : ''}}" wx:if="{{order}}">
+    <block wx:if="{{order.status === 'paid'}}">
+      <t-button block theme="primary" size="large" bind:tap="onAccept" loading="{{submitting}}">接单一键制作</t-button>
+    </block>
+    <block wx:elif="{{order.status === 'preparing'}}">
+      <t-button block theme="primary" variant="outline" size="large" bind:tap="onMarkReady" loading="{{submitting}}">标记制作完成</t-button>
+    </block>
+    <block wx:elif="{{order.status === 'ready' && (order.order_type === 'dine_in' || order.order_type === 'takeaway')}}">
+      <t-button block theme="success" size="large" bind:tap="onComplete" loading="{{submitting}}">确认送达/核销</t-button>
+    </block>
+    <view wx:else class="status-footer">{{order.status_label}}</view>
+  </view>
+</view>
+
+<t-dialog id="t-dialog" />

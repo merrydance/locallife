@@ -1,5 +1,6 @@
-import { isLargeScreen } from '@/utils/responsive'
-import { request } from '@/utils/request'
+import { isLargeScreen, getStableBarHeights } from '../../../utils/responsive'
+import { request } from '../../../utils/request'
+import { logger } from '../../../utils/logger'
 
 interface RuleItem {
   id: string
@@ -8,6 +9,8 @@ interface RuleItem {
   value: string
   unit: string
   desc: string
+  category: 'rider' | 'merchant' | 'platform'
+  icon?: string
 }
 
 interface RulesResponse {
@@ -16,81 +19,135 @@ interface RulesResponse {
 
 Page({
   data: {
-    rules: [] as RuleItem[],
     isLargeScreen: false,
     navBarHeight: 88,
     loading: false,
     initialLoading: true,
     error: null as string | null,
+    
+    activeCategory: 'rider',
+    categories: [
+      { label: '骑手规则', value: 'rider', icon: 'user' },
+      { label: '商户规则', value: 'merchant', icon: 'shop' },
+      { label: '平台策略', value: 'platform', icon: 'setting' }
+    ],
+    
+    rules: [] as RuleItem[],
+    categorizedRules: {
+      rider: [] as RuleItem[],
+      merchant: [] as RuleItem[],
+      platform: [] as RuleItem[]
+    },
+
+    // 编辑弹窗
+    showEdit: false,
+    editingRule: null as RuleItem | null,
+    newValue: ''
   },
 
   onLoad() {
-    this.setData({ isLargeScreen: isLargeScreen() })
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ 
+      isLargeScreen: isLargeScreen(),
+      navBarHeight 
+    })
     this.loadRules()
-  },
-
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
   async loadRules() {
     this.setData({ loading: true, error: null })
     try {
       const res = await request<RulesResponse>({ url: '/v1/operator/rules', method: 'GET' })
+      
+      // 模拟一些分类数据，以便 UI 展示更丰富（如果是真实后端，这些字段应由后端返回）
+      const enhancedRules = res.rules.map(rule => {
+        let category: any = 'platform'
+        let icon = 'info-circle'
+        
+        if (rule.key.includes('RIDER') || rule.key.includes('DELIVERY')) {
+          category = 'rider'
+          icon = 'user-assignment'
+        } else if (rule.key.includes('MERCHANT') || rule.key.includes('COMMISSION')) {
+          category = 'merchant'
+          icon = 'shop'
+        }
+        
+        return { ...rule, category, icon }
+      })
+
+      const categorized = {
+        rider: enhancedRules.filter(r => r.category === 'rider'),
+        merchant: enhancedRules.filter(r => r.category === 'merchant'),
+        platform: enhancedRules.filter(r => r.category === 'platform')
+      }
+
       this.setData({
-        rules: res.rules,
+        rules: enhancedRules,
+        categorizedRules: categorized,
         loading: false,
         initialLoading: false
       })
     } catch (error) {
-      console.error('加载规则配置失败:', error)
+      logger.error('加载规则配置失败:', error)
       this.setData({ 
         loading: false,
         initialLoading: false,
-        error: '加载规则配置失败' 
+        error: '加载规则配置失败，请检查网络或后端权限' 
       })
     }
   },
 
-  onRetry() {
-    this.loadRules()
+  switchCategory(e: any) {
+    const { val } = e.currentTarget.dataset
+    this.setData({ activeCategory: val })
   },
 
-  onEditRule(e: WechatMiniprogram.CustomEvent) {
+  onEditRule(e: any) {
     const { id } = e.currentTarget.dataset
     const rule = this.data.rules.find((r) => r.id === id)
     if (!rule) return
 
-    // 天气系数由系统更新，不允许手动修改
+    // 天气系数由系统同步，通常不允许手动修改（除非有特殊业务逻辑）
     if (rule.key === 'WEATHER_COEFFICIENT') {
-      wx.showToast({ title: '该规则由系统自动更新，无法手动修改', icon: 'none' })
+      wx.showToast({ title: '该项由气象接口同步，无法手动修改', icon: 'none' })
       return
     }
 
-    wx.showModal({
-      title: `修改${rule.name}`,
-      content: rule.value,
-      editable: true,
-      placeholderText: '请输入新值',
-      success: async (res) => {
-        if (res.confirm && res.content) {
-          try {
-            wx.showLoading({ title: '保存中...' })
-            await request({ 
-              url: `/v1/operator/rules/${rule.key}`, 
-              method: 'PATCH', 
-              data: { value: res.content } 
-            })
-            wx.hideLoading()
-            wx.showToast({ title: '修改成功', icon: 'success' })
-            this.loadRules()
-          } catch (err) {
-            wx.hideLoading()
-            console.error('修改规则失败:', err)
-            // request.ts 通常会自动显示错误 toast
-          }
-        }
-      }
+    this.setData({
+      showEdit: true,
+      editingRule: rule,
+      newValue: rule.value
     })
+  },
+
+  onValueChange(e: any) {
+    this.setData({ newValue: e.detail.value })
+  },
+
+  onCloseEdit() {
+    this.setData({ showEdit: false, editingRule: null })
+  },
+
+  async confirmEdit() {
+    const { editingRule, newValue } = this.data
+    if (!editingRule || newValue === '') return
+
+    try {
+      wx.showLoading({ title: '保存中...', mask: true })
+      await request({ 
+        url: `/v1/operator/rules/${editingRule.key}`, 
+        method: 'PATCH', 
+        data: { value: newValue } 
+      })
+      
+      wx.hideLoading()
+      wx.showToast({ title: '更新成功', icon: 'success' })
+      this.setData({ showEdit: false })
+      this.loadRules() // 重新加载以确认为最新数据
+    } catch (err: any) {
+      wx.hideLoading()
+      logger.error('修改规则失败:', err)
+      // request.ts 通常会自动显示错误 toast
+    }
   }
 })

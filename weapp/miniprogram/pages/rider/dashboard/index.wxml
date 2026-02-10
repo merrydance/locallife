@@ -65,16 +65,17 @@
       <t-tab-panel label="抢单大厅" value="hall">
         <view class="tab-content">
           <!-- 1. 骨架占位 -->
-          <block wx:if="{{loading && recommendOrders.length === 0}}">
-            <view class="order-card skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this">
-              <view class="skeleton-header"></view>
-              <view class="skeleton-content"></view>
-              <view class="skeleton-footer"></view>
-            </view>
-          </block>
+          <t-skeleton 
+            loading="{{loading && recommendOrders.length === 0}}" 
+            theme="list"
+            t-class="skeleton-item"
+            rowCol="{{ [1, 1, 1] }}"
+            wx:for="{{[1,2,3]}}"
+            wx:key="*this"
+          />
 
           <!-- 2. 真实订单 -->
-          <block wx:elif="{{recommendOrders.length > 0}}">
+          <block wx:if="{{recommendOrders.length > 0}}">
             <view 
               class="order-card grab-card" 
               wx:for="{{recommendOrders}}" 
@@ -143,15 +144,17 @@
       <t-tab-panel label="我的任务" value="my">
         <view class="tab-content">
           <!-- 1. 骨架占位 -->
-          <block wx:if="{{loading && activeDeliveries.length === 0}}">
-            <view class="order-card skeleton-card" wx:for="{{[1,2]}}" wx:key="*this">
-              <view class="skeleton-header"></view>
-              <view class="skeleton-content"></view>
-            </view>
-          </block>
+          <t-skeleton 
+            loading="{{loading && activeDeliveries.length === 0}}" 
+            theme="list"
+            t-class="skeleton-item"
+            rowCol="{{ [1, 1, 1] }}"
+            wx:for="{{[1,2]}}"
+            wx:key="*this"
+          />
 
           <!-- 2. 真实任务 -->
-          <block wx:elif="{{activeDeliveries.length > 0}}">
+          <block wx:if="{{activeDeliveries.length > 0}}">
             <view 
               class="order-card task-card {{item.is_overdue ? 'is-overdue' : ''}}" 
               wx:for="{{activeDeliveries}}" 

@@ -64,7 +64,8 @@
       "pages": [
         "detail/index",
         "list/index",
-        "tracking/index"
+        "tracking/index",
+        "success/index"
       ]
     },
     {
@@ -113,7 +114,23 @@
     { "root": "pages/user_center/wallet", "pages": ["index"] },
     { "root": "pages/user_center/payment-detail", "pages": ["index"] },
     { "root": "pages/user_center/refund-detail", "pages": ["index"] },
-    { "root": "pages/user_center/reservations", "pages": ["index"] }
+    {
+      "root": "pages/user_center/reservations",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/merchant",
+      "name": "merchant",
+      "pages": [
+        "dashboard/index",
+        "dishes/index",
+        "dishes/edit/index",
+        "orders/list/index",
+        "orders/detail/index",
+        "tables/index"
+      ],
+      "independent": false
+    }
   ],
   "preloadRule": {
     "pages/takeout/index": {

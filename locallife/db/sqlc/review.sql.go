@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -243,9 +244,11 @@ func (q *Queries) ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMe
 }
 
 const listReviewsByUser = `-- name: ListReviewsByUser :many
-SELECT id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at FROM reviews
-WHERE user_id = $1
-ORDER BY created_at DESC
+SELECT r.id, r.order_id, r.user_id, r.merchant_id, r.content, r.images, r.is_visible, r.merchant_reply, r.replied_at, r.created_at, m.name as merchant_name, m.logo_url as merchant_logo
+FROM reviews r
+JOIN merchants m ON r.merchant_id = m.id
+WHERE r.user_id = $1
+ORDER BY r.created_at DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -255,15 +258,30 @@ type ListReviewsByUserParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]Review, error) {
+type ListReviewsByUserRow struct {
+	ID            int64              `json:"id"`
+	OrderID       int64              `json:"order_id"`
+	UserID        int64              `json:"user_id"`
+	MerchantID    int64              `json:"merchant_id"`
+	Content       string             `json:"content"`
+	Images        []string           `json:"images"`
+	IsVisible     bool               `json:"is_visible"`
+	MerchantReply pgtype.Text        `json:"merchant_reply"`
+	RepliedAt     pgtype.Timestamptz `json:"replied_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	MerchantName  string             `json:"merchant_name"`
+	MerchantLogo  pgtype.Text        `json:"merchant_logo"`
+}
+
+func (q *Queries) ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]ListReviewsByUserRow, error) {
 	rows, err := q.db.Query(ctx, listReviewsByUser, arg.UserID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Review{}
+	items := []ListReviewsByUserRow{}
 	for rows.Next() {
-		var i Review
+		var i ListReviewsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrderID,
@@ -275,6 +293,8 @@ func (q *Queries) ListReviewsByUser(ctx context.Context, arg ListReviewsByUserPa
 			&i.MerchantReply,
 			&i.RepliedAt,
 			&i.CreatedAt,
+			&i.MerchantName,
+			&i.MerchantLogo,
 		); err != nil {
 			return nil, err
 		}

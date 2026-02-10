@@ -1,10 +1,11 @@
 {
-    "navigationBarTitleText": "规则配置",
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-loading": "tdesign-miniprogram/loading/loading",
-        "t-empty": "tdesign-miniprogram/empty/empty",
-        "card-skeleton": "/components/card-skeleton/index"
-    }
+  "usingComponents": {
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "custom-navbar": "/components/custom-navbar/custom-navbar"
+  },
+  "navigationStyle": "custom"
 }

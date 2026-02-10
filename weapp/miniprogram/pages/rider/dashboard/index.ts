@@ -7,6 +7,25 @@ import { globalStore } from '../../../utils/global-store'
 import { request } from '../../../utils/request'
 
 const app = getApp<IAppOption>()
+const MAX_GRAB_DISTANCE = 5000 // 最大抢单距离 5km
+
+/**
+ * 计算两个经纬度之间的距离（单位：米）
+ */
+function getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371e3 // 地球半径
+  const φ1 = lat1 * Math.PI / 180
+  const φ2 = lat2 * Math.PI / 180
+  const Δφ = (lat2 - lat1) * Math.PI / 180
+  const Δλ = (lng2 - lng1) * Math.PI / 180
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+  return R * c
+}
 
 Page({
   data: {
@@ -78,7 +97,7 @@ Page({
       if (status.is_online) {
         this.refreshData()
       }
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Failed to init rider data', err)
     } finally {
       this.setData({ loading: false })
@@ -125,7 +144,7 @@ Page({
         activeDeliveries: myDeliveries,
         isRefresherTriggered: false
       })
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Refresh data error', err)
       this.setData({ 
         recommendOrders: [],
@@ -278,8 +297,36 @@ Page({
     const { orderId } = e.currentTarget.dataset
     if (!orderId) return
 
-    wx.showLoading({ title: '抢单中...' })
+    const order = this.data.recommendOrders.find(o => o.order_id === orderId)
+    if (!order) return
+
+    wx.showLoading({ title: '校验中...' })
     try {
+      // 1. 获取当前位置进行 LBS 校验
+      const location = await this.getLocation().catch(() => null)
+      if (!location) {
+        wx.showToast({ title: '无法获取当前位置，抢单失败', icon: 'none' })
+        return
+      }
+
+      // 2. 物理距离校验
+      const distance = getDistance(
+        location.latitude,
+        location.longitude,
+        order.pickup_latitude,
+        order.pickup_longitude
+      )
+
+      if (distance > MAX_GRAB_DISTANCE) {
+        wx.showToast({ 
+          title: `距离过远 (约${(distance / 1000).toFixed(1)}km)，仅限${MAX_GRAB_DISTANCE / 1000}km内抢单`, 
+          icon: 'none',
+          duration: 3000
+        })
+        return
+      }
+
+      wx.showLoading({ title: '抢单中...' })
       await DeliveryService.grabOrder(orderId)
       wx.showToast({ title: '抢单成功！', icon: 'success' })
       
@@ -350,7 +397,7 @@ Page({
        
        // 震动提醒骑手
        wx.vibrateShort({ type: 'medium' });
-    });
+     });
 
     this.data._wsListeners = [goneSub, newSub];
   },
@@ -372,4 +419,3 @@ Page({
     this.refreshData().catch(err => logger.error('Manual refresh error', err));
   }
 })
-

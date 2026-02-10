@@ -29,6 +29,8 @@ type reviewResponse struct {
 	OrderID       int64    `json:"order_id"`
 	UserID        int64    `json:"user_id"`
 	MerchantID    int64    `json:"merchant_id"`
+	MerchantName  string   `json:"merchant_name,omitempty"`
+	MerchantLogo  string   `json:"merchant_logo,omitempty"`
 	Content       string   `json:"content"`
 	Images        []string `json:"images,omitempty"`
 	IsVisible     bool     `json:"is_visible"`
@@ -196,6 +198,29 @@ func (server *Server) getReview(ctx *gin.Context) {
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("review not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newReviewResponse(review))
+}
+
+// getReviewByOrder 根据订单ID获取评价
+func (server *Server) getReviewByOrder(ctx *gin.Context) {
+	var uri struct {
+		ID int64 `uri:"id" binding:"required,min=1"`
+	}
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	review, err := server.store.GetReviewByOrderID(ctx, uri.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("no review found for this order")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -373,7 +398,7 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 	}
 
 	response := gin.H{
-		"reviews":     newReviewListResponse(reviews),
+		"reviews":     newListReviewByUserResponse(reviews),
 		"total_count": count,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
@@ -565,6 +590,39 @@ func newReviewListResponse(reviews []db.Review) []reviewResponse {
 	responses := make([]reviewResponse, len(reviews))
 	for i, review := range reviews {
 		responses[i] = newReviewResponse(review)
+	}
+	return responses
+}
+
+func newListReviewByUserResponse(reviews []db.ListReviewsByUserRow) []reviewResponse {
+	responses := make([]reviewResponse, len(reviews))
+	for i, r := range reviews {
+		images := make([]string, 0, len(r.Images))
+		for _, img := range r.Images {
+			images = append(images, normalizeUploadURLForClient(img))
+		}
+
+		resp := reviewResponse{
+			ID:           r.ID,
+			OrderID:      r.OrderID,
+			UserID:       r.UserID,
+			MerchantID:   r.MerchantID,
+			MerchantName: r.MerchantName,
+			MerchantLogo: normalizeUploadURLForClient(r.MerchantLogo.String),
+			Content:      r.Content,
+			Images:       images,
+			IsVisible:    r.IsVisible,
+			CreatedAt:    r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+
+		if r.MerchantReply.Valid {
+			resp.MerchantReply = &r.MerchantReply.String
+		}
+		if r.RepliedAt.Valid {
+			repliedAt := r.RepliedAt.Time.Format("2006-01-02T15:04:05Z07:00")
+			resp.RepliedAt = &repliedAt
+		}
+		responses[i] = resp
 	}
 	return responses
 }

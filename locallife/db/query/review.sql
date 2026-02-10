@@ -31,9 +31,11 @@ WHERE merchant_id = $1
   AND is_visible = true;
 
 -- name: ListReviewsByUser :many
-SELECT * FROM reviews
-WHERE user_id = $1
-ORDER BY created_at DESC
+SELECT r.*, m.name as merchant_name, m.logo_url as merchant_logo
+FROM reviews r
+JOIN merchants m ON r.merchant_id = m.id
+WHERE r.user_id = $1
+ORDER BY r.created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountReviewsByUser :one

@@ -402,18 +402,54 @@ export async function createOrderFromCart(
   orderType: OrderType,
   options: {
     address_id?: number
-    voucher_id?: number
-    use_membership_discount?: boolean
+    use_balance?: boolean
+    user_voucher_id?: number
     notes?: string
     table_id?: number
-    guest_count?: number
     reservation_id?: number
+    // 前端计算透传字段
+    delivery_fee?: number
+    delivery_fee_discount?: number
+    delivery_distance?: number
   } = {}
 ): Promise<OrderResponse> {
-  // 这里需要先获取购物车数据，然后转换为订单格式
-  // 实际实现时需要调用购物车API
-  console.log('Creating order from cart for merchant:', merchantId, 'type:', orderType, 'options:', options)
-  throw new Error('需要先实现购物车到订单的转换逻辑')
+  const { getCart } = await import('./cart')
+  
+  // 1. 获取对应商户和类型的购物车数据
+  const cart = await getCart({
+    merchant_id: merchantId,
+    order_type: orderType,
+    table_id: options.table_id,
+    reservation_id: options.reservation_id
+  })
+
+  if (!cart || cart.items.length === 0) {
+    throw new Error('购物车为空，无法创建订单')
+  }
+
+  // 2. 将购物车项转换为订单项
+  const items: OrderItemRequest[] = cart.items.map(item => ({
+    dish_id: item.dish_id,
+    combo_id: item.combo_id,
+    quantity: item.quantity,
+    customizations: item.customizations as Record<string, number | string>
+  }))
+
+  // 3. 提交创建订单
+  return createOrder({
+    merchant_id: merchantId,
+    order_type: orderType,
+    items,
+    address_id: options.address_id,
+    use_balance: options.use_balance,
+    user_voucher_id: options.user_voucher_id,
+    notes: options.notes,
+    table_id: options.table_id,
+    reservation_id: options.reservation_id,
+    delivery_fee: options.delivery_fee,
+    delivery_fee_discount: options.delivery_fee_discount,
+    delivery_distance: options.delivery_distance
+  })
 }
 
 // ==================== 兼容性别名 ====================

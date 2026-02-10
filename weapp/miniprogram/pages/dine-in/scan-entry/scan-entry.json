@@ -1,14 +1,15 @@
 {
-    "navigationBarTitleText": "扫码点餐",
-    "navigationStyle": "custom",
-    "navigationBarBackgroundColor": "#667eea",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#667eea",
-    "enablePullDownRefresh": false,
-    "disableScroll": false,
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-empty": "tdesign-miniprogram/empty/empty"
-    }
+  "usingComponents": {
+    "t-navbar": "tdesign-miniprogram/navbar/navbar",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-avatar": "tdesign-miniprogram/avatar/avatar",
+    "t-divider": "tdesign-miniprogram/divider/divider",
+    "custom-navbar": "/components/custom-navbar/custom-navbar"
+  },
+  "navigationStyle": "custom"
 }

@@ -1,5 +1,6 @@
 import { ReservationService } from '../../../api/reservation'
 import { processPayment } from '../../../api/payment'
+import Navigation from '../../../utils/navigation'
 import { ReservationCardAdapter, ReservationDetailViewModel, ReservationCardViewModel } from '../../../adapters/reservation-card'
 import { logger } from '../../../utils/logger'
 
@@ -148,8 +149,12 @@ Page({
         wx.showLoading({ title: '拉起支付' })
         try {
             await processPayment(this.data.reservation.id, 'reservation')
-            wx.showToast({ title: '支付成功', icon: 'success' })
-            this.loadDetail()
+            
+            Navigation.toPaymentSuccess({
+                orderId: String(this.data.id),
+                orderNo: String(this.data.id),
+                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00'
+            })
         } catch (e) {
             logger.error('Pay failed', e)
             wx.showToast({ title: '支付未完成', icon: 'none' })

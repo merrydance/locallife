@@ -10,6 +10,8 @@ export interface Review {
     is_visible: boolean
     merchant_reply?: string
     replied_at?: string
+    merchant_name?: string
+    merchant_logo?: string
     created_at: string
 }
 
@@ -49,6 +51,17 @@ export class ReviewService {
             url: '/v1/reviews',
             method: 'POST',
             data
+        })
+    }
+
+    /**
+     * 获取指定订单的评价
+     * GET /v1/reviews/orders/:order_id
+     */
+    static async getReviewByOrderId(orderId: number): Promise<Review> {
+        return await request({
+            url: `/v1/reviews/orders/${orderId}`,
+            method: 'GET'
         })
     }
 
