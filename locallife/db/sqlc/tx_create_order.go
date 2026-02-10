@@ -25,7 +25,10 @@ type CreateOrderTxParams struct {
 	BalancePaid  int64  // 余额支付金额
 
 	// 配送精度相关（可选）
-	DeliveryDuration int32 // 配送预计在途时间（秒），由 LBS 真实路径计算得出
+	// 配送精度相关（可选）
+	DeliveryDuration   int32 // 配送预计在途时间（秒），由 LBS 真实路径计算得出
+	RiderAverageSpeed  int   // 骑手平均速度（km/h），用于兜底估算
+	DefaultPrepareTime int   // 默认出餐时间（分钟），用于兜底估算
 }
 
 // CreateOrderTxResult contains the result of the create order transaction
@@ -172,6 +175,23 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 			result.Transaction = &transaction
 		}
 
+		// 8. 🚀 如果是全额余额支付，在同一事务中直接完成支付处理（扣库存、推履约）
+		// P1-031 / P1-047 修复：原子化余额支付流程，避免“扣了余额但订单仍为pending”的情况
+		if arg.MembershipID != nil && arg.BalancePaid > 0 && arg.BalancePaid >= result.Order.TotalAmount {
+			paymentResult, err := processOrderPaymentWithQueries(ctx, q, ProcessOrderPaymentTxParams{
+				OrderID:            result.Order.ID,
+				RiderAverageSpeed:  arg.RiderAverageSpeed,
+				DefaultPrepareTime: arg.DefaultPrepareTime,
+				DeliveryDuration:   arg.DeliveryDuration,
+			})
+			if err != nil {
+				// 关键：如果扣库存或后续步骤失败，整个事务（包括余额扣除）回滚！
+				return fmt.Errorf("process atomic balance payment: %w", err)
+			}
+			// 更新返回结果中的订单状态
+			result.Order = paymentResult.Order
+		}
+
 		return nil
 	})
 
@@ -232,6 +252,12 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, arg Process
 			}
 		}
 		return result, nil
+	}
+
+	// P1-060 Fix: Ensure we only process Pending orders.
+	// If order is Cancelled/Refunded/Completed, we must not proceed with payment processing.
+	if order.Status != OrderStatusPending {
+		return result, fmt.Errorf("order status is %s, expected pending", order.Status)
 	}
 
 	// 2. Get order items

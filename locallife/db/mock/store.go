@@ -2481,6 +2481,21 @@ func (mr *MockStoreMockRecorder) CreateCombinedPaymentSubOrder(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCombinedPaymentSubOrder", reflect.TypeOf((*MockStore)(nil).CreateCombinedPaymentSubOrder), ctx, arg)
 }
 
+// CreateCombinedPaymentTx mocks base method.
+func (m *MockStore) CreateCombinedPaymentTx(ctx context.Context, arg db.CreateCombinedPaymentTxParams) (db.CreateCombinedPaymentTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCombinedPaymentTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateCombinedPaymentTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCombinedPaymentTx indicates an expected call of CreateCombinedPaymentTx.
+func (mr *MockStoreMockRecorder) CreateCombinedPaymentTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCombinedPaymentTx", reflect.TypeOf((*MockStore)(nil).CreateCombinedPaymentTx), ctx, arg)
+}
+
 // CreateComboSet mocks base method.
 func (m *MockStore) CreateComboSet(ctx context.Context, arg db.CreateComboSetParams) (db.ComboSet, error) {
 	m.ctrl.T.Helper()
@@ -10081,7 +10096,7 @@ func (mr *MockStoreMockRecorder) ListBehaviorAppealsByEntity(ctx, arg any) *gomo
 }
 
 // ListBehaviorDecisionsByOrder mocks base method.
-func (m *MockStore) ListBehaviorDecisionsByOrder(ctx context.Context, orderID int64) ([]db.BehaviorDecision, error) {
+func (m *MockStore) ListBehaviorDecisionsByOrder(ctx context.Context, orderID pgtype.Int8) ([]db.BehaviorDecision, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListBehaviorDecisionsByOrder", ctx, orderID)
 	ret0, _ := ret[0].([]db.BehaviorDecision)
@@ -10318,6 +10333,21 @@ func (m *MockStore) ListComboTags(ctx context.Context, comboID int64) ([]db.Tag,
 func (mr *MockStoreMockRecorder) ListComboTags(ctx, comboID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListComboTags", reflect.TypeOf((*MockStore)(nil).ListComboTags), ctx, comboID)
+}
+
+// ListCompletedOrdersMissingProfitSharing mocks base method.
+func (m *MockStore) ListCompletedOrdersMissingProfitSharing(ctx context.Context, limit int32) ([]db.ListCompletedOrdersMissingProfitSharingRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCompletedOrdersMissingProfitSharing", ctx, limit)
+	ret0, _ := ret[0].([]db.ListCompletedOrdersMissingProfitSharingRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCompletedOrdersMissingProfitSharing indicates an expected call of ListCompletedOrdersMissingProfitSharing.
+func (mr *MockStoreMockRecorder) ListCompletedOrdersMissingProfitSharing(ctx, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCompletedOrdersMissingProfitSharing", reflect.TypeOf((*MockStore)(nil).ListCompletedOrdersMissingProfitSharing), ctx, limit)
 }
 
 // ListDailyInventoryByDate mocks base method.
@@ -11713,6 +11743,21 @@ func (m *MockStore) ListPaidUnprocessedPaymentOrders(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) ListPaidUnprocessedPaymentOrders(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaidUnprocessedPaymentOrders", reflect.TypeOf((*MockStore)(nil).ListPaidUnprocessedPaymentOrders), ctx, arg)
+}
+
+// ListPaidUnrefundedPaymentOrders mocks base method.
+func (m *MockStore) ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPaidUnrefundedPaymentOrders", ctx, limit)
+	ret0, _ := ret[0].([]db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPaidUnrefundedPaymentOrders indicates an expected call of ListPaidUnrefundedPaymentOrders.
+func (mr *MockStoreMockRecorder) ListPaidUnrefundedPaymentOrders(ctx, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaidUnrefundedPaymentOrders", reflect.TypeOf((*MockStore)(nil).ListPaidUnrefundedPaymentOrders), ctx, limit)
 }
 
 // ListPaymentOrdersByUser mocks base method.
@@ -14117,6 +14162,21 @@ func (m *MockStore) SetOperatorWallet(ctx context.Context, arg db.SetOperatorWal
 func (mr *MockStoreMockRecorder) SetOperatorWallet(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOperatorWallet", reflect.TypeOf((*MockStore)(nil).SetOperatorWallet), ctx, arg)
+}
+
+// SetPaymentOrderCombinedID mocks base method.
+func (m *MockStore) SetPaymentOrderCombinedID(ctx context.Context, arg db.SetPaymentOrderCombinedIDParams) (db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetPaymentOrderCombinedID", ctx, arg)
+	ret0, _ := ret[0].(db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetPaymentOrderCombinedID indicates an expected call of SetPaymentOrderCombinedID.
+func (mr *MockStoreMockRecorder) SetPaymentOrderCombinedID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPaymentOrderCombinedID", reflect.TypeOf((*MockStore)(nil).SetPaymentOrderCombinedID), ctx, arg)
 }
 
 // SetPrimaryTableImage mocks base method.

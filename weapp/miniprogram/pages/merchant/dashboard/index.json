@@ -13,8 +13,8 @@
         "t-sticky": "tdesign-miniprogram/sticky/sticky",
         "t-divider": "tdesign-miniprogram/divider/divider",
         "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
-        "ec-canvas": "/components/ec-canvas/ec-canvas",
-        "custom-navbar": "/components/custom-navbar/custom-navbar"
+        "ec-canvas": "/components/ec-canvas/index",
+        "custom-navbar": "/components/custom-navbar/index"
     },
     "navigationStyle": "custom"
 }

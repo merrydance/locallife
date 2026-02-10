@@ -44,6 +44,7 @@ ORDER BY scope_type, scope_id;
 -- name: CreateBehaviorDecision :one
 INSERT INTO behavior_decisions (
     order_id,
+    reservation_id,
     user_id,
     merchant_id,
     rider_id,
@@ -54,7 +55,7 @@ INSERT INTO behavior_decisions (
     decision_status,
     trace_summary
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    sqlc.narg('order_id'), sqlc.narg('reservation_id'), $1, $2, $3, $4, $5, $6, $7, $8, $9
 ) RETURNING *;
 
 -- name: GetBehaviorDecision :one

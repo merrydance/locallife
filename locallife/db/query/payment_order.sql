@@ -127,3 +127,22 @@ RETURNING *;
 UPDATE payment_orders
 SET status = 'closed'
 WHERE status = 'pending' AND expires_at < now();
+
+-- name: ListPaidUnrefundedPaymentOrders :many
+SELECT po.*
+FROM payment_orders po
+JOIN orders o ON po.order_id = o.id
+WHERE 
+    po.status = 'paid' 
+    AND po.business_type = 'order' 
+    AND o.status = 'cancelled'
+    AND po.created_at > now() - INTERVAL '7 days'
+ORDER BY po.created_at
+LIMIT $1;
+
+-- name: SetPaymentOrderCombinedID :one
+UPDATE payment_orders
+SET combined_payment_id = $2
+WHERE id = $1
+RETURNING *;
+

@@ -89,7 +89,7 @@ func (s *ClaimRecoveryScheduler) runOnce() {
 			}); err != nil {
 				log.Error().Err(err).Int64("merchant_id", order.MerchantID).Msg("suspend merchant for recovery failed")
 			}
-			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, updated.OrderID); err == nil && len(decisions) > 0 {
+			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: updated.OrderID, Valid: true}); err == nil && len(decisions) > 0 {
 				detail, _ := json.Marshal(map[string]any{
 					"action":        "suspend_takeout",
 					"merchant_id":   order.MerchantID,
@@ -119,7 +119,7 @@ func (s *ClaimRecoveryScheduler) runOnce() {
 			}); err != nil {
 				log.Error().Err(err).Int64("rider_id", delivery.RiderID.Int64).Msg("suspend rider for recovery failed")
 			}
-			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, updated.OrderID); err == nil && len(decisions) > 0 {
+			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: updated.OrderID, Valid: true}); err == nil && len(decisions) > 0 {
 				detail, _ := json.Marshal(map[string]any{
 					"action":        "suspend_rider",
 					"rider_id":      delivery.RiderID.Int64,

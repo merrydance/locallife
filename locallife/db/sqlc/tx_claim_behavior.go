@@ -93,7 +93,8 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 		}
 
 		decision, err := q.CreateBehaviorDecision(ctx, CreateBehaviorDecisionParams{
-			OrderID:            arg.OrderID,
+			OrderID:            pgtype.Int8{Int64: arg.OrderID, Valid: true},
+			ReservationID:      pgtype.Int8{},
 			UserID:             pgtype.Int8{Int64: arg.UserID, Valid: true},
 			MerchantID:         pgtype.Int8{Int64: order.MerchantID, Valid: true},
 			RiderID:            riderID,

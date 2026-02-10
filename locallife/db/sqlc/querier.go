@@ -1016,7 +1016,7 @@ type Querier interface {
 	ListAvailableRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListAvailableRoomsForCustomerRow, error)
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)
-	ListBehaviorDecisionsByOrder(ctx context.Context, orderID int64) ([]BehaviorDecision, error)
+	ListBehaviorDecisionsByOrder(ctx context.Context, orderID pgtype.Int8) ([]BehaviorDecision, error)
 	ListBehaviorTraceSnapshotsByDecision(ctx context.Context, decisionID int64) ([]BehaviorTraceSnapshot, error)
 	ListBillingGroupOrdersByGroup(ctx context.Context, billingGroupID int64) ([]BillingGroupOrder, error)
 	ListBillingGroupsBySession(ctx context.Context, diningSessionID int64) ([]BillingGroup, error)
@@ -1038,6 +1038,7 @@ type Querier interface {
 	ListComboDishes(ctx context.Context, comboID int64) ([]ListComboDishesRow, error)
 	ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ComboSet, error)
 	ListComboTags(ctx context.Context, comboID int64) ([]Tag, error)
+	ListCompletedOrdersMissingProfitSharing(ctx context.Context, limit int32) ([]ListCompletedOrdersMissingProfitSharingRow, error)
 	ListDailyInventoryByDate(ctx context.Context, date pgtype.Date) ([]DailyInventory, error)
 	ListDailyInventoryByMerchant(ctx context.Context, arg ListDailyInventoryByMerchantParams) ([]ListDailyInventoryByMerchantRow, error)
 	ListDeliveriesByRider(ctx context.Context, arg ListDeliveriesByRiderParams) ([]Delivery, error)
@@ -1172,6 +1173,7 @@ type Querier interface {
 	ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersByUserAndStatusParams) ([]ListOrdersByUserAndStatusRow, error)
 	ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error)
 	ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error)
+	ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
 	ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOrdersByUserParams) ([]PaymentOrder, error)
 	ListPaymentOrdersByUserAndStatus(ctx context.Context, arg ListPaymentOrdersByUserAndStatusParams) ([]PaymentOrder, error)
 	ListPeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
@@ -1371,6 +1373,7 @@ type Querier interface {
 	// 先将用户的所有地址设为非默认
 	SetDefaultAddress(ctx context.Context, userID int64) error
 	SetOperatorWallet(ctx context.Context, arg SetOperatorWalletParams) error
+	SetPaymentOrderCombinedID(ctx context.Context, arg SetPaymentOrderCombinedIDParams) (PaymentOrder, error)
 	// 先清除所有主图标记，再设置新的主图
 	SetPrimaryTableImage(ctx context.Context, tableID int64) error
 	SetProfitSharingAuditActor(ctx context.Context, arg SetProfitSharingAuditActorParams) error

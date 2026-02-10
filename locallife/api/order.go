@@ -1492,14 +1492,16 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	// 创建订单（使用事务，同时处理优惠券核销和余额扣减）
 	txResult, err := server.store.CreateOrderTx(ctx, db.CreateOrderTxParams{
-		CreateOrderParams: arg,
-		Items:             items,
-		BillingGroupID:    req.BillingGroupID,
-		UserVoucherID:     userVoucherID,
-		VoucherAmount:     voucherAmount,
-		MembershipID:      membershipID,
-		BalancePaid:       balancePaid,
-		DeliveryDuration:  deliveryDuration,
+		CreateOrderParams:  arg,
+		Items:              items,
+		BillingGroupID:     req.BillingGroupID,
+		UserVoucherID:      userVoucherID,
+		VoucherAmount:      voucherAmount,
+		MembershipID:       membershipID,
+		BalancePaid:        balancePaid,
+		DeliveryDuration:   deliveryDuration,
+		RiderAverageSpeed:  server.config.RiderAverageSpeed,
+		DefaultPrepareTime: server.config.DefaultPrepareTime,
 	})
 	if err != nil {
 		// 处理特定错误
@@ -1517,21 +1519,6 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	}
-
-	// 如果是余额全额支付，则自动推进订单状态和后续流程（扣库存、发配送等）
-	if req.UseBalance && balancePaid >= totalAmount && txResult.Order.Status == OrderStatusPending {
-		paymentResult, err := server.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{
-			OrderID:            txResult.Order.ID,
-			RiderAverageSpeed:  server.config.RiderAverageSpeed,
-			DefaultPrepareTime: server.config.DefaultPrepareTime,
-		})
-		if err != nil {
-			log.Error().Err(err).Int64("order_id", txResult.Order.ID).Msg("failed to process automatic balance payment")
-			// 即使失败也继续，因为订单已创建且余额已扣，只是状态未同步更新，可以通过管理后台手动补推
-		} else {
-			txResult.Order = paymentResult.Order
-		}
 	}
 
 	resp := newOrderResponse(txResult.Order)

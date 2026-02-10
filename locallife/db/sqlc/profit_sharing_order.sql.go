@@ -776,6 +776,45 @@ func (q *Queries) GetRiderProfitSharingStats(ctx context.Context, arg GetRiderPr
 	return i, err
 }
 
+const listCompletedOrdersMissingProfitSharing = `-- name: ListCompletedOrdersMissingProfitSharing :many
+SELECT po.id AS payment_order_id, po.order_id
+FROM payment_orders po
+JOIN orders o ON po.order_id = o.id
+LEFT JOIN profit_sharing_orders pso ON po.id = pso.payment_order_id
+WHERE 
+    po.status = 'paid' 
+    AND po.payment_type = 'profit_sharing'
+    AND o.status = 'completed'
+    AND pso.id IS NULL
+    AND o.updated_at > now() - INTERVAL '7 days'
+LIMIT $1
+`
+
+type ListCompletedOrdersMissingProfitSharingRow struct {
+	PaymentOrderID int64       `json:"payment_order_id"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+}
+
+func (q *Queries) ListCompletedOrdersMissingProfitSharing(ctx context.Context, limit int32) ([]ListCompletedOrdersMissingProfitSharingRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedOrdersMissingProfitSharing, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedOrdersMissingProfitSharingRow{}
+	for rows.Next() {
+		var i ListCompletedOrdersMissingProfitSharingRow
+		if err := rows.Scan(&i.PaymentOrderID, &i.OrderID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMerchantFinanceOrders = `-- name: ListMerchantFinanceOrders :many
 SELECT 
     p.id,
@@ -788,7 +827,8 @@ SELECT
     p.status,
     p.created_at,
     p.finished_at,
-    po.order_id
+    po.order_id,
+    po.reservation_id
 FROM profit_sharing_orders p
 JOIN payment_orders po ON po.id = p.payment_order_id
 WHERE p.merchant_id = $1
@@ -817,6 +857,7 @@ type ListMerchantFinanceOrdersRow struct {
 	CreatedAt          time.Time          `json:"created_at"`
 	FinishedAt         pgtype.Timestamptz `json:"finished_at"`
 	OrderID            pgtype.Int8        `json:"order_id"`
+	ReservationID      pgtype.Int8        `json:"reservation_id"`
 }
 
 // 商户财务订单明细（带分账信息）
@@ -847,6 +888,7 @@ func (q *Queries) ListMerchantFinanceOrders(ctx context.Context, arg ListMerchan
 			&i.CreatedAt,
 			&i.FinishedAt,
 			&i.OrderID,
+			&i.ReservationID,
 		); err != nil {
 			return nil, err
 		}

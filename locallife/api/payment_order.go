@@ -77,6 +77,7 @@ type createCombinedPaymentOrderRequest struct {
 
 type combinedPaymentSubOrderResponse struct {
 	OrderID             int64  `json:"order_id"`
+	PaymentOrderID      int64  `json:"payment_order_id"`
 	MerchantID          int64  `json:"merchant_id"`
 	SubMchID            string `json:"sub_mch_id"`
 	Amount              int64  `json:"amount"`
@@ -487,180 +488,41 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	expiresAt := time.Now().Add(30 * time.Minute)
 	combineOutTradeNo := generateOutTradeNoWithPrefix("CP")
 
-	type combinedOrderInfo struct {
-		order         db.Order
-		paymentConfig db.MerchantPaymentConfig
-		paymentOrder  *db.PaymentOrder
-		description   string
-	}
-	orderInfos := make([]combinedOrderInfo, 0, len(orderIDs))
-	var totalAmount int64
-
-	for _, orderID := range orderIDs {
-		order, err := server.store.GetOrder(ctx, orderID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if order.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-			return
-		}
-
-		if order.Status != OrderStatusPending {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in pending status")))
-			return
-		}
-
-		paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant payment config not found")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if paymentConfig.Status != "active" || paymentConfig.SubMchID == "" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant payment config is not active")))
-			return
-		}
-
-		merchant, err := server.store.GetMerchant(ctx, order.MerchantID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		description := fmt.Sprintf("%s - 订单支付", merchant.Name)
-
-		var paymentOrder *db.PaymentOrder
-		existing, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-			BusinessType: BusinessTypeOrder,
-		})
-		if err == nil {
-			if existing.Status == PaymentStatusPending {
-				if existing.PaymentType != PaymentTypeProfitShare {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("existing pending payment order found")))
-					return
-				}
-				if existing.Amount != order.TotalAmount {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("payment amount mismatch")))
-					return
-				}
-				paymentOrder = &existing
-			} else {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order already has a payment record")))
-				return
-			}
-		} else if !errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		orderInfos = append(orderInfos, combinedOrderInfo{
-			order:         order,
-			paymentConfig: paymentConfig,
-			paymentOrder:  paymentOrder,
-			description:   description,
-		})
-		totalAmount += order.TotalAmount
-	}
-
-	combinedPayment, err := server.store.CreateCombinedPaymentOrder(ctx, db.CreateCombinedPaymentOrderParams{
+	// 使用原子事务创建合单支付记录
+	// P1-009 Fix: 确保跨子单操作原子性
+	result, err := server.store.CreateCombinedPaymentTx(ctx, db.CreateCombinedPaymentTxParams{
 		UserID:            authPayload.UserID,
+		OrderIDs:          orderIDs,
 		CombineOutTradeNo: combineOutTradeNo,
-		TotalAmount:       totalAmount,
-		Status:            PaymentStatusPending,
-		ExpiresAt:         pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ExpiresAt:         expiresAt,
 	})
 	if err != nil {
+		// 转换错误响应
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
+	combinedPayment := result.CombinedPaymentOrder
+
 	var subOrders []combinedPaymentSubOrderResponse
-	wechatSubOrders := make([]wechat.SubOrder, 0, len(orderInfos))
+	wechatSubOrders := make([]wechat.SubOrder, 0, len(result.OrderInfos))
 
-	for _, info := range orderInfos {
-		order := info.order
-		paymentConfig := info.paymentConfig
-		description := info.description
-
-		paymentOrder := info.paymentOrder
-		if paymentOrder == nil {
-			var created db.PaymentOrder
-			var createErr error
-			for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-				outTradeNo := generateOutTradeNoWithPrefix("C")
-				created, createErr = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-					OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-					UserID:       authPayload.UserID,
-					PaymentType:  PaymentTypeProfitShare,
-					BusinessType: BusinessTypeOrder,
-					Amount:       order.TotalAmount,
-					OutTradeNo:   outTradeNo,
-					ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-				})
-				if createErr == nil {
-					break
-				}
-				if isOutTradeNoConflict(createErr) && attempt < outTradeNoMaxRetry {
-					if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
-						ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
-						return
-					}
-					continue
-				}
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, createErr))
-				return
-			}
-			paymentOrder = &created
-		}
-
-		_, err = server.store.CreateCombinedPaymentSubOrder(ctx, db.CreateCombinedPaymentSubOrderParams{
-			CombinedPaymentID: combinedPayment.ID,
-			OrderID:           order.ID,
-			MerchantID:        order.MerchantID,
-			SubMchid:          paymentConfig.SubMchID,
-			Amount:            order.TotalAmount,
-			OutTradeNo:        paymentOrder.OutTradeNo,
-			Description:       description,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if server.taskDistributor != nil {
-			_ = server.taskDistributor.DistributeTaskPaymentOrderTimeout(
-				ctx,
-				&worker.PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrder.OutTradeNo},
-				asynq.ProcessAt(expiresAt),
-			)
-		}
-
-		subOrders = append(subOrders, combinedPaymentSubOrderResponse{
-			OrderID:     order.ID,
-			MerchantID:  order.MerchantID,
-			SubMchID:    paymentConfig.SubMchID,
-			Amount:      order.TotalAmount,
-			OutTradeNo:  paymentOrder.OutTradeNo,
-			Description: description,
-		})
+	for _, info := range result.OrderInfos {
+		description := fmt.Sprintf("%s - 订单支付", info.Merchant.Name)
 
 		wechatSubOrders = append(wechatSubOrders, wechat.SubOrder{
-			MchID:         paymentConfig.SubMchID,
-			OutTradeNo:    paymentOrder.OutTradeNo,
-			Description:   description,
-			Amount:        order.TotalAmount,
-			ProfitSharing: true,
-			Attach:        fmt.Sprintf("order_id:%d", order.ID),
+			MchID:       info.PaymentConfig.SubMchID,
+			Amount:      info.PaymentOrder.Amount,
+			OutTradeNo:  info.PaymentOrder.OutTradeNo,
+			Description: description,
+			Attach:      info.PaymentOrder.Attach.String,
+		})
+
+		subOrders = append(subOrders, combinedPaymentSubOrderResponse{
+			OrderID:        info.Order.ID,
+			PaymentOrderID: info.PaymentOrder.ID,
+			Amount:         info.PaymentOrder.Amount,
+			OutTradeNo:     info.PaymentOrder.OutTradeNo,
 		})
 	}
 
@@ -690,7 +552,7 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	resp := combinedPaymentOrderResponse{
 		ID:                combinedPayment.ID,
 		CombineOutTradeNo: combinedPayment.CombineOutTradeNo,
-		TotalAmount:       totalAmount,
+		TotalAmount:       combinedPayment.TotalAmount,
 		Status:            combinedPayment.Status,
 		SubOrders:         subOrders,
 	}

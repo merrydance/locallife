@@ -114,4 +114,38 @@ func (s *ProfitSharingRecoveryScheduler) runOnce() {
 				Msg("enqueue profit sharing recovery task failed")
 		}
 	}
+
+	// 新增：扫描已完成但未创建分账单的订单（P1-046 修复）
+	missingOrders, err := s.store.ListCompletedOrdersMissingProfitSharing(ctx, profitSharingRecoveryBatchLimit)
+	if err != nil {
+		log.Error().Err(err).Msg("list completed orders missing profit sharing failed")
+		return
+	}
+
+	for _, row := range missingOrders {
+		if !row.OrderID.Valid {
+			continue
+		}
+
+		log.Warn().
+			Int64("payment_order_id", row.PaymentOrderID).
+			Int64("order_id", row.OrderID.Int64).
+			Msg("found completed order with missing profit sharing, triggering recovery")
+
+		err := s.distributor.DistributeTaskProcessProfitSharing(
+			ctx,
+			&ProfitSharingPayload{
+				PaymentOrderID: row.PaymentOrderID,
+				OrderID:        row.OrderID.Int64,
+			},
+			asynq.MaxRetry(5),
+			asynq.Queue(QueueCritical),
+		)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", row.PaymentOrderID).
+				Int64("order_id", row.OrderID.Int64).
+				Msg("enqueue missing profit sharing recovery task failed")
+		}
+	}
 }

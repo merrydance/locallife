@@ -6,60 +6,63 @@
 
 ### 核心风险总结 (2026-02-06 审计发现)
 
-| 编号       | 风险等级 | 类别          | 描述                                                                                                                   |
-| :--------- | :------- | :------------ | :--------------------------------------------------------------------------------------------------------------------- |
-| **P1-001** | Critical | 基础设施      | `app.env.example` 缺失关键微信配置，生产环境部署风险。                                                                 |
-| **P1-002** | Medium   | 日志          | `main.go` 默认日志级别过高，可能掩盖底层数据库错误。                                                                   |
-| **P1-003** | High     | 安全/配送     | `grabOrder` 缺失骑手物理距离校验，允许异地抢单。                                                                       |
-| **P1-004** | High     | 安全/索赔     | `SubmitClaim` 在规则引擎故障时缺乏可靠的降级保护。                                                                     |
-| **P1-005** | Resolved | 安全/配送     | ~~`confirmDelivery` 缺失 LBS 地理围栏校验~~ (**已修复**: `DeliveryConfirmRadiusMeters` 500米围栏校验)                  |
-| **P1-006** | Critical | 架构约束      | 违反 Rule 3：`api/*.go` 堆积了大量核心业务逻辑，未解耦至 logic 层。                                                    |
-| **P1-007** | Resolved | 事务/SSOT     | ~~`adjustMemberBalance` 余额变动与流水记录未在同一事务内~~ (**已修复**: `AdjustMemberBalanceTx` 原子事务)              |
-| **P1-008** | Medium   | 业务逻辑      | `promotion_engine` 暂未支持真实的本金/赠额拆分汇总。                                                                   |
-| **P1-009** | High     | 事务/SSOT     | `createCombinedPaymentOrder` 跨子单操作缺乏原子性保证。                                                                |
-| **P1-010** | Resolved | 业务逻辑      | ~~`Appeal` (申诉) 接口缺失时效窗口限制~~ (**已修复**: `AppealWindowDays` 7天窗口期检查)                                |
-| **P1-011** | High     | 一致性        | `createOrder` 在事务外预计算余额，存在高并发下的脏读风险。                                                             |
-| **P1-012** | Resolved | 并发/SSOT     | ~~`renewAccessToken` 刷新令牌时未对 Session 加锁，存在竞态风险。~~ (**已修复**: `RefreshSessionTx` + `FOR UPDATE`)     |
-| **P1-013** | Low      | 性能          | RBAC 中间件多次重复查询相同实体（商户/骑手），增加 DB 压力。                                                           |
-| **P1-014** | Medium   | 安全          | 权限校验链路不统一，部分路由未接入全局 Casbin Enforcer。                                                               |
-| **P1-015** | Low      | 业务逻辑      | 购物车预览阶段缺失阶梯优惠与代金券试算功能。                                                                           |
-| **P1-016** | Resolved | 并发/业务     | ~~`addCartItem` 数量上限校验与数据库写入非原子操作~~ (**已修复**: SQL `WHERE quantity + amount <= 99` 原子保护)        |
-| **P1-017** | Medium   | 安全          | 运费校验虽然记录了差异但主要依赖前端传入，防篡改策略相对宽松。                                                         |
-| **P1-018** | Medium   | 业务逻辑      | 营销引擎缺乏“互斥/叠加”规则的可视化配置，当前代码逻辑较硬。                                                            |
-| **P1-019** | Resolved | 安全/频控     | ~~`urgeOrder` (催单) 完全缺失速率限制~~ (**已修复**: 5分钟窗口最多3次限频)                                             |
-| **P1-020** | Resolved | 事务/SSOT     | ~~`replaceOrder` 跨表操作（创建新单并标记旧单）未在同一个事务内执行~~ (**已修复**: `ReplaceOrderTx`)                   |
-| **P1-021** | High     | 性能/成本     | 骑手推荐列表实时调用 OSM 骑行路径计算且无缓存，高并发下成本/延时极高。                                                 |
-| **P1-022** | Resolved | 业务逻辑      | ~~`scanTable` 仅校验商户审核状态，未校验实时营业状态 (`is_open`)~~ (**已修复**: 增加 `IsOpen` 检查)                    |
-| **P1-023** | Resolved | 魔数/Rule 5   | ~~堂食/预订签到窗口（30分钟）为硬编码魔法数字~~ (**已修复**: 改用 `ReservationCheckInEarlyMinutes` 常量)               |
-| **P1-024** | Medium   | 可靠性        | `SendNotification` 在非 Worker 模式下同步执行 I/O，可能阻塞 API 响应。                                                 |
-| **P1-025** | Medium   | 逻辑泄露      | `cleanupStaleDeliveries` 自动取消订单时未显式触发退款 Worker 任务。                                                    |
-| **P1-026** | Low      | 维护性        | 购物车 (`carts` 表) 缺失定时清理机制，长期运行可能导致数据膨胀。                                                       |
-| **P1-027** | Resolved | 一致性        | ~~`adjustMemberBalance` 未使用 DB 事务包裹“余额更新”与“流水记录”~~ (**已修复**: 同 P1-007)                             |
-| **P1-028** | Resolved | 并发/死锁     | ~~`CancelOrderTx` 还原库存时未按 `dish_id` 排序~~ (**已修复**: `sort.Slice` 按 DishID 排序)                            |
-| **P1-029** | Resolved | 事务/一致性   | ~~预定取消/爽约与库存释放非原子操作~~ (**已修复**: `CancelReservationTx` 事务内释放库存)                               |
-| **P1-030** | Resolved | 事务/SSOT     | ~~`grabOrder` 抢单逻辑分解为多次独立事务~~ (**已修复**: `GrabOrderTx` 原子事务)                                        |
-| **P1-031** | Critical | 事务/资金     | 余额下单模式下，订单创建与支付确认非原子，失败会导致“扣钱未得货”。                                                     |
-| **P1-032** | Medium   | 可靠性        | `cancelOrder` 分步执行状态变更与退款任务入队，入队失败会导致退款丢失。                                                 |
-| **P1-033** | Medium   | 并发/一致性   | Casbin 策略更新缺失多实例同步机制，可能导致各节点权限状态不一致。                                                      |
-| **P1-034** | Medium   | 可靠性/资金   | `rejectOrder` 直接同步调用微信退款 API，失败无任务补偿机制，易丢单。                                                   |
-| **P1-035** | Resolved | 并发/一致性   | ~~`kitchen` 状态变更未像 `api/order` 一样加锁~~ (**已修复**: `UpdateOrderToPreparing`/`UpdateOrderToReady` 带状态条件) |
-| **P1-036** | Resolved | 事务/资金     | ~~`confirmDelivery` 将送达确认、订单完结、押金解冻拆为多笔事务~~ (**已修复**: `CompleteDeliveryTx` 原子事务)           |
-| **P1-037** | Resolved | 逻辑/一致性   | ~~`submitMerchantApplication` 提交时未校验 OCR 任务是否全部完成~~ (**已修复**: 审核时检查所有 OCR 数据)                |
-| **P1-038** | Medium   | 安全/防欺诈   | 自动审核系统缺失针对营业执照、身份证的历史库查重，易被恶意 P 图绕过。                                                  |
-| **P1-039** | Medium   | 逻辑/数据     | `CheckMerchantAddressExists` 字符串匹配逻辑太初级，易被“XX路1号”与“XX路一号”绕过。                                     |
-| **P1-040** | Resolved | 安全/CSRF     | ~~WebSocket `CheckOrigin` 在配置为空时默认为 `*`~~ (**已修复**: 使用 `isOriginAllowed()` 白名单校验)                   |
-| **P1-041** | High     | 架构/可用性   | WebSocketHub 缺失 Redis Pub/Sub 订阅，多实例部署时通知无法跨节点同步（已确认缺失）。                                   |
-| **P1-042** | Resolved | 逻辑/健壮性   | ~~`Hub.unregisterClient` 在 platform 类型下缺失 client 实例校验~~ (**已修复**: 所有类型都有 `existing == client` 校验) |
-| **P1-043** | High     | 架构/并发     | `robfig/cron` 缺失分布式锁（如 Redis Lock），多实例部署会导致定时任务重复执行。                                        |
-| **P1-044** | Medium   | 逻辑/原子性   | 异步任务（如 OCR）缺乏最终一致性对齐，若任务执行中系统崩溃，申请可能永久卡在 pending。                                 |
-| **P1-045** | High     | 安全/合规     | `TOKEN_SYMMETRIC_KEY` 等核心秘钥缺乏自动轮转机制，长期暴露增加被破解风险。                                             |
-| **P1-046** | Medium   | 逻辑/可靠性   | `confirmOrder` 异步分发分账任务失败无补偿，可能导致商户无法收到资金。                                                  |
-| **P1-047** | High     | 逻辑/金融安全 | 余额支付在 `CreateOrderTx` 扣除但在后续 `ProcessOrderPaymentTx` 失败时无回滚，导致“僵尸扣款”。                         |
-| **P1-058** | Medium   | 逻辑/并发     | `tryWebSocketPush` 对每一条通知都进行角色查询，在高并发下可能导致 DB 压力。                                            |
-| **P1-059** | Resolved | 事务/资金     | ~~`CancelOrderTx` (订单取消) 缺失会员余额回滚逻辑~~ (**已修复**: 事务内原子回滚余额+创建退款流水)                      |
-| **P1-060** | High     | 逻辑/并发     | `ProcessOrderPaymentTx` 在 inventory 扣减后未对 `PaymentOrder` 状态做最终强制校验。                                    |
-| **P1-061** | Medium   | 逻辑/同步     | `getMerchantFinanceOverview` 跨日期统计未加缓存，且未对超大时间跨度做严格限制。                                        |
-| **P1-062** | Resolved | 安全/身份     | ~~`bindPhone` 接口允许绑定任意手机号~~ (已移除该功能，因业务不需要且微信接口收费)。                                    |
+| 编号       | 风险等级 | 类别        | 描述                                                                                                                                                                             |
+| :--------- | :------- | :---------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P1-001** | Resolved | 基础设施    | ~~`app.env.example` 缺失关键微信配置，生产环境部署风险。~~ (**已修复**: Verified `WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH` and other keys are present)                               |
+| **P1-002** | Medium   | 日志        | `main.go` 默认日志级别过高，可能掩盖底层数据库错误。                                                                                                                             |
+| **P1-003** | Resolved | 安全/配送   | ~~`grabOrder` 缺失骑手物理距离校验，允许异地抢单。~~ (**已修复**: `MaxGrabOrderDistanceMeters` 5公里距离校验)                                                                    |
+| **P1-004** | Resolved | 安全/索赔   | ~~`SubmitClaim` 在规则引擎故障时缺乏可靠的降级保护。~~ (**已修复**: Implemented fallback to manual review with error logging.)                                                   |
+| **P1-005** | Resolved | 安全/配送   | ~~`confirmDelivery` 缺失 LBS 地理围栏校验~~ (**已修复**: `DeliveryConfirmRadiusMeters` 500米围栏校验)                                                                            |
+| **P1-006** | Critical | 架构约束    | 违反 Rule 3：`api/*.go` 堆积了大量核心业务逻辑，未解耦至 logic 层。                                                                                                              |
+| **P1-007** | Resolved | 事务/SSOT   | ~~`adjustMemberBalance` 余额变动与流水记录未在同一事务内~~ (**已修复**: `AdjustMemberBalanceTx` 原子事务)                                                                        |
+| **P1-008** | Medium   | 业务逻辑    | `promotion_engine` 暂未支持真实的本金/赠额拆分汇总。                                                                                                                             |
+| **P1-009** | Resolved | 事务/SSOT   | ~~`createCombinedPaymentOrder` 跨子单操作缺乏原子性保证。~~ (**已修复**: `CreateCombinedPaymentTx` 原子事务)                                                                     |
+| **P1-010** | Resolved | 业务逻辑    | ~~`Appeal` (申诉) 接口缺失时效窗口限制~~ (**已修复**: `AppealWindowDays` 7天窗口期检查)                                                                                          |
+| **P1-011** | Resolved | 一致性      | ~~`createOrder` 在事务外预计算余额，存在高并发下的脏读风险。~~ (**已修复**: `CreateOrderTx` 内使用 `FOR UPDATE` 锁校验)                                                          |
+| **P1-012** | Resolved | 并发/SSOT   | ~~`renewAccessToken` 刷新令牌时未对 Session 加锁，存在竞态风险。~~ (**已修复**: `RefreshSessionTx` + `FOR UPDATE`)                                                               |
+| **P1-013** | Low      | 性能        | RBAC 中间件多次重复查询相同实体（商户/骑手），增加 DB 压力。                                                                                                                     |
+| **P1-014** | Medium   | 安全        | 权限校验链路不统一，部分路由未接入全局 Casbin Enforcer。                                                                                                                         |
+| **P1-015** | Low      | 业务逻辑    | 购物车预览阶段缺失阶梯优惠与代金券试算功能。                                                                                                                                     |
+| **P1-016** | Resolved | 并发/业务   | ~~`addCartItem` 数量上限校验与数据库写入非原子操作~~ (**已修复**: SQL `WHERE quantity + amount <= 99` 原子保护)                                                                  |
+| **P1-017** | Medium   | 安全        | 运费校验虽然记录了差异但主要依赖前端传入，防篡改策略相对宽松。                                                                                                                   |
+| **P1-018** | Medium   | 业务逻辑    | 营销引擎缺乏“互斥/叠加”规则的可视化配置，当前代码逻辑较硬。                                                                                                                      |
+| **P1-019** | Resolved | 安全/频控   | ~~`urgeOrder` (催单) 完全缺失速率限制~~ (**已修复**: 5分钟窗口最多3次限频)                                                                                                       |
+| **P1-020** | Resolved | 事务/SSOT   | ~~`replaceOrder` 跨表操作（创建新单并标记旧单）未在同一个事务内执行~~ (**已修复**: `ReplaceOrderTx`)                                                                             |
+| **P1-021** | High     | 性能/成本   | 骑手推荐列表实时调用 OSM 骑行路径计算且无缓存，高并发下成本/延时极高。                                                                                                           |
+| **P1-022** | Resolved | 业务逻辑    | ~~`scanTable` 仅校验商户审核状态，未校验实时营业状态 (`is_open`)~~ (**已修复**: 增加 `IsOpen` 检查)                                                                              |
+| **P1-023** | Resolved | 魔数/Rule 5 | ~~堂食/预订签到窗口（30分钟）为硬编码魔法数字~~ (**已修复**: 改用 `ReservationCheckInEarlyMinutes` 常量)                                                                         |
+| **P1-024** | Medium   | 可靠性      | `SendNotification` 在非 Worker 模式下同步执行 I/O，可能阻塞 API 响应。                                                                                                           |
+| **P1-025** | Medium   | 逻辑泄露    | `cleanupStaleDeliveries` 自动取消订单时未显式触发退款 Worker 任务。                                                                                                              |
+| **P1-026** | Low      | 维护性      | 购物车 (`carts` 表) 缺失定时清理机制，长期运行可能导致数据膨胀。                                                                                                                 |
+| **P1-027** | Resolved | 一致性      | ~~`adjustMemberBalance` 未使用 DB 事务包裹“余额更新”与“流水记录”~~ (**已修复**: 同 P1-007)                                                                                       |
+| **P1-028** | Resolved | 并发/死锁   | ~~`CancelOrderTx` 还原库存时未按 `dish_id` 排序~~ (**已修复**: `sort.Slice` 按 DishID 排序)                                                                                      |
+| **P1-029** | Resolved | 事务/一致性 | ~~预定取消/爽约与库存释放非原子操作~~ (**已修复**: `CancelReservationTx` 事务内释放库存)                                                                                         |
+| **P1-030** | Resolved | 事务/SSOT   | ~~`grabOrder` 抢单逻辑分解为多次独立事务~~ (**已修复**: `GrabOrderTx` 原子事务)                                                                                                  |
+| **P1-031** | Resolved | 事务/资金   | ~~余额下单模式下，订单创建与支付确认非原子~~ (**已修复**: `CreateOrderTx` 集成扣库存逻辑，全原子操作)                                                                            |
+| **P1-032** | Resolved | 可靠性      | ~~`cancelOrder` 分步执行状态变更与退款任务入队，入队失败会导致退款丢失。~~ (**已修复**: `RefundRecoveryScheduler` 自动扫描补偿)                                                  |
+| **P1-033** | Accepted | 并发/一致性 | Casbin 策略更新缺失多实例同步机制。(用户确认: 两年内仅单实例部署，暂不修复)                                                                                                      |
+| **P1-034** | Resolved | 可靠性/资金 | ~~`rejectOrder` 直接同步调用微信退款 API，失败无任务补偿机制，易丢单。~~ (**已修复**: `RefundRecoveryScheduler` 自动扫描补偿)                                                    |
+| **P1-035** | Resolved | 并发/一致性 | ~~`kitchen` 状态变更未像 `api/order` 一样加锁~~ (**已修复**: `UpdateOrderToPreparing`/`UpdateOrderToReady` 带状态条件)                                                           |
+| **P1-036** | Resolved | 事务/资金   | ~~`confirmDelivery` 将送达确认、订单完结、押金解冻拆为多笔事务~~ (**已修复**: `CompleteDeliveryTx` 原子事务)                                                                     |
+| **P1-037** | Resolved | 逻辑/一致性 | ~~`submitMerchantApplication` 提交时未校验 OCR 任务是否全部完成~~ (**已修复**: 审核时检查所有 OCR 数据)                                                                          |
+| **P1-038** | Medium   | 安全/防欺诈 | 自动审核系统缺失针对营业执照、身份证的历史库查重，易被恶意 P 图绕过。                                                                                                            |
+| **P1-039** | Medium   | 逻辑/数据   | `CheckMerchantAddressExists` 字符串匹配逻辑太初级，易被“XX路1号”与“XX路一号”绕过。                                                                                               |
+| **P1-040** | Resolved | 安全/CSRF   | ~~WebSocket `CheckOrigin` 在配置为空时默认为 `*`~~ (**已修复**: 使用 `isOriginAllowed()` 白名单校验)                                                                             |
+| **P1-041** | Accepted | 架构/可用性 | WebSocketHub 缺失 Redis Pub/Sub 订阅。(用户确认: 两年内仅单实例部署，暂不修复)                                                                                                   |
+| **P1-042** | Resolved | 逻辑/健壮性 | ~~`Hub.unregisterClient` 在 platform 类型下缺失 client 实例校验~~ (**已修复**: 所有类型都有 `existing == client` 校验)                                                           |
+| **P1-043** | Accepted | 架构/并发   | `robfig/cron` 缺失分布式锁。(用户确认: 两年内仅单实例部署，暂不修复)                                                                                                             |
+| **P1-044** | Medium   | 逻辑/原子性 | 异步任务（如 OCR）缺乏最终一致性对齐，若任务执行中系统崩溃，申请可能永久卡在 pending。                                                                                           |
+| **P1-045** | Accepted | 安全/合规   | `TOKEN_SYMMETRIC_KEY` 等核心秘钥缺乏自动轮转机制。(用户确认: 运维手动管理，Accept风险)                                                                                           |
+| **P1-046** | Resolved | 逻辑/可靠性 | ~~`confirmOrder` 异步分发分账任务失败无补偿，可能导致商户无法收到资金。~~ (**已修复**: `ProfitSharingRecoveryScheduler` 自动扫描补偿)                                            |
+| **P1-047** | Resolved | 事务/资金   | ~~余额支付在 `CreateOrderTx` 扣除但在后续失败时无回滚~~ (**已修复**: 全原子操作，无需回滚)                                                                                       |
+| **P1-058** | Medium   | 逻辑/并发   | `tryWebSocketPush` 对每一条通知都进行角色查询，在高并发下可能导致 DB 压力。                                                                                                      |
+| **P1-059** | Resolved | 事务/资金   | ~~`CancelOrderTx` (订单取消) 缺失会员余额回滚逻辑~~ (**已修复**: 事务内原子回滚余额+创建退款流水)                                                                                |
+| **P1-060** | Resolved | 逻辑/并发   | ~~`ProcessOrderPaymentTx` 在 inventory 扣减后未对 `PaymentOrder` 状态做最终强制校验。~~ (**已修复**: Added mandatory check for `OrderStatusPending` in `ProcessOrderPaymentTx`.) |
+| **P1-061** | Medium   | 逻辑/同步   | `getMerchantFinanceOverview` 跨日期统计未加缓存，且未对超大时间跨度做严格限制。                                                                                                  |
+| **P1-062** | Resolved | 安全/身份   | ~~`bindPhone` 接口允许绑定任意手机号~~ (已移除该功能，因业务不需要且微信接口收费)。                                                                                              |
+| **P1-063** | Resolved | 逻辑/资金   | ~~爽约时定金（Deposit）逻辑缺失，未显式处理没收/结算资金流。~~ (**已修复**: Integrated into ProfitSharing system)                                                                |
+| **P1-064** | Resolved | 安全/风控   | ~~爽约时未记录用户风控信用分，无法防止恶意爽约。~~ (**已修复**: Automatically create behavior decision for no-show)                                                              |
+| **P1-065** | Medium   | 业务逻辑    | 取消预订仅支持全额/无退款，不支持部分退款配置（如退50%）。                                                                                                                       |
 
 ---
 
@@ -266,6 +269,8 @@
   - [x] 任务失败时的重试策略 ✅ Asynq 自动重试
   - [x] 重试导致的重复处理 ✅ `GetPaymentOrderForUpdate` + `processed_at`
         幂等检查
+  - [x] **发现 P1-060**: `ProcessOrderPaymentTx` 缺乏对 `OrderStatus`
+        的最终一致性校验。 (已修复)
 
 #### A4.5 支付超时处理
 
@@ -516,8 +521,11 @@
 
 - [x] `api/table_reservation.go` - `noShowReservation` ✅
   - [x] 爽约判定标准 ✅ `MarkNoShowTx` 事务内处理
-  - [ ] 定金处理
-  - [ ] 风控记录
+  - [x] **发现 P1-063**:
+        ~~爽约时定金（Deposit）逻辑缺失，未显式处理没收/结算资金流。~~
+        (**已修复**)
+  - [x] **发现 P1-064**: ~~爽约时未记录用户风控信用分，无法防止恶意爽约。~~
+        (**已修复**)
 
 #### A9.8 预订取消
 
@@ -525,8 +533,9 @@
       `GetTableReservationForUpdate`
   - [x] 退款窗口（refund_deadline）✅
   - [x] **发现 P1-029**: 状态变更与库存释放 (`ReleaseReservationInventoryTx`)
-        分属不同事务，存在库存泄露。
-  - [ ] 部分退款规则
+        分属不同事务，存在库存泄露。(Resolved)
+  - [x] **发现 P1-065**:
+        取消预订仅支持全额/无退款，不支持部分退款配置（如退50%）。(Medium)
 
 #### A9.9 预订超时
 
@@ -548,7 +557,8 @@
   - [x] 证据上传 ✅
   - [x] 规则引擎触发 ✅
   - [x] **发现 P1-004**:
-        规则引擎故障时采用异步重试但主流程通过，存在拦截失效风险。
+        规则引擎故障时采用异步重试但主流程通过，存在拦截失效风险。(已修复:
+        规则引擎故障时降级为 Manual Review)
   - [x] **并发/幂等性** -> **发现 P0-003**: `claims.order_id`
         无唯一约束，非原子操作。
   - [x] **退款可靠性** ⚠️ 异步 goroutine 执行退款，应使用 Task Queue。

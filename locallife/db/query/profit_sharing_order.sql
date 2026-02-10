@@ -162,7 +162,8 @@ SELECT
     p.status,
     p.created_at,
     p.finished_at,
-    po.order_id
+    po.order_id,
+    po.reservation_id
 FROM profit_sharing_orders p
 JOIN payment_orders po ON po.id = p.payment_order_id
 WHERE p.merchant_id = sqlc.arg('merchant_id')
@@ -293,3 +294,16 @@ WHERE rider_id = sqlc.arg('rider_id')
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
 GROUP BY DATE(created_at)
 ORDER BY date DESC;
+
+-- name: ListCompletedOrdersMissingProfitSharing :many
+SELECT po.id AS payment_order_id, po.order_id
+FROM payment_orders po
+JOIN orders o ON po.order_id = o.id
+LEFT JOIN profit_sharing_orders pso ON po.id = pso.payment_order_id
+WHERE 
+    po.status = 'paid' 
+    AND po.payment_type = 'profit_sharing'
+    AND o.status = 'completed'
+    AND pso.id IS NULL
+    AND o.updated_at > now() - INTERVAL '7 days'
+LIMIT $1;

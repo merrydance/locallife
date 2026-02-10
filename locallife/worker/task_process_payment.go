@@ -129,7 +129,8 @@ type RefundResultPayload struct {
 // ProfitSharingPayload 分账任务载荷
 type ProfitSharingPayload struct {
 	PaymentOrderID int64 `json:"payment_order_id"`
-	OrderID        int64 `json:"order_id"`
+	OrderID        int64 `json:"order_id,omitempty"`
+	ReservationID  int64 `json:"reservation_id,omitempty"`
 }
 
 // ApplymentResultPayload 进件结果处理任务载荷
@@ -259,12 +260,19 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharing(
 		return fmt.Errorf("enqueue task: %w", err)
 	}
 
-	log.Info().
+	event := log.Info().
 		Str("type", task.Type()).
 		Str("queue", info.Queue).
-		Int64("payment_order_id", payload.PaymentOrderID).
-		Int64("order_id", payload.OrderID).
-		Msg("enqueued task")
+		Int64("payment_order_id", payload.PaymentOrderID)
+
+	if payload.OrderID > 0 {
+		event.Int64("order_id", payload.OrderID)
+	}
+	if payload.ReservationID > 0 {
+		event.Int64("reservation_id", payload.ReservationID)
+	}
+
+	event.Msg("enqueued task")
 
 	return nil
 }
@@ -395,7 +403,16 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 	}
 
 	// 预定支付成功后，创建未到店提醒任务 (预定时间后30分钟)
-	if paymentOrder.BusinessType == "reservation" && paymentOrder.ReservationID.Valid {
+	if (paymentOrder.BusinessType == "reservation" || paymentOrder.BusinessType == "reservation_addon") && paymentOrder.ReservationID.Valid {
+		// 触发分账流程（用于财务统计，即使没有分账也会创建finished状态的记录）
+		if err := processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
+			PaymentOrderID: paymentOrder.ID,
+			ReservationID:  paymentOrder.ReservationID.Int64,
+		}); err != nil {
+			log.Error().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("distribute reservation profit sharing task failed")
+			// 不阻断后续逻辑
+		}
+
 		res, err := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
 		if err == nil {
 			// 计算提醒时间：预定日期 + 预定时间
@@ -793,10 +810,17 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		return fmt.Errorf("unmarshal payload: %w", asynq.SkipRetry)
 	}
 
-	log.Info().
-		Int64("payment_order_id", payload.PaymentOrderID).
-		Int64("order_id", payload.OrderID).
-		Msg("processing profit sharing")
+	event := log.Info().
+		Int64("payment_order_id", payload.PaymentOrderID)
+
+	if payload.OrderID > 0 {
+		event.Int64("order_id", payload.OrderID)
+	}
+	if payload.ReservationID > 0 {
+		event.Int64("reservation_id", payload.ReservationID)
+	}
+
+	event.Msg("processing profit sharing")
 
 	// 获取支付订单
 	paymentOrder, err := processor.store.GetPaymentOrder(ctx, payload.PaymentOrderID)
@@ -812,26 +836,61 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		return fmt.Errorf("transaction_id is required for profit sharing: %w", asynq.SkipRetry)
 	}
 
-	// 获取订单信息
-	order, err := processor.store.GetOrder(ctx, payload.OrderID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return fmt.Errorf("order not found: %w", asynq.SkipRetry)
+	// 初始化通用参数
+	var merchantID int64
+	var totalAmount int64
+	var deliveryFee int64
+	var orderSource string
+	var addressID int64 // 0 if none
+	var outOrderNoSuffix string
+
+	if payload.OrderID > 0 {
+		// 获取订单信息
+		order, err := processor.store.GetOrder(ctx, payload.OrderID)
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return fmt.Errorf("order not found: %w", asynq.SkipRetry)
+			}
+			return fmt.Errorf("get order: %w", err)
 		}
-		return fmt.Errorf("get order: %w", err)
+		merchantID = order.MerchantID
+		totalAmount = order.TotalAmount
+		deliveryFee = order.DeliveryFee
+		orderSource = order.OrderType
+		if order.AddressID.Valid {
+			addressID = order.AddressID.Int64
+		}
+		outOrderNoSuffix = fmt.Sprintf("%d", payload.OrderID)
+	} else if payload.ReservationID > 0 {
+		// 获取预订信息
+		res, err := processor.store.GetTableReservation(ctx, payload.ReservationID)
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return fmt.Errorf("reservation not found: %w", asynq.SkipRetry)
+			}
+			return fmt.Errorf("get reservation: %w", err)
+		}
+		merchantID = res.MerchantID
+		// 预订交易使用支付订单金额
+		totalAmount = paymentOrder.Amount
+		deliveryFee = 0
+		orderSource = "reservation"
+		outOrderNoSuffix = fmt.Sprintf("R%d", payload.ReservationID)
+	} else {
+		return fmt.Errorf("neither order_id nor reservation_id provided: %w", asynq.SkipRetry)
 	}
 
 	// 获取商户信息
-	merchant, err := processor.store.GetMerchant(ctx, order.MerchantID)
+	merchant, err := processor.store.GetMerchant(ctx, merchantID)
 	if err != nil {
 		return fmt.Errorf("get merchant: %w", err)
 	}
 
 	// 获取商户支付配置（从新表 merchant_payment_configs）
-	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
+	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, merchantID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			log.Warn().Int64("merchant_id", order.MerchantID).Msg("merchant payment config not found, skip profit sharing")
+			log.Warn().Int64("merchant_id", merchantID).Msg("merchant payment config not found, skip profit sharing")
 			return nil // 商户未配置微信支付，跳过分账
 		}
 		return fmt.Errorf("get merchant payment config: %w", err)
@@ -843,31 +902,42 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	regionID := merchant.RegionID
 	var operatorCommission int64
 	var platformCommission int64
-	merchantAmount := order.TotalAmount
+	merchantAmount := totalAmount
 
 	// 获取配送地址的区域ID（优先使用配送地址，否则回退商户区域）
-	if order.AddressID.Valid {
-		address, err := processor.store.GetUserAddress(ctx, order.AddressID.Int64)
+	if addressID > 0 {
+		address, err := processor.store.GetUserAddress(ctx, addressID)
 		if err == nil && address.RegionID > 0 {
 			regionID = address.RegionID
 		}
 	}
 
 	config, err := processor.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
-		OrderSource: order.OrderType,
-		MerchantID:  pgtype.Int8{Int64: order.MerchantID, Valid: true},
+		OrderSource: orderSource,
+		MerchantID:  pgtype.Int8{Int64: merchantID, Valid: true},
 		RegionID:    pgtype.Int8{Int64: regionID, Valid: regionID > 0},
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return fmt.Errorf("profit sharing config not found: %w", asynq.SkipRetry)
+			// 如果没有配置分账规则，假设无分账，仅记录
+			config = db.ProfitSharingConfig{
+				PlatformRate: 0,
+				OperatorRate: 0,
+				RiderEnabled: false,
+			}
+		} else {
+			return fmt.Errorf("get profit sharing config: %w", err)
 		}
-		return fmt.Errorf("get profit sharing config: %w", err)
 	}
 
 	platformRate := config.PlatformRate
 	operatorRate := config.OperatorRate
 	riderEnabled := config.RiderEnabled
+
+	// 预订业务强制禁用骑手分账
+	if orderSource == "reservation" {
+		riderEnabled = false
+	}
 
 	// 查找运营商
 	if regionID > 0 {
@@ -883,11 +953,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	}
 
 	// 计算分账金额（单位：分）
-	platformCommission = order.TotalAmount * int64(platformRate) / 100
+	platformCommission = totalAmount * int64(platformRate) / 100
 	if hasOperator {
-		operatorCommission = order.TotalAmount * int64(operatorRate) / 100
+		operatorCommission = totalAmount * int64(operatorRate) / 100
 	}
-	merchantAmount = order.TotalAmount - platformCommission - operatorCommission
+	merchantAmount = totalAmount - platformCommission - operatorCommission
 	needProfitSharing := platformCommission > 0 || operatorCommission > 0
 
 	// 若已有分账记录，复用并尝试重试
@@ -922,26 +992,26 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		}
 	} else {
 		// 创建分账订单记录
-		outOrderNo = fmt.Sprintf("PS%d%d", payload.PaymentOrderID, payload.OrderID)
+		outOrderNo = fmt.Sprintf("PS%d%s", payload.PaymentOrderID, outOrderNoSuffix)
 		var operatorID pgtype.Int8
 		if hasOperator {
 			operatorID = pgtype.Int8{Int64: operator.ID, Valid: true}
 		}
 
 		riderAmount := int64(0)
-		if riderEnabled && order.DeliveryFee > 0 {
-			riderAmount = order.DeliveryFee
+		if riderEnabled && deliveryFee > 0 {
+			riderAmount = deliveryFee
 		}
 		profitSharingOrder, err = processor.store.CreateProfitSharingOrder(ctx, db.CreateProfitSharingOrderParams{
 			PaymentOrderID:      payload.PaymentOrderID,
-			MerchantID:          order.MerchantID,
+			MerchantID:          merchantID,
 			OperatorID:          operatorID,
-			OrderSource:         order.OrderType,
-			TotalAmount:         order.TotalAmount,
-			DeliveryFee:         order.DeliveryFee,
+			OrderSource:         orderSource,
+			TotalAmount:         totalAmount,
+			DeliveryFee:         deliveryFee,
 			RiderID:             pgtype.Int8{},
 			RiderAmount:         riderAmount,
-			DistributableAmount: order.TotalAmount,
+			DistributableAmount: totalAmount,
 			PlatformRate:        platformRate,
 			OperatorRate:        operatorRate,
 			PlatformCommission:  platformCommission,
@@ -956,9 +1026,9 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	}
 
 	log.Info().
-		Int64("order_id", payload.OrderID).
+		Int64("payment_order_id", payload.PaymentOrderID).
 		Str("merchant_name", merchant.Name).
-		Int64("total_amount", order.TotalAmount).
+		Int64("total_amount", totalAmount).
 		Int64("platform_commission", platformCommission).
 		Int64("operator_commission", operatorCommission).
 		Int64("merchant_amount", merchantAmount).

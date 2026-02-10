@@ -177,6 +177,7 @@ const createBehaviorDecision = `-- name: CreateBehaviorDecision :one
 
 INSERT INTO behavior_decisions (
     order_id,
+    reservation_id,
     user_id,
     merchant_id,
     rider_id,
@@ -187,12 +188,11 @@ INSERT INTO behavior_decisions (
     decision_status,
     trace_summary
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at
+    $10, $11, $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id
 `
 
 type CreateBehaviorDecisionParams struct {
-	OrderID            int64       `json:"order_id"`
 	UserID             pgtype.Int8 `json:"user_id"`
 	MerchantID         pgtype.Int8 `json:"merchant_id"`
 	RiderID            pgtype.Int8 `json:"rider_id"`
@@ -202,6 +202,8 @@ type CreateBehaviorDecisionParams struct {
 	CompensationSource string      `json:"compensation_source"`
 	DecisionStatus     string      `json:"decision_status"`
 	TraceSummary       pgtype.Text `json:"trace_summary"`
+	OrderID            pgtype.Int8 `json:"order_id"`
+	ReservationID      pgtype.Int8 `json:"reservation_id"`
 }
 
 // ==============================
@@ -209,7 +211,6 @@ type CreateBehaviorDecisionParams struct {
 // ==============================
 func (q *Queries) CreateBehaviorDecision(ctx context.Context, arg CreateBehaviorDecisionParams) (BehaviorDecision, error) {
 	row := q.db.QueryRow(ctx, createBehaviorDecision,
-		arg.OrderID,
 		arg.UserID,
 		arg.MerchantID,
 		arg.RiderID,
@@ -219,6 +220,8 @@ func (q *Queries) CreateBehaviorDecision(ctx context.Context, arg CreateBehavior
 		arg.CompensationSource,
 		arg.DecisionStatus,
 		arg.TraceSummary,
+		arg.OrderID,
+		arg.ReservationID,
 	)
 	var i BehaviorDecision
 	err := row.Scan(
@@ -235,6 +238,7 @@ func (q *Queries) CreateBehaviorDecision(ctx context.Context, arg CreateBehavior
 		&i.TraceSummary,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservationID,
 	)
 	return i, err
 }
@@ -356,7 +360,7 @@ func (q *Queries) GetActiveBehaviorBlocklist(ctx context.Context, arg GetActiveB
 }
 
 const getBehaviorDecision = `-- name: GetBehaviorDecision :one
-SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at FROM behavior_decisions
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id FROM behavior_decisions
 WHERE id = $1
 LIMIT 1
 `
@@ -378,6 +382,7 @@ func (q *Queries) GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDe
 		&i.TraceSummary,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReservationID,
 	)
 	return i, err
 }
@@ -552,12 +557,12 @@ func (q *Queries) ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehav
 }
 
 const listBehaviorDecisionsByOrder = `-- name: ListBehaviorDecisionsByOrder :many
-SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at FROM behavior_decisions
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id FROM behavior_decisions
 WHERE order_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListBehaviorDecisionsByOrder(ctx context.Context, orderID int64) ([]BehaviorDecision, error) {
+func (q *Queries) ListBehaviorDecisionsByOrder(ctx context.Context, orderID pgtype.Int8) ([]BehaviorDecision, error) {
 	rows, err := q.db.Query(ctx, listBehaviorDecisionsByOrder, orderID)
 	if err != nil {
 		return nil, err
@@ -580,6 +585,7 @@ func (q *Queries) ListBehaviorDecisionsByOrder(ctx context.Context, orderID int6
 			&i.TraceSummary,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReservationID,
 		); err != nil {
 			return nil, err
 		}

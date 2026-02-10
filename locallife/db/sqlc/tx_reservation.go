@@ -146,6 +146,24 @@ func (store *SQLStore) MarkNoShowTx(ctx context.Context, arg MarkNoShowTxParams)
 			result.TableUpdated = true
 		}
 
+		// 3. P1-064 记录用户未到店风险行为
+		_, err = q.CreateBehaviorDecision(ctx, CreateBehaviorDecisionParams{
+			OrderID:            pgtype.Int8{}, // null
+			ReservationID:      pgtype.Int8{Int64: arg.ReservationID, Valid: true},
+			UserID:             pgtype.Int8{Int64: result.Reservation.UserID, Valid: true},
+			MerchantID:         pgtype.Int8{Int64: result.Reservation.MerchantID, Valid: true},
+			RiderID:            pgtype.Int8{},
+			DecisionVersion:    "v1",
+			ReasonCodes:        []string{"reservation_no_show"},
+			ResponsibleParty:   "user",
+			CompensationSource: "unknown",
+			DecisionStatus:     "decided",
+			TraceSummary:       pgtype.Text{String: "User failed to show up for reservation", Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("create behavior decision: %w", err)
+		}
+
 		return nil
 	})
 

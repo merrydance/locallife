@@ -17,6 +17,7 @@ import (
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
+	"github.com/rs/zerolog/log"
 )
 
 type behaviorWindowConfig struct {
@@ -338,18 +339,27 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
-		ruleDecision = decision
-		if !decision.Allow {
-			reason := decision.Reason
-			if reason == "" {
-				reason = "claim blocked by rule"
+			// P1-004 Fix: 规则引擎故障时降级为人工审核，而不是直接报错
+			log.Error().Err(err).
+				Int64("order_id", req.OrderID).
+				Int64("user_id", authPayload.UserID).
+				Msg("Rules engine evaluation failed, falling back to manual review")
+
+			ruleDecision = rules.Decision{
+				Action: "manual",
+				Reason: "系统风控服务暂时不可用，转入人工审核",
 			}
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New(reason)))
-			return
+		} else {
+			server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
+			ruleDecision = decision
+			if !decision.Allow {
+				reason := decision.Reason
+				if reason == "" {
+					reason = "claim blocked by rule"
+				}
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New(reason)))
+				return
+			}
 		}
 	}
 

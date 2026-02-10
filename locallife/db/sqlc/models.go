@@ -94,7 +94,7 @@ type BehaviorBlocklist struct {
 
 type BehaviorDecision struct {
 	ID                 int64       `json:"id"`
-	OrderID            int64       `json:"order_id"`
+	OrderID            pgtype.Int8 `json:"order_id"`
 	UserID             pgtype.Int8 `json:"user_id"`
 	MerchantID         pgtype.Int8 `json:"merchant_id"`
 	RiderID            pgtype.Int8 `json:"rider_id"`
@@ -106,6 +106,7 @@ type BehaviorDecision struct {
 	TraceSummary       pgtype.Text `json:"trace_summary"`
 	CreatedAt          time.Time   `json:"created_at"`
 	UpdatedAt          time.Time   `json:"updated_at"`
+	ReservationID      pgtype.Int8 `json:"reservation_id"`
 }
 
 type BehaviorTraceSnapshot struct {
