@@ -194,6 +194,31 @@ func (q *Queries) GetMerchantApplicationDraft(ctx context.Context, userID int64)
 	return i, err
 }
 
+const listMerchantAddressesByRegion = `-- name: ListMerchantAddressesByRegion :many
+SELECT address FROM merchants
+WHERE region_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) ListMerchantAddressesByRegion(ctx context.Context, regionID int64) ([]string, error) {
+	rows, err := q.db.Query(ctx, listMerchantAddressesByRegion, regionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var address string
+		if err := rows.Scan(&address); err != nil {
+			return nil, err
+		}
+		items = append(items, address)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rejectMerchantApplication = `-- name: RejectMerchantApplication :one
 UPDATE merchant_applications
 SET

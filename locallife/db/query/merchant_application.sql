@@ -141,6 +141,10 @@ SELECT EXISTS(
   WHERE address = $1 AND owner_user_id != $2 AND deleted_at IS NULL
 ) AS exists;
 
+-- name: ListMerchantAddressesByRegion :many
+SELECT address FROM merchants
+WHERE region_id = $1 AND deleted_at IS NULL;
+
 -- name: UpdateMerchantApplicationImages :one
 -- 更新门头照和环境照（jsonb数组）
 UPDATE merchant_applications

@@ -46,7 +46,7 @@
 | **P1-036** | Resolved | 事务/资金   | ~~`confirmDelivery` 将送达确认、订单完结、押金解冻拆为多笔事务~~ (**已修复**: `CompleteDeliveryTx` 原子事务)                                                                                               |
 | **P1-037** | Resolved | 逻辑/一致性 | ~~`submitMerchantApplication` 提交时未校验 OCR 任务是否全部完成~~ (**已修复**: 审核时检查所有 OCR 数据)                                                                                                    |
 | **P1-038** | Resolved | 安全/防欺诈 | ~~自动审核系统缺失针对营业执照、身份证的历史库查重，易被恶意 P 图绕过。~~ (**已修复**: Added duplicate checks for License and ID Card)                                                                     |
-| **P1-039** | Medium   | 逻辑/数据   | `CheckMerchantAddressExists` 字符串匹配逻辑太初级，易被“XX路1号”与“XX路一号”绕过。                                                                                                                         |
+| **P1-039** | Resolved | 逻辑/数据   | ~~`CheckMerchantAddressExists` 字符串匹配逻辑太初级~~ (**已修复**: Added fuzzy address matching logic)                                                                                                     |
 | **P1-040** | Resolved | 安全/CSRF   | ~~WebSocket `CheckOrigin` 在配置为空时默认为 `*`~~ (**已修复**: 使用 `isOriginAllowed()` 白名单校验)                                                                                                       |
 | **P1-041** | Accepted | 架构/可用性 | WebSocketHub 缺失 Redis Pub/Sub 订阅。(用户确认: 两年内仅单实例部署，暂不修复)                                                                                                                             |
 | **P1-042** | Resolved | 逻辑/健壮性 | ~~`Hub.unregisterClient` 在 platform 类型下缺失 client 实例校验~~ (**已修复**: 所有类型都有 `existing == client` 校验)                                                                                     |
@@ -600,7 +600,8 @@
   - [x] 证件有效期校验 ✅
   - [x] 经营范围关键词匹配 ✅
   - [x] 身份与法人一致性检查 ✅
-  - [x] 地址重合度检查 ⚠️ **发现 P1-039**: 地址去重逻辑较弱。
+  - [x] 地址重合度检查 ⚠️ **发现 P1-039**: ~~地址去重逻辑较弱。~~ (**已修复**:
+        Added fuzzy matching)
   - [x] **发现 P1-038**: ~~缺失针对证件真伪、修图、多开账号的防欺诈校验。~~
         (**已修复**: Implemented duplicate license/ID checks)
 - [x] `db/sqlc/tx_merchant_application.go` - 审核通过事务 ✅

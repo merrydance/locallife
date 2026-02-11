@@ -1309,7 +1309,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return false, "营业执照地址与商户地址不匹配"
 	}
 
-	// 6. 检查地址是否已被占用
+	// 6. 检查地址是否已被占用 (严格匹配 + 模糊匹配 P1-039)
 	addressExists, err := server.store.CheckMerchantAddressExists(ctx, db.CheckMerchantAddressExistsParams{
 		Address:     app.BusinessAddress,
 		OwnerUserID: app.UserID,
@@ -1319,7 +1319,23 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return false, "系统错误，请稍后重试"
 	}
 	if addressExists {
-		return false, "该地址已有商户入驻，同一地址不能注册两家餐厅"
+		return false, "该地址已被其他商户注册"
+	}
+
+	// 模糊匹配增强 (P1-039)
+	if app.RegionID.Valid {
+		regionAddrs, err := server.store.ListMerchantAddressesByRegion(ctx, app.RegionID.Int64)
+		if err != nil {
+			log.Warn().Err(err).Int64("region_id", app.RegionID.Int64).Msg("failed to list region addresses for fuzzy check, skipping")
+		} else {
+			normalizedInput := normalizeAddress(app.BusinessAddress)
+			for _, existingAddr := range regionAddrs {
+				if normalizeAddress(existingAddr) == normalizedInput {
+					log.Warn().Str("input", app.BusinessAddress).Str("existing", existingAddr).Msg("fuzzy address match found")
+					return false, "该地址已被其他商户注册 (模糊匹配)"
+				}
+			}
+		}
 	}
 
 	// 7. 检查食品经营许可证

@@ -1098,6 +1098,7 @@ type Querier interface {
 	ListMerchantActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
 	// 获取商户当前有效的代金券
 	ListMerchantActiveVouchers(ctx context.Context, merchantID int64) ([]Voucher, error)
+	ListMerchantAddressesByRegion(ctx context.Context, regionID int64) ([]string, error)
 	// =========================== 商户视角 ===========================
 	// 商户查询自己的申诉列表
 	ListMerchantAppealsForMerchant(ctx context.Context, arg ListMerchantAppealsForMerchantParams) ([]ListMerchantAppealsForMerchantRow, error)
