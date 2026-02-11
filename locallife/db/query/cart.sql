@@ -251,3 +251,8 @@ UPDATE cart_items
 SET quantity = quantity + sqlc.arg('amount')
 WHERE id = sqlc.arg('id') AND quantity + sqlc.arg('amount') <= 99
 RETURNING *;
+
+-- name: CleanupOldCarts :exec
+-- P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
+DELETE FROM carts
+WHERE updated_at < $1;

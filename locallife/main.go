@@ -65,6 +65,12 @@ func main() {
 		log.Fatal().Err(err).Msg("cannot load config")
 	}
 
+	level, err := zerolog.ParseLevel(config.LogLevel)
+	if err != nil {
+		level = zerolog.InfoLevel
+	}
+	zerolog.SetGlobalLevel(level)
+
 	if config.Environment == "development" {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}

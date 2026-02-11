@@ -67,6 +67,10 @@ type Querier interface {
 	// =========================== 通用查询 ===========================
 	// 检查索赔是否已有指定申诉方类型的申诉
 	CheckAppealExists(ctx context.Context, arg CheckAppealExistsParams) (bool, error)
+	// 检查营业执照号是否已被其他已通过的申请占用
+	CheckBusinessLicenseExists(ctx context.Context, arg CheckBusinessLicenseExistsParams) (int64, error)
+	// 检查法人身份证号是否已被其他已通过的申请占用
+	CheckLegalPersonIDExists(ctx context.Context, arg CheckLegalPersonIDExistsParams) (int64, error)
 	// 检查地址是否已被其他商户占用（排除指定用户自己的商户）
 	CheckMerchantAddressExists(ctx context.Context, arg CheckMerchantAddressExistsParams) (bool, error)
 	CheckNotificationExists(ctx context.Context, id string) (bool, error)
@@ -78,6 +82,8 @@ type Querier interface {
 	// 检查用户是否是某商户的 Boss
 	CheckUserIsBoss(ctx context.Context, arg CheckUserIsBossParams) (bool, error)
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
+	// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
+	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
@@ -1337,6 +1343,7 @@ type Querier interface {
 	ResetOperatorApplicationToDraft(ctx context.Context, id int64) (OperatorApplication, error)
 	// 重置申请为草稿状态（被拒绝后可重新编辑）
 	ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error)
+	ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error
 	// 审核申诉
 	ReviewAppeal(ctx context.Context, arg ReviewAppealParams) (Appeal, error)
 	// 运营商审核索赔

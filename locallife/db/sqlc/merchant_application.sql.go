@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -293,6 +294,26 @@ func (q *Queries) ResetMerchantApplicationToDraft(ctx context.Context, id int64)
 		&i.EnvironmentImages,
 	)
 	return i, err
+}
+
+const resetStaleMerchantOCRStatus = `-- name: ResetStaleMerchantOCRStatus :exec
+UPDATE merchant_applications
+SET 
+  business_license_ocr = CASE WHEN business_license_ocr->>'status' = 'processing' THEN jsonb_set(business_license_ocr, '{status}', '"failed"') ELSE business_license_ocr END,
+  food_permit_ocr = CASE WHEN food_permit_ocr->>'status' = 'processing' THEN jsonb_set(food_permit_ocr, '{status}', '"failed"') ELSE food_permit_ocr END,
+  id_card_front_ocr = CASE WHEN id_card_front_ocr->>'status' = 'processing' THEN jsonb_set(id_card_front_ocr, '{status}', '"failed"') ELSE id_card_front_ocr END,
+  id_card_back_ocr = CASE WHEN id_card_back_ocr->>'status' = 'processing' THEN jsonb_set(id_card_back_ocr, '{status}', '"failed"') ELSE id_card_back_ocr END
+WHERE 
+  (business_license_ocr->>'status' = 'processing' OR
+   food_permit_ocr->>'status' = 'processing' OR
+   id_card_front_ocr->>'status' = 'processing' OR
+   id_card_back_ocr->>'status' = 'processing')
+  AND updated_at < $1
+`
+
+func (q *Queries) ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error {
+	_, err := q.db.Exec(ctx, resetStaleMerchantOCRStatus, updatedAt)
+	return err
 }
 
 const submitMerchantApplication = `-- name: SubmitMerchantApplication :one

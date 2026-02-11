@@ -1138,10 +1138,10 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	log.Info().Int64("subtotal", subtotal).Int("items_count", len(items)).Msg("[DEBUG] createOrder: items calculated")
 
 	// 计算配送费（仅外卖订单）
-	// 优先使用前端已计算的费用，后端再校验/兜底，避免重算失败导致 0 元
-	var deliveryFee int64 = req.DeliveryFee
-	var deliveryDistance int32 = req.DeliveryDistance
-	var deliveryFeeDiscount int64 = req.DeliveryFeeDiscount
+	// P1-017 fix: 默认且强制初始化为0，仅在外卖逻辑中通过服务端计算赋值
+	var deliveryFee int64 = 0
+	var deliveryDistance int32 = 0
+	var deliveryFeeDiscount int64 = 0
 	var serverFee int64
 	var serverFeeDiscount int64
 	var deliveryDuration int32
@@ -1163,88 +1163,91 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			return
 		}
 
-		// 若前端未提供距离，则计算配送距离（用于兜底/校验）
-		if deliveryDistance == 0 {
-			deliveryDistance = DefaultDeliveryDistance
-			if address.Latitude.Valid && address.Longitude.Valid && merchant.Latitude.Valid && merchant.Longitude.Valid {
-				userLat, _ := address.Latitude.Float64Value()
-				userLng, _ := address.Longitude.Float64Value()
-				merchantLat, _ := merchant.Latitude.Float64Value()
-				merchantLng, _ := merchant.Longitude.Float64Value()
+		// P1-017: 强制服务端计算距离与运费，防止前端篡改
+		// 忽略前端传入的 deliveryDistance，重新计算
+		calculatedDistance := int32(0)
+		calculatedDuration := int32(0)
 
-				// 优先使用自建 OSM 计算骑行距离
-				if server.mapClient != nil {
-					fromLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
-					toLoc := maps.Location{Lat: userLat.Float64, Lng: userLng.Float64}
-					routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-					if err == nil && routeResult != nil {
-						deliveryDistance = int32(routeResult.Distance)
-						deliveryDuration = int32(routeResult.Duration)
-					}
-					if err != nil {
-						log.Warn().Err(err).
-							Int64("merchant_id", req.MerchantID).
-							Int64("address_id", *req.AddressID).
-							Msg("createOrder: route calculation failed, using fallback distance")
-					}
+		if address.Latitude.Valid && address.Longitude.Valid && merchant.Latitude.Valid && merchant.Longitude.Valid {
+			userLat, _ := address.Latitude.Float64Value()
+			userLng, _ := address.Longitude.Float64Value()
+			merchantLat, _ := merchant.Latitude.Float64Value()
+			merchantLng, _ := merchant.Longitude.Float64Value()
+
+			// 优先使用自建 OSM 计算骑行距离
+			if server.mapClient != nil {
+				fromLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
+				toLoc := maps.Location{Lat: userLat.Float64, Lng: userLng.Float64}
+				routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
+				if err == nil && routeResult != nil {
+					calculatedDistance = int32(routeResult.Distance)
+					calculatedDuration = int32(routeResult.Duration)
 				} else {
-					// 降级：使用简化的距离计算
-					latDiff := (userLat.Float64 - merchantLat.Float64) * MetersPerLatDegree
-					lngDiff := (userLng.Float64 - merchantLng.Float64) * MetersPerLngDegree
-					deliveryDistance = int32(math.Sqrt(latDiff*latDiff + lngDiff*lngDiff))
-				}
-				if deliveryDistance < MinDeliveryDistance {
-					deliveryDistance = MinDeliveryDistance
+					log.Warn().Err(err).
+						Int64("merchant_id", req.MerchantID).
+						Int64("address_id", *req.AddressID).
+						Msg("createOrder: route calculation failed, using fallback distance")
 				}
 			}
-		}
 
-		// 服务端校验运费（不中断，主要为兜底与记录差异）
-		if deliveryDistance > 0 {
-			feeResult, err := server.calculateDeliveryFeeInternal(ctx, address.RegionID, req.MerchantID, deliveryDistance, subtotal)
-			if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-				serverFee = feeResult.FinalFee
-				serverFeeDiscount = feeResult.PromotionDiscount
-			} else if err != nil {
-				log.Warn().Err(err).
-					Int64("merchant_id", req.MerchantID).
-					Int64("address_id", *req.AddressID).
-					Int32("delivery_distance", deliveryDistance).
-					Int64("subtotal", subtotal).
-					Msg("createOrder: delivery fee calculation failed, fallback to client fee")
+			// 降级：如果地图服务失败或未配置，使用直线距离估算 + 系数
+			if calculatedDistance == 0 {
+				// 1度纬度 ~= 111km
+				const metersPerDegree = 111000.0
+				latDiff := (userLat.Float64 - merchantLat.Float64) * metersPerDegree
+				// 经度距离随纬度变化
+				avgLatRad := (userLat.Float64 + merchantLat.Float64) / 2.0 * math.Pi / 180.0
+				lngDiff := (userLng.Float64 - merchantLng.Float64) * metersPerDegree * math.Cos(avgLatRad)
+
+				// 乘以 1.4 系数估算路网距离
+				calculatedDistance = int32(math.Sqrt(latDiff*latDiff+lngDiff*lngDiff) * 1.4)
 			}
-		}
 
-		// 选择落库的运费：优先使用服务端兜底，其次使用前端正数
-		if deliveryFee <= 0 && serverFee > 0 {
-			deliveryFee = serverFee
-			deliveryFeeDiscount = serverFeeDiscount
-		} else if deliveryFee > 0 && serverFee > 0 {
-			// 若差异较大(>10元或>10%)，强制使用服务端计算结果，防止篡改
-			if feeDiffSignificant(deliveryFee, serverFee) {
-				log.Warn().
-					Int64("merchant_id", req.MerchantID).
-					Int64("address_id", *req.AddressID).
-					Int64("client_fee", deliveryFee).
-					Int64("server_fee", serverFee).
-					Int64("client_discount", deliveryFeeDiscount).
-					Int64("server_discount", serverFeeDiscount).
-					Msg("createOrder: delivery fee mismatch, overwriting with server value")
-
-				deliveryFee = serverFee
-				deliveryFeeDiscount = serverFeeDiscount
-			} else {
-				// 差异不大，信任前端基础运费，但需严格校验折扣
-				// 优惠折扣必须与服务端一致（允许微小误差，防止前端篡改折扣）
-				if feeDiffSignificant(deliveryFeeDiscount, serverFeeDiscount) {
-					log.Warn().
-						Int64("client_discount", deliveryFeeDiscount).
-						Int64("server_discount", serverFeeDiscount).
-						Msg("createOrder: delivery fee discount mismatch, overwriting with server value")
-					deliveryFeeDiscount = serverFeeDiscount
-				}
+			if calculatedDistance < MinDeliveryDistance {
+				calculatedDistance = MinDeliveryDistance
 			}
+		} else {
+			// 必须有经纬度才能计算运费
+			log.Warn().Msg("createOrder: missing lat/lng for address or merchant")
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid address or merchant location")))
+			return
 		}
+
+		deliveryDistance = calculatedDistance
+		deliveryDuration = calculatedDuration
+
+		// 服务端强制计算运费
+		feeResult, err := server.calculateDeliveryFeeInternal(ctx, address.RegionID, req.MerchantID, deliveryDistance, subtotal)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("merchant_id", req.MerchantID).
+				Int64("address_id", *req.AddressID).
+				Msg("createOrder: failed to calculate delivery fee")
+			ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("failed to calculate delivery fee")))
+			return
+		}
+
+		if feeResult.DeliverySuspended {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("delivery suspended for this area")))
+			return
+		}
+
+		serverFee = feeResult.FinalFee
+		serverFeeDiscount = feeResult.PromotionDiscount
+
+		// 记录差异日志
+		if deliveryFee != serverFee || deliveryFeeDiscount != serverFeeDiscount {
+			log.Info().
+				Int64("client_fee", deliveryFee).
+				Int64("server_fee", serverFee).
+				Int64("client_discount", deliveryFeeDiscount).
+				Int64("server_discount", serverFeeDiscount).
+				Msg("createOrder: delivery fee mismatch, using server value")
+		}
+
+		// 强制应用服务端计算结果
+		deliveryFee = serverFee
+		deliveryFeeDiscount = serverFeeDiscount
 
 		log.Info().
 			Int64("merchant_id", req.MerchantID).
@@ -1898,30 +1901,6 @@ func (server *Server) getOrder(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
-}
-
-// 判断运费差异是否显著（大于10元或10%）
-func feeDiffSignificant(clientFee, serverFee int64) bool {
-	if clientFee == serverFee {
-		return false
-	}
-	// 绝对差异阈值：1000 分（10元）
-	if abs64(clientFee-serverFee) > 1000 {
-		return true
-	}
-	// 相对差异阈值：10%
-	base := clientFee
-	if serverFee > base {
-		base = serverFee
-	}
-	return abs64(clientFee-serverFee)*10 > base
-}
-
-func abs64(v int64) int64 {
-	if v < 0 {
-		return -v
-	}
-	return v
 }
 
 // extractDistance 优先取配送单距离，其次取订单存储的距离

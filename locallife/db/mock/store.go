@@ -566,6 +566,36 @@ func (mr *MockStoreMockRecorder) CheckAppealExists(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckAppealExists", reflect.TypeOf((*MockStore)(nil).CheckAppealExists), ctx, arg)
 }
 
+// CheckBusinessLicenseExists mocks base method.
+func (m *MockStore) CheckBusinessLicenseExists(ctx context.Context, arg db.CheckBusinessLicenseExistsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckBusinessLicenseExists", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckBusinessLicenseExists indicates an expected call of CheckBusinessLicenseExists.
+func (mr *MockStoreMockRecorder) CheckBusinessLicenseExists(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckBusinessLicenseExists", reflect.TypeOf((*MockStore)(nil).CheckBusinessLicenseExists), ctx, arg)
+}
+
+// CheckLegalPersonIDExists mocks base method.
+func (m *MockStore) CheckLegalPersonIDExists(ctx context.Context, arg db.CheckLegalPersonIDExistsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckLegalPersonIDExists", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckLegalPersonIDExists indicates an expected call of CheckLegalPersonIDExists.
+func (mr *MockStoreMockRecorder) CheckLegalPersonIDExists(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckLegalPersonIDExists", reflect.TypeOf((*MockStore)(nil).CheckLegalPersonIDExists), ctx, arg)
+}
+
 // CheckMerchantAddressExists mocks base method.
 func (m *MockStore) CheckMerchantAddressExists(ctx context.Context, arg db.CheckMerchantAddressExistsParams) (bool, error) {
 	m.ctrl.T.Helper()
@@ -714,6 +744,20 @@ func (m *MockStore) ClaimVoucherTx(ctx context.Context, arg db.ClaimVoucherTxPar
 func (mr *MockStoreMockRecorder) ClaimVoucherTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimVoucherTx", reflect.TypeOf((*MockStore)(nil).ClaimVoucherTx), ctx, arg)
+}
+
+// CleanupOldCarts mocks base method.
+func (m *MockStore) CleanupOldCarts(ctx context.Context, updatedAt time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CleanupOldCarts", ctx, updatedAt)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CleanupOldCarts indicates an expected call of CleanupOldCarts.
+func (mr *MockStoreMockRecorder) CleanupOldCarts(ctx, updatedAt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupOldCarts", reflect.TypeOf((*MockStore)(nil).CleanupOldCarts), ctx, updatedAt)
 }
 
 // ClearBrowseHistory mocks base method.
@@ -13807,6 +13851,20 @@ func (m *MockStore) ResetRiderApplicationToDraft(ctx context.Context, id int64) 
 func (mr *MockStoreMockRecorder) ResetRiderApplicationToDraft(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetRiderApplicationToDraft", reflect.TypeOf((*MockStore)(nil).ResetRiderApplicationToDraft), ctx, id)
+}
+
+// ResetStaleMerchantOCRStatus mocks base method.
+func (m *MockStore) ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetStaleMerchantOCRStatus", ctx, updatedAt)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ResetStaleMerchantOCRStatus indicates an expected call of ResetStaleMerchantOCRStatus.
+func (mr *MockStoreMockRecorder) ResetStaleMerchantOCRStatus(ctx, updatedAt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetStaleMerchantOCRStatus", reflect.TypeOf((*MockStore)(nil).ResetStaleMerchantOCRStatus), ctx, updatedAt)
 }
 
 // ReviewAppeal mocks base method.

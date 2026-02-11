@@ -239,8 +239,8 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 		return
 	}
 
-	// 对 Top N 个订单调用自建 OSM 获取真实骑行距离
-	realDistances := server.enrichWithRealDistance(ctx, req.Latitude, req.Longitude, scored)
+	// 对 Top N 个订单调用自建 OSM 获取真实骑行距离 (Cached)
+	realDistances := server.routeService.EnrichOrders(ctx, req.Latitude, req.Longitude, scored)
 
 	// 转换响应
 	var response []recommendedOrderResponse
@@ -286,43 +286,6 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, response)
-}
-
-// enrichWithRealDistance 对 Top N 订单调用自建 OSM 获取真实骑行距离
-// 返回 map[orderID] => RouteResult
-func (server *Server) enrichWithRealDistance(ctx context.Context, riderLat, riderLng float64, scored []algorithm.ScoredOrder) map[int64]*maps.RouteResult {
-	result := make(map[int64]*maps.RouteResult)
-
-	// 如果没有配置地图客户端，直接返回空
-	if server.mapClient == nil {
-		return result
-	}
-
-	// 只对前 10 个订单计算真实距离（节省 API 调用）
-	maxOrders := 10
-	if len(scored) < maxOrders {
-		maxOrders = len(scored)
-	}
-
-	riderLocation := maps.Location{Lat: riderLat, Lng: riderLng}
-
-	for i := 0; i < maxOrders; i++ {
-		order := scored[i]
-		pickupLocation := maps.Location{
-			Lat: order.PoolOrder.PickupLocation.Latitude,
-			Lng: order.PoolOrder.PickupLocation.Longitude,
-		}
-
-		route, err := server.mapClient.GetBicyclingRoute(ctx, riderLocation, pickupLocation)
-		if err != nil {
-			log.Warn().Err(err).Int64("order_id", order.OrderID).Msg("failed to get bicycling route")
-			continue
-		}
-
-		result[order.OrderID] = route
-	}
-
-	return result
 }
 
 // ==================== 抢单 ====================

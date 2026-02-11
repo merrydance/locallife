@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
-	"github.com/hibiken/asynq"
 )
 
 // NotificationHelper 通知发送辅助函数集合
@@ -86,15 +86,15 @@ func (server *Server) isInDoNotDisturbPeriod(prefs db.UserNotificationPreference
 func (server *Server) SendNotification(ctx context.Context, params SendNotificationParams) error {
 	if server.taskDistributor != nil {
 		payload := &worker.SendNotificationPayload{
-			UserID:             params.UserID,
-			Type:               params.Type,
-			Title:              params.Title,
-			Content:            params.Content,
-			RelatedType:        params.RelatedType,
-			RelatedID:          params.RelatedID,
-			ExtraData:          params.ExtraData,
-			ExpiresAt:          params.ExpiresAt,
-			IgnorePreferences:  params.IgnorePreferences,
+			UserID:            params.UserID,
+			Type:              params.Type,
+			Title:             params.Title,
+			Content:           params.Content,
+			RelatedType:       params.RelatedType,
+			RelatedID:         params.RelatedID,
+			ExtraData:         params.ExtraData,
+			ExpiresAt:         params.ExpiresAt,
+			IgnorePreferences: params.IgnorePreferences,
 		}
 		return server.taskDistributor.DistributeTaskSendNotification(
 			ctx,
@@ -104,6 +104,21 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 		)
 	}
 
+	// Fallback: execute asynchronously in a goroutine to avoid blocking the API response
+	// P1-024: Ensure notification logic doesn't block critical path
+	go func() {
+		// Create a detached context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		server.sendNotificationInternal(ctx, params)
+	}()
+
+	return nil
+}
+
+// sendNotificationInternal executes the notification logic synchronously (internal use)
+func (server *Server) sendNotificationInternal(ctx context.Context, params SendNotificationParams) {
 	// 测试环境跳过WebSocket推送，但仍创建通知记录（如果store不为nil）
 	skipWebSocket := server.wsHub == nil
 
@@ -121,7 +136,7 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 					Int64("user_id", params.UserID).
 					Str("type", params.Type).
 					Msg("notification disabled by user preference")
-				return nil // 用户禁用了该类型通知，不创建
+				return
 			}
 
 			// 检查是否在免打扰时段（只影响推送，不影响通知创建）
@@ -141,7 +156,7 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 		extraDataJSON, err = json.Marshal(params.ExtraData)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to marshal extra_data")
-			return err
+			return
 		}
 	}
 
@@ -172,12 +187,12 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 	notification, err := server.store.CreateNotification(ctx, createParams)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create notification")
-		return err
+		return
 	}
 
 	// 如果跳过WebSocket或不应推送（免打扰时段），直接返回
 	if skipWebSocket || !shouldPush {
-		return nil
+		return
 	}
 
 	// 通过WebSocket推送（如果骑手或商户在线）
@@ -211,6 +226,4 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 	if pushed {
 		_ = server.store.MarkNotificationAsPushed(ctx, notification.ID)
 	}
-
-	return nil
 }

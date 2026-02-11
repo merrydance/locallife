@@ -11,6 +11,7 @@ import (
 // The values are read by viper from a config file or environment variable.
 type Config struct {
 	Environment          string        `mapstructure:"ENVIRONMENT"`
+	LogLevel             string        `mapstructure:"LOG_LEVEL"`
 	AllowedOrigins       []string      `mapstructure:"ALLOWED_ORIGINS"`
 	LBSProvider          string        `mapstructure:"LBS_PROVIDER"`        // 仅支持 "osm"（自建）
 	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"`        // OSM 反向代理基地址，如 https://lbs.merrydance.cn
@@ -100,6 +101,7 @@ func LoadConfig(path string) (config Config, err error) {
 	viper.AutomaticEnv()
 	viper.SetDefault("AUTO_MIGRATE", false)
 	viper.SetDefault("REDIS_REQUIRED", false)
+	viper.SetDefault("LOG_LEVEL", "info")
 	// WebSocket rollout defaults
 	viper.SetDefault("WS_RELIABLE_ENABLED", true)
 	viper.SetDefault("WS_RELIABLE_PERCENT", 100)

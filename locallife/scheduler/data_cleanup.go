@@ -10,6 +10,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 
+	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
@@ -70,6 +71,18 @@ func (s *DataCleanupScheduler) Start() error {
 
 	// 每天凌晨2点30执行异常统计回填（修正漂移）
 	_, err = s.cron.AddFunc("0 30 2 * * *", s.backfillAbnormalStatsDaily)
+	if err != nil {
+		return err
+	}
+
+	// 每天凌晨4点清理长期未更新的购物车（7天）
+	_, err = s.cron.AddFunc("0 0 4 * * *", s.cleanupExpiredCarts)
+	if err != nil {
+		return err
+	}
+
+	// 每小时15分清理超时OCR任务
+	_, err = s.cron.AddFunc("0 15 * * * *", s.cleanupStaleOCRTasks)
 	if err != nil {
 		return err
 	}
@@ -280,10 +293,17 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 				continue
 			}
 
+			// P1-025 fix: 首先获取订单状态，以确保 CancelOrderTx 能正确处理库存回滚
+			order, err := s.store.GetOrder(ctx, delivery.OrderID)
+			if err != nil {
+				log.Error().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to get order for stale delivery cancellation")
+				continue
+			}
+
 			// 使用事务取消订单
-			_, err := s.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
+			cancelResult, err := s.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
 				OrderID:      delivery.OrderID,
-				OldStatus:    "", // 我们需要先查一下当前状态，或者让 CancelOrderTx 支持状态检查
+				OldStatus:    order.Status,
 				CancelReason: "配送无人接单，系统自动取消",
 				OperatorID:   0, // 系统
 				OperatorType: "system",
@@ -299,12 +319,41 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 				continue
 			}
 
-			// 触发自动退款（如果有支付）
-			// 这里假设 CancelOrderTx 或后续流程会处理退款逻辑（通常在 ProcessOrderPaymentTimeout 或类似的 watcher 中）
-			// 但因为我们是系统主动取消，最好明确触发退款任务。
-			// 由于 scheduler 没有直接访问 taskDistributor，我们暂时依赖 CancelOrderTx 的副作用或日志监控。
-			// 如果需要显式退款，需要将 taskDistributor 注入到 DataCleanupScheduler。
-			// 目前暂且只做状态变更，后续完善退款链路。
+			// 3. P1-025 fix: 显式触发退款任务（针对微信支付等外部支付）
+			// CancelOrderTx 内部已处理余额支付的回滚，这里只处理外部支付
+			// 需要查找该订单关联的成功支付记录
+			paymentOrders, err := s.store.GetPaymentOrdersByOrder(ctx, pgtype.Int8{Int64: cancelResult.Order.ID, Valid: true})
+			if err != nil {
+				log.Error().Err(err).Int64("order_id", cancelResult.Order.ID).Msg("failed to get payment orders for refund check")
+			} else {
+				var successPayment *db.PaymentOrder
+				for _, p := range paymentOrders {
+					if p.Status == "success" {
+						successPayment = &p
+						break
+					}
+				}
+
+				if successPayment != nil {
+					payload := &worker.PayloadProcessRefund{
+						PaymentOrderID: successPayment.ID,
+						OrderID:        cancelResult.Order.ID,
+						RefundAmount:   successPayment.Amount, // 全额退款
+						Reason:         "配送无人接单，系统自动取消",
+					}
+					opts := []asynq.Option{
+						asynq.MaxRetry(10),
+						asynq.ProcessIn(10 * time.Second), // 稍后处理，给DB复制留点时间
+						asynq.Queue(worker.QueueCritical),
+					}
+					if err := s.taskDistributor.DistributeTaskProcessRefund(ctx, payload, opts...); err != nil {
+						log.Error().Err(err).Int64("order_id", cancelResult.Order.ID).Msg("failed to enqueue refund task for stale delivery")
+						// 即使入队失败，订单已取消，后续可以通过 ProcessOrderPaymentTimeout 或人工补偿
+					} else {
+						log.Info().Int64("order_id", cancelResult.Order.ID).Msg("enqueued refund task for stale delivery cancellation")
+					}
+				}
+			}
 
 			cancelledCount++
 		}
@@ -454,5 +503,35 @@ func (s *DataCleanupScheduler) markExpiredVouchers() {
 
 	if count > 0 {
 		log.Info().Int64("count", count).Msg("marked vouchers as expired")
+	}
+}
+
+// cleanupExpiredCarts 清理长期未更新的购物车
+// 超过7天未更新的购物车数据将被物理删除
+func (s *DataCleanupScheduler) cleanupExpiredCarts() {
+	ctx := context.Background()
+	// 7天前
+	expireTime := time.Now().AddDate(0, 0, -7)
+
+	err := s.store.CleanupOldCarts(ctx, expireTime)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to cleanup expired carts")
+		return
+	}
+
+	log.Info().Msg("cleanup expired carts (older than 7 days) completed")
+}
+
+// cleanupStaleOCRTasks 清理长期处于 processing 状态的 OCR 任务
+// 超过1小时未更新的 OCR 标记为 failed，允许用户重试
+func (s *DataCleanupScheduler) cleanupStaleOCRTasks() {
+	ctx := context.Background()
+	// 1小时前
+	staleTime := time.Now().Add(-1 * time.Hour)
+
+	err := s.store.ResetStaleMerchantOCRStatus(ctx, staleTime)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to reset stale merchant ocr status")
+		return
 	}
 }

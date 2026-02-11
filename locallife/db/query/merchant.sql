@@ -454,3 +454,19 @@ WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL;
 
+
+-- name: CheckBusinessLicenseExists :one
+-- 检查营业执照号是否已被其他已通过的申请占用
+SELECT COUNT(*) FROM merchant_applications
+WHERE business_license_number = $1
+  AND status = 'approved'
+  AND id != $2;
+
+-- name: CheckLegalPersonIDExists :one
+-- 检查法人身份证号是否已被其他已通过的申请占用
+SELECT COUNT(*) FROM merchant_applications
+WHERE legal_person_id_number = $1
+  AND status = 'approved'
+  AND id != $2;
+
+

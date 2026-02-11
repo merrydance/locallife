@@ -48,6 +48,17 @@ func (q *Queries) AddCartItem(ctx context.Context, arg AddCartItemParams) (CartI
 	return i, err
 }
 
+const cleanupOldCarts = `-- name: CleanupOldCarts :exec
+DELETE FROM carts
+WHERE updated_at < $1
+`
+
+// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
+func (q *Queries) CleanupOldCarts(ctx context.Context, updatedAt time.Time) error {
+	_, err := q.db.Exec(ctx, cleanupOldCarts, updatedAt)
+	return err
+}
+
 const clearCart = `-- name: ClearCart :exec
 DELETE FROM cart_items
 WHERE cart_id = $1

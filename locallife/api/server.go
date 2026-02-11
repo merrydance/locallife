@@ -49,6 +49,7 @@ type Server struct {
 	deliveryBroadcast *logic.DeliveryBroadcastLogic
 	rateLimiter       *RateLimiter
 	rulesEngine       rules.Engine
+	routeService      *logic.RouteService
 	router            *gin.Engine
 }
 
@@ -227,6 +228,8 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	if wsPubSub != nil {
 		server.deliveryBroadcast = logic.NewDeliveryBroadcastLogic(store, wsPubSub.GetRedisClient())
 	}
+
+	server.routeService = logic.NewRouteService(mapClient)
 
 	server.setupRouter()
 	return server, nil
@@ -555,6 +558,8 @@ func (server *Server) setupRouter() {
 
 	// M4: 菜品管理路由
 	dishesGroup := authGroup.Group("/dishes")
+	dishesGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "chef"))
+
 	{
 		dishesGroup.POST("/images/upload", server.uploadDishImage)
 		// 菜品分类
@@ -578,6 +583,8 @@ func (server *Server) setupRouter() {
 
 	// M4: 套餐管理路由
 	combosGroup := authGroup.Group("/combos")
+	combosGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "chef"))
+
 	{
 		// 套餐管理
 		combosGroup.POST("", server.createComboSet)
@@ -594,6 +601,8 @@ func (server *Server) setupRouter() {
 
 	// M4: 库存管理路由
 	inventoryGroup := authGroup.Group("/inventory")
+	inventoryGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "chef"))
+
 	{
 		inventoryGroup.POST("", server.createDailyInventory)
 		inventoryGroup.GET("", server.listDailyInventory)
@@ -728,6 +737,8 @@ func (server *Server) setupRouter() {
 
 	// M7: 商户端订单管理路由
 	merchantOrdersGroup := authGroup.Group("/merchant/orders")
+	merchantOrdersGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "cashier"))
+
 	{
 		merchantOrdersGroup.GET("", server.listMerchantOrders)
 		merchantOrdersGroup.GET("/:id", server.getMerchantOrder)
@@ -740,6 +751,8 @@ func (server *Server) setupRouter() {
 
 	// M7-KDS: 厨房显示系统路由
 	kitchenGroup := authGroup.Group("/kitchen")
+	kitchenGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "chef"))
+
 	{
 		kitchenGroup.GET("/orders", server.listKitchenOrders)
 		kitchenGroup.GET("/orders/:id", server.getKitchenOrderDetails)

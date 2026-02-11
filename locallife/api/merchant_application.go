@@ -1393,6 +1393,35 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return false, "法人身份证已过期"
 	}
 
+	// P1-038: 防欺诈多重校验
+	// 9. 检查营业执照是否已被使用
+	licenseCount, err := server.store.CheckBusinessLicenseExists(ctx, db.CheckBusinessLicenseExistsParams{
+		BusinessLicenseNumber: app.BusinessLicenseNumber,
+		ID:                    app.ID,
+	})
+	if err != nil {
+		log.Error().Err(err).Int64("application_id", app.ID).Msg("failed to check duplicate license")
+		return false, "系统错误，请稍后重试"
+	}
+	if licenseCount > 0 {
+		return false, "该营业执照号码已被其他商户使用" // 防止恶意抢注/重复入驻
+	}
+
+	// 10. 检查身份证是否已被使用
+	// 注意：此处严格限制身份证唯一性，暂不支持同一法人开设多家店铺（防止欺诈多账号）
+	// 如需支持连锁店，需放宽此处逻辑或增加连锁店审核流程
+	idCardCount, err := server.store.CheckLegalPersonIDExists(ctx, db.CheckLegalPersonIDExistsParams{
+		LegalPersonIDNumber: app.LegalPersonIDNumber,
+		ID:                  app.ID,
+	})
+	if err != nil {
+		log.Error().Err(err).Int64("application_id", app.ID).Msg("failed to check duplicate id card")
+		return false, "系统错误，请稍后重试"
+	}
+	if idCardCount > 0 {
+		return false, "该身份证号码已被注册"
+	}
+
 	return true, ""
 }
 
