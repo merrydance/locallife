@@ -62,7 +62,7 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 		return
 	}
 
-	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 90)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -193,7 +193,7 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 90)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -320,7 +320,7 @@ func (server *Server) listMerchantServiceFees(ctx *gin.Context) {
 		return
 	}
 
-	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 90)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -433,7 +433,7 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 90)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -564,7 +564,7 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 		return
 	}
 
-	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 90)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return

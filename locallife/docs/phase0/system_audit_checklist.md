@@ -58,7 +58,7 @@
 | **P1-058** | Medium   | 逻辑/并发   | `tryWebSocketPush` 对每一条通知都进行角色查询，在高并发下可能导致 DB 压力。                                                                                                                                |
 | **P1-059** | Resolved | 事务/资金   | ~~`CancelOrderTx` (订单取消) 缺失会员余额回滚逻辑~~ (**已修复**: 事务内原子回滚余额+创建退款流水)                                                                                                          |
 | **P1-060** | Resolved | 逻辑/并发   | ~~`ProcessOrderPaymentTx` 在 inventory 扣减后未对 `PaymentOrder` 状态做最终强制校验。~~ (**已修复**: Added mandatory check for `OrderStatusPending` in `ProcessOrderPaymentTx`.)                           |
-| **P1-061** | Medium   | 逻辑/同步   | `getMerchantFinanceOverview` 跨日期统计未加缓存，且未对超大时间跨度做严格限制。                                                                                                                            |
+| **P1-061** | Resolved | 逻辑/同步   | ~~`getMerchantFinanceOverview` 跨日期统计未加缓存，且未对超大时间跨度做严格限制。~~ (**已修复**: Restricted date range to 90 days)                                                                         |
 | **P1-062** | Resolved | 安全/身份   | ~~`bindPhone` 接口允许绑定任意手机号~~ (已移除该功能，因业务不需要且微信接口收费)。                                                                                                                        |
 | **P1-063** | Resolved | 逻辑/资金   | ~~爽约时定金（Deposit）逻辑缺失，未显式处理没收/结算资金流。~~ (**已修复**: Integrated into ProfitSharing system)                                                                                          |
 | **P1-064** | Resolved | 安全/风控   | ~~爽约时未记录用户风控信用分，无法防止恶意爽约。~~ (**已修复**: Automatically create behavior decision for no-show)                                                                                        |
