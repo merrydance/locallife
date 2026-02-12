@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -11,11 +12,10 @@ import (
 
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/websocket"
-	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -187,129 +187,56 @@ type orderBadge struct {
 }
 
 type orderResponse struct {
-	// 订单ID
-	ID int64 `json:"id" example:"100001"`
-
-	// 订单编号 (唯一订单号)
-	OrderNo string `json:"order_no" example:"ORD20251201123456"`
-
-	// 用户ID
-	UserID int64 `json:"user_id" example:"10001"`
-
-	// 商户ID
-	MerchantID int64 `json:"merchant_id" example:"20001"`
-
-	// 商户名称
-	MerchantName string `json:"merchant_name,omitempty" example:"张三餐厅"`
-
-	// 订单类型 (枚举: takeout-外卖, dine_in-堂食, takeaway-打包自取, reservation-预定点菜)
-	OrderType string `json:"order_type" enums:"takeout,dine_in,takeaway,reservation" example:"takeout"`
-
-	// 配送地址ID (外卖订单时有值)
-	AddressID *int64 `json:"address_id,omitempty" example:"5001"`
-
-	// 配送费 (单位：分)
-	DeliveryFee int64 `json:"delivery_fee" example:"500"`
-
-	// 配送距离 (单位：米)
-	DeliveryDistance *int32 `json:"delivery_distance,omitempty" example:"2500"`
-
-	// 预计送达总时长（分钟），用于前端 ETA 展示
-	DeliveryEtaMinutes *int32 `json:"delivery_eta_minutes,omitempty" example:"38"`
-
-	// 预计送达时间（时间戳），用于订单详情展示送达时间段
-	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at,omitempty" example:"2025-12-01T12:30:00Z"`
-
-	// 三方派单/履约信息
-	DispatchOrderID  *int64  `json:"dispatch_order_id,omitempty"`
-	FlowID           *int64  `json:"flow_id,omitempty"`
-	PickupCode       *string `json:"pickup_code,omitempty"`
-	PickupCodeMasked *string `json:"pickup_code_masked,omitempty"`
-
-	// 桌台ID (堂食订单时有值)
-	TableID *int64 `json:"table_id,omitempty" example:"301"`
-
-	// 预订ID (预定点菜时有值)
-	ReservationID *int64 `json:"reservation_id,omitempty" example:"8001"`
-
-	// 商品小计 (单位：分，不含配送费)
-	Subtotal int64 `json:"subtotal" example:"5760"`
-
-	// 优惠金额 (单位：分)
-	DiscountAmount int64 `json:"discount_amount" example:"500"`
-
-	// 配送费优惠 (单位：分)
-	DeliveryFeeDiscount int64 `json:"delivery_fee_discount" example:"200"`
-
-	// 订单总金额 (单位：分)
-	TotalAmount int64 `json:"total_amount" example:"5760"`
-
-	// 订单状态 (枚举: pending-待支付, paid-已支付, preparing-制作中, ready-待取餐/待配送, courier_accepted-骑手已接单, picked-已取餐, delivering-配送中, rider_delivered-骑手送达, user_delivered-用户确认送达, completed-已完成, cancelled-已取消)
-	Status string `json:"status" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
-
-	// 状态提示与徽标
-	StatusHint *string      `json:"status_hint,omitempty"`
-	Badges     []orderBadge `json:"badges,omitempty"`
-	Actions    []string     `json:"actions,omitempty"`
-
-	// 异常/投诉通道
-	ExceptionState *string `json:"exception_state,omitempty"`
-	ClaimChannel   *string `json:"claim_channel,omitempty"`
-	Overtime       bool    `json:"overtime,omitempty"`
-
-	// 履约状态 (枚举: scheduled-已排期, pending_kitchen-待出餐, preparing-制作中, ready-已出餐, completed-履约完成, cancelled-已取消)
-	FulfillmentStatus string `json:"fulfillment_status" enums:"scheduled,pending_kitchen,preparing,ready,completed,cancelled" example:"pending_kitchen"`
-
-	// 支付方式 (枚举: wechat-微信支付, balance-余额支付)
-	PaymentMethod *string `json:"payment_method,omitempty" enums:"wechat,balance" example:"wechat"`
-
-	// 订单备注
-	Notes *string `json:"notes,omitempty" example:"不要香菜"`
-
-	// 订单商品列表
-	Items []orderItemResponse `json:"items,omitempty"`
-
-	// 支付时间
-	PaidAt *time.Time `json:"paid_at,omitempty" example:"2025-12-01T12:30:00Z"`
-
-	// 准备/配送关键时间点
-	PrepStartAt         *time.Time `json:"prep_start_at,omitempty"`
-	ReadyAt             *time.Time `json:"ready_at,omitempty"`
-	CourierAcceptAt     *time.Time `json:"courier_accept_at,omitempty"`
-	PickedAt            *time.Time `json:"picked_at,omitempty"`
-	RiderDeliveredAt    *time.Time `json:"rider_delivered_at,omitempty"`
-	UserDeliveredAt     *time.Time `json:"user_delivered_at,omitempty"`
-	AutoUserDeliveredAt *time.Time `json:"auto_user_delivered_at,omitempty"`
-
-	// 完成时间（历史兼容）
-	CompletedAt *time.Time `json:"completed_at,omitempty" example:"2025-12-01T13:15:00Z"`
-
-	// 取消时间
-	CancelledAt *time.Time `json:"cancelled_at,omitempty" example:"2025-12-01T12:25:00Z"`
-
-	// 取消原因
-	CancelReason *string `json:"cancel_reason,omitempty" example:"商品缺货"`
-
-	// 替换的新订单ID（仅当此订单被更新菜单替换时存在）
-	ReplacedByOrderID *int64 `json:"replaced_by_order_id,omitempty" example:"100009"`
-
-	// 创建时间
-	CreatedAt time.Time `json:"created_at" example:"2025-12-01T12:20:00Z"`
-
-	// 更新时间
-	UpdatedAt *time.Time `json:"updated_at,omitempty" example:"2025-12-01T12:30:00Z"`
-
-	// 商户电话
-	MerchantPhone *string `json:"merchant_phone,omitempty" example:"13800138000"`
-
-	// 配送联系人
-	DeliveryContactName *string `json:"delivery_contact_name,omitempty" example:"张三"`
-
-	// 配送联系电话
-	DeliveryContactPhone *string `json:"delivery_contact_phone,omitempty" example:"13800138000"`
-
-	// 配送地址
-	DeliveryAddress *string `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
+	ID                   int64               `json:"id" example:"100001"`
+	OrderNo              string              `json:"order_no" example:"ORD20251201123456"`
+	UserID               int64               `json:"user_id" example:"10001"`
+	MerchantID           int64               `json:"merchant_id" example:"20001"`
+	MerchantName         string              `json:"merchant_name,omitempty" example:"张三餐厅"`
+	OrderType            string              `json:"order_type" enums:"takeout,dine_in,takeaway,reservation" example:"takeout"`
+	AddressID            *int64              `json:"address_id,omitempty" example:"5001"`
+	DeliveryFee          int64               `json:"delivery_fee" example:"500"`
+	DeliveryDistance     *int32              `json:"delivery_distance,omitempty" example:"2500"`
+	DeliveryEtaMinutes   *int32              `json:"delivery_eta_minutes,omitempty" example:"38"`
+	EstimatedDeliveryAt  *time.Time          `json:"estimated_delivery_at,omitempty" example:"2025-12-01T12:30:00Z"`
+	DispatchOrderID      *int64              `json:"dispatch_order_id,omitempty"`
+	FlowID               *int64              `json:"flow_id,omitempty"`
+	PickupCode           *string             `json:"pickup_code,omitempty"`
+	PickupCodeMasked     *string             `json:"pickup_code_masked,omitempty"`
+	TableID              *int64              `json:"table_id,omitempty" example:"301"`
+	ReservationID        *int64              `json:"reservation_id,omitempty" example:"8001"`
+	Subtotal             int64               `json:"subtotal" example:"5760"`
+	DiscountAmount       int64               `json:"discount_amount" example:"500"`
+	DeliveryFeeDiscount  int64               `json:"delivery_fee_discount" example:"200"`
+	TotalAmount          int64               `json:"total_amount" example:"5760"`
+	Status               string              `json:"status" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
+	StatusHint           *string             `json:"status_hint,omitempty"`
+	Badges               []orderBadge        `json:"badges,omitempty"`
+	Actions              []string            `json:"actions,omitempty"`
+	ExceptionState       *string             `json:"exception_state,omitempty"`
+	ClaimChannel         *string             `json:"claim_channel,omitempty"`
+	Overtime             bool                `json:"overtime,omitempty"`
+	FulfillmentStatus    string              `json:"fulfillment_status" enums:"scheduled,pending_kitchen,preparing,ready,completed,cancelled" example:"pending_kitchen"`
+	PaymentMethod        *string             `json:"payment_method,omitempty" enums:"wechat,balance" example:"wechat"`
+	Notes                *string             `json:"notes,omitempty" example:"不要香菜"`
+	Items                []orderItemResponse `json:"items,omitempty"`
+	PaidAt               *time.Time          `json:"paid_at,omitempty" example:"2025-12-01T12:30:00Z"`
+	PrepStartAt          *time.Time          `json:"prep_start_at,omitempty"`
+	ReadyAt              *time.Time          `json:"ready_at,omitempty"`
+	CourierAcceptAt      *time.Time          `json:"courier_accept_at,omitempty"`
+	PickedAt             *time.Time          `json:"picked_at,omitempty"`
+	RiderDeliveredAt     *time.Time          `json:"rider_delivered_at,omitempty"`
+	UserDeliveredAt      *time.Time          `json:"user_delivered_at,omitempty"`
+	AutoUserDeliveredAt  *time.Time          `json:"auto_user_delivered_at,omitempty"`
+	CompletedAt          *time.Time          `json:"completed_at,omitempty" example:"2025-12-01T13:15:00Z"`
+	CancelledAt          *time.Time          `json:"cancelled_at,omitempty" example:"2025-12-01T12:25:00Z"`
+	CancelReason         *string             `json:"cancel_reason,omitempty" example:"商品缺货"`
+	ReplacedByOrderID    *int64              `json:"replaced_by_order_id,omitempty" example:"100009"`
+	CreatedAt            time.Time           `json:"created_at" example:"2025-12-01T12:20:00Z"`
+	UpdatedAt            *time.Time          `json:"updated_at,omitempty" example:"2025-12-01T12:30:00Z"`
+	MerchantPhone        *string             `json:"merchant_phone,omitempty" example:"13800138000"`
+	DeliveryContactName  *string             `json:"delivery_contact_name,omitempty" example:"张三"`
+	DeliveryContactPhone *string             `json:"delivery_contact_phone,omitempty" example:"13800138000"`
+	DeliveryAddress      *string             `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
 }
 
 func newOrderResponse(o db.Order) orderResponse {
@@ -411,7 +338,6 @@ func newOrderResponse(o db.Order) orderResponse {
 		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
 	}
 
-	// 配送预计在途时长 (ETA)
 	if o.DeliveryDuration.Valid && o.DeliveryDuration.Int32 > 0 {
 		etaMinutes := o.DeliveryDuration.Int32 / 60
 		resp.DeliveryEtaMinutes = &etaMinutes
@@ -843,33 +769,26 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	// 验证商户存在且正常营业
-	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
+	merchant, err := logic.ValidateMerchantForOrder(ctx, server.store, req.MerchantID)
 	if err != nil {
-		if isNotFoundError(err) {
-			log.Warn().Msg("[DEBUG] createOrder: merchant not found")
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if merchant.Status != "active" {
-		log.Warn().Str("status", merchant.Status).Msg("[DEBUG] createOrder: merchant not active")
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant is not active")))
-		return
-	}
-	if !merchant.IsOpen {
-		log.Warn().Int64("merchant_id", merchant.ID).Msg("[DEBUG] createOrder: merchant is closed")
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户已打烊，暂时无法接单")))
-		return
-	}
 
 	if req.OrderType == OrderTypeTakeout {
-		if merchantProfile, err := server.store.GetMerchantProfile(ctx, merchant.ID); err == nil && merchantProfile.IsTakeoutSuspended {
+		suspension, err := logic.GetTakeoutSuspension(ctx, server.store, merchant.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if suspension != nil {
 			ctx.JSON(http.StatusForbidden, gin.H{
 				"error":          "merchant takeout ordering is suspended",
-				"suspend_reason": merchantProfile.TakeoutSuspendReason.String,
-				"suspend_until":  merchantProfile.TakeoutSuspendUntil.Time,
+				"suspend_reason": suspension.Reason,
+				"suspend_until":  suspension.Until,
 			})
 			return
 		}
@@ -877,49 +796,41 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	log.Info().Msg("[DEBUG] createOrder: merchant validated")
 
-	ruleDecision := rules.Decision{Action: "allow"}
-	if server.rulesEngine != nil && server.config.RulesEngineEnabled {
-		ruleInput := rules.Context{
-			Domain:     rules.DomainOrder,
-			RegionID:   merchant.RegionID,
-			MerchantID: merchant.ID,
-			UserID:     authPayload.UserID,
-			OrderType:  req.OrderType,
-			Metadata: map[string]interface{}{
-				"items_count": len(req.Items),
-				"use_balance": req.UseBalance,
-			},
-		}
-		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+	ruleInput := rules.Context{
+		Domain:     rules.DomainOrder,
+		RegionID:   merchant.RegionID,
+		MerchantID: merchant.ID,
+		UserID:     authPayload.UserID,
+		OrderType:  req.OrderType,
+		Metadata: map[string]interface{}{
+			"items_count": len(req.Items),
+			"use_balance": req.UseBalance,
+		},
+	}
+	ruleDecision, err := logic.EvaluateRules(ctx, logic.RuleEvaluationInput{
+		Enabled:   server.rulesEngine != nil && server.config.RulesEngineEnabled,
+		Engine:    server.rulesEngine,
+		Context:   ruleInput,
+		ActorRole: RoleCustomer,
+		OnDecision: func(input rules.Context, decision rules.Decision, actorRole string) {
+			server.recordRuleHit(ctx, input, decision, actorRole)
+		},
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
-		ruleDecision = decision
-		if !decision.Allow {
-			reason := decision.Reason
-			if reason == "" {
-				reason = "order blocked by rule"
-			}
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New(reason)))
-			return
-		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
 	// P0安全: 堂食订单验证桌台归属商户
 	if req.OrderType == OrderTypeDineIn && req.TableID != nil {
-		table, err := server.store.GetTable(ctx, *req.TableID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+		if err := logic.ValidateTableOwnership(ctx, server.store, req.MerchantID, *req.TableID); err != nil {
+			if writeLogicRequestError(ctx, err) {
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if table.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table does not belong to this merchant")))
 			return
 		}
 	}
@@ -927,208 +838,64 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	// 堂食/预订订单需要开放用餐会话，绑定会话到订单
 	var diningSession *db.DiningSession
 	var reservation *db.TableReservation
-	switch req.OrderType {
-	case OrderTypeReservation:
-		if req.ReservationID == nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation_id is required for reservation orders")))
-			return
-		}
-
-		res, err := server.store.GetTableReservation(ctx, *req.ReservationID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if res.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
-			return
-		}
-		if res.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation does not belong to this merchant")))
-			return
-		}
-		if res.Status != ReservationStatusPending && res.Status != ReservationStatusPaid && res.Status != ReservationStatusConfirmed && res.Status != ReservationStatusCheckedIn {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is in an invalid state for ordering")))
-			return
-		}
-		if req.TableID != nil && res.TableID != *req.TableID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table does not match reservation")))
-			return
-		}
-
-		reservation = &res
-
-		session, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: res.ID, Valid: true})
-		if err == nil {
-			if session.TableID != res.TableID {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session table mismatch")))
-				return
-			}
-			if session.MerchantID != req.MerchantID {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dining session merchant mismatch")))
-				return
-			}
-			diningSession = &session
-		} else if !isNotFoundError(err) {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		// 如果是预订点餐且未到店（无会话），允许继续创建订单，后续到店核销时再绑定
-
-		tableID := res.TableID
-		req.TableID = &tableID
-
-	case OrderTypeDineIn:
-		if req.TableID == nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table_id is required for dine-in orders")))
-			return
-		}
-
-		session, err := server.store.GetActiveDiningSessionByTable(ctx, *req.TableID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for table")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if session.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("dining session merchant mismatch")))
-			return
-		}
-		if req.ReservationID != nil {
-			if !session.ReservationID.Valid || session.ReservationID.Int64 != *req.ReservationID {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("dining session reservation mismatch")))
-				return
-			}
-
-			res, err := server.store.GetTableReservation(ctx, *req.ReservationID)
-			if err != nil {
-				if isNotFoundError(err) {
-					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-					return
-				}
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			if res.UserID != authPayload.UserID {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
-				return
-			}
-			if res.MerchantID != req.MerchantID {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("reservation does not belong to this merchant")))
-				return
-			}
-			if res.TableID != *req.TableID {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table does not match reservation")))
-				return
-			}
-			if res.PaymentMode != PaymentModeDeposit {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not in deposit mode")))
-				return
-			}
-			if res.Status != ReservationStatusPaid && res.Status != ReservationStatusConfirmed && res.Status != ReservationStatusCheckedIn {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not ready for dining")))
-				return
-			}
-
-			reservation = &res
-		}
-
-		diningSession = &session
-	}
-
-	// 账单组校验（仅堂食/预订）
-	if req.BillingGroupID != nil && req.OrderType != OrderTypeDineIn && req.OrderType != OrderTypeReservation {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("billing_group_id is only allowed for dine-in or reservation orders")))
-		return
-	}
 	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
-		if diningSession == nil {
-			if req.OrderType == OrderTypeDineIn {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for billing group")))
+		result, err := logic.ValidateOrderSessionAndBilling(ctx, server.store, logic.OrderSessionInput{
+			UserID:         authPayload.UserID,
+			MerchantID:     req.MerchantID,
+			OrderType:      req.OrderType,
+			TableID:        req.TableID,
+			ReservationID:  req.ReservationID,
+			BillingGroupID: req.BillingGroupID,
+		})
+		if err != nil {
+			if writeLogicRequestError(ctx, err) {
 				return
 			}
-			if req.BillingGroupID != nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("billing_group_id requires an active session")))
-				return
-			}
-		} else {
-
-			var bg db.BillingGroup
-			if req.BillingGroupID != nil {
-				var err error
-				bg, err = server.store.GetBillingGroup(ctx, *req.BillingGroupID)
-				if err != nil {
-					if isNotFoundError(err) {
-						ctx.JSON(http.StatusNotFound, errorResponse(errors.New("billing group not found")))
-						return
-					}
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			} else {
-				var err error
-				bg, err = server.store.GetDefaultBillingGroupBySession(ctx, diningSession.ID)
-				if err != nil {
-					if isNotFoundError(err) {
-						ctx.JSON(http.StatusConflict, errorResponse(errors.New("default billing group not found")))
-						return
-					}
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-
-			if bg.DiningSessionID != diningSession.ID {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group does not belong to this dining session")))
-				return
-			}
-			if bg.Status == "closed" {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("billing group is closed")))
-				return
-			}
-			if _, err := server.store.GetActiveBillingGroupMember(ctx, db.GetActiveBillingGroupMemberParams{
-				BillingGroupID: bg.ID,
-				UserID:         authPayload.UserID,
-			}); err != nil {
-				if isNotFoundError(err) {
-					ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a member of the billing group")))
-					return
-				}
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-
-			if req.BillingGroupID == nil {
-				bgID := bg.ID
-				req.BillingGroupID = &bgID
-			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if result.DiningSession != nil {
+			diningSession = result.DiningSession
+		}
+		if result.Reservation != nil {
+			reservation = result.Reservation
+		}
+		if result.BillingGroupID != nil {
+			req.BillingGroupID = result.BillingGroupID
+		}
+		if result.TableID != nil {
+			req.TableID = result.TableID
 		}
 	}
 
 	// 定金模式仅允许一笔尾款订单，避免重复抵扣
 	if reservation != nil && reservation.PaymentMode == PaymentModeDeposit {
-		existing, err := server.store.GetLatestOrderByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
-		if err == nil {
-			if existing.Status != OrderStatusCancelled && !existing.ReplacedByOrderID.Valid {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation already has an active order")))
+		if err := logic.EnsureReservationSingleActiveOrder(ctx, server.store, reservation.ID); err != nil {
+			if writeLogicRequestError(ctx, err) {
 				return
 			}
-		} else if !isNotFoundError(err) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 	}
 
 	// 计算订单金额
-	subtotal, items, err := server.calculateOrderItems(ctx, req.MerchantID, req.Items)
+	subtotal, items, err := logic.CalculateOrderItems(ctx, server.store, req.MerchantID, toOrderItemInputs(req.Items),
+		func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
+			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID, customizations)
+			if err != nil {
+				return nil, 0, err
+			}
+			if len(normalized) == 0 {
+				return nil, extra, nil
+			}
+			data, err := json.Marshal(normalized)
+			if err != nil {
+				return nil, 0, err
+			}
+			return data, extra, nil
+		},
+	)
 	if err != nil {
 		log.Warn().Err(err).Msg("[DEBUG] createOrder: calculateOrderItems failed")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -1142,8 +909,6 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	var deliveryFee int64 = 0
 	var deliveryDistance int32 = 0
 	var deliveryFeeDiscount int64 = 0
-	var serverFee int64
-	var serverFeeDiscount int64
 	var deliveryDuration int32
 	if req.OrderType == OrderTypeTakeout && req.AddressID != nil {
 		// 获取用户地址
@@ -1157,127 +922,46 @@ func (server *Server) createOrder(ctx *gin.Context) {
 			return
 		}
 
-		// P0安全: 验证地址属于当前用户
-		if address.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("address does not belong to you")))
-			return
-		}
-
-		// P1-017: 强制服务端计算距离与运费，防止前端篡改
-		// 忽略前端传入的 deliveryDistance，重新计算
-		calculatedDistance := int32(0)
-		calculatedDuration := int32(0)
-
-		if address.Latitude.Valid && address.Longitude.Valid && merchant.Latitude.Valid && merchant.Longitude.Valid {
-			userLat, _ := address.Latitude.Float64Value()
-			userLng, _ := address.Longitude.Float64Value()
-			merchantLat, _ := merchant.Latitude.Float64Value()
-			merchantLng, _ := merchant.Longitude.Float64Value()
-
-			// 优先使用自建 OSM 计算骑行距离
-			if server.mapClient != nil {
-				fromLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
-				toLoc := maps.Location{Lat: userLat.Float64, Lng: userLng.Float64}
-				routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-				if err == nil && routeResult != nil {
-					calculatedDistance = int32(routeResult.Distance)
-					calculatedDuration = int32(routeResult.Duration)
-				} else {
-					log.Warn().Err(err).
-						Int64("merchant_id", req.MerchantID).
-						Int64("address_id", *req.AddressID).
-						Msg("createOrder: route calculation failed, using fallback distance")
-				}
+		quote, err := logic.ComputeDeliveryQuote(ctx, logic.DeliveryQuoteInput{
+			UserID:    authPayload.UserID,
+			OrderType: req.OrderType,
+			Subtotal:  subtotal,
+			Merchant:  merchant,
+			Address:   address,
+		}, server.mapClient, func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
+			feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, merchantID, distance, orderAmount)
+			if err != nil {
+				return logic.DeliveryFeeComputation{}, err
 			}
-
-			// 降级：如果地图服务失败或未配置，使用直线距离估算 + 系数
-			if calculatedDistance == 0 {
-				// 1度纬度 ~= 111km
-				const metersPerDegree = 111000.0
-				latDiff := (userLat.Float64 - merchantLat.Float64) * metersPerDegree
-				// 经度距离随纬度变化
-				avgLatRad := (userLat.Float64 + merchantLat.Float64) / 2.0 * math.Pi / 180.0
-				lngDiff := (userLng.Float64 - merchantLng.Float64) * metersPerDegree * math.Cos(avgLatRad)
-
-				// 乘以 1.4 系数估算路网距离
-				calculatedDistance = int32(math.Sqrt(latDiff*latDiff+lngDiff*lngDiff) * 1.4)
-			}
-
-			if calculatedDistance < MinDeliveryDistance {
-				calculatedDistance = MinDeliveryDistance
-			}
-		} else {
-			// 必须有经纬度才能计算运费
-			log.Warn().Msg("createOrder: missing lat/lng for address or merchant")
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid address or merchant location")))
-			return
-		}
-
-		deliveryDistance = calculatedDistance
-		deliveryDuration = calculatedDuration
-
-		// 服务端强制计算运费
-		feeResult, err := server.calculateDeliveryFeeInternal(ctx, address.RegionID, req.MerchantID, deliveryDistance, subtotal)
+			return logic.DeliveryFeeComputation{
+				Fee:           feeResult.FinalFee,
+				Discount:      feeResult.PromotionDiscount,
+				Suspended:     feeResult.DeliverySuspended,
+				SuspendReason: feeResult.SuspendReason,
+			}, nil
+		})
 		if err != nil {
+			if writeLogicRequestError(ctx, err) {
+				return
+			}
 			log.Error().Err(err).
 				Int64("merchant_id", req.MerchantID).
 				Int64("address_id", *req.AddressID).
-				Msg("createOrder: failed to calculate delivery fee")
+				Msg("createOrder: failed to compute delivery fee")
 			ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("failed to calculate delivery fee")))
 			return
 		}
 
-		if feeResult.DeliverySuspended {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("delivery suspended for this area")))
-			return
-		}
-
-		serverFee = feeResult.FinalFee
-		serverFeeDiscount = feeResult.PromotionDiscount
-
-		// 记录差异日志
-		if deliveryFee != serverFee || deliveryFeeDiscount != serverFeeDiscount {
-			log.Info().
-				Int64("client_fee", deliveryFee).
-				Int64("server_fee", serverFee).
-				Int64("client_discount", deliveryFeeDiscount).
-				Int64("server_discount", serverFeeDiscount).
-				Msg("createOrder: delivery fee mismatch, using server value")
-		}
-
-		// 强制应用服务端计算结果
-		deliveryFee = serverFee
-		deliveryFeeDiscount = serverFeeDiscount
-
-		log.Info().
-			Int64("merchant_id", req.MerchantID).
-			Int64("address_id", *req.AddressID).
-			Int32("delivery_distance", deliveryDistance).
-			Int64("delivery_fee", deliveryFee).
-			Int64("delivery_fee_discount", deliveryFeeDiscount).
-			Int64("server_fee", serverFee).
-			Int64("server_fee_discount", serverFeeDiscount).
-			Msg("createOrder: delivery fee decided")
+		deliveryDistance = quote.Distance
+		deliveryDuration = quote.Duration
+		deliveryFee = quote.Fee
+		deliveryFeeDiscount = quote.Discount
 	}
 
 	// 计算满减优惠
 	var discountAmount int64 = 0
-	discountRules, err := server.store.ListActiveDiscountRules(ctx, req.MerchantID)
-	if err == nil {
-		// 选择最优满减（金额最大的）
-		var bestDiscount db.DiscountRule
-		var bestFound bool
-		for _, d := range discountRules {
-			if subtotal >= d.MinOrderAmount {
-				if !bestFound || d.DiscountAmount > bestDiscount.DiscountAmount {
-					bestDiscount = d
-					bestFound = true
-				}
-			}
-		}
-		if bestFound {
-			discountAmount = bestDiscount.DiscountAmount
-		}
+	if bestAmount, err := logic.GetBestDiscountAmount(ctx, server.store, req.MerchantID, subtotal); err == nil {
+		discountAmount = bestAmount
 	}
 
 	// ==================== 优惠券验证 ====================
@@ -1285,62 +969,22 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	var voucherAmount int64 = 0
 
 	if req.UserVoucherID != nil {
-		// 获取用户优惠券信息（包含优惠券模板信息）
-		uv, err := server.store.GetUserVoucher(ctx, *req.UserVoucherID)
+		voucherResult, err := logic.ValidateVoucher(ctx, server.store, logic.VoucherValidationInput{
+			UserID:        authPayload.UserID,
+			MerchantID:    req.MerchantID,
+			OrderType:     req.OrderType,
+			Subtotal:      subtotal,
+			UserVoucherID: req.UserVoucherID,
+		})
 		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("优惠券不存在")))
+			if writeLogicRequestError(ctx, err) {
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-
-		// 验证优惠券属于当前用户
-		if uv.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("优惠券不属于您")))
-			return
-		}
-
-		// 验证优惠券状态
-		if uv.Status != "unused" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已使用或已过期")))
-			return
-		}
-
-		// 验证优惠券是否过期
-		if time.Now().After(uv.ExpiresAt) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已过期")))
-			return
-		}
-
-		// 验证优惠券属于当前商户（uv已包含MerchantID）
-		if uv.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该优惠券不能在此商户使用")))
-			return
-		}
-
-		// 验证最低消费（uv已包含MinOrderAmount）
-		if subtotal < uv.MinOrderAmount {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("未达到最低消费 %d 元", uv.MinOrderAmount/100)))
-			return
-		}
-
-		// 验证代金券是否适用于当前订单类型
-		orderTypeAllowed := false
-		for _, allowedType := range uv.AllowedOrderTypes {
-			if allowedType == req.OrderType {
-				orderTypeAllowed = true
-				break
-			}
-		}
-		if !orderTypeAllowed {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该代金券不适用于此订单类型")))
-			return
-		}
-
-		userVoucherID = req.UserVoucherID
-		voucherAmount = uv.Amount
+		userVoucherID = voucherResult.UserVoucherID
+		voucherAmount = voucherResult.VoucherAmount
 	}
 
 	// 定金抵扣：预订定金到店点菜直接抵扣应付
@@ -1352,83 +996,58 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	// ==================== 会员余额验证 ====================
 	var membershipID *int64
 	var balancePaid int64 = 0
+	var totalAmount int64 = 0
 	var membership *db.MerchantMembership
 
 	if req.UseBalance {
-		// 验证订单类型是否支持余额支付（仅堂食、自提和预定）
-		if req.OrderType != OrderTypeDineIn && req.OrderType != OrderTypeTakeaway && req.OrderType != OrderTypeReservation {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("外卖订单暂不支持余额支付")))
-			return
-		}
-
-		// 获取用户在该商户的会员卡
-		mem, err := server.store.GetMembershipByMerchantAndUser(ctx, db.GetMembershipByMerchantAndUserParams{
-			MerchantID: req.MerchantID,
-			UserID:     authPayload.UserID,
+		mem, err := logic.ValidateMembershipPayment(ctx, server.store, logic.MembershipPaymentInput{
+			UserID:             authPayload.UserID,
+			MerchantID:         req.MerchantID,
+			OrderType:          req.OrderType,
+			RulesEngineEnabled: server.config.RulesEngineEnabled,
 		})
 		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是该商户的会员，请先加入会员")))
+			if writeLogicRequestError(ctx, err) {
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 
-		// 检查商户会员设置
-		settings, err := server.store.GetMerchantMembershipSettings(ctx, req.MerchantID)
-		if err == nil {
-			// 检查该场景是否允许使用余额
-			sceneAllowed := false
-			for _, scene := range settings.BalanceUsableScenes {
-				if scene == req.OrderType {
-					sceneAllowed = true
-					break
-				}
-			}
-			if !sceneAllowed && !server.config.RulesEngineEnabled {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户设置不允许在此场景使用余额支付")))
-				return
-			}
-		}
-		// 如果没有设置，默认允许堂食和自提
+		membershipID = &mem.ID
+		membership = mem
+	}
 
-		if mem.Balance <= 0 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("会员余额不足")))
+	membershipBalance := int64(0)
+	if membership != nil {
+		membershipBalance = membership.Balance
+	}
+
+	totals, err := logic.ComputeOrderTotals(logic.OrderTotalsInput{
+		Subtotal:            subtotal,
+		DiscountAmount:      discountAmount,
+		VoucherAmount:       voucherAmount,
+		DeliveryFee:         deliveryFee,
+		DeliveryFeeDiscount: deliveryFeeDiscount,
+		DepositDeduction:    depositDeduction,
+		MembershipBalance:   membershipBalance,
+		UseBalance:          req.UseBalance,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-
-		membershipID = &mem.ID
-		membership = &mem
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
-
 	// 计算总金额（扣除优惠券后）
-	totalAmount := subtotal - discountAmount - voucherAmount + deliveryFee - deliveryFeeDiscount
-	if totalAmount < 0 {
-		totalAmount = 0
-	}
-
-	// 定金抵扣应付金额
-	if depositDeduction > 0 {
-		if depositDeduction > totalAmount {
-			depositDeduction = totalAmount
-		}
-		totalAmount -= depositDeduction
-	}
-
+	totalAmount = totals.TotalAmount
 	// 计算余额支付金额
-	if req.UseBalance && membership != nil {
-		// 使用全部余额或订单金额，取较小值
-		if membership.Balance >= totalAmount {
-			balancePaid = totalAmount
-		} else {
-			balancePaid = membership.Balance
-		}
-	}
+	balancePaid = totals.BalancePaid
 
 	// 外卖拒绝服务检查（仅外卖，不影响预订/堂食）
 	if req.OrderType == OrderTypeTakeout && !server.config.RulesEngineEnabled {
-		blocked, err := server.checkTakeoutBlocklist(ctx, authPayload.UserID)
+		blocked, err := logic.CheckTakeoutBlocklist(ctx, server.store, authPayload.UserID)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -1577,11 +1196,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	// 绑定用餐会话的活跃订单（失败不影响下单返回，但记录日志）
 	if diningSession != nil {
-		_, err := server.store.UpdateDiningSessionActiveOrder(ctx, db.UpdateDiningSessionActiveOrderParams{
-			ID:            diningSession.ID,
-			ActiveOrderID: pgtype.Int8{Int64: txResult.Order.ID, Valid: true},
-		})
-		if err != nil {
+		if err := logic.BindDiningSessionActiveOrder(ctx, server.store, diningSession.ID, txResult.Order.ID); err != nil {
 			log.Warn().Err(err).
 				Int64("session_id", diningSession.ID).
 				Int64("order_id", txResult.Order.ID).
@@ -1591,25 +1206,13 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	// 清空堂食/预订购物车（外卖保留移除已支付商品逻辑）
 	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
-		tableID := pgtype.Int8{}
-		if req.TableID != nil {
-			tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
-		}
-		reservationID := pgtype.Int8{}
-		if req.ReservationID != nil {
-			reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
-		}
-
-		cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
+		_ = logic.ClearDiningOrderCart(ctx, server.store, logic.ClearDiningOrderCartInput{
 			UserID:        authPayload.UserID,
 			MerchantID:    req.MerchantID,
 			OrderType:     req.OrderType,
-			TableID:       tableID,
-			ReservationID: reservationID,
+			TableID:       req.TableID,
+			ReservationID: req.ReservationID,
 		})
-		if err == nil {
-			_ = server.store.ClearCart(ctx, cart.ID)
-		}
 	}
 
 	// 调度订单支付超时任务：对于仍处于 pending 状态（需在线支付）的订单
@@ -1624,29 +1227,6 @@ func (server *Server) createOrder(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
-}
-
-func (server *Server) checkTakeoutBlocklist(ctx *gin.Context, userID int64) (bool, error) {
-	block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
-		EntityType: "user",
-		EntityID:   userID,
-	})
-	if err != nil {
-		if isNotFoundError(err) || errors.Is(err, db.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if block.BlockUntil.Valid && time.Now().After(block.BlockUntil.Time) {
-		_ = server.store.UpdateBehaviorBlocklistStatus(ctx, db.UpdateBehaviorBlocklistStatusParams{
-			ID:     block.ID,
-			Status: "expired",
-		})
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // validateOrderTypeFields 验证订单类型与关联字段
@@ -1681,109 +1261,17 @@ func validateOrderTypeFields(req createOrderRequest) error {
 	return nil
 }
 
-// calculateOrderItems 计算订单商品金额
-func (server *Server) calculateOrderItems(ctx *gin.Context, merchantID int64, items []orderItemRequest) (int64, []db.CreateOrderItemParams, error) {
-	var subtotal int64 = 0
-	orderItems := make([]db.CreateOrderItemParams, 0, len(items))
-
-	for _, item := range items {
-		var name string
-		var unitPrice int64
-		var dishID, comboID pgtype.Int8
-
-		if item.DishID != nil {
-			// 查询菜品
-			dish, err := server.store.GetDish(ctx, *item.DishID)
-			if err != nil {
-				if isNotFoundError(err) {
-					return 0, nil, fmt.Errorf("dish %d not found", *item.DishID)
-				}
-				return 0, nil, err
-			}
-			// 验证菜品属于该商户
-			if dish.MerchantID != merchantID {
-				return 0, nil, fmt.Errorf("dish %d does not belong to this merchant", *item.DishID)
-			}
-			// 验证菜品上架且可售
-			if !dish.IsOnline {
-				return 0, nil, fmt.Errorf("dish %s is offline", dish.Name)
-			}
-			if !dish.IsAvailable {
-				return 0, nil, fmt.Errorf("dish %s is not available today", dish.Name)
-			}
-
-			name = dish.Name
-			unitPrice = dish.Price
-			dishID = pgtype.Int8{Int64: *item.DishID, Valid: true}
-		} else if item.ComboID != nil {
-			// 查询套餐
-			combo, err := server.store.GetComboSet(ctx, *item.ComboID)
-			if err != nil {
-				if isNotFoundError(err) {
-					return 0, nil, fmt.Errorf("combo %d not found", *item.ComboID)
-				}
-				return 0, nil, err
-			}
-			// 验证套餐属于该商户
-			if combo.MerchantID != merchantID {
-				return 0, nil, fmt.Errorf("combo %d does not belong to this merchant", *item.ComboID)
-			}
-			// 验证套餐上架
-			if !combo.IsOnline {
-				return 0, nil, fmt.Errorf("combo %s is offline", combo.Name)
-			}
-
-			name = combo.Name
-			unitPrice = combo.ComboPrice
-			comboID = pgtype.Int8{Int64: *item.ComboID, Valid: true}
-		}
-
-		var normalizedCustomizations []orderCustomizationItem
-		var extraPrice int64 = 0
-
-		if len(item.Customizations) > 0 {
-			if item.DishID == nil {
-				return 0, nil, fmt.Errorf("customizations only supported for dish items")
-			}
-			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID.Int64, item.Customizations)
-			if err != nil {
-				return 0, nil, err
-			}
-			normalizedCustomizations = normalized
-			extraPrice = extra
-		} else if item.DishID != nil {
-			normalized, _, _, err := server.normalizeDishCustomizations(ctx, dishID.Int64, nil)
-			if err != nil {
-				return 0, nil, err
-			}
-			if len(normalized) > 0 {
-				return 0, nil, fmt.Errorf("missing required customizations for dish %d", dishID.Int64)
-			}
-		}
-
-		unitPrice += extraPrice
-
-		itemSubtotal := unitPrice * int64(item.Quantity)
-		subtotal += itemSubtotal
-
-		// 序列化定制选项
-		var customizations []byte
-		if len(normalizedCustomizations) > 0 {
-			customizations, _ = json.Marshal(normalizedCustomizations)
-		}
-
-		orderItems = append(orderItems, db.CreateOrderItemParams{
-			DishID:         dishID,
-			ComboID:        comboID,
-			Name:           name,
-			UnitPrice:      unitPrice,
+func toOrderItemInputs(items []orderItemRequest) []logic.OrderItemInput {
+	inputs := make([]logic.OrderItemInput, len(items))
+	for i, item := range items {
+		inputs[i] = logic.OrderItemInput{
+			DishID:         item.DishID,
+			ComboID:        item.ComboID,
 			Quantity:       item.Quantity,
-			Subtotal:       itemSubtotal,
-			Customizations: customizations,
-		})
+			Customizations: item.Customizations,
+		}
 	}
-
-	return subtotal, orderItems, nil
+	return inputs
 }
 
 type getOrderRequest struct {
@@ -1878,17 +1366,17 @@ func (server *Server) getOrder(ctx *gin.Context) {
 				resp.DeliveryEtaMinutes = &eta
 			} else {
 				// 无精确送达时间时根据距离估算 ETA，避免前端空白
-				distance := extractDistance(delivery.Distance, order.DeliveryDistance)
-				eta := server.computeDeliveryETA(ctx, order.MerchantID, distance, estimateDurationSecByDistance(distance))
+				distance := logic.ExtractDistance(delivery.Distance, order.DeliveryDistance)
+				eta := logic.ComputeDeliveryETA(ctx, server.store, order.MerchantID, distance, logic.EstimateDurationSecByDistance(distance))
 				resp.DeliveryEtaMinutes = &eta.DeliveryEtaMinutes
 				est := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
 				resp.EstimatedDeliveryAt = &est
 			}
 		} else {
 			// 未生成配送单（如待支付）也给出基于距离的预计时间
-			distance := extractDistance(0, order.DeliveryDistance)
+			distance := logic.ExtractDistance(0, order.DeliveryDistance)
 			if distance > 0 {
-				eta := server.computeDeliveryETA(ctx, order.MerchantID, distance, estimateDurationSecByDistance(distance))
+				eta := logic.ComputeDeliveryETA(ctx, server.store, order.MerchantID, distance, logic.EstimateDurationSecByDistance(distance))
 				resp.DeliveryEtaMinutes = &eta.DeliveryEtaMinutes
 				est := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
 				resp.EstimatedDeliveryAt = &est
@@ -1901,26 +1389,6 @@ func (server *Server) getOrder(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
-}
-
-// extractDistance 优先取配送单距离，其次取订单存储的距离
-func extractDistance(deliveryDistance int32, orderDistance pgtype.Int4) int32 {
-	if deliveryDistance > 0 {
-		return deliveryDistance
-	}
-	if orderDistance.Valid {
-		return orderDistance.Int32
-	}
-	return 0
-}
-
-// estimateDurationSecByDistance 给出基于距离的粗略秒级配送耗时估计（假设 15km/h）
-func estimateDurationSecByDistance(distance int32) int {
-	if distance <= 0 {
-		return 0
-	}
-	// 15km/h ≈ 250 米/分钟 → 秒 = 距离/250*60
-	return int(math.Round(float64(distance) / 250 * 60))
 }
 
 // listOrders 获取订单列表 (用户)
@@ -2069,106 +1537,28 @@ func (server *Server) cancelOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取订单（加锁）
-	order, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
+	result, err := logic.CancelOrder(ctx, server.store, logic.CancelOrderInput{
+		UserID:  authPayload.UserID,
+		OrderID: uriReq.ID,
+		Reason:  bodyReq.Reason,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证订单属于当前用户
-	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-		return
-	}
-
-	lateStatuses := map[string]bool{
-		OrderStatusPreparing:       true,
-		OrderStatusReady:           true,
-		OrderStatusCourierAccepted: true,
-		OrderStatusPicked:          true,
-		OrderStatusDelivering:      true,
-		OrderStatusRiderDelivered:  true,
-	}
-
-	if lateStatuses[order.Status] {
-		// 已进入制作/配送，记录异常通道，拒绝直接取消
-		_, err := server.store.UpdateOrderExceptionState(ctx, db.UpdateOrderExceptionStateParams{
-			ID:             order.ID,
-			ExceptionState: pgtype.Text{String: "cancel_requested", Valid: true},
-			ClaimChannel:   pgtype.Text{String: "user", Valid: true},
+	if result.Refund != nil && server.taskDistributor != nil {
+		err = server.taskDistributor.DistributeTaskProcessRefund(ctx, &worker.PayloadProcessRefund{
+			PaymentOrderID: result.Refund.PaymentOrderID,
+			OrderID:        result.Order.ID,
+			RefundAmount:   result.Refund.Amount,
+			Reason:         result.Refund.Reason,
 		})
 		if err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("record cancel request exception state failed")
-		}
-
-		_, err = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: order.Status, Valid: true},
-			ToStatus:     order.Status,
-			OperatorID:   pgtype.Int8{Int64: authPayload.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "user", Valid: true},
-			Notes:        pgtype.Text{String: "用户申请取消，进入售后通道", Valid: true},
-		})
-		if err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("record cancel request log failed")
-		}
-
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("订单已制作/配送，已记录取消诉求，请联系商户或客服处理")))
-		return
-	}
-
-	// 验证订单状态可取消：只允许 pending(待支付) 和 paid(已支付,商户未接单) 状态
-	if order.Status != OrderStatusPending && order.Status != OrderStatusPaid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("订单当前状态无法取消，商户已接单后请联系商户处理")))
-		return
-	}
-
-	// 使用事务更新订单状态并创建日志
-	cancelReason := "用户取消"
-	if bodyReq.Reason != "" {
-		cancelReason = bodyReq.Reason
-	}
-
-	result, err := server.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
-		OrderID:      uriReq.ID,
-		OldStatus:    order.Status,
-		CancelReason: cancelReason,
-		OperatorID:   authPayload.UserID,
-		OperatorType: "user",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 如果是已支付订单，触发退款流程
-	if order.Status == OrderStatusPaid && server.taskDistributor != nil {
-		// 查询支付订单
-		paymentOrders, err := server.store.GetPaymentOrdersByOrder(ctx, pgtype.Int8{Int64: order.ID, Valid: true})
-		if err == nil && len(paymentOrders) > 0 {
-			// 找到状态为 paid 的支付订单
-			for _, paymentOrder := range paymentOrders {
-				if paymentOrder.Status == "paid" {
-					// 异步发起退款任务
-					err = server.taskDistributor.DistributeTaskProcessRefund(ctx, &worker.PayloadProcessRefund{
-						PaymentOrderID: paymentOrder.ID,
-						OrderID:        order.ID,
-						RefundAmount:   paymentOrder.Amount,
-						Reason:         cancelReason,
-					})
-					if err != nil {
-						// 退款任务分发失败，记录日志但不影响取消结果
-						log.Error().Err(err).Int64("order_id", order.ID).Msg("failed to distribute refund task")
-					}
-					break
-				}
-			}
+			log.Error().Err(err).Int64("order_id", result.Order.ID).Msg("failed to distribute refund task")
 		}
 	}
 
@@ -2203,56 +1593,24 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取订单
-	order, err := server.store.GetOrder(ctx, uriReq.ID)
+	result, err := logic.UrgeOrder(ctx, server.store, logic.UrgeOrderInput{
+		UserID:          authPayload.UserID,
+		OrderID:         uriReq.ID,
+		RateLimitWindow: time.Duration(UrgeOrderRateLimitWindowSeconds) * time.Second,
+		RateLimitMax:    int64(UrgeOrderRateLimitMaxCount),
+		Now:             time.Now(),
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证订单属于当前用户
-	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-		return
-	}
+	order := result.Order
 
-	// P1-019 修复：催单频率限制（每5分钟最多3次）
-	// 使用订单状态日志统计最近催单次数
-	recentUrgeCount, err := server.store.CountRecentOrderStatusLogs(ctx, db.CountRecentOrderStatusLogsParams{
-		OrderID:   order.ID,
-		Notes:     pgtype.Text{String: "用户催单", Valid: true},
-		CreatedAt: time.Now().Add(-time.Duration(UrgeOrderRateLimitWindowSeconds) * time.Second),
-	})
-	if err == nil && recentUrgeCount >= int64(UrgeOrderRateLimitMaxCount) {
-		ctx.JSON(http.StatusTooManyRequests, errorResponse(fmt.Errorf(
-			"催单过于频繁，请%d分钟后再试",
-			UrgeOrderRateLimitWindowSeconds/60,
-		)))
-		return
-	}
-
-	// 验证订单状态允许催单（已支付、制作中、待取餐、配送中）
-	allowedStatuses := map[string]bool{
-		OrderStatusPaid:            true,
-		OrderStatusPreparing:       true,
-		OrderStatusReady:           true,
-		OrderStatusCourierAccepted: true,
-		OrderStatusPicked:          true,
-		OrderStatusDelivering:      true,
-		OrderStatusRiderDelivered:  true,
-	}
-	if !allowedStatuses[order.Status] {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order cannot be urged in current status")))
-		return
-	}
-
-	// 发送催单通知
-	// 1. 发送给商户
-	if order.Status == OrderStatusPaid || order.Status == OrderStatusPreparing {
+	if result.NotifyMerchant {
 		_ = server.SendNotification(ctx, SendNotificationParams{
 			UserID:      order.MerchantID,
 			Title:       "用户催单提醒",
@@ -2263,31 +1621,16 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 		})
 	}
 
-	// 2. 配送中的订单发送给骑手
-	if order.Status == OrderStatusDelivering || order.Status == OrderStatusCourierAccepted || order.Status == OrderStatusPicked || order.Status == OrderStatusRiderDelivered {
-		// 查询配送信息获取骑手ID
-		delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
-		if err == nil && delivery.RiderID.Valid {
-			_ = server.SendNotification(ctx, SendNotificationParams{
-				UserID:      delivery.RiderID.Int64,
-				Title:       "用户催单提醒",
-				Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快送达", order.OrderNo),
-				Type:        "order_urge",
-				RelatedType: "order",
-				RelatedID:   order.ID,
-			})
-		}
+	if result.RiderID != nil {
+		_ = server.SendNotification(ctx, SendNotificationParams{
+			UserID:      *result.RiderID,
+			Title:       "用户催单提醒",
+			Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快送达", order.OrderNo),
+			Type:        "order_urge",
+			RelatedType: "order",
+			RelatedID:   order.ID,
+		})
 	}
-
-	// 记录催单日志
-	_, _ = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-		OrderID:      order.ID,
-		FromStatus:   pgtype.Text{String: order.Status, Valid: true},
-		ToStatus:     order.Status, // 状态不变，只记录催单事件
-		OperatorID:   pgtype.Int8{Int64: authPayload.UserID, Valid: true},
-		OperatorType: pgtype.Text{String: "user", Valid: true},
-		Notes:        pgtype.Text{String: "用户催单", Valid: true},
-	})
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"message":  "urge notification sent",
@@ -2328,232 +1671,61 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	oldOrder, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
+	result, err := logic.ReplaceReservationOrder(
+		ctx,
+		server.store,
+		server.paymentClient,
+		logic.ReplaceOrderInput{
+			UserID:  authPayload.UserID,
+			OrderID: uriReq.ID,
+			Items:   toOrderItemInputs(req.Items),
+			Notes:   req.Notes,
+		},
+		func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
+			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID, customizations)
+			if err != nil {
+				return nil, 0, err
+			}
+			if len(normalized) == 0 {
+				return nil, extra, nil
+			}
+			data, err := json.Marshal(normalized)
+			if err != nil {
+				return nil, 0, err
+			}
+			return data, extra, nil
+		},
+	)
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if oldOrder.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-		return
-	}
-	if oldOrder.OrderType != OrderTypeReservation {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only reservation orders can be replaced")))
-		return
-	}
-	if oldOrder.Status != OrderStatusPaid {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("order must be paid before replacement")))
-		return
-	}
-	if oldOrder.ReplacedByOrderID.Valid {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("order already replaced")))
-		return
-	}
-	if !oldOrder.ReservationID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order missing reservation")))
-		return
-	}
-
-	reservation, err := server.store.GetTableReservation(ctx, oldOrder.ReservationID.Int64)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if reservation.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to you")))
-		return
-	}
-	if reservation.PaymentMode != PaymentModeFull {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only full-payment reservations support replacement")))
-		return
-	}
-	if reservation.Status != ReservationStatusPaid && reservation.Status != ReservationStatusConfirmed && reservation.Status != ReservationStatusCheckedIn {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not ready for replacement")))
-		return
-	}
-
-	// 需要有开放的用餐会话确保桌台占用
-	session, err := server.store.GetActiveDiningSessionByReservation(ctx, pgtype.Int8{Int64: reservation.ID, Valid: true})
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("no active dining session for reservation")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if session.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dining session does not belong to you")))
-		return
-	}
-
-	// 计算新菜品金额
-	subtotal, items, err := server.calculateOrderItems(ctx, reservation.MerchantID, req.Items)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 简化：沿用满减优惠
-	var discountAmount int64
-	discountRules, err := server.store.ListActiveDiscountRules(ctx, reservation.MerchantID)
-	if err == nil {
-		var best db.DiscountRule
-		var has bool
-		for _, d := range discountRules {
-			if subtotal >= d.MinOrderAmount {
-				if !has || d.DiscountAmount > best.DiscountAmount {
-					best = d
-					has = true
-				}
-			}
-		}
-		if has {
-			discountAmount = best.DiscountAmount
-		}
-	}
-
-	newTotal := subtotal - discountAmount
-	if newTotal < 0 {
-		newTotal = 0
-	}
-
-	delta := newTotal - oldOrder.TotalAmount
-	newStatus := OrderStatusPaid
-	newFulfillment := FulfillmentStatusPendingKitchen
-	if delta > 0 {
-		newStatus = OrderStatusPending
-		newFulfillment = FulfillmentStatusScheduled
-	}
-
-	orderNo := generateOrderNo()
-	arg := db.CreateOrderParams{
-		OrderNo:             orderNo,
-		UserID:              authPayload.UserID,
-		MerchantID:          reservation.MerchantID,
-		OrderType:           OrderTypeDineIn,
-		TableID:             pgtype.Int8{Int64: reservation.TableID, Valid: true},
-		ReservationID:       pgtype.Int8{Int64: reservation.ID, Valid: true},
-		DeliveryFee:         0,
-		Subtotal:            subtotal,
-		DiscountAmount:      discountAmount,
-		DeliveryFeeDiscount: 0,
-		TotalAmount:         newTotal,
-		Status:              newStatus,
-		FulfillmentStatus:   newFulfillment,
-	}
-	if req.Notes != "" {
-		arg.Notes = pgtype.Text{String: req.Notes, Valid: true}
-	}
-
-	// P1-020 修复：使用事务原子地创建新订单并标记旧订单
-	replaceTx, err := server.store.ReplaceOrderTx(ctx, db.ReplaceOrderTxParams{
-		CreateOrderParams: arg,
-		Items:             items,
-		OldOrderID:        oldOrder.ID,
-		CancelReason:      "replaced by new order",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	newOrder := replaceTx.NewOrder
-
-	var paymentOrderID *int64
-	refundInitiated := false
-
-	if delta > 0 {
-		// 生成补差支付单
-		outTradeNo := generateOutTradeNo()
-		expiresAt := time.Now().Add(30 * time.Minute)
-		var payOrder db.PaymentOrder
-		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-			outTradeNo = generateOutTradeNo()
-			payOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-				OrderID:      pgtype.Int8{Int64: newOrder.ID, Valid: true},
-				UserID:       authPayload.UserID,
-				PaymentType:  PaymentTypeMiniProgram,
-				BusinessType: BusinessTypeOrder,
-				Amount:       delta,
-				OutTradeNo:   outTradeNo,
-				ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-			})
-			if err == nil {
-				paymentOrderID = &payOrder.ID
-				break
-			}
-			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-				if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
-					break
-				}
-				continue
-			}
-			break
-		}
-	} else if delta < 0 {
-		// 发起差额退款（基于旧订单支付单）
-		paymentOrders, err := server.store.GetPaymentOrdersByOrder(ctx, pgtype.Int8{Int64: oldOrder.ID, Valid: true})
-		if err == nil {
-			for _, po := range paymentOrders {
-				if po.Status == PaymentStatusPaid {
-					refundAmount := -delta
-					if server.taskDistributor != nil {
-						_ = server.taskDistributor.DistributeTaskProcessRefund(ctx, &worker.PayloadProcessRefund{
-							PaymentOrderID: po.ID,
-							OrderID:        oldOrder.ID,
-							RefundAmount:   refundAmount,
-							Reason:         "order replaced diff refund",
-						})
-						refundInitiated = true
-					}
-					break
-				}
-			}
-		}
-	}
-
-	// 差额为零或负数（无需补差），直接推进支付后履约流程：扣减库存、发厨房/通知
-	if delta <= 0 {
-		result, err := server.store.ProcessOrderPaymentTx(ctx, db.ProcessOrderPaymentTxParams{
-			OrderID:            newOrder.ID,
-			RiderAverageSpeed:  server.config.RiderAverageSpeed,
-			DefaultPrepareTime: server.config.DefaultPrepareTime,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		newOrder = result.Order
-	}
-
-	resp := newOrderResponse(newOrder)
-	ctx.JSON(http.StatusOK, gin.H{
-		"order":            resp,
-		"delta":            delta,
-		"payment_order_id": paymentOrderID,
-		"refund_initiated": refundInitiated,
+	ctx.JSON(http.StatusOK, replaceOrderResponse{
+		Order:           newOrderResponse(result.NewOrder),
+		Delta:           result.Delta,
+		PaymentOrderID:  result.PaymentOrderID,
+		RefundInitiated: result.RefundInitiated,
 	})
 }
 
+// confirmOrderRequest confirms a takeout order receipt.
+type confirmOrderRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1" example:"100001"`
+}
+
 // confirmOrder godoc
-// @Summary 确认收货并完成订单
-// @Description 用户确认已收到外卖订单，并将订单置为已完成（completed）
+// @Summary 用户确认收货
+// @Description 用户确认外卖已送达并完成订单
 // @Tags 订单管理
 // @Accept json
 // @Produce json
 // @Param id path int true "订单ID" minimum(1)
-// @Success 200 {object} orderResponse "确认成功"
-// @Failure 400 {object} ErrorResponse "订单类型或状态不允许确认"
+// @Success 200 {object} orderResponse "订单完成"
+// @Failure 400 {object} ErrorResponse "请求参数错误 / 订单状态不允许"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前用户"
 // @Failure 404 {object} ErrorResponse "订单不存在"
@@ -2561,67 +1733,31 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 // @Router /v1/orders/{id}/confirm [post]
 // @Security BearerAuth
 func (server *Server) confirmOrder(ctx *gin.Context) {
-	var uriReq struct {
-		ID int64 `uri:"id" binding:"required,min=1"`
-	}
-	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+	var req confirmOrderRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取订单（加锁）
-	order, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
+	result, err := logic.ConfirmTakeoutOrder(ctx, server.store, logic.ConfirmOrderInput{
+		UserID:  authPayload.UserID,
+		OrderID: req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证订单属于当前用户
-	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-		return
-	}
-
-	// 验证订单类型是外卖且状态是配送中
-	if order.OrderType != OrderTypeTakeout {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only takeout orders can be confirmed")))
-		return
-	}
-
-	// 已完成则幂等返回
-	if order.Status == OrderStatusCompleted {
+	order := result.Order
+	if result.AlreadyCompleted {
 		ctx.JSON(http.StatusOK, newOrderResponse(order))
 		return
 	}
-
-	// 允许从 rider_delivered / user_delivered 进入 completed
-	if order.Status != OrderStatusRiderDelivered && order.Status != OrderStatusUserDelivered {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not ready for confirmation")))
-		return
-	}
-
-	// 更新订单状态为已完成（并补齐 user_delivered_at）
-	updatedOrder, err := server.store.CompleteTakeoutOrderByUser(ctx, order.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 记录状态变更日志
-	_, _ = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-		OrderID:      order.ID,
-		FromStatus:   pgtype.Text{String: order.Status, Valid: true},
-		ToStatus:     OrderStatusCompleted,
-		OperatorID:   pgtype.Int8{Int64: authPayload.UserID, Valid: true},
-		OperatorType: pgtype.Text{String: "user", Valid: true},
-		Notes:        pgtype.Text{String: "用户确认收货并完成订单", Valid: true},
-	})
 
 	// 发送通知给商户和骑手
 	_ = server.SendNotification(ctx, SendNotificationParams{
@@ -2633,11 +1769,9 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 		RelatedID:   order.ID,
 	})
 
-	// 通知骑手
-	delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
-	if err == nil && delivery.RiderID.Valid {
+	if result.RiderID != nil {
 		_ = server.SendNotification(ctx, SendNotificationParams{
-			UserID:      delivery.RiderID.Int64,
+			UserID:      *result.RiderID,
 			Title:       "配送已完成",
 			Content:     fmt.Sprintf("订单 %s 用户已确认收货", order.OrderNo),
 			Type:        "delivery_completed",
@@ -2660,7 +1794,7 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
+	ctx.JSON(http.StatusOK, newOrderResponse(order))
 }
 
 // ==================== 商户端订单API ====================
@@ -2724,20 +1858,25 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		merchant = value
 	}
 
 	offset := pageOffset(req.PageID, req.PageSize)
 
 	var orders []db.Order
 	var totalCount int64
+	var err error
 
 	if req.Status != "" {
 		orders, err = server.store.ListOrdersByMerchantAndStatus(ctx, db.ListOrdersByMerchantAndStatusParams{
@@ -2813,14 +1952,18 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		merchant = value
 	}
 
 	order, err := server.store.GetOrder(ctx, req.ID)
@@ -2918,62 +2061,45 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		merchant = value
 	}
 
-	// 获取订单（加锁）
-	order, err := server.store.GetOrderForUpdate(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证订单属于当前商户
-	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "merchant",
-			Action:      "merchant_resource_access_denied",
-			TargetType:  "order",
-			TargetID:    &order.ID,
-			RegionID:    &merchant.RegionID,
-			Metadata: map[string]any{
-				"reason":      "order_not_belong_to_merchant",
-				"merchant_id": merchant.ID,
-				"order_id":    order.ID,
-			},
-		})
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
-		return
-	}
-
-	// 验证订单状态
-	if order.Status != OrderStatusPaid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only paid orders can be accepted")))
-		return
-	}
-
-	// 使用事务更新订单状态并创建日志
-	result, err := server.store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
-		OrderID:              req.ID,
-		NewStatus:            OrderStatusPreparing,
-		OldStatus:            order.Status,
-		OperatorID:           authPayload.UserID,
-		OperatorType:         "merchant",
-		NewFulfillmentStatus: ptrString(FulfillmentStatusPreparing),
+	result, err := logic.AcceptMerchantOrder(ctx, server.store, logic.MerchantOrderUpdateInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+		OperatorID: authPayload.UserID,
 	})
 	if err != nil {
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Status == http.StatusForbidden && reqErr.Err != nil && reqErr.Err.Error() == "order does not belong to your merchant" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "merchant_resource_access_denied",
+				TargetType:  "order",
+				TargetID:    &req.ID,
+				RegionID:    &merchant.RegionID,
+				Metadata: map[string]any{
+					"reason":      "order_not_belong_to_merchant",
+					"merchant_id": merchant.ID,
+					"order_id":    req.ID,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -3007,7 +2133,7 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 		Metadata: map[string]any{
 			"order_no":    updatedOrder.OrderNo,
 			"order_type":  updatedOrder.OrderType,
-			"from_status": order.Status,
+			"from_status": result.Previous.Status,
 			"to_status":   updatedOrder.Status,
 		},
 	})
@@ -3058,63 +2184,46 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		merchant = value
 	}
 
-	// 获取订单（加锁）
-	order, err := server.store.GetOrderForUpdate(ctx, uriReq.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证订单属于当前商户
-	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "merchant",
-			Action:      "merchant_resource_access_denied",
-			TargetType:  "order",
-			TargetID:    &order.ID,
-			RegionID:    &merchant.RegionID,
-			Metadata: map[string]any{
-				"reason":      "order_not_belong_to_merchant",
-				"merchant_id": merchant.ID,
-				"order_id":    order.ID,
-			},
-		})
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
-		return
-	}
-
-	// 验证订单状态（只有已支付的订单可以被拒单）
-	if order.Status != OrderStatusPaid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only paid orders can be rejected")))
-		return
-	}
-
-	// 使用事务更新订单状态为已取消，并记录拒单原因
-	result, err := server.store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
-		OrderID:              uriReq.ID,
-		NewStatus:            OrderStatusCancelled,
-		OldStatus:            order.Status,
-		OperatorID:           authPayload.UserID,
-		OperatorType:         "merchant",
-		Notes:                fmt.Sprintf("商户拒单：%s", bodyReq.Reason),
-		NewFulfillmentStatus: ptrString(FulfillmentStatusCancelled),
+	result, err := logic.RejectMerchantOrder(ctx, server.store, logic.MerchantOrderUpdateInput{
+		MerchantID: merchant.ID,
+		OrderID:    uriReq.ID,
+		OperatorID: authPayload.UserID,
+		Reason:     bodyReq.Reason,
 	})
 	if err != nil {
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Status == http.StatusForbidden && reqErr.Err != nil && reqErr.Err.Error() == "order does not belong to your merchant" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "merchant_resource_access_denied",
+				TargetType:  "order",
+				TargetID:    &uriReq.ID,
+				RegionID:    &merchant.RegionID,
+				Metadata: map[string]any{
+					"reason":      "order_not_belong_to_merchant",
+					"merchant_id": merchant.ID,
+					"order_id":    uriReq.ID,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -3149,56 +2258,21 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 		Metadata: map[string]any{
 			"order_no":    updatedOrder.OrderNo,
 			"order_type":  updatedOrder.OrderType,
-			"from_status": order.Status,
+			"from_status": result.Previous.Status,
 			"to_status":   updatedOrder.Status,
 			"reason":      bodyReq.Reason,
 		},
 	})
 
-	// 自动退款：获取支付订单并发起退款
-	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-		OrderID:      pgtype.Int8{Int64: updatedOrder.ID, Valid: true},
-		BusinessType: BusinessTypeOrder,
+	refundResult, err := logic.ProcessMerchantRejectRefund(ctx, server.store, server.paymentClient, logic.MerchantRejectRefundInput{
+		OrderID: updatedOrder.ID,
+		Reason:  bodyReq.Reason,
 	})
-	if err == nil && paymentOrder.Status == PaymentStatusPaid {
-		// 生成退款单号
-		outRefundNo := generateOutRefundNo()
-
-		// 创建退款订单
-		refundOrder, err := server.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-			PaymentOrderID: paymentOrder.ID,
-			RefundType:     "full",
-			RefundAmount:   paymentOrder.Amount,
-			RefundReason:   pgtype.Text{String: fmt.Sprintf("商户拒单：%s", bodyReq.Reason), Valid: true},
-			OutRefundNo:    outRefundNo,
-			Status:         "pending",
-		})
-		if err != nil {
-			log.Error().Err(err).Int64("order_id", updatedOrder.ID).Msg("failed to create refund order for rejected order")
-		} else if server.paymentClient != nil {
-			// 调用微信退款 API
-			wxRefund, err := server.paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-				OutTradeNo:   paymentOrder.OutTradeNo,
-				OutRefundNo:  outRefundNo,
-				Reason:       fmt.Sprintf("商户拒单：%s", bodyReq.Reason),
-				RefundAmount: paymentOrder.Amount,
-				TotalAmount:  paymentOrder.Amount,
-			})
-			if err != nil {
-				log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat refund API failed")
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			} else {
-				switch wxRefund.Status {
-				case wechat.RefundStatusSuccess:
-					server.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-					server.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
-				case wechat.RefundStatusProcessing:
-					server.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-						ID:       refundOrder.ID,
-						RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-					})
-				}
-			}
+	if err != nil {
+		if refundResult.RefundOrder != nil {
+			log.Error().Err(err).Int64("refund_order_id", refundResult.RefundOrder.ID).Msg("merchant reject refund failed")
+		} else {
+			log.Error().Err(err).Int64("order_id", updatedOrder.ID).Msg("merchant reject refund failed")
 		}
 	}
 
@@ -3236,62 +2310,45 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		merchant = value
 	}
 
-	// 获取订单（加锁）
-	order, err := server.store.GetOrderForUpdate(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证订单属于当前商户
-	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "merchant",
-			Action:      "merchant_resource_access_denied",
-			TargetType:  "order",
-			TargetID:    &order.ID,
-			RegionID:    &merchant.RegionID,
-			Metadata: map[string]any{
-				"reason":      "order_not_belong_to_merchant",
-				"merchant_id": merchant.ID,
-				"order_id":    order.ID,
-			},
-		})
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
-		return
-	}
-
-	// 验证订单状态
-	if order.Status != OrderStatusPreparing {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only preparing orders can be marked as ready")))
-		return
-	}
-
-	// 使用事务更新订单状态并创建日志
-	result, err := server.store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
-		OrderID:              req.ID,
-		NewStatus:            OrderStatusReady,
-		OldStatus:            order.Status,
-		OperatorID:           authPayload.UserID,
-		OperatorType:         "merchant",
-		NewFulfillmentStatus: ptrString(FulfillmentStatusReady),
+	result, err := logic.MarkMerchantOrderReady(ctx, server.store, logic.MerchantOrderUpdateInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+		OperatorID: authPayload.UserID,
 	})
 	if err != nil {
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Status == http.StatusForbidden && reqErr.Err != nil && reqErr.Err.Error() == "order does not belong to your merchant" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "merchant_resource_access_denied",
+				TargetType:  "order",
+				TargetID:    &req.ID,
+				RegionID:    &merchant.RegionID,
+				Metadata: map[string]any{
+					"reason":      "order_not_belong_to_merchant",
+					"merchant_id": merchant.ID,
+					"order_id":    req.ID,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -3325,7 +2382,7 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 		Metadata: map[string]any{
 			"order_no":    updatedOrder.OrderNo,
 			"order_type":  updatedOrder.OrderType,
-			"from_status": order.Status,
+			"from_status": result.Previous.Status,
 			"to_status":   updatedOrder.Status,
 		},
 	})
@@ -3364,51 +2421,29 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		merchant = value
 	}
 
-	// 获取订单（加锁）
-	order, err := server.store.GetOrderForUpdate(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证订单属于当前商户
-	if order.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
-		return
-	}
-
-	// 验证订单类型和状态
-	if order.OrderType == OrderTypeTakeout {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("takeout orders cannot be completed by merchant")))
-		return
-	}
-	if order.Status != OrderStatusReady {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only ready orders can be completed")))
-		return
-	}
-
-	// 使用事务更新订单状态并创建日志
-	result, err := server.store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      req.ID,
-		OldStatus:    order.Status,
-		OperatorID:   authPayload.UserID,
-		OperatorType: "merchant",
+	result, err := logic.CompleteMerchantOrder(ctx, server.store, logic.MerchantOrderUpdateInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+		OperatorID: authPayload.UserID,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -3442,7 +2477,7 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 		Metadata: map[string]any{
 			"order_no":    completedOrder.OrderNo,
 			"order_type":  completedOrder.OrderType,
-			"from_status": order.Status,
+			"from_status": result.Previous.Status,
 			"to_status":   completedOrder.Status,
 		},
 	})
@@ -3494,14 +2529,18 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		merchant = value
 	}
 
 	// 解析日期
@@ -3630,253 +2669,79 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 
 	// 获取当前用户
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	userID := authPayload.UserID
-
-	// 获取用户购物车
-	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
-		UserID:     userID,
-		MerchantID: req.MerchantID,
-	})
+	result, err := logic.CalculateOrderPreview(
+		ctx,
+		server.store,
+		server.mapClient,
+		logic.OrderCalculationInput{
+			UserID:        authPayload.UserID,
+			MerchantID:    req.MerchantID,
+			OrderType:     req.OrderType,
+			Latitude:      req.Latitude,
+			Longitude:     req.Longitude,
+			AddressID:     req.AddressID,
+			UserVoucherID: req.UserVoucherID,
+			VoucherCode:   req.VoucherCode,
+		},
+		func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
+			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID, customizations)
+			if err != nil {
+				return nil, 0, err
+			}
+			if len(normalized) == 0 {
+				return nil, extra, nil
+			}
+			data, err := json.Marshal(normalized)
+			if err != nil {
+				return nil, 0, err
+			}
+			return data, extra, nil
+		},
+		func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
+			feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, merchantID, distance, orderAmount)
+			if err != nil {
+				return logic.DeliveryFeeComputation{}, err
+			}
+			return logic.DeliveryFeeComputation{
+				Fee:      feeResult.FinalFee,
+				Discount: feeResult.PromotionDiscount,
+			}, nil
+		},
+	)
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("cart is empty")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	}
-
-	cartItems, err := server.store.ListCartItems(ctx, cart.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if len(cartItems) == 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("cart is empty")))
-		return
-	}
-
-	// 计算商品小计
-	var subtotal int64 = 0
-	items := make([]orderCalculationItem, len(cartItems))
-	for i, item := range cartItems {
-		var name string
-		var price int64
-		if item.DishID.Valid {
-			name = item.DishName.String
-			price = item.DishPrice.Int64
-
-			var customizationMap map[string]interface{}
-			if len(item.Customizations) > 0 {
-				if err := json.Unmarshal(item.Customizations, &customizationMap); err != nil {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid customizations in cart")))
-					return
-				}
-			}
-			_, extraPrice, _, err := server.normalizeDishCustomizations(ctx, item.DishID.Int64, customizationMap)
-			if err != nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(err))
-				return
-			}
-			price += extraPrice
-		} else if item.ComboID.Valid {
-			name = item.ComboName.String
-			price = item.ComboPrice.Int64
-			if len(item.Customizations) > 0 {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("customizations not supported for combo items")))
-				return
-			}
-		}
-
-		itemSubtotal := price * int64(item.Quantity)
-		items[i] = orderCalculationItem{
-			Name:      name,
-			UnitPrice: price,
-			Quantity:  item.Quantity,
-			Subtotal:  itemSubtotal,
-		}
-		if item.DishID.Valid {
-			dishID := item.DishID.Int64
-			items[i].DishID = &dishID
-		}
-		if item.ComboID.Valid {
-			comboID := item.ComboID.Int64
-			items[i].ComboID = &comboID
-		}
-		subtotal += itemSubtotal
 	}
 
 	response := orderCalculationResponse{
-		Subtotal:   subtotal,
-		Promotions: []orderPromotion{},
-		Items:      items,
+		Subtotal:            result.Subtotal,
+		DeliveryFee:         result.DeliveryFee,
+		DeliveryFeeDiscount: result.DeliveryFeeDiscount,
+		DiscountAmount:      result.DiscountAmount,
+		TotalAmount:         result.TotalAmount,
+		Items:               make([]orderCalculationItem, len(result.Items)),
+		Promotions:          make([]orderPromotion, len(result.Promotions)),
 	}
 
-	// 计算配送费
-	if req.OrderType == "takeout" {
-		// 获取商户信息
-		merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		var userLat, userLng float64
-		var regionID int64 = merchant.RegionID // 默认使用商户所在区域
-
-		// 确定用户位置：优先使用 address_id，其次使用经纬度
-		if req.AddressID != nil {
-			// 下单阶段：使用已保存地址
-			address, err := server.store.GetUserAddress(ctx, *req.AddressID)
-			if err == nil && address.UserID == userID {
-				if address.Latitude.Valid && address.Longitude.Valid {
-					lat, _ := address.Latitude.Float64Value()
-					lng, _ := address.Longitude.Float64Value()
-					userLat = lat.Float64
-					userLng = lng.Float64
-				}
-				regionID = address.RegionID
-			}
-		} else if req.Latitude != nil && req.Longitude != nil {
-			// 浏览阶段：使用实时位置
-			userLat = *req.Latitude
-			userLng = *req.Longitude
-			// regionID 保持使用商户所在区域（用户实时位置通常和商户在同一区域）
-		}
-
-		// 计算配送距离
-		var deliveryDistance int32 = DefaultDeliveryDistance
-		if userLat != 0 && userLng != 0 && merchant.Latitude.Valid && merchant.Longitude.Valid {
-			merchantLat, _ := merchant.Latitude.Float64Value()
-			merchantLng, _ := merchant.Longitude.Float64Value()
-
-			// 优先使用自建 OSM 计算骑行距离
-			if server.mapClient != nil {
-				fromLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
-				toLoc := maps.Location{Lat: userLat, Lng: userLng}
-				routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-				if err == nil && routeResult != nil {
-					deliveryDistance = int32(routeResult.Distance)
-				}
-			} else {
-				// 降级：使用简化的距离计算
-				latDiff := (userLat - merchantLat.Float64) * MetersPerLatDegree
-				lngDiff := (userLng - merchantLng.Float64) * MetersPerLngDegree
-				dist := int32(latDiff*latDiff + lngDiff*lngDiff)
-				if dist > 0 {
-					deliveryDistance = int32(float64(dist) / 1000)
-					if deliveryDistance < MinDeliveryDistance {
-						deliveryDistance = MinDeliveryDistance
-					}
-				}
-			}
-		}
-
-		// 使用配送费计算内部方法
-		feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, req.MerchantID, deliveryDistance, subtotal)
-		if err == nil {
-			response.DeliveryFee = feeResult.FinalFee
-			if feeResult.PromotionDiscount > 0 {
-				response.DeliveryFeeDiscount = feeResult.PromotionDiscount
-				response.Promotions = append(response.Promotions, orderPromotion{
-					Type:   "delivery_fee_return",
-					Title:  "满额返运费",
-					Amount: feeResult.PromotionDiscount,
-				})
-			}
+	for i, item := range result.Items {
+		response.Items[i] = orderCalculationItem{
+			DishID:    item.DishID,
+			ComboID:   item.ComboID,
+			Name:      item.Name,
+			UnitPrice: item.UnitPrice,
+			Quantity:  item.Quantity,
+			Subtotal:  item.Subtotal,
 		}
 	}
-
-	// 计算满减
-	discountRules, err := server.store.ListActiveDiscountRules(ctx, req.MerchantID)
-	if err == nil {
-		// 按 min_order_amount 降序，选择最优满减
-		var bestDiscount db.DiscountRule
-		var bestFound bool
-		for _, d := range discountRules {
-			if subtotal >= d.MinOrderAmount {
-				if !bestFound || d.DiscountAmount > bestDiscount.DiscountAmount {
-					bestDiscount = d
-					bestFound = true
-				}
-			}
+	for i, promo := range result.Promotions {
+		response.Promotions[i] = orderPromotion{
+			Type:   promo.Type,
+			Title:  promo.Title,
+			Amount: promo.Amount,
 		}
-		if bestFound {
-			response.DiscountAmount = bestDiscount.DiscountAmount
-			response.Promotions = append(response.Promotions, orderPromotion{
-				Type:   "discount",
-				Title:  fmt.Sprintf("满%d减%d", bestDiscount.MinOrderAmount/100, bestDiscount.DiscountAmount/100),
-				Amount: bestDiscount.DiscountAmount,
-			})
-		}
-	}
-
-	// 计算优惠券
-	if req.VoucherCode != "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请使用 user_voucher_id 进行金额预览")))
-		return
-	}
-	if req.UserVoucherID != nil {
-		uv, err := server.store.GetUserVoucher(ctx, *req.UserVoucherID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("优惠券不存在")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if uv.UserID != userID {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("优惠券不属于您")))
-			return
-		}
-
-		if uv.Status != "unused" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已使用或已过期")))
-			return
-		}
-
-		if time.Now().After(uv.ExpiresAt) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已过期")))
-			return
-		}
-
-		if uv.MerchantID != req.MerchantID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该优惠券不能在此商户使用")))
-			return
-		}
-
-		if subtotal < uv.MinOrderAmount {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("未达到最低消费 %d 元", uv.MinOrderAmount/100)))
-			return
-		}
-
-		orderTypeAllowed := false
-		for _, allowedType := range uv.AllowedOrderTypes {
-			if allowedType == req.OrderType {
-				orderTypeAllowed = true
-				break
-			}
-		}
-		if !orderTypeAllowed {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该代金券不适用于此订单类型")))
-			return
-		}
-
-		response.DiscountAmount += uv.Amount
-		response.Promotions = append(response.Promotions, orderPromotion{
-			Type:   "voucher",
-			Title:  uv.Name,
-			Amount: uv.Amount,
-		})
-	}
-
-	// 计算最终金额
-	response.TotalAmount = response.Subtotal + response.DeliveryFee - response.DeliveryFeeDiscount - response.DiscountAmount
-	if response.TotalAmount < 0 {
-		response.TotalAmount = 0
 	}
 
 	ctx.JSON(http.StatusOK, response)

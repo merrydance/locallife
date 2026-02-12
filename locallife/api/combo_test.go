@@ -92,7 +92,8 @@ func TestCreateComboSetAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -128,7 +129,8 @@ func TestCreateComboSetAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -325,7 +327,8 @@ func TestGetComboSetAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 				store.EXPECT().
 					GetComboSetWithDetails(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -425,7 +428,8 @@ func TestListComboSetsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -440,7 +444,8 @@ func TestListComboSetsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -539,7 +544,8 @@ func TestUpdateComboSetAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -674,7 +680,8 @@ func TestDeleteComboSetAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -840,7 +847,8 @@ func TestAddComboDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -858,7 +866,8 @@ func TestAddComboDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -950,7 +959,8 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -1062,7 +1072,8 @@ func TestRemoveComboDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -1078,7 +1089,8 @@ func TestRemoveComboDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

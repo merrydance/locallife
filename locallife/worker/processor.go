@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -52,6 +53,14 @@ type RedisTaskProcessor struct {
 	pubSubPublisher   websocket.PubSubPublisher       // Pub/Sub 发布器（用于推送通知）
 	deliveryBroadcast *logic.DeliveryBroadcastLogic
 	config            util.Config
+	roleCache         map[int64]cachedUserRoles
+	roleCacheMu       sync.RWMutex
+	roleCacheTTL      time.Duration
+}
+
+type cachedUserRoles struct {
+	roles     []db.UserRole
+	expiresAt time.Time
 }
 
 func NewRedisTaskProcessor(
@@ -102,6 +111,8 @@ func NewRedisTaskProcessor(
 		pubSubPublisher:   pubSubPublisher,
 		deliveryBroadcast: deliveryBroadcast,
 		config:            config,
+		roleCache:         make(map[int64]cachedUserRoles),
+		roleCacheTTL:      1 * time.Minute,
 	}
 }
 
@@ -118,6 +129,8 @@ func NewTestTaskProcessor(
 		wechatClient:    wechatClient,
 		ecommerceClient: ecommerceClient,
 		pubSubPublisher: websocket.NoopPublisher{},
+		roleCache:       make(map[int64]cachedUserRoles),
+		roleCacheTTL:    1 * time.Minute,
 	}
 }
 

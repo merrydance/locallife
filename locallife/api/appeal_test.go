@@ -212,6 +212,7 @@ func TestCreateMerchantAppealAPI(t *testing.T) {
 		Status:      "approved",
 		MerchantID:  merchant.ID,
 		RegionID:    region.ID,
+		CreatedAt:   time.Now(),
 	}
 
 	appeal := randomAppeal(claim.ID, merchant.ID, region.ID, "merchant")
@@ -505,6 +506,7 @@ func TestCreateRiderAppealAPI(t *testing.T) {
 		MerchantID:  200,
 		RegionID:    region.ID,
 		RiderID:     pgtype.Int8{Int64: rider.ID, Valid: true},
+		CreatedAt:   time.Now(),
 	}
 
 	appeal := randomAppeal(claim.ID, rider.ID, region.ID, "rider")

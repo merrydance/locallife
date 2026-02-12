@@ -253,8 +253,12 @@ func TestSearchMerchants(t *testing.T) {
 		Offset:  0,
 		Limit:   10,
 		Column3: "SEARCHABLE_MERCHANT",
-		Column4: 0,
-		Column5: 0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
 	}
 
 	merchants, err := testStore.SearchMerchants(context.Background(), searchArg)

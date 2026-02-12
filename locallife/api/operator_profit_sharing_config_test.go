@@ -64,7 +64,7 @@ func TestListOperatorProfitSharingConfigsAPI(t *testing.T) {
 		},
 		{
 			name:  "InvalidLimit",
-			query: "?limit=0",
+			query: "?limit=-1",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},

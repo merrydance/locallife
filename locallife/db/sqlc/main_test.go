@@ -6,6 +6,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -22,24 +25,23 @@ func TestMain(m *testing.M) {
 		testDBSource = "postgresql:///locallife_dev?sslmode=disable&host=/var/run/postgresql"
 	}
 
-	// [SAFEGUARD] 既然使用 locallife_dev，禁用自动 migration 和 Drop 操作，防止误删数据。
-	// 我们假设 dev 数据库结构已经是新的。
-	/*
-		migrationURL := os.Getenv("TEST_MIGRATION_URL")
-		if migrationURL == "" {
-			// 当前文件位于 db/sqlc 下，migration 目录在 db/migration
-			migrationURL = "file://../migration"
-		}
+	// [SAFEGUARD] 只执行 Up（不做 Drop/Down），避免破坏性操作。
+	migrationURL := os.Getenv("TEST_MIGRATION_URL")
+	if migrationURL == "" {
+		// 当前文件位于 db/sqlc 下，migration 目录在 db/migration
+		migrationURL = "file://../migration"
+	}
 
-		mig, err := migrate.New(migrationURL, testDBSource)
-		if err != nil {
-			log.Fatal("cannot create migrate instance:", err)
-		}
-		// ... (省略原有危险的 Drop/Up 逻辑) ...
-		if _, err := mig.Close(); err != nil {
-			log.Printf("warning: cannot close migrate instance: %v", err)
-		}
-	*/
+	mig, err := migrate.New(migrationURL, testDBSource)
+	if err != nil {
+		log.Fatal("cannot create migrate instance:", err)
+	}
+	if err := mig.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatal("migration failed:", err)
+	}
+	if _, err := mig.Close(); err != nil {
+		log.Printf("warning: cannot close migrate instance: %v", err)
+	}
 
 	connPool, err := pgxpool.New(context.Background(), testDBSource)
 	if err != nil {

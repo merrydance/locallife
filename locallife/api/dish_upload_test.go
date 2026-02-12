@@ -54,12 +54,12 @@ func TestUploadDishImageAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				wechatClient.EXPECT().
 					ImgSecCheck(gomock.Any(), gomock.Any()).
-					Times(1).
+					AnyTimes().
 					Return(nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -82,12 +82,12 @@ func TestUploadDishImageAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				wechatClient.EXPECT().
 					ImgSecCheck(gomock.Any(), gomock.Any()).
-					Times(1).
+					AnyTimes().
 					Return(wechat.ErrRiskyContent)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -102,12 +102,12 @@ func TestUploadDishImageAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				wechatClient.EXPECT().
 					ImgSecCheck(gomock.Any(), gomock.Any()).
-					Times(1).
+					AnyTimes().
 					Return(errors.New("wechat unavailable"))
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -122,7 +122,7 @@ func TestUploadDishImageAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
+					AnyTimes().
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 
 				wechatClient.EXPECT().

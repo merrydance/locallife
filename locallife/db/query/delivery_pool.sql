@@ -57,14 +57,18 @@ LIMIT $1 OFFSET $2;
 -- 按骑手位置获取附近的可接订单
 -- 动态优先级：等待越久优先级越高
 SELECT *, 
-    (6371000 * acos(cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(pickup_latitude)) * 
-    cos(radians(pickup_longitude) - radians(sqlc.arg(rider_lng)::float8)) + 
-    sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(pickup_latitude))))::int AS distance_to_rider,
+    (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(pickup_latitude::float8)) * 
+        cos(radians(pickup_longitude::float8) - radians(sqlc.arg(rider_lng)::float8)) + 
+        sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(pickup_latitude::float8))
+    ))))::int AS distance_to_rider,
     (priority + EXTRACT(EPOCH FROM (now() - created_at)) / 600)::int AS effective_priority
 FROM delivery_pool
-WHERE (6371000 * acos(cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(pickup_latitude)) * 
-        cos(radians(pickup_longitude) - radians(sqlc.arg(rider_lng)::float8)) + 
-        sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(pickup_latitude)))) < sqlc.arg(max_distance)::float8
+WHERE (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(pickup_latitude::float8)) * 
+        cos(radians(pickup_longitude::float8) - radians(sqlc.arg(rider_lng)::float8)) + 
+        sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(pickup_latitude::float8))
+    )))) < sqlc.arg(max_distance)::float8
 ORDER BY distance_to_rider ASC
 LIMIT sqlc.arg(result_limit)::int;
 
@@ -73,16 +77,20 @@ LIMIT sqlc.arg(result_limit)::int;
 -- 骑手只能看到其所属区域内商户的订单
 -- 距离越近排名越靠前，同时返回动态优先级供前端展示
 SELECT dp.*, 
-    (6371000 * acos(cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(dp.pickup_latitude)) * 
-    cos(radians(dp.pickup_longitude) - radians(sqlc.arg(rider_lng)::float8)) + 
-    sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(dp.pickup_latitude))))::int AS distance_to_rider,
+    (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(dp.pickup_latitude::float8)) * 
+        cos(radians(dp.pickup_longitude::float8) - radians(sqlc.arg(rider_lng)::float8)) + 
+        sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(dp.pickup_latitude::float8))
+    ))))::int AS distance_to_rider,
     (dp.priority + EXTRACT(EPOCH FROM (now() - dp.created_at)) / 600)::int AS effective_priority
 FROM delivery_pool dp
 JOIN merchants m ON dp.merchant_id = m.id
 WHERE m.region_id = sqlc.arg(region_id)::bigint
-    AND (6371000 * acos(cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(dp.pickup_latitude)) * 
-        cos(radians(dp.pickup_longitude) - radians(sqlc.arg(rider_lng)::float8)) + 
-        sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(dp.pickup_latitude)))) < sqlc.arg(max_distance)::float8
+    AND (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians(sqlc.arg(rider_lat)::float8)) * cos(radians(dp.pickup_latitude::float8)) * 
+        cos(radians(dp.pickup_longitude::float8) - radians(sqlc.arg(rider_lng)::float8)) + 
+        sin(radians(sqlc.arg(rider_lat)::float8)) * sin(radians(dp.pickup_latitude::float8))
+    )))) < sqlc.arg(max_distance)::float8
 ORDER BY distance_to_rider ASC
 LIMIT sqlc.arg(result_limit)::int;
 

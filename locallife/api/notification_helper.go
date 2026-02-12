@@ -104,6 +104,11 @@ func (server *Server) SendNotification(ctx context.Context, params SendNotificat
 		)
 	}
 
+	if server.config.Environment == "test" {
+		server.sendNotificationInternal(ctx, params)
+		return nil
+	}
+
 	// Fallback: execute asynchronously in a goroutine to avoid blocking the API response
 	// P1-024: Ensure notification logic doesn't block critical path
 	go func() {

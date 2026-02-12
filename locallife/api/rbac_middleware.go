@@ -41,15 +41,19 @@ func (server *Server) RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		// 从 context 获取 auth payload
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 查询用户角色
-		userRoles, err := server.store.ListUserRoles(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
+		// 查询用户角色（优先复用已缓存的角色）
+		userRoles, ok := GetUserRolesFromContext(ctx)
+		if !ok {
+			var err error
+			userRoles, err = server.store.ListUserRoles(ctx, authPayload.UserID)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
 
-		// 缓存角色到 context
-		ctx.Set(userRolesKey, userRoles)
+			// 缓存角色到 context
+			ctx.Set(userRolesKey, userRoles)
+		}
 
 		// 检查是否拥有允许的角色之一
 		hasRole := false
@@ -85,6 +89,17 @@ func (server *Server) RoleMiddleware(allowedRoles ...string) gin.HandlerFunc {
 func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+		if cachedMerchant, ok := GetMerchantFromContext(ctx); ok {
+			if cachedMerchant.Status != "active" && cachedMerchant.Status != "approved" {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+					errors.New("merchant account is not active, please complete WeChat payment registration"),
+				))
+				return
+			}
+			ctx.Next()
+			return
+		}
 
 		// 通过 user_role 的 related_entity_id 获取商户 ID
 		userRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
@@ -144,17 +159,22 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 1. 通过 GetMerchantByOwner 获取商户（已支持 merchant_staff 表）
-		merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-					errors.New("you are not associated with any merchant"),
-				))
+		// 1. 优先复用已缓存的商户信息
+		merchant, ok := GetMerchantFromContext(ctx)
+		if !ok {
+			// 通过 GetMerchantByOwner 获取商户（已支持 merchant_staff 表）
+			var err error
+			merchant, err = server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+			if err != nil {
+				if isNotFoundError(err) {
+					ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+						errors.New("you are not associated with any merchant"),
+					))
+					return
+				}
+				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
 		}
 
 		// 检查商户状态
@@ -238,6 +258,17 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 func (server *Server) RiderMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+		if cachedRider, ok := GetRiderFromContext(ctx); ok {
+			if cachedRider.Status != "approved" {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+					errors.New("rider account is not approved"),
+				))
+				return
+			}
+			ctx.Next()
+			return
+		}
 
 		// 加载骑手信息
 		rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)

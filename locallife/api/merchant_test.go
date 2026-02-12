@@ -145,6 +145,11 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -252,6 +257,11 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)

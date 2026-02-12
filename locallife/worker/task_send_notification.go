@@ -187,10 +187,34 @@ func (processor *RedisTaskProcessor) isInDoNotDisturbPeriod(prefs db.UserNotific
 	return currentMicroseconds >= startMicroseconds && currentMicroseconds < endMicroseconds
 }
 
+func (processor *RedisTaskProcessor) getUserRolesCached(ctx context.Context, userID int64) ([]db.UserRole, error) {
+	now := time.Now()
+	processor.roleCacheMu.RLock()
+	if cached, ok := processor.roleCache[userID]; ok && now.Before(cached.expiresAt) {
+		processor.roleCacheMu.RUnlock()
+		return cached.roles, nil
+	}
+	processor.roleCacheMu.RUnlock()
+
+	roles, err := processor.store.ListUserRoles(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	processor.roleCacheMu.Lock()
+	processor.roleCache[userID] = cachedUserRoles{
+		roles:     roles,
+		expiresAt: now.Add(processor.roleCacheTTL),
+	}
+	processor.roleCacheMu.Unlock()
+
+	return roles, nil
+}
+
 // tryWebSocketPush 尝试通过WebSocket推送通知（如果用户是骑手或商户）
 func (processor *RedisTaskProcessor) tryWebSocketPush(ctx context.Context, userID int64, notification db.Notification) error {
-	// 查询用户角色
-	roles, err := processor.store.ListUserRoles(ctx, userID)
+	// 查询用户角色（带短期缓存，避免高并发下重复查询）
+	roles, err := processor.getUserRolesCached(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("list user roles: %w", err)
 	}

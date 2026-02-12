@@ -461,6 +461,7 @@ type DiscountRule struct {
 	CreatedAt              time.Time          `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt              pgtype.Timestamptz `json:"deleted_at"`
+	StackingGroup          pgtype.Text        `json:"stacking_group"`
 }
 
 type Dish struct {
@@ -657,16 +658,18 @@ type Ingredient struct {
 
 // M10: 会员交易流水表
 type MembershipTransaction struct {
-	ID             int64       `json:"id"`
-	MembershipID   int64       `json:"membership_id"`
-	Type           string      `json:"type"`
-	Amount         int64       `json:"amount"`
-	BalanceAfter   int64       `json:"balance_after"`
-	RelatedOrderID pgtype.Int8 `json:"related_order_id"`
-	RechargeRuleID pgtype.Int8 `json:"recharge_rule_id"`
-	Notes          pgtype.Text `json:"notes"`
-	CreatedAt      time.Time   `json:"created_at"`
-	PaymentOrderID pgtype.Int8 `json:"payment_order_id"`
+	ID              int64       `json:"id"`
+	MembershipID    int64       `json:"membership_id"`
+	Type            string      `json:"type"`
+	Amount          int64       `json:"amount"`
+	BalanceAfter    int64       `json:"balance_after"`
+	RelatedOrderID  pgtype.Int8 `json:"related_order_id"`
+	RechargeRuleID  pgtype.Int8 `json:"recharge_rule_id"`
+	Notes           pgtype.Text `json:"notes"`
+	CreatedAt       time.Time   `json:"created_at"`
+	PaymentOrderID  pgtype.Int8 `json:"payment_order_id"`
+	PrincipalAmount int64       `json:"principal_amount"`
+	BonusAmount     int64       `json:"bonus_amount"`
 }
 
 type Merchant struct {
@@ -873,14 +876,16 @@ type MerchantGroupMember struct {
 
 // M10: 商户会员账户表
 type MerchantMembership struct {
-	ID             int64              `json:"id"`
-	MerchantID     int64              `json:"merchant_id"`
-	UserID         int64              `json:"user_id"`
-	Balance        int64              `json:"balance"`
-	TotalRecharged int64              `json:"total_recharged"`
-	TotalConsumed  int64              `json:"total_consumed"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID               int64              `json:"id"`
+	MerchantID       int64              `json:"merchant_id"`
+	UserID           int64              `json:"user_id"`
+	Balance          int64              `json:"balance"`
+	TotalRecharged   int64              `json:"total_recharged"`
+	TotalConsumed    int64              `json:"total_consumed"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	PrincipalBalance int64              `json:"principal_balance"`
+	BonusBalance     int64              `json:"bonus_balance"`
 }
 
 // 商户会员使用场景配置

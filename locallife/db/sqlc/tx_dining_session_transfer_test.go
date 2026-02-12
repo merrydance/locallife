@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -180,18 +181,36 @@ func TestTransferDiningSessionTableTx_TargetTableReservedWithoutReservation(t *t
 	fromTable := createRandomTable(t, merchant.ID)
 	toTable := createRandomTable(t, merchant.ID)
 
-	otherReservation := createRandomReservation(t, user.ID, merchant.ID, toTable.ID, "confirmed")
+	reservedAt := time.Now().Add(30 * time.Minute)
+	reservationTimeMicro := int64(reservedAt.Hour())*3600*1000000 + int64(reservedAt.Minute())*60*1000000
+	otherReservation, err := testStore.CreateTableReservation(context.Background(), CreateTableReservationParams{
+		TableID:         toTable.ID,
+		UserID:          user.ID,
+		MerchantID:      merchant.ID,
+		ReservationDate: pgtype.Date{Time: reservedAt, Valid: true},
+		ReservationTime: pgtype.Time{Microseconds: reservationTimeMicro, Valid: true},
+		GuestCount:      2,
+		ContactName:     "test",
+		ContactPhone:    "13800138000",
+		PaymentMode:     "deposit",
+		DepositAmount:   10000,
+		PrepaidAmount:   0,
+		RefundDeadline:  reservedAt.Add(-1 * time.Hour),
+		PaymentDeadline: time.Now().Add(30 * time.Minute),
+		Status:          "confirmed",
+	})
+	require.NoError(t, err)
 	setTableStatus(t, toTable.ID, "reserved", pgtype.Int8{Int64: otherReservation.ID, Valid: true})
 
 	session := createOpenDiningSession(t, merchant.ID, fromTable.ID, user.ID, pgtype.Int8{Valid: false})
 
-	_, err := testStore.TransferDiningSessionTableTx(context.Background(), TransferDiningSessionTableTxParams{
+	_, transferErr := testStore.TransferDiningSessionTableTx(context.Background(), TransferDiningSessionTableTxParams{
 		SessionID:      session.ID,
 		ToTableID:      toTable.ID,
 		OperatorUserID: user.ID,
 		Reason:         pgtype.Text{String: "reserved target", Valid: true},
 	})
-	require.ErrorIs(t, err, ErrTargetTableReserved)
+	require.ErrorIs(t, transferErr, ErrTargetTableReserved)
 }
 
 func TestTransferDiningSessionTableTx_TargetTableOccupied(t *testing.T) {

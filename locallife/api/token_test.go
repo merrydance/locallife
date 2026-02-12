@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -35,28 +36,10 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 				}, refreshToken
 			},
 			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
-				refreshTokenHash, err := util.HashToken(refreshToken, tokenSecret)
-				require.NoError(t, err)
-
-				session := db.Session{
-					ID:                    util.RandomInt(1, 1000),
-					UserID:                userID,
-					RefreshToken:          refreshTokenHash,
-					RefreshTokenExpiresAt: time.Now().Add(24 * time.Hour),
-					IsRevoked:             false,
-				}
-
 				store.EXPECT().
-					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
-						RefreshToken:         refreshTokenHash,
-						RefreshTokenFallback: refreshToken,
-					})).
+					RefreshSessionTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(session, nil)
-
-				store.EXPECT().
-					UpdateSessionTokens(gomock.Any(), gomock.Any()).
-					Times(1)
+					Return(db.RefreshSessionTxResult{Session: db.Session{UserID: userID}}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, tokenMaker token.Maker, userID int64) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -132,25 +115,10 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 				}, refreshToken
 			},
 			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
-				refreshTokenHash, err := util.HashToken(refreshToken, tokenSecret)
-				require.NoError(t, err)
-
-				// Session在数据库中已过期
-				session := db.Session{
-					ID:                    util.RandomInt(1, 1000),
-					UserID:                userID,
-					RefreshToken:          refreshTokenHash,
-					RefreshTokenExpiresAt: time.Now().Add(-1 * time.Hour), // 已过期
-					IsRevoked:             false,
-				}
-
 				store.EXPECT().
-					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
-						RefreshToken:         refreshTokenHash,
-						RefreshTokenFallback: refreshToken,
-					})).
+					RefreshSessionTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(session, nil)
+					Return(db.RefreshSessionTxResult{}, fmt.Errorf("refresh token expired"))
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, tokenMaker token.Maker, userID int64) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -166,24 +134,10 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 				}, refreshToken
 			},
 			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
-				refreshTokenHash, err := util.HashToken(refreshToken, tokenSecret)
-				require.NoError(t, err)
-
-				session := db.Session{
-					ID:                    util.RandomInt(1, 1000),
-					UserID:                userID,
-					RefreshToken:          refreshTokenHash,
-					RefreshTokenExpiresAt: time.Now().Add(24 * time.Hour),
-					IsRevoked:             true, // 已撤销
-				}
-
 				store.EXPECT().
-					GetSessionByRefreshToken(gomock.Any(), gomock.Eq(db.GetSessionByRefreshTokenParams{
-						RefreshToken:         refreshTokenHash,
-						RefreshTokenFallback: refreshToken,
-					})).
+					RefreshSessionTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(session, nil)
+					Return(db.RefreshSessionTxResult{}, fmt.Errorf("session is revoked"))
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, tokenMaker token.Maker, userID int64) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)

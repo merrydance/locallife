@@ -23,6 +23,7 @@ func TestGetMerchantDailyStatsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -257,6 +258,7 @@ func TestGetMerchantOverviewAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -363,6 +365,7 @@ func TestGetTopSellingDishesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -521,6 +524,7 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -711,6 +715,7 @@ func TestGetCustomerDetailAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -855,6 +860,7 @@ func TestGetMerchantHourlyStatsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -961,6 +967,7 @@ func TestGetMerchantOrderSourceStatsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -1048,6 +1055,7 @@ func TestGetMerchantRepurchaseRateAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -1155,6 +1163,7 @@ func TestGetMerchantDishCategoryStatsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",

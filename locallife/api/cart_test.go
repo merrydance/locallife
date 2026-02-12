@@ -883,11 +883,6 @@ func TestCalculateCartAPI(t *testing.T) {
 					Return([]db.DiscountRule{}, nil)
 
 				store.EXPECT().
-					GetDeliveryFeeConfigByRegion(gomock.Any(), int64(0)).
-					Times(1).
-					Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
 					GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
 						UserID:     user.ID,
 						MerchantID: merchant.ID,
@@ -900,6 +895,15 @@ func TestCalculateCartAPI(t *testing.T) {
 					ListCartItems(gomock.Any(), cart.ID).
 					Times(1).
 					Return([]db.ListCartItemsRow{listRow}, nil)
+
+				store.EXPECT().
+					ListUserAvailableVouchersForMerchant(gomock.Any(), db.ListUserAvailableVouchersForMerchantParams{
+						UserID:         user.ID,
+						MerchantID:     merchant.ID,
+						MinOrderAmount: int64(cartItem.Quantity) * dish.Price,
+					}).
+					Times(1).
+					Return([]db.ListUserAvailableVouchersForMerchantRow{}, nil)
 
 				store.EXPECT().
 					GetMembershipByMerchantAndUser(gomock.Any(), db.GetMembershipByMerchantAndUserParams{
@@ -1276,16 +1280,6 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 					GetCart(gomock.Any(), cart2ID).
 					Times(1).
 					Return(db.Cart{ID: cart2ID, UserID: user.ID, MerchantID: merchant2.ID, OrderType: "dine_in"}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant1.ID).
-					Times(1).
-					Return(merchant1, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchant2.ID).
-					Times(1).
-					Return(merchant2, nil)
 
 				// Mock: 获取购物车商品
 				store.EXPECT().

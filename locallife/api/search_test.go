@@ -29,7 +29,7 @@ func TestSearchDishesAPI(t *testing.T) {
 	}{
 		{
 			name:  "OK_GlobalSearch",
-			query: "?keyword=鸡&page_id=1&page_size=10",
+			query: "?keyword=鸡&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				// 全局搜索
 				store.EXPECT().
@@ -66,7 +66,7 @@ func TestSearchDishesAPI(t *testing.T) {
 		},
 		{
 			name:  "OK_MissingKeyword",
-			query: "?page_id=1&page_size=10",
+			query: "?region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchDishesGlobal(gomock.Any(), gomock.Any()).
@@ -132,7 +132,7 @@ func TestSearchDishesAPI(t *testing.T) {
 		},
 		{
 			name:  "InternalError_GlobalSearch",
-			query: "?keyword=鸡&page_id=1&page_size=10",
+			query: "?keyword=鸡&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchDishesGlobal(gomock.Any(), gomock.Any()).
@@ -182,7 +182,7 @@ func TestSearchMerchantsAPI(t *testing.T) {
 	}{
 		{
 			name:  "OK",
-			query: "?keyword=火锅&page_id=1&page_size=10",
+			query: "?keyword=火锅&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchMerchants(gomock.Any(), gomock.Any()).
@@ -200,7 +200,7 @@ func TestSearchMerchantsAPI(t *testing.T) {
 		},
 		{
 			name:  "OK_MissingKeyword",
-			query: "?page_id=1&page_size=10",
+			query: "?region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchMerchants(gomock.Any(), gomock.Any()).
@@ -230,7 +230,7 @@ func TestSearchMerchantsAPI(t *testing.T) {
 		},
 		{
 			name:  "InternalError",
-			query: "?keyword=火锅&page_id=1&page_size=10",
+			query: "?keyword=火锅&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchMerchants(gomock.Any(), gomock.Any()).
@@ -282,7 +282,7 @@ func TestSearchCombosAPI(t *testing.T) {
 	}{
 		{
 			name:  "OK_GlobalSearch",
-			query: "?keyword=套餐&page_id=1&page_size=10",
+			query: "?keyword=套餐&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				combos := []db.SearchCombosGlobalRow{
 					{
@@ -338,7 +338,7 @@ func TestSearchCombosAPI(t *testing.T) {
 		},
 		{
 			name:  "InternalError",
-			query: "?keyword=套餐&page_id=1&page_size=10",
+			query: "?keyword=套餐&region_id=1&page_id=1&page_size=10",
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					SearchCombosGlobal(gomock.Any(), gomock.Any()).

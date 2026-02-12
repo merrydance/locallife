@@ -361,10 +361,12 @@ func TestCreateOrderTxWithBalance(t *testing.T) {
 	// 手动增加余额（模拟充值）
 	rechargeAmount := int64(50000) // 500元
 	membership.Membership, err = testStore.UpdateMembershipBalance(context.Background(), UpdateMembershipBalanceParams{
-		ID:             membership.Membership.ID,
-		Balance:        rechargeAmount,
-		TotalRecharged: rechargeAmount,
-		TotalConsumed:  0,
+		ID:               membership.Membership.ID,
+		Balance:          rechargeAmount,
+		PrincipalBalance: rechargeAmount,
+		BonusBalance:     0,
+		TotalRecharged:   rechargeAmount,
+		TotalConsumed:    0,
 	})
 	require.NoError(t, err)
 	require.Equal(t, rechargeAmount, membership.Membership.Balance)
@@ -453,10 +455,12 @@ func TestCreateOrderTxWithVoucherAndBalance(t *testing.T) {
 
 	rechargeAmount := int64(50000) // 500元
 	membership.Membership, err = testStore.UpdateMembershipBalance(context.Background(), UpdateMembershipBalanceParams{
-		ID:             membership.Membership.ID,
-		Balance:        rechargeAmount,
-		TotalRecharged: rechargeAmount,
-		TotalConsumed:  0,
+		ID:               membership.Membership.ID,
+		Balance:          rechargeAmount,
+		PrincipalBalance: rechargeAmount,
+		BonusBalance:     0,
+		TotalRecharged:   rechargeAmount,
+		TotalConsumed:    0,
 	})
 	require.NoError(t, err)
 

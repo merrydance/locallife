@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/rs/zerolog/log"
 )
 
@@ -215,56 +216,37 @@ func (server *Server) maybeAutoAdvancePickup(ctx context.Context, delivery db.De
 		return
 	}
 
-	var oldStatus string
-	var order db.Order
-	orderLoaded := false
-	loadedOrder, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err == nil {
-		order = loadedOrder
-		oldStatus = order.Status
-		orderLoaded = true
-	} else if !isNotFoundError(err) {
-		log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto advance")
-	}
-	if orderLoaded && !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionStartPickup) {
-		return
-	}
-
-	result, err := server.store.UpdateDeliveryToPickupTx(ctx, db.UpdateDeliveryToPickupTxParams{
-		DeliveryID: delivery.ID,
-		RiderID:    rider.ID,
-		OrderID:    delivery.OrderID,
-	})
+	result, err := logic.AutoAdvancePickup(ctx, server.store, delivery, rider)
 	if err != nil {
 		log.Warn().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to auto advance delivery to picking")
 		return
 	}
-
-	if orderLoaded && oldStatus != "" && oldStatus != OrderStatusCourierAccepted {
-		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     OrderStatusCourierAccepted,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "围栏驻留自动触发开始取餐", Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for geofence auto pickup")
-		}
+	if result.LoadOrderErr != nil {
+		log.Warn().Err(result.LoadOrderErr).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto advance")
+	}
+	if !result.Updated {
+		return
 	}
 
 	updated := result.Delivery
-	if order, err := server.store.GetOrder(ctx, updated.OrderID); err == nil {
-		server.sendDeliveryStatusNotification(
-			ctx,
-			order.UserID,
-			updated.OrderID,
-			updated.ID,
-			"picking",
-			"骑手正在取餐",
-			"骑手已到店并开始取餐",
-		)
+	order := result.Order
+	if !result.OrderLoaded {
+		loadedOrder, err := server.store.GetOrder(ctx, updated.OrderID)
+		if err != nil {
+			return
+		}
+		order = loadedOrder
 	}
+
+	server.sendDeliveryStatusNotification(
+		ctx,
+		order.UserID,
+		updated.OrderID,
+		updated.ID,
+		"picking",
+		"骑手正在取餐",
+		"骑手已到店并开始取餐",
+	)
 }
 
 func (server *Server) maybeAutoConfirmPickup(ctx context.Context, delivery db.Delivery, rider db.Rider) {
@@ -275,44 +257,18 @@ func (server *Server) maybeAutoConfirmPickup(ctx context.Context, delivery db.De
 		return
 	}
 
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		if !isNotFoundError(err) {
-			log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto pickup")
-		}
-		return
-	}
-	oldStatus := order.Status
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmPickup) {
-		return
-	}
-
-	result, err := server.store.UpdateDeliveryToPickedTx(ctx, db.UpdateDeliveryToPickedTxParams{
-		DeliveryID: delivery.ID,
-		RiderID:    rider.ID,
-		OrderID:    delivery.OrderID,
-	})
+	result, err := logic.AutoConfirmPickup(ctx, server.store, delivery, rider)
 	if err != nil {
 		log.Warn().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to auto confirm pickup")
 		return
 	}
-
-	if oldStatus != OrderStatusPicked {
-		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     OrderStatusPicked,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "围栏驻留自动确认取餐", Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for auto picked")
-		}
+	if !result.Updated || !result.OrderLoaded {
+		return
 	}
 
 	server.sendDeliveryStatusNotification(
 		ctx,
-		order.UserID,
+		result.Order.UserID,
 		result.Delivery.OrderID,
 		result.Delivery.ID,
 		"picked",
@@ -329,46 +285,18 @@ func (server *Server) maybeAutoConfirmDelivery(ctx context.Context, delivery db.
 		return
 	}
 
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		if !isNotFoundError(err) {
-			log.Warn().Err(err).Int64("order_id", delivery.OrderID).Msg("failed to load order for geofence auto delivery")
-		}
-		return
-	}
-	oldStatus := order.Status
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmDelivery) {
-		return
-	}
-
-	result, err := server.store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
-		DeliveryID:     delivery.ID,
-		RiderID:        rider.ID,
-		OrderID:        delivery.OrderID,
-		UnfreezeAmount: int64(5000),
-		DeliveryFee:    delivery.DeliveryFee,
-	})
+	result, err := logic.AutoConfirmDelivery(ctx, server.store, delivery, rider, 5000)
 	if err != nil {
 		log.Warn().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to auto confirm delivery")
 		return
 	}
-
-	if oldStatus != OrderStatusRiderDelivered {
-		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     OrderStatusRiderDelivered,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "围栏驻留自动确认送达", Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for auto rider_delivered")
-		}
+	if !result.Updated || !result.OrderLoaded {
+		return
 	}
 
 	server.sendDeliveryStatusNotification(
 		ctx,
-		order.UserID,
+		result.Order.UserID,
 		result.Delivery.OrderID,
 		result.Delivery.ID,
 		"delivered",

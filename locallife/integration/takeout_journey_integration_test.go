@@ -1640,8 +1640,9 @@ func TestReservationJourneyCCheckInPendingIntegration(t *testing.T) {
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
-	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
-	reservationTime := "19:00"
+	reservationDateTime := time.Now().Add(20 * time.Minute)
+	reservationDate := reservationDateTime.Format("2006-01-02")
+	reservationTime := reservationDateTime.Format("15:04")
 
 	// 1) 创建预订（未支付）
 	var created reservationStatusResponse
@@ -1807,6 +1808,14 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	paidReservation, err := store.GetTableReservation(ctx, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "paid", paidReservation.Status)
+
+	checkinTime := time.Now().Add(5 * time.Minute)
+	_, err = store.UpdateReservation(ctx, db.UpdateReservationParams{
+		ID:              created.ID,
+		ReservationDate: pgtype.Date{Time: checkinTime, Valid: true},
+		ReservationTime: pgtype.Time{Microseconds: int64(checkinTime.Hour()*3600+checkinTime.Minute()*60) * 1000000, Valid: true},
+	})
+	require.NoError(t, err)
 
 	// 5) 商户确认预订
 	{

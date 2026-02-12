@@ -885,7 +885,7 @@ func (q *Queries) ListMerchantActiveDeliveryPromotions(ctx context.Context, merc
 }
 
 const listMerchantActiveDiscountRules = `-- name: ListMerchantActiveDiscountRules :many
-SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1
   AND is_active = true
   AND valid_from <= NOW()
@@ -919,6 +919,7 @@ func (q *Queries) ListMerchantActiveDiscountRules(ctx context.Context, merchantI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.StackingGroup,
 		); err != nil {
 			return nil, err
 		}

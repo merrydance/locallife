@@ -493,9 +493,9 @@ func TestListDeliveryPool_EffectivePriority(t *testing.T) {
 	merchant, err := testStore.GetMerchant(context.Background(), order.MerchantID)
 	require.NoError(t, err)
 
-	// 使用非常独特且计算稳定的坐标，避免浮点误差导致 acos 参数超界
-	uniqueLat := 0.0
-	uniqueLng := 0.0
+	// 使用稳定且常见的坐标，保证距离计算与查询窗口匹配
+	uniqueLat := 39.915
+	uniqueLng := 116.404
 
 	arg := AddToDeliveryPoolParams{
 		OrderID:           order.ID,
@@ -528,7 +528,7 @@ func TestListDeliveryPool_EffectivePriority(t *testing.T) {
 		RiderLat:    riderLat,
 		RiderLng:    riderLng,
 		MaxDistance: 1000, // 1km 范围内
-		ResultLimit: 10,
+		ResultLimit: 200,
 	})
 	require.NoError(t, err)
 

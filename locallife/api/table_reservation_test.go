@@ -84,9 +84,14 @@ func TestCreateReservationAPI(t *testing.T) {
 					Return(room, nil)
 
 				store.EXPECT().
-					CheckTableAvailability(gomock.Any(), gomock.Any()).
+					ListReservationsByTableAndDate(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(int64(0), nil) // 可用
+					Return([]db.TableReservation{}, nil)
+
+				store.EXPECT().
+					ListMerchantBusinessHours(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.MerchantBusinessHour{}, nil)
 
 				store.EXPECT().
 					CreateReservationTx(gomock.Any(), gomock.Any()).
@@ -187,7 +192,7 @@ func TestCreateReservationAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				unavailableRoom := room
-				unavailableRoom.Status = "occupied"
+				unavailableRoom.Status = "disabled"
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(room.ID)).
@@ -219,9 +224,14 @@ func TestCreateReservationAPI(t *testing.T) {
 					Return(room, nil)
 
 				store.EXPECT().
-					CheckTableAvailability(gomock.Any(), gomock.Any()).
+					ListReservationsByTableAndDate(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(int64(1), nil) // 已被预定
+					Return([]db.TableReservation{reservation}, nil)
+
+				store.EXPECT().
+					ListMerchantBusinessHours(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.MerchantBusinessHour{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
@@ -726,11 +736,6 @@ func TestCancelReservationAPI(t *testing.T) {
 					Return(reservation, nil)
 
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound) // 用户不是商户
-
-				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(reservation.TableID)).
 					Times(1).
 					Return(room, nil)
@@ -739,11 +744,6 @@ func TestCancelReservationAPI(t *testing.T) {
 					CancelReservationTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CancelReservationTxResult{Reservation: cancelledReservation}, nil)
-
-				store.EXPECT().
-					ReleaseReservationInventoryTx(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -874,6 +874,11 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 					ListReservationsByMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(reservations, nil)
+
+				store.EXPECT().
+					ListReservationItems(gomock.Any(), gomock.Any()).
+					Times(len(reservations)).
+					Return([]db.ListReservationItemsRow{}, nil)
 
 				store.EXPECT().
 					CountReservationsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
@@ -1237,10 +1242,11 @@ func TestGetReservationStatsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 
-	stats := db.GetReservationStatsRow{
+	stats := db.GetReservationStatsEnhancedRow{
 		PendingCount:   10,
 		PaidCount:      20,
 		ConfirmedCount: 50,
+		CheckedInCount: 15,
 		CompletedCount: 30,
 		CancelledCount: 10,
 		ExpiredCount:   5,
@@ -1265,7 +1271,7 @@ func TestGetReservationStatsAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				store.EXPECT().
-					GetReservationStats(gomock.Any(), merchant.ID).
+					GetReservationStatsEnhanced(gomock.Any(), merchant.ID).
 					Times(1).
 					Return(stats, nil)
 			},

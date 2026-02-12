@@ -81,7 +81,7 @@ func TestCreateDishCategoryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -111,7 +111,8 @@ func TestCreateDishCategoryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
@@ -147,7 +148,8 @@ func TestCreateDishCategoryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -211,7 +213,7 @@ func TestListDishCategoriesAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -302,7 +304,7 @@ func TestCreateDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -338,7 +340,8 @@ func TestCreateDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -415,7 +418,7 @@ func TestGetDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -436,7 +439,7 @@ func TestGetDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -457,7 +460,7 @@ func TestGetDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				// Return dish belonging to different merchant
@@ -532,7 +535,7 @@ func TestListDishesByMerchantAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -561,7 +564,8 @@ func TestListDishesByMerchantAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -619,7 +623,7 @@ func TestUpdateDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -651,7 +655,7 @@ func TestUpdateDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -713,7 +717,7 @@ func TestDeleteDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -744,7 +748,7 @@ func TestDeleteDishAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().

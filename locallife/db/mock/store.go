@@ -6483,6 +6483,21 @@ func (mr *MockStoreMockRecorder) GetMembershipByMerchantAndUserForUpdate(ctx, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipByMerchantAndUserForUpdate", reflect.TypeOf((*MockStore)(nil).GetMembershipByMerchantAndUserForUpdate), ctx, arg)
 }
 
+// GetMembershipConsumeByOrder mocks base method.
+func (m *MockStore) GetMembershipConsumeByOrder(ctx context.Context, arg db.GetMembershipConsumeByOrderParams) (db.MembershipTransaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMembershipConsumeByOrder", ctx, arg)
+	ret0, _ := ret[0].(db.MembershipTransaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMembershipConsumeByOrder indicates an expected call of GetMembershipConsumeByOrder.
+func (mr *MockStoreMockRecorder) GetMembershipConsumeByOrder(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipConsumeByOrder", reflect.TypeOf((*MockStore)(nil).GetMembershipConsumeByOrder), ctx, arg)
+}
+
 // GetMembershipForUpdate mocks base method.
 func (m *MockStore) GetMembershipForUpdate(ctx context.Context, id int64) (db.MerchantMembership, error) {
 	m.ctrl.T.Helper()

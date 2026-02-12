@@ -80,15 +80,21 @@ func (store *SQLStore) RechargeTx(ctx context.Context, arg RechargeTxParams) (Re
 		}
 
 		// 2. Calculate total amount (recharge + bonus)
-		totalAmount := arg.RechargeAmount + arg.BonusAmount
-		newBalance := membership.Balance + totalAmount
+		principalAmount := arg.RechargeAmount
+		bonusAmount := arg.BonusAmount
+		newPrincipal := membership.PrincipalBalance + principalAmount
+		newBonus := membership.BonusBalance + bonusAmount
+		totalAmount := principalAmount + bonusAmount
+		newBalance := newPrincipal + newBonus
 
 		// 3. Update membership balance
 		result.Membership, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
-			ID:             arg.MembershipID,
-			Balance:        newBalance,
-			TotalRecharged: membership.TotalRecharged + totalAmount,
-			TotalConsumed:  membership.TotalConsumed,
+			ID:               arg.MembershipID,
+			Balance:          newBalance,
+			PrincipalBalance: newPrincipal,
+			BonusBalance:     newBonus,
+			TotalRecharged:   membership.TotalRecharged + totalAmount,
+			TotalConsumed:    membership.TotalConsumed,
 		})
 		if err != nil {
 			return fmt.Errorf("update balance: %w", err)
@@ -103,13 +109,15 @@ func (store *SQLStore) RechargeTx(ctx context.Context, arg RechargeTxParams) (Re
 		notesPg := pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""}
 
 		result.Transaction, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
-			MembershipID:   arg.MembershipID,
-			Type:           "recharge",
-			Amount:         totalAmount,
-			BalanceAfter:   newBalance,
-			RelatedOrderID: pgtype.Int8{},
-			RechargeRuleID: rechargeRuleIDPg,
-			Notes:          notesPg,
+			MembershipID:    arg.MembershipID,
+			Type:            "recharge",
+			Amount:          totalAmount,
+			PrincipalAmount: principalAmount,
+			BonusAmount:     bonusAmount,
+			BalanceAfter:    newBalance,
+			RelatedOrderID:  pgtype.Int8{},
+			RechargeRuleID:  rechargeRuleIDPg,
+			Notes:           notesPg,
 		})
 		if err != nil {
 			return fmt.Errorf("create transaction: %w", err)
@@ -153,13 +161,22 @@ func (store *SQLStore) ConsumeTx(ctx context.Context, arg ConsumeTxParams) (Cons
 			return fmt.Errorf("insufficient balance: have %d, need %d", membership.Balance, arg.Amount)
 		}
 
-		// 3. Update membership balance
-		newBalance := membership.Balance - arg.Amount
+		// 3. Update membership balance (bonus first, then principal)
+		bonusUsed := membership.BonusBalance
+		if bonusUsed > arg.Amount {
+			bonusUsed = arg.Amount
+		}
+		principalUsed := arg.Amount - bonusUsed
+		newBonus := membership.BonusBalance - bonusUsed
+		newPrincipal := membership.PrincipalBalance - principalUsed
+		newBalance := newPrincipal + newBonus
 		result.Membership, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
-			ID:             arg.MembershipID,
-			Balance:        newBalance,
-			TotalRecharged: membership.TotalRecharged,
-			TotalConsumed:  membership.TotalConsumed + arg.Amount,
+			ID:               arg.MembershipID,
+			Balance:          newBalance,
+			PrincipalBalance: newPrincipal,
+			BonusBalance:     newBonus,
+			TotalRecharged:   membership.TotalRecharged,
+			TotalConsumed:    membership.TotalConsumed + arg.Amount,
 		})
 		if err != nil {
 			return fmt.Errorf("update balance: %w", err)
@@ -169,13 +186,15 @@ func (store *SQLStore) ConsumeTx(ctx context.Context, arg ConsumeTxParams) (Cons
 		notesPg := pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""}
 
 		result.Transaction, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
-			MembershipID:   arg.MembershipID,
-			Type:           "consume",
-			Amount:         -arg.Amount, // Negative for consumption
-			BalanceAfter:   newBalance,
-			RelatedOrderID: pgtype.Int8{Int64: arg.RelatedOrderID, Valid: true},
-			RechargeRuleID: pgtype.Int8{},
-			Notes:          notesPg,
+			MembershipID:    arg.MembershipID,
+			Type:            "consume",
+			Amount:          -arg.Amount, // Negative for consumption
+			PrincipalAmount: -principalUsed,
+			BonusAmount:     -bonusUsed,
+			BalanceAfter:    newBalance,
+			RelatedOrderID:  pgtype.Int8{Int64: arg.RelatedOrderID, Valid: true},
+			RechargeRuleID:  pgtype.Int8{},
+			Notes:           notesPg,
 		})
 		if err != nil {
 			return fmt.Errorf("create transaction: %w", err)
@@ -214,13 +233,17 @@ func (store *SQLStore) RefundTx(ctx context.Context, arg RefundTxParams) (Refund
 			return fmt.Errorf("get membership: %w", err)
 		}
 
-		// 2. Update membership balance
-		newBalance := membership.Balance + arg.Amount
+		// 2. Update membership balance (refund to principal by default)
+		newPrincipal := membership.PrincipalBalance + arg.Amount
+		newBonus := membership.BonusBalance
+		newBalance := newPrincipal + newBonus
 		result.Membership, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
-			ID:             arg.MembershipID,
-			Balance:        newBalance,
-			TotalRecharged: membership.TotalRecharged,
-			TotalConsumed:  membership.TotalConsumed,
+			ID:               arg.MembershipID,
+			Balance:          newBalance,
+			PrincipalBalance: newPrincipal,
+			BonusBalance:     newBonus,
+			TotalRecharged:   membership.TotalRecharged,
+			TotalConsumed:    membership.TotalConsumed,
 		})
 		if err != nil {
 			return fmt.Errorf("update balance: %w", err)
@@ -230,13 +253,15 @@ func (store *SQLStore) RefundTx(ctx context.Context, arg RefundTxParams) (Refund
 		notesPg := pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""}
 
 		result.Transaction, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
-			MembershipID:   arg.MembershipID,
-			Type:           "refund",
-			Amount:         arg.Amount,
-			BalanceAfter:   newBalance,
-			RelatedOrderID: pgtype.Int8{Int64: arg.RelatedOrderID, Valid: true},
-			RechargeRuleID: pgtype.Int8{},
-			Notes:          notesPg,
+			MembershipID:    arg.MembershipID,
+			Type:            "refund",
+			Amount:          arg.Amount,
+			PrincipalAmount: arg.Amount,
+			BonusAmount:     0,
+			BalanceAfter:    newBalance,
+			RelatedOrderID:  pgtype.Int8{Int64: arg.RelatedOrderID, Valid: true},
+			RechargeRuleID:  pgtype.Int8{},
+			Notes:           notesPg,
 		})
 		if err != nil {
 			return fmt.Errorf("create transaction: %w", err)
@@ -277,8 +302,10 @@ func (store *SQLStore) AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemb
 			return fmt.Errorf("get membership for update: %w", err)
 		}
 
-		// 2. 计算新余额并验证
-		newBalance := membership.Balance + arg.Amount
+		// 2. 计算新余额并验证（调整默认作用于本金）
+		newPrincipal := membership.PrincipalBalance + arg.Amount
+		newBonus := membership.BonusBalance
+		newBalance := newPrincipal + newBonus
 		if newBalance < 0 {
 			return fmt.Errorf("余额不足，当前余额 %d 分，需扣减 %d 分", membership.Balance, -arg.Amount)
 		}
@@ -298,10 +325,12 @@ func (store *SQLStore) AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemb
 
 		// 4. 更新余额（原子操作）
 		result.Membership, err = q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
-			ID:             arg.MembershipID,
-			Balance:        newBalance,
-			TotalRecharged: newTotalRecharged,
-			TotalConsumed:  newTotalConsumed,
+			ID:               arg.MembershipID,
+			Balance:          newBalance,
+			PrincipalBalance: newPrincipal,
+			BonusBalance:     newBonus,
+			TotalRecharged:   newTotalRecharged,
+			TotalConsumed:    newTotalConsumed,
 		})
 		if err != nil {
 			return fmt.Errorf("update membership balance: %w", err)
@@ -309,13 +338,15 @@ func (store *SQLStore) AdjustMemberBalanceTx(ctx context.Context, arg AdjustMemb
 
 		// 5. 创建流水记录（同一事务内，保证原子性）
 		result.Transaction, err = q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
-			MembershipID:   arg.MembershipID,
-			Type:           txType,
-			Amount:         arg.Amount,
-			BalanceAfter:   newBalance,
-			RelatedOrderID: pgtype.Int8{},
-			RechargeRuleID: pgtype.Int8{},
-			Notes:          pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""},
+			MembershipID:    arg.MembershipID,
+			Type:            txType,
+			Amount:          arg.Amount,
+			PrincipalAmount: arg.Amount,
+			BonusAmount:     0,
+			BalanceAfter:    newBalance,
+			RelatedOrderID:  pgtype.Int8{},
+			RechargeRuleID:  pgtype.Int8{},
+			Notes:           pgtype.Text{String: arg.Notes, Valid: arg.Notes != ""},
 		})
 		if err != nil {
 			return fmt.Errorf("create membership transaction: %w", err)

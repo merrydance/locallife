@@ -50,10 +50,10 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 	})
 
 	foodPermitOCR, _ := json.Marshal(FoodPermitOCRData{
-		PermitNo: "JY11105000000001",
+		PermitNo:    "JY11105000000001",
 		CompanyName: "测试餐饮有限公司",
-		ValidTo:  "2030年12月31日",
-		OCRAt:    time.Now().Format(time.RFC3339),
+		ValidTo:     "2030年12月31日",
+		OCRAt:       time.Now().Format(time.RFC3339),
 	})
 
 	idCardFrontOCR, _ := json.Marshal(MerchantIDCardOCRData{
@@ -327,6 +327,27 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(false, nil)
 
+				store.EXPECT().
+					ListMerchantAddressesByRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]string{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
 				approvedApp := submittedApp
 				approvedApp.Status = "approved"
 				store.EXPECT().
@@ -452,6 +473,27 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					}).
 					Times(1).
 					Return(false, nil)
+
+				store.EXPECT().
+					ListMerchantAddressesByRegion(gomock.Any(), app.RegionID.Int64).
+					Times(1).
+					Return([]string{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: app.BusinessLicenseNumber,
+						ID:                    app.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: app.LegalPersonIDNumber,
+						ID:                  app.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
 
 				store.EXPECT().
 					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).

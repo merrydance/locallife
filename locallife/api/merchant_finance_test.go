@@ -503,6 +503,7 @@ func TestListMerchantPromotionExpensesAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -596,6 +597,7 @@ func TestListMerchantDailyFinanceAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",
@@ -634,6 +636,11 @@ func TestListMerchantDailyFinanceAPI(t *testing.T) {
 							TotalFee:       50000,
 						},
 					}, nil)
+
+				store.EXPECT().
+					ListMerchantDailySettlementAdjustments(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListMerchantDailySettlementAdjustmentsRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -671,6 +678,7 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
+		RegionID:    1,
 		OwnerUserID: user.ID,
 		Name:        "测试商户",
 		Status:      "approved",

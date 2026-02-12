@@ -71,6 +71,7 @@ func randomDiscountRule(merchantID int64) db.DiscountRule {
 func TestScanTableAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
 	table := randomTable(merchant.ID)
 	category := randomDishCategory()
 	listCategory := db.ListDishCategoriesRow{
@@ -134,6 +135,11 @@ func TestScanTableAPI(t *testing.T) {
 					ListActiveDiscountRules(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
 					Return([]db.DiscountRule{discountRule}, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{ID: dish.ID}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -475,6 +481,11 @@ func TestScanTableAPI(t *testing.T) {
 					ListActiveDiscountRules(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil, errors.New("db error"))
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{ID: dish.ID}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				// Promotions errors are silently ignored, should still return OK

@@ -172,6 +172,10 @@ func newTestServer(t *testing.T, store db.Store) *Server {
 	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
 	require.NoError(t, err)
 
+	// Disable websocket side effects for unit tests.
+	server.wsHub = nil
+	server.wsPubSub = nil
+
 	return server
 }
 

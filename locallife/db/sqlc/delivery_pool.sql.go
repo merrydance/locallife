@@ -274,14 +274,18 @@ func (q *Queries) ListDeliveryPool(ctx context.Context, arg ListDeliveryPoolPara
 
 const listDeliveryPoolNearby = `-- name: ListDeliveryPoolNearby :many
 SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at, 
-    (6371000 * acos(cos(radians($1::float8)) * cos(radians(pickup_latitude)) * 
-    cos(radians(pickup_longitude) - radians($2::float8)) + 
-    sin(radians($1::float8)) * sin(radians(pickup_latitude))))::int AS distance_to_rider,
+    (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians($1::float8)) * cos(radians(pickup_latitude::float8)) * 
+        cos(radians(pickup_longitude::float8) - radians($2::float8)) + 
+        sin(radians($1::float8)) * sin(radians(pickup_latitude::float8))
+    ))))::int AS distance_to_rider,
     (priority + EXTRACT(EPOCH FROM (now() - created_at)) / 600)::int AS effective_priority
 FROM delivery_pool
-WHERE (6371000 * acos(cos(radians($1::float8)) * cos(radians(pickup_latitude)) * 
-        cos(radians(pickup_longitude) - radians($2::float8)) + 
-        sin(radians($1::float8)) * sin(radians(pickup_latitude)))) < $3::float8
+WHERE (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians($1::float8)) * cos(radians(pickup_latitude::float8)) * 
+        cos(radians(pickup_longitude::float8) - radians($2::float8)) + 
+        sin(radians($1::float8)) * sin(radians(pickup_latitude::float8))
+    )))) < $3::float8
 ORDER BY distance_to_rider ASC
 LIMIT $4::int
 `
@@ -358,16 +362,20 @@ func (q *Queries) ListDeliveryPoolNearby(ctx context.Context, arg ListDeliveryPo
 
 const listDeliveryPoolNearbyByRegion = `-- name: ListDeliveryPoolNearbyByRegion :many
 SELECT dp.id, dp.order_id, dp.merchant_id, dp.pickup_longitude, dp.pickup_latitude, dp.delivery_longitude, dp.delivery_latitude, dp.distance, dp.delivery_fee, dp.expected_pickup_at, dp.expires_at, dp.priority, dp.created_at, dp.expected_delivery_at, 
-    (6371000 * acos(cos(radians($1::float8)) * cos(radians(dp.pickup_latitude)) * 
-    cos(radians(dp.pickup_longitude) - radians($2::float8)) + 
-    sin(radians($1::float8)) * sin(radians(dp.pickup_latitude))))::int AS distance_to_rider,
+    (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians($1::float8)) * cos(radians(dp.pickup_latitude::float8)) * 
+        cos(radians(dp.pickup_longitude::float8) - radians($2::float8)) + 
+        sin(radians($1::float8)) * sin(radians(dp.pickup_latitude::float8))
+    ))))::int AS distance_to_rider,
     (dp.priority + EXTRACT(EPOCH FROM (now() - dp.created_at)) / 600)::int AS effective_priority
 FROM delivery_pool dp
 JOIN merchants m ON dp.merchant_id = m.id
 WHERE m.region_id = $3::bigint
-    AND (6371000 * acos(cos(radians($1::float8)) * cos(radians(dp.pickup_latitude)) * 
-        cos(radians(dp.pickup_longitude) - radians($2::float8)) + 
-        sin(radians($1::float8)) * sin(radians(dp.pickup_latitude)))) < $4::float8
+    AND (6371000 * acos(LEAST(1, GREATEST(-1,
+        cos(radians($1::float8)) * cos(radians(dp.pickup_latitude::float8)) * 
+        cos(radians(dp.pickup_longitude::float8) - radians($2::float8)) + 
+        sin(radians($1::float8)) * sin(radians(dp.pickup_latitude::float8))
+    )))) < $4::float8
 ORDER BY distance_to_rider ASC
 LIMIT $5::int
 `

@@ -38,12 +38,13 @@ INSERT INTO discount_rules (
     discount_amount,
     can_stack_with_voucher,
     can_stack_with_membership,
+    stacking_group,
     valid_from,
     valid_until,
     is_active
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) RETURNING id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group
 `
 
 type CreateDiscountRuleParams struct {
@@ -54,6 +55,7 @@ type CreateDiscountRuleParams struct {
 	DiscountAmount         int64       `json:"discount_amount"`
 	CanStackWithVoucher    bool        `json:"can_stack_with_voucher"`
 	CanStackWithMembership bool        `json:"can_stack_with_membership"`
+	StackingGroup          pgtype.Text `json:"stacking_group"`
 	ValidFrom              time.Time   `json:"valid_from"`
 	ValidUntil             time.Time   `json:"valid_until"`
 	IsActive               bool        `json:"is_active"`
@@ -69,6 +71,7 @@ func (q *Queries) CreateDiscountRule(ctx context.Context, arg CreateDiscountRule
 		arg.DiscountAmount,
 		arg.CanStackWithVoucher,
 		arg.CanStackWithMembership,
+		arg.StackingGroup,
 		arg.ValidFrom,
 		arg.ValidUntil,
 		arg.IsActive,
@@ -89,6 +92,7 @@ func (q *Queries) CreateDiscountRule(ctx context.Context, arg CreateDiscountRule
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.StackingGroup,
 	)
 	return i, err
 }
@@ -104,7 +108,7 @@ func (q *Queries) DeleteDiscountRule(ctx context.Context, id int64) error {
 }
 
 const getApplicableDiscountRules = `-- name: GetApplicableDiscountRules :many
-SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE
@@ -143,6 +147,7 @@ func (q *Queries) GetApplicableDiscountRules(ctx context.Context, arg GetApplica
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.StackingGroup,
 		); err != nil {
 			return nil, err
 		}
@@ -155,7 +160,7 @@ func (q *Queries) GetApplicableDiscountRules(ctx context.Context, arg GetApplica
 }
 
 const getBestDiscountRule = `-- name: GetBestDiscountRule :one
-SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE
@@ -189,12 +194,13 @@ func (q *Queries) GetBestDiscountRule(ctx context.Context, arg GetBestDiscountRu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.StackingGroup,
 	)
 	return i, err
 }
 
 const getDiscountRule = `-- name: GetDiscountRule :one
-SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -216,12 +222,13 @@ func (q *Queries) GetDiscountRule(ctx context.Context, id int64) (DiscountRule, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.StackingGroup,
 	)
 	return i, err
 }
 
 const listActiveDiscountRules = `-- name: ListActiveDiscountRules :many
-SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 
     AND deleted_at IS NULL
     AND is_active = TRUE
@@ -254,6 +261,7 @@ func (q *Queries) ListActiveDiscountRules(ctx context.Context, merchantID int64)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.StackingGroup,
 		); err != nil {
 			return nil, err
 		}
@@ -266,7 +274,7 @@ func (q *Queries) ListActiveDiscountRules(ctx context.Context, merchantID int64)
 }
 
 const listMerchantDiscountRules = `-- name: ListMerchantDiscountRules :many
-SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at FROM discount_rules
+SELECT id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group FROM discount_rules
 WHERE merchant_id = $1 AND deleted_at IS NULL
 ORDER BY min_order_amount ASC
 LIMIT $2 OFFSET $3
@@ -302,6 +310,7 @@ func (q *Queries) ListMerchantDiscountRules(ctx context.Context, arg ListMerchan
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.StackingGroup,
 		); err != nil {
 			return nil, err
 		}
@@ -322,12 +331,13 @@ SET
     discount_amount = COALESCE($4, discount_amount),
     can_stack_with_voucher = COALESCE($5, can_stack_with_voucher),
     can_stack_with_membership = COALESCE($6, can_stack_with_membership),
-    valid_from = COALESCE($7, valid_from),
-    valid_until = COALESCE($8, valid_until),
-    is_active = COALESCE($9, is_active),
+    stacking_group = COALESCE($7, stacking_group),
+    valid_from = COALESCE($8, valid_from),
+    valid_until = COALESCE($9, valid_until),
+    is_active = COALESCE($10, is_active),
     updated_at = NOW()
-WHERE id = $10 AND deleted_at IS NULL
-RETURNING id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at
+WHERE id = $11 AND deleted_at IS NULL
+RETURNING id, merchant_id, name, description, min_order_amount, discount_amount, can_stack_with_voucher, can_stack_with_membership, valid_from, valid_until, is_active, created_at, updated_at, deleted_at, stacking_group
 `
 
 type UpdateDiscountRuleParams struct {
@@ -337,6 +347,7 @@ type UpdateDiscountRuleParams struct {
 	DiscountAmount         pgtype.Int8        `json:"discount_amount"`
 	CanStackWithVoucher    pgtype.Bool        `json:"can_stack_with_voucher"`
 	CanStackWithMembership pgtype.Bool        `json:"can_stack_with_membership"`
+	StackingGroup          pgtype.Text        `json:"stacking_group"`
 	ValidFrom              pgtype.Timestamptz `json:"valid_from"`
 	ValidUntil             pgtype.Timestamptz `json:"valid_until"`
 	IsActive               pgtype.Bool        `json:"is_active"`
@@ -351,6 +362,7 @@ func (q *Queries) UpdateDiscountRule(ctx context.Context, arg UpdateDiscountRule
 		arg.DiscountAmount,
 		arg.CanStackWithVoucher,
 		arg.CanStackWithMembership,
+		arg.StackingGroup,
 		arg.ValidFrom,
 		arg.ValidUntil,
 		arg.IsActive,
@@ -372,6 +384,7 @@ func (q *Queries) UpdateDiscountRule(ctx context.Context, arg UpdateDiscountRule
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.StackingGroup,
 	)
 	return i, err
 }

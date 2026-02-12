@@ -132,19 +132,7 @@ func (store *SQLStore) TransferDiningSessionTableTx(ctx context.Context, arg Tra
 			}
 		} else {
 			if toTable.Status == "reserved" || toTable.CurrentReservationID.Valid {
-				if toTable.CurrentReservationID.Valid {
-					targetRes, err := q.GetTableReservation(ctx, toTable.CurrentReservationID.Int64)
-					if err == nil {
-						resStart := util.CombineDateAndTime(targetRes.ReservationDate.Time, targetRes.ReservationTime.Microseconds)
-						if util.IsConflictWithReservation(time.Now(), resStart) {
-							return ErrTargetTableReserved
-						}
-					} else {
-						return ErrTargetTableReserved
-					}
-				} else {
-					return ErrTargetTableReserved
-				}
+				return ErrTargetTableReserved
 			}
 		}
 

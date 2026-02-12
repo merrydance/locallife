@@ -1,20 +1,17 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
-	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -23,36 +20,6 @@ import (
 )
 
 // ==================== 预定管理 ====================
-
-// 预定状态常量
-
-const (
-	reservationActionConfirm      = "confirm"
-	reservationActionComplete     = "complete"
-	reservationActionCancel       = "cancel"
-	reservationActionNoShow       = "no_show"
-	reservationActionCheckIn      = "check_in"
-	reservationActionStartCooking = "start_cooking"
-)
-
-func isReservationStatusAllowed(status string, action string) bool {
-	switch action {
-	case reservationActionConfirm:
-		return status == ReservationStatusPaid
-	case reservationActionComplete:
-		return status == ReservationStatusConfirmed || status == ReservationStatusCheckedIn
-	case reservationActionCancel:
-		return status == ReservationStatusPending || status == ReservationStatusPaid || status == ReservationStatusConfirmed
-	case reservationActionNoShow:
-		return status == ReservationStatusPaid || status == ReservationStatusConfirmed
-	case reservationActionCheckIn:
-		return status == ReservationStatusPaid || status == ReservationStatusConfirmed
-	case reservationActionStartCooking:
-		return status == ReservationStatusConfirmed || status == ReservationStatusCheckedIn
-	default:
-		return false
-	}
-}
 
 // 支付模式常量
 const (
@@ -302,210 +269,34 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		return
 	}
 
-	// 检查预定时间是否在未来
+	reservationItems := make([]logic.ReservationItemInput, len(req.Items))
+	for i, item := range req.Items {
+		reservationItems[i] = logic.ReservationItemInput{
+			DishID:   item.DishID,
+			ComboID:  item.ComboID,
+			Quantity: item.Quantity,
+		}
+	}
+
 	now := time.Now()
-	reservationDateTime := time.Date(
-		reservationDate.Year(), reservationDate.Month(), reservationDate.Day(),
-		reservationTime.Hour(), reservationTime.Minute(), 0, 0, time.Local,
-	)
-	if reservationDateTime.Before(now) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("所选时段已过，请选择其他时间")))
-		return
-	}
-
-	// 获取桌台信息
-	table, err := server.store.GetTable(ctx, req.TableID)
+	result, err := logic.CreateReservation(ctx, server.store, logic.CreateReservationInput{
+		UserID:              authPayload.UserID,
+		TableID:             req.TableID,
+		ReservationDate:     reservationDate,
+		ReservationTime:     reservationTime,
+		GuestCount:          req.GuestCount,
+		ContactName:         req.ContactName,
+		ContactPhone:        req.ContactPhone,
+		PaymentMode:         req.PaymentMode,
+		Notes:               req.Notes,
+		Items:               reservationItems,
+		Now:                 now,
+		PaymentTimeoutMins:  PaymentTimeoutMinutes,
+		RefundDeadlineHours: RefundDeadlineHours,
+		DefaultDeposit:      DefaultDepositAmount,
+	})
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 只有包间可以预定
-	if table.TableType != "room" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只有包间可以预订")))
-		return
-	}
-
-	// 检查桌台状态
-	if table.Status == "disabled" {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("table is disabled and cannot be reserved")))
-		return
-	}
-
-	// 检查人数是否超过容量
-	if req.GuestCount > table.Capacity {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("guest count exceeds table capacity")))
-		return
-	}
-
-	conflict, err := server.checkReservationConflict(ctx, req.TableID, table.MerchantID, reservationDate, reservationTime, 0)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if conflict {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
-		return
-	}
-
-	pgDate := pgtype.Date{Time: reservationDate, Valid: true}
-	pgTime := pgtype.Time{
-		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
-		Valid:        true,
-	}
-
-	// 计算金额和验证菜品
-	var depositAmount, prepaidAmount int64
-	var validatedItems []validatedReservationItem
-
-	if req.PaymentMode == PaymentModeDeposit {
-		// 定金模式：使用包间最低消费作为定金，如果没有则使用默认定金
-		if table.MinimumSpend.Valid && table.MinimumSpend.Int64 > 0 {
-			depositAmount = table.MinimumSpend.Int64
-		} else {
-			depositAmount = DefaultDepositAmount
-		}
-	} else {
-		// 全款模式：如果预点了菜品，则验证菜品和金额
-		if len(req.Items) > 0 {
-			// 验证并计算菜品金额（同时获取菜品单价）
-			validatedItems, prepaidAmount, err = server.validateReservationItems(ctx, table.MerchantID, req.Items)
-			if err != nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(err))
-				return
-			}
-
-			// 全款模式如果预点了菜品，至少要达到包间最低消费
-			if table.MinimumSpend.Valid && prepaidAmount < table.MinimumSpend.Int64 {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("预点菜品金额 %d 分未达到包间最低消费 %d 分", prepaidAmount, table.MinimumSpend.Int64)))
-				return
-			}
-		}
-		// 如果没有预点菜品，允许创建预订（prepaidAmount 为 0），用户将在 30 分钟内去点菜支付
-	}
-
-	// 计算支付截止时间和退款截止时间
-	paymentDeadline := now.Add(PaymentTimeoutMinutes * time.Minute)
-	refundDeadline := reservationDateTime.Add(-RefundDeadlineHours * time.Hour)
-
-	// 准备创建预定参数
-	arg := db.CreateTableReservationParams{
-		TableID:         req.TableID,
-		UserID:          authPayload.UserID,
-		MerchantID:      table.MerchantID,
-		ReservationDate: pgDate,
-		ReservationTime: pgTime,
-		GuestCount:      req.GuestCount,
-		ContactName:     req.ContactName,
-		ContactPhone:    req.ContactPhone,
-		PaymentMode:     req.PaymentMode,
-		DepositAmount:   depositAmount,
-		PrepaidAmount:   prepaidAmount,
-		RefundDeadline:  refundDeadline,
-		PaymentDeadline: paymentDeadline,
-		Status:          ReservationStatusPending,
-	}
-
-	if req.Notes != "" {
-		arg.Notes = pgtype.Text{String: req.Notes, Valid: true}
-	}
-
-	// 构建事务参数（包含菜品项）
-	txArg := db.CreateReservationTxParams{
-		CreateTableReservationParams: arg,
-		AfterLock: func(ctx context.Context, q *db.Queries) error {
-			// P0-002 修复：在锁内进行二次冲突校验
-			// 1. 获取已有预订
-			existingReservations, err := q.ListReservationsByTableAndDate(ctx, db.ListReservationsByTableAndDateParams{
-				TableID:         req.TableID,
-				ReservationDate: pgDate,
-			})
-			if err != nil {
-				return fmt.Errorf("failed to list existing reservations: %w", err)
-			}
-
-			// 2. 获取商户营业时间配置 (用于冲突判断规则)
-			businessHours, err := q.ListMerchantBusinessHours(ctx, table.MerchantID)
-			config := util.DefaultConfig
-			if err == nil {
-				dayOfWeek := int32(reservationDate.Weekday())
-				var todayHours []db.MerchantBusinessHour
-				for _, bh := range businessHours {
-					if bh.SpecialDate.Valid && bh.SpecialDate.Time.Format("2006-01-02") == reservationDate.Format("2006-01-02") {
-						todayHours = append(todayHours, bh)
-					}
-				}
-				if len(todayHours) == 0 {
-					for _, bh := range businessHours {
-						if !bh.SpecialDate.Valid && bh.DayOfWeek == dayOfWeek {
-							todayHours = append(todayHours, bh)
-						}
-					}
-				}
-
-				if len(todayHours) > 0 {
-					h1 := todayHours[0]
-					config.LunchStart = int(h1.OpenTime.Microseconds/1000000/3600*100) + int(h1.OpenTime.Microseconds/1000000%3600/60)
-					config.LunchEnd = int(h1.CloseTime.Microseconds/1000000/3600*100) + int(h1.CloseTime.Microseconds/1000000%3600/60)
-					config.DinnerStart = 0
-					config.DinnerEnd = 0
-
-					if len(todayHours) > 1 {
-						h2 := todayHours[1]
-						config.DinnerStart = int(h2.OpenTime.Microseconds/1000000/3600*100) + int(h2.OpenTime.Microseconds/1000000%3600/60)
-						config.DinnerEnd = int(h2.CloseTime.Microseconds/1000000/3600*100) + int(h2.CloseTime.Microseconds/1000000%3600/60)
-					} else if config.LunchStart >= 1500 {
-						config.DinnerStart = config.LunchStart
-						config.DinnerEnd = config.LunchEnd
-						config.LunchStart = 0
-						config.LunchEnd = 0
-					}
-				}
-			}
-
-			// 3. 检查冲突
-			newDateTime := time.Date(reservationDate.Year(), reservationDate.Month(), reservationDate.Day(), reservationTime.Hour(), reservationTime.Minute(), 0, 0, reservationDate.Location())
-
-			for _, r := range existingReservations {
-				if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
-					continue
-				}
-				if !r.ReservationTime.Valid {
-					continue
-				}
-
-				existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
-
-				if util.AreReservationsConflictingWithConfig(newDateTime, existingTime, config) {
-					return fmt.Errorf("该时间段刚刚被抢订，请选择其他时间")
-				}
-			}
-			return nil
-		},
-	}
-
-	// 全款模式添加菜品明细
-	if len(validatedItems) > 0 {
-		txArg.Items = make([]db.ReservationItemInput, len(validatedItems))
-		for i, item := range validatedItems {
-			txArg.Items[i] = db.ReservationItemInput{
-				DishID:    item.DishID,
-				ComboID:   item.ComboID,
-				Quantity:  item.Quantity,
-				UnitPrice: item.UnitPrice,
-			}
-		}
-	}
-
-	// 使用事务创建预定和菜品明细
-	result, err := server.store.CreateReservationTx(ctx, txArg)
-	if err != nil {
-		if strings.Contains(err.Error(), "刚被抢订") { // Handle custom error
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段刚刚被抢订，请选择其他时间")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -583,7 +374,7 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		err = server.taskDistributor.DistributeTaskReservationPaymentTimeout(
 			ctx,
 			&worker.PayloadReservationPaymentTimeout{ReservationID: result.Reservation.ID},
-			asynq.ProcessAt(paymentDeadline),
+			asynq.ProcessAt(result.Reservation.PaymentDeadline),
 		)
 		if err != nil {
 			// 任务分发失败不影响主流程，记录日志
@@ -1105,45 +896,11 @@ func (server *Server) confirmReservation(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	result, err := logic.ConfirmReservation(ctx, server.store, authPayload.UserID, req.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 获取预定并锁定
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, req.ID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证所有权
-	if reservation.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to your merchant")))
-		return
-	}
-
-	// 检查状态
-	if !isReservationStatusAllowed(reservation.Status, reservationActionConfirm) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not paid")))
-		return
-	}
-
-	// 使用事务更新预定状态和桌台状态
-	result, err := server.store.ConfirmReservationTx(ctx, db.ConfirmReservationTxParams{
-		ReservationID: req.ID,
-		TableID:       reservation.TableID,
-	})
-	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1192,53 +949,11 @@ func (server *Server) completeReservation(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	result, err := logic.CompleteReservation(ctx, server.store, authPayload.UserID, req.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 获取预定并锁定
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, req.ID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证所有权
-	if reservation.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to your merchant")))
-		return
-	}
-
-	// 检查状态
-	if !isReservationStatusAllowed(reservation.Status, reservationActionComplete) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("reservation is not confirmed or checked in")))
-		return
-	}
-
-	// 获取桌台当前预定ID
-	table, err := server.store.GetTable(ctx, reservation.TableID)
-	var currentReservationID pgtype.Int8
-	if err == nil {
-		currentReservationID = table.CurrentReservationID
-	}
-
-	// 使用事务更新预定状态和释放桌台
-	result, err := server.store.CompleteReservationTx(ctx, db.CompleteReservationTxParams{
-		ReservationID:        req.ID,
-		TableID:              reservation.TableID,
-		CurrentReservationID: currentReservationID,
-	})
-	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1284,131 +999,13 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取预定并锁定
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, uriReq.ID)
+	result, err := logic.CancelReservation(ctx, server.store, server.paymentClient, authPayload.UserID, uriReq.ID, req.Reason, time.Now())
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	}
-
-	// 验证权限：用户或商户
-	isOwner := reservation.UserID == authPayload.UserID
-	isMerchant := false
-
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err == nil && merchant.ID == reservation.MerchantID {
-		isMerchant = true
-	}
-
-	if !isOwner && !isMerchant {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to cancel this reservation")))
-		return
-	}
-
-	// 检查状态：只有 pending, paid, confirmed 可以取消
-	if !isReservationStatusAllowed(reservation.Status, reservationActionCancel) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("预约状态不允许取消")))
-		return
-	}
-
-	// 用户取消时检查退款截止时间
-	if isOwner && !isMerchant {
-		if reservation.Status == ReservationStatusPaid || reservation.Status == ReservationStatusConfirmed {
-			if time.Now().After(reservation.RefundDeadline) {
-				ctx.JSON(http.StatusConflict, errorResponse(errors.New("refund deadline passed, please contact merchant")))
-				return
-			}
-		}
-	}
-
-	// 获取桌台信息以判断是否需要释放
-	table, err := server.store.GetTable(ctx, reservation.TableID)
-	var currentReservationID pgtype.Int8
-	if err == nil {
-		currentReservationID = table.CurrentReservationID
-	}
-
-	// P1-029 修复：使用事务执行取消操作，同时释放库存（原子性保证）
-	result, err := server.store.CancelReservationTx(ctx, db.CancelReservationTxParams{
-		ReservationID:        uriReq.ID,
-		TableID:              reservation.TableID,
-		CancelReason:         req.Reason,
-		CurrentReservationID: currentReservationID,
-		ReleaseInventory:     true, // P1-029: 在同一事务中释放库存
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 处理退款逻辑（退款逻辑在事务外执行，因为涉及外部 API 调用）
-	// 取消预定时需要根据以下条件处理退款：
-	// 1. 状态为 pending：无需退款（未支付）
-	// 2. 状态为 paid/confirmed 且在 refund_deadline 之前：全额退款
-	// 3. 状态为 paid/confirmed 且在 refund_deadline 之后：根据商户政策处理（可能部分退款或不退）
-	if reservation.Status == ReservationStatusPaid || reservation.Status == ReservationStatusConfirmed {
-		// 查找该预定的支付订单
-		paymentOrder, err := server.store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
-			ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-			BusinessType:  BusinessTypeReservation,
-		})
-		if err == nil && paymentOrder.Status == PaymentStatusPaid {
-			// 计算退款金额
-			var refundAmount int64
-			if time.Now().Before(reservation.RefundDeadline) {
-				// 退款截止前，全额退款
-				refundAmount = paymentOrder.Amount
-			} else {
-				// 退款截止后，根据商户政策处理（这里暂不退款，实际可配置）
-				refundAmount = 0
-			}
-
-			if refundAmount > 0 && server.paymentClient != nil {
-				// 生成退款单号
-				outRefundNo := generateOutRefundNo()
-
-				refundType := paymentOrder.PaymentType
-				if refundType == PaymentTypeNative {
-					refundType = PaymentTypeMiniProgram
-				}
-
-				// 创建退款订单
-				refundOrder, err := server.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-					PaymentOrderID: paymentOrder.ID,
-					RefundType:     refundType,
-					RefundAmount:   refundAmount,
-					RefundReason:   pgtype.Text{String: "预定取消退款", Valid: true},
-					OutRefundNo:    outRefundNo,
-					Status:         "pending",
-				})
-				if err == nil {
-					// 调用微信退款 API
-					wxRefund, err := server.paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-						OutTradeNo:   paymentOrder.OutTradeNo,
-						OutRefundNo:  outRefundNo,
-						Reason:       "预定取消退款",
-						RefundAmount: refundAmount,
-						TotalAmount:  paymentOrder.Amount,
-					})
-					if err != nil {
-						server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-					} else if wxRefund.Status == wechat.RefundStatusSuccess {
-						server.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-						server.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
-					} else if wxRefund.Status == wechat.RefundStatusProcessing {
-						server.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-							ID:       refundOrder.ID,
-							RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-						})
-					}
-				}
-			}
-		}
 	}
 
 	ctx.JSON(http.StatusOK, newReservationResponse(result.Reservation))
@@ -1439,60 +1036,11 @@ func (server *Server) markNoShow(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	result, err := logic.MarkReservationNoShow(ctx, server.store, authPayload.UserID, req.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 获取预定并锁定
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, req.ID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证所有权
-	if reservation.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to your merchant")))
-		return
-	}
-
-	// 检查状态：只有 paid 或 confirmed 可以标记为未到店
-	if !isReservationStatusAllowed(reservation.Status, reservationActionNoShow) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("only paid or confirmed reservations can be marked as no-show")))
-		return
-	}
-
-	// 获取桌台信息以判断是否需要释放
-	table, err := server.store.GetTable(ctx, reservation.TableID)
-	var currentReservationID pgtype.Int8
-	if err == nil {
-		currentReservationID = table.CurrentReservationID
-	}
-
-	// 使用事务执行标记未到店操作：更新预定状态 + 释放桌台
-	result, err := server.store.MarkNoShowTx(ctx, db.MarkNoShowTxParams{
-		ReservationID:        req.ID,
-		TableID:              reservation.TableID,
-		CurrentReservationID: currentReservationID,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if err := server.store.ReleaseReservationInventoryTx(ctx, db.ReleaseReservationInventoryTxParams{
-		ReservationID: reservation.ID,
-	}); err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1561,80 +1109,6 @@ func (server *Server) getReservationStats(ctx *gin.Context) {
 
 // ==================== 辅助函数 ====================
 
-// validatedReservationItem 验证后的预定菜品项（包含单价）
-type validatedReservationItem struct {
-	DishID    *int64
-	ComboID   *int64
-	Quantity  int16
-	UnitPrice int64
-}
-
-// validateReservationItems 验证预定菜品并返回带单价的菜品列表
-// 返回: 菜品列表、总金额、错误
-func (server *Server) validateReservationItems(ctx *gin.Context, merchantID int64, items []reservationItem) ([]validatedReservationItem, int64, error) {
-	var total int64 = 0
-	validatedItems := make([]validatedReservationItem, 0, len(items))
-
-	for _, item := range items {
-		if item.DishID == nil && item.ComboID == nil {
-			return nil, 0, errors.New("每个菜品项必须指定 dish_id 或 combo_id")
-		}
-		if item.DishID != nil && item.ComboID != nil {
-			return nil, 0, errors.New("每个菜品项只能指定 dish_id 或 combo_id 之一")
-		}
-
-		var unitPrice int64
-
-		if item.DishID != nil {
-			// 查询菜品
-			dish, err := server.store.GetDish(ctx, *item.DishID)
-			if err != nil {
-				if isNotFoundError(err) {
-					return nil, 0, fmt.Errorf("菜品 %d 不存在", *item.DishID)
-				}
-				return nil, 0, err
-			}
-			// 验证菜品属于该商户
-			if dish.MerchantID != merchantID {
-				return nil, 0, fmt.Errorf("菜品 %s 不属于该商户", dish.Name)
-			}
-			// 验证菜品上架
-			if !dish.IsOnline {
-				return nil, 0, fmt.Errorf("菜品 %s 已下架", dish.Name)
-			}
-			unitPrice = dish.Price
-		} else if item.ComboID != nil {
-			// 查询套餐
-			combo, err := server.store.GetComboSet(ctx, *item.ComboID)
-			if err != nil {
-				if isNotFoundError(err) {
-					return nil, 0, fmt.Errorf("套餐 %d 不存在", *item.ComboID)
-				}
-				return nil, 0, err
-			}
-			// 验证套餐属于该商户
-			if combo.MerchantID != merchantID {
-				return nil, 0, fmt.Errorf("套餐 %s 不属于该商户", combo.Name)
-			}
-			// 验证套餐上架
-			if !combo.IsOnline {
-				return nil, 0, fmt.Errorf("套餐 %s 已下架", combo.Name)
-			}
-			unitPrice = combo.ComboPrice
-		}
-
-		validatedItems = append(validatedItems, validatedReservationItem{
-			DishID:    item.DishID,
-			ComboID:   item.ComboID,
-			Quantity:  item.Quantity,
-			UnitPrice: unitPrice,
-		})
-		total += unitPrice * int64(item.Quantity)
-	}
-
-	return validatedItems, total, nil
-}
-
 // addDishesToReservation 为预定追加菜品
 // POST /v1/reservations/:id/add-dishes
 // @Summary 为预定追加菜品
@@ -1674,114 +1148,42 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	// 获取当前用户
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取预定信息
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, uriReq.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证权限（只有预定用户可以加菜）
-	if reservation.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only add dishes to your own reservation")))
-		return
-	}
-
-	// 验证预定状态（只有已支付或已确认的预定可以加菜）
-	if reservation.Status != ReservationStatusPaid && reservation.Status != ReservationStatusConfirmed {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("cannot add dishes to reservation in %s status", reservation.Status)))
-		return
-	}
-
-	// 转换请求项以复用验证逻辑
-	addItems := make([]reservationItem, len(req.Items))
+	addItems := make([]logic.ReservationItemInput, len(req.Items))
 	for i, item := range req.Items {
-		addItems[i] = reservationItem{
+		addItems[i] = logic.ReservationItemInput{
 			DishID:   item.DishID,
 			ComboID:  item.ComboID,
 			Quantity: item.Quantity,
 		}
 	}
 
-	// 验证并计算追加菜品金额（带单价）
-	validatedItems, addedAmount, err := server.validateReservationItems(ctx, reservation.MerchantID, addItems)
+	result, err := logic.AddReservationDishes(ctx, server.store, logic.AddReservationDishesInput{
+		UserID:        authPayload.UserID,
+		ReservationID: uriReq.ID,
+		Items:         addItems,
+		Now:           time.Now(),
+	})
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 记录追加菜品到 reservation_items，便于详情页展示
-	for _, item := range validatedItems {
-		var dishID, comboID pgtype.Int8
-		if item.DishID != nil {
-			dishID = pgtype.Int8{Int64: *item.DishID, Valid: true}
-		}
-		if item.ComboID != nil {
-			comboID = pgtype.Int8{Int64: *item.ComboID, Valid: true}
-		}
-
-		_, err := server.store.CreateReservationItem(ctx, db.CreateReservationItemParams{
-			ReservationID: reservation.ID,
-			DishID:        dishID,
-			ComboID:       comboID,
-			Quantity:      item.Quantity,
-			UnitPrice:     item.UnitPrice,
-			TotalPrice:    item.UnitPrice * int64(item.Quantity),
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	// 如果是全款预付模式，需要创建补差价支付订单
-	if reservation.PaymentMode == PaymentModeFull {
-		// 创建支付订单（out_trade_no 碰撞重试）
-		var paymentOrder db.PaymentOrder
-		var outTradeNo string
-		expiresAt := time.Now().Add(30 * time.Minute)
-		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-			outTradeNo = generateOutTradeNoWithPrefix("RA")
-			paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-				UserID:        authPayload.UserID,
-				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-				PaymentType:   PaymentTypeMiniProgram,
-				BusinessType:  BusinessTypeReservationAddon,
-				Amount:        addedAmount,
-				OutTradeNo:    outTradeNo,
-				ExpiresAt:     pgtype.Timestamptz{Time: expiresAt, Valid: true},
-			})
-			if err == nil {
-				break
-			}
-			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-				if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
-					ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
-					return
-				}
-				continue
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
+	if result.Payment != nil {
 		ctx.JSON(http.StatusOK, gin.H{
 			"message":          "additional dishes added, payment required",
-			"payment_order_id": paymentOrder.ID,
-			"amount":           addedAmount,
+			"payment_order_id": result.Payment.ID,
+			"amount":           result.AddedAmount,
 			"items_count":      len(req.Items),
 		})
 		return
 	}
 
-	// 定金模式：直接记录追加菜品，到店结算
 	ctx.JSON(http.StatusOK, gin.H{
 		"message":     "additional dishes added successfully",
-		"amount":      addedAmount,
+		"amount":      result.AddedAmount,
 		"items_count": len(req.Items),
 		"note":        "payment will be settled on site",
 	})
@@ -1825,182 +1227,52 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, uriReq.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if reservation.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only modify your own reservation")))
-		return
-	}
-
-	if reservation.Status != ReservationStatusPaid && reservation.Status != ReservationStatusConfirmed && reservation.Status != ReservationStatusCheckedIn {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("cannot modify reservation in %s status", reservation.Status)))
-		return
-	}
-
-	if reservation.CookingStartedAt.Valid {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("cooking already started, modification is not allowed")))
-		return
-	}
-
-	currentTotal, err := server.store.SumReservationItemsTotal(ctx, reservation.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	modifyItems := make([]reservationItem, len(req.Items))
+	modifyItems := make([]logic.ReservationItemInput, len(req.Items))
 	for i, item := range req.Items {
-		modifyItems[i] = reservationItem{
+		modifyItems[i] = logic.ReservationItemInput{
 			DishID:   item.DishID,
 			ComboID:  item.ComboID,
 			Quantity: item.Quantity,
 		}
 	}
 
-	validatedItems, newTotal, err := server.validateReservationItems(ctx, reservation.MerchantID, modifyItems)
+	result, err := logic.ModifyReservationDishes(ctx, server.store, server.paymentClient, logic.ModifyReservationDishesInput{
+		UserID:        authPayload.UserID,
+		ReservationID: uriReq.ID,
+		Items:         modifyItems,
+		Now:           time.Now(),
+	})
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	delta := newTotal - currentTotal
-
-	createItems := make([]db.CreateReservationItemParams, 0, len(validatedItems))
-	for _, item := range validatedItems {
-		var dishID, comboID pgtype.Int8
-		if item.DishID != nil {
-			dishID = pgtype.Int8{Int64: *item.DishID, Valid: true}
+		if writeLogicRequestError(ctx, err) {
+			return
 		}
-		if item.ComboID != nil {
-			comboID = pgtype.Int8{Int64: *item.ComboID, Valid: true}
-		}
-		createItems = append(createItems, db.CreateReservationItemParams{
-			ReservationID: reservation.ID,
-			DishID:        dishID,
-			ComboID:       comboID,
-			Quantity:      item.Quantity,
-			UnitPrice:     item.UnitPrice,
-			TotalPrice:    item.UnitPrice * int64(item.Quantity),
-		})
-	}
-
-	if _, err := server.store.ReplaceReservationItemsTx(ctx, db.ReplaceReservationItemsTxParams{
-		ReservationID: reservation.ID,
-		Items:         createItems,
-	}); err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if reservation.PaymentMode == PaymentModeFull && delta != 0 {
-		if delta > 0 {
-			var paymentOrder db.PaymentOrder
-			var outTradeNo string
-			expiresAt := time.Now().Add(30 * time.Minute)
-			for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-				outTradeNo = generateOutTradeNoWithPrefix("RA")
-				paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-					UserID:        authPayload.UserID,
-					ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-					PaymentType:   PaymentTypeMiniProgram,
-					BusinessType:  BusinessTypeReservationAddon,
-					Amount:        delta,
-					OutTradeNo:    outTradeNo,
-					ExpiresAt:     pgtype.Timestamptz{Time: expiresAt, Valid: true},
-				})
-				if err == nil {
-					break
-				}
-				if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-					if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
-						ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
-						return
-					}
-					continue
-				}
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
+	if result.Payment != nil {
+		ctx.JSON(http.StatusOK, gin.H{
+			"message":          "reservation modified, payment required",
+			"payment_order_id": result.Payment.ID,
+			"amount":           result.Delta,
+			"items_count":      len(req.Items),
+		})
+		return
+	}
 
-			ctx.JSON(http.StatusOK, gin.H{
-				"message":          "reservation modified, payment required",
-				"payment_order_id": paymentOrder.ID,
-				"amount":           delta,
-				"items_count":      len(req.Items),
-			})
-			return
-		}
-
-		refundAmount := -delta
-		if refundAmount > reservation.PrepaidAmount {
-			refundAmount = reservation.PrepaidAmount
-		}
-		if refundAmount > 0 && server.paymentClient != nil {
-			paymentOrder, err := server.store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
-				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-				BusinessType:  BusinessTypeReservation,
-			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			if paymentOrder.Status == PaymentStatusPaid {
-				outRefundNo := generateOutRefundNo()
-				refundOrder, err := server.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-					PaymentOrderID: paymentOrder.ID,
-					RefundType:     "partial",
-					RefundAmount:   refundAmount,
-					RefundReason:   pgtype.Text{String: "预定改菜退款", Valid: true},
-					OutRefundNo:    outRefundNo,
-					Status:         "pending",
-				})
-				if err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-
-				wxRefund, err := server.paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-					OutTradeNo:   paymentOrder.OutTradeNo,
-					OutRefundNo:  outRefundNo,
-					Reason:       "预定改菜退款",
-					RefundAmount: refundAmount,
-					TotalAmount:  paymentOrder.Amount,
-				})
-				if err != nil {
-					server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-				if wxRefund.Status == wechat.RefundStatusSuccess {
-					server.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-					_, _ = server.store.AddReservationPrepaidAmount(ctx, db.AddReservationPrepaidAmountParams{
-						ID:            reservation.ID,
-						PrepaidAmount: -refundAmount,
-					})
-				}
-			}
-
-			ctx.JSON(http.StatusOK, gin.H{
-				"message":       "reservation modified, refund initiated",
-				"refund_amount": refundAmount,
-				"items_count":   len(req.Items),
-			})
-			return
-		}
+	if result.RefundInitiated {
+		ctx.JSON(http.StatusOK, gin.H{
+			"message":       "reservation modified, refund initiated",
+			"refund_amount": result.RefundAmount,
+			"items_count":   len(req.Items),
+		})
+		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"message":     "reservation modified successfully",
 		"items_count": len(req.Items),
-		"delta":       delta,
+		"delta":       result.Delta,
 	})
 }
 
@@ -2087,76 +1359,23 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 		return
 	}
 
-	// 获取桌台信息
-	table, err := server.store.GetTable(ctx, req.TableID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证桌台属于该商户
-	if table.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("table does not belong to your merchant")))
-		return
-	}
-
-	// 检查桌台状态
-	if table.Status == "disabled" {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("table is disabled and cannot be reserved")))
-		return
-	}
-
-	// 检查人数是否超过容量
-	if req.GuestCount > table.Capacity {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("guest count exceeds table capacity")))
-		return
-	}
-
-	conflict, err := server.checkReservationConflict(ctx, req.TableID, merchant.ID, reservationDate, reservationTime, 0)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if conflict {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
-		return
-	}
-
-	pgDate := pgtype.Date{Time: reservationDate, Valid: true}
-	pgTime := pgtype.Time{
-		Microseconds: int64(reservationTime.Hour()*3600+reservationTime.Minute()*60) * 1000000,
-		Valid:        true,
-	}
-
-	// 来源默认为 merchant
-	source := req.Source
-	if source == "" {
-		source = ReservationSourceMerchant
-	}
-
-	// 创建预订（商户代订无需支付，直接确认）
-	reservation, err := server.store.CreateTableReservationByMerchant(ctx, db.CreateTableReservationByMerchantParams{
-		TableID:         req.TableID,
-		UserID:          authPayload.UserID, // 商户用户ID
+	reservation, err := logic.MerchantCreateReservation(ctx, server.store, logic.MerchantCreateReservationInput{
+		OperatorUserID:  authPayload.UserID,
 		MerchantID:      merchant.ID,
-		ReservationDate: pgDate,
-		ReservationTime: pgTime,
+		TableID:         req.TableID,
+		ReservationDate: reservationDate,
+		ReservationTime: reservationTime,
 		GuestCount:      req.GuestCount,
 		ContactName:     req.ContactName,
 		ContactPhone:    req.ContactPhone,
-		PaymentMode:     PaymentModeDeposit, // 商户代订默认到店结算
-		DepositAmount:   0,                  // 商户代订无定金
-		PrepaidAmount:   0,
-		RefundDeadline:  time.Now(),                           // 无退款期限
-		PaymentDeadline: time.Now().Add(365 * 24 * time.Hour), // 无支付期限
-		Notes:           pgtype.Text{String: req.Notes, Valid: req.Notes != ""},
-		Source:          pgtype.Text{String: source, Valid: true},
+		Source:          req.Source,
+		Notes:           req.Notes,
+		Now:             time.Now(),
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -2206,83 +1425,25 @@ func (server *Server) checkInReservation(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取预定
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, req.ID)
+	result, err := logic.CheckInReservation(ctx, server.store, authPayload.UserID, req.ID, time.Now(), ReservationCheckInEarlyMinutes, ReservationCheckInLateMinutes)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证权限：顾客或商户
-	isOwner := reservation.UserID == authPayload.UserID
-	isMerchant := false
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err == nil && merchant.ID == reservation.MerchantID {
-		isMerchant = true
-	}
-
-	if !isOwner && !isMerchant {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to check in this reservation")))
-		return
-	}
-
-	// 检查状态：只有已支付或已确认的预定可以签到
-	if !isReservationStatusAllowed(reservation.Status, reservationActionCheckIn) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("only paid or confirmed reservations can be checked in")))
-		return
-	}
-
-	// P1-023 修复：签到时间窗口检查（使用常量替代硬编码）
-	if reservation.ReservationDate.Valid && reservation.ReservationTime.Valid {
-		hours := reservation.ReservationTime.Microseconds / 1000000 / 3600
-		minutes := (reservation.ReservationTime.Microseconds / 1000000 % 3600) / 60
-		reservationDateTime := time.Date(
-			reservation.ReservationDate.Time.Year(),
-			reservation.ReservationDate.Time.Month(),
-			reservation.ReservationDate.Time.Day(),
-			int(hours), int(minutes), 0, 0, time.Local,
-		)
-
-		now := time.Now()
-		earlyLimit := reservationDateTime.Add(-time.Duration(ReservationCheckInEarlyMinutes) * time.Minute)
-		lateLimit := reservationDateTime.Add(time.Duration(ReservationCheckInLateMinutes) * time.Minute)
-
-		if now.Before(earlyLimit) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
-				"尚未到签到时间，请在预订时间前%d分钟内签到", ReservationCheckInEarlyMinutes,
-			)))
-			return
-		}
-		if now.After(lateLimit) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
-				"已超过签到时间%d分钟，请联系商户", ReservationCheckInLateMinutes,
-			)))
-			return
-		}
-	}
-
-	// 更新状态为已签到
-	updatedReservation, err := server.store.UpdateReservationToCheckedIn(ctx, req.ID)
-	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	// 推送 WebSocket 通知给商户
 	if server.wsHub != nil {
-		server.wsHub.SendToMerchant(reservation.MerchantID, websocket.Message{
+		server.wsHub.SendToMerchant(result.Reservation.MerchantID, websocket.Message{
 			Type:      "reservation_checkin",
-			Data:      []byte(fmt.Sprintf(`{"reservation_id":%d,"contact_name":"%s"}`, req.ID, reservation.ContactName)),
+			Data:      []byte(fmt.Sprintf(`{"reservation_id":%d,"contact_name":"%s"}`, req.ID, result.Reservation.ContactName)),
 			Timestamp: time.Now(),
 		})
 	}
 
-	ctx.JSON(http.StatusOK, newReservationResponse(updatedReservation))
+	ctx.JSON(http.StatusOK, newReservationResponse(result.Reservation))
 }
 
 // ==================== 起菜通知 ====================
@@ -2311,54 +1472,25 @@ func (server *Server) startCookingReservation(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取预定
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, req.ID)
+	result, err := logic.StartCookingReservation(ctx, server.store, authPayload.UserID, req.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证权限：顾客或商户
-	isOwner := reservation.UserID == authPayload.UserID
-	isMerchant := false
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err == nil && merchant.ID == reservation.MerchantID {
-		isMerchant = true
-	}
-
-	if !isOwner && !isMerchant {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized to start cooking for this reservation")))
-		return
-	}
-
-	// 检查状态：只有已确认或已签到的预定可以起菜
-	if !isReservationStatusAllowed(reservation.Status, reservationActionStartCooking) {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("only confirmed or checked-in reservations can start cooking")))
-		return
-	}
-
-	// 更新起菜时间
-	updatedReservation, err := server.store.UpdateReservationCookingStarted(ctx, req.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
 	// 推送 WebSocket 通知给商户（厨房）
 	if server.wsHub != nil {
-		server.wsHub.SendToMerchant(reservation.MerchantID, websocket.Message{
+		server.wsHub.SendToMerchant(result.Reservation.MerchantID, websocket.Message{
 			Type:      "reservation_start_cooking",
-			Data:      []byte(fmt.Sprintf(`{"reservation_id":%d,"contact_name":"%s"}`, req.ID, reservation.ContactName)),
+			Data:      []byte(fmt.Sprintf(`{"reservation_id":%d,"contact_name":"%s"}`, req.ID, result.Reservation.ContactName)),
 			Timestamp: time.Now(),
 		})
 	}
 
-	ctx.JSON(http.StatusOK, newReservationResponse(updatedReservation))
+	ctx.JSON(http.StatusOK, newReservationResponse(result.Reservation))
 }
 
 // ==================== 商户修改预订 ====================
@@ -2405,114 +1537,43 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 		return
 	}
 
-	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
 
-	// 获取预定
-	reservation, err := server.store.GetTableReservationForUpdate(ctx, uriReq.ID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("reservation not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证所有权
-	if reservation.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("reservation does not belong to your merchant")))
-		return
-	}
-
-	// 只能修改未完成的预订
-	if reservation.Status == ReservationStatusCompleted ||
-		reservation.Status == ReservationStatusCancelled ||
-		reservation.Status == ReservationStatusExpired {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("cannot modify completed, cancelled or expired reservations")))
-		return
-	}
-
-	// 构建更新参数
-	updateParams := db.UpdateReservationParams{
-		ID: uriReq.ID,
-	}
-
-	if req.TableID != nil {
-		updateParams.TableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
-	}
+	var reservationDate *time.Time
 	if req.Date != nil {
 		date, err := parseISODate(*req.Date, "invalid date format")
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, errorResponse(err))
 			return
 		}
-		updateParams.ReservationDate = pgtype.Date{Time: date, Valid: true}
+		reservationDate = &date
 	}
+
+	var reservationTime *time.Time
 	if req.Time != nil {
-		t, err := time.Parse("15:04", *req.Time)
+		parsedTime, err := time.Parse("15:04", *req.Time)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid time format")))
 			return
 		}
-		updateParams.ReservationTime = pgtype.Time{
-			Microseconds: int64(t.Hour()*3600+t.Minute()*60) * 1000000,
-			Valid:        true,
-		}
-	}
-	if req.GuestCount != nil {
-		updateParams.GuestCount = pgtype.Int2{Int16: *req.GuestCount, Valid: true}
-	}
-	if req.ContactName != nil {
-		updateParams.ContactName = pgtype.Text{String: *req.ContactName, Valid: true}
-	}
-	if req.ContactPhone != nil {
-		updateParams.ContactPhone = pgtype.Text{String: *req.ContactPhone, Valid: true}
-	}
-	if req.Notes != nil {
-		updateParams.Notes = pgtype.Text{String: *req.Notes, Valid: true}
+		reservationTime = &parsedTime
 	}
 
-	// 如果更换了桌台或时间，需要检查可用性
-	if req.TableID != nil || req.Date != nil || req.Time != nil {
-		checkTableID := reservation.TableID
-		if req.TableID != nil {
-			checkTableID = *req.TableID
-		}
-
-		targetDate := reservation.ReservationDate.Time
-		if req.Date != nil {
-			date, _ := parseISODate(*req.Date, "invalid date format")
-			targetDate = date
-		}
-
-		finalTime := time.Date(0, 1, 1, int(reservation.ReservationTime.Microseconds/1000000/3600), int((reservation.ReservationTime.Microseconds/1000000%3600)/60), 0, 0, time.UTC)
-		if req.Time != nil {
-			finalTime, _ = time.Parse("15:04", *req.Time)
-		}
-
-		conflict, err := server.checkReservationConflict(ctx, checkTableID, reservation.MerchantID, targetDate, finalTime, reservation.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if conflict {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该时间段已被预订，请选择其他时间")))
-			return
-		}
-	}
-
-	updatedReservation, err := server.store.UpdateReservation(ctx, updateParams)
+	updatedReservation, err := logic.MerchantUpdateReservation(ctx, server.store, logic.MerchantUpdateReservationInput{
+		OperatorUserID:  authPayload.UserID,
+		ReservationID:   uriReq.ID,
+		TableID:         req.TableID,
+		ReservationDate: reservationDate,
+		ReservationTime: reservationTime,
+		GuestCount:      req.GuestCount,
+		ContactName:     req.ContactName,
+		ContactPhone:    req.ContactPhone,
+		Notes:           req.Notes,
+	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -2614,76 +1675,4 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{"reservations": resp})
-}
-
-func (server *Server) checkReservationConflict(ctx *gin.Context, tableID int64, merchantID int64, date time.Time, newTime time.Time, excludeID int64) (bool, error) {
-	pgDate := pgtype.Date{Time: date, Valid: true}
-	reservations, err := server.store.ListReservationsByTableAndDate(ctx, db.ListReservationsByTableAndDateParams{
-		TableID:         tableID,
-		ReservationDate: pgDate,
-	})
-	if err != nil {
-		return false, err
-	}
-
-	// 获取商户营业时间以确定冲突规则
-	businessHours, err := server.store.ListMerchantBusinessHours(ctx, merchantID)
-	config := util.DefaultConfig
-	if err == nil {
-		dayOfWeek := int32(date.Weekday())
-		var todayHours []db.MerchantBusinessHour
-		for _, bh := range businessHours {
-			if bh.SpecialDate.Valid && bh.SpecialDate.Time.Format("2006-01-02") == date.Format("2006-01-02") {
-				todayHours = append(todayHours, bh)
-			}
-		}
-		if len(todayHours) == 0 {
-			for _, bh := range businessHours {
-				if !bh.SpecialDate.Valid && bh.DayOfWeek == dayOfWeek {
-					todayHours = append(todayHours, bh)
-				}
-			}
-		}
-
-		if len(todayHours) > 0 {
-			h1 := todayHours[0]
-			config.LunchStart = int(h1.OpenTime.Microseconds/1000000/3600*100) + int(h1.OpenTime.Microseconds/1000000%3600/60)
-			config.LunchEnd = int(h1.CloseTime.Microseconds/1000000/3600*100) + int(h1.CloseTime.Microseconds/1000000%3600/60)
-			config.DinnerStart = 0
-			config.DinnerEnd = 0
-
-			if len(todayHours) > 1 {
-				h2 := todayHours[1]
-				config.DinnerStart = int(h2.OpenTime.Microseconds/1000000/3600*100) + int(h2.OpenTime.Microseconds/1000000%3600/60)
-				config.DinnerEnd = int(h2.CloseTime.Microseconds/1000000/3600*100) + int(h2.CloseTime.Microseconds/1000000%3600/60)
-			} else if config.LunchStart >= 1500 {
-				// 如果只有一个段，且是下午 15:00 之后开始，视为晚餐
-				config.DinnerStart = config.LunchStart
-				config.DinnerEnd = config.LunchEnd
-				config.LunchStart = 0
-				config.LunchEnd = 0
-			}
-		}
-	}
-
-	for _, r := range reservations {
-		if r.ID == excludeID {
-			continue
-		}
-		if r.Status == ReservationStatusCancelled || r.Status == ReservationStatusExpired || r.Status == ReservationStatusNoShow {
-			continue
-		}
-		if !r.ReservationTime.Valid {
-			continue
-		}
-
-		existingTime := util.CombineDateAndTime(r.ReservationDate.Time, r.ReservationTime.Microseconds)
-		newDateTime := time.Date(date.Year(), date.Month(), date.Day(), newTime.Hour(), newTime.Minute(), 0, 0, date.Location())
-
-		if util.AreReservationsConflictingWithConfig(newDateTime, existingTime, config) {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }

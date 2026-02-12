@@ -1,0 +1,311 @@
+package logic
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/algorithm"
+	db "github.com/merrydance/locallife/db/sqlc"
+)
+
+// DeliveryStatusInput carries rider and delivery identifiers.
+type DeliveryStatusInput struct {
+	UserID     int64
+	DeliveryID int64
+}
+
+// ConfirmDeliveryInput carries confirm delivery parameters.
+type ConfirmDeliveryInput struct {
+	UserID              int64
+	DeliveryID          int64
+	ConfirmRadiusMeters int
+}
+
+// DeliveryStatusResult returns updated delivery data and related entities.
+type DeliveryStatusResult struct {
+	Delivery       db.Delivery
+	Order          db.Order
+	Rider          db.Rider
+	PreviousStatus string
+}
+
+// StartPickup advances a delivery into picking status.
+func StartPickup(ctx context.Context, store db.Store, input DeliveryStatusInput) (DeliveryStatusResult, error) {
+	var result DeliveryStatusResult
+
+	rider, err := store.GetRiderByUserID(ctx, input.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("您还不是骑手"))
+		}
+		return result, err
+	}
+
+	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+		}
+		return result, err
+	}
+
+	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+	}
+
+	if delivery.Status != "assigned" {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前状态(%s)不允许开始取餐", delivery.Status))
+	}
+
+	order, err := store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
+		}
+		return result, err
+	}
+	if !IsOrderStatusAllowedForDeliveryAction(order.Status, "start_pickup") {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前订单状态(%s)不允许开始取餐", order.Status))
+	}
+
+	updated, err := store.UpdateDeliveryToPickupTx(ctx, db.UpdateDeliveryToPickupTxParams{
+		DeliveryID: input.DeliveryID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	return DeliveryStatusResult{
+		Delivery:       updated.Delivery,
+		Order:          order,
+		Rider:          rider,
+		PreviousStatus: order.Status,
+	}, nil
+}
+
+// ConfirmPickup advances a delivery into picked status and logs order status.
+func ConfirmPickup(ctx context.Context, store db.Store, input DeliveryStatusInput) (DeliveryStatusResult, error) {
+	var result DeliveryStatusResult
+
+	rider, err := store.GetRiderByUserID(ctx, input.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("您还不是骑手"))
+		}
+		return result, err
+	}
+
+	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+		}
+		return result, err
+	}
+
+	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+	}
+
+	if delivery.Status != "picking" {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前状态(%s)不允许确认取餐", delivery.Status))
+	}
+
+	order, err := store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
+		}
+		return result, err
+	}
+	oldStatus := order.Status
+	if !IsOrderStatusAllowedForDeliveryAction(order.Status, "confirm_pickup") {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前订单状态(%s)不允许确认取餐", order.Status))
+	}
+
+	updated, err := store.UpdateDeliveryToPickedTx(ctx, db.UpdateDeliveryToPickedTxParams{
+		DeliveryID: input.DeliveryID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	if oldStatus != "picked" {
+		_, _ = store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     "picked",
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "骑手确认取餐", Valid: true},
+		})
+	}
+
+	order.Status = "picked"
+
+	return DeliveryStatusResult{
+		Delivery:       updated.Delivery,
+		Order:          order,
+		Rider:          rider,
+		PreviousStatus: oldStatus,
+	}, nil
+}
+
+// StartDelivery advances a delivery into delivering status and logs order status.
+func StartDelivery(ctx context.Context, store db.Store, input DeliveryStatusInput) (DeliveryStatusResult, error) {
+	var result DeliveryStatusResult
+
+	rider, err := store.GetRiderByUserID(ctx, input.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("您还不是骑手"))
+		}
+		return result, err
+	}
+
+	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+		}
+		return result, err
+	}
+
+	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+	}
+
+	if delivery.Status != "picked" {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前状态(%s)不允许开始配送", delivery.Status))
+	}
+
+	order, err := store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
+		}
+		return result, err
+	}
+	oldStatus := order.Status
+
+	updated, err := store.UpdateDeliveryToDeliveringTx(ctx, db.UpdateDeliveryToDeliveringTxParams{
+		DeliveryID: input.DeliveryID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	if oldStatus != "delivering" {
+		_, _ = store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     "delivering",
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "骑手开始配送", Valid: true},
+		})
+	}
+
+	order.Status = "delivering"
+
+	return DeliveryStatusResult{
+		Delivery:       updated.Delivery,
+		Order:          order,
+		Rider:          rider,
+		PreviousStatus: oldStatus,
+	}, nil
+}
+
+// ConfirmDelivery completes a delivery, validates radius, and logs order status.
+func ConfirmDelivery(ctx context.Context, store db.Store, input ConfirmDeliveryInput) (DeliveryStatusResult, error) {
+	var result DeliveryStatusResult
+
+	rider, err := store.GetRiderByUserID(ctx, input.UserID)
+	if err != nil {
+		return result, err
+	}
+
+	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
+	if err != nil {
+		return result, err
+	}
+
+	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+	}
+
+	if delivery.Status != "delivering" {
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前状态(%s)不允许确认送达", delivery.Status))
+	}
+
+	if input.ConfirmRadiusMeters > 0 {
+		riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
+		riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
+		deliveryLng, deliveryLngOk := floatFromNumeric(delivery.DeliveryLongitude)
+		deliveryLat, deliveryLatOk := floatFromNumeric(delivery.DeliveryLatitude)
+
+		if riderLngOk && riderLatOk && deliveryLngOk && deliveryLatOk {
+			riderLoc := algorithm.Location{Longitude: riderLng, Latitude: riderLat}
+			deliveryLoc := algorithm.Location{Longitude: deliveryLng, Latitude: deliveryLat}
+			distance := algorithm.HaversineDistance(riderLoc, deliveryLoc)
+
+			if distance > input.ConfirmRadiusMeters {
+				return result, NewRequestError(http.StatusBadRequest, fmt.Errorf(
+					"您距离配送地址%.0f米，请靠近后确认送达（需在%d米内）",
+					float64(distance),
+					input.ConfirmRadiusMeters,
+				))
+			}
+		}
+	}
+
+	order, err := store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
+		}
+		return result, err
+	}
+	oldStatus := order.Status
+
+	unfreezeAmount := OrderFreezeAmount(order)
+	updated, err := store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
+		DeliveryID:     input.DeliveryID,
+		RiderID:        rider.ID,
+		OrderID:        delivery.OrderID,
+		UnfreezeAmount: unfreezeAmount,
+		DeliveryFee:    delivery.DeliveryFee,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	if oldStatus != "rider_delivered" {
+		_, _ = store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+			OrderID:      order.ID,
+			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
+			ToStatus:     "rider_delivered",
+			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
+			OperatorType: pgtype.Text{String: "rider", Valid: true},
+			Notes:        pgtype.Text{String: "骑手确认送达", Valid: true},
+		})
+	}
+
+	order.Status = "rider_delivered"
+
+	return DeliveryStatusResult{
+		Delivery:       updated.Delivery,
+		Order:          order,
+		Rider:          rider,
+		PreviousStatus: oldStatus,
+	}, nil
+}

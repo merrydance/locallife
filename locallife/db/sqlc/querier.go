@@ -651,6 +651,7 @@ type Querier interface {
 	GetMatchingRechargeRule(ctx context.Context, arg GetMatchingRechargeRuleParams) (RechargeRule, error)
 	GetMembershipByMerchantAndUser(ctx context.Context, arg GetMembershipByMerchantAndUserParams) (MerchantMembership, error)
 	GetMembershipByMerchantAndUserForUpdate(ctx context.Context, arg GetMembershipByMerchantAndUserForUpdateParams) (MerchantMembership, error)
+	GetMembershipConsumeByOrder(ctx context.Context, arg GetMembershipConsumeByOrderParams) (MembershipTransaction, error)
 	GetMembershipForUpdate(ctx context.Context, id int64) (MerchantMembership, error)
 	GetMembershipTransaction(ctx context.Context, id int64) (MembershipTransaction, error)
 	GetMembershipTransactionByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (MembershipTransaction, error)

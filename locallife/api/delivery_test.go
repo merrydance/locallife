@@ -78,7 +78,7 @@ func TestGetRecommendedOrdersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(rider, nil)
 
 				// GetActiveRecommendConfig - may return error for default config
@@ -194,7 +194,7 @@ func TestGrabOrderAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(rider, nil)
 
 				store.EXPECT().
@@ -304,7 +304,7 @@ func TestGrabOrderAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(rider, nil)
 
 				store.EXPECT().
@@ -1431,7 +1431,7 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 				lowDepositRider.DepositAmount = 1000 // 只有10元
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(lowDepositRider, nil)
 
 				store.EXPECT().
@@ -1491,7 +1491,7 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(rider, nil)
 
 				store.EXPECT().

@@ -9,9 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/rs/zerolog/log"
 )
@@ -132,115 +131,19 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 		return
 	}
 
-	// 获取推荐配置
-	config := algorithm.DefaultConfig()
-	dbConfig, err := server.store.GetActiveRecommendConfig(ctx)
-	if err == nil {
-		dw, _ := dbConfig.DistanceWeight.Float64Value()
-		rw, _ := dbConfig.RouteWeight.Float64Value()
-		uw, _ := dbConfig.UrgencyWeight.Float64Value()
-		pw, _ := dbConfig.ProfitWeight.Float64Value()
-		config.DistanceWeight = dw.Float64
-		config.RouteWeight = rw.Float64
-		config.UrgencyWeight = uw.Float64
-		config.ProfitWeight = pw.Float64
-		config.MaxDistance = int(dbConfig.MaxDistance)
-		config.MaxResults = int(dbConfig.MaxResults)
-	}
-
-	// 获取可接订单池（按骑手所属区域过滤）
-	poolItems, err := server.store.ListDeliveryPoolNearbyByRegion(ctx, db.ListDeliveryPoolNearbyByRegionParams{
-		RegionID:    rider.RegionID.Int64,
-		RiderLat:    req.Latitude,
-		RiderLng:    req.Longitude,
-		MaxDistance: float64(config.MaxDistance),
-		ResultLimit: 100,
+	recommendations, err := logic.RecommendDeliveryOrders(ctx, server.store, server.routeService, logic.RecommendDeliveryInput{
+		RiderID:       rider.ID,
+		RiderRegionID: rider.RegionID.Int64,
+		RiderLat:      req.Latitude,
+		RiderLng:      req.Longitude,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 转换为算法输入格式
-	var availablePool []algorithm.PoolOrder
-	for _, item := range poolItems {
-		pickupLng, _ := item.PickupLongitude.Float64Value()
-		pickupLat, _ := item.PickupLatitude.Float64Value()
-		deliveryLng, _ := item.DeliveryLongitude.Float64Value()
-		deliveryLat, _ := item.DeliveryLatitude.Float64Value()
-
-		availablePool = append(availablePool, algorithm.PoolOrder{
-			OrderID:    item.OrderID,
-			MerchantID: item.MerchantID,
-			PickupLocation: algorithm.Location{
-				Longitude: pickupLng.Float64,
-				Latitude:  pickupLat.Float64,
-			},
-			DeliveryLocation: algorithm.Location{
-				Longitude: deliveryLng.Float64,
-				Latitude:  deliveryLat.Float64,
-			},
-			Distance:           int(item.Distance),
-			DeliveryFee:        item.DeliveryFee,
-			ExpectedPickupAt:   item.ExpectedPickupAt,
-			ExpectedDeliveryAt: item.ExpectedDeliveryAt.Time,
-			ExpiresAt:          item.ExpiresAt,
-			Priority:           int(item.Priority),
-			CreatedAt:          item.CreatedAt,
-		})
-	}
-
-	// 获取骑手当前活跃订单
-	var activeOrders []algorithm.ActiveDelivery
-	activeDeliveries, err := server.store.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
-	if err == nil {
-		for _, d := range activeDeliveries {
-			pickupLng, _ := d.PickupLongitude.Float64Value()
-			pickupLat, _ := d.PickupLatitude.Float64Value()
-			deliveryLng, _ := d.DeliveryLongitude.Float64Value()
-			deliveryLat, _ := d.DeliveryLatitude.Float64Value()
-
-			ad := algorithm.ActiveDelivery{
-				DeliveryID: d.ID,
-				OrderID:    d.OrderID,
-				PickupLocation: algorithm.Location{
-					Longitude: pickupLng.Float64,
-					Latitude:  pickupLat.Float64,
-				},
-				DeliveryLocation: algorithm.Location{
-					Longitude: deliveryLng.Float64,
-					Latitude:  deliveryLat.Float64,
-				},
-				Status: d.Status,
-			}
-			if d.PickedAt.Valid {
-				ad.PickedAt = d.PickedAt.Time
-			}
-			activeOrders = append(activeOrders, ad)
-		}
-	}
-
-	// 调用推荐算法
-	recommender := algorithm.NewSimpleRecommender()
-	input := algorithm.RecommendInput{
-		RiderID: rider.ID,
-		RiderLocation: algorithm.Location{
-			Longitude: req.Longitude,
-			Latitude:  req.Latitude,
-		},
-		ActiveOrders:  activeOrders,
-		AvailablePool: availablePool,
-		Config:        config,
-	}
-
-	scored, err := recommender.Recommend(ctx, input)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 对 Top N 个订单调用自建 OSM 获取真实骑行距离 (Cached)
-	realDistances := server.routeService.EnrichOrders(ctx, req.Latitude, req.Longitude, scored)
+	scored := recommendations.Scored
+	realDistances := recommendations.RealDistances
 
 	// 转换响应
 	var response []recommendedOrderResponse
@@ -357,7 +260,7 @@ func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) de
 	// 补充信息
 	if order, err := server.store.GetOrder(ctx, d.OrderID); err == nil {
 		resp.OrderNo = order.OrderNo
-		resp.FreezeAmount = orderFreezeAmount(order)
+		resp.FreezeAmount = logic.OrderFreezeAmount(order)
 		if merchant, err := server.store.GetMerchant(ctx, order.MerchantID); err == nil {
 			resp.MerchantName = merchant.Name
 		}
@@ -469,166 +372,88 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		return
 	}
 
-	// 计算可用押金（后续与订单货值对比）
-	availableDeposit := rider.DepositAmount - rider.FrozenDeposit
-
-	// 检查订单是否在池中（先获取用于高值单校验）
-	poolItem, err := server.store.GetDeliveryPoolByOrderID(ctx, req.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在或已被接走")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查是否过期
-	if poolItem.ExpiresAt.Before(time.Now()) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("订单已过期")))
-		return
-	}
-
-	// 高值单资格校验：运费 >= 10 元（1000分）的订单需要骑手高值单资格积分 >= 0
-	highValueThreshold := int64(1000) // 10 元 = 1000 分
-	isHighValueOrder := poolItem.DeliveryFee >= highValueThreshold
-
-	// 获取骑手高值单资格积分
-	premiumScore, err := server.store.GetRiderPremiumScore(ctx, rider.ID)
-	if err != nil {
-		if !isNotFoundError(err) {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		// 如果rider_profiles不存在，默认积分为0
-		premiumScore = 0
-	}
-
-	if isHighValueOrder && premiumScore < 0 {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("高值单资格积分不足，无法接取高值单（运费≥10元），请先完成普通订单积累积分")))
-		return
-	}
-
-	// 检查订单是否在骑手服务区域内
-	merchant, err := server.store.GetMerchant(ctx, poolItem.MerchantID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if merchant.RegionID != rider.RegionID.Int64 {
-		regionID := merchant.RegionID
-		riderRegionID := rider.RegionID.Int64
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "rider",
-			Action:      "region_access_denied",
-			TargetType:  "region",
-			TargetID:    &regionID,
-			RegionID:    &regionID,
-			Metadata: map[string]any{
-				"reason":             "rider_region_mismatch",
-				"rider_region_id":    riderRegionID,
-				"merchant_region_id": regionID,
-				"order_id":           req.OrderID,
-				"path":               ctx.Request.URL.Path,
-				"method":             ctx.Request.Method,
-			},
-		})
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("该订单不在您的服务区域内")))
-		return
-	}
-
-	// P1-003 修复：骑手距离校验
-	// 确保骑手上报了有效位置且在商户附近
-	riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
-	riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
-	merchantLng, merchantLngOk := floatFromNumeric(merchant.Longitude)
-	merchantLat, merchantLatOk := floatFromNumeric(merchant.Latitude)
-
-	if riderLngOk && riderLatOk && merchantLngOk && merchantLatOk {
-		riderLoc := algorithm.Location{Longitude: riderLng, Latitude: riderLat}
-		merchantLoc := algorithm.Location{Longitude: merchantLng, Latitude: merchantLat}
-		distance := algorithm.HaversineDistance(riderLoc, merchantLoc)
-
-		if distance > MaxGrabOrderDistanceMeters {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
-				"您距离商户太远（%.1f公里），请靠近后再抢单",
-				float64(distance)/1000,
-			)))
-			return
-		}
-	}
-
-	// 获取配送单
-	delivery, err := server.store.GetDeliveryByOrderID(ctx, req.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("该订单配置异常(缺少配送单信息)，无法抢单。如果是Mock数据，请确保deliveries表有相应记录")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 获取订单用于状态同步与日志记录
-	order, err := server.store.GetOrder(ctx, req.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	oldStatus := order.Status
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionGrab) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许接单", order.Status)))
-		return
-	}
-
-	// 根据订单货值冻结押金
-	freezeAmount := orderFreezeAmount(order)
-	if freezeAmount > 0 && availableDeposit < freezeAmount {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("押金余额不足，无法接单")))
-		return
-	}
-
-	// 使用事务执行抢单操作：分配骑手 + 移除订单池 + 冻结押金 + 创建流水
-	result, err := server.store.GrabOrderTx(ctx, db.GrabOrderTxParams{
-		DeliveryID:   delivery.ID,
-		RiderID:      rider.ID,
-		OrderID:      req.OrderID,
-		FreezeAmount: freezeAmount,
+	result, err := logic.GrabDeliveryOrder(ctx, server.store, logic.GrabOrderInput{
+		UserID:            authPayload.UserID,
+		OrderID:           req.OrderID,
+		MaxDistanceMeters: MaxGrabOrderDistanceMeters,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 同步订单状态为骑手已接单（忽略状态不匹配）
-	if _, err := server.store.UpdateOrderToCourierAccepted(ctx, req.OrderID); err != nil && !isNotFoundError(err) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if oldStatus != OrderStatusCourierAccepted {
-		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     OrderStatusCourierAccepted,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "骑手接单", Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for courier_accepted")
+		var regionErr *logic.RegionAccessError
+		if errors.As(err, &regionErr) {
+			regionID := regionErr.MerchantRegionID
+			riderRegionID := regionErr.RiderRegionID
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "rider",
+				Action:      "region_access_denied",
+				TargetType:  "region",
+				TargetID:    &regionID,
+				RegionID:    &regionID,
+				Metadata: map[string]any{
+					"reason":             "rider_region_mismatch",
+					"rider_region_id":    riderRegionID,
+					"merchant_region_id": regionID,
+					"order_id":           req.OrderID,
+					"path":               ctx.Request.URL.Path,
+					"method":             ctx.Request.Method,
+				},
+			})
 		}
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Err != nil && reqErr.Err.Error() == "您尚未分配服务区域，请联系管理员" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "rider",
+				Action:      "region_access_denied",
+				TargetType:  "region",
+				RegionID:    nil,
+				Metadata: map[string]any{
+					"reason": "rider_region_unassigned",
+					"path":   ctx.Request.URL.Path,
+					"method": ctx.Request.Method,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
-	order.Status = OrderStatusCourierAccepted
+	order := result.Order
+	merchant := result.Merchant
+	rider = result.Rider
+	delivery := result.Delivery
 
 	// 骑手接单后，使用自建 LBS 重新计算更精确的预估送达时间
 	// 预估送达时间 = 当前时间 + 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
-	server.updateDeliveryEstimatedTime(ctx, result.Delivery, rider, merchant)
+	estimateResult, err := logic.UpdateDeliveryEstimatedTime(ctx, server.store, logic.DeliveryEstimateInput{
+		Delivery:                delivery,
+		Rider:                   rider,
+		Merchant:                merchant,
+		RiderSpeedMetersPerHour: server.config.RiderAverageSpeed,
+		MinTotalMinutes:         10,
+		MapClient:               server.mapClient,
+	})
+	if err != nil {
+		log.Error().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to update estimated delivery time")
+	} else if estimateResult.Skipped {
+		log.Debug().Int64("rider_id", rider.ID).Msg("rider location not available, skip estimated time update")
+	} else {
+		if estimateResult.MapError != nil {
+			log.Warn().Err(estimateResult.MapError).Msg("failed to get distance matrix from LBS, fallback to manual estimation")
+		}
+		log.Info().
+			Int64("delivery_id", delivery.ID).
+			Int64("rider_id", rider.ID).
+			Int("rider_to_merchant_m", estimateResult.RiderToMerchantDistance).
+			Int("merchant_to_customer_m", estimateResult.MerchantToCustomerDistance).
+			Float64("prepare_wait_min", estimateResult.PrepareWaitMinutes).
+			Float64("total_min", estimateResult.TotalMinutes).
+			Time("new_estimated_at", estimateResult.NewEstimatedDeliveryAt).
+			Msg("✅ updated delivery estimated time after rider accepted")
+	}
 
 	// 📢 P1: 异步发送骑手接单通知给商家
 	server.sendDeliveryStatusNotification(
@@ -647,161 +472,20 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	}
 
 	// 重新获取更新后的配送单
-	updatedDelivery, err := server.store.GetDelivery(ctx, result.Delivery.ID)
+	updatedDelivery, err := server.store.GetDelivery(ctx, delivery.ID)
 	if err != nil {
 		// 即使获取失败也返回原结果
-		ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, result.Delivery))
+		ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, delivery))
 		return
 	}
 
 	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updatedDelivery))
 }
 
-// updateDeliveryEstimatedTime 骑手接单后重新计算预估送达时间
-// 使用自建 LBS 计算真实骑行距离，预估时间 = 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
-func (server *Server) updateDeliveryEstimatedTime(ctx context.Context, delivery db.Delivery, rider db.Rider, merchant db.Merchant) {
-	riderSpeedMetersPerHour := server.config.RiderAverageSpeed
-
-	// 检查骑手位置是否有效
-	if !rider.CurrentLatitude.Valid || !rider.CurrentLongitude.Valid {
-		log.Debug().Int64("rider_id", rider.ID).Msg("rider location not available, skip estimated time update")
-		return
-	}
-
-	riderLat, _ := rider.CurrentLatitude.Float64Value()
-	riderLng, _ := rider.CurrentLongitude.Float64Value()
-	merchantLat, _ := merchant.Latitude.Float64Value()
-	merchantLng, _ := merchant.Longitude.Float64Value()
-	deliveryLat, _ := delivery.DeliveryLatitude.Float64Value()
-	deliveryLng, _ := delivery.DeliveryLongitude.Float64Value()
-
-	// 计算骑手到商户的距离（米）
-	var riderToMerchantDistance int
-	// 计算商户到顾客的距离（米）
-	var merchantToCustomerDistance int = int(delivery.Distance) // 使用已存储的距离
-
-	// 1. 优先尝试使用 LBS 计算在途时间 (Duration)
-	var riderToMerchantMinutes float64
-	var merchantToCustomerMinutes float64
-
-	if server.mapClient != nil {
-		riderLoc := maps.Location{Lat: riderLat.Float64, Lng: riderLng.Float64}
-		merchantLoc := maps.Location{Lat: merchantLat.Float64, Lng: merchantLng.Float64}
-		deliveryLoc := maps.Location{Lat: deliveryLat.Float64, Lng: deliveryLng.Float64}
-
-		froms := []maps.Location{riderLoc, merchantLoc}
-		tos := []maps.Location{merchantLoc, deliveryLoc}
-
-		result, err := server.mapClient.GetDistanceMatrix(ctx, froms, tos, "bicycling")
-		if err == nil && len(result.Rows) >= 2 {
-			if len(result.Rows[0].Elements) > 0 {
-				riderToMerchantDistance = result.Rows[0].Elements[0].Distance
-				riderToMerchantMinutes = float64(result.Rows[0].Elements[0].Duration) / 60.0
-			}
-			if len(result.Rows[1].Elements) > 0 {
-				merchantToCustomerDistance = result.Rows[1].Elements[0].Distance
-				merchantToCustomerMinutes = float64(result.Rows[1].Elements[0].Duration) / 60.0
-			}
-		} else {
-			log.Warn().Err(err).Msg("failed to get distance matrix from LBS, fallback to manual estimation")
-		}
-	}
-
-	// 2. 兜底逻辑：如果 LBS 未返回时间（如超限或异常），则使用配置的骑手速度进行估算
-	if riderToMerchantMinutes <= 0 {
-		if riderToMerchantDistance == 0 {
-			dist := algorithm.HaversineDistance(
-				algorithm.Location{Latitude: riderLat.Float64, Longitude: riderLng.Float64},
-				algorithm.Location{Latitude: merchantLat.Float64, Longitude: merchantLng.Float64},
-			)
-			riderToMerchantDistance = int(float64(dist) * 1.3)
-		}
-		riderToMerchantMinutes = float64(riderToMerchantDistance) / float64(riderSpeedMetersPerHour) * 60
-	}
-
-	if merchantToCustomerMinutes <= 0 {
-		merchantToCustomerMinutes = float64(merchantToCustomerDistance) / float64(riderSpeedMetersPerHour) * 60
-	}
-
-	// 出餐等待时间：使用已有的预估出餐时间减去当前时间（如果还没出餐）
-	var prepareWaitMinutes float64 = 0
-	if delivery.EstimatedPickupAt.Valid {
-		waitDuration := time.Until(delivery.EstimatedPickupAt.Time)
-		if waitDuration > 0 {
-			prepareWaitMinutes = waitDuration.Minutes()
-		}
-	}
-
-	// 总配送时间 = 骑手到商户 + 出餐等待 + 商户到顾客
-	totalMinutes := riderToMerchantMinutes + prepareWaitMinutes + merchantToCustomerMinutes
-	// 最少配送时间：10分钟
-	if totalMinutes < 10 {
-		totalMinutes = 10
-	}
-
-	// 新的预估送达时间
-	newEstimatedDeliveryAt := time.Now().Add(time.Duration(totalMinutes) * time.Minute)
-
-	// 更新配送单的预估送达时间
-	_, err := server.store.UpdateDeliveryEstimatedTime(ctx, db.UpdateDeliveryEstimatedTimeParams{
-		ID:                  delivery.ID,
-		EstimatedDeliveryAt: pgtype.Timestamptz{Time: newEstimatedDeliveryAt, Valid: true},
-	})
-	if err != nil {
-		log.Error().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to update estimated delivery time")
-		return
-	}
-
-	log.Info().
-		Int64("delivery_id", delivery.ID).
-		Int64("rider_id", rider.ID).
-		Int("rider_to_merchant_m", riderToMerchantDistance).
-		Int("merchant_to_customer_m", merchantToCustomerDistance).
-		Float64("prepare_wait_min", prepareWaitMinutes).
-		Float64("total_min", totalMinutes).
-		Time("new_estimated_at", newEstimatedDeliveryAt).
-		Msg("✅ updated delivery estimated time after rider accepted")
-}
-
 // ==================== 配送状态更新 ====================
 
 type updateDeliveryRequest struct {
 	ID int64 `uri:"delivery_id" binding:"required,min=1"`
-}
-
-const (
-	deliveryActionGrab            = "grab"
-	deliveryActionStartPickup     = "start_pickup"
-	deliveryActionConfirmPickup   = "confirm_pickup"
-	deliveryActionStartDelivery   = "start_delivery"
-	deliveryActionConfirmDelivery = "confirm_delivery"
-)
-
-func isOrderStatusAllowedForDeliveryAction(status string, action string) bool {
-	switch action {
-	case deliveryActionGrab:
-		return status == OrderStatusPaid || status == OrderStatusPreparing || status == OrderStatusReady
-	case deliveryActionStartPickup:
-		return status == OrderStatusCourierAccepted
-	case deliveryActionConfirmPickup:
-		return status == OrderStatusCourierAccepted
-	case deliveryActionStartDelivery:
-		return status == OrderStatusPicked
-	case deliveryActionConfirmDelivery:
-		return status == OrderStatusDelivering
-	default:
-		return false
-	}
-}
-
-func orderFreezeAmount(order db.Order) int64 {
-	if order.FinalAmount.Valid && order.FinalAmount.Int64 > 0 {
-		return order.FinalAmount.Int64
-	}
-	if order.TotalAmount > 0 {
-		return order.TotalAmount
-	}
-	return 0
 }
 
 // startPickup godoc
@@ -828,64 +512,20 @@ func (server *Server) startPickup(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 先获取配送单检查状态和归属
-	delivery, err := server.store.GetDelivery(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查是否是该骑手的配送单
-	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权操作此配送单")))
-		return
-	}
-
-	// 检查状态是否允许开始取餐（只有assigned状态可以）
-	if delivery.Status != "assigned" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许开始取餐", delivery.Status)))
-		return
-	}
-
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionStartPickup) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许开始取餐", order.Status)))
-		return
-	}
-
-	result, err := server.store.UpdateDeliveryToPickupTx(ctx, db.UpdateDeliveryToPickupTxParams{
+	result, err := logic.StartPickup(ctx, server.store, logic.DeliveryStatusInput{
+		UserID:     authPayload.UserID,
 		DeliveryID: req.ID,
-		RiderID:    rider.ID,
-		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	updated := result.Delivery
+	order := result.Order
 
 	// 📢 P1: 异步发送骑手开始取餐通知给用户
 	server.sendDeliveryStatusNotification(
@@ -925,80 +565,20 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 先获取配送单检查状态和归属
-	delivery, err := server.store.GetDelivery(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查是否是该骑手的配送单
-	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权操作此配送单")))
-		return
-	}
-
-	// 检查状态是否允许确认取餐（只有picking状态可以）
-	if delivery.Status != "picking" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许确认取餐", delivery.Status)))
-		return
-	}
-
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	oldStatus := order.Status
-	if !isOrderStatusAllowedForDeliveryAction(order.Status, deliveryActionConfirmPickup) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态(%s)不允许确认取餐", order.Status)))
-		return
-	}
-
-	result, err := server.store.UpdateDeliveryToPickedTx(ctx, db.UpdateDeliveryToPickedTxParams{
+	result, err := logic.ConfirmPickup(ctx, server.store, logic.DeliveryStatusInput{
+		UserID:     authPayload.UserID,
 		DeliveryID: req.ID,
-		RiderID:    rider.ID,
-		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	updated := result.Delivery
-
-	if oldStatus != OrderStatusPicked {
-		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     OrderStatusPicked,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "骑手确认取餐", Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for picked")
-		}
-	}
-
-	order.Status = OrderStatusPicked
+	order := result.Order
 
 	// 📢 P1: 异步发送骑手已取餐通知给用户
 	server.sendDeliveryStatusNotification(
@@ -1038,76 +618,20 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 先获取配送单检查状态和归属
-	delivery, err := server.store.GetDelivery(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查是否是该骑手的配送单
-	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权操作此配送单")))
-		return
-	}
-
-	// 检查状态是否允许开始配送（只有picked状态可以）
-	if delivery.Status != "picked" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许开始配送", delivery.Status)))
-		return
-	}
-
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	oldStatus := order.Status
-
-	result, err := server.store.UpdateDeliveryToDeliveringTx(ctx, db.UpdateDeliveryToDeliveringTxParams{
+	result, err := logic.StartDelivery(ctx, server.store, logic.DeliveryStatusInput{
+		UserID:     authPayload.UserID,
 		DeliveryID: req.ID,
-		RiderID:    rider.ID,
-		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	updated := result.Delivery
-
-	if oldStatus != OrderStatusDelivering {
-		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     OrderStatusDelivering,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "骑手开始配送", Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for delivering")
-		}
-	}
-
-	order.Status = OrderStatusDelivering
+	order := result.Order
 
 	// 📢 P1: 异步发送骑手配送中通知给用户
 	server.sendDeliveryStatusNotification(
@@ -1147,102 +671,34 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	delivery, err := server.store.GetDelivery(ctx, req.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权操作此配送单")))
-		return
-	}
-
-	if delivery.Status != "delivering" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前状态(%s)不允许确认送达", delivery.Status)))
-		return
-	}
-
-	// P1-005 修复：配送确认地理围栏检查
-	// 确保骑手在配送地址附近
-	riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
-	riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
-	deliveryLng, deliveryLngOk := floatFromNumeric(delivery.DeliveryLongitude)
-	deliveryLat, deliveryLatOk := floatFromNumeric(delivery.DeliveryLatitude)
-
-	if riderLngOk && riderLatOk && deliveryLngOk && deliveryLatOk {
-		riderLoc := algorithm.Location{Longitude: riderLng, Latitude: riderLat}
-		deliveryLoc := algorithm.Location{Longitude: deliveryLng, Latitude: deliveryLat}
-		distance := algorithm.HaversineDistance(riderLoc, deliveryLoc)
-
-		if distance > DeliveryConfirmRadiusMeters {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf(
-				"您距离配送地址%.0f米，请靠近后确认送达（需在%d米内）",
-				float64(distance),
-				DeliveryConfirmRadiusMeters,
-			)))
-			return
-		}
-	}
-
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	oldStatus := order.Status
-
-	// 使用事务执行送达操作：更新状态 + 解冻押金 + 创建流水 + 更新统计
-	unfreezeAmount := orderFreezeAmount(order)
-	result, err := server.store.CompleteDeliveryTx(ctx, db.CompleteDeliveryTxParams{
-		DeliveryID:     req.ID,
-		RiderID:        rider.ID,
-		OrderID:        delivery.OrderID,
-		UnfreezeAmount: unfreezeAmount,
-		DeliveryFee:    delivery.DeliveryFee,
+	result, err := logic.ConfirmDelivery(ctx, server.store, logic.ConfirmDeliveryInput{
+		UserID:              authPayload.UserID,
+		DeliveryID:          req.ID,
+		ConfirmRadiusMeters: DeliveryConfirmRadiusMeters,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if oldStatus != OrderStatusRiderDelivered {
-		if _, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     OrderStatusRiderDelivered,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "骑手确认送达", Valid: true},
-		}); err != nil {
-			log.Warn().Err(err).Int64("order_id", order.ID).Msg("failed to create order status log for rider_delivered")
-		}
-	}
-
-	order.Status = OrderStatusRiderDelivered
+	order := result.Order
+	updated := result.Delivery
 
 	// 📢 P1: 异步发送送达通知给用户
 	server.sendDeliveryStatusNotification(
 		ctx,
 		order.UserID,
-		delivery.OrderID,
-		req.ID,
+		updated.OrderID,
+		updated.ID,
 		"delivered",
 		"订单已送达",
 		fmt.Sprintf("您的订单%s已送达，请确认收餐", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, result.Delivery))
+	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }
 
 // ==================== 顾客查询配送状态 ====================

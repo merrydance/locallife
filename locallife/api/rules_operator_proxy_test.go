@@ -196,6 +196,11 @@ func TestCreateOperatorRuleVersionProxyAPI(t *testing.T) {
 			}, nil
 		})
 
+	store.EXPECT().
+		CreateRuleAudit(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.RuleAudit{}, nil)
+
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -895,6 +896,14 @@ func TestCreateOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				GetMerchantProfile(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
+			store.EXPECT().
+				GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -999,6 +1008,14 @@ func TestGetOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				GetMerchantProfile(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
+			store.EXPECT().
+				GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -1078,7 +1095,10 @@ func TestCancelOrderAPI(t *testing.T) {
 					CancelOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CancelOrderTxResult{Order: paidOrder}, nil)
-				// 注意：因为 taskDistributor 为 nil，不会调用 GetPaymentOrdersByOrder
+				store.EXPECT().
+					GetPaymentOrdersByOrder(gomock.Any(), gomock.Eq(pgtype.Int8{Int64: order.ID, Valid: true})).
+					Times(1).
+					Return([]db.PaymentOrder{{ID: 1, OrderID: pgtype.Int8{Int64: order.ID, Valid: true}, Status: "paid", Amount: 1000}}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1123,6 +1143,14 @@ func TestCancelOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				GetMerchantProfile(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
+			store.EXPECT().
+				GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -1224,7 +1252,12 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), merchantOwner.ID).
+					Times(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1264,7 +1297,12 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), merchantOwner.ID).
+					Times(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1279,6 +1317,14 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				GetMerchantProfile(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
+			store.EXPECT().
+				GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -1427,6 +1473,14 @@ func TestAcceptOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			store.EXPECT().
+				GetMerchantProfile(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
+			store.EXPECT().
+				GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).
+				AnyTimes().
+				Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -1511,7 +1565,12 @@ func TestRejectOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), merchantOwner.ID).
+					Times(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1523,7 +1582,12 @@ func TestRejectOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), merchantOwner.ID).
+					Times(1).
+					Return(merchant, nil)
+			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -1752,6 +1816,10 @@ func TestUrgeOrderAPI(t *testing.T) {
 					Times(1).
 					Return(paidOrder, nil)
 				store.EXPECT().
+					CountRecentOrderStatusLogs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
+				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), paidOrder.MerchantID).
 					Times(1).
 					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
@@ -1782,6 +1850,10 @@ func TestUrgeOrderAPI(t *testing.T) {
 					Times(1).
 					Return(preparingOrder, nil)
 				store.EXPECT().
+					CountRecentOrderStatusLogs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
+				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), preparingOrder.MerchantID).
 					Times(1).
 					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
@@ -1811,6 +1883,10 @@ func TestUrgeOrderAPI(t *testing.T) {
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(deliveringOrder, nil)
+				store.EXPECT().
+					CountRecentOrderStatusLogs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
 				store.EXPECT().
 					GetDeliveryByOrderID(gomock.Any(), order.ID).
 					Times(1).
@@ -1869,6 +1945,10 @@ func TestUrgeOrderAPI(t *testing.T) {
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(pendingOrder, nil)
+				store.EXPECT().
+					CountRecentOrderStatusLogs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1887,6 +1967,10 @@ func TestUrgeOrderAPI(t *testing.T) {
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(completedOrder, nil)
+				store.EXPECT().
+					CountRecentOrderStatusLogs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1951,7 +2035,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 				deliveringOrder := order
 				deliveringOrder.Status = "rider_delivered"
 				store.EXPECT().
-					GetOrderForUpdate(gomock.Any(), order.ID).
+					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(deliveringOrder, nil)
 
@@ -1990,7 +2074,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetOrderForUpdate(gomock.Any(), int64(99999)).
+					GetOrder(gomock.Any(), int64(99999)).
 					Times(1).
 					Return(db.Order{}, db.ErrRecordNotFound)
 			},
@@ -2008,7 +2092,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 				deliveringOrder := order
 				deliveringOrder.Status = "rider_delivered"
 				store.EXPECT().
-					GetOrderForUpdate(gomock.Any(), order.ID).
+					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(deliveringOrder, nil)
 			},
@@ -2027,7 +2111,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 				dineInOrder.OrderType = "dine_in"
 				dineInOrder.Status = "rider_delivered"
 				store.EXPECT().
-					GetOrderForUpdate(gomock.Any(), order.ID).
+					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(dineInOrder, nil)
 			},
@@ -2045,7 +2129,7 @@ func TestConfirmOrderAPI(t *testing.T) {
 				paidOrder := order
 				paidOrder.Status = "paid"
 				store.EXPECT().
-					GetOrderForUpdate(gomock.Any(), order.ID).
+					GetOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return(paidOrder, nil)
 			},
@@ -3637,13 +3721,24 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				merchantWithLocation := merchant
+				merchantWithLocation.Latitude = pgtype.Numeric{Int: big.NewInt(312304), Exp: -4, Valid: true}
+				merchantWithLocation.Longitude = pgtype.Numeric{Int: big.NewInt(1214737), Exp: -4, Valid: true}
+
 				store.EXPECT().
 					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
-					Return(merchant, nil)
+					Return(merchantWithLocation, nil)
+
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{}, nil)
 
 				region := randomRegion()
 				address := randomUserAddress(user.ID, region.ID)
+				address.Latitude = pgtype.Numeric{Int: big.NewInt(312304), Exp: -4, Valid: true}
+				address.Longitude = pgtype.Numeric{Int: big.NewInt(1214737), Exp: -4, Valid: true}
 				store.EXPECT().
 					GetUserAddress(gomock.Any(), int64(1)).
 					Times(1).

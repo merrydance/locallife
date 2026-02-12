@@ -21,8 +21,10 @@ type CreateOrderTxParams struct {
 	VoucherAmount int64  // 优惠券抵扣金额
 
 	// 余额支付相关（可选）
-	MembershipID *int64 // 会员卡ID
-	BalancePaid  int64  // 余额支付金额
+	MembershipID         *int64 // 会员卡ID
+	BalancePaid          int64  // 余额支付金额
+	BalancePaidPrincipal int64  // 余额支付本金
+	BalancePaidBonus     int64  // 余额支付赠额
 
 	// 配送精度相关（可选）
 	// 配送精度相关（可选）
@@ -146,13 +148,27 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 
 		// 7. 如果使用余额，扣减会员余额
 		if arg.MembershipID != nil && arg.BalancePaid > 0 && result.Membership != nil {
-			newBalance := result.Membership.Balance - arg.BalancePaid
+			principalPaid := arg.BalancePaidPrincipal
+			bonusPaid := arg.BalancePaidBonus
+			if principalPaid+bonusPaid != arg.BalancePaid {
+				bonusPaid = result.Membership.BonusBalance
+				if bonusPaid > arg.BalancePaid {
+					bonusPaid = arg.BalancePaid
+				}
+				principalPaid = arg.BalancePaid - bonusPaid
+			}
+
+			newPrincipal := result.Membership.PrincipalBalance - principalPaid
+			newBonus := result.Membership.BonusBalance - bonusPaid
+			newBalance := newPrincipal + newBonus
 
 			updatedMembership, err := q.UpdateMembershipBalance(ctx, UpdateMembershipBalanceParams{
-				ID:             *arg.MembershipID,
-				Balance:        newBalance,
-				TotalRecharged: result.Membership.TotalRecharged,
-				TotalConsumed:  result.Membership.TotalConsumed + arg.BalancePaid,
+				ID:               *arg.MembershipID,
+				Balance:          newBalance,
+				PrincipalBalance: newPrincipal,
+				BonusBalance:     newBonus,
+				TotalRecharged:   result.Membership.TotalRecharged,
+				TotalConsumed:    result.Membership.TotalConsumed + arg.BalancePaid,
 			})
 			if err != nil {
 				return fmt.Errorf("update membership balance: %w", err)
@@ -161,13 +177,15 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 
 			// 创建消费交易记录
 			transaction, err := q.CreateMembershipTransaction(ctx, CreateMembershipTransactionParams{
-				MembershipID:   *arg.MembershipID,
-				Type:           "consume",
-				Amount:         -arg.BalancePaid,
-				BalanceAfter:   newBalance,
-				RelatedOrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
-				RechargeRuleID: pgtype.Int8{},
-				Notes:          pgtype.Text{String: fmt.Sprintf("订单支付: %s", result.Order.OrderNo), Valid: true},
+				MembershipID:    *arg.MembershipID,
+				Type:            "consume",
+				Amount:          -arg.BalancePaid,
+				PrincipalAmount: -principalPaid,
+				BonusAmount:     -bonusPaid,
+				BalanceAfter:    newBalance,
+				RelatedOrderID:  pgtype.Int8{Int64: result.Order.ID, Valid: true},
+				RechargeRuleID:  pgtype.Int8{},
+				Notes:           pgtype.Text{String: fmt.Sprintf("订单支付: %s", result.Order.OrderNo), Valid: true},
 			})
 			if err != nil {
 				return fmt.Errorf("create membership transaction: %w", err)

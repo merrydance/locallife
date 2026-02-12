@@ -34,7 +34,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 				// Mock GetMerchantByOwner
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				// Mock ListMerchantOrdersByStatus for paid orders
@@ -72,7 +72,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -123,7 +123,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -177,7 +177,7 @@ func TestStartPreparingAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -188,11 +188,7 @@ func TestStartPreparingAPI(t *testing.T) {
 				updatedOrder := order
 				updatedOrder.Status = "preparing"
 				store.EXPECT().
-					UpdateOrderStatus(gomock.Any(), db.UpdateOrderStatusParams{
-						ID:                order.ID,
-						Status:            "preparing",
-						FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusPreparing, Valid: true},
-					}).
+					UpdateOrderToPreparing(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(updatedOrder, nil)
 
@@ -224,7 +220,7 @@ func TestStartPreparingAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -248,7 +244,7 @@ func TestStartPreparingAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(otherMerchant, nil)
 
 				store.EXPECT().
@@ -269,7 +265,7 @@ func TestStartPreparingAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				// 返回一个已经在 preparing 状态的订单
@@ -279,6 +275,11 @@ func TestStartPreparingAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(preparingOrder, nil)
+
+				store.EXPECT().
+					UpdateOrderToPreparing(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -291,7 +292,10 @@ func TestStartPreparingAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Should not reach store
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					AnyTimes().
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -344,7 +348,7 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -355,13 +359,19 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 				updatedOrder := order
 				updatedOrder.Status = "ready"
 				store.EXPECT().
-					UpdateOrderStatus(gomock.Any(), db.UpdateOrderStatusParams{
-						ID:                order.ID,
-						Status:            "ready",
-						FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusReady, Valid: true},
-					}).
+					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(updatedOrder, nil)
+
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 
 				// Mock for convertToKitchenOrder
 				store.EXPECT().
@@ -391,7 +401,7 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				paidOrder := order
@@ -404,13 +414,19 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 				updatedOrder := order
 				updatedOrder.Status = "ready"
 				store.EXPECT().
-					UpdateOrderStatus(gomock.Any(), db.UpdateOrderStatusParams{
-						ID:                order.ID,
-						Status:            "ready",
-						FulfillmentStatus: pgtype.Text{String: db.FulfillmentStatusReady, Valid: true},
-					}).
+					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(updatedOrder, nil)
+
+				store.EXPECT().
+					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
+					Times(1).
+					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					CreateNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Notification{}, nil)
 
 				// Mock for convertToKitchenOrder
 				store.EXPECT().
@@ -436,7 +452,7 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				completedOrder := order
@@ -445,6 +461,11 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(completedOrder, nil)
+
+				store.EXPECT().
+					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(db.Order{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -513,7 +534,7 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -561,7 +582,7 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -601,7 +622,7 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					AnyTimes().
 					Return(merchant, nil)
 
 				store.EXPECT().

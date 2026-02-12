@@ -638,6 +638,13 @@ func TestSearchDishesGlobal(t *testing.T) {
 		Column1: pgtype.Text{String: uniqueName, Valid: true},
 		Limit:   10,
 		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, dishes)
@@ -689,6 +696,13 @@ func TestSearchDishesGlobal_OnlyApprovedMerchants(t *testing.T) {
 		Column1: pgtype.Text{String: uniqueName, Valid: true},
 		Limit:   10,
 		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Empty(t, dishes, "Dishes from pending merchant should not appear in global search")
@@ -725,6 +739,13 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 		Column1: pgtype.Text{String: prefix, Valid: true},
 		Limit:   2,
 		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Len(t, page1, 2)
@@ -734,6 +755,13 @@ func TestSearchDishesGlobal_Pagination(t *testing.T) {
 		Column1: pgtype.Text{String: prefix, Valid: true},
 		Limit:   2,
 		Offset:  2,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Len(t, page2, 2)
@@ -776,6 +804,11 @@ func TestCountSearchDishesGlobal(t *testing.T) {
 	// 计数
 	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
 		Column1: pgtype.Text{String: prefix, Valid: true},
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), count)

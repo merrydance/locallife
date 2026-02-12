@@ -21,6 +21,7 @@ type createDiscountRuleRequest struct {
 	DiscountAmount         int64     `json:"discount_amount" binding:"required,min=1"`
 	CanStackWithVoucher    bool      `json:"can_stack_with_voucher"`
 	CanStackWithMembership bool      `json:"can_stack_with_membership"`
+	StackingGroup          *string   `json:"stacking_group" binding:"omitempty,max=50"`
 	ValidFrom              time.Time `json:"valid_from" binding:"required"`
 	ValidUntil             time.Time `json:"valid_until" binding:"required"`
 }
@@ -35,6 +36,7 @@ type discountRuleResponse struct {
 	DiscountAmount         int64     `json:"discount_amount"`
 	CanStackWithVoucher    bool      `json:"can_stack_with_voucher"`
 	CanStackWithMembership bool      `json:"can_stack_with_membership"`
+	StackingGroup          *string   `json:"stacking_group,omitempty"`
 	ValidFrom              time.Time `json:"valid_from"`
 	ValidUntil             time.Time `json:"valid_until"`
 	IsActive               bool      `json:"is_active"`
@@ -76,6 +78,7 @@ func (server *Server) createDiscountRule(ctx *gin.Context) {
 		DiscountAmount:         req.DiscountAmount,
 		CanStackWithVoucher:    req.CanStackWithVoucher,
 		CanStackWithMembership: req.CanStackWithMembership,
+		StackingGroup:          pgtype.Text{String: stringOrEmpty(req.StackingGroup), Valid: req.StackingGroup != nil && *req.StackingGroup != ""},
 		ValidFrom:              req.ValidFrom,
 		ValidUntil:             req.ValidUntil,
 		IsActive:               true,
@@ -333,6 +336,7 @@ type updateDiscountRuleRequest struct {
 	DiscountAmount         *int64     `json:"discount_amount"`
 	CanStackWithVoucher    *bool      `json:"can_stack_with_voucher"`
 	CanStackWithMembership *bool      `json:"can_stack_with_membership"`
+	StackingGroup          *string    `json:"stacking_group"`
 	ValidFrom              *time.Time `json:"valid_from"`
 	ValidUntil             *time.Time `json:"valid_until"`
 	IsActive               *bool      `json:"is_active"`
@@ -390,6 +394,9 @@ func (server *Server) updateDiscountRule(ctx *gin.Context) {
 	}
 	if req.CanStackWithMembership != nil {
 		arg.CanStackWithMembership = pgtype.Bool{Bool: *req.CanStackWithMembership, Valid: true}
+	}
+	if req.StackingGroup != nil {
+		arg.StackingGroup = pgtype.Text{String: *req.StackingGroup, Valid: *req.StackingGroup != ""}
 	}
 	if req.ValidFrom != nil {
 		arg.ValidFrom = pgtype.Timestamptz{Time: *req.ValidFrom, Valid: true}
@@ -476,6 +483,17 @@ func convertDiscountRuleResponse(rule db.DiscountRule) discountRuleResponse {
 	if rule.Description.Valid {
 		rsp.Description = rule.Description.String
 	}
+	if rule.StackingGroup.Valid {
+		value := rule.StackingGroup.String
+		rsp.StackingGroup = &value
+	}
 
 	return rsp
+}
+
+func stringOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
