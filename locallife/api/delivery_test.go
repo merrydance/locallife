@@ -829,12 +829,6 @@ func TestGetDeliveryTrackAPI(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(otherUserOrder, nil)
-
-				// 当前用户也不是骑手
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

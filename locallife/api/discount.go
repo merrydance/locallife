@@ -6,9 +6,9 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ==================== 满减规则管理 ====================
@@ -51,18 +51,6 @@ func (server *Server) createDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	// 验证时间范围
-	if req.ValidUntil.Before(req.ValidFrom) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("valid_until must be after valid_from")))
-		return
-	}
-
-	// 验证折扣金额小于最低消费
-	if req.DiscountAmount >= req.MinOrderAmount {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("discount_amount must be less than min_order_amount")))
-		return
-	}
-
 	merchantVal, exists := ctx.Get(merchantKey)
 	if !exists {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
@@ -70,20 +58,22 @@ func (server *Server) createDiscountRule(ctx *gin.Context) {
 	}
 	merchant := merchantVal.(db.Merchant)
 
-	rule, err := server.store.CreateDiscountRule(ctx, db.CreateDiscountRuleParams{
+	rule, err := logic.CreateDiscountRule(ctx, server.store, logic.CreateDiscountRuleInput{
 		MerchantID:             merchant.ID,
 		Name:                   req.Name,
-		Description:            pgtype.Text{String: req.Description, Valid: req.Description != ""},
+		Description:            req.Description,
 		MinOrderAmount:         req.MinOrderAmount,
 		DiscountAmount:         req.DiscountAmount,
 		CanStackWithVoucher:    req.CanStackWithVoucher,
 		CanStackWithMembership: req.CanStackWithMembership,
-		StackingGroup:          pgtype.Text{String: stringOrEmpty(req.StackingGroup), Valid: req.StackingGroup != nil && *req.StackingGroup != ""},
+		StackingGroup:          req.StackingGroup,
 		ValidFrom:              req.ValidFrom,
 		ValidUntil:             req.ValidUntil,
-		IsActive:               true,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -112,17 +102,15 @@ func (server *Server) getDiscountRule(ctx *gin.Context) {
 	}
 	merchant := merchantVal.(db.Merchant)
 
-	rule, err := server.store.GetDiscountRule(ctx, req.ID)
+	rule, err := logic.GetDiscountRuleForMerchant(ctx, server.store, logic.DiscountRuleAccessInput{
+		MerchantID: merchant.ID,
+		RuleID:     req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("discount rule not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if rule.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
 		return
 	}
 
@@ -168,17 +156,17 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 		return
 	}
 	merchant := merchantVal.(db.Merchant)
-	if uriReq.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
-		return
-	}
 
-	rules, err := server.store.ListMerchantDiscountRules(ctx, db.ListMerchantDiscountRulesParams{
-		MerchantID: uriReq.MerchantID,
-		Limit:      queryReq.PageSize,
-		Offset:     pageOffset(queryReq.PageID, queryReq.PageSize),
+	rules, err := logic.ListMerchantDiscountRules(ctx, server.store, logic.ListMerchantDiscountRulesInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: uriReq.MerchantID,
+		Limit:            queryReq.PageSize,
+		Offset:           pageOffset(queryReq.PageID, queryReq.PageSize),
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -216,13 +204,15 @@ func (server *Server) listActiveDiscountRules(ctx *gin.Context) {
 		return
 	}
 	merchant := merchantVal.(db.Merchant)
-	if req.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
-		return
-	}
 
-	rules, err := server.store.ListActiveDiscountRules(ctx, req.MerchantID)
+	rules, err := logic.ListActiveDiscountRules(ctx, server.store, logic.ListActiveDiscountRulesInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: req.MerchantID,
+	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -251,10 +241,6 @@ func (server *Server) getApplicableDiscountRules(ctx *gin.Context) {
 		return
 	}
 	merchant := merchantVal.(db.Merchant)
-	if uriReq.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
-		return
-	}
 
 	var queryReq struct {
 		OrderAmount int64 `form:"order_amount" binding:"required,min=1"`
@@ -264,11 +250,15 @@ func (server *Server) getApplicableDiscountRules(ctx *gin.Context) {
 		return
 	}
 
-	rules, err := server.store.GetApplicableDiscountRules(ctx, db.GetApplicableDiscountRulesParams{
-		MerchantID:     uriReq.MerchantID,
-		MinOrderAmount: queryReq.OrderAmount,
+	rules, err := logic.GetApplicableDiscountRules(ctx, server.store, logic.ApplicableDiscountRulesInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: uriReq.MerchantID,
+		OrderAmount:      queryReq.OrderAmount,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -297,10 +287,6 @@ func (server *Server) getBestDiscountRule(ctx *gin.Context) {
 		return
 	}
 	merchant := merchantVal.(db.Merchant)
-	if uriReq.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("insufficient permissions for this merchant")))
-		return
-	}
 
 	var queryReq struct {
 		OrderAmount int64 `form:"order_amount" binding:"required,min=1"`
@@ -310,13 +296,13 @@ func (server *Server) getBestDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	rule, err := server.store.GetBestDiscountRule(ctx, db.GetBestDiscountRuleParams{
-		MerchantID:     uriReq.MerchantID,
-		MinOrderAmount: queryReq.OrderAmount,
+	rule, err := logic.GetBestDiscountRule(ctx, server.store, logic.BestDiscountRuleInput{
+		MerchantID:       merchant.ID,
+		TargetMerchantID: uriReq.MerchantID,
+		OrderAmount:      queryReq.OrderAmount,
 	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("no applicable discount rule found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -350,66 +336,31 @@ func (server *Server) updateDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	// 获取原规则验证权限
-	rule, err := server.store.GetDiscountRule(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("discount rule not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
 	merchantVal, exists := ctx.Get(merchantKey)
 	if !exists {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
 	merchant := merchantVal.(db.Merchant)
-	if merchant.ID != rule.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
-		return
-	}
 
-	// 构造更新参数
-	arg := db.UpdateDiscountRuleParams{
-		ID: req.ID,
-	}
-
-	if req.Name != nil {
-		arg.Name = pgtype.Text{String: *req.Name, Valid: true}
-	}
-	if req.Description != nil {
-		arg.Description = pgtype.Text{String: *req.Description, Valid: true}
-	}
-	if req.MinOrderAmount != nil {
-		arg.MinOrderAmount = pgtype.Int8{Int64: *req.MinOrderAmount, Valid: true}
-	}
-	if req.DiscountAmount != nil {
-		arg.DiscountAmount = pgtype.Int8{Int64: *req.DiscountAmount, Valid: true}
-	}
-	if req.CanStackWithVoucher != nil {
-		arg.CanStackWithVoucher = pgtype.Bool{Bool: *req.CanStackWithVoucher, Valid: true}
-	}
-	if req.CanStackWithMembership != nil {
-		arg.CanStackWithMembership = pgtype.Bool{Bool: *req.CanStackWithMembership, Valid: true}
-	}
-	if req.StackingGroup != nil {
-		arg.StackingGroup = pgtype.Text{String: *req.StackingGroup, Valid: *req.StackingGroup != ""}
-	}
-	if req.ValidFrom != nil {
-		arg.ValidFrom = pgtype.Timestamptz{Time: *req.ValidFrom, Valid: true}
-	}
-	if req.ValidUntil != nil {
-		arg.ValidUntil = pgtype.Timestamptz{Time: *req.ValidUntil, Valid: true}
-	}
-	if req.IsActive != nil {
-		arg.IsActive = pgtype.Bool{Bool: *req.IsActive, Valid: true}
-	}
-
-	updatedRule, err := server.store.UpdateDiscountRule(ctx, arg)
+	updatedRule, err := logic.UpdateDiscountRuleForMerchant(ctx, server.store, logic.UpdateDiscountRuleInput{
+		MerchantID:             merchant.ID,
+		RuleID:                 req.ID,
+		Name:                   req.Name,
+		Description:            req.Description,
+		MinOrderAmount:         req.MinOrderAmount,
+		DiscountAmount:         req.DiscountAmount,
+		CanStackWithVoucher:    req.CanStackWithVoucher,
+		CanStackWithMembership: req.CanStackWithMembership,
+		StackingGroup:          req.StackingGroup,
+		ValidFrom:              req.ValidFrom,
+		ValidUntil:             req.ValidUntil,
+		IsActive:               req.IsActive,
+	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -431,30 +382,21 @@ func (server *Server) deleteDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	// 获取规则验证权限
-	rule, err := server.store.GetDiscountRule(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("discount rule not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
 	merchantVal, exists := ctx.Get(merchantKey)
 	if !exists {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant context not found")))
 		return
 	}
 	merchant := merchantVal.(db.Merchant)
-	if merchant.ID != rule.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not authorized")))
-		return
-	}
 
-	err = server.store.DeleteDiscountRule(ctx, req.ID)
+	err := logic.DeleteDiscountRuleForMerchant(ctx, server.store, logic.DeleteDiscountRuleInput{
+		MerchantID: merchant.ID,
+		RuleID:     req.ID,
+	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -489,11 +431,4 @@ func convertDiscountRuleResponse(rule db.DiscountRule) discountRuleResponse {
 	}
 
 	return rsp
-}
-
-func stringOrEmpty(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

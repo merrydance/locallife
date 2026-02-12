@@ -98,52 +98,36 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
+	recommendationResult, err := logic.RecommendDeliveryOrdersForUser(ctx, server.store, server.routeService, logic.RecommendDeliveryForUserInput{
+		UserID:   authPayload.UserID,
+		RiderLat: req.Latitude,
+		RiderLng: req.Longitude,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Err != nil && reqErr.Err.Error() == "您尚未分配服务区域，请联系管理员" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "rider",
+				Action:      "region_access_denied",
+				TargetType:  "region",
+				RegionID:    nil,
+				Metadata: map[string]any{
+					"reason": "rider_region_unassigned",
+					"path":   ctx.Request.URL.Path,
+					"method": ctx.Request.Method,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if !rider.IsOnline {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上线")))
-		return
-	}
-
-	// 检查骑手是否已分配区域
-	if !rider.RegionID.Valid {
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "rider",
-			Action:      "region_access_denied",
-			TargetType:  "region",
-			RegionID:    nil,
-			Metadata: map[string]any{
-				"reason": "rider_region_unassigned",
-				"path":   ctx.Request.URL.Path,
-				"method": ctx.Request.Method,
-			},
-		})
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您尚未分配服务区域，请联系管理员")))
-		return
-	}
-
-	recommendations, err := logic.RecommendDeliveryOrders(ctx, server.store, server.routeService, logic.RecommendDeliveryInput{
-		RiderID:       rider.ID,
-		RiderRegionID: rider.RegionID.Int64,
-		RiderLat:      req.Latitude,
-		RiderLng:      req.Longitude,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	scored := recommendations.Scored
-	realDistances := recommendations.RealDistances
+	scored := recommendationResult.Recommendations.Scored
+	realDistances := recommendationResult.Recommendations.RealDistances
 
 	// 转换响应
 	var response []recommendedOrderResponse
@@ -339,39 +323,6 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if !rider.IsOnline {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上线")))
-		return
-	}
-
-	// 检查骑手是否已分配区域
-	if !rider.RegionID.Valid {
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "rider",
-			Action:      "region_access_denied",
-			TargetType:  "region",
-			RegionID:    nil,
-			Metadata: map[string]any{
-				"reason": "rider_region_unassigned",
-				"path":   ctx.Request.URL.Path,
-				"method": ctx.Request.Method,
-			},
-		})
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您尚未分配服务区域，请联系管理员")))
-		return
-	}
-
 	result, err := logic.GrabDeliveryOrder(ctx, server.store, logic.GrabOrderInput{
 		UserID:            authPayload.UserID,
 		OrderID:           req.OrderID,
@@ -423,7 +374,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 
 	order := result.Order
 	merchant := result.Merchant
-	rider = result.Rider
+	rider := result.Rider
 	delivery := result.Delivery
 
 	// 骑手接单后，使用自建 LBS 重新计算更精确的预估送达时间
@@ -731,27 +682,12 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取订单，验证归属权
-	order, err := server.store.GetOrder(ctx, req.OrderID)
+	delivery, err := logic.GetDeliveryForOrderOwner(ctx, server.store, logic.DeliveryOrderAccessInput{
+		UserID:  authPayload.UserID,
+		OrderID: req.OrderID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 只有订单所有者可以查看配送信息
-	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权查看此订单配送信息")))
-		return
-	}
-
-	delivery, err := server.store.GetDeliveryByOrderID(ctx, req.OrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -799,38 +735,16 @@ func (server *Server) getDeliveryTrack(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取配送单信息
-	delivery, err := server.store.GetDelivery(ctx, uriReq.ID)
+	_, err := logic.ValidateDeliveryViewer(ctx, server.store, logic.DeliveryViewerInput{
+		UserID:           authPayload.UserID,
+		DeliveryID:       uriReq.ID,
+		ForbiddenMessage: "无权查看此配送单轨迹",
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证权限：只有订单所有者或配送骑手可以查看
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查是否是订单所有者
-	isOrderOwner := order.UserID == authPayload.UserID
-
-	// 检查是否是配送骑手（只有非订单所有者才需要检查）
-	isDeliveryRider := false
-	if !isOrderOwner && delivery.RiderID.Valid {
-		rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-		if err == nil && rider.ID == delivery.RiderID.Int64 {
-			isDeliveryRider = true
-		}
-	}
-
-	if !isOrderOwner && !isDeliveryRider {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权查看此配送单轨迹")))
 		return
 	}
 
@@ -911,38 +825,16 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取配送单信息
-	delivery, err := server.store.GetDelivery(ctx, req.DeliveryID)
+	_, err := logic.ValidateDeliveryViewer(ctx, server.store, logic.DeliveryViewerInput{
+		UserID:           authPayload.UserID,
+		DeliveryID:       req.DeliveryID,
+		ForbiddenMessage: "无权查看此配送单位置",
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("配送单不存在")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证权限：只有订单所有者或配送骑手可以查看
-	order, err := server.store.GetOrder(ctx, delivery.OrderID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查是否是订单所有者
-	isOrderOwner := order.UserID == authPayload.UserID
-
-	// 检查是否是配送骑手（只有非订单所有者才需要检查）
-	isDeliveryRider := false
-	if !isOrderOwner && delivery.RiderID.Valid {
-		rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-		if err == nil && rider.ID == delivery.RiderID.Int64 {
-			isDeliveryRider = true
-		}
-	}
-
-	if !isOrderOwner && !isDeliveryRider {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权查看此配送单位置")))
 		return
 	}
 

@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/merrydance/locallife/websocket"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const timeLayout = "2006-01-02 15:04:05"
@@ -156,69 +154,39 @@ func (server *Server) precheckDiningSession(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	table, err := server.store.GetTable(ctx, req.TableID)
+	result, err := logic.PrecheckDiningSession(ctx, server.store, logic.DiningSessionPrecheckInput{
+		UserID:  authPayload.UserID,
+		TableID: req.TableID,
+		Now:     time.Now(),
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("table not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	activeReservation, err := logic.FindActiveReservationForTable(ctx, server.store, table.ID, time.Now())
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if activeReservation == nil {
-		ctx.JSON(http.StatusOK, diningSessionPrecheckResponse{TableID: table.ID, Reserved: false})
-		return
-	}
-
-	// 检查请求者是否为该桌商户/员工
-	isMerchant := false
-	if m, err := server.store.GetMerchant(ctx, table.MerchantID); err == nil && m.OwnerUserID == authPayload.UserID {
-		isMerchant = true
-	} else {
-		if hasAccess, err := server.store.CheckUserHasMerchantAccess(ctx, db.CheckUserHasMerchantAccessParams{
-			MerchantID: table.MerchantID,
-			UserID:     authPayload.UserID,
-		}); err == nil && hasAccess {
-			isMerchant = true
-		}
-	}
-
-	if activeReservation.UserID != authPayload.UserID && !isMerchant {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("桌位已被预约，暂时不可用")))
+	if !result.Reserved || result.Reservation == nil {
+		ctx.JSON(http.StatusOK, diningSessionPrecheckResponse{TableID: result.Table.ID, Reserved: false})
 		return
 	}
 
 	resp := diningSessionPrecheckResponse{
-		TableID:            table.ID,
+		TableID:            result.Table.ID,
 		Reserved:           true,
-		ReservationID:      &activeReservation.ID,
-		IsReservationOwner: true,
+		ReservationID:      &result.Reservation.ID,
+		IsReservationOwner: result.IsReservationOwner,
+		PaymentMode:        result.PaymentMode,
+		PaidAmount:         result.PaidAmount,
 	}
-	pm := activeReservation.PaymentMode
-	resp.PaymentMode = &pm
-	paidAmount := activeReservation.PrepaidAmount
-	if pm == PaymentModeDeposit {
-		paidAmount = activeReservation.DepositAmount
-	}
-	resp.PaidAmount = &paidAmount
-
-	if order, err := server.store.GetLatestOrderByReservation(ctx, pgtype.Int8{Int64: activeReservation.ID, Valid: true}); err == nil {
-		resp.OrderID = &order.ID
-		resp.OrderStatus = &order.Status
-		if order.FulfillmentStatus != "" {
-			fs := order.FulfillmentStatus
+	if result.Order != nil {
+		resp.OrderID = &result.Order.ID
+		resp.OrderStatus = &result.Order.Status
+		if result.Order.FulfillmentStatus != "" {
+			fs := result.Order.FulfillmentStatus
 			resp.OrderFulfillmentStatus = &fs
 		}
-	} else if !isNotFoundError(err) {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
 	}
 
 	ctx.JSON(http.StatusOK, resp)

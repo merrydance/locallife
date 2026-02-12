@@ -1,0 +1,93 @@
+package logic
+
+import (
+	"context"
+	"errors"
+	"net/http"
+
+	db "github.com/merrydance/locallife/db/sqlc"
+)
+
+// DeliveryOrderAccessInput defines access parameters by order.
+type DeliveryOrderAccessInput struct {
+	UserID  int64
+	OrderID int64
+}
+
+// DeliveryViewerInput defines access parameters by delivery.
+type DeliveryViewerInput struct {
+	UserID           int64
+	DeliveryID       int64
+	ForbiddenMessage string
+}
+
+// DeliveryViewerResult returns delivery and order context for access checks.
+type DeliveryViewerResult struct {
+	Delivery     db.Delivery
+	Order        db.Order
+	IsOrderOwner bool
+	IsRider      bool
+}
+
+// GetDeliveryForOrderOwner loads delivery info for an order owner.
+func GetDeliveryForOrderOwner(ctx context.Context, store db.Store, input DeliveryOrderAccessInput) (db.Delivery, error) {
+	order, err := store.GetOrder(ctx, input.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
+		}
+		return db.Delivery{}, err
+	}
+	if order.UserID != input.UserID {
+		return db.Delivery{}, NewRequestError(http.StatusForbidden, errors.New("无权查看此订单配送信息"))
+	}
+
+	delivery, err := store.GetDeliveryByOrderID(ctx, input.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+		}
+		return db.Delivery{}, err
+	}
+
+	return delivery, nil
+}
+
+// ValidateDeliveryViewer validates that the user can view delivery data.
+func ValidateDeliveryViewer(ctx context.Context, store db.Store, input DeliveryViewerInput) (DeliveryViewerResult, error) {
+	var result DeliveryViewerResult
+
+	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+		}
+		return result, err
+	}
+
+	order, err := store.GetOrder(ctx, delivery.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
+		}
+		return result, err
+	}
+
+	isOwner := order.UserID == input.UserID
+	isRider := delivery.RiderID.Valid && delivery.RiderID.Int64 == input.UserID
+	if !isOwner && !isRider {
+		msg := input.ForbiddenMessage
+		if msg == "" {
+			msg = "无权查看此配送单"
+		}
+		return result, NewRequestError(http.StatusForbidden, errors.New(msg))
+	}
+
+	result.Delivery = delivery
+	result.Order = order
+	result.IsOrderOwner = isOwner
+	result.IsRider = isRider
+
+	return result, nil
+}
+

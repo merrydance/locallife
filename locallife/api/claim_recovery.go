@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 )
 
@@ -72,24 +72,15 @@ func (server *Server) getMerchantClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, claimID)
+	recovery, err := logic.GetClaimRecoveryForMerchant(ctx, server.store, logic.MerchantClaimRecoveryInput{
+		ClaimID:    claimID,
+		MerchantID: merchant.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for recovery")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if claimInfo.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this claim does not belong to your merchant")))
-		return
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim recovery not found")))
 		return
 	}
 
@@ -124,24 +115,15 @@ func (server *Server) getRiderClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, claimID)
+	recovery, err := logic.GetClaimRecoveryForRider(ctx, server.store, logic.RiderClaimRecoveryInput{
+		ClaimID: claimID,
+		RiderID: rider.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for recovery")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if !claimInfo.RiderID.Valid || claimInfo.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this claim does not belong to your rider")))
-		return
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim recovery not found")))
 		return
 	}
 
@@ -176,24 +158,15 @@ func (server *Server) getOperatorClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, claimID)
+	recovery, err := logic.GetClaimRecoveryForOperator(ctx, server.store, logic.OperatorClaimRecoveryInput{
+		ClaimID:  claimID,
+		RegionID: operator.RegionID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for recovery")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if claimInfo.RegionID != operator.RegionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator does not manage this region")))
-		return
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim recovery not found")))
 		return
 	}
 
@@ -228,60 +201,15 @@ func (server *Server) payMerchantClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, claimID)
+	updated, err := logic.PayMerchantClaimRecovery(ctx, server.store, logic.PayMerchantClaimRecoveryInput{
+		ClaimID:    claimID,
+		MerchantID: merchant.ID,
+		Now:        time.Now(),
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for recovery")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if claimInfo.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this claim does not belong to your merchant")))
-		return
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim recovery not found")))
-		return
-	}
-
-	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != "merchant" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("recovery target mismatch")))
-		return
-	}
-
-	updated, err := server.store.MarkClaimRecoveryPaid(ctx, recovery.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if _, err := server.store.GetMerchantSettlementAdjustmentByRelatedAndType(ctx, db.GetMerchantSettlementAdjustmentByRelatedAndTypeParams{
-		RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-		RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-		AdjustmentType: "claim_recovery_charge",
-	}); err != nil {
-		_, err = server.store.CreateMerchantSettlementAdjustment(ctx, db.CreateMerchantSettlementAdjustmentParams{
-			MerchantID:     merchant.ID,
-			AdjustmentType: "claim_recovery_charge",
-			Amount:         -updated.RecoveryAmount,
-			Status:         "finished",
-			RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-			RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-			Note:           pgtype.Text{String: "claim recovery paid", Valid: true},
-			PostedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	if err := server.store.UnsuspendMerchantTakeout(ctx, merchant.ID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -317,39 +245,14 @@ func (server *Server) payRiderClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, claimID)
+	updated, err := logic.PayRiderClaimRecovery(ctx, server.store, logic.PayRiderClaimRecoveryInput{
+		ClaimID: claimID,
+		RiderID: rider.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for recovery")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if !claimInfo.RiderID.Valid || claimInfo.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this claim does not belong to your rider")))
-		return
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim recovery not found")))
-		return
-	}
-
-	if !recovery.RecoveryTarget.Valid || recovery.RecoveryTarget.String != "rider" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("recovery target mismatch")))
-		return
-	}
-
-	updated, err := server.store.MarkClaimRecoveryPaid(ctx, recovery.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if err := server.store.UnsuspendRider(ctx, rider.ID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -385,79 +288,17 @@ func (server *Server) waiveClaimRecovery(ctx *gin.Context) {
 		return
 	}
 
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, claimID)
+	updated, err := logic.WaiveClaimRecovery(ctx, server.store, logic.WaiveClaimRecoveryInput{
+		ClaimID:  claimID,
+		RegionID: operator.RegionID,
+		Now:      time.Now(),
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for recovery")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	}
-
-	if claimInfo.RegionID != operator.RegionID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator does not manage this region")))
-		return
-	}
-
-	recovery, err := server.store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim recovery not found")))
-		return
-	}
-
-	updated, err := server.store.MarkClaimRecoveryWaived(ctx, recovery.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if updated.RecoveryTarget.Valid && updated.RecoveryTarget.String == "merchant" {
-		order, orderErr := server.store.GetOrder(ctx, updated.OrderID)
-		if orderErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, orderErr))
-			return
-		}
-		if recovery.Status == "paid" {
-			if _, err := server.store.GetMerchantSettlementAdjustmentByRelatedAndType(ctx, db.GetMerchantSettlementAdjustmentByRelatedAndTypeParams{
-				RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-				RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-				AdjustmentType: "claim_recovery_reversal",
-			}); err != nil {
-				_, err = server.store.CreateMerchantSettlementAdjustment(ctx, db.CreateMerchantSettlementAdjustmentParams{
-					MerchantID:     order.MerchantID,
-					AdjustmentType: "claim_recovery_reversal",
-					Amount:         updated.RecoveryAmount,
-					Status:         "finished",
-					RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-					RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-					Note:           pgtype.Text{String: "claim recovery waived", Valid: true},
-					PostedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true},
-				})
-				if err != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-					return
-				}
-			}
-		}
-		if err := server.store.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	if updated.RecoveryTarget.Valid && updated.RecoveryTarget.String == "rider" {
-		delivery, deliveryErr := server.store.GetDeliveryByOrderID(ctx, updated.OrderID)
-		if deliveryErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, deliveryErr))
-			return
-		}
-		if delivery.RiderID.Valid {
-			if err := server.store.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-		}
 	}
 
 	ctx.JSON(http.StatusOK, newClaimRecoveryResponse(updated))

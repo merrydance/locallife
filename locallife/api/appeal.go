@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
 )
@@ -325,59 +326,19 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 		return
 	}
 
-	// 检查索赔是否存在且属于该商户
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, req.ClaimID)
+	appeal, err := logic.CreateMerchantAppeal(ctx, server.store, logic.CreateMerchantAppealInput{
+		MerchantID:       merchant.ID,
+		ClaimID:          req.ClaimID,
+		Reason:           req.Reason,
+		AppealWindowDays: AppealWindowDays,
+		Now:              time.Now(),
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for appeal")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	}
-
-	if claimInfo.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this claim does not belong to your merchant")))
-		return
-	}
-
-	// P1-010 修复：检查申诉窗口期（索赔后7天内可申诉）
-	appealDeadline := claimInfo.CreatedAt.Add(time.Duration(AppealWindowDays) * 24 * time.Hour)
-	if time.Now().After(appealDeadline) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("申诉窗口期已过（索赔后7天内可申诉）")))
-		return
-	}
-
-	// 检查是否已有申诉
-	exists, err := server.store.CheckAppealExists(ctx, db.CheckAppealExistsParams{
-		ClaimID:       req.ClaimID,
-		AppellantType: "merchant",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if exists {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
-		return
-	}
-
-	// 创建申诉
-	appeal, err := server.store.CreateAppeal(ctx, db.CreateAppealParams{
-		ClaimID:       req.ClaimID,
-		AppellantType: "merchant",
-		AppellantID:   merchant.ID,
-		Reason:        req.Reason,
-		RegionID:      claimInfo.RegionID,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 标记追偿单为申诉中（避免逾期触发限制）
-	if recovery, recoveryErr := server.store.GetClaimRecoveryByClaimID(ctx, req.ClaimID); recoveryErr == nil {
-		_, _ = server.store.MarkClaimRecoveryAppealed(ctx, recovery.ID)
 	}
 
 	ctx.JSON(http.StatusCreated, newAppealResponse(appeal))
@@ -418,23 +379,18 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 
 	offset := pageOffset(req.PageID, req.PageSize)
 
-	appeals, err := server.store.ListMerchantAppealsForMerchant(ctx, db.ListMerchantAppealsForMerchantParams{
-		AppellantID: merchant.ID,
-		Limit:       req.PageSize,
-		Offset:      offset,
+	result, err := logic.ListMerchantAppeals(ctx, server.store, logic.ListMerchantAppealsInput{
+		MerchantID: merchant.ID,
+		Limit:      req.PageSize,
+		Offset:     offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	total, err := server.store.CountMerchantAppealsForMerchant(ctx, merchant.ID)
-	if err != nil {
-		total = int64(len(appeals))
-	}
-
-	response := make([]gin.H, len(appeals))
-	for i, a := range appeals {
+	response := make([]gin.H, len(result.Appeals))
+	for i, a := range result.Appeals {
 		response[i] = gin.H{
 			"id":                a.ID,
 			"claim_id":          a.ClaimID,
@@ -462,8 +418,8 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":     response,
-		"total":       total,
-		"total_count": total,
+		"total":       result.Total,
+		"total_count": result.Total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -497,13 +453,12 @@ func (server *Server) getMerchantAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	appeal, err := server.store.GetMerchantAppealDetail(ctx, db.GetMerchantAppealDetailParams{
-		ID:          appealID,
-		AppellantID: merchant.ID,
+	appeal, err := logic.GetMerchantAppealDetail(ctx, server.store, logic.GetMerchantAppealDetailInput{
+		AppealID:   appealID,
+		MerchantID: merchant.ID,
 	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -739,75 +694,27 @@ func (server *Server) createRiderAppeal(ctx *gin.Context) {
 		return
 	}
 
-	// 检查索赔是否存在且关联到该骑手的配送单
-	claimInfo, err := server.store.GetClaimForAppeal(ctx, req.ClaimID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found or not eligible for appeal")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证骑手是否是该订单的配送员
-	if !claimInfo.RiderID.Valid || claimInfo.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this claim is not related to your deliveries")))
-		return
-	}
-
-	// P1-010 修复：检查申诉窗口期（索赔后7天内可申诉）
-	appealDeadline := claimInfo.CreatedAt.Add(time.Duration(AppealWindowDays) * 24 * time.Hour)
-	if time.Now().After(appealDeadline) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("申诉窗口期已过（索赔后7天内可申诉）")))
-		return
-	}
-
-	// 检查是否已有申诉
-	exists, err := server.store.CheckAppealExists(ctx, db.CheckAppealExistsParams{
-		ClaimID:       req.ClaimID,
-		AppellantType: "rider",
+	result, err := logic.CreateRiderAppeal(ctx, server.store, logic.CreateRiderAppealInput{
+		RiderID:          rider.ID,
+		ClaimID:          req.ClaimID,
+		Reason:           req.Reason,
+		AppealWindowDays: AppealWindowDays,
+		Now:              time.Now(),
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if exists {
-		appeal, err := server.store.GetAppealByClaim(ctx, db.GetAppealByClaimParams{
-			ClaimID:       req.ClaimID,
-			AppellantType: "rider",
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		if appeal.AppellantType != "rider" || appeal.AppellantID != rider.ID {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("appeal already exists for this claim")))
-			return
-		}
-		ctx.JSON(http.StatusOK, newAppealResponse(appeal))
-		return
-	}
-
-	// 创建申诉
-	appeal, err := server.store.CreateAppeal(ctx, db.CreateAppealParams{
-		ClaimID:       req.ClaimID,
-		AppellantType: "rider",
-		AppellantID:   rider.ID,
-		Reason:        req.Reason,
-		RegionID:      claimInfo.RegionID,
-	})
-	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 标记追偿单为申诉中（避免逾期触发限制）
-	if recovery, recoveryErr := server.store.GetClaimRecoveryByClaimID(ctx, req.ClaimID); recoveryErr == nil {
-		_, _ = server.store.MarkClaimRecoveryAppealed(ctx, recovery.ID)
+	status := http.StatusCreated
+	if result.AlreadyExists {
+		status = http.StatusOK
 	}
 
-	ctx.JSON(http.StatusCreated, newAppealResponse(appeal))
+	ctx.JSON(status, newAppealResponse(result.Appeal))
 }
 
 // listRiderAppeals 骑手查看申诉列表
@@ -840,23 +747,18 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 
 	offset := pageOffset(req.PageID, req.PageSize)
 
-	appeals, err := server.store.ListRiderAppeals(ctx, db.ListRiderAppealsParams{
-		AppellantID: rider.ID,
-		Limit:       req.PageSize,
-		Offset:      offset,
+	result, err := logic.ListRiderAppeals(ctx, server.store, logic.ListRiderAppealsInput{
+		RiderID: rider.ID,
+		Limit:   req.PageSize,
+		Offset:  offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	total, err := server.store.CountRiderAppeals(ctx, rider.ID)
-	if err != nil {
-		total = int64(len(appeals))
-	}
-
-	response := make([]gin.H, len(appeals))
-	for i, a := range appeals {
+	response := make([]gin.H, len(result.Appeals))
+	for i, a := range result.Appeals {
 		response[i] = gin.H{
 			"id":                a.ID,
 			"claim_id":          a.ClaimID,
@@ -884,8 +786,8 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":     response,
-		"total":       total,
-		"total_count": total,
+		"total":       result.Total,
+		"total_count": result.Total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -919,13 +821,12 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	appeal, err := server.store.GetRiderAppealDetail(ctx, db.GetRiderAppealDetailParams{
-		ID:          appealID,
-		AppellantID: rider.ID,
+	appeal, err := logic.GetRiderAppealDetail(ctx, server.store, logic.GetRiderAppealDetailInput{
+		AppealID: appealID,
+		RiderID:  rider.ID,
 	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

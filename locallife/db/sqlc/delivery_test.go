@@ -493,9 +493,10 @@ func TestListDeliveryPool_EffectivePriority(t *testing.T) {
 	merchant, err := testStore.GetMerchant(context.Background(), order.MerchantID)
 	require.NoError(t, err)
 
-	// 使用稳定且常见的坐标，保证距离计算与查询窗口匹配
-	uniqueLat := 39.915
-	uniqueLng := 116.404
+	// 使用远离常用测试坐标的经纬度，避免共享测试库中出现大量同坐标记录
+	coordOffset := float64(order.ID%1000) / 1000000.0
+	uniqueLat := 10.123456 + coordOffset
+	uniqueLng := 20.654321 + coordOffset
 
 	arg := AddToDeliveryPoolParams{
 		OrderID:           order.ID,
