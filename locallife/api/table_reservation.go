@@ -968,7 +968,7 @@ type cancelReservationRequest struct {
 
 // cancelReservation 取消预定 (用户或商户)
 // @Summary 取消预定
-// @Description 用户取消自己的预定，或商户取消店铺的预定。已支付的预定在退款截止时间前可全额退款。
+// @Description 用户取消自己的预定，或商户取消店铺的预定。已支付的预定按配置策略支持截止前后差异化退款（含部分退款）。
 // @Tags 预定管理
 // @Accept json
 // @Produce json
@@ -999,7 +999,13 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	result, err := logic.CancelReservation(ctx, server.store, server.paymentClient, authPayload.UserID, uriReq.ID, req.Reason, time.Now())
+	policy := logic.ReservationRefundPolicy{
+		UserBeforeDeadlinePercent:     server.config.ReservationUserRefundPercentBeforeDeadline,
+		UserAfterDeadlinePercent:      server.config.ReservationUserRefundPercentAfterDeadline,
+		MerchantBeforeDeadlinePercent: server.config.ReservationMerchantRefundPercentBeforeDeadline,
+		MerchantAfterDeadlinePercent:  server.config.ReservationMerchantRefundPercentAfterDeadline,
+	}
+	result, err := logic.CancelReservation(ctx, server.store, server.paymentClient, authPayload.UserID, uriReq.ID, req.Reason, policy, time.Now())
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
 			return

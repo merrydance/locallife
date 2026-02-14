@@ -73,9 +73,22 @@
       </view>
       
       <!-- 优惠明细 -->
+      <view class="price-row" wx:for="{{calculation.ladder_promotions || []}}" wx:key="rule_id" style="display: flex; justify-content: space-between; margin-bottom: 12rpx; color: #666;">
+        <text wx:if="{{item.current_hit}}">{{item.name}}（已满¥{{item.thresholdDisplay}}）</text>
+        <text wx:else>{{item.name}}（还差¥{{item.missingNeedDisplay}}）</text>
+        <text>可减¥{{item.discountDisplay}}</text>
+      </view>
       <view class="price-row" wx:for="{{calculation.applied_promotions || []}}" wx:key="title" style="display: flex; justify-content: space-between; margin-bottom: 12rpx; color: #E34D59;">
         <text>{{item.title}}</text>
         <text>-¥{{item.amountDisplay}}</text>
+      </view>
+      <view class="price-row" wx:for="{{calculation.voucher_trials || []}}" wx:key="voucher_id" style="display: flex; justify-content: space-between; margin-bottom: 12rpx; color: #666;">
+        <text>券试算：{{item.voucher_name}}（减¥{{item.amountDisplay}}）</text>
+        <text>试算后¥{{item.trialPayableDisplay}}</text>
+      </view>
+      <view class="price-row" wx:if="{{calculation.payment_assessment && calculation.payment_assessment.payment_hint}}" style="display: flex; justify-content: space-between; margin-bottom: 12rpx; color: #666;">
+        <text>支付提示</text>
+        <text>{{calculation.payment_assessment.payment_hint}}</text>
       </view>
 
       <view class="price-row total-row" style="display: flex; justify-content: space-between; margin-top: 16rpx; padding-top: 16rpx; border-top: 1rpx solid #eee;">

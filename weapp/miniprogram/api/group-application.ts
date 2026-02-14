@@ -1,5 +1,5 @@
 import { request, uploadFile } from '../utils/request'
-import { ApplicationStatus, OCRStatus } from './onboarding'
+import { ApplicationStatus } from './onboarding'
 
 export interface GroupApplicationResponse {
   id: number
@@ -89,7 +89,7 @@ export function submitGroupApplication() {
  * 搜索集团
  */
 export function searchGroups(keyword: string) {
-  return request<any[]>({
+  return request<Array<Record<string, unknown>>>({
     url: '/v1/groups',
     method: 'GET',
     data: { keyword }

@@ -33,7 +33,7 @@ export interface ErrorInfo {
     level: ErrorLevel
     message: string
     code?: string | number
-    details?: any
+    details?: unknown
     timestamp: number
     page?: string
     action?: string
@@ -138,7 +138,7 @@ export class EnhancedErrorHandler {
     /**
      * 处理错误
      */
-    static handle(error: any, context?: { page?: string; action?: string }): void {
+    static handle(error: unknown, context?: { page?: string, action?: string }): void {
         const errorInfo = this.parseError(error, context)
         ErrorLogger.log(errorInfo)
         this.showUserMessage(errorInfo)
@@ -147,7 +147,7 @@ export class EnhancedErrorHandler {
     /**
      * 解析错误
      */
-    private static parseError(error: any, context?: { page?: string; action?: string }): ErrorInfo {
+    private static parseError(error: unknown, context?: { page?: string, action?: string }): ErrorInfo {
         const errorInfo: ErrorInfo = {
             type: ErrorType.UNKNOWN,
             level: ErrorLevel.ERROR,
@@ -158,36 +158,46 @@ export class EnhancedErrorHandler {
         }
 
         // 网络错误
-        if (error?.errMsg?.includes('request:fail')) {
+        if (typeof error === 'object' && error !== null && 'errMsg' in error && typeof (error as { errMsg?: unknown }).errMsg === 'string' && (error as { errMsg: string }).errMsg.includes('request:fail')) {
             errorInfo.type = ErrorType.NETWORK
             errorInfo.message = '网络连接失败，请检查网络设置'
             errorInfo.details = error
         }
         // API错误
-        else if (error?.code || error?.statusCode) {
+        else if (typeof error === 'object' && error !== null && ('code' in error || 'statusCode' in error)) {
+            const apiError = error as {
+                code?: string | number
+                statusCode?: string | number
+                message?: unknown
+                errMsg?: unknown
+            }
             errorInfo.type = ErrorType.API
-            errorInfo.code = error.code || error.statusCode
-            errorInfo.message = error.message || error.errMsg || 'API请求失败'
+            errorInfo.code = apiError.code || apiError.statusCode
+            errorInfo.message = typeof apiError.message === 'string'
+                ? apiError.message
+                : (typeof apiError.errMsg === 'string' ? apiError.errMsg : 'API请求失败')
             errorInfo.details = error
         }
         // 验证错误
-        else if (error?.name === 'ValidationError') {
+        else if (typeof error === 'object' && error !== null && 'name' in error && (error as { name?: unknown }).name === 'ValidationError') {
+            const validationError = error as { message?: unknown }
             errorInfo.type = ErrorType.VALIDATION
             errorInfo.level = ErrorLevel.WARNING
-            errorInfo.message = error.message || '数据验证失败'
+            errorInfo.message = typeof validationError.message === 'string' ? validationError.message : '数据验证失败'
             errorInfo.details = error
         }
         // 权限错误
-        else if (error?.errMsg?.includes('permission')) {
+        else if (typeof error === 'object' && error !== null && 'errMsg' in error && typeof (error as { errMsg?: unknown }).errMsg === 'string' && (error as { errMsg: string }).errMsg.includes('permission')) {
             errorInfo.type = ErrorType.PERMISSION
             errorInfo.message = '权限不足，请授权后重试'
             errorInfo.details = error
         }
         // 业务错误
-        else if (error?.businessCode) {
+        else if (typeof error === 'object' && error !== null && 'businessCode' in error) {
+            const businessError = error as { businessCode?: string | number, message?: unknown }
             errorInfo.type = ErrorType.BUSINESS
-            errorInfo.code = error.businessCode
-            errorInfo.message = error.message || '业务处理失败'
+            errorInfo.code = businessError.businessCode
+            errorInfo.message = typeof businessError.message === 'string' ? businessError.message : '业务处理失败'
             errorInfo.details = error
         }
         // 其他错误
@@ -269,7 +279,7 @@ export class EnhancedErrorHandler {
     static createError(
         type: ErrorType,
         message: string,
-        details?: any
+        details?: unknown
     ): ErrorInfo {
         return {
             type,
@@ -299,13 +309,13 @@ export class EnhancedErrorHandler {
  * 异步错误处理装饰器
  */
 export function handleAsyncError(
-    target: any,
+    _target: object,
     propertyKey: string,
     descriptor: PropertyDescriptor
 ) {
     const originalMethod = descriptor.value
 
-    descriptor.value = async function (...args: any[]) {
+    descriptor.value = async function (...args: unknown[]) {
         try {
             return await originalMethod.apply(this, args)
         } catch (error) {
@@ -326,14 +336,14 @@ export function handleAsyncError(
  */
 export function retry(maxRetries: number = 3, delay: number = 1000) {
     return function (
-        target: any,
+        _target: object,
         propertyKey: string,
         descriptor: PropertyDescriptor
     ) {
         const originalMethod = descriptor.value
 
-        descriptor.value = async function (...args: any[]) {
-            let lastError: any
+        descriptor.value = async function (...args: unknown[]) {
+            let lastError: unknown
 
             for (let i = 0; i < maxRetries; i++) {
                 try {
@@ -343,7 +353,7 @@ export function retry(maxRetries: number = 3, delay: number = 1000) {
                     console.log(`Retry ${i + 1}/${maxRetries} for ${propertyKey}`)
 
                     if (i < maxRetries - 1) {
-                        await new Promise(resolve => setTimeout(resolve, delay))
+                        await new Promise((resolve) => setTimeout(resolve, delay))
                     }
                 }
             }

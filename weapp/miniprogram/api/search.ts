@@ -102,6 +102,21 @@ export interface SearchSuggestion {
     count: number
 }
 
+interface SearchMerchantsResponse {
+    merchants: MerchantSummary[]
+    total?: number
+}
+
+interface SearchRoomsResponse {
+    rooms: RoomSearchResult[]
+    total?: number
+}
+
+interface SearchDishesResponse {
+    dishes: DishSummary[]
+    total?: number
+}
+
 // ==================== API接口函数 ====================
 
 /**
@@ -117,7 +132,7 @@ function cleanParams<T>(params: T): T {
         // JSON keeps nulls. If backend dislikes null, we should remove them.
         // Let's remove nulls too for max safety against "null" string.
         if (cleaned && typeof cleaned === 'object') {
-            Object.keys(cleaned).forEach(key => {
+            Object.keys(cleaned).forEach((key) => {
                 if (cleaned[key] === null) {
                     delete cleaned[key]
                 }
@@ -139,12 +154,12 @@ export async function searchMerchants(params: SearchMerchantsParams): Promise<Me
     if (!data.keyword) data.keyword = ''
 
     // Response is { merchants: [], total: ... }
-    const res = await request<any>({
+    const res = await request<SearchMerchantsResponse | MerchantSummary[]>({
         url: '/v1/search/merchants',
         method: 'GET',
         data
     })
-    return res.merchants || res // Fallback if API changes
+    return Array.isArray(res) ? res : (res.merchants || []) // Fallback if API changes
 }
 
 /**
@@ -198,12 +213,12 @@ export async function getRecommendedRooms(params: RecommendRoomsParams): Promise
  * @param params 搜索参数
  */
 export async function searchRooms(params: SearchRoomsParams): Promise<RoomSearchResult[]> {
-    const res = await request<any>({
+    const res = await request<SearchRoomsResponse | RoomSearchResult[]>({
         url: '/v1/search/rooms',
         method: 'GET',
         data: cleanParams(params)
     })
-    return res.rooms || res
+    return Array.isArray(res) ? res : (res.rooms || [])
 }
 
 /**
@@ -302,7 +317,7 @@ export async function unifiedSearch(
                 page_size: dish_limit,
                 ...cleanedLoc
             }
-        }) as Promise<any>,
+        }) as Promise<SearchDishesResponse | DishSummary[]>,
         request({
             url: '/v1/search/merchants',
             method: 'GET',
@@ -312,14 +327,25 @@ export async function unifiedSearch(
                 page_size: merchant_limit,
                 ...cleanedLoc
             }
-        }) as Promise<any>
+        }) as Promise<SearchMerchantsResponse | MerchantSummary[]>
     ])
 
+    const dishes = Array.isArray(dishResults) ? dishResults : (dishResults.dishes || [])
+    const merchants = Array.isArray(merchantResults)
+        ? merchantResults
+        : (merchantResults.merchants || [])
+    const dishTotal = Array.isArray(dishResults)
+        ? dishResults.length
+        : (dishResults.total || dishes.length)
+    const merchantTotal = Array.isArray(merchantResults)
+        ? merchantResults.length
+        : (merchantResults.total || merchants.length)
+
     return {
-        dishes: dishResults.dishes || dishResults,
-        merchants: merchantResults.merchants || merchantResults,
-        total_dishes: dishResults.total || dishResults.length,
-        total_merchants: merchantResults.total || merchantResults.length
+        dishes,
+        merchants,
+        total_dishes: dishTotal,
+        total_merchants: merchantTotal
     }
 }
 

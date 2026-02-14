@@ -287,7 +287,7 @@ export class ErrorHandler {
     } = {}
   ): Promise<T> {
     const { maxRetries = 3, retryDelay = 1000, context } = options
-    let lastError: any
+    let lastError: unknown
 
     for (let i = 0; i < maxRetries; i++) {
       try {

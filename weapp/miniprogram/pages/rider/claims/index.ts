@@ -7,6 +7,10 @@ import {
   CreateAppealRequest
 } from '../../../api/appeals-customer-service'
 
+interface RiderClaimsOptions {
+  taskId?: string
+}
+
 interface ClaimDisplay {
   id: number
   task_id?: string
@@ -41,7 +45,7 @@ Page({
     recoveryPaying: {} as Record<number, boolean>
   },
 
-  onLoad(options: any) {
+  onLoad(options: RiderClaimsOptions) {
     if (options.taskId) {
       this.setData({ taskId: options.taskId })
     }

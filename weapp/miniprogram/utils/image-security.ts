@@ -1,4 +1,3 @@
-import { getToken } from './auth'
 import { API_BASE, request } from './request'
 
 /**
@@ -86,13 +85,16 @@ export async function resolveImageURL(urlOrPath: string): Promise<string> {
         signedUrlCache.set(storedPath, res)
         return res.url
 
-    } catch (e: any) {
+    } catch (e: unknown) {
         // 如果是abort错误，等待短暂时间后检查缓存（另一个并发请求可能成功了）
-        if (e?.errMsg?.includes('abort')) {
-            await new Promise(resolve => setTimeout(resolve, 100))
-            const cached = signedUrlCache.get(storedPath)
-            if (cached && cached.expires > Math.floor(Date.now() / 1000) + 60) {
-                return cached.url
+        if (typeof e === 'object' && e !== null && 'errMsg' in e) {
+            const errMsg = (e as { errMsg?: unknown }).errMsg
+            if (typeof errMsg === 'string' && errMsg.includes('abort')) {
+                await new Promise((resolve) => setTimeout(resolve, 100))
+                const cached = signedUrlCache.get(storedPath)
+                if (cached && cached.expires > Math.floor(Date.now() / 1000) + 60) {
+                    return cached.url
+                }
             }
         }
 

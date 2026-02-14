@@ -7,6 +7,39 @@ import {
 import { ocrIdCard } from '../../../../api/onboarding'
 import { logger } from '../../../../utils/logger'
 
+type NavHeightEvent = {
+  detail: {
+    navBarHeight: number
+  }
+}
+
+type UploadEvent = {
+  detail: {
+    path: string
+  }
+}
+
+type InputEvent = {
+  currentTarget: {
+    dataset: {
+      field?: string
+    }
+  }
+  detail: {
+    value: string
+  }
+}
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -28,7 +61,7 @@ Page({
     await this.fetchDraft()
   },
 
-  onNavHeight(e: any) {
+  onNavHeight(e: NavHeightEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
@@ -49,7 +82,7 @@ Page({
     }
   },
 
-  async onIdFrontUpload(e: any) {
+  async onIdFrontUpload(e: UploadEvent) {
     const { path } = e.detail
     this.setData({ 'idFront.url': path })
     wx.showLoading({ title: '识别身份证...' })
@@ -65,11 +98,11 @@ Page({
     }
   },
 
-  onIdBackUpload(e: any) {
+  onIdBackUpload(e: UploadEvent) {
     this.setData({ 'idBack.url': e.detail.path })
   },
 
-  async onLicenseUpload(e: any) {
+  async onLicenseUpload(e: UploadEvent) {
     const { path } = e.detail
     this.setData({ 'license.url': path })
     wx.showLoading({ title: '识别执照...' })
@@ -84,8 +117,11 @@ Page({
     }
   },
 
-  onInput(e: any) {
+  onInput(e: InputEvent) {
     const field = e.currentTarget.dataset.field
+    if (!field) {
+      return
+    }
     this.setData({ [`formData.${field}`]: e.detail.value })
   },
 
@@ -154,9 +190,9 @@ Page({
           }
         })
       }, 2000)
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.setData({ submitting: false })
-      wx.showToast({ title: e.message || '提交失败', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(e, '提交失败'), icon: 'none' })
     }
   }
 })

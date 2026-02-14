@@ -6,6 +6,21 @@
 
 import { request, API_BASE } from '../utils/request'
 
+interface RoomTagItem {
+  name?: string
+}
+
+interface RoomDetailApiResponse {
+  id: number
+  merchant_id?: number
+  room_no?: string
+  capacity?: number
+  minimum_spend?: number
+  images?: string[]
+  tags?: Array<RoomTagItem | string>
+  description?: string
+}
+
 // ==================== 数据类型定义 ====================
 
 /**
@@ -255,7 +270,7 @@ export class ReservationService {
    * 追加菜品
    * POST /v1/reservations/:id/add-dishes
    */
-  static async addDishes(id: number, items: ReservationItem[]): Promise<any> {
+  static async addDishes(id: number, items: ReservationItem[]): Promise<unknown> {
     return await request({
       url: `/v1/reservations/${id}/add-dishes`,
       method: 'POST',
@@ -267,7 +282,7 @@ export class ReservationService {
    * 预订改菜（差量）
    * POST /v1/reservations/:id/modify-dishes
    */
-  static async modifyDishes(id: number, items: ReservationItem[]): Promise<any> {
+  static async modifyDishes(id: number, items: ReservationItem[]): Promise<unknown> {
     return await request({
       url: `/v1/reservations/${id}/modify-dishes`,
       method: 'POST',
@@ -315,7 +330,7 @@ export class ReservationService {
    * 开启用餐会话（已存在开放会话时后端直接返回）
    * POST /v1/dining-sessions/open
    */
-  static async openDiningSession(params: { table_id: number; reservation_id?: number }): Promise<{ session: DiningSessionDTO; billing_group: BillingGroupDTO; cart_id?: number; imported_items: number }> {
+  static async openDiningSession(params: { table_id: number, reservation_id?: number }): Promise<{ session: DiningSessionDTO, billing_group: BillingGroupDTO, cart_id?: number, imported_items: number }> {
     return await request({
       url: '/v1/dining-sessions/open',
       method: 'POST',
@@ -466,7 +481,7 @@ export async function getRoomDetail(id: string): Promise<Room> {
   const response = await request({
     url: `/v1/rooms/${id}`,
     method: 'GET'
-  }) as any
+  }) as RoomDetailApiResponse
 
   // 映射后端 RoomDetailResponse 到页面 Room 格式
   // 图片URL已经是完整路径或以/开头，直接使用
@@ -484,9 +499,11 @@ export async function getRoomDetail(id: string): Promise<Room> {
     capacity: response.capacity || 0,
     min_spend: response.minimum_spend || 0,
     // 定金逻辑与后端一致：有最低消费则定金=最低消费，否则默认100元
-    deposit: response.minimum_spend > 0 ? response.minimum_spend : 10000,
+    deposit: (response.minimum_spend || 0) > 0 ? (response.minimum_spend || 0) : 10000,
     images: (response.images || []).map((url: string) => processImageUrl(url)),
-    facilities: (response.tags || []).map((t: any) => t.name || t), // 标签作为设施
+    facilities: (response.tags || []).map((tag) =>
+      typeof tag === 'string' ? tag : tag.name || ''
+    ), // 标签作为设施
     description: response.description || ''
   }
 }

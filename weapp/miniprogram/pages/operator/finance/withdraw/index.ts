@@ -1,11 +1,15 @@
 import { withdrawOperator } from '../../../../api/operator-finance'
 
+interface AmountChangeDetail {
+  value: string
+}
+
 Page({
   data: {
-    amount: '',
+    amount: ''
   },
 
-  onAmountChange(e: any) {
+  onAmountChange(e: WechatMiniprogram.CustomEvent<AmountChangeDetail>) {
     this.setData({ amount: e.detail.value })
   },
 
@@ -22,8 +26,9 @@ Page({
       await withdrawOperator({ amount: Math.floor(amount * 100) })
       wx.showToast({ title: '提交成功', icon: 'success' })
       setTimeout(() => wx.navigateBack(), 1500)
-    } catch (error: any) {
-      wx.showToast({ title: error.message || '提现失败', icon: 'error' })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '提现失败'
+      wx.showToast({ title: message, icon: 'error' })
     } finally {
       wx.hideLoading()
     }

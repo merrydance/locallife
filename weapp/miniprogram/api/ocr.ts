@@ -54,8 +54,23 @@ export interface OCRResponse {
 
 // OCR上传返回结果，包含完整申请数据和OCR结果
 export interface OCRUploadResult {
-  applicationData: any          // 完整的申请数据（用于刷新页面）
+  applicationData: Record<string, unknown> // 完整的申请数据（用于刷新页面）
   ocrData: OCRResponse          // OCR识别结果
+}
+
+type OCRPayload = Record<string, unknown>
+
+interface OCRNestedPayload extends OCRPayload {
+  business_license_ocr?: OCRResponse
+  id_card_front_ocr?: OCRResponse
+  id_card_back_ocr?: OCRResponse
+  food_permit_ocr?: OCRResponse
+  id_card_ocr?: OCRResponse
+  health_cert_ocr?: OCRResponse
+}
+
+function toOCRResponse(payload: unknown): OCRResponse {
+  return payload as OCRResponse
 }
 
 // ==================== 角色端点映射 ====================
@@ -84,7 +99,7 @@ const API_ENDPOINTS = {
  * @param filePath 本地文件路径
  * @param formData 附加表单数据（如 side 参数）
  */
-function uploadOCR(url: string, filePath: string, formData: any = {}): Promise<any> {
+function uploadOCR(url: string, filePath: string, formData: Record<string, unknown> = {}): Promise<OCRPayload> {
   return uploadFile(filePath, url, 'image', formData)
 }
 
@@ -96,11 +111,11 @@ function uploadOCR(url: string, filePath: string, formData: any = {}): Promise<a
  */
 export function ocrBusinessLicense(filePath: string): Promise<OCRUploadResult> {
   return uploadOCR(API_ENDPOINTS.merchant.license, filePath)
-    .then((res: any) => {
+    .then((res: OCRNestedPayload) => {
       console.log('[OCR] Merchant Business License Response:', JSON.stringify(res))
       return {
         applicationData: res,
-        ocrData: res.business_license_ocr || res
+        ocrData: toOCRResponse(res.business_license_ocr || res)
       }
     })
 }
@@ -115,11 +130,11 @@ export function ocrIdCard(filePath: string, side: 'front' | 'back' = 'front'): P
   // 商户接口使用 "Front"/"Back" 首字母大写
   const capitalizedSide = side === 'front' ? 'Front' : 'Back'
   return uploadOCR(API_ENDPOINTS.merchant.idcard, filePath, { side: capitalizedSide })
-    .then((res: any) => {
+    .then((res: OCRNestedPayload) => {
       console.log(`[OCR] Merchant ID Card ${side} Response:`, JSON.stringify(res))
       const ocrData = side === 'front'
-        ? (res.id_card_front_ocr || res)
-        : (res.id_card_back_ocr || res)
+        ? toOCRResponse(res.id_card_front_ocr || res)
+        : toOCRResponse(res.id_card_back_ocr || res)
       return {
         applicationData: res,
         ocrData
@@ -133,11 +148,11 @@ export function ocrIdCard(filePath: string, side: 'front' | 'back' = 'front'): P
  */
 export function ocrFoodLicense(filePath: string): Promise<OCRUploadResult> {
   return uploadOCR(API_ENDPOINTS.merchant.foodpermit, filePath)
-    .then((res: any) => {
+    .then((res: OCRNestedPayload) => {
       console.log('[OCR] Merchant Food License Response:', JSON.stringify(res))
       return {
         applicationData: res,
-        ocrData: res.food_permit_ocr || res
+        ocrData: toOCRResponse(res.food_permit_ocr || res)
       }
     })
 }
@@ -153,12 +168,12 @@ export function ocrFoodLicense(filePath: string): Promise<OCRUploadResult> {
 export function ocrRiderIdCard(filePath: string, side: 'front' | 'back' = 'front'): Promise<OCRUploadResult> {
   // 骑手接口使用小写 "front"/"back"
   return uploadOCR(API_ENDPOINTS.rider.idcard, filePath, { side })
-    .then((res: any) => {
+    .then((res: OCRNestedPayload) => {
       console.log(`[OCR] Rider ID Card ${side} Response:`, JSON.stringify(res))
       const ocrData = res.id_card_ocr || res
       return {
         applicationData: res,
-        ocrData
+        ocrData: toOCRResponse(ocrData)
       }
     })
 }
@@ -169,11 +184,11 @@ export function ocrRiderIdCard(filePath: string, side: 'front' | 'back' = 'front
  */
 export function ocrRiderHealthCert(filePath: string): Promise<OCRUploadResult> {
   return uploadOCR(API_ENDPOINTS.rider.healthcert, filePath)
-    .then((res: any) => {
+    .then((res: OCRNestedPayload) => {
       console.log('[OCR] Rider Health Cert Response:', JSON.stringify(res))
       return {
         applicationData: res,
-        ocrData: res.health_cert_ocr || res
+        ocrData: toOCRResponse(res.health_cert_ocr || res)
       }
     })
 }
@@ -186,11 +201,11 @@ export function ocrRiderHealthCert(filePath: string): Promise<OCRUploadResult> {
  */
 export function ocrOperatorBusinessLicense(filePath: string): Promise<OCRUploadResult> {
   return uploadOCR(API_ENDPOINTS.operator.license, filePath)
-    .then((res: any) => {
+    .then((res: OCRNestedPayload) => {
       console.log('[OCR] Operator Business License Response:', JSON.stringify(res))
       return {
         applicationData: res,
-        ocrData: res.business_license_ocr || res
+        ocrData: toOCRResponse(res.business_license_ocr || res)
       }
     })
 }
@@ -205,11 +220,11 @@ export function ocrOperatorIdCard(filePath: string, side: 'front' | 'back' = 'fr
   // 运营商接口使用 "Front"/"Back" 首字母大写
   const capitalizedSide = side === 'front' ? 'Front' : 'Back'
   return uploadOCR(API_ENDPOINTS.operator.idcard, filePath, { side: capitalizedSide })
-    .then((res: any) => {
+    .then((res: OCRNestedPayload) => {
       console.log(`[OCR] Operator ID Card ${side} Response:`, JSON.stringify(res))
       const ocrData = side === 'front'
-        ? (res.id_card_front_ocr || res)
-        : (res.id_card_back_ocr || res)
+        ? toOCRResponse(res.id_card_front_ocr || res)
+        : toOCRResponse(res.id_card_back_ocr || res)
       return {
         applicationData: res,
         ocrData

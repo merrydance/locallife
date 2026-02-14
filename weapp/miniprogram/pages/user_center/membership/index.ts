@@ -94,7 +94,7 @@ Page({
   onCardTap(e: WechatMiniprogram.BaseEvent) {
     const id = e.currentTarget.dataset.id
     // Future: Go to membership detail or records
-    const item = this.data.memberships.find(m => m.id === id)
+    const item = this.data.memberships.find((m) => m.id === id)
     if (item) {
        // Navigate to merchant detail for now, or just show toast
        wx.navigateTo({
@@ -104,7 +104,7 @@ Page({
   },
 
   onRechargeTap(e: WechatMiniprogram.BaseEvent) {
-    const item = e.currentTarget.dataset.item
+    void e.currentTarget.dataset.item
     // Placeholder for Recharge Flow
     wx.showToast({
         title: '充值功能即将上线',

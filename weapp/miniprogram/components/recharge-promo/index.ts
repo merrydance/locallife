@@ -46,7 +46,7 @@ Component({
     },
 
     observers: {
-        'merchantId': function(merchantId: number) {
+        'merchantId'(merchantId: number) {
             if (merchantId > 0) {
                 this.loadRechargeRules()
             }
@@ -74,7 +74,7 @@ Component({
                 const rules = await getPublicRechargeRules(merchantId)
 
                 // 转换为展示数据
-                const rulesView: RuleView[] = rules.map(rule => ({
+                const rulesView: RuleView[] = rules.map((rule) => ({
                     ...rule,
                     rechargeDisplay: formatPriceNoSymbol(rule.recharge_amount),
                     bonusDisplay: formatPriceNoSymbol(rule.bonus_amount),
@@ -115,7 +115,7 @@ Component({
 
             if (recharging || !selectedRuleId) return
 
-            const selectedRule = rules.find(r => r.id === selectedRuleId)
+            const selectedRule = rules.find((r) => r.id === selectedRuleId)
             if (!selectedRule) return
 
             this.setData({ recharging: true })

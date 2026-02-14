@@ -8,7 +8,7 @@ Page({
     navBarHeight: 88
   },
 
-  onLoad(options: { orderId: string; orderNo: string; amount: string }) {
+  onLoad(options: { orderId: string, orderNo: string, amount: string }) {
     const { navBarHeight } = getStableBarHeights()
     this.setData({
       navBarHeight,

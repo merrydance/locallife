@@ -447,10 +447,10 @@ export async function smartOnlineManagement(action: 'online' | 'offline'): Promi
                 riderInfo
             }
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         return {
             success: false,
-            message: error?.message || `${action === 'online' ? '上线' : '下线'}失败`
+            message: error instanceof Error ? error.message : `${action === 'online' ? '上线' : '下线'}失败`
         }
     }
 }
@@ -693,7 +693,7 @@ export function formatEarnings(amount: number, showUnit: boolean = true): string
  * 验证位置数据
  * @param location 位置数据
  */
-export function validateLocationPoint(location: LocationPoint): { valid: boolean; message?: string } {
+export function validateLocationPoint(location: LocationPoint): { valid: boolean, message?: string } {
     if (!location.latitude || !location.longitude) {
         return { valid: false, message: '经纬度不能为空' }
     }

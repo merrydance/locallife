@@ -513,6 +513,12 @@ type calculateCartResponse struct {
 	AppliedPromotions []logic.AppliedPromotion `json:"applied_promotions,omitempty"`
 	// 推荐可用优惠券（仅试算，不自动使用）
 	SuggestedVoucher *logic.SuggestedVoucher `json:"suggested_voucher,omitempty"`
+	// 阶梯优惠试算信息
+	LadderPromotions []logic.LadderPromotion `json:"ladder_promotions,omitempty"`
+	// 代金券试算信息
+	VoucherTrials []logic.VoucherTrial `json:"voucher_trials,omitempty"`
+	// 会员余额支付能力评估
+	PaymentAssessment logic.PaymentAssessment `json:"payment_assessment"`
 	// 最小起送金额（分），0表示无限制
 	MinOrderAmount int64 `json:"min_order_amount"`
 	// 是否满足起送金额
@@ -738,6 +744,9 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		DiscountInfo:        "", // 具体的明细已在 AppliedPromotions 中
 		AppliedPromotions:   calcResult.AppliedPromotions,
 		SuggestedVoucher:    calcResult.SuggestedVoucher,
+		LadderPromotions:    calcResult.LadderPromotions,
+		VoucherTrials:       calcResult.VoucherTrials,
+		PaymentAssessment:   calcResult.PaymentAssessment,
 		MinOrderAmount:      minOrderAmount,
 		MeetsMinOrder:       meetsMinOrder,
 	})

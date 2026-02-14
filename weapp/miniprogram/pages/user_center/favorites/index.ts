@@ -1,7 +1,26 @@
 import FavoriteService, { FavoriteType } from '../../../api/favorite'
-import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
 import { formatPriceNoSymbol } from '../../../utils/util'
+
+type FavoriteDishItem = {
+    id: number
+    dish_id: number
+    dish_name: string
+    image_url?: string
+    description?: string
+    merchant_name?: string
+    price: number
+    created_at?: string
+}
+
+type FavoriteMerchantItem = {
+    id: number
+    merchant_id: number
+    merchant_name: string
+    merchant_logo?: string
+    address?: string
+    created_at?: string
+}
 
 // ViewModel
 interface FavoriteViewModel {
@@ -63,7 +82,9 @@ Page({
 
             if (this.data.activeTab === 'dish') {
                 const res = await FavoriteService.getFavoriteDishes(this.data.page, this.data.pageSize)
-                list = res.dishes.map((d: any) => ({
+                list = res.dishes.map((dish) => {
+                    const d = dish as unknown as FavoriteDishItem
+                    return ({
                     id: d.id,
                     targetId: d.dish_id,
                     type: 'dish',
@@ -73,11 +94,14 @@ Page({
                     subTitle: d.description || d.merchant_name || '',
                     priceDisplay: formatPriceNoSymbol(d.price),
                     createdAt: d.created_at?.split('T')[0] || ''
-                }))
+                    })
+                })
                 total = res.total
             } else {
                 const res = await FavoriteService.getFavoriteMerchants(this.data.page, this.data.pageSize)
-                list = res.merchants.map((m: any) => ({
+                list = res.merchants.map((merchant) => {
+                    const m = merchant as unknown as FavoriteMerchantItem
+                    return ({
                     id: m.id,
                     targetId: m.merchant_id,
                     type: 'merchant',
@@ -87,7 +111,8 @@ Page({
                     subTitle: m.address || '',
                     rating: 5.0,
                     createdAt: m.created_at?.split('T')[0] || ''
-                }))
+                    })
+                })
                 total = res.total
             }
 
@@ -138,7 +163,7 @@ Page({
                          wx.showToast({ title: '已取消', icon: 'success' })
                          
                          // Refresh list
-                         const favorites = this.data.favorites.filter(f => f.id !== item.id)
+                         const favorites = this.data.favorites.filter((f) => f.id !== item.id)
                          this.setData({ favorites })
                      } catch (e) {
                          ErrorHandler.handle(e, 'Favorites.remove')

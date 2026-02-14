@@ -13,7 +13,28 @@ import {
     type RiderStatusResponse,
     type ReportExceptionRequest,
     type ReportDelayRequest
-} from '@/api/rider-delivery';
+} from '@/api/rider-delivery'
+
+type TaskEventDetail = {
+    id?: number
+    value?: string
+}
+
+type TaskEvent = WechatMiniprogram.CustomEvent<TaskEventDetail> & {
+    currentTarget: {
+        dataset: {
+            id?: number
+        }
+    }
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    if (error && typeof error === 'object' && 'message' in error) {
+        const message = (error as { message?: string }).message
+        if (message) return message
+    }
+    return fallback
+}
 
 Page({
     data: {
@@ -56,24 +77,24 @@ Page({
         } as ReportDelayRequest,
 
         // 位置上报定时器
-        locationTimer: null as any
+        locationTimer: null as ReturnType<typeof setInterval> | null
     },
 
     onLoad() {
-        this.initPage();
+        this.initPage()
     },
 
     onShow() {
-        this.loadData();
-        this.startLocationReporting();
+        this.loadData()
+        this.startLocationReporting()
     },
 
     onHide() {
-        this.stopLocationReporting();
+        this.stopLocationReporting()
     },
 
     onUnload() {
-        this.stopLocationReporting();
+        this.stopLocationReporting()
     },
 
     /**
@@ -81,19 +102,19 @@ Page({
      */
     async initPage() {
         try {
-            this.setData({ loading: true });
+            this.setData({ loading: true })
             await Promise.all([
                 this.loadRiderStatus(),
                 this.loadData()
-            ]);
-        } catch (error: any) {
-            console.error('初始化页面失败:', error);
+            ])
+        } catch (error: unknown) {
+            console.error('初始化页面失败:', error)
             wx.showToast({
-                title: error.message || '加载失败',
+                title: getErrorMessage(error, '加载失败'),
                 icon: 'error'
-            });
+            })
         } finally {
-            this.setData({ loading: false });
+            this.setData({ loading: false })
         }
     },
 
@@ -101,28 +122,28 @@ Page({
      * 加载数据
      */
     async loadData() {
-        const { currentTab } = this.data;
+        const { currentTab } = this.data
 
         switch (currentTab) {
             case 'available':
-                await this.loadAvailableTasks();
-                break;
+                await this.loadAvailableTasks()
+                break
             case 'active':
-                await this.loadActiveTasks();
-                break;
+                await this.loadActiveTasks()
+                break
             case 'history':
-                await this.loadHistoryTasks();
-                break;
+                await this.loadHistoryTasks()
+                break
         }
     },
 
     /**
      * 切换Tab
      */
-    onTabChange(e: any) {
-        const tab = e.detail.value;
-        this.setData({ currentTab: tab });
-        this.loadData();
+    onTabChange(e: TaskEvent) {
+        const tab = e.detail.value || 'available'
+        this.setData({ currentTab: tab })
+        this.loadData()
     },
 
     // ==================== 骑手状态管理 ====================
@@ -132,13 +153,13 @@ Page({
      */
     async loadRiderStatus() {
         try {
-            const status = await RiderInfoService.getRiderStatus();
+            const status = await RiderInfoService.getRiderStatus()
             this.setData({
                 riderStatus: status,
                 isOnline: status.status === 'online'
-            });
-        } catch (error: any) {
-            console.error('加载骑手状态失败:', error);
+            })
+        } catch (error: unknown) {
+            console.error('加载骑手状态失败:', error)
         }
     },
 
@@ -146,31 +167,31 @@ Page({
      * 切换在线状态
      */
     async toggleOnlineStatus() {
-        const { isOnline } = this.data;
+        const { isOnline } = this.data
 
         try {
-            wx.showLoading({ title: isOnline ? '下线中...' : '上线中...' });
+            wx.showLoading({ title: isOnline ? '下线中...' : '上线中...' })
 
             if (isOnline) {
-                await RiderInfoService.goOffline();
+                await RiderInfoService.goOffline()
             } else {
-                await RiderInfoService.goOnline();
+                await RiderInfoService.goOnline()
             }
 
-            await this.loadRiderStatus();
+            await this.loadRiderStatus()
 
             wx.showToast({
                 title: isOnline ? '已下线' : '已上线',
                 icon: 'success'
-            });
+            })
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             wx.showToast({
-                title: error.message || '操作失败',
+                title: getErrorMessage(error, '操作失败'),
                 icon: 'error'
-            });
+            })
         } finally {
-            wx.hideLoading();
+            wx.hideLoading()
         }
     },
 
@@ -181,14 +202,14 @@ Page({
      */
     async loadAvailableTasks() {
         try {
-            const result = await DeliveryTaskService.getRecommendedTasks();
-            this.setData({ availableTasks: result.tasks });
-        } catch (error: any) {
-            console.error('加载可接任务失败:', error);
+            const result = await DeliveryTaskService.getRecommendedTasks()
+            this.setData({ availableTasks: result.tasks })
+        } catch (error: unknown) {
+            console.error('加载可接任务失败:', error)
             wx.showToast({
                 title: '加载任务失败',
                 icon: 'error'
-            });
+            })
         }
     },
 
@@ -197,14 +218,14 @@ Page({
      */
     async loadActiveTasks() {
         try {
-            const tasks = await DeliveryTaskService.getActiveTasks();
-            this.setData({ activeTasks: tasks });
-        } catch (error: any) {
-            console.error('加载当前任务失败:', error);
+            const tasks = await DeliveryTaskService.getActiveTasks()
+            this.setData({ activeTasks: tasks })
+        } catch (error: unknown) {
+            console.error('加载当前任务失败:', error)
             wx.showToast({
                 title: '加载任务失败',
                 icon: 'error'
-            });
+            })
         }
     },
 
@@ -213,153 +234,173 @@ Page({
      */
     async loadHistoryTasks(reset: boolean = true) {
         try {
-            const { historyPage, historyPageSize } = this.data;
+            const { historyPage, historyPageSize } = this.data
 
             if (reset) {
-                this.setData({ historyPage: 1, historyTasks: [], historyHasMore: true });
+                this.setData({ historyPage: 1, historyTasks: [], historyHasMore: true })
             }
 
             const result = await DeliveryTaskService.getDeliveryHistory({
                 page_id: reset ? 1 : historyPage,
                 page_size: historyPageSize
-            });
+            })
 
-            const newTasks = reset ? result.deliveries : [...this.data.historyTasks, ...result.deliveries];
+            const newTasks = reset ? result.deliveries : [...this.data.historyTasks, ...result.deliveries]
 
             this.setData({
                 historyTasks: newTasks,
                 historyHasMore: result.deliveries.length === historyPageSize,
                 historyPage: reset ? 2 : historyPage + 1
-            });
+            })
 
-        } catch (error: any) {
-            console.error('加载历史任务失败:', error);
+        } catch (error: unknown) {
+            console.error('加载历史任务失败:', error)
             wx.showToast({
                 title: '加载历史失败',
                 icon: 'error'
-            });
+            })
         }
     },
 
     /**
      * 抢单
      */
-    async grabOrder(e: any) {
-        const orderId = e.detail.id || e.currentTarget.dataset.id;
+    async grabOrder(e: TaskEvent) {
+        const orderId = e.detail.id || e.currentTarget.dataset.id
+        if (!orderId) {
+            wx.showToast({ title: '订单ID无效', icon: 'error' })
+            return
+        }
 
         try {
-            wx.showLoading({ title: '抢单中...' });
+            wx.showLoading({ title: '抢单中...' })
 
-            await DeliveryTaskService.grabOrder(orderId);
+            await DeliveryTaskService.grabOrder(orderId)
 
             wx.showToast({
                 title: '抢单成功',
                 icon: 'success'
-            });
+            })
 
             // 切换到当前任务Tab
-            this.setData({ currentTab: 'active' });
-            await this.loadActiveTasks();
+            this.setData({ currentTab: 'active' })
+            await this.loadActiveTasks()
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             wx.showToast({
-                title: error.message || '抢单失败',
+                title: getErrorMessage(error, '抢单失败'),
                 icon: 'error'
-            });
+            })
         } finally {
-            wx.hideLoading();
+            wx.hideLoading()
         }
     },
 
     /**
      * 开始取餐
      */
-    async startPickup(e: any) {
-        const deliveryId = e.detail.id || e.currentTarget.dataset.id;
+    async startPickup(e: TaskEvent) {
+        const deliveryId = e.detail.id || e.currentTarget.dataset.id
+        if (!deliveryId) {
+            wx.showToast({ title: '配送ID无效', icon: 'error' })
+            return
+        }
 
         try {
-            wx.showLoading({ title: '处理中...' });
+            wx.showLoading({ title: '处理中...' })
 
-            await DeliveryTaskService.startPickup(deliveryId);
+            await DeliveryTaskService.startPickup(deliveryId)
 
             wx.showToast({
                 title: '已开始取餐',
                 icon: 'success'
-            });
+            })
 
-            await this.loadActiveTasks();
+            await this.loadActiveTasks()
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             wx.showToast({
-                title: error.message || '操作失败',
+                title: getErrorMessage(error, '操作失败'),
                 icon: 'error'
-            });
+            })
         } finally {
-            wx.hideLoading();
+            wx.hideLoading()
         }
     },
 
     /**
      * 确认取餐
      */
-    async confirmPickup(e: any) {
-        const deliveryId = e.detail.id || e.currentTarget.dataset.id;
+    async confirmPickup(e: TaskEvent) {
+        const deliveryId = e.detail.id || e.currentTarget.dataset.id
+        if (!deliveryId) {
+            wx.showToast({ title: '配送ID无效', icon: 'error' })
+            return
+        }
 
         try {
-            wx.showLoading({ title: '处理中...' });
+            wx.showLoading({ title: '处理中...' })
 
-            await DeliveryTaskService.confirmPickup(deliveryId);
+            await DeliveryTaskService.confirmPickup(deliveryId)
 
             wx.showToast({
                 title: '已确认取餐',
                 icon: 'success'
-            });
+            })
 
-            await this.loadActiveTasks();
+            await this.loadActiveTasks()
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             wx.showToast({
-                title: error.message || '操作失败',
+                title: getErrorMessage(error, '操作失败'),
                 icon: 'error'
-            });
+            })
         } finally {
-            wx.hideLoading();
+            wx.hideLoading()
         }
     },
 
     /**
      * 开始配送
      */
-    async startDelivery(e: any) {
-        const deliveryId = e.detail.id || e.currentTarget.dataset.id;
+    async startDelivery(e: TaskEvent) {
+        const deliveryId = e.detail.id || e.currentTarget.dataset.id
+        if (!deliveryId) {
+            wx.showToast({ title: '配送ID无效', icon: 'error' })
+            return
+        }
 
         try {
-            wx.showLoading({ title: '处理中...' });
+            wx.showLoading({ title: '处理中...' })
 
-            await DeliveryTaskService.startDelivery(deliveryId);
+            await DeliveryTaskService.startDelivery(deliveryId)
 
             wx.showToast({
                 title: '已开始配送',
                 icon: 'success'
-            });
+            })
 
-            await this.loadActiveTasks();
+            await this.loadActiveTasks()
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             wx.showToast({
-                title: error.message || '操作失败',
+                title: getErrorMessage(error, '操作失败'),
                 icon: 'error'
-            });
+            })
         } finally {
-            wx.hideLoading();
+            wx.hideLoading()
         }
     },
 
     /**
      * 确认送达
      */
-    async confirmDelivery(e: any) {
-        const deliveryId = e.detail.id || e.currentTarget.dataset.id;
+    async confirmDelivery(e: TaskEvent) {
+        const deliveryId = e.detail.id || e.currentTarget.dataset.id
+        if (!deliveryId) {
+            wx.showToast({ title: '配送ID无效', icon: 'error' })
+            return
+        }
 
         wx.showModal({
             title: '确认送达',
@@ -367,29 +408,29 @@ Page({
             success: async (res) => {
                 if (res.confirm) {
                     try {
-                        wx.showLoading({ title: '处理中...' });
+                        wx.showLoading({ title: '处理中...' })
 
-                        await DeliveryTaskService.confirmDelivery(deliveryId);
+                        await DeliveryTaskService.confirmDelivery(deliveryId)
 
                         wx.showToast({
                             title: '配送完成',
                             icon: 'success'
-                        });
+                        })
 
-                        await this.loadActiveTasks();
-                        await this.loadRiderStatus();
+                        await this.loadActiveTasks()
+                        await this.loadRiderStatus()
 
-                    } catch (error: any) {
+                    } catch (error: unknown) {
                         wx.showToast({
-                            title: error.message || '操作失败',
+                            title: getErrorMessage(error, '操作失败'),
                             icon: 'error'
-                        });
+                        })
                     } finally {
-                        wx.hideLoading();
+                        wx.hideLoading()
                     }
                 }
             }
-        });
+        })
     },
 
     // ==================== 异常处理 ====================
@@ -397,9 +438,9 @@ Page({
     /**
      * 显示异常上报弹窗
      */
-    showExceptionDialog(e: any) {
-        const taskId = e.detail.id || e.currentTarget.dataset.id;
-        const task = this.data.activeTasks.find(t => t.delivery_id === taskId);
+    showExceptionDialog(e: TaskEvent) {
+        const taskId = e.detail.id || e.currentTarget.dataset.id
+        const task = this.data.activeTasks.find((t) => t.delivery_id === taskId)
 
         this.setData({
             showExceptionModal: true,
@@ -408,51 +449,51 @@ Page({
                 exception_type: '',
                 description: ''
             }
-        });
+        })
     },
 
     /**
      * 关闭异常上报弹窗
      */
     closeExceptionModal() {
-        this.setData({ showExceptionModal: false });
+        this.setData({ showExceptionModal: false })
     },
 
     /**
      * 上报异常
      */
     async reportException() {
-        const { selectedTask, exceptionForm } = this.data;
+        const { selectedTask, exceptionForm } = this.data
 
-        if (!selectedTask) return;
+        if (!selectedTask) return
 
         if (!exceptionForm.exception_type || !exceptionForm.description) {
             wx.showToast({
                 title: '请填写完整信息',
                 icon: 'error'
-            });
-            return;
+            })
+            return
         }
 
         try {
-            wx.showLoading({ title: '上报中...' });
+            wx.showLoading({ title: '上报中...' })
 
-            await ExceptionHandlingService.reportException(selectedTask.order_id, exceptionForm);
+            await ExceptionHandlingService.reportException(selectedTask.order_id, exceptionForm)
 
             wx.showToast({
                 title: '上报成功',
                 icon: 'success'
-            });
+            })
 
-            this.closeExceptionModal();
+            this.closeExceptionModal()
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             wx.showToast({
-                title: error.message || '上报失败',
+                title: getErrorMessage(error, '上报失败'),
                 icon: 'error'
-            });
+            })
         } finally {
-            wx.hideLoading();
+            wx.hideLoading()
         }
     },
 
@@ -462,15 +503,15 @@ Page({
      * 开始位置上报
      */
     startLocationReporting() {
-        if (!this.data.isOnline) return;
+        if (!this.data.isOnline) return
 
-        this.stopLocationReporting();
+        this.stopLocationReporting()
 
         const timer = setInterval(() => {
-            this.reportLocation();
-        }, 30000); // 每30秒上报一次
+            this.reportLocation()
+        }, 30000) // 每30秒上报一次
 
-        this.setData({ locationTimer: timer });
+        this.setData({ locationTimer: timer })
     },
 
     /**
@@ -478,8 +519,8 @@ Page({
      */
     stopLocationReporting() {
         if (this.data.locationTimer) {
-            clearInterval(this.data.locationTimer);
-            this.setData({ locationTimer: null });
+            clearInterval(this.data.locationTimer)
+            this.setData({ locationTimer: null })
         }
     },
 
@@ -488,17 +529,17 @@ Page({
      */
     async reportLocation() {
         try {
-            const location = await this.getCurrentLocation();
-            await RiderInfoService.reportLocation(location);
+            const location = await this.getCurrentLocation()
+            await RiderInfoService.reportLocation(location)
         } catch (error) {
-            console.error('位置上报失败:', error);
+            console.error('位置上报失败:', error)
         }
     },
 
     /**
      * 获取当前位置
      */
-    getCurrentLocation(): Promise<{ latitude: number; longitude: number }> {
+    getCurrentLocation(): Promise<{ latitude: number, longitude: number }> {
         return new Promise((resolve, reject) => {
             wx.getLocation({
                 type: 'gcj02',
@@ -506,11 +547,11 @@ Page({
                     resolve({
                         latitude: res.latitude,
                         longitude: res.longitude
-                    });
+                    })
                 },
                 fail: reject
-            });
-        });
+            })
+        })
     },
 
     // ==================== 工具方法 ====================
@@ -519,48 +560,48 @@ Page({
      * 格式化金额
      */
     formatAmount(amount: number): string {
-        return DeliveryAdapter.formatAmount(amount);
+        return DeliveryAdapter.formatAmount(amount)
     },
 
     /**
      * 格式化距离
      */
     formatDistance(distance: number): string {
-        return DeliveryAdapter.formatDistance(distance);
+        return DeliveryAdapter.formatDistance(distance)
     },
 
     /**
      * 格式化配送状态
      */
     formatDeliveryStatus(status: string): string {
-        return DeliveryAdapter.formatDeliveryStatus(status);
+        return DeliveryAdapter.formatDeliveryStatus(status)
     },
 
     /**
      * 获取状态颜色
      */
     getStatusColor(status: string): string {
-        return DeliveryAdapter.getStatusColor(status);
+        return DeliveryAdapter.getStatusColor(status)
     },
 
     /**
      * 格式化骑手状态
      */
     formatRiderStatus(status: string): string {
-        return DeliveryAdapter.formatRiderStatus(status);
+        return DeliveryAdapter.formatRiderStatus(status)
     },
 
     /**
      * 获取骑手状态颜色
      */
     getRiderStatusColor(status: string): string {
-        return DeliveryAdapter.getRiderStatusColor(status);
+        return DeliveryAdapter.getRiderStatusColor(status)
     },
 
     /**
      * 计算预计送达时间
      */
     calculateEstimatedArrival(createdAt: string, estimatedTime: number): string {
-        return DeliveryAdapter.calculateEstimatedArrival(createdAt, estimatedTime);
+        return DeliveryAdapter.calculateEstimatedArrival(createdAt, estimatedTime)
     }
-});
+})

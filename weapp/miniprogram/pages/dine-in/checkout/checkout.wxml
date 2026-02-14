@@ -128,9 +128,22 @@
       </view>
       
       <!-- 自动应用的优惠列表 -->
+      <view class="price-row" wx:for="{{calculation.ladder_promotions || []}}" wx:key="rule_id">
+        <text class="price-label" wx:if="{{item.current_hit}}">{{item.name}}（已满¥{{item.thresholdDisplay}}）</text>
+        <text class="price-label" wx:else>{{item.name}}（还差¥{{item.missingNeedDisplay}}）</text>
+        <text class="price-value">可减¥{{item.discountDisplay}}</text>
+      </view>
       <view class="price-row" wx:for="{{calculation.applied_promotions || []}}" wx:key="title">
         <text class="price-label">{{item.title}}</text>
         <text class="price-value status-red">-¥{{item.amountDisplay}}</text>
+      </view>
+      <view class="price-row" wx:for="{{calculation.voucher_trials || []}}" wx:key="voucher_id">
+        <text class="price-label">券试算：{{item.voucher_name}}（减¥{{item.amountDisplay}}）</text>
+        <text class="price-value">试算后¥{{item.trialPayableDisplay}}</text>
+      </view>
+      <view class="price-row" wx:if="{{calculation.payment_assessment && calculation.payment_assessment.payment_hint}}">
+        <text class="price-label">支付提示</text>
+        <text class="price-value">{{calculation.payment_assessment.payment_hint}}</text>
       </view>
 
       <view class="price-row total-row">

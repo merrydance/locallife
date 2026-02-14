@@ -211,6 +211,32 @@ export class OperatorMerchantManagementService {
             data: params
         })
     }
+
+    /**
+     * 暂停商户
+     * @param merchantId 商户ID
+     * @param data 操作参数
+     */
+    async suspendMerchant(merchantId: number, data: MerchantActionRequest): Promise<void> {
+        return request({
+            url: `/v1/operator/merchants/${merchantId}/suspend`,
+            method: 'POST',
+            data
+        })
+    }
+
+    /**
+     * 恢复商户
+     * @param merchantId 商户ID
+     * @param data 操作参数
+     */
+    async resumeMerchant(merchantId: number, data: MerchantActionRequest): Promise<void> {
+        return request({
+            url: `/v1/operator/merchants/${merchantId}/resume`,
+            method: 'POST',
+            data
+        })
+    }
 }
 
 // ==================== 商户分析服务类 ====================
@@ -298,8 +324,8 @@ export class MerchantAnalyticsService {
      * @param previousPeriod 上期数据
      */
     analyzeMerchantGrowth(
-        currentPeriod: { orderCount: number; gmv: number; rating: number },
-        previousPeriod: { orderCount: number; gmv: number; rating: number }
+        currentPeriod: { orderCount: number, gmv: number, rating: number },
+        previousPeriod: { orderCount: number, gmv: number, rating: number }
     ): {
         orderGrowth: number
         gmvGrowth: number
@@ -355,7 +381,7 @@ export class MerchantAnalyticsService {
             totalGmv: number
         }>()
 
-        merchants.forEach(merchant => {
+        merchants.forEach((merchant) => {
             const category = merchant.category || '未分类'
             const existing = categoryMap.get(category) || { count: 0, totalRating: 0, totalGmv: 0 }
 
@@ -375,11 +401,11 @@ export class MerchantAnalyticsService {
             avgGmv: data.totalGmv / data.count
         })).sort((a, b) => b.count - a.count)
 
-        const topCategories = categoryStats.slice(0, 5).map(stat => stat.category)
+        const topCategories = categoryStats.slice(0, 5).map((stat) => stat.category)
 
         // 简化的趋势分析（实际应该基于历史数据）
         const categoryTrends = new Map<string, 'growing' | 'stable' | 'declining'>()
-        categoryStats.forEach(stat => {
+        categoryStats.forEach((stat) => {
             if (stat.avgGmv > 100000) categoryTrends.set(stat.category, 'growing')
             else if (stat.avgGmv > 50000) categoryTrends.set(stat.category, 'stable')
             else categoryTrends.set(stat.category, 'declining')
@@ -614,9 +640,9 @@ export async function getMerchantManagementDashboard(regionId?: number): Promise
     const total = merchantList.total ?? merchants.length
     const merchantSummary = {
         total,
-        active: merchants.filter(m => m.status === 'approved').length,
-        suspended: merchants.filter(m => m.status === 'suspended').length,
-        pending: merchants.filter(m => m.status === 'pending').length
+        active: merchants.filter((m) => m.status === 'approved').length,
+        suspended: merchants.filter((m) => m.status === 'suspended').length,
+        pending: merchants.filter((m) => m.status === 'pending').length
     }
 
     // 分析商户分类
@@ -686,7 +712,7 @@ function generateMerchantRecommendations(
     const recommendations: string[] = []
 
     // 基于绩效弱点的建议
-    performance.weaknesses.forEach(weakness => {
+    performance.weaknesses.forEach((weakness) => {
         switch (weakness) {
             case '订单完成率偏低':
                 recommendations.push('建议优化备货管理，减少缺货导致的订单取消')
@@ -821,10 +847,10 @@ export async function batchMerchantAction(
     actionData: MerchantActionRequest
 ): Promise<{
     success: number[]
-    failed: Array<{ id: number; error: string }>
+    failed: Array<{ id: number, error: string }>
 }> {
     const success: number[] = []
-    const failed: Array<{ id: number; error: string }> = []
+    const failed: Array<{ id: number, error: string }> = []
 
     for (const merchantId of merchantIds) {
         try {
@@ -911,7 +937,7 @@ export function formatRiskLevel(level: 'low' | 'medium' | 'high'): string {
  * 验证商户查询参数
  * @param params 查询参数
  */
-export function validateMerchantQueryParams(params: MerchantQueryParams): { valid: boolean; message?: string } {
+export function validateMerchantQueryParams(params: MerchantQueryParams): { valid: boolean, message?: string } {
     if (params.rating_min && (params.rating_min < 0 || params.rating_min > 5)) {
         return { valid: false, message: '最低评分必须在0-5之间' }
     }

@@ -1,6 +1,6 @@
 Page({
   data: {
-    navBarHeight: 88,
+    navBarHeight: 88
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {

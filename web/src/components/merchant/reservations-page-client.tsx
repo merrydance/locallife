@@ -715,7 +715,7 @@ export function ReservationsPageClient({
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl font-black text-slate-900 tracking-tight">确认取消该时段预订？</AlertDialogTitle>
-            <AlertDialogDescription className="text-sm font-medium">取消后该桌位在对应时段（{matchedReservation?.reservation_time}）将恢复为可预订状态。此操作不可撤销。</AlertDialogDescription>
+            <AlertDialogDescription className="text-sm font-medium">取消后该桌位在对应时段（{matchedReservation?.reservation_time}）将恢复为可预订状态。已支付订单将按系统退款策略处理（可能为部分退款）。此操作不可撤销。</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel className="font-bold rounded-xl border-slate-200">暂不取消</AlertDialogCancel>

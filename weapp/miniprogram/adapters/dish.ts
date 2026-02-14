@@ -18,7 +18,7 @@ export class DishAdapter {
       priceDisplay: formatPrice(dto.price),
       shopName: '商户名称', // 需要从商户信息获取
       merchantId: dto.merchant_id,
-      attributes: dto.ingredients?.map(ing => ing.name) || [],
+      attributes: dto.ingredients?.map((ing) => ing.name) || [],
       spicyLevel: 0, // 从tags中解析辣度
       salesBadge: '', // 菜品详情中没有销量信息
       ratingDisplay: '0.0', // 菜品详情中没有评分信息
@@ -26,8 +26,8 @@ export class DishAdapter {
       deliveryTimeDisplay: DishAdapter.formatDeliveryTime(dto.prepare_time),
       deliveryFeeDisplay: '配送费待定',
       discountRule: '',
-      tags: dto.tags?.map(tag => tag.name) || [],
-      isPremade: dto.tags?.some(tag => tag.name.includes('预制')) || false,
+      tags: dto.tags?.map((tag) => tag.name) || [],
+      isPremade: dto.tags?.some((tag) => tag.name.includes('预制')) || false,
       customization_groups: dto.customization_groups,
       member_price: dto.member_price,
       is_available: dto.is_available,

@@ -79,6 +79,22 @@ type DishViewModel = {
   estimated_delivery_time_display: string
 }
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+    const { userMessage } = error as { userMessage?: unknown }
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     dishId: '',
@@ -228,12 +244,12 @@ Page({
         tags: dish.tags
       })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('加载菜品详情失败:', error)
       this.setData({ 
         loading: false, 
         isError: true, 
-        errorMsg: error.userMessage || '加载信息失败，请重试' 
+        errorMsg: getErrorMessage(error, '加载信息失败，请重试') 
       })
     }
   },

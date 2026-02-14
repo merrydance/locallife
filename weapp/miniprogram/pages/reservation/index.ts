@@ -26,6 +26,10 @@ type RestaurantItemView = {
 
 type ReservationListItem = RoomItemView | RestaurantItemView
 
+interface MessageError {
+  message?: string
+}
+
 Page({
   data: {
     keyword: '',
@@ -86,7 +90,7 @@ Page({
       { label: '12:00', value: '12:00' }, { label: '12:30', value: '12:30' },
       { label: '13:00', value: '13:00' }, { label: '17:00', value: '17:00' },
       { label: '18:00', value: '18:00' }, { label: '19:00', value: '19:00' }
-    ],
+    ]
   },
 
   onLoad() {
@@ -210,12 +214,13 @@ Page({
         hasMore: newList.length === pageSize
       })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Load items failed', error, 'Reservation')
+      const message = (error as MessageError).message || '加载失败，请重试'
       this.setData({ 
         loading: false,
         isError: true,
-        errorMessage: error.message || '加载失败，请重试'
+        errorMessage: message
       })
     }
   },
@@ -230,7 +235,7 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  onLocationChange(e: WechatMiniprogram.CustomEvent) {
+  onLocationChange(_e: WechatMiniprogram.CustomEvent) {
     this.loadItems(true)
   },
 
@@ -320,7 +325,7 @@ Page({
     const [h, m] = startTime.split(':').map(Number)
     const endTime = `${h + 2}:${m}`
 
-    const priceOption = this.data.priceOptions.find(p => p.value === uiPriceRange)
+    const priceOption = this.data.priceOptions.find((p) => p.value === uiPriceRange)
     const minSpend = priceOption?.min !== undefined ? priceOption.min * 100 : undefined
     const maxSpend = priceOption?.max !== undefined ? priceOption.max * 100 : undefined
 

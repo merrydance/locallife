@@ -1,9 +1,21 @@
 import { responsiveBehavior } from '@/utils/responsive'
-import { formatPriceNoSymbol, formatPrice } from '@/utils/util'
+import { formatPriceNoSymbol } from '@/utils/util'
 import { operatorBasicManagementService } from '../../../api/operator-basic-management'
 import { operatorAnalyticsService, OperatorAppealService } from '../../../api/operator-analytics'
 import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
 import { operatorRiderManagementService } from '../../../api/operator-rider-management'
+
+interface PendingApprovalItem {
+  id: number
+  type: 'MERCHANT' | 'RIDER' | 'APPEAL'
+  name: string
+  time: string
+}
+
+interface RiderRankingDisplayItem {
+  completion_rate: string
+  [key: string]: unknown
+}
 
 const appealService = new OperatorAppealService()
 
@@ -32,18 +44,18 @@ Page({
     timeDimension: 'day',
     
     // 待办事项
-    pending_approvals: [] as any[],
+    pending_approvals: [] as PendingApprovalItem[],
     pending_count: 0,
     
     // 排行榜
-    merchantRankings: [] as any[],
-    riderRankings: [] as any[],
+    merchantRankings: [] as Array<Record<string, unknown>>,
+    riderRankings: [] as RiderRankingDisplayItem[],
     rankingType: 'merchant', // merchant | rider
 
     loading: false,
     initialLoading: true,
     error: null as string | null,
-    navBarHeight: 88,
+    navBarHeight: 88
   },
 
   onLoad() {
@@ -95,7 +107,7 @@ Page({
         operatorBasicManagementService.getFinanceOverview(),
         operatorAnalyticsService.getRealtimeStats(),
         operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending' }),
-        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending' }),
+        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending_approval' }),
         operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
         operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
         operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate),
@@ -106,20 +118,22 @@ Page({
       const today = new Date().toISOString().split('T')[0]
       const trends = Array.isArray(dailyTrends) ? dailyTrends : []
       // 后端现在返回 operator_income 字段，直接使用无需前端计算
-      const todayTrend = trends.find(t => t.date === today) || { total_gmv: 0, order_count: 0, operator_income: 0 }
+      const todayTrend = trends.find((t) => t.date === today) || { total_gmv: 0, order_count: 0, operator_income: 0 }
       
       const merchantRankList = Array.isArray(merchantRanking) ? merchantRanking : []
-      const riderRankList = (Array.isArray(riderRanking) ? riderRanking : []).map(r => ({
+      const riderRankList = (Array.isArray(riderRanking) ? riderRanking : []).map((r) => ({
         ...r,
         completion_rate: typeof r.completion_rate === 'number' ? r.completion_rate.toFixed(1) : '0.0'
       }))
 
       // 待办事项组合
       const pendingItems = [
-        ...(merchantsPending.merchants || []).map(m => ({ id: m.id, type: 'MERCHANT', name: m.name, time: m.created_at })),
-        ...(ridersPending.riders || []).map(r => ({ id: r.id, type: 'RIDER', name: r.name, time: r.created_at })),
-        ...(appeals.appeals || []).map(a => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.title}`, time: a.created_at }))
-      ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+        ...(merchantsPending.merchants || []).map((m) => ({ id: m.id, type: 'MERCHANT', name: m.name, time: m.created_at })),
+        ...(ridersPending.riders || []).map((r) => ({ id: r.id, type: 'RIDER', name: r.name, time: r.created_at })),
+        ...(appeals.appeals || []).map((a) => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.title}`, time: a.created_at }))
+      ] as PendingApprovalItem[]
+
+      pendingItems.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
 
       this.setData({
         stats: {
@@ -144,11 +158,12 @@ Page({
         pending_count: pendingItems.length,
         loading: false
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '数据加载失败，请重试'
       console.error('加载运营仪表盘失败:', error)
       this.setData({ 
         loading: false,
-        error: error.message || '数据加载失败，请重试'
+        error: message
       })
     }
   },
@@ -177,7 +192,7 @@ Page({
   /**
    * 切换时间维度
    */
-  onTimeDimensionChange(e: any) {
+  onTimeDimensionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     const dimension = e.detail.value
     this.setData({ timeDimension: dimension }, () => {
       this.loadDashboardData()
@@ -187,7 +202,7 @@ Page({
   /**
    * 切换排行榜类型
    */
-  onRankingTypeChange(e: any) {
+  onRankingTypeChange(e: WechatMiniprogram.CustomEvent<{ value: 'merchant' | 'rider' }>) {
     this.setData({ rankingType: e.detail.value })
   },
 
@@ -198,8 +213,8 @@ Page({
   /**
    * 处理待办点击
    */
-  onPendingTap(e: any) {
-    const { id, type } = e.currentTarget.dataset
+  onPendingTap(e: WechatMiniprogram.TouchEvent) {
+    const { id, type } = e.currentTarget.dataset as { id?: number, type?: PendingApprovalItem['type'] }
     let url = ''
     if (type === 'MERCHANT') url = `/pages/operator/merchants/detail/detail?id=${id}`
     else if (type === 'RIDER') url = `/pages/operator/riders/detail/detail?id=${id}`

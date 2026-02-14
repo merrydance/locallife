@@ -85,9 +85,14 @@ App<IAppOption>({
   /**
      * 全局Promise拒绝捕获 - 捕获未处理的Promise错误
      */
-  onUnhandledRejection(res: any) {
+  onUnhandledRejection(res: { reason?: unknown, promise?: unknown }) {
     // 后端服务不可用时使用简洁日志
-    const reasonStr = String(res.reason?.message || res.reason)
+    const reason = res.reason
+    const reasonMessage =
+      reason && typeof reason === 'object' && 'message' in reason
+        ? (reason as { message?: string }).message
+        : undefined
+    const reasonStr = String(reasonMessage || reason)
     const isBackendError = reasonStr.includes('502') || reasonStr.includes('503') || reasonStr.includes('504')
 
     if (isBackendError) {
@@ -109,7 +114,11 @@ App<IAppOption>({
   /**
      * 页面未找到捕获
      */
-  onPageNotFound(res: any) {
+  onPageNotFound(res: {
+    path?: string
+    query?: Record<string, unknown>
+    isEntryPage?: boolean
+  }) {
     logger.warn('页面未找到', {
       path: res.path,
       query: res.query,
@@ -128,7 +137,7 @@ App<IAppOption>({
   /**
      * 上报错误到监控平台
      */
-  reportErrorToMonitor(error: any, type: string) {
+  reportErrorToMonitor(error: unknown, type: string) {
     try {
       // 使用微信小程序实时日志
       const realtimeLog = wx.getRealtimeLogManager ? wx.getRealtimeLogManager() : null
@@ -210,7 +219,7 @@ App<IAppOption>({
 
             // 保存用户信息
             const user = loginData.user
-            this.globalData.userId = user.id;
+            this.globalData.userId = user.id
             this.globalData.userInfo = {
               nickName: user.full_name || `User ${user.id.toString().slice(-4)}`,
               avatarUrl: user.avatar_url || 'https://tdesign.gtimg.com/mobile/demos/avatar1.png',
@@ -250,7 +259,7 @@ App<IAppOption>({
 
           } catch (error) {
             // 后端服务不可用时不显示Toast,仅记录日志
-            const appError = error as any
+            const appError = error as { message?: string }
             const isBackendError = appError.message && (
               appError.message.includes('502') ||
               appError.message.includes('503') ||
@@ -531,9 +540,9 @@ App<IAppOption>({
     try {
       // 获取所有存储的 key
       const res = wx.getStorageInfoSync()
-      const keysToRemove = res.keys.filter(key => key.startsWith('api_'))
+      const keysToRemove = res.keys.filter((key) => key.startsWith('api_'))
 
-      keysToRemove.forEach(key => {
+      keysToRemove.forEach((key) => {
         try {
           wx.removeStorageSync(key)
         } catch (e) {
@@ -548,7 +557,7 @@ App<IAppOption>({
       // 忽略缓存清除失败
       logger.warn('清除 API 缓存失败', e, 'clearApiCache')
     }
-  },
+  }
 
 
 })

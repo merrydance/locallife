@@ -3,7 +3,7 @@
  * 显示用户的所有预订记录
  */
 
-import { ReservationService, ReservationStatus, ReservationListParams, ReservationResponse } from '../../../api/reservation'
+import { ReservationService, ReservationStatus, ReservationListParams } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
 import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
 import { processPayment } from '../../../api/payment'
@@ -29,7 +29,7 @@ const CANCEL_REASONS = [
 const getEventId = (event: WechatMiniprogram.BaseEvent): number | null => {
     const dataset = event.currentTarget.dataset as { id?: string | number }
     const id = dataset.id
-    const numericId = typeof id === "number" ? id : Number(id)
+    const numericId = typeof id === 'number' ? id : Number(id)
     return Number.isFinite(numericId) ? numericId : null
 }
 
@@ -90,7 +90,7 @@ Page({
             const result = response.reservations
             const totalCount = typeof response.total_count === 'number' ? response.total_count : result.length
 
-            const viewModels = result.map(r => ReservationCardAdapter.toCardViewModel(r))
+            const viewModels = result.map((r) => ReservationCardAdapter.toCardViewModel(r))
             
             const reservations = reset ? viewModels : [...this.data.reservations, ...viewModels]
 
@@ -169,7 +169,7 @@ Page({
             await processPayment(id, 'reservation')
             
             // 找到对应的预订数据用于展示
-            const res = this.data.reservations.find(r => r.id === id)
+            const res = this.data.reservations.find((r) => r.id === id)
             Navigation.toPaymentSuccess({
                 orderId: String(id),
                 orderNo: String(id), // 预订号暂用ID

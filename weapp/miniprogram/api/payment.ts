@@ -321,7 +321,7 @@ export async function pollPaymentStatus(
         }
 
         if (i < maxAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, interval))
+            await new Promise((resolve) => setTimeout(resolve, interval))
         }
     }
 

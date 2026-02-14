@@ -5,9 +5,39 @@ import {
   ocrOperatorBusinessLicense, 
   ocrOperatorIdCard, 
   submitOperatorApplication,
-  listAvailableRegions
+  listAvailableRegions,
+  type OperatorApplicationResponse
 } from '../../../api/operator-application'
 import { logger } from '../../../utils/logger'
+
+type RegionOption = {
+  label: string
+  secondary: string
+  value: number
+}
+
+type FormDataValue = {
+  regionId: number
+  regionName: string
+  name: string
+  contactName: string
+  contactPhone: string
+  years: number
+}
+
+type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
+
+function getErrorText(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'userMessage' in error) {
+    const userMessage = (error as { userMessage?: string }).userMessage
+    if (userMessage) return userMessage
+  }
+  if (error && typeof error === 'object' && 'data' in error) {
+    const data = (error as { data?: { message?: string } }).data
+    if (data?.message) return data.message
+  }
+  return fallback
+}
 
 Page({
   data: {
@@ -30,8 +60,8 @@ Page({
 
     // 区域选择相关状态
     regionPopupVisible: false,
-    regionOptions: [] as any[],     // 原始列表
-    filteredRegions: [] as any[]    // 搜索过滤后的列表
+    regionOptions: [] as RegionOption[],     // 原始列表
+    filteredRegions: [] as RegionOption[]    // 搜索过滤后的列表
   },
 
   onLoad() {
@@ -39,8 +69,8 @@ Page({
     this.fetchAvailableRegions()
   },
 
-  onNavHeight(e: any) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+    this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
   },
 
   /**
@@ -67,9 +97,13 @@ Page({
           })
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // 404 说明没申请过，留在介绍页，非异常
-      if (e.statusCode !== 404) {
+      const statusCode =
+        e && typeof e === 'object' && 'statusCode' in e
+          ? (e as { statusCode?: number }).statusCode
+          : undefined
+      if (statusCode !== 404) {
         logger.error('Init operator application failed', e)
       }
     }
@@ -82,7 +116,7 @@ Page({
     try {
       const res = await listAvailableRegions({ page_id: 1, page_size: 100, level: 3 })
       if (res && res.regions) {
-        const options = res.regions.map(r => ({
+        const options = res.regions.map((r) => ({
           label: r.name,
           secondary: r.parent_name || '',
           value: r.id
@@ -105,26 +139,26 @@ Page({
   /**
    * 将后端响应映射到视图数据
    */
-  mapResponseToData(res: any) {
+  mapResponseToData(res: OperatorApplicationResponse) {
     if (!res) return
 
-    const newData: any = {
-      'formData.regionId': res.region_id || 0,
-      'formData.name': res.name || '',
-      'formData.contactName': res.contact_name || '',
-      'formData.contactPhone': res.contact_phone || '',
-      'formData.years': res.requested_contract_years || 3,
-      idFront: { url: res.id_card_front_url || '', rawUrl: res.id_card_front_url || '' },
-      idBack: { url: res.id_card_back_url || '', rawUrl: res.id_card_back_url || '' },
-      license: { url: res.business_license_url || '', rawUrl: res.business_license_url || '' }
+    const newData: Record<string, unknown> = {
+      'formData.regionId': Number(res.region_id || 0),
+      'formData.name': String(res.name || ''),
+      'formData.contactName': String(res.contact_name || ''),
+      'formData.contactPhone': String(res.contact_phone || ''),
+      'formData.years': Number(res.requested_contract_years || 3),
+      idFront: { url: String(res.id_card_front_url || ''), rawUrl: String(res.id_card_front_url || '') },
+      idBack: { url: String(res.id_card_back_url || ''), rawUrl: String(res.id_card_back_url || '') },
+      license: { url: String(res.business_license_url || ''), rawUrl: String(res.business_license_url || '') }
     }
 
     // 优先使用后端返回的名称，否则尝试从本地 Options 中反查
-    const regionId = res.region_id
-    let regionName = res.region_name || ''
+    const regionId = Number(res.region_id || 0)
+    let regionName = String(res.region_name || '')
 
     if (!regionName && regionId && this.data.regionOptions.length > 0) {
-      const matched = this.data.regionOptions.find(r => Number(r.value) === Number(regionId))
+      const matched = this.data.regionOptions.find((r) => Number(r.value) === Number(regionId))
       if (matched) {
         regionName = matched.secondary ? `${matched.secondary} - ${matched.label}` : matched.label
       }
@@ -142,7 +176,7 @@ Page({
    */
   syncRegionName(regionId: number | string) {
     const id = Number(regionId)
-    const matched = this.data.regionOptions.find(r => Number(r.value) === id)
+    const matched = this.data.regionOptions.find((r) => Number(r.value) === id)
     if (matched) {
       const fullName = matched.secondary ? `${matched.secondary} - ${matched.label}` : matched.label
       this.setData({ 'formData.regionName': fullName })
@@ -159,18 +193,18 @@ Page({
     this.setData({ regionPopupVisible: false })
   },
 
-  onRegionSearch(e: any) {
+  onRegionSearch(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
     const keyword = (e.detail.value || '').toLowerCase()
-    const filtered = this.data.regionOptions.filter(item => 
+    const filtered = this.data.regionOptions.filter((item) => 
       item.label.toLowerCase().includes(keyword) || 
       item.secondary.toLowerCase().includes(keyword)
     )
     this.setData({ filteredRegions: filtered })
   },
 
-  onSelectRegion(e: any) {
+  onSelectRegion(e: WechatMiniprogram.CustomEvent<{ value?: number | string }>) {
     const regionId = Number(e.detail.value)
-    const region = this.data.regionOptions.find(r => Number(r.value) === regionId)
+    const region = this.data.regionOptions.find((r) => Number(r.value) === regionId)
     
     if (region) {
       const fullName = region.secondary ? `${region.secondary} - ${region.label}` : region.label
@@ -184,36 +218,40 @@ Page({
 
   // ==================== 输入处理 ====================
 
-  onInput(e: any) {
-    const field = e.currentTarget.dataset.field
-    this.setData({ [`formData.${field}`]: e.detail.value })
+  onInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    const field = (e.currentTarget.dataset as { field?: keyof FormDataValue }).field
+    if (!field) return
+    this.setData({ [`formData.${field}`]: e.detail.value || '' })
   },
 
-  onYearsChange(e: any) {
-    this.setData({ 'formData.years': e.detail.value })
+  onYearsChange(e: WechatMiniprogram.CustomEvent<{ value?: number }>) {
+    this.setData({ 'formData.years': e.detail.value || 3 })
   },
 
   // ==================== 证照上传 (对齐集团模式) ====================
 
-  async onIdFrontUpload(e: any) {
+  async onIdFrontUpload(e: UploadEvent) {
     const { path } = e.detail
+    if (!path) return
     this.setData({ 'idFront.url': path })
     this.processOCR(ocrOperatorIdCard(path, 'Front'))
   },
 
-  async onIdBackUpload(e: any) {
+  async onIdBackUpload(e: UploadEvent) {
     const { path } = e.detail
+    if (!path) return
     this.setData({ 'idBack.url': path })
     this.processOCR(ocrOperatorIdCard(path, 'Back'))
   },
 
-  async onLicenseUpload(e: any) {
+  async onLicenseUpload(e: UploadEvent) {
     const { path } = e.detail
+    if (!path) return
     this.setData({ 'license.url': path })
     this.processOCR(ocrOperatorBusinessLicense(path))
   },
 
-  async processOCR(ocrPromise: Promise<any>) {
+  async processOCR(ocrPromise: Promise<OperatorApplicationResponse>) {
     wx.showLoading({ title: '智能识别中...' })
     try {
       const res = await ocrPromise
@@ -259,7 +297,7 @@ Page({
         
         // 2. 更新基础信息
         const updated = await updateOperatorBasic({
-          name: name,
+          name,
           contact_name: contactName,
           contact_phone: contactPhone,
           requested_contract_years: years
@@ -267,10 +305,10 @@ Page({
         this.mapResponseToData(updated)
         
         this.setData({ currentStep: 2 })
-      } catch (e: any) {
+      } catch (e: unknown) {
         logger.error('Step 1 sync failed', e)
         // 优先显示后端返回的精准消息
-        const msg = e.userMessage || e.data?.message || '锁定区域失败，可能已被占用'
+        const msg = getErrorText(e, '锁定区域失败，可能已被占用')
         wx.showToast({ title: msg, icon: 'none' })
       } finally {
         wx.hideLoading()
@@ -297,8 +335,8 @@ Page({
     try {
       await submitOperatorApplication()
       this.setData({ currentStep: 4 })
-    } catch (e: any) {
-      wx.showToast({ title: e.userMessage || '提交审核失败', icon: 'none' })
+    } catch (e: unknown) {
+      wx.showToast({ title: getErrorText(e, '提交审核失败'), icon: 'none' })
     } finally {
       this.setData({ isSubmitting: false })
       wx.hideLoading()

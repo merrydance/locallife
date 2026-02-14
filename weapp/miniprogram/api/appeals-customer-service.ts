@@ -653,16 +653,16 @@ export async function getMerchantCustomerServiceDashboard(merchantId: number): P
 export async function batchReplyReviews(replies: Array<{
     reviewId: number
     reply: string
-}>): Promise<{ reviewId: number; success: boolean; message: string }[]> {
+}>): Promise<{ reviewId: number, success: boolean, message: string }[]> {
     const promises = replies.map(async ({ reviewId, reply }) => {
         try {
             await reviewReplyService.replyToReview(reviewId, { reply })
             return { reviewId, success: true, message: '回复成功' }
-        } catch (error: any) {
+        } catch (error: unknown) {
             return {
                 reviewId,
                 success: false,
-                message: error?.message || '回复失败'
+                message: error instanceof Error ? error.message : '回复失败'
             }
         }
     })
@@ -675,7 +675,7 @@ export async function batchReplyReviews(replies: Array<{
  * @param startDate 开始日期
  * @param endDate 结束日期
  */
-export async function getAppealStatistics(startDate: string, endDate: string): Promise<{
+export async function getAppealStatistics(_startDate: string, _endDate: string): Promise<{
     totalAppeals: number
     approvedAppeals: number
     rejectedAppeals: number
@@ -692,13 +692,13 @@ export async function getAppealStatistics(startDate: string, endDate: string): P
 
     const appeals = appealsResult.appeals
     const totalAppeals = appeals.length
-    const approvedAppeals = appeals.filter(a => a.status === 'approved').length
-    const rejectedAppeals = appeals.filter(a => a.status === 'rejected').length
-    const pendingAppeals = appeals.filter(a => a.status === 'pending').length
+    const approvedAppeals = appeals.filter((a) => a.status === 'approved').length
+    const rejectedAppeals = appeals.filter((a) => a.status === 'rejected').length
+    const pendingAppeals = appeals.filter((a) => a.status === 'pending').length
     const approvalRate = totalAppeals > 0 ? (approvedAppeals / totalAppeals) * 100 : 0
 
     // 计算平均处理时间（天）
-    const processedAppeals = appeals.filter(a => a.reviewed_at)
+    const processedAppeals = appeals.filter((a) => a.reviewed_at)
     const avgProcessingTime = processedAppeals.length > 0
         ? processedAppeals.reduce((sum, appeal) => {
             const created = new Date(appeal.created_at)
@@ -722,7 +722,7 @@ export async function getAppealStatistics(startDate: string, endDate: string): P
  * 验证申诉理由
  * @param reason 申诉理由
  */
-export function validateAppealReason(reason: string): { valid: boolean; message?: string } {
+export function validateAppealReason(reason: string): { valid: boolean, message?: string } {
     if (!reason || reason.trim().length === 0) {
         return { valid: false, message: '申诉理由不能为空' }
     }
@@ -742,7 +742,7 @@ export function validateAppealReason(reason: string): { valid: boolean; message?
  * 验证评价回复
  * @param reply 回复内容
  */
-export function validateReviewReply(reply: string): { valid: boolean; message?: string } {
+export function validateReviewReply(reply: string): { valid: boolean, message?: string } {
     if (!reply || reply.trim().length === 0) {
         return { valid: false, message: '回复内容不能为空' }
     }

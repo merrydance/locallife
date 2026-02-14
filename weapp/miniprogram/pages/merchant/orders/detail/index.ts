@@ -3,17 +3,37 @@ import { MerchantOrderManagementService, OrderResponse, OrderManagementAdapter }
 import { logger } from '../../../../utils/logger'
 import dayjs from 'dayjs'
 
+interface MerchantOrderDetailOptions {
+  id?: string
+}
+
+interface MerchantOrderDetailView extends OrderResponse {
+  customer_phone?: string
+  status_label: string
+  status_color: string
+  status_icon: string
+  status_desc: string
+  order_type_label: string
+  payment_method_label: string
+  created_at_fmt: string
+  paid_at_fmt: string
+  accept_at_fmt: string
+  ready_at_fmt: string
+  completed_at_fmt: string
+  step_current: number
+}
+
 Page({
   data: {
     navBarHeight: 88,
     orderId: 0,
-    order: null as any,
+    order: null as MerchantOrderDetailView | null,
     loading: true,
     submitting: false,
     isIPhoneX: false
   },
 
-  onLoad(options: any) {
+  onLoad(options: MerchantOrderDetailOptions) {
     const { navBarHeight } = getStableBarHeights()
     const { model } = wx.getSystemInfoSync()
     const isIPhoneX = model.includes('iPhone X') || model.includes('iPhone 11') || model.includes('iPhone 12') || model.includes('iPhone 13')
@@ -21,7 +41,7 @@ Page({
     this.setData({ 
       navBarHeight, 
       isIPhoneX,
-      orderId: parseInt(options.id)
+      orderId: parseInt(options.id || '0')
     })
     this.loadDetail()
   },
@@ -107,7 +127,7 @@ Page({
     await this.performAction(MerchantOrderManagementService.completeOrder(this.data.orderId))
   },
 
-  async performAction(apiPromise: Promise<any>) {
+  async performAction(apiPromise: Promise<unknown>) {
     this.setData({ submitting: true })
     try {
       await apiPromise
@@ -116,8 +136,8 @@ Page({
       
       // 通知列表页刷新
       const pages = getCurrentPages()
-      const listPage = pages[pages.length - 2] as any
-      if (listPage && listPage.loadOrders) {
+      const listPage = pages[pages.length - 2] as { loadOrders?: (reset?: boolean) => void } | undefined
+      if (listPage?.loadOrders) {
         listPage.loadOrders(true)
       }
     } catch (err) {

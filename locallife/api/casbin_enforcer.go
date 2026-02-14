@@ -208,15 +208,19 @@ func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 		// 从 context 获取 auth payload
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 查询用户角色
-		userRoles, err := server.store.ListUserRoles(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
+		// 查询用户角色（优先复用已缓存的角色）
+		userRoles, ok := GetUserRolesFromContext(ctx)
+		if !ok {
+			var err error
+			userRoles, err = server.store.ListUserRoles(ctx, authPayload.UserID)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
 
-		// 缓存角色到 context
-		ctx.Set(userRolesKey, userRoles)
+			// 缓存角色到 context
+			ctx.Set(userRolesKey, userRoles)
+		}
 
 		// 提取活跃角色列表
 		activeRoles := make([]string, 0, len(userRoles))

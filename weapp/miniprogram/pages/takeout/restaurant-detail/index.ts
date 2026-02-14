@@ -76,6 +76,22 @@ interface ComboView {
   dish_images: string[] // 新增：包含菜品的图片列表
 }
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+    const { userMessage } = error as { userMessage?: unknown }
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     restaurantId: '',
@@ -146,9 +162,9 @@ Page({
       }
 
       // 第二次处理套餐，注入菜品图片
-      const combosResult = combosResultFirstPass.map(combo => {
+      const combosResult = combosResultFirstPass.map((combo) => {
         const dishImages = (combo.dishes || [])
-          .map(cd => dishesResult.dishes.find(d => d.id === cd.dish_id)?.image_url)
+          .map((cd) => dishesResult.dishes.find((d) => d.id === cd.dish_id)?.image_url)
           .filter(Boolean) as string[]
         return { ...combo, dish_images: dishImages }
       })
@@ -168,12 +184,12 @@ Page({
       })
 
       this.filterDishes()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('加载商户详情失败:', error)
       this.setData({ 
         loading: false, 
         isError: true, 
-        errorMsg: error.userMessage || '数据请求失败，请检查网络'
+        errorMsg: getErrorMessage(error, '数据请求失败，请检查网络')
       })
     }
   },
@@ -194,7 +210,7 @@ Page({
         let businessHoursDisplay = ''
         if (merchant.business_hours && merchant.business_hours.length > 0) {
           const today = new Date().getDay()
-          const todayHours = merchant.business_hours.find(h => h.day_of_week === today)
+          const todayHours = merchant.business_hours.find((h) => h.day_of_week === today)
           if (todayHours) {
             businessHoursDisplay = `${todayHours.open_time} - ${todayHours.close_time}`
           } else if (merchant.business_hours[0]) {
@@ -204,11 +220,11 @@ Page({
         }
 
         // 格式化所有营业时间
-        const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
         const formattedHours: BusinessHoursView[] = (merchant.business_hours || []).map((h) => ({
           ...h,
           day_name: dayNames[h.day_of_week]
-        }));
+        }))
 
         return {
           id: merchant.id,
@@ -240,7 +256,7 @@ Page({
     }
   },
 
-  async loadDishes(merchantId: number): Promise<{ dishes: DishView[]; categories: PublicDishCategory[] }> {
+  async loadDishes(merchantId: number): Promise<{ dishes: DishView[], categories: PublicDishCategory[] }> {
     try {
       const result = await getPublicMerchantDishes(merchantId)
       const dishes: DishView[] = (result.dishes || []).map((dish: PublicDish) => ({
@@ -275,7 +291,7 @@ Page({
         // 优先使用后端返回的图片列表，如果没有则回退到前端拼接逻辑(兼容旧数据)
         let dishImages: string[] = []
         if (combo.dish_images && combo.dish_images.length > 0) {
-           dishImages = combo.dish_images.map(url => getPublicImageUrl(url));
+           dishImages = combo.dish_images.map((url) => getPublicImageUrl(url))
         }
 
         return {
@@ -313,20 +329,20 @@ Page({
     }
   },
 
-  extractCategories(dishesResult: { dishes: DishView[]; categories: PublicDishCategory[] }): PublicDishCategory[] {
+  extractCategories(dishesResult: { dishes: DishView[], categories: PublicDishCategory[] }): PublicDishCategory[] {
     const categoryMap = new Map<number, PublicDishCategory>()
     categoryMap.set(0, { id: 0, name: '全部', sort_order: -1 })
 
     // 优先使用API返回的分类
     if (dishesResult.categories && dishesResult.categories.length > 0) {
-      dishesResult.categories.forEach(cat => {
+      dishesResult.categories.forEach((cat) => {
         if (!categoryMap.has(cat.id)) {
           categoryMap.set(cat.id, cat)
         }
       })
     } else {
       // 回退：从菜品中提取分类
-      dishesResult.dishes.forEach(dish => {
+      dishesResult.dishes.forEach((dish) => {
         if (dish.category_id && !categoryMap.has(dish.category_id)) {
           categoryMap.set(dish.category_id, {
             id: dish.category_id,

@@ -87,7 +87,7 @@ export class FavoriteService {
      * 获取收藏商户列表
      * GET /v1/favorites/merchants
      */
-    static async getFavoriteMerchants(page: number = 1, pageSize: number = 20): Promise<{ merchants: any[], total: number }> {
+    static async getFavoriteMerchants(page: number = 1, pageSize: number = 20): Promise<{ merchants: Array<Record<string, unknown>>, total: number }> {
         return await request({
             url: '/v1/favorites/merchants',
             method: 'GET',
@@ -99,7 +99,7 @@ export class FavoriteService {
      * 获取收藏菜品列表
      * GET /v1/favorites/dishes
      */
-    static async getFavoriteDishes(page: number = 1, pageSize: number = 20): Promise<{ dishes: any[], total: number }> {
+    static async getFavoriteDishes(page: number = 1, pageSize: number = 20): Promise<{ dishes: Array<Record<string, unknown>>, total: number }> {
         return await request({
             url: '/v1/favorites/dishes',
             method: 'GET',

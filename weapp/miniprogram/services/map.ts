@@ -3,57 +3,66 @@
  * 提供地图相关功能：路线规划、坐标解码、标记创建等
  */
 
-import { logger } from "../utils/logger";
-import { request } from "../utils/request";
-import { locationService } from "../utils/location";
+import { logger } from '../utils/logger'
+import { request } from '../utils/request'
+import { locationService } from '../utils/location'
 
 /**
  * 地图点坐标
  */
 export interface MapPoint {
-  latitude: number;
-  longitude: number;
+  latitude: number
+  longitude: number
 }
 
 /**
  * 路线规划结果
  */
 export interface RouteResult {
-  points: MapPoint[];
-  distance: number; // 距离（米）
-  duration: number; // 时长（秒）
+  points: MapPoint[]
+  distance: number // 距离（米）
+  duration: number // 时长（秒）
+}
+
+interface RouteApiResponse {
+  code?: number
+  message?: string
+  data?: {
+    distance?: number
+    duration?: number
+  }
 }
 
 /**
  * 地图标记
  */
 export interface MapMarker {
-  id: number;
-  latitude: number;
-  longitude: number;
-  width: number;
-  height: number;
-  iconPath: string;
+  id: number
+  latitude: number
+  longitude: number
+  width: number
+  height: number
+  iconPath: string
   callout: {
-    content: string;
-    color: string;
-    fontSize: number;
-    padding: number;
-    borderRadius: number;
-    display: "ALWAYS";
-    bgColor: string;
-  };
+    content: string
+    color: string
+    fontSize: number
+    padding: number
+    borderRadius: number
+    display: 'ALWAYS'
+    bgColor: string
+  }
 }
 
 /**
  * 地图路线
  */
 export interface MapPolyline {
-  points: MapPoint[];
-  color: string;
-  width: number;
-  dottedLine?: boolean;
-  arrowLine?: boolean;
+  points: MapPoint[]
+  color: string
+  width: number
+  dottedLine?: boolean
+  arrowLine?: boolean
 }
 
 /**
@@ -67,55 +76,55 @@ class MapService {
    */
   async planRoute(from: MapPoint, to: MapPoint): Promise<RouteResult> {
     try {
-      const fromStr = `${from.latitude},${from.longitude}`;
-      const toStr = `${to.latitude},${to.longitude}`;
+      const fromStr = `${from.latitude},${from.longitude}`
+      const toStr = `${to.latitude},${to.longitude}`
 
       logger.info(
-        "开始规划路线",
+        '开始规划路线',
         {
           from: fromStr,
-          to: toStr,
+          to: toStr
         },
-        "MapService.planRoute",
-      );
+        'MapService.planRoute'
+      )
 
       // 调用后端代理接口
-      const data = await request<any>({
-        url: "/v1/location/direction/bicycling",
-        method: "GET",
+      const data = await request<RouteApiResponse>({
+        url: '/v1/location/direction/bicycling',
+        method: 'GET',
         data: {
           from: fromStr,
-          to: toStr,
-        },
-      });
+          to: toStr
+        }
+      })
 
       // 后端已改为返回 {code,message,data{distance,duration}}
       if (data.code === 0 && data.data) {
         const result = {
           points: [], // OSRM 不返回 polyline，这里留空以免误用
           distance: data.data.distance || 0,
-          duration: data.data.duration || 0,
-        };
+          duration: data.data.duration || 0
+        }
 
         logger.info(
-          "路线规划成功",
+          '路线规划成功',
           {
             distance: result.distance,
             duration: result.duration,
-            pointsCount: result.points.length,
+            pointsCount: result.points.length
           },
-          "MapService.planRoute",
-        );
+          'MapService.planRoute'
+        )
 
-        return result;
+        return result
       } else {
-        const errorMsg = data.message || "路线规划失败";
-        logger.error("路线规划失败", data, "MapService.planRoute");
-        throw new Error(errorMsg);
+        const errorMsg = data.message || '路线规划失败'
+        logger.error('路线规划失败', data, 'MapService.planRoute')
+        throw new Error(errorMsg)
       }
     } catch (err) {
-      logger.error("路线规划请求失败", err, "MapService.planRoute");
-      throw err;
+      logger.error('路线规划请求失败', err, 'MapService.planRoute')
+      throw err
     }
   }
 
@@ -128,11 +137,11 @@ class MapService {
     label: string,
     iconPath: string,
     options?: {
-      width?: number;
-      height?: number;
-      calloutColor?: string;
-      calloutBgColor?: string;
-    },
+      width?: number
+      height?: number
+      calloutColor?: string
+      calloutBgColor?: string
+    }
   ): MapMarker {
     return {
       id,
@@ -143,14 +152,14 @@ class MapService {
       iconPath,
       callout: {
         content: label,
-        color: options?.calloutColor || "#333",
+        color: options?.calloutColor || '#333',
         fontSize: 14,
         padding: 6,
         borderRadius: 12,
-        display: "ALWAYS",
-        bgColor: options?.calloutBgColor || "#fff",
-      },
-    };
+        display: 'ALWAYS',
+        bgColor: options?.calloutBgColor || '#fff'
+      }
+    }
   }
 
   /**
@@ -158,23 +167,23 @@ class MapService {
    */
   adjustMapView(mapId: string, points: MapPoint[], padding?: number[]): void {
     if (!points || points.length === 0) {
-      logger.warn("没有点需要调整视野", undefined, "MapService.adjustMapView");
-      return;
+      logger.warn('没有点需要调整视野', undefined, 'MapService.adjustMapView')
+      return
     }
 
-    const mapCtx = wx.createMapContext(mapId);
+    const mapCtx = wx.createMapContext(mapId)
     mapCtx.includePoints({
       points,
-      padding: padding || [80, 40, 80, 40],
-    });
+      padding: padding || [80, 40, 80, 40]
+    })
 
     logger.debug(
-      "地图视野已调整",
+      '地图视野已调整',
       {
-        pointsCount: points.length,
+        pointsCount: points.length
       },
-      "MapService.adjustMapView",
-    );
+      'MapService.adjustMapView'
+    )
   }
 
   /**
@@ -183,19 +192,19 @@ class MapService {
   createPolyline(
     points: MapPoint[],
     options?: {
-      color?: string;
-      width?: number;
-      dottedLine?: boolean;
-      arrowLine?: boolean;
-    },
+      color?: string
+      width?: number
+      dottedLine?: boolean
+      arrowLine?: boolean
+    }
   ): MapPolyline {
     return {
       points,
-      color: options?.color || "#1d63ff",
+      color: options?.color || '#1d63ff',
       width: options?.width || 6,
       dottedLine: options?.dottedLine || false,
-      arrowLine: options?.arrowLine || false,
-    };
+      arrowLine: options?.arrowLine || false
+    }
   }
 
   /**
@@ -206,15 +215,15 @@ class MapService {
     try {
       const locationInfo = await locationService.reverseGeocode(
         point.latitude,
-        point.longitude,
-      );
+        point.longitude
+      )
       const address =
-        locationInfo.street || locationInfo.district || locationInfo.address;
-      logger.info("逆地理编码成功", { address }, "MapService.reverseGeocode");
-      return address;
+        locationInfo.street || locationInfo.district || locationInfo.address
+      logger.info('逆地理编码成功', { address }, 'MapService.reverseGeocode')
+      return address
     } catch (err) {
-      logger.error("逆地理编码失败", err, "MapService.reverseGeocode");
-      throw err;
+      logger.error('逆地理编码失败', err, 'MapService.reverseGeocode')
+      throw err
     }
   }
 
@@ -222,21 +231,21 @@ class MapService {
    * 计算两点之间的直线距离（米）
    */
   calculateDistance(point1: MapPoint, point2: MapPoint): number {
-    const R = 6371000; // 地球半径（米）
-    const lat1 = (point1.latitude * Math.PI) / 180;
-    const lat2 = (point2.latitude * Math.PI) / 180;
-    const deltaLat = ((point2.latitude - point1.latitude) * Math.PI) / 180;
-    const deltaLng = ((point2.longitude - point1.longitude) * Math.PI) / 180;
+    const R = 6371000 // 地球半径（米）
+    const lat1 = (point1.latitude * Math.PI) / 180
+    const lat2 = (point2.latitude * Math.PI) / 180
+    const deltaLat = ((point2.latitude - point1.latitude) * Math.PI) / 180
+    const deltaLng = ((point2.longitude - point1.longitude) * Math.PI) / 180
 
     const a =
       Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
       Math.cos(lat1) *
         Math.cos(lat2) *
         Math.sin(deltaLng / 2) *
-        Math.sin(deltaLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        Math.sin(deltaLng / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 
-    return Math.round(R * c);
+    return Math.round(R * c)
   }
 
   /**
@@ -244,9 +253,9 @@ class MapService {
    */
   formatDistance(meters: number): string {
     if (meters < 1000) {
-      return `${meters}米`;
+      return `${meters}米`
     }
-    return `${(meters / 1000).toFixed(1)}公里`;
+    return `${(meters / 1000).toFixed(1)}公里`
   }
 
   /**
@@ -254,17 +263,17 @@ class MapService {
    */
   formatDuration(seconds: number): string {
     if (seconds < 60) {
-      return `${seconds}秒`;
+      return `${seconds}秒`
     }
-    const minutes = Math.floor(seconds / 60);
+    const minutes = Math.floor(seconds / 60)
     if (minutes < 60) {
-      return `${minutes}分钟`;
+      return `${minutes}分钟`
     }
-    const hours = Math.floor(minutes / 60);
-    const remainMinutes = minutes % 60;
-    return `${hours}小时${remainMinutes}分钟`;
+    const hours = Math.floor(minutes / 60)
+    const remainMinutes = minutes % 60
+    return `${hours}小时${remainMinutes}分钟`
   }
 }
 
 // 导出单例
-export const mapService = new MapService();
+export const mapService = new MapService()

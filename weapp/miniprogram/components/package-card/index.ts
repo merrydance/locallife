@@ -7,7 +7,7 @@ Component({
   },
   methods: {
     onTap() {
-      const pkg = this.properties.package as any
+      const pkg = this.properties.package as { id?: number }
       if (pkg && pkg.id) {
         this.triggerEvent('click', { id: pkg.id })
       }

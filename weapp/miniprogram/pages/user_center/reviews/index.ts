@@ -1,8 +1,16 @@
 import ReviewService, { Review } from '../../../api/review'
 import { formatTime } from '../../../utils/util'
-import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { ErrorHandler } from '../../../utils/error-handler'
+
+interface MerchantDataset {
+  id?: number
+}
+
+interface PreviewDataset {
+  urls?: string[]
+  current?: string
+}
 
 interface ReviewDisplay {
   id: number
@@ -90,19 +98,20 @@ Page({
     })
   },
 
-  onMerchantClick(e: any) {
-    const { id } = e.currentTarget.dataset
+  onMerchantClick(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as MerchantDataset
     if (!id) return
     wx.navigateTo({
         url: `/pages/takeout/restaurant-detail/index?id=${id}`
     })
   },
 
-  onImagePreview(e: any) {
-    const { urls, current } = e.currentTarget.dataset
+  onImagePreview(e: WechatMiniprogram.TouchEvent) {
+    const { urls, current } = e.currentTarget.dataset as PreviewDataset
+    if (!urls || urls.length === 0) return
     wx.previewImage({
         urls,
-        current
+        current: current || urls[0]
     })
   },
 

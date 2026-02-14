@@ -6,6 +6,39 @@
 
 ### 核心风险总结 (2026-02-06 审计发现)
 
+### 风险处置决策 (2026-02-14)
+
+- **短期暂缓/不修复（Accepted）**
+  - `P1-006`：架构分层重构（涉及面大，暂缓）
+  - `P1-033`、`P1-041`、`P1-043`、`P1-045`：单实例阶段接受风险
+  - `P2-002`、`P2-003`：敏感信息加密改造暂不在短期迭代范围
+- **继续推进修复（短期）**
+  - 非上述项继续按原计划闭环（代码修复 + 回归验证）
+  - 同步清理文档内“已修复但子项未回填”的状态不一致
+
+### 短期执行清单（精简稿）
+
+#### 1) 本期不修复（已确认）
+
+- `P1-006`：架构分层重构（Deferred，纳入中长期）
+- `P1-033`：Casbin 多实例策略同步（Accepted）
+- `P1-041`：WebSocket Redis Pub/Sub（Accepted）
+- `P1-043`：Cron 分布式锁（Accepted）
+- `P1-045`：密钥自动轮转（Accepted）
+- `P2-002`：商户敏感字段加密（Accepted，后续专项）
+- `P2-003`：骑手 OCR 敏感字段加密/脱敏（Accepted，后续专项）
+
+#### 2) 本期持续推进
+
+- 按链路继续关闭非 Deferred/Accepted 类风险条目
+- 每项修复必须附带回归验证（`lint/compile/test`）
+- 每次修复后同步回填本清单与“核心风险总结”状态
+
+#### 3) 里程碑输出要求
+
+- 每周输出一次“剩余风险短名单”（仅未关闭项）
+- 每次发布前输出“已关闭风险清单 + 证据链接（PR/测试结果）”
+
 | 编号       | 风险等级 | 类别        | 描述                                                                                                                                                                                                       |
 | :--------- | :------- | :---------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **P1-001** | Resolved | 基础设施    | ~~`app.env.example` 缺失关键微信配置，生产环境部署风险。~~ (**已修复**: Verified `WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH` and other keys are present)                                                         |
@@ -13,19 +46,19 @@
 | **P1-003** | Resolved | 安全/配送   | ~~`grabOrder` 缺失骑手物理距离校验，允许异地抢单。~~ (**已修复**: `MaxGrabOrderDistanceMeters` 5公里距离校验)                                                                                              |
 | **P1-004** | Resolved | 安全/索赔   | ~~`SubmitClaim` 在规则引擎故障时缺乏可靠的降级保护。~~ (**已修复**: Implemented fallback to manual review with error logging.)                                                                             |
 | **P1-005** | Resolved | 安全/配送   | ~~`confirmDelivery` 缺失 LBS 地理围栏校验~~ (**已修复**: `DeliveryConfirmRadiusMeters` 500米围栏校验)                                                                                                      |
-| **P1-006** | Critical | 架构约束    | 违反 Rule 3：`api/*.go` 堆积了大量核心业务逻辑，未解耦至 logic 层。                                                                                                                                        |
+| **P1-006** | Deferred | 架构约束    | 违反 Rule 3：`api/*.go` 堆积了大量核心业务逻辑，未解耦至 logic 层。（**决策**: 2026-02-14 起短期暂缓，纳入中长期重构）                                                                                  |
 | **P1-007** | Resolved | 事务/SSOT   | ~~`adjustMemberBalance` 余额变动与流水记录未在同一事务内~~ (**已修复**: `AdjustMemberBalanceTx` 原子事务)                                                                                                  |
-| **P1-008** | Medium   | 业务逻辑    | `promotion_engine` 暂未支持真实的本金/赠额拆分汇总。                                                                                                                                                       |
+| **P1-008** | Resolved | 业务逻辑    | ~~`promotion_engine` 暂未支持真实的本金/赠额拆分汇总。~~ (**已修复**: 结合会员本金/赠额余额与使用场景/抵扣上限计算)                                                                                        |
 | **P1-009** | Resolved | 事务/SSOT   | ~~`createCombinedPaymentOrder` 跨子单操作缺乏原子性保证。~~ (**已修复**: `CreateCombinedPaymentTx` 原子事务)                                                                                               |
 | **P1-010** | Resolved | 业务逻辑    | ~~`Appeal` (申诉) 接口缺失时效窗口限制~~ (**已修复**: `AppealWindowDays` 7天窗口期检查)                                                                                                                    |
 | **P1-011** | Resolved | 一致性      | ~~`createOrder` 在事务外预计算余额，存在高并发下的脏读风险。~~ (**已修复**: `CreateOrderTx` 内使用 `FOR UPDATE` 锁校验)                                                                                    |
 | **P1-012** | Resolved | 并发/SSOT   | ~~`renewAccessToken` 刷新令牌时未对 Session 加锁，存在竞态风险。~~ (**已修复**: `RefreshSessionTx` + `FOR UPDATE`)                                                                                         |
-| **P1-013** | Low      | 性能        | RBAC 中间件多次重复查询相同实体（商户/骑手），增加 DB 压力。                                                                                                                                               |
+| **P1-013** | Resolved | 性能        | ~~RBAC 中间件多次重复查询相同实体（商户/骑手），增加 DB 压力。~~ (**已修复**: Casbin 中间件优先复用 context 中的角色缓存)                                                                                  |
 | **P1-014** | Resolved | 安全        | ~~权限校验链路不统一，部分路由未接入全局 Casbin Enforcer。~~ (**已修复**: Applied `MerchantStaffMiddleware` to critical routes)                                                                            |
-| **P1-015** | Low      | 业务逻辑    | 购物车预览阶段缺失阶梯优惠与代金券试算功能。                                                                                                                                                               |
+| **P1-015** | Resolved | 业务逻辑    | ~~购物车预览阶段缺失阶梯优惠与代金券试算功能。~~ (**已修复**: `calculateCart` 返回 `ladder_promotions` 与 `voucher_trials` 试算结果)                                                                     |
 | **P1-016** | Resolved | 并发/业务   | ~~`addCartItem` 数量上限校验与数据库写入非原子操作~~ (**已修复**: SQL `WHERE quantity + amount <= 99` 原子保护)                                                                                            |
 | **P1-017** | Resolved | 安全        | ~~运费校验虽然记录了差异但主要依赖前端传入，防篡改策略相对宽松。~~ (**已修复**: Enforced server-side distance & fee calculation)                                                                           |
-| **P1-018** | Medium   | 业务逻辑    | 营销引擎缺乏“互斥/叠加”规则的可视化配置，当前代码逻辑较硬。                                                                                                                                                |
+| **P1-018** | Resolved | 业务逻辑    | ~~营销引擎缺乏“互斥/叠加”规则的可视化配置，当前代码逻辑较硬。~~ (**已修复**: 基于 `stacking_group`/`can_stack_with_*` 规则化决策互斥与叠加)                                                             |
 | **P1-019** | Resolved | 安全/频控   | ~~`urgeOrder` (催单) 完全缺失速率限制~~ (**已修复**: 5分钟窗口最多3次限频)                                                                                                                                 |
 | **P1-020** | Resolved | 事务/SSOT   | ~~`replaceOrder` 跨表操作（创建新单并标记旧单）未在同一个事务内执行~~ (**已修复**: `ReplaceOrderTx`)                                                                                                       |
 | **P1-021** | Resolved | 性能/成本   | ~~骑手推荐列表实时调用 OSM 骑行路径计算且无缓存，高并发下成本/延时极高。~~ (**已修复**: Removed `enrichWithRealDistance` in favor of cached `RouteService.EnrichOrders` with ~100m precision and 30m TTL.) |
@@ -55,14 +88,14 @@
 | **P1-045** | Accepted | 安全/合规   | `TOKEN_SYMMETRIC_KEY` 等核心秘钥缺乏自动轮转机制。(用户确认: 运维手动管理，Accept风险)                                                                                                                     |
 | **P1-046** | Resolved | 逻辑/可靠性 | ~~`confirmOrder` 异步分发分账任务失败无补偿，可能导致商户无法收到资金。~~ (**已修复**: `ProfitSharingRecoveryScheduler` 自动扫描补偿)                                                                      |
 | **P1-047** | Resolved | 事务/资金   | ~~余额支付在 `CreateOrderTx` 扣除但在后续失败时无回滚~~ (**已修复**: 全原子操作，无需回滚)                                                                                                                 |
-| **P1-058** | Medium   | 逻辑/并发   | `tryWebSocketPush` 对每一条通知都进行角色查询，在高并发下可能导致 DB 压力。                                                                                                                                |
+| **P1-058** | Resolved | 逻辑/并发   | ~~`tryWebSocketPush` 对每一条通知都进行角色查询，在高并发下可能导致 DB 压力。~~ (**已修复**: worker 内对用户角色查询做短期缓存)                                                                          |
 | **P1-059** | Resolved | 事务/资金   | ~~`CancelOrderTx` (订单取消) 缺失会员余额回滚逻辑~~ (**已修复**: 事务内原子回滚余额+创建退款流水)                                                                                                          |
 | **P1-060** | Resolved | 逻辑/并发   | ~~`ProcessOrderPaymentTx` 在 inventory 扣减后未对 `PaymentOrder` 状态做最终强制校验。~~ (**已修复**: Added mandatory check for `OrderStatusPending` in `ProcessOrderPaymentTx`.)                           |
 | **P1-061** | Resolved | 逻辑/同步   | ~~`getMerchantFinanceOverview` 跨日期统计未加缓存，且未对超大时间跨度做严格限制。~~ (**已修复**: Restricted date range to 90 days)                                                                         |
 | **P1-062** | Resolved | 安全/身份   | ~~`bindPhone` 接口允许绑定任意手机号~~ (已移除该功能，因业务不需要且微信接口收费)。                                                                                                                        |
 | **P1-063** | Resolved | 逻辑/资金   | ~~爽约时定金（Deposit）逻辑缺失，未显式处理没收/结算资金流。~~ (**已修复**: Integrated into ProfitSharing system)                                                                                          |
 | **P1-064** | Resolved | 安全/风控   | ~~爽约时未记录用户风控信用分，无法防止恶意爽约。~~ (**已修复**: Automatically create behavior decision for no-show)                                                                                        |
-| **P1-065** | Medium   | 业务逻辑    | 取消预订仅支持全额/无退款，不支持部分退款配置（如退50%）。                                                                                                                                                 |
+| **P1-065** | Resolved | 业务逻辑    | ~~取消预订仅支持全额/无退款，不支持部分退款配置（如退50%）。~~ (**已修复**: 新增可配置的“用户/商户×截止前后”退款比例策略)                                                                               |
 
 ---
 
@@ -102,14 +135,14 @@
   - [x] refresh_payload 校验 ✅
   - [x] session.is_revoked 校验 ✅
   - [x] 令牌滚动更新（New RT for Each Refresh）✅
-  - [ ] **发现 P1-012**: 缺少 `FOR UPDATE` 锁定会话，存在高并发刷新冲突。
+  - [x] **发现 P1-012**: ~~缺少 `FOR UPDATE` 锁定会话，存在高并发刷新冲突。~~ (**已修复**: `RefreshSessionTx` + `FOR UPDATE`)
 
 #### A1.4 权限控制链路
 
 - [x] `api/rbac_middleware.go` - RBAC 权限系统 ✅
   - [x] 角色动态加载 ✅
   - [x] 实体（商户/骑手/运营商）关联校验 ✅
-  - [ ] **发现 P1-013**: 多重中间件导致冗余的 DB 查询。
+  - [x] **发现 P1-013**: ~~多重中间件导致冗余的 DB 查询。~~ (**已修复**: Casbin 中间件复用 context 角色缓存)
   - [x] **发现 P1-014**: ~~部分路由未覆盖全局 Casbin 规则。~~ (**已修复**: Added
         `MerchantStaffMiddleware` to merchant management APIs)
 - [x] `api/casbin_enforcer.go` - Casbin 策略执行 ✅
@@ -151,14 +184,15 @@
   - [x] 配送费计算 ✅
   - [x] 包装费计算 ✅
   - [x] 金额精度处理（分 vs 元）✅
-  - [ ] **发现 P1-015**: 购物车预览阶段缺失阶梯优惠与代金券试算功能。
-  - [ ] **发现 P1-016**: `addCartItem`
-        数量上限校验与数据库写入非原子操作，可绕过 99 件限制。
+    - [x] **发现 P1-015**:
+      ~~购物车预览阶段缺失阶梯优惠与代金券试算功能。~~ (**已修复**: 返回阶梯优惠/代金券试算明细)
+  - [x] **发现 P1-016**: ~~`addCartItem` 数量上限校验与数据库写入非原子操作，可绕过 99 件限制。~~ (**已修复**: SQL `WHERE quantity + amount <= 99` 原子保护)
   - [x] **发现 P1-017**: ~~运费校验宽松。~~ (**已修复**: Ignored client
         distance/fee, always recalculate on server)
 
-  - [ ] **发现 P1-018**:
-        营销引擎缺乏“互斥/叠加”规则的可视化配置，当前代码逻辑较硬。
+    - [x] **发现 P1-018**:
+      ~~营销引擎缺乏“互斥/叠加”规则的可视化配置，当前代码逻辑较硬。~~
+      (**已修复**: `stacking_group` + `can_stack_with_voucher/can_stack_with_membership` 决策)
 
 ---
 
@@ -231,13 +265,11 @@
 - [x] `api/order.go` - `urgeOrder` ✅
   - [ ] 催单频率限制
   - [ ] 通知推送
-  - [ ] **发现 P1-019**: `urgeOrder` (催单)
-        完全缺失速率限制，易被恶意刷接口污染日志。
+  - [x] **发现 P1-019**: ~~`urgeOrder` (催单) 完全缺失速率限制，易被恶意刷接口污染日志。~~ (**已修复**: 5分钟窗口最多3次限频)
 - [x] `api/order.go` - `replaceOrder` (改单) ✅
   - [ ] 改单后金额变化处理
   - [ ] 已支付订单改单的差价处理
-  - [ ] **发现 P1-020**: `replaceOrder`
-        跨表操作（创建新单并标记旧单）未在同一个事务内执行。
+  - [x] **发现 P1-020**: ~~`replaceOrder` 跨表操作（创建新单并标记旧单）未在同一个事务内执行。~~ (**已修复**: `ReplaceOrderTx`)
 
 ---
 
@@ -546,8 +578,9 @@
   - [x] 退款窗口（refund_deadline）✅
   - [x] **发现 P1-029**: 状态变更与库存释放 (`ReleaseReservationInventoryTx`)
         分属不同事务，存在库存泄露。(Resolved)
-  - [x] **发现 P1-065**:
-        取消预订仅支持全额/无退款，不支持部分退款配置（如退50%）。(Medium)
+    - [x] **发现 P1-065**:
+      ~~取消预订仅支持全额/无退款，不支持部分退款配置（如退50%）。~~
+      (**已修复**: 取消预订支持按角色/时间窗口配置部分退款比例)
 
 #### A9.9 预订超时
 
@@ -704,7 +737,7 @@
   - [x] 会员等级计算 ✅
   - [x] 折扣生效 ✅
   - [x] **发现 P1-007**: `adjustMemberBalance` 余额变动与流水写入非原子事务。
-  - [x] **发现 P1-008**: 赠额与本金拆分逻辑不完整。
+  - [x] **发现 P1-008**: ~~赠额与本金拆分逻辑不完整。~~ (**已修复**: 结合会员本金/赠额余额与使用场景/抵扣上限计算)
 
 ---
 
@@ -991,8 +1024,8 @@
 | 编号   | 链路           | 问题描述                                                                      | 代码位置                      | 修复建议                                                                |
 | ------ | -------------- | ----------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------- |
 | P2-001 | A10.1 索赔退款 | **退款可靠性不足**：使用 `go func` 异步执行退款事务，进程崩溃会导致退款丢失。 | `api/risk_management.go`      | ✅ **已修复**: 使用 `Asynq` 任务队列 (`TaskClaimRefund`) 替代 goroutine |
-| P2-002 | A11.1 商户入驻 | **敏感信息明文存储**：法人身份证号在 merchant_applications 表中未加密存储。   | `api/merchant_application.go` | **建议**: 使用 AES 加密存储或仅存储脱敏/哈希值（如业务允许）            |
-| P2-003 | A12.1 骑手入驻 | **敏感信息明文存储**：OCR 结果 JSON 直接存入数据库，包含完整身份证信息。      | `api/rider_application.go`    | **建议**: 对敏感字段进行加密处理或仅保存必要脱敏信息                    |
+| P2-002 | A11.1 商户入驻 | **敏感信息明文存储**：法人身份证号在 merchant_applications 表中未加密存储。   | `api/merchant_application.go` | **Accepted（短期不修复）**：后续统一纳入敏感字段加密专项                |
+| P2-003 | A12.1 骑手入驻 | **敏感信息明文存储**：OCR 结果 JSON 直接存入数据库，包含完整身份证信息。      | `api/rider_application.go`    | **Accepted（短期不修复）**：后续统一纳入敏感字段加密专项                |
 
 ### 设计优化建议
 
@@ -1004,5 +1037,5 @@
 ### 🔵 优化建议 (P2 - Low)
 
 1. **P2-001 (A10.1 索赔追偿)**: 已通过 Task Queue 修复。
-2. **P2-002 (A11.1 商户入驻)**: 建议对身份证号等敏感字段加密存储 (P1-006合规)。
-3. **P2-003 (A12.1 骑手入驻)**: 建议对 OCR JSON 中的敏感信息加密或脱敏。
+2. **P2-002 (A11.1 商户入驻)**: **Accepted（短期不修复）**，后续纳入敏感字段加密专项。
+3. **P2-003 (A12.1 骑手入驻)**: **Accepted（短期不修复）**，后续纳入敏感字段加密专项。

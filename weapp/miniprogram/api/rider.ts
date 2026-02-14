@@ -49,15 +49,19 @@ export class RiderService {
         latitude: number
         recorded_at: string
         delivery_id?: number
-    }>): Promise<any> {
+    }>): Promise<unknown> {
         return await request({
             url: '/v1/rider/location',
             method: 'POST',
             data: { locations }
         })
     }
-    static async request(url: string, method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', data?: any): Promise<any> {
-        return await request({ url, method, data })
+    static async request<T = unknown>(
+        url: string,
+        method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+        data?: unknown
+    ): Promise<T> {
+        return await request<T>({ url, method, data })
     }
 
     /**
@@ -66,7 +70,7 @@ export class RiderService {
     static async reportException(orderId: number, data: {
         exception_type: string
         description: string
-    }): Promise<any> {
+    }): Promise<unknown> {
         return await request({
             url: `/v1/rider/orders/${orderId}/exception`,
             method: 'POST',

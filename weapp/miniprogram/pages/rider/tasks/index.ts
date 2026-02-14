@@ -55,8 +55,9 @@ Page({
     }
   },
 
-  onGoToDetail(e: any) {
-    const { orderId } = e.currentTarget.dataset
+  onGoToDetail(e: WechatMiniprogram.TouchEvent) {
+    const { orderId } = e.currentTarget.dataset as { orderId?: number }
+    if (!orderId) return
     wx.navigateTo({
         url: `/pages/rider/task-detail/index?id=${orderId}`
     })

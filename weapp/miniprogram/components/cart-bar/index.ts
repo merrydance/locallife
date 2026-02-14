@@ -33,7 +33,7 @@ Component({
   },
 
   observers: {
-    'totalPrice, totalPriceDisplay': function (price: number, display: string) {
+    'totalPrice, totalPriceDisplay' (price: number, display: string) {
       // 如果传入了格式化好的价格则使用，否则自己格式化
       if (!display && price >= 0) {
         this.setData({ computedPriceDisplay: formatPriceNoSymbol(price) })
@@ -41,7 +41,7 @@ Component({
         this.setData({ computedPriceDisplay: display })
       }
     },
-    'deliveryFee, deliveryFeeDisplay': function (fee: number, display: string) {
+    'deliveryFee, deliveryFeeDisplay' (fee: number, display: string) {
       if (!display && fee > 0) {
         this.setData({ computedDeliveryDisplay: formatPriceNoSymbol(fee) })
       } else {

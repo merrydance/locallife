@@ -5,15 +5,37 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import dayjs from 'dayjs'
 
 interface ExceptionAudit {
-  id: number;
-  order_id: number;
-  exception_type: string;
-  description: string;
-  status: 'pending' | 'resolved' | 'dismissed';
-  created_at: string;
-  resolution?: string;
-  type_label?: string;
-  status_label?: string;
+  id: number
+  order_id: number
+  exception_type: string
+  description: string
+  status: 'pending' | 'resolved' | 'dismissed'
+  created_at: string
+  resolution?: string
+  type_label?: string
+  status_label?: string
+}
+
+interface ExceptionOptions {
+  orderId?: string
+  tab?: 'report' | 'history'
+}
+
+interface AppealHistoryItem {
+  id: number
+  order_id: number
+  exception_type: string
+  description: string
+  status: 'pending' | 'resolved' | 'dismissed'
+  created_at: string
+}
+
+interface UploadFileItem {
+  url: string
+}
+
+interface UserMessageError {
+  userMessage?: string
 }
 
 Page({
@@ -33,7 +55,7 @@ Page({
       type: 'customer_unreachable',
       description: ''
     },
-    fileList: [] as any[],
+    fileList: [] as UploadFileItem[],
     
     typeOptions: [
       { label: '无法联系顾客', value: 'customer_unreachable', icon: 'mobile-off' },
@@ -45,7 +67,7 @@ Page({
     ]
   },
 
-  onLoad(options: any) {
+  onLoad(options: ExceptionOptions) {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     
@@ -65,8 +87,9 @@ Page({
     this.fetchData()
   },
 
-  switchTab(e: any) {
-    const { tab } = e.currentTarget.dataset
+  switchTab(e: WechatMiniprogram.TouchEvent) {
+    const { tab } = e.currentTarget.dataset as { tab?: 'report' | 'history' }
+    if (!tab) return
     if (tab === this.data.activeTab) return
     this.setData({ activeTab: tab })
   },
@@ -79,12 +102,12 @@ Page({
       // 并发请求活跃订单和历史记录
       const [activeOrders, historyRes] = await Promise.all([
         request({ url: '/v1/delivery/active', method: 'GET' }) as Promise<Delivery[]>,
-        request({ url: '/v1/rider/appeals', method: 'GET' }) as Promise<{ appeals: any[] }>
+        request({ url: '/v1/rider/appeals', method: 'GET' }) as Promise<{ appeals: AppealHistoryItem[] }>
       ])
       
       // 格式化历史记录
-      const history = (historyRes?.appeals || []).map((item: any) => {
-        const typeOpt = this.data.typeOptions.find(o => o.value === item.exception_type)
+      const history = (historyRes?.appeals || []).map((item) => {
+        const typeOpt = this.data.typeOptions.find((o) => o.value === item.exception_type)
         const statusMap = {
           'pending': '处理中',
           'resolved': '已通过',
@@ -109,28 +132,30 @@ Page({
     }
   },
 
-  onSelectOrder(e: any) {
-    const { id } = e.currentTarget.dataset
+  onSelectOrder(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
     this.setData({ 'formData.orderId': id })
   },
 
-  onTypeSelect(e: any) {
-    const { value } = e.currentTarget.dataset
+  onTypeSelect(e: WechatMiniprogram.TouchEvent) {
+    const { value } = e.currentTarget.dataset as { value?: string }
+    if (!value) return
     this.setData({ 'formData.type': value })
   },
 
-  onDescriptionChange(e: any) {
+  onDescriptionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ 'formData.description': e.detail.value })
   },
 
-  onAddImage(e: any) {
+  onAddImage(e: WechatMiniprogram.CustomEvent<{ files: UploadFileItem[] }>) {
     const { files } = e.detail
     this.setData({
       fileList: [...this.data.fileList, ...files]
     })
   },
 
-  onRemoveImage(e: any) {
+  onRemoveImage(e: WechatMiniprogram.CustomEvent<{ index: number }>) {
     const { index } = e.detail
     const { fileList } = this.data
     fileList.splice(index, 1)
@@ -175,10 +200,12 @@ Page({
       
       // 延迟刷新列表，避免立刻刷新导致感知不到新数据（如果后端有延迟）
       setTimeout(() => this.fetchData(), 500)
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('Report exception failed', err)
+      const userMessage = (err as UserMessageError).userMessage
+      const message = typeof userMessage === 'string' && userMessage ? userMessage : '上报失败'
       wx.showToast({ 
-        title: err.userMessage || '上报失败', 
+        title: message,
         icon: 'none' 
       })
       this.setData({ submitting: false })

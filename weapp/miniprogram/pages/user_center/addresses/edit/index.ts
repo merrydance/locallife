@@ -1,4 +1,4 @@
-import AddressService, { Address, CreateAddressRequest, UpdateAddressRequest } from '../../../../api/address'
+import AddressService, { CreateAddressRequest, UpdateAddressRequest } from '../../../../api/address'
 import { logger } from '../../../../utils/logger'
 import { ErrorHandler } from '../../../../utils/error-handler'
 
@@ -6,6 +6,25 @@ interface WechatAddressData {
   contact_name: string
   contact_phone: string
   detail_address: string
+}
+
+const getErrorMessage = (error: unknown): string => {
+  if (!error || typeof error !== 'object') {
+    return ''
+  }
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string') {
+    return message
+  }
+  const responseError = (error as { response?: { data?: { error?: unknown } } }).response?.data?.error
+  if (typeof responseError === 'string') {
+    return responseError
+  }
+  const dataError = (error as { data?: { error?: unknown } }).data?.error
+  if (typeof dataError === 'string') {
+    return dataError
+  }
+  return ''
 }
 
 Page({
@@ -24,7 +43,7 @@ Page({
     navTitle: '编辑地址'
   },
 
-  onLoad(options: { id?: string; wechat_data?: string }) {
+  onLoad(options: { id?: string, wechat_data?: string }) {
     if (options.id) {
       this.setData({ 
         addressId: Number(options.id),
@@ -173,8 +192,7 @@ Page({
       setTimeout(() => wx.navigateBack(), 1000)
     } catch (error) {
       logger.error('Save failed', error)
-      const err = error as any
-      const message = err?.message || err?.response?.data?.error || err?.data?.error
+      const message = getErrorMessage(error)
        if (message && (
         message.includes('未能定位') ||
         message.includes('geocode')

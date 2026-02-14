@@ -1,4 +1,4 @@
-import { responsiveBehavior } from '../../utils/responsive';
+import { responsiveBehavior } from '../../utils/responsive'
 
 Component({
     behaviors: [responsiveBehavior],
@@ -37,7 +37,7 @@ Component({
 
     methods: {
         onTap() {
-            this.triggerEvent('tap');
+            this.triggerEvent('tap')
         }
     }
-});
+})

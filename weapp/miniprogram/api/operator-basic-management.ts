@@ -375,7 +375,7 @@ export class RegionAnalyticsService {
         }
 
         const regionRankings = regionStats
-            .map(region => ({
+            .map((region) => ({
                 region,
                 performance: this.calculateRegionPerformance(region),
                 rank: 0
@@ -641,7 +641,7 @@ export async function getOperatorDashboard(): Promise<{
     ])
 
     // 获取各区域统计数据
-    const regionStatsPromises = regions.regions.map(region =>
+    const regionStatsPromises = regions.regions.map((region) =>
         operatorBasicManagementService.getRegionStats(region.id)
     )
     const regionStats = await Promise.all(regionStatsPromises)
@@ -687,7 +687,7 @@ export async function getRegionAnalysisReport(regionId: number, days: number = 3
         operatorBasicManagementService.getRegionStats(regionId, startDate, endDate)
     ])
 
-    const regionInfo = regions.regions.find(r => r.id === regionId)
+    const regionInfo = regions.regions.find((r) => r.id === regionId)
     if (!regionInfo) {
         throw new Error('区域不存在')
     }
@@ -848,7 +848,7 @@ export function formatGrowthRate(growth: number, showSign: boolean = true): stri
  * 验证区域查询参数
  * @param params 查询参数
  */
-export function validateRegionQueryParams(params: RegionQueryParams): { valid: boolean; message?: string } {
+export function validateRegionQueryParams(params: RegionQueryParams): { valid: boolean, message?: string } {
     if (params.page && params.page < 1) {
         return { valid: false, message: '页码必须大于0' }
     }
@@ -868,7 +868,7 @@ export function validateRegionQueryParams(params: RegionQueryParams): { valid: b
  * 验证佣金查询参数
  * @param params 查询参数
  */
-export function validateCommissionQueryParams(params: CommissionQueryParams): { valid: boolean; message?: string } {
+export function validateCommissionQueryParams(params: CommissionQueryParams): { valid: boolean, message?: string } {
     if (params.start_date && params.end_date) {
         const startDate = new Date(params.start_date)
         const endDate = new Date(params.end_date)

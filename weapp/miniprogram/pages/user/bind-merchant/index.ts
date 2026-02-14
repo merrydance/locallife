@@ -6,8 +6,18 @@
 import { bindMerchant, BindMerchantResponse } from '../../../api/personal'
 import { getWebLoginSessionStatus, confirmWebLoginSession } from '../../../api/auth'
 
-const isBindMerchantError = (error: unknown): error is { statusCode?: number; message?: string } => {
+const isBindMerchantError = (error: unknown): error is { statusCode?: number, message?: string } => {
     return !!error && typeof error === 'object'
+}
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (error && typeof error === 'object' && 'message' in error) {
+        const { message } = error as { message?: unknown }
+        if (typeof message === 'string' && message.trim()) {
+            return message
+        }
+    }
+    return fallback
 }
 
 Page({
@@ -107,17 +117,23 @@ Page({
     },
 
     extractRawPayload(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
-        const anyRes = res as any
-        const path = anyRes.path || ''
-        const result = anyRes.result || ''
-        const rawData = anyRes.rawData || ''
-        const scene = anyRes.scene || ''
-        const query = anyRes.query || {}
+        const payload = res as WechatMiniprogram.ScanCodeSuccessCallbackResult & {
+            path?: string
+            result?: string
+            rawData?: string
+            scene?: string
+            query?: { code?: string }
+        }
+        const path = payload.path || ''
+        const result = payload.result || ''
+        const rawData = payload.rawData || ''
+        const scene = payload.scene || ''
+        const query = payload.query || {}
         const codeFromQuery = query.code || ''
         const candidate = [path, result, rawData, scene, codeFromQuery].find((val) => !!val) || ''
         return {
             raw: String(candidate),
-            codeCandidate: String(codeFromQuery || candidate || ''),
+            codeCandidate: String(codeFromQuery || candidate || '')
         }
     },
 
@@ -153,8 +169,8 @@ Page({
                 try {
                     await confirmWebLoginSession(code)
                     wx.showToast({ title: '已确认登录', icon: 'success' })
-                } catch (error: any) {
-                    wx.showToast({ title: error?.message || '确认失败', icon: 'none' })
+                } catch (error: unknown) {
+                    wx.showToast({ title: getErrorMessage(error, '确认失败'), icon: 'none' })
                 } finally {
                     wx.hideLoading()
                 }

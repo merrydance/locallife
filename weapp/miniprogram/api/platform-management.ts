@@ -235,6 +235,20 @@ export class PlatformManagementService {
         })
     }
 
+    private typeReviewEfficiency(efficiency: {
+        avgReviewTime: number
+        approvalRate: number
+        rejectionRate: number
+        pendingCount: number
+    }): {
+        avgReviewTime: number
+        approvalRate: number
+        rejectionRate: number
+        pendingCount: number
+    } {
+        return efficiency
+    }
+
     /**
      * 审核商户申请
      * @param applicationId 申请ID
@@ -396,19 +410,19 @@ export class ReviewAnalyticsService {
             byRegion: Map<string, number>
         }
         trends: {
-            dailyApplications: Array<{ date: string; count: number }>
-            reviewTimeTrend: Array<{ date: string; avgTime: number }>
+            dailyApplications: Array<{ date: string, count: number }>
+            reviewTimeTrend: Array<{ date: string, avgTime: number }>
         }
         insights: string[]
         recommendations: string[]
     } {
         const total = applications.length
-        const approved = applications.filter(app => app.status === 'approved')
-        const rejected = applications.filter(app => app.status === 'rejected')
-        const pending = applications.filter(app => app.status === 'pending' || app.status === 'reviewing')
+        const approved = applications.filter((app) => app.status === 'approved')
+        const rejected = applications.filter((app) => app.status === 'rejected')
+        const pending = applications.filter((app) => app.status === 'pending' || app.status === 'reviewing')
 
         // 计算审核时间
-        const reviewedApps = applications.filter(app => app.reviewed_at && app.submitted_at)
+        const reviewedApps = applications.filter((app) => app.reviewed_at && app.submitted_at)
         const avgReviewTime = reviewedApps.length > 0
             ? reviewedApps.reduce((sum, app) => {
                 const submitTime = new Date(app.submitted_at).getTime()
@@ -426,7 +440,7 @@ export class ReviewAnalyticsService {
         const categoryDistribution = new Map<string, number>()
         const regionDistribution = new Map<string, number>()
 
-        applications.forEach(app => {
+        applications.forEach((app) => {
             statusDistribution.set(app.status, (statusDistribution.get(app.status) || 0) + 1)
             categoryDistribution.set(app.business_category, (categoryDistribution.get(app.business_category) || 0) + 1)
             regionDistribution.set(app.region_name, (regionDistribution.get(app.region_name) || 0) + 1)
@@ -434,9 +448,9 @@ export class ReviewAnalyticsService {
 
         // 趋势分析（简化版）
         const dailyApplicationsMap = new Map<string, number>()
-        const reviewTimeMap = new Map<string, { total: number; count: number }>()
+        const reviewTimeMap = new Map<string, { total: number, count: number }>()
 
-        applications.forEach(app => {
+        applications.forEach((app) => {
             const submitDate = app.submitted_at.split('T')[0]
             dailyApplicationsMap.set(submitDate, (dailyApplicationsMap.get(submitDate) || 0) + 1)
 
@@ -524,12 +538,12 @@ export class ReviewAnalyticsService {
         recommendations: string[]
     } {
         const total = riders.length
-        const approved = riders.filter(rider => rider.status === 'approved')
-        const rejected = riders.filter(rider => rider.status === 'rejected')
-        const pending = riders.filter(rider => rider.status === 'pending' || rider.status === 'reviewing')
+        const approved = riders.filter((rider) => rider.status === 'approved')
+        const rejected = riders.filter((rider) => rider.status === 'rejected')
+        const pending = riders.filter((rider) => rider.status === 'pending' || rider.status === 'reviewing')
 
         // 计算审核时间
-        const reviewedRiders = riders.filter(rider => rider.approved_at && rider.applied_at)
+        const reviewedRiders = riders.filter((rider) => rider.approved_at && rider.applied_at)
         const avgReviewTime = reviewedRiders.length > 0
             ? reviewedRiders.reduce((sum, rider) => {
                 const applyTime = new Date(rider.applied_at).getTime()
@@ -547,7 +561,7 @@ export class ReviewAnalyticsService {
         const vehicleTypeDistribution = new Map<string, number>()
         const regionDistribution = new Map<string, number>()
 
-        riders.forEach(rider => {
+        riders.forEach((rider) => {
             statusDistribution.set(rider.status, (statusDistribution.get(rider.status) || 0) + 1)
             vehicleTypeDistribution.set(rider.vehicle_type, (vehicleTypeDistribution.get(rider.vehicle_type) || 0) + 1)
             regionDistribution.set(rider.region_name, (regionDistribution.get(rider.region_name) || 0) + 1)
@@ -559,7 +573,7 @@ export class ReviewAnalyticsService {
         let vehicleLicenseComplete = 0
         let allComplete = 0
 
-        riders.forEach(rider => {
+        riders.forEach((rider) => {
             const docs = rider.documents
             const hasIdCard = docs.id_card_front && docs.id_card_back
             const hasHealthCert = docs.health_certificate
@@ -612,7 +626,7 @@ export class ReviewAnalyticsService {
     /**
      * 生成商户审核洞察
      */
-    private generateMerchantReviewInsights(efficiency: any): string[] {
+    private generateMerchantReviewInsights(efficiency: ReturnType<PlatformManagementService['typeReviewEfficiency']>): string[] {
         const insights: string[] = []
 
         if (efficiency.avgReviewTime > 72) { // 超过3天
@@ -637,7 +651,7 @@ export class ReviewAnalyticsService {
     /**
      * 生成商户审核建议
      */
-    private generateMerchantReviewRecommendations(efficiency: any): string[] {
+    private generateMerchantReviewRecommendations(efficiency: ReturnType<PlatformManagementService['typeReviewEfficiency']>): string[] {
         const recommendations: string[] = []
 
         if (efficiency.avgReviewTime > 72) {
@@ -661,7 +675,7 @@ export class ReviewAnalyticsService {
     /**
      * 生成骑手审核洞察
      */
-    private generateRiderReviewInsights(efficiency: any): string[] {
+    private generateRiderReviewInsights(efficiency: ReturnType<PlatformManagementService['typeReviewEfficiency']>): string[] {
         const insights: string[] = []
 
         if (efficiency.avgReviewTime > 48) { // 超过2天
@@ -686,7 +700,7 @@ export class ReviewAnalyticsService {
     /**
      * 生成骑手审核建议
      */
-    private generateRiderReviewRecommendations(efficiency: any): string[] {
+    private generateRiderReviewRecommendations(efficiency: ReturnType<PlatformManagementService['typeReviewEfficiency']>): string[] {
         const recommendations: string[] = []
 
         if (efficiency.avgReviewTime > 48) {
@@ -934,7 +948,7 @@ export async function getPlatformManagementDashboard(): Promise<{
         },
         systemConfig: {
             deliveryFeeConfigs: deliveryFeeConfigs ? [deliveryFeeConfigs] : [],
-            peakHourConfigs: peakHourConfigs
+            peakHourConfigs
         }
     }
 }
@@ -949,10 +963,10 @@ export async function batchReviewMerchantApplications(
     reviewData: ReviewMerchantApplicationRequest
 ): Promise<{
     success: number[]
-    failed: Array<{ id: number; error: string }>
+    failed: Array<{ id: number, error: string }>
 }> {
     const success: number[] = []
-    const failed: Array<{ id: number; error: string }> = []
+    const failed: Array<{ id: number, error: string }> = []
 
     for (const applicationId of applicationIds) {
         try {
@@ -981,10 +995,10 @@ export async function batchReviewRiders(
     actionData: ApproveRiderRequest | RejectRiderRequest
 ): Promise<{
     success: number[]
-    failed: Array<{ id: number; error: string }>
+    failed: Array<{ id: number, error: string }>
 }> {
     const success: number[] = []
-    const failed: Array<{ id: number; error: string }> = []
+    const failed: Array<{ id: number, error: string }> = []
 
     for (const riderId of riderIds) {
         try {
@@ -1069,7 +1083,7 @@ export function formatTime(time: string): string {
  * 验证配送费配置
  * @param config 配送费配置
  */
-export function validateDeliveryFeeConfig(config: CreateDeliveryFeeConfigRequest): { valid: boolean; message?: string } {
+export function validateDeliveryFeeConfig(config: CreateDeliveryFeeConfigRequest): { valid: boolean, message?: string } {
     if (config.base_fee < 0) {
         return { valid: false, message: '基础配送费不能为负数' }
     }
@@ -1101,7 +1115,7 @@ export function validateDeliveryFeeConfig(config: CreateDeliveryFeeConfigRequest
  * 验证高峰时段配置
  * @param config 高峰时段配置
  */
-export function validatePeakHourConfig(config: CreatePeakHourConfigRequest): { valid: boolean; message?: string } {
+export function validatePeakHourConfig(config: CreatePeakHourConfigRequest): { valid: boolean, message?: string } {
     // 验证时间格式
     const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/
     if (!timeRegex.test(config.start_time)) {
@@ -1136,7 +1150,7 @@ export function validatePeakHourConfig(config: CreatePeakHourConfigRequest): { v
         return { valid: false, message: '必须选择至少一天' }
     }
 
-    const validDays = config.days_of_week.every(day => day >= 0 && day <= 6)
+    const validDays = config.days_of_week.every((day) => day >= 0 && day <= 6)
     if (!validDays) {
         return { valid: false, message: '星期数字必须在0-6之间' }
     }

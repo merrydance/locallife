@@ -1,6 +1,16 @@
 import { getRoomDetail, Room } from '../../../api/reservation'
 import { checkRoomAvailability, RoomAvailabilityResponse, TimeSlot } from '../../../api/room'
-import { formatTime, formatPriceNoSymbol } from '@/utils/util'
+import { formatPriceNoSymbol } from '@/utils/util'
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
 
 interface DayAvailability {
   date: string
@@ -65,12 +75,12 @@ Page({
       })
       // 加载可用日期
       this.loadCalendarData(parseInt(id))
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error)
       this.setData({ 
         loading: false,
         isError: true,
-        errorMessage: error.message || '加载详情失败'
+        errorMessage: getErrorMessage(error, '加载详情失败')
       })
     }
   },
@@ -129,19 +139,19 @@ Page({
         const slots = results[i].time_slots || []
         
         // 使用后端返回的 period 进行分类
-        const lunchSlots = slots.filter(s => s.period === 'lunch')
-        const dinnerSlots = slots.filter(s => s.period === 'dinner')
-        const otherSlots = slots.filter(s => s.period === 'other')
+        const lunchSlots = slots.filter((s) => s.period === 'lunch')
+        const dinnerSlots = slots.filter((s) => s.period === 'dinner')
+        const otherSlots = slots.filter((s) => s.period === 'other')
 
         // 将 other 合并到 dinner 中
         const effectiveDinnerSlots = [...dinnerSlots, ...otherSlots]
 
         return {
           ...day,
-          lunchSlots: lunchSlots,
+          lunchSlots,
           dinnerSlots: effectiveDinnerSlots,
-          lunchAvailable: lunchSlots.some(s => s.available),
-          dinnerAvailable: effectiveDinnerSlots.some(s => s.available)
+          lunchAvailable: lunchSlots.some((s) => s.available),
+          dinnerAvailable: effectiveDinnerSlots.some((s) => s.available)
         }
       })
 
@@ -157,7 +167,7 @@ Page({
   },
 
   onCellTap(e: WechatMiniprogram.CustomEvent) {
-    const { date, type, available } = e.currentTarget.dataset as { date?: string; type?: 'lunch' | 'dinner'; available?: boolean }
+    const { date, type, available } = e.currentTarget.dataset as { date?: string, type?: 'lunch' | 'dinner', available?: boolean }
     if (!available) {
       wx.showToast({ title: '时段已满', icon: 'none' })
       return
@@ -177,11 +187,11 @@ Page({
     if (room) {
       // 查找该类别的第一个可用时段作为默认时间
       let time = ''
-      const day = this.data.calendarDays.find(d => d.date === selectedDate)
+      const day = this.data.calendarDays.find((d) => d.date === selectedDate)
       
       if (day && selectedType) {
         const targetSlots = selectedType === 'lunch' ? day.lunchSlots : day.dinnerSlots
-        const firstAvailable = targetSlots.find(s => s.available)
+        const firstAvailable = targetSlots.find((s) => s.available)
         
         if (firstAvailable) {
           time = firstAvailable.time

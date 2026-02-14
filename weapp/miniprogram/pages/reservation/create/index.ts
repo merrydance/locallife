@@ -1,5 +1,15 @@
-import { ReservationService } from '../../../api/reservation';
-import ReservationAdapter from '../../../adapters/reservation';
+import { ReservationService } from '../../../api/reservation'
+import ReservationAdapter from '../../../adapters/reservation'
+
+type ValueEvent<T> = WechatMiniprogram.CustomEvent<{ value: T }>
+
+function getErrorMsg(error: unknown, fallback: string): string {
+    if (error && typeof error === 'object' && 'message' in error) {
+        const message = (error as { message?: string }).message
+        if (message) return message
+    }
+    return fallback
+}
 
 Page({
     data: {
@@ -52,99 +62,99 @@ Page({
         ]
     },
 
-    onNavHeight(e: any) {
-        this.setData({ navBarHeight: e.detail.navBarHeight });
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+        this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
-    onLoad(options: any) {
+    onLoad(options: { merchantId?: string, merchantName?: string }) {
         if (options.merchantId) {
             this.setData({
                 merchantId: parseInt(options.merchantId),
                 merchantName: options.merchantName || '餐厅'
-            });
+            })
         }
 
         // Initialize with tomorrow's date by default
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
         this.setData({
             date: `${tomorrow.getFullYear()}-${tomorrow.getMonth() + 1}-${tomorrow.getDate()}`
-        });
+        })
     },
 
     // Date Picker
     showDatePicker() {
-        this.setData({ showDatePicker: true });
+        this.setData({ showDatePicker: true })
     },
     hideDatePicker() {
-        this.setData({ showDatePicker: false });
+        this.setData({ showDatePicker: false })
     },
-    onDateChange(e: any) {
-        this.setData({ date: e.detail.value });
+    onDateChange(e: ValueEvent<string>) {
+        this.setData({ date: e.detail.value })
     },
-    onDateConfirm(e: any) {
-        this.setData({ date: e.detail.value });
-        this.hideDatePicker();
+    onDateConfirm(e: ValueEvent<string>) {
+        this.setData({ date: e.detail.value })
+        this.hideDatePicker()
     },
 
     // Time Picker
     showTimePicker() {
-        this.setData({ showTimePicker: true });
+        this.setData({ showTimePicker: true })
     },
     hideTimePicker() {
-        this.setData({ showTimePicker: false });
+        this.setData({ showTimePicker: false })
     },
-    onTimeConfirm(e: any) {
-        const value = e.detail.value[0];
-        this.setData({ time: value });
-        this.hideTimePicker();
+    onTimeConfirm(e: ValueEvent<string[]>) {
+        const value = e.detail.value[0]
+        this.setData({ time: value })
+        this.hideTimePicker()
     },
 
     // Party Size Picker
     showPartySizePicker() {
-        this.setData({ showPartySizePicker: true });
+        this.setData({ showPartySizePicker: true })
     },
     hidePartySizePicker() {
-        this.setData({ showPartySizePicker: false });
+        this.setData({ showPartySizePicker: false })
     },
-    onPartySizeConfirm(e: any) {
-        const value = e.detail.value[0];
-        this.setData({ partySize: value });
-        this.hidePartySizePicker();
+    onPartySizeConfirm(e: ValueEvent<number[]>) {
+        const value = e.detail.value[0]
+        this.setData({ partySize: value })
+        this.hidePartySizePicker()
     },
 
     // Input Handlers
-    onNameInput(e: any) {
-        this.setData({ contactName: e.detail.value });
+    onNameInput(e: ValueEvent<string>) {
+        this.setData({ contactName: e.detail.value })
     },
-    onPhoneInput(e: any) {
-        this.setData({ contactPhone: e.detail.value });
+    onPhoneInput(e: ValueEvent<string>) {
+        this.setData({ contactPhone: e.detail.value })
     },
-    onNotesInput(e: any) {
-        this.setData({ notes: e.detail.value });
+    onNotesInput(e: ValueEvent<string>) {
+        this.setData({ notes: e.detail.value })
     },
 
     // Submit
     async onSubmit() {
-        if (this.data.submitting) return;
+        if (this.data.submitting) return
 
-        const { merchantId, date, time, partySize, contactName, contactPhone, notes } = this.data;
-        const reservationTime = `${date} ${time}:00`;
+        const { merchantId, date, time, partySize, contactName, contactPhone, notes } = this.data
+        const reservationTime = `${date} ${time}:00`
 
         const validation = ReservationAdapter.validateReservation({
             reservation_time: reservationTime,
             party_size: partySize,
             contact_name: contactName,
             contact_phone: contactPhone
-        });
+        })
 
         if (!validation.valid) {
-            wx.showToast({ title: validation.message || '信息不完整', icon: 'none' });
-            return;
+            wx.showToast({ title: validation.message || '信息不完整', icon: 'none' })
+            return
         }
 
         try {
-            this.setData({ submitting: true });
+            this.setData({ submitting: true })
 
             await ReservationService.createReservation({
                 merchant_id: merchantId,
@@ -152,20 +162,20 @@ Page({
                 party_size: partySize,
                 contact_name: contactName,
                 contact_phone: contactPhone,
-                notes: notes
-            });
+                notes
+            })
 
-            wx.showToast({ title: '预订成功', icon: 'success' });
+            wx.showToast({ title: '预订成功', icon: 'success' })
 
             setTimeout(() => {
                 wx.redirectTo({
                     url: '/pages/reservation/list/index'
-                });
-            }, 1000);
+                })
+            }, 1000)
 
-        } catch (error: any) {
-            wx.showToast({ title: error.message || '预订失败', icon: 'none' });
-            this.setData({ submitting: false });
+        } catch (error: unknown) {
+            wx.showToast({ title: getErrorMsg(error, '预订失败'), icon: 'none' })
+            this.setData({ submitting: false })
         }
     }
-});
+})

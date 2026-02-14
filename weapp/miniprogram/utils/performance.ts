@@ -67,39 +67,36 @@ export class PerformanceMonitor {
 /**
  * 防抖函数
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
     func: T,
     wait: number
 ): (...args: Parameters<T>) => void {
-    let timeout: number | null = null
+    let timeout: ReturnType<typeof setTimeout> | null = null
 
-    return function (this: any, ...args: Parameters<T>) {
-        const context = this
-
+    return function (this: unknown, ...args: Parameters<T>) {
         if (timeout !== null) {
             clearTimeout(timeout)
         }
 
         timeout = setTimeout(() => {
-            func.apply(context, args)
+            func.apply(this, args)
             timeout = null
-        }, wait) as any
+        }, wait)
     }
 }
 
 /**
  * 节流函数
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
     func: T,
     wait: number
 ): (...args: Parameters<T>) => void {
-    let timeout: number | null = null
+    let timeout: ReturnType<typeof setTimeout> | null = null
     let previous = 0
 
-    return function (this: any, ...args: Parameters<T>) {
+    return function (this: unknown, ...args: Parameters<T>) {
         const now = Date.now()
-        const context = this
 
         if (!previous) previous = now
 
@@ -111,13 +108,13 @@ export function throttle<T extends (...args: any[]) => any>(
                 timeout = null
             }
             previous = now
-            func.apply(context, args)
+            func.apply(this, args)
         } else if (!timeout) {
             timeout = setTimeout(() => {
                 previous = Date.now()
                 timeout = null
-                func.apply(context, args)
-            }, remaining) as any
+                func.apply(this, args)
+            }, remaining)
         }
     }
 }
@@ -161,7 +158,7 @@ export class ImageLazyLoader {
      * 批量预加载图片
      */
     static async preloadBatch(imageUrls: string[]): Promise<void> {
-        const promises = imageUrls.map(url => this.preload(url))
+        const promises = imageUrls.map((url) => this.preload(url))
         await Promise.all(promises)
     }
 }
@@ -170,12 +167,12 @@ export class ImageLazyLoader {
  * 数据缓存管理
  */
 export class CacheManager {
-    private static cache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map()
+    private static cache: Map<string, { data: unknown, timestamp: number, ttl: number }> = new Map()
 
     /**
      * 设置缓存
      */
-    static set(key: string, data: any, ttl: number = 5 * 60 * 1000): void {
+    static set(key: string, data: unknown, ttl: number = 5 * 60 * 1000): void {
         this.cache.set(key, {
             data,
             timestamp: Date.now(),
@@ -186,7 +183,7 @@ export class CacheManager {
     /**
      * 获取缓存
      */
-    static get<T = any>(key: string): T | null {
+    static get<T = unknown>(key: string): T | null {
         const item = this.cache.get(key)
 
         if (!item) {
@@ -233,7 +230,7 @@ export class CacheManager {
  * 请求队列管理
  */
 export class RequestQueue {
-    private static queue: Array<() => Promise<any>> = []
+    private static queue: Array<() => Promise<unknown>> = []
     private static running = 0
     private static maxConcurrent = 5
 
@@ -284,18 +281,21 @@ export class RequestQueue {
  * 页面性能追踪装饰器
  */
 export function trackPagePerformance(pageName: string) {
-    return function (target: any) {
+    return function (target: {
+        onLoad?: (...args: unknown[]) => void
+        onReady?: (...args: unknown[]) => void
+    }) {
         const originalOnLoad = target.onLoad
         const originalOnReady = target.onReady
 
-        target.onLoad = function (...args: any[]) {
+        target.onLoad = function (...args: unknown[]) {
             PerformanceMonitor.mark(`${pageName}-load-start`)
             if (originalOnLoad) {
                 originalOnLoad.apply(this, args)
             }
         }
 
-        target.onReady = function (...args: any[]) {
+        target.onReady = function (...args: unknown[]) {
             PerformanceMonitor.mark(`${pageName}-ready`)
             const duration = PerformanceMonitor.measure(
                 `${pageName}-load`,
@@ -333,7 +333,7 @@ export class MemoryOptimizer {
     /**
      * 获取内存使用情况（微信小程序）
      */
-    static getMemoryInfo(): Promise<any> {
+    static getMemoryInfo(): Promise<unknown> {
         return new Promise((resolve) => {
             if (wx.getPerformance) {
                 const performance = wx.getPerformance()

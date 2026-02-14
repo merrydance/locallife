@@ -1,5 +1,4 @@
 import CouponService, { Coupon, UserCoupon, CouponListParams, MyCouponParams } from '../../../api/coupon'
-import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
 
 // ViewModel
@@ -67,7 +66,7 @@ Page({
                     page_size: this.data.pageSize
                 }
                 const res = await CouponService.getAvailableCoupons(params)
-                list = res.coupons.map(c => this.mapCouponToView(c))
+                list = res.coupons.map((c) => this.mapCouponToView(c))
                 total = res.total
             } else {
                 // Fetch My Coupons
@@ -76,7 +75,7 @@ Page({
                     page_size: this.data.pageSize
                 }
                 const res = await CouponService.getMyCoupons(params)
-                list = res.coupons.map(c => this.mapUserCouponToView(c))
+                list = res.coupons.map((c) => this.mapUserCouponToView(c))
                 total = res.total
             }
 
@@ -116,7 +115,7 @@ Page({
             wx.showToast({ title: '领取成功', icon: 'success' })
             
             // Optimistic update: mark as claimed
-            const coupons = this.data.coupons.map(c => {
+            const coupons = this.data.coupons.map((c) => {
                 if (c.id === id) {
                     return { ...c, isClaimed: true }
                 }

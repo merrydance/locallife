@@ -62,7 +62,7 @@ export async function searchMerchants(params: {
   user_latitude?: number
   user_longitude?: number
 }): Promise<MerchantSummary[]> {
-  const requestParams: any = {
+  const requestParams: Record<string, unknown> = {
     keyword: params.keyword || '',
     page_id: params.page_id || 1,
     page_size: params.page_size || 20
@@ -97,7 +97,7 @@ export async function searchMerchants(params: {
     estimated_delivery_fee: item.estimated_delivery_fee,
     total_orders: item.total_orders,
     region_id: item.region_id,
-    status: item.status,
+    status: item.status
   }))
 }
 
@@ -128,7 +128,7 @@ export interface RecommendMerchantsResult {
 export async function getRecommendedMerchants(params?: RecommendMerchantsParams): Promise<RecommendMerchantsResult> {
   const page = params?.page ?? 1
   const pageSize = params?.limit ?? 20
-  const response = await request<{ merchants: MerchantSummary[]; total?: number; total_count?: number; page_id?: number; page_size?: number }>({
+  const response = await request<{ merchants: MerchantSummary[], total?: number, total_count?: number, page_id?: number, page_size?: number }>({
     url: '/v1/search/merchants',
     method: 'GET',
     data: {
@@ -321,7 +321,7 @@ export class MerchantManagementAdapter {
     const currentDay = now.getDay()
     const currentTime = now.toTimeString().slice(0, 5)
 
-    const todayHours = businessHours.find(hour => hour.day_of_week === currentDay)
+    const todayHours = businessHours.find((hour) => hour.day_of_week === currentDay)
 
     if (!todayHours || todayHours.is_closed) {
       return false

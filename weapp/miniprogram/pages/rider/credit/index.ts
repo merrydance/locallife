@@ -69,7 +69,7 @@ Page({
       ]
 
       // 转换历史记录
-      const history: HistoryItem[] = historyResponse.history.map(h => ({
+      const history: HistoryItem[] = historyResponse.history.map((h) => ({
         id: h.id,
         type: h.score_change >= 0 ? 'REWARD' : 'PENALTY',
         amount: h.score_change,
@@ -92,7 +92,7 @@ Page({
     }
   },
 
-  calculateLevelInfo(score: number): { level: string; levelDesc: string } {
+  calculateLevelInfo(score: number): { level: string, levelDesc: string } {
     if (score >= 95) {
       return { level: '钻石骑手', levelDesc: '服务卓越' }
     } else if (score >= 85) {

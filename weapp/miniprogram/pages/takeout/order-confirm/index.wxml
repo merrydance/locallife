@@ -106,9 +106,19 @@
           <text class="cost-label">商品金额</text>
           <text class="cost-value">¥{{item.subtotalDisplay}}</text>
         </view>
+        <view class="cost-row" wx:for="{{item.ladderPromotions || []}}" wx:key="name" wx:for-item="ladder">
+          <text class="cost-label" wx:if="{{ladder.currentHit}}">{{ladder.name}}（已满{{ladder.thresholdDisplay}}）</text>
+          <text class="cost-label" wx:else>{{ladder.name}}（还差¥{{ladder.missingNeedDisplay}}）</text>
+          <text class="cost-value" wx:if="{{ladder.currentHit}}">可减¥{{ladder.discountDisplay}}</text>
+          <text class="cost-value" wx:else>可减¥{{ladder.discountDisplay}}</text>
+        </view>
         <view class="cost-row" wx:for="{{item.appliedPromotions || []}}" wx:key="title" wx:for-item="promo" wx:if="{{promo.type === 'merchant' || promo.type === 'voucher'}}">
           <text class="cost-label status-red">{{promo.title}}</text>
           <text class="cost-value status-red">-¥{{promo.amountDisplay}}</text>
+        </view>
+        <view class="cost-row" wx:for="{{item.voucherTrials || []}}" wx:key="voucherName" wx:for-item="trial">
+          <text class="cost-label">券试算：{{trial.voucherName}}（减¥{{trial.amountDisplay}}）</text>
+          <text class="cost-value">试算后¥{{trial.trialPayableDisplay}}</text>
         </view>
         <view class="cost-row">
           <text class="cost-label">代取费</text>
@@ -125,6 +135,10 @@
             <text class="old-price" wx:if="{{item.hasDiscount}}">¥{{item.originalTotalDisplay}}</text>
             <text class="new-price">¥{{item.orderTotalDisplay}}</text>
           </view>
+        </view>
+        <view class="cost-row" wx:if="{{item.paymentHint}}">
+          <text class="cost-label">支付提示</text>
+          <text class="cost-value">{{item.paymentHint}}</text>
         </view>
       </view>
 

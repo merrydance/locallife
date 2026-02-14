@@ -1,6 +1,5 @@
 import * as CartAPI from '@/api/cart'
-import { UserCartsResponse, MerchantCartResponse, CartResponse } from '@/api/cart'
-import { DishManagementService } from '@/api/dish'
+import { MerchantCartResponse, CartResponse } from '@/api/cart'
 import { logger } from '@/utils/logger'
 import { getPublicImageUrl } from '@/utils/image'
 
@@ -128,8 +127,8 @@ Page({
 
       // 默认全选（排除有错误的商户）
       const selectedCartIds = merchantGroups
-        .filter(g => !g.errorStatus)
-        .map(g => g.cartId)
+        .filter((g) => !g.errorStatus)
+        .map((g) => g.cartId)
 
       // 设置数据并显示
       this.setData({
@@ -168,7 +167,7 @@ Page({
 
     globalStore.set('cart', {
       items: [],  // 多商户模式下不使用单一 items 列表
-      totalCount: totalCount,
+      totalCount,
       totalPrice: summary.totalAmount,
       totalPriceDisplay: summary.totalAmountDisplay
     })
@@ -180,8 +179,8 @@ Page({
    * 构建商户购物车组
    */
   buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetail: CartResponse): MerchantCartGroup {
-    const items: CartItemView[] = (cartDetail.items || []).map(item => {
-      let specDisplay = item.spec_text || ''
+    const items: CartItemView[] = (cartDetail.items || []).map((item) => {
+      const specDisplay = item.spec_text || ''
 
       return {
         id: item.id,
@@ -197,7 +196,7 @@ Page({
         isAvailable: item.is_available,
         specDisplay,
         customizations: item.customizations,
-        dishImages: item.combo_member_images?.map(url => getPublicImageUrl(url)) || []
+        dishImages: item.combo_member_images?.map((url) => getPublicImageUrl(url)) || []
       }
     })
 
@@ -220,7 +219,7 @@ Page({
       totalAmount: subtotal,
       totalAmountDisplay: `¥${(subtotal / 100).toFixed(2)}`,
       itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-      allAvailable: items.every(item => item.isAvailable),
+      allAvailable: items.every((item) => item.isAvailable),
       selected: true // 初始设为true，calculateDeliveryFees 后可能会改为 false
     }
   },
@@ -242,7 +241,6 @@ Page({
     const longitude = app.globalData?.longitude
 
     const updatedGroups = [...merchantGroups]
-    let hasChanges = false
 
     // 并行计算以提高速度
     await Promise.all(updatedGroups.map(async (group, i) => {
@@ -267,21 +265,24 @@ Page({
             : '免代取费',
           totalAmount: group.subtotal + (result.delivery_fee || 0),
           totalAmountDisplay: `¥${((group.subtotal + (result.delivery_fee || 0)) / 100).toFixed(2)}`,
-          errorStatus: '', // 清除错误状态
+          errorStatus: '' // 清除错误状态
           // 既然计算成功，如果是之前因错误导致的selected=false，是否要恢复？
           // 保守起见，保持当前selected状态，除非它之前是错的但用户本意是选中
           // 这里简化：只有在出错时才强制selected=false
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const userMessage =
+          typeof error === 'object' && error !== null && 'userMessage' in error
+            ? String((error as { userMessage?: string }).userMessage || '')
+            : ''
         logger.warn('Failed to calculate delivery fee', { merchantId: group.merchantId }, 'cart.calculateDeliveryFees')
         
         // 捕获错误并显示给用户（如商户打烊、超出范围）
         updatedGroups[i] = {
           ...group,
-          errorStatus: error.userMessage || '暂不支持配送',
+          errorStatus: userMessage || '暂不支持配送',
           selected: false // 有错误时自动取消选中
         }
-        hasChanges = true
       }
     }))
 
@@ -291,15 +292,15 @@ Page({
       
       // 检查 selectedCartIds 是否需要更新
       const { selectedCartIds } = this.data
-      const newSelectedIds = updatedGroups.filter(g => g.selected && selectedCartIds.includes(g.cartId)).map(g => g.cartId)
+      const newSelectedIds = updatedGroups.filter((g) => g.selected && selectedCartIds.includes(g.cartId)).map((g) => g.cartId)
       
       // 如果有原来选中的现在因为错误变为了不选中
       if (newSelectedIds.length !== selectedCartIds.length) {
          // 注意：这里的简单比较可能不够，但通常足够处理 "选中->不选中" 的情况
          // 更严谨：newSelectedIds 应该是 (OldSelected intersect ValidGroups)
          // 上面的 filter 已经做了这件事：g.selected 被置为 false 了如果出错
-         const validSelectedIds = selectedCartIds.filter(id => {
-           const g = updatedGroups.find(group => group.cartId === id)
+         const validSelectedIds = selectedCartIds.filter((id) => {
+           const g = updatedGroups.find((group) => group.cartId === id)
            return g && !g.errorStatus
          })
          
@@ -339,7 +340,7 @@ Page({
     const { cartId } = e.currentTarget.dataset
     const { selectedCartIds, merchantGroups } = this.data
 
-    const group = merchantGroups.find(g => g.cartId === cartId)
+    const group = merchantGroups.find((g) => g.cartId === cartId)
     // 阻止有错误的商户被选中
     if (group?.errorStatus) {
       wx.showToast({ title: group.errorStatus, icon: 'none' })
@@ -354,7 +355,7 @@ Page({
     }
 
     // 同时更新 merchantGroups 中对应项的 selected 状态
-    const updatedGroups = merchantGroups.map(group => ({
+    const updatedGroups = merchantGroups.map((group) => ({
       ...group,
       selected: selectedCartIds.includes(group.cartId)
     }))
@@ -432,7 +433,7 @@ Page({
    */
   getItemQuantity(itemId: number): number {
     for (const group of this.data.merchantGroups) {
-      const item = group.items.find(i => i.id === itemId)
+      const item = group.items.find((i) => i.id === itemId)
       if (item) return item.quantity
     }
     return 1
@@ -445,7 +446,7 @@ Page({
     const { merchantGroups } = this.data
 
     for (let i = 0; i < merchantGroups.length; i++) {
-      const itemIndex = merchantGroups[i].items.findIndex(item => item.id === itemId)
+      const itemIndex = merchantGroups[i].items.findIndex((item) => item.id === itemId)
       if (itemIndex !== -1) {
         // 使用路径更新避免重新渲染整个列表
         this.setData({
@@ -500,7 +501,7 @@ Page({
     let targetItemIndex = -1
 
     for (let i = 0; i < merchantGroups.length; i++) {
-      const itemIndex = merchantGroups[i].items.findIndex(item => item.id === itemId)
+      const itemIndex = merchantGroups[i].items.findIndex((item) => item.id === itemId)
       if (itemIndex !== -1) {
         targetGroupIndex = i
         targetItemIndex = itemIndex
@@ -517,11 +518,11 @@ Page({
         ...group,
         items: nextItems
       }
-    }).filter(group => group.items.length > 0)
+    }).filter((group) => group.items.length > 0)
 
     const removedGroup = merchantGroups[targetGroupIndex]
-    const nextSelectedCartIds = removedGroup && updatedGroups.every(group => group.cartId !== removedGroup.cartId)
-      ? selectedCartIds.filter(id => id !== removedGroup.cartId)
+    const nextSelectedCartIds = removedGroup && updatedGroups.every((group) => group.cartId !== removedGroup.cartId)
+      ? selectedCartIds.filter((id) => id !== removedGroup.cartId)
       : selectedCartIds
 
     this.setData({
@@ -558,7 +559,7 @@ Page({
       success: async (res) => {
         if (res.confirm) {
           try {
-            const group = this.data.merchantGroups.find(g => g.merchantId === merchantId)
+            const group = this.data.merchantGroups.find((g) => g.merchantId === merchantId)
             await CartAPI.clearCart({
               merchant_id: merchantId,
               order_type: group?.orderType || 'takeout',
@@ -568,12 +569,12 @@ Page({
 
             // 本地移除该商户分组，避免重新加载整个页面
             const { merchantGroups, selectedCartIds } = this.data
-            const groupIndex = merchantGroups.findIndex(g => g.merchantId === merchantId)
+            const groupIndex = merchantGroups.findIndex((g) => g.merchantId === merchantId)
 
             if (groupIndex !== -1) {
               const removedGroup = merchantGroups[groupIndex]
               const newGroups = merchantGroups.filter((_, i) => i !== groupIndex)
-              const newSelectedIds = selectedCartIds.filter(id => id !== removedGroup.cartId)
+              const newSelectedIds = selectedCartIds.filter((id) => id !== removedGroup.cartId)
 
               this.setData({
                 merchantGroups: newGroups,

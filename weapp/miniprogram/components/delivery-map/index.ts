@@ -4,6 +4,33 @@ type MapPoint = {
     name?: string
 }
 
+type MapLocationPoint = {
+    latitude: number
+    longitude: number
+}
+
+type MarkerItem = {
+    id: number
+    latitude: number
+    longitude: number
+    iconPath: string
+    width: number
+    height: number
+    callout: {
+        content: string
+        padding: number
+        borderRadius: number
+        display: 'ALWAYS'
+    }
+}
+
+type PolylineItem = {
+    points: MapLocationPoint[]
+    color: string
+    width: number
+    arrowLine: boolean
+}
+
 Component({
     properties: {
         merchant: {
@@ -25,14 +52,14 @@ Component({
     },
 
     data: {
-        markers: [] as any[],
-        polyline: [] as any[],
-        includePoints: [] as any[]
+        markers: [] as MarkerItem[],
+        polyline: [] as PolylineItem[],
+        includePoints: [] as MapLocationPoint[]
     },
 
     observers: {
-        'merchant, customer, rider': function (merchant, customer, rider) {
-            this.updateMap();
+        'merchant, customer, rider' (_merchant, _customer, _rider) {
+            this.updateMap()
         }
     },
 
@@ -43,11 +70,15 @@ Component({
                 customer?: MapPoint
                 rider?: MapPoint
                 showRoute?: boolean
-            };
-            const markers: any[] = [];
-            const includePoints: any[] = [];
+            }
+            const markers: MarkerItem[] = []
+            const includePoints: MapLocationPoint[] = []
 
-            if (merchant && merchant.latitude) {
+            if (
+                merchant &&
+                typeof merchant.latitude === 'number' &&
+                typeof merchant.longitude === 'number'
+            ) {
                 markers.push({
                     id: 1,
                     latitude: merchant.latitude,
@@ -61,11 +92,15 @@ Component({
                         borderRadius: 4,
                         display: 'ALWAYS'
                     }
-                });
-                includePoints.push({ latitude: merchant.latitude, longitude: merchant.longitude });
+                })
+                includePoints.push({ latitude: merchant.latitude, longitude: merchant.longitude })
             }
 
-            if (customer && customer.latitude) {
+            if (
+                customer &&
+                typeof customer.latitude === 'number' &&
+                typeof customer.longitude === 'number'
+            ) {
                 markers.push({
                     id: 2,
                     latitude: customer.latitude,
@@ -79,11 +114,15 @@ Component({
                         borderRadius: 4,
                         display: 'ALWAYS'
                     }
-                });
-                includePoints.push({ latitude: customer.latitude, longitude: customer.longitude });
+                })
+                includePoints.push({ latitude: customer.latitude, longitude: customer.longitude })
             }
 
-            if (rider && rider.latitude) {
+            if (
+                rider &&
+                typeof rider.latitude === 'number' &&
+                typeof rider.longitude === 'number'
+            ) {
                 markers.push({
                     id: 3,
                     latitude: rider.latitude,
@@ -97,13 +136,21 @@ Component({
                         borderRadius: 4,
                         display: 'ALWAYS'
                     }
-                });
-                includePoints.push({ latitude: rider.latitude, longitude: rider.longitude });
+                })
+                includePoints.push({ latitude: rider.latitude, longitude: rider.longitude })
             }
 
             // Simple straight line for polyline if route API is not used
-            let polyline: any[] = [];
-            if (showRoute && merchant && customer) {
+            let polyline: PolylineItem[] = []
+            if (
+                showRoute &&
+                merchant &&
+                typeof merchant.latitude === 'number' &&
+                typeof merchant.longitude === 'number' &&
+                customer &&
+                typeof customer.latitude === 'number' &&
+                typeof customer.longitude === 'number'
+            ) {
                 polyline = [{
                     points: [
                         { latitude: merchant.latitude, longitude: merchant.longitude },
@@ -112,10 +159,10 @@ Component({
                     color: '#1890ff',
                     width: 4,
                     arrowLine: true
-                }];
+                }]
             }
 
-            this.setData({ markers, polyline, includePoints });
+            this.setData({ markers, polyline, includePoints })
         }
     }
-});
+})

@@ -3,18 +3,34 @@ import { MerchantOrderManagementService, OrderResponse, OrderManagementAdapter }
 import { logger } from '../../../../utils/logger'
 import dayjs from 'dayjs'
 
+type OrderStatus = OrderResponse['status']
+
+interface MerchantOrderListItem extends OrderResponse {
+  order_no_short: string
+  order_type_label: string
+  status_label: string
+  status_color: string
+  time_label: string
+  address_summary: string
+  submitting: boolean
+}
+
+interface OrdersPageOptions {
+  status?: OrderStatus
+}
+
 Page({
   data: {
     navBarHeight: 88,
     loading: false,
-    orders: [] as any[],
-    currentStatus: 'paid' as any,
+    orders: [] as MerchantOrderListItem[],
+    currentStatus: 'paid' as OrderStatus,
     page: 1,
     pageSize: 10,
     hasMore: true
   },
 
-  onLoad(options: any) {
+  onLoad(options: OrdersPageOptions) {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ 
       navBarHeight,
@@ -36,7 +52,7 @@ Page({
         status: this.data.currentStatus || undefined
       })
 
-      const formattedOrders = (res || []).map(o => this.formatOrder(o))
+      const formattedOrders = (res || []).map((o) => this.formatOrder(o))
       
       this.setData({
         orders: reset ? formattedOrders : [...this.data.orders, ...formattedOrders],
@@ -65,7 +81,7 @@ Page({
     }
   },
 
-  onTabChange(e: any) {
+  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatus }>) {
     this.setData({ 
       currentStatus: e.detail.value,
       orders: [],
@@ -84,30 +100,34 @@ Page({
     this.loadOrders()
   },
 
-  onViewDetail(e: any) {
-    const { id } = e.currentTarget.dataset
+  onViewDetail(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
     wx.navigateTo({ url: `../detail/index?id=${id}` })
   },
 
   // ==================== 快捷操作 ====================
 
-  async onAcceptOrder(e: any) {
-    const { id } = e.currentTarget.dataset
+  async onAcceptOrder(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
     await this.performAction(id, MerchantOrderManagementService.acceptOrder(id), '接单成功')
   },
 
-  async onMarkReady(e: any) {
-    const { id } = e.currentTarget.dataset
+  async onMarkReady(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
     await this.performAction(id, MerchantOrderManagementService.markOrderReady(id), '制作已完成')
   },
 
-  async onCompleteOrder(e: any) {
-    const { id } = e.currentTarget.dataset
+  async onCompleteOrder(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
     await this.performAction(id, MerchantOrderManagementService.completeOrder(id), '订单已核销')
   },
 
-  async performAction(id: number, apiPromise: Promise<any>, successMsg: string) {
-    const index = this.data.orders.findIndex(o => o.id === id)
+  async performAction(id: number, apiPromise: Promise<unknown>, successMsg: string) {
+    const index = this.data.orders.findIndex((o) => o.id === id)
     if (index === -1) return
 
     this.setData({ [`orders[${index}].submitting`]: true })

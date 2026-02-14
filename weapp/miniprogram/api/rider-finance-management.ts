@@ -97,6 +97,11 @@ export interface DepositStats {
     avg_recharge_amount: number
 }
 
+interface DeliveryEarningRecord {
+    amount?: number
+    order_id?: number
+}
+
 // ==================== 骑手财务管理服务类 ====================
 
 /**
@@ -118,7 +123,7 @@ export class RiderFinanceManagementService {
      * 保证金充值
      * @param rechargeData 充值数据
      */
-    async rechargeDeposit(rechargeData: DepositRechargeRequest): Promise<any> {
+    async rechargeDeposit(rechargeData: DepositRechargeRequest): Promise<unknown> {
         return request({
             url: '/v1/rider/deposit',
             method: 'POST',
@@ -196,25 +201,25 @@ export class FinanceStatsService {
      * @param deposits 保证金记录
      * @param deliveries 配送记录（需要从其他服务获取）
      */
-    calculateEarningsStats(deposits: DepositResponse[], deliveries: any[] = []): EarningsStats {
+    calculateEarningsStats(deposits: DepositResponse[], deliveries: DeliveryEarningRecord[] = []): EarningsStats {
         const now = new Date()
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
         const weekStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
         // 从保证金记录中筛选收入相关的记录
-        const earningsDeposits = deposits.filter(d => d.type === 'recharge' && d.amount > 0)
+        const earningsDeposits = deposits.filter((d) => d.type === 'recharge' && d.amount > 0)
 
         const todayEarnings = earningsDeposits
-            .filter(d => new Date(d.created_at) >= today)
+            .filter((d) => new Date(d.created_at) >= today)
             .reduce((sum, d) => sum + d.amount, 0)
 
         const weekEarnings = earningsDeposits
-            .filter(d => new Date(d.created_at) >= weekStart)
+            .filter((d) => new Date(d.created_at) >= weekStart)
             .reduce((sum, d) => sum + d.amount, 0)
 
         const monthEarnings = earningsDeposits
-            .filter(d => new Date(d.created_at) >= monthStart)
+            .filter((d) => new Date(d.created_at) >= monthStart)
             .reduce((sum, d) => sum + d.amount, 0)
 
         const totalEarnings = earningsDeposits.reduce((sum, d) => sum + d.amount, 0)
@@ -242,9 +247,9 @@ export class FinanceStatsService {
      * @param deposits 保证金记录
      */
     calculateDepositStats(deposits: DepositResponse[]): DepositStats {
-        const rechargeRecords = deposits.filter(d => d.type === 'recharge')
-        const withdrawRecords = deposits.filter(d => d.type === 'withdraw')
-        const deductRecords = deposits.filter(d => d.type === 'deduct')
+        const rechargeRecords = deposits.filter((d) => d.type === 'recharge')
+        const withdrawRecords = deposits.filter((d) => d.type === 'withdraw')
+        const deductRecords = deposits.filter((d) => d.type === 'deduct')
 
         const totalRecharge = rechargeRecords.reduce((sum, d) => sum + d.amount, 0)
         const totalWithdraw = withdrawRecords.reduce((sum, d) => sum + Math.abs(d.amount), 0)
@@ -500,7 +505,7 @@ export function checkDepositSecurity(
 
     // 检查近期异常扣款
     const recentDeducts = recentDeposits
-        .filter(d => d.type === 'deduct' && new Date(d.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+        .filter((d) => d.type === 'deduct' && new Date(d.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
 
     if (recentDeducts.length > 3) {
         issues.push('近期扣款频繁')
@@ -516,14 +521,14 @@ export function checkDepositSecurity(
  * @param deposits 保证金记录
  * @param days 分析天数
  */
-export function analyzeEarningsTrend(deposits: DepositResponse[], days: number = 30): {
+export function analyzeEarningsTrend(deposits: DepositResponse[], _days: number = 30): {
     trend: 'up' | 'down' | 'stable'
     growthRate: number
     dailyAverage: number
-    bestDay: { date: string; amount: number } | null
-    worstDay: { date: string; amount: number } | null
+    bestDay: { date: string, amount: number } | null
+    worstDay: { date: string, amount: number } | null
 } {
-    const earningsDeposits = deposits.filter(d => d.type === 'recharge')
+    const earningsDeposits = deposits.filter((d) => d.type === 'recharge')
 
     if (earningsDeposits.length === 0) {
         return {
@@ -537,7 +542,7 @@ export function analyzeEarningsTrend(deposits: DepositResponse[], days: number =
 
     // 按日期分组计算每日收入
     const dailyEarnings = new Map<string, number>()
-    earningsDeposits.forEach(deposit => {
+    earningsDeposits.forEach((deposit) => {
         const date = deposit.created_at.split('T')[0]
         dailyEarnings.set(date, (dailyEarnings.get(date) || 0) + deposit.amount)
     })
@@ -615,7 +620,7 @@ export function formatAmount(amount: number, showUnit: boolean = true): string {
  * @param amount 提现金额（分）
  * @param availableDeposit 可用保证金
  */
-export function validateWithdrawAmount(amount: number, availableDeposit: number): { valid: boolean; message?: string } {
+export function validateWithdrawAmount(amount: number, availableDeposit: number): { valid: boolean, message?: string } {
     if (amount < 100) {
         return { valid: false, message: '提现金额不能少于1元' }
     }
@@ -635,7 +640,7 @@ export function validateWithdrawAmount(amount: number, availableDeposit: number)
  * 验证充值金额
  * @param amount 充值金额（分）
  */
-export function validateRechargeAmount(amount: number): { valid: boolean; message?: string } {
+export function validateRechargeAmount(amount: number): { valid: boolean, message?: string } {
     if (amount < 100) {
         return { valid: false, message: '充值金额不能少于1元' }
     }

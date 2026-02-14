@@ -50,7 +50,7 @@ class ImageLazyLoader {
    * 加载单张图片
    */
   private loadImage(url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const cacheItem = this.cache.get(url)
 
       // 如果已在加载中或已加载，跳过

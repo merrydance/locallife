@@ -105,6 +105,46 @@ type ReservationStatusUpdateResult struct {
 	RefundEligible bool
 }
 
+// ReservationRefundPolicy defines reservation cancel refund percentages.
+type ReservationRefundPolicy struct {
+	UserBeforeDeadlinePercent     int
+	UserAfterDeadlinePercent      int
+	MerchantBeforeDeadlinePercent int
+	MerchantAfterDeadlinePercent  int
+}
+
+func normalizeRefundPercent(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
+}
+
+func (policy ReservationRefundPolicy) normalize() ReservationRefundPolicy {
+	return ReservationRefundPolicy{
+		UserBeforeDeadlinePercent:     normalizeRefundPercent(policy.UserBeforeDeadlinePercent),
+		UserAfterDeadlinePercent:      normalizeRefundPercent(policy.UserAfterDeadlinePercent),
+		MerchantBeforeDeadlinePercent: normalizeRefundPercent(policy.MerchantBeforeDeadlinePercent),
+		MerchantAfterDeadlinePercent:  normalizeRefundPercent(policy.MerchantAfterDeadlinePercent),
+	}
+}
+
+func (policy ReservationRefundPolicy) refundPercent(isMerchant bool, beforeDeadline bool) int {
+	if isMerchant {
+		if beforeDeadline {
+			return policy.MerchantBeforeDeadlinePercent
+		}
+		return policy.MerchantAfterDeadlinePercent
+	}
+	if beforeDeadline {
+		return policy.UserBeforeDeadlinePercent
+	}
+	return policy.UserAfterDeadlinePercent
+}
+
 // CreateReservation creates a customer reservation with validations and conflict checks.
 func CreateReservation(ctx context.Context, store db.Store, input CreateReservationInput) (CreateReservationResult, error) {
 	var result CreateReservationResult
@@ -420,6 +460,7 @@ func CancelReservation(
 	userID,
 	reservationID int64,
 	reason string,
+	refundPolicy ReservationRefundPolicy,
 	now time.Time,
 ) (ReservationStatusUpdateResult, error) {
 	reservation, err := store.GetTableReservationForUpdate(ctx, reservationID)
@@ -449,12 +490,12 @@ func CancelReservation(
 		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("预约状态不允许取消"))
 	}
 
+	refundPolicy = refundPolicy.normalize()
 	refundEligible := false
+	refundPercent := 0
 	if reservation.Status == reservationStatusPaid || reservation.Status == reservationStatusConfirmed {
 		refundEligible = now.Before(reservation.RefundDeadline)
-		if isOwner && !isMerchant && !refundEligible {
-			return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("refund deadline passed, please contact merchant"))
-		}
+		refundPercent = refundPolicy.refundPercent(isMerchant, refundEligible)
 	}
 
 	var currentReservationID pgtype.Int8
@@ -473,13 +514,20 @@ func CancelReservation(
 		return ReservationStatusUpdateResult{}, err
 	}
 
-	if (reservation.Status == reservationStatusPaid || reservation.Status == reservationStatusConfirmed) && refundEligible && paymentClient != nil {
+	if (reservation.Status == reservationStatusPaid || reservation.Status == reservationStatusConfirmed) && refundPercent > 0 && paymentClient != nil {
 		paymentOrder, err := store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
 			ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
 			BusinessType:  businessTypeReservation,
 		})
 		if err == nil && paymentOrder.Status == paymentStatusPaid {
-			refundAmount := paymentOrder.Amount
+			refundAmount := paymentOrder.Amount * int64(refundPercent) / 100
+			if refundAmount <= 0 {
+				return ReservationStatusUpdateResult{
+					Reservation:    result.Reservation,
+					PreviousStatus: reservation.Status,
+					RefundEligible: false,
+				}, nil
+			}
 			outRefundNo := generateOutRefundNo()
 
 			refundType := paymentOrder.PaymentType
@@ -521,7 +569,7 @@ func CancelReservation(
 	return ReservationStatusUpdateResult{
 		Reservation:    result.Reservation,
 		PreviousStatus: reservation.Status,
-		RefundEligible: refundEligible,
+		RefundEligible: refundPercent > 0,
 	}, nil
 }
 

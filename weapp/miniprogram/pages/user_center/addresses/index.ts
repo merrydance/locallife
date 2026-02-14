@@ -2,6 +2,11 @@ import AddressService, { Address } from '../../../api/address'
 import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
 
+type PreviousAddressPage = {
+  setData?: (data: Record<string, unknown>) => void
+  onAddressSelected?: (address?: Address) => void
+}
+
 Page({
   data: {
     addresses: [] as Address[],
@@ -133,14 +138,14 @@ Page({
 
     if (this.data.isSelectMode) {
       const pages = getCurrentPages()
-      const prevPage = pages[pages.length - 2] as any
+      const prevPage = pages[pages.length - 2] as PreviousAddressPage | undefined
       if (prevPage && prevPage.setData) {
         // 尝试设置上一页的数据，或者是调用一个回调如果页面支持
         // 假设上一页监听 selectedAddressId
         prevPage.setData({ selectedAddressId: id })
         // 如果有 onAddressSelected 方法也可以调用
         if (typeof prevPage.onAddressSelected === 'function') {
-            prevPage.onAddressSelected(this.data.addresses.find(a => a.id === id))
+            prevPage.onAddressSelected(this.data.addresses.find((a) => a.id === id))
         }
       }
       wx.navigateBack()
@@ -150,7 +155,7 @@ Page({
   async onSetDefault(e: WechatMiniprogram.CustomEvent) {
     const { id } = e.currentTarget.dataset
     // 如果已经是默认，就不做操作
-    const current = this.data.addresses.find(a => a.id === id)
+    const current = this.data.addresses.find((a) => a.id === id)
     if (current?.is_default) return
 
     try {

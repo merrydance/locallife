@@ -257,7 +257,7 @@ export function recognizeFoodPermit(data: OCRUploadRequest): Promise<MerchantApp
 /**
  * 绑定银行账户
  */
-export function bindMerchantBank(data: MerchantBankBindRequest): Promise<any> {
+export function bindMerchantBank(data: MerchantBankBindRequest): Promise<unknown> {
     return request({
         url: '/v1/merchant/bindbank',
         method: 'POST',
@@ -386,7 +386,7 @@ export class MerchantApplicationFlow {
     /**
      * 验证申请信息是否完整
      */
-    validateApplication(): { isValid: boolean; missingFields: string[] } {
+    validateApplication(): { isValid: boolean, missingFields: string[] } {
         if (!this.draft) {
             return { isValid: false, missingFields: ['申请草稿未初始化'] }
         }

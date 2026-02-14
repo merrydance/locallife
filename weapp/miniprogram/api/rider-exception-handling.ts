@@ -263,7 +263,7 @@ export class ExceptionHandlingUtils {
      * 验证异常上报数据
      * @param exceptionData 异常数据
      */
-    static validateExceptionReport(exceptionData: ExceptionReportRequest): { valid: boolean; message?: string } {
+    static validateExceptionReport(exceptionData: ExceptionReportRequest): { valid: boolean, message?: string } {
         if (!exceptionData.exception_type) {
             return { valid: false, message: '请选择异常类型' }
         }
@@ -283,7 +283,7 @@ export class ExceptionHandlingUtils {
      * 验证延迟申报数据
      * @param delayData 延迟数据
      */
-    static validateDelayReport(delayData: DelayReportRequest): { valid: boolean; message?: string } {
+    static validateDelayReport(delayData: DelayReportRequest): { valid: boolean, message?: string } {
         if (!delayData.reason || delayData.reason.trim().length < 5) {
             return { valid: false, message: '延迟原因至少需要5个字符' }
         }
@@ -319,19 +319,19 @@ export class ExceptionHandlingUtils {
             other: 0
         }
 
-        exceptions.forEach(exception => {
+        exceptions.forEach((exception) => {
             exceptionsByType[exception.exception_type]++
         })
 
         // 找出最常见的异常类型
-        const entries = Object.keys(exceptionsByType).map(key => [key, exceptionsByType[key as ExceptionType]] as [string, number])
+        const entries = Object.keys(exceptionsByType).map((key) => [key, exceptionsByType[key as ExceptionType]] as [string, number])
         const mostCommonType = entries
             .reduce((max: { type: ExceptionType | null, count: number }, [type, count]: [string, number]) =>
                 count > max.count ? { type: type as ExceptionType, count } : max,
                 { type: null as ExceptionType | null, count: 0 }).type
 
         // 计算解决率
-        const resolvedExceptions = exceptions.filter(e => e.status === 'resolved').length
+        const resolvedExceptions = exceptions.filter((e) => e.status === 'resolved').length
         const resolutionRate = totalExceptions > 0 ? (resolvedExceptions / totalExceptions) * 100 : 0
 
         // 计算平均解决时间（这里需要根据实际数据结构调整）
@@ -425,6 +425,8 @@ export class RiderExceptionHandlingAdapter {
 
 export const riderExceptionHandlingService = new RiderExceptionHandlingService()
 
+type DashboardExceptionRecord = Record<string, unknown>
+
 // ==================== 便捷函数 ====================
 
 /**
@@ -433,7 +435,7 @@ export const riderExceptionHandlingService = new RiderExceptionHandlingService()
 export async function getRiderExceptionDashboard(): Promise<{
     pendingAppeals: AppealResponse[]
     pendingClaims: ClaimResponse[]
-    recentExceptions: any[] // 需要根据实际接口调整
+    recentExceptions: DashboardExceptionRecord[] // 需要根据实际接口调整
     stats: {
         totalAppeals: number
         totalClaims: number
@@ -447,7 +449,7 @@ export async function getRiderExceptionDashboard(): Promise<{
     ])
 
     // 异常记录需要根据实际接口调整
-    const recentExceptions: any[] = []
+    const recentExceptions: DashboardExceptionRecord[] = []
 
     return {
         pendingAppeals: appealsResult.appeals,
@@ -527,7 +529,7 @@ export function getSmartExceptionSuggestion(
 export async function batchReportExceptions(reports: Array<{
     orderId: number
     exceptionData: ExceptionReportRequest
-}>): Promise<{ orderId: number; success: boolean; message: string; reportId?: number }[]> {
+}>): Promise<{ orderId: number, success: boolean, message: string, reportId?: number }[]> {
     const promises = reports.map(async ({ orderId, exceptionData }) => {
         try {
             const result = await riderExceptionHandlingService.reportException(orderId, exceptionData)
@@ -537,11 +539,15 @@ export async function batchReportExceptions(reports: Array<{
                 message: '上报成功',
                 reportId: result.id
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : '上报失败'
             return {
                 orderId,
                 success: false,
-                message: error?.message || '上报失败'
+                message
             }
         }
     })

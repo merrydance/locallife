@@ -566,7 +566,7 @@ export class TagService {
      * 创建标签
      * POST /v1/tags
      */
-    static async createTag(data: { name: string; type: string }): Promise<TagInfo> {
+    static async createTag(data: { name: string, type: string }): Promise<TagInfo> {
         return await request<TagInfo>({
             url: '/v1/tags',
             method: 'POST',
@@ -1090,10 +1090,10 @@ export interface DishSearchResult {
 export async function searchDishes(params?: DishSearchParams): Promise<DishSearchResult> {
     // 首页推荐重构：使用搜索接口替代推荐接口
     // 如果没有关键词，表示获取推荐流
-    const searchParams: any = {
+    const searchParams: Record<string, unknown> = {
         keyword: params?.keyword || '', // 空字符串表示推荐流
         page_id: params?.page || 1,
-        page_size: params?.limit || 20,
+        page_size: params?.limit || 20
     }
 
     // 仅当参数存在时才添加，避免传递 undefined 导致后端验证失败
@@ -1117,7 +1117,7 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
     const hasMore = response.has_more ?? (page * pageSize < totalCount)
 
     return {
-        dishes: (response.dishes || []).map(item => ({
+        dishes: (response.dishes || []).map((item) => ({
             ...item,
             // 使用后端返回的商户信息，部分字段暂时缺省
             merchant_name: item.merchant_name || '未知商户',
@@ -1135,7 +1135,7 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
         } as unknown as DishSummary)),
 
         has_more: hasMore,
-        page: page,
+        page,
         total_count: totalCount
     }
 }
@@ -1180,7 +1180,7 @@ export interface RecommendCombosResult {
 export async function getRecommendedCombos(params?: RecommendCombosParams): Promise<RecommendCombosResult> {
     const page = params?.page ?? 1
     const pageSize = params?.limit ?? 20
-    const response = await request<{ combos: ComboSummary[]; total?: number; total_count?: number; page_id?: number; page_size?: number }>({
+    const response = await request<{ combos: ComboSummary[], total?: number, total_count?: number, page_id?: number, page_size?: number }>({
         url: '/v1/search/combos',
         method: 'GET',
         data: {
@@ -1275,7 +1275,7 @@ export interface ComboSearchResult {
  */
 export async function searchCombos(params: ComboSearchParams): Promise<ComboSearchResult> {
     // 过滤掉 undefined 的参数
-    const searchParams: any = {
+    const searchParams: Record<string, unknown> = {
         page_id: params.page_id || 1,
         page_size: params.page_size || 20
     }

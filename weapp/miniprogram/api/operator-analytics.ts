@@ -233,6 +233,27 @@ export interface AppealQueryParams extends Record<string, unknown> {
     limit?: number
 }
 
+type GrowthAnalysis = {
+    merchantGrowth: number
+    riderGrowth: number
+    orderGrowth: number
+    gmvGrowth: number
+    overallGrowth: number
+}
+
+type AppealEfficiencyMetrics = {
+    avgResolutionTime: number
+    resolutionRate: number
+    satisfactionRate: number
+    workload: number
+}
+
+type AppealDistribution = {
+    byStatus: Map<AppealStatus, number>
+    byType: Map<AppealType, number>
+    byPriority: Map<AppealPriority, number>
+}
+
 // ==================== 运营商数据统计服务类 ====================
 
 /**
@@ -384,7 +405,7 @@ export class DataAnalysisService {
         else if (performanceScore >= 50) performanceLevel = 'average'
 
         // 增长分析
-        let growthAnalysis: any = undefined
+        let growthAnalysis: GrowthAnalysis | undefined = undefined
         if (previousStats) {
             growthAnalysis = {
                 merchantGrowth: stats.growth_stats.merchant_growth_rate,
@@ -436,14 +457,13 @@ export class DataAnalysisService {
             byPriority: Map<AppealPriority, number>
         }
         trends: {
-            dailyVolume: Array<{ date: string; count: number }>
-            resolutionTrend: Array<{ date: string; avgTime: number }>
+            dailyVolume: Array<{ date: string, count: number }>
+            resolutionTrend: Array<{ date: string, avgTime: number }>
         }
         insights: string[]
         actionItems: string[]
     } {
-        const now = Date.now()
-        const resolvedAppeals = appeals.filter(a => a.status === 'resolved' && a.resolution_time)
+        const resolvedAppeals = appeals.filter((a) => a.status === 'resolved' && a.resolution_time)
         const totalAppeals = appeals.length
 
         // 效率指标
@@ -453,19 +473,19 @@ export class DataAnalysisService {
 
         const resolutionRate = totalAppeals > 0 ? (resolvedAppeals.length / totalAppeals) * 100 : 0
 
-        const satisfactionAppeals = resolvedAppeals.filter(a => a.satisfaction_rating)
+        const satisfactionAppeals = resolvedAppeals.filter((a) => a.satisfaction_rating)
         const satisfactionRate = satisfactionAppeals.length > 0
             ? satisfactionAppeals.reduce((sum, a) => sum + (a.satisfaction_rating || 0), 0) / satisfactionAppeals.length
             : 0
 
-        const workload = appeals.filter(a => ['pending', 'processing'].includes(a.status)).length
+        const workload = appeals.filter((a) => ['pending', 'processing'].includes(a.status)).length
 
         // 分布统计
         const statusDistribution = new Map<AppealStatus, number>()
         const typeDistribution = new Map<AppealType, number>()
         const priorityDistribution = new Map<AppealPriority, number>()
 
-        appeals.forEach(appeal => {
+        appeals.forEach((appeal) => {
             statusDistribution.set(appeal.status, (statusDistribution.get(appeal.status) || 0) + 1)
             typeDistribution.set(appeal.appeal_type, (typeDistribution.get(appeal.appeal_type) || 0) + 1)
             priorityDistribution.set(appeal.priority, (priorityDistribution.get(appeal.priority) || 0) + 1)
@@ -473,9 +493,9 @@ export class DataAnalysisService {
 
         // 趋势分析（简化版）
         const dailyVolumeMap = new Map<string, number>()
-        const resolutionTimeMap = new Map<string, { total: number; count: number }>()
+        const resolutionTimeMap = new Map<string, { total: number, count: number }>()
 
-        appeals.forEach(appeal => {
+        appeals.forEach((appeal) => {
             const date = appeal.created_at.split('T')[0]
             dailyVolumeMap.set(date, (dailyVolumeMap.get(date) || 0) + 1)
 
@@ -503,14 +523,22 @@ export class DataAnalysisService {
             resolutionRate,
             satisfactionRate,
             workload
-        }, { statusDistribution, typeDistribution, priorityDistribution })
+        }, {
+            byStatus: statusDistribution,
+            byType: typeDistribution,
+            byPriority: priorityDistribution
+        })
 
         const actionItems = this.generateAppealActionItems({
             avgResolutionTime,
             resolutionRate,
             satisfactionRate,
             workload
-        }, { statusDistribution, typeDistribution, priorityDistribution })
+        }, {
+            byStatus: statusDistribution,
+            byType: typeDistribution,
+            byPriority: priorityDistribution
+        })
 
         return {
             efficiency: {
@@ -599,7 +627,7 @@ export class DataAnalysisService {
     private generateInsights(
         stats: OperatorRegionStatsResponse,
         performanceScore: number,
-        growthAnalysis?: any
+        growthAnalysis?: GrowthAnalysis
     ): string[] {
         const insights: string[] = []
 
@@ -643,7 +671,7 @@ export class DataAnalysisService {
     private generateRecommendations(
         stats: OperatorRegionStatsResponse,
         performanceLevel: string,
-        growthAnalysis?: any
+        growthAnalysis?: GrowthAnalysis
     ): string[] {
         const recommendations: string[] = []
 
@@ -679,8 +707,8 @@ export class DataAnalysisService {
      * 生成申诉洞察
      */
     private generateAppealInsights(
-        efficiency: any,
-        distribution: any
+        efficiency: AppealEfficiencyMetrics,
+        distribution: AppealDistribution
     ): string[] {
         const insights: string[] = []
 
@@ -696,7 +724,7 @@ export class DataAnalysisService {
             insights.push('待处理申诉数量较多，建议增加处理人员')
         }
 
-        const byType = distribution.byType as Map<string, number>
+        const byType = distribution.byType
         const orderIssueCount = byType.get('order_issue') || 0
         const totalCount = Array.from(byType.values()).reduce((sum, count) => sum + count, 0)
         if (totalCount > 0 && orderIssueCount / totalCount > 0.5) {
@@ -710,8 +738,8 @@ export class DataAnalysisService {
      * 生成申诉行动项
      */
     private generateAppealActionItems(
-        efficiency: any,
-        distribution: any
+        efficiency: AppealEfficiencyMetrics,
+        distribution: AppealDistribution
     ): string[] {
         const actionItems: string[] = []
 
@@ -831,7 +859,7 @@ export class OperatorAnalyticsAdapter {
                 completionRate: data.order_stats.completion_rate,
                 avgOrderValue: data.order_stats.avg_order_value,
                 totalGmv: data.order_stats.total_gmv,
-                peakHours: data.order_stats.peak_hours.map(item => ({
+                peakHours: data.order_stats.peak_hours.map((item) => ({
                     hour: item.hour,
                     orderCount: item.order_count
                 }))
@@ -1130,7 +1158,7 @@ export function formatResolutionTime(minutes: number): string {
  * 验证申诉查询参数
  * @param params 查询参数
  */
-export function validateAppealQueryParams(params: AppealQueryParams): { valid: boolean; message?: string } {
+export function validateAppealQueryParams(params: AppealQueryParams): { valid: boolean, message?: string } {
     if (params.start_date && params.end_date) {
         const startDate = new Date(params.start_date)
         const endDate = new Date(params.end_date)

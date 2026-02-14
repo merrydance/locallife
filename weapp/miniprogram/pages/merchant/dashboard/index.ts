@@ -5,12 +5,23 @@ import dayjs from 'dayjs'
 import * as echarts from '@/libs/echarts'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 
-let chart: any = null
+type EChartInstance = ReturnType<typeof echarts.init>
+type WsUnsubscribe = () => void
 
-function initChart(canvas: any, width: number, height: number, dpr: number) {
+interface ChartCanvas {
+  setChart: (chart: EChartInstance) => void
+}
+
+interface MerchantDailyStats {
+  total_revenue: number
+}
+
+let chart: EChartInstance | null = null
+
+function initChart(canvas: ChartCanvas, width: number, height: number, dpr: number) {
   chart = echarts.init(canvas, null, {
-    width: width,
-    height: height,
+    width,
+    height,
     devicePixelRatio: dpr
   })
   canvas.setChart(chart)
@@ -57,8 +68,6 @@ function initChart(canvas: any, width: number, height: number, dpr: number) {
   return chart
 }
 
-const app = getApp<IAppOption>()
-
 Page({
   data: {
     navBarHeight: 88,
@@ -89,7 +98,7 @@ Page({
     ec: {
       onInit: initChart
     },
-    _wsListeners: [] as any[]
+    _wsListeners: [] as WsUnsubscribe[]
   },
 
   onLoad() {
@@ -122,8 +131,12 @@ Page({
 
     const sub = wsManager.on(WSMessageType.NOTIFICATION, (data) => {
       logger.info('Merchant received notification', data)
+      const notification =
+        typeof data === 'object' && data !== null
+          ? (data as { type?: string })
+          : {}
       // 检查是否是订单通知 (后端 params.Type = "order")
-      if (data.type === 'order') {
+      if (notification.type === 'order') {
         wx.vibrateLong()
         wx.showModal({
           title: '新订单提醒',
@@ -144,7 +157,7 @@ Page({
 
   cleanupWebSocket() {
     if (this.data._wsListeners) {
-      this.data._wsListeners.forEach(unsub => unsub())
+      this.data._wsListeners.forEach((unsub) => unsub())
       this.data._wsListeners = []
     }
   },
@@ -198,7 +211,7 @@ Page({
     try {
       // 模拟近7天日期
       const dates = []
-      const promises = []
+      const promises: Array<Promise<MerchantDailyStats>> = []
       for (let i = 6; i >= 0; i--) {
         const d = dayjs().subtract(i, 'day').format('YYYY-MM-DD')
         dates.push(dayjs(d).format('MM-DD'))
@@ -206,7 +219,7 @@ Page({
       }
 
       const results = await Promise.all(promises)
-      const revenues = results.map((r: any) => r.total_revenue / 100)
+      const revenues = results.map((r) => r.total_revenue / 100)
 
       if (chart) {
         chart.setOption({

@@ -165,6 +165,32 @@ export interface CalculateCartResponse {
         amount: number
         type: string
     }>
+    suggested_voucher?: {
+        id: number
+        name: string
+        amount: number
+    }
+    ladder_promotions?: Array<{
+        rule_id: number
+        name: string
+        threshold: number
+        discount: number
+        current_hit: boolean
+        missing_need: number
+    }>
+    voucher_trials?: Array<{
+        voucher_id: number
+        voucher_name: string
+        amount: number
+        trial_payable: number
+    }>
+    payment_assessment?: {
+        is_balance_payable: boolean
+        usable_balance: number
+        principal_part: number
+        bonus_part: number
+        payment_hint: string
+    }
 }
 
 // ==================== API接口函数 ====================
@@ -175,12 +201,12 @@ export interface CalculateCartResponse {
  */
 export async function getCart(
     params: {
-        merchant_id: number,
-        order_type?: string,
-        table_id?: number,
+        merchant_id: number
+        order_type?: string
+        table_id?: number
         reservation_id?: number
     },
-    options?: { loading?: boolean; loadingText?: string }
+    options?: { loading?: boolean, loadingText?: string }
 ): Promise<CartResponse> {
     return request({
         url: '/v1/cart',
@@ -209,7 +235,7 @@ export async function getCartSummary(orderType?: string): Promise<CartSummaryRes
  */
 export async function getUserCarts(
     orderType?: string,
-    options?: { loading?: boolean; loadingText?: string }
+    options?: { loading?: boolean, loadingText?: string }
 ): Promise<UserCartsResponse> {
     return request({
         url: '/v1/cart/summary',
@@ -225,7 +251,7 @@ export async function getUserCarts(
  */
 export async function addToCart(
     item: AddCartItemRequest,
-    options?: { loading?: boolean; loadingText?: string }
+    options?: { loading?: boolean, loadingText?: string }
 ): Promise<CartResponse> {
     return request({
         url: '/v1/cart/items',
@@ -243,7 +269,7 @@ export async function addToCart(
 export async function updateCartItem(
     itemId: number,
     updates: UpdateCartItemRequest,
-    options?: { loading?: boolean; loadingText?: string }
+    options?: { loading?: boolean, loadingText?: string }
 ): Promise<CartResponse> {
     return request({
         url: `/v1/cart/items/${itemId}`,
@@ -259,7 +285,7 @@ export async function updateCartItem(
  */
 export async function removeFromCart(
     itemId: number,
-    options?: { loading?: boolean; loadingText?: string }
+    options?: { loading?: boolean, loadingText?: string }
 ): Promise<CartResponse> {
     return request({
         url: `/v1/cart/items/${itemId}`,
@@ -286,7 +312,7 @@ export async function clearCart(params: ClearCartRequest): Promise<void> {
  */
 export async function calculateCart(
     params: CalculateCartRequest,
-    options?: { loading?: boolean; loadingText?: string }
+    options?: { loading?: boolean, loadingText?: string }
 ): Promise<CalculateCartResponse> {
     return request({
         url: '/v1/cart/calculate',

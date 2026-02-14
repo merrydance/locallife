@@ -1,7 +1,13 @@
 import { isLargeScreen } from '@/utils/responsive'
 import * as echarts from '@/libs/echarts'
 
-function initChart(canvas: any, width: number, height: number, dpr: number) {
+type EChartInstance = ReturnType<typeof echarts.init>
+
+interface ChartCanvas {
+  setChart: (chart: EChartInstance) => void
+}
+
+function initChart(canvas: ChartCanvas, width: number, height: number, dpr: number) {
   const chart = echarts.init(canvas, null, {
     width,
     height,
@@ -90,7 +96,7 @@ Page({
     this.setData({ loading: true, error: null })
     try {
       // 模拟 API 加载延迟
-      await new Promise(resolve => setTimeout(resolve, 800))
+      await new Promise((resolve) => setTimeout(resolve, 800))
       
       this.setData({
         initialLoading: false,

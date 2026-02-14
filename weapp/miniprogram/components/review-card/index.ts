@@ -1,4 +1,4 @@
-import { ReviewResponse } from '../../api/review';
+import { Review } from '../../api/review'
 
 Component({
     options: {
@@ -19,21 +19,21 @@ Component({
 
     methods: {
         onPreviewImage(e: WechatMiniprogram.TouchEvent) {
-            const { index } = e.currentTarget.dataset;
-            const review = this.properties.review as ReviewResponse | undefined
-            const images = review?.images || [];
+            const { index } = e.currentTarget.dataset
+            const review = this.properties.review as Review | undefined
+            const images = review?.images || []
 
             wx.previewImage({
                 current: images[index],
                 urls: images
-            });
+            })
         },
 
-        onReply(e: WechatMiniprogram.TouchEvent) {
+        onReply(_e: WechatMiniprogram.TouchEvent) {
             // Trigger event for merchant reply
-            const review = this.properties.review as ReviewResponse | undefined
+            const review = this.properties.review as Review | undefined
             if (!review?.id) return
-            this.triggerEvent('reply', { id: review.id });
+            this.triggerEvent('reply', { id: review.id })
         }
     }
-});
+})

@@ -1,4 +1,4 @@
-﻿import { CartResponse, CartItemResponse, AddCartItemRequest, UpdateCartItemRequest } from '../api/cart'
+﻿import { CartResponse, AddCartItemRequest, UpdateCartItemRequest } from '../api/cart'
 import * as CartAPI from '../api/cart'
 import { logger } from '../utils/logger'
 import { globalStore } from '../utils/global-store'
@@ -17,6 +17,16 @@ class CartService {
   private currentOrderType: string | null = null
   private currentTableId: number | null = null
   private currentReservationId: number | null = null
+
+  private getErrorUserMessage(error: unknown, fallback: string): string {
+    if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+      const candidate = (error as { userMessage?: unknown }).userMessage
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate
+      }
+    }
+    return fallback
+  }
 
   static getInstance(): CartService {
     if (!CartService.instance) {
@@ -43,7 +53,7 @@ class CartService {
   /**
    * Initialize or switch to a specific merchant's cart
    */
-  async loadCart(merchantId: number, options?: { orderType?: string; tableId?: number; reservationId?: number }): Promise<CartResponse> {
+  async loadCart(merchantId: number, options?: { orderType?: string, tableId?: number, reservationId?: number }): Promise<CartResponse> {
     this.currentMerchantId = merchantId
     this.currentOrderType = options?.orderType ?? this.currentOrderType ?? 'takeout'
     this.currentTableId = options?.tableId ?? this.currentTableId ?? null
@@ -81,10 +91,10 @@ class CartService {
    * Add item to backend cart
    */
   async addItem(item: {
-    merchantId: string | number,
-    dishId?: string | number,
-    comboId?: string | number,
-    quantity?: number,
+    merchantId: string | number
+    dishId?: string | number
+    comboId?: string | number
+    quantity?: number
     customizations?: Record<string, unknown>
   }, options?: { loading?: boolean }): Promise<boolean> {
     try {
@@ -101,7 +111,7 @@ class CartService {
         reservation_id: this.currentReservationId ?? undefined,
         dish_id: item.dishId ? Number(item.dishId) : undefined,
         combo_id: item.comboId ? Number(item.comboId) : undefined,
-        quantity: quantity,
+        quantity,
         customizations: item.customizations
       }
 
@@ -114,12 +124,12 @@ class CartService {
       this.notifyListeners()
 
       return true
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Failed to add item to cart', error, 'CartService.addItem')
 
       // Handle simple error reporting - 优先展示后端返回的友好提示
       wx.showToast({
-        title: error.userMessage || '添加失败，请重试',
+        title: this.getErrorUserMessage(error, '添加失败，请重试'),
         icon: 'none'
       })
       return false

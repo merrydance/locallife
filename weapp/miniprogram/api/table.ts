@@ -5,7 +5,7 @@
  */
 
 import { request } from '../utils/request'
-import type { DishResponse, CustomizationGroup } from './dish'
+import type { CustomizationGroup } from './dish'
 
 // ==================== 数据类型定义 ====================
 
@@ -199,7 +199,7 @@ export async function getTableDetail(tableId: number): Promise<TableResponse> {
  * 通过二维码URL解析商户和桌台信息
  * @param qrCodeUrl 二维码URL
  */
-export function parseQRCodeUrl(qrCodeUrl: string): { merchantId: number; tableNo: string } | null {
+export function parseQRCodeUrl(qrCodeUrl: string): { merchantId: number, tableNo: string } | null {
     try {
         const url = new URL(qrCodeUrl)
         const merchantId = url.searchParams.get('merchant_id')

@@ -1,5 +1,5 @@
 
-import { request, API_BASE } from '../utils/request'
+import { API_BASE } from '../utils/request'
 import { getToken } from '../utils/auth'
 
 /**
@@ -43,7 +43,7 @@ export class UploadService {
                             } else {
                                 resolve(data.data?.image_url || data.image_url)
                             }
-                        } catch (e) {
+                        } catch (_error) {
                             reject(new Error('Parse response failed'))
                         }
                     } else {

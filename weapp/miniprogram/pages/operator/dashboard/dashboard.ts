@@ -13,6 +13,10 @@ import type {
     RegionStatsResponse
 } from '@/api/operator-basic-management'
 
+interface QuickActionDataset {
+    url?: string
+}
+
 Page({
     data: {
         loading: false,
@@ -69,7 +73,7 @@ Page({
         this.loadDashboardData()
     },
 
-    onNavHeight(e: any) {
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
         this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
@@ -130,7 +134,7 @@ Page({
     /**
      * 切换区域
      */
-    onRegionChange(e: any) {
+    onRegionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
         const regionId = parseInt(e.detail.value)
         this.setData({ selectedRegionId: regionId })
         this.loadRegionData(regionId)
@@ -166,8 +170,9 @@ Page({
     /**
      * 快捷入口点击
      */
-    onQuickActionTap(e: any) {
-        const { url } = e.currentTarget.dataset
+    onQuickActionTap(e: WechatMiniprogram.TouchEvent) {
+        const { url } = e.currentTarget.dataset as QuickActionDataset
+        if (!url) return
         wx.navigateTo({ url })
     },
 

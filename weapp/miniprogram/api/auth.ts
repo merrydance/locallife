@@ -112,11 +112,11 @@ export interface RoleAccessResponse {
  * Web 登录会话状态 - 对齐 api.webLoginSessionStatusResponse
  */
 export interface WebLoginSessionStatus {
-  code: string,
-  status: string,
-  expires_at: string,
-  confirmed_at?: string,
-  consumed_at?: string,
+  code: string
+  status: string
+  expires_at: string
+  confirmed_at?: string
+  consumed_at?: string
 }
 
 // 兼容性别名

@@ -4,9 +4,20 @@ import {
   ocrRiderIdCard, 
   ocrRiderHealthCert, 
   submitRiderApplication,
-  resetRiderApplication
+  resetRiderApplication,
+  type RiderApplicationResponse
 } from '../../../api/rider-application'
 import { logger } from '../../../utils/logger'
+
+type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: string }).message
+    if (message) return message
+  }
+  return fallback
+}
 
 Page({
   data: {
@@ -31,7 +42,7 @@ Page({
     await this.initApplication()
   },
 
-  onNavHeight(e: any) {
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
@@ -68,7 +79,7 @@ Page({
     }
   },
 
-  mapResponseToData(res: any) {
+  mapResponseToData(res: RiderApplicationResponse) {
     this.setData({
       'formData.realName': res.real_name || res.id_card_ocr?.name || '',
       'formData.phone': res.phone || '',
@@ -82,25 +93,28 @@ Page({
     })
   },
 
-  async onIdFrontUpload(e: any) {
+  async onIdFrontUpload(e: UploadEvent) {
     const { path } = e.detail
+    if (!path) return
     this.setData({ 'idFront.url': path })
     this.processOCR(ocrRiderIdCard(path, 'Front'), 'identity')
   },
 
-  async onIdBackUpload(e: any) {
+  async onIdBackUpload(e: UploadEvent) {
     const { path } = e.detail
+    if (!path) return
     this.setData({ 'idBack.url': path })
     this.processOCR(ocrRiderIdCard(path, 'Back'), 'identity')
   },
 
-  async onHealthCertUpload(e: any) {
+  async onHealthCertUpload(e: UploadEvent) {
     const { path } = e.detail
+    if (!path) return
     this.setData({ 'healthCert.url': path })
     this.processOCR(ocrRiderHealthCert(path), 'health')
   },
 
-  async processOCR(ocrPromise: Promise<any>, type: 'identity' | 'health') {
+  async processOCR(ocrPromise: Promise<RiderApplicationResponse>, _type: 'identity' | 'health') {
     wx.showLoading({ title: '智能识别中...' })
     try {
       const res = await ocrPromise
@@ -113,9 +127,10 @@ Page({
     }
   },
 
-  onInput(e: any) {
-    const field = e.currentTarget.dataset.field
-    this.setData({ [`formData.${field}`]: e.detail.value })
+  onInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    const field = (e.currentTarget.dataset as { field?: string }).field
+    if (!field) return
+    this.setData({ [`formData.${field}`]: e.detail.value || '' })
   },
 
   onChooseAddress() {
@@ -191,9 +206,9 @@ Page({
           })
         }
       }, 1500)
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.setData({ isSubmitting: false, currentStep: 3 })
-      wx.showToast({ title: e.message || '提交失败', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(e, '提交失败'), icon: 'none' })
     }
   }
 })

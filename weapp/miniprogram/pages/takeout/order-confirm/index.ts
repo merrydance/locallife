@@ -6,7 +6,6 @@ import { createOrder, CreateOrderRequest, OrderItemRequest, OrderType } from '..
 import { createOrderPayment, createCombinedPaymentOrder, invokeWechatPay } from '../../../api/payment'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
-import { getPublicMerchantCombos, getPublicMerchantDishes } from '../../../api/merchant'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 
 interface CartItemView {
@@ -45,7 +44,10 @@ interface MerchantCartView {
   orderTotalDisplay: string
   originalTotalDisplay: string // 原价（不含优惠）
   hasDiscount: boolean         // 是否有优惠
-  appliedPromotions: Array<{ title: string, amountDisplay: string, type: string }>
+  appliedPromotions: Array<{ title: string, amount: number, amountDisplay: string, type: string }>
+  ladderPromotions: Array<{ name: string, thresholdDisplay: string, discountDisplay: string, currentHit: boolean, missingNeedDisplay: string }>
+  voucherTrials: Array<{ voucherName: string, amountDisplay: string, trialPayableDisplay: string }>
+  paymentHint: string
 }
 
 Page({
@@ -71,7 +73,7 @@ Page({
   onLoad(options: { cart_ids?: string }) {
     // 解析URL中的cart_ids参数
     if (options.cart_ids) {
-      const cartIds = options.cart_ids.split(',').map(Number).filter(id => !isNaN(id))
+      const cartIds = options.cart_ids.split(',').map(Number).filter((id) => !isNaN(id))
       this.setData({ cartIds })
     }
     this.loadCart()
@@ -112,7 +114,7 @@ Page({
       const { cartIds } = this.data
       let selectedCarts = userCarts.carts
       if (cartIds.length > 0) {
-        selectedCarts = userCarts.carts.filter(c => cartIds.includes(c.cart_id || 0))
+        selectedCarts = userCarts.carts.filter((c) => cartIds.includes(c.cart_id || 0))
       }
       if (selectedCarts.length === 0) selectedCarts = [userCarts.carts[0]]
 
@@ -144,7 +146,7 @@ Page({
           subtotalDisplay: formatPriceNoSymbol(item.subtotal),
           specText: item.spec_text || '',
           customizations: item.customizations || undefined,
-          dishImages: (item.combo_member_images || []).map(url => getPublicImageUrl(url))
+          dishImages: (item.combo_member_images || []).map((url) => getPublicImageUrl(url))
         }))
 
         cartViews.push({
@@ -167,7 +169,10 @@ Page({
           orderTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
           originalTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
           hasDiscount: false,
-          appliedPromotions: []
+          appliedPromotions: [],
+          ladderPromotions: [],
+          voucherTrials: [],
+          paymentHint: ''
         })
       }
 
@@ -195,7 +200,7 @@ Page({
       const memberBalanceDisplays: Record<number, string> = {}
       const membershipIds: Record<number, number> = {}
 
-      carts.forEach(cart => {
+      carts.forEach((cart) => {
         const membership = result.memberships?.find(
           (m: MembershipResponse) => m.merchant_id === cart.merchantId
         )
@@ -325,7 +330,7 @@ Page({
           longitude: address.longitude ? Number(address.longitude) : undefined
         }, { loading: false })
 
-        if (!result) continue;
+        if (!result) continue
 
         const deliveryFee = result.delivery_fee || 0
         const deliveryFeeDiscount = result.delivery_fee_discount || 0
@@ -337,10 +342,23 @@ Page({
 
         const deliveryEtaMinutes = result.delivery_eta_minutes || 0
         const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
-        const appliedPromotions = (result.applied_promotions || []).map(p => ({
+        const appliedPromotions = (result.applied_promotions || []).map((p) => ({
           title: p.title || '优惠',
+          amount: p.amount || 0,
           amountDisplay: formatPriceNoSymbol(p.amount || 0),
           type: p.type || 'merchant'
+        }))
+        const ladderPromotions = (result.ladder_promotions || []).map((rule) => ({
+          name: rule.name || '满减活动',
+          thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
+          discountDisplay: formatPriceNoSymbol(rule.discount || 0),
+          currentHit: !!rule.current_hit,
+          missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
+        }))
+        const voucherTrials = (result.voucher_trials || []).map((trial) => ({
+          voucherName: trial.voucher_name || '优惠券',
+          amountDisplay: formatPriceNoSymbol(trial.amount || 0),
+          trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
         }))
 
         updated.push({
@@ -355,15 +373,18 @@ Page({
           hasDiscount,
           deliveryEtaMinutes,
           deliveryEtaDisplay,
-          appliedPromotions: appliedPromotions || []
+          appliedPromotions: appliedPromotions || [],
+          ladderPromotions,
+          voucherTrials,
+          paymentHint: result.payment_assessment?.payment_hint || ''
         })
       }
 
       const summarySubtotal = updated.reduce((sum, c) => {
         const merchDiscount = (c.appliedPromotions || [])
-          .filter(p => p.type === 'merchant' || p.type === 'voucher')
-          .reduce((s, p) => s + (Number(p.amountDisplay) * 100), 0);
-        return sum + (c.subtotal || 0) - merchDiscount;
+          .filter((p) => p.type === 'merchant' || p.type === 'voucher')
+          .reduce((s, p) => s + (p.amount || 0), 0)
+        return sum + (c.subtotal || 0) - merchDiscount
       }, 0)
       const summaryDelivery = updated.reduce((sum, c) => sum + Math.max(0, (c.deliveryFee || 0) - (c.deliveryFeeDiscount || 0)), 0)
       const totalOrderAmount = updated.reduce((sum, c) => sum + (c.orderTotal || 0), 0)
@@ -376,12 +397,14 @@ Page({
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
-      const errMessage = error instanceof Error ? error.message : String(error)
-      wx.showModal({
-        title: '调试',
-        content: `计算运费失败: ${errMessage || '未知错误'}`,
-        showCancel: false
-      })
+      if (!silent) {
+        const errMessage = error instanceof Error ? error.message : String(error)
+        wx.showModal({
+          title: '调试',
+          content: `计算运费失败: ${errMessage || '未知错误'}`,
+          showCancel: false
+        })
+      }
       // 保留现有金额显示，不打断流程
     }
   },

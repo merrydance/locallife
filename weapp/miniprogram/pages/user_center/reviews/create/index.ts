@@ -2,7 +2,12 @@ import { ReviewService, CreateReviewParams } from '../../../../api/review'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
-import Message from 'tdesign-miniprogram/message/index'
+
+interface ReviewUploadFile {
+  url: string
+  status?: 'loading' | 'done' | 'failed'
+  remotePath?: string
+}
 
 Page({
   data: {
@@ -17,7 +22,7 @@ Page({
 
     // 表单数据
     content: '',
-    fileList: [] as any[],
+    fileList: [] as ReviewUploadFile[],
     maxImages: 9,
     maxContentLength: 500
   },
@@ -30,7 +35,7 @@ Page({
       this.setData({ orderId: parseInt(options.orderId) })
       this.loadOrderInfo()
     } else {
-      Message.error({ context: this, offset: [navBarHeight, 0], content: '无效的任务订单' })
+      wx.showToast({ title: '无效的任务订单', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 2000)
     }
   },
@@ -49,21 +54,21 @@ Page({
     } catch (error) {
       logger.error('加载订单信息失败', error, 'reviews/create')
       this.setData({ initialLoading: false, loading: false })
-      Message.error({ context: this, content: '订单详情加载失败' })
+      wx.showToast({ title: '订单详情加载失败', icon: 'none' })
     }
   },
 
-  onContentChange(e: any) {
+  onContentChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ content: e.detail.value })
   },
 
   // 图片添加回调
-  async onAddImage(e: any) {
+  async onAddImage(e: WechatMiniprogram.CustomEvent<{ files: Array<{ url: string }> }>) {
     const { files } = e.detail
     const { fileList } = this.data
 
     // 先展示在界面上 (status: loading)
-    const newFiles = files.map((f: any) => ({
+    const newFiles: ReviewUploadFile[] = files.map((f) => ({
       ...f,
       status: 'loading'
     }))
@@ -99,7 +104,7 @@ Page({
     this.setData({ fileList })
   },
 
-  onRemoveImage(e: any) {
+  onRemoveImage(e: WechatMiniprogram.CustomEvent<{ index: number }>) {
     const { index } = e.detail
     const { fileList } = this.data
     fileList.splice(index, 1)
@@ -112,14 +117,14 @@ Page({
     if (submitting) return
 
     if (!content || content.length < 10) {
-      Message.warning({ context: this, content: '评价内容至少10个字' })
+      wx.showToast({ title: '评价内容至少10个字', icon: 'none' })
       return
     }
 
     // 检查上传状态
-    const uploading = fileList.some(f => f.status === 'loading')
+    const uploading = fileList.some((f) => f.status === 'loading')
     if (uploading) {
-        Message.warning({ context: this, content: '正在上传图片中，请稍候' })
+      wx.showToast({ title: '正在上传图片中，请稍候', icon: 'none' })
         return
     }
 
@@ -128,8 +133,9 @@ Page({
     try {
       // 提取成功上传的远程路径
       const remoteImages = fileList
-        .filter(f => f.status === 'done' && f.remotePath)
-        .map(f => f.remotePath)
+        .filter((f) => f.status === 'done' && f.remotePath)
+        .map((f) => f.remotePath)
+        .filter((path): path is string => Boolean(path))
 
       const reviewData: CreateReviewParams = {
         order_id: orderId,
@@ -139,7 +145,7 @@ Page({
 
       await ReviewService.createReview(reviewData)
 
-      Message.success({ context: this, content: '发布成功！感谢您的评价' })
+      wx.showToast({ title: '发布成功！感谢您的评价', icon: 'none' })
       
       setTimeout(() => {
         // 触发上级页面刷新
@@ -150,12 +156,12 @@ Page({
         }
         wx.navigateBack()
       }, 1500)
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('提交评价失败', error, 'reviews/create')
       this.setData({ submitting: false })
       // 这里的友好提示可以根据错误码处理
-      const msg = error.errMsg || '提交失败，请重试'
-      Message.error({ context: this, content: msg })
+      const msg = error instanceof Error ? error.message : '提交失败，请重试'
+      wx.showToast({ title: msg, icon: 'none' })
     }
   }
 })

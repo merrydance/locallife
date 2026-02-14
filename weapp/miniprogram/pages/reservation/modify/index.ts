@@ -45,7 +45,7 @@ Page({
         errorMessage: '',
         navBarHeight: 88,
 
-        categories: [] as Array<{ id: number; name: string; dishes: DishView[] }>,
+        categories: [] as Array<{ id: number, name: string, dishes: DishView[] }>,
         currentCategoryId: 0,
         currentDishes: [] as DishView[],
 
@@ -133,8 +133,8 @@ Page({
                 selectedQty: dishQtyMap[dish.id] || 0
             }))
 
-            const categories: Array<{ id: number; name: string; dishes: DishView[] }> = []
-            const categoryMap = new Map<number, { id: number; name: string; dishes: DishView[] }>()
+            const categories: Array<{ id: number, name: string, dishes: DishView[] }> = []
+            const categoryMap = new Map<number, { id: number, name: string, dishes: DishView[] }>()
 
             categories.push({ id: 0, name: '全部', dishes: [...dishesWithQty] })
 

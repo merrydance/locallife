@@ -6,9 +6,20 @@
 import { isLargeScreen } from '@/utils/responsive'
 import { operatorMerchantManagementService, OperatorMerchantItem } from '../../../api/operator-merchant-management'
 
+interface OperatorMerchantView {
+  id: number
+  name: string
+  phone: string
+  status: string
+  region_id: number
+  created_at: string
+  is_open: boolean
+  address: string
+}
+
 Page({
   data: {
-    merchants: [] as any[],
+    merchants: [] as OperatorMerchantView[],
     isLargeScreen: false,
     navBarHeight: 88,
     loading: false,

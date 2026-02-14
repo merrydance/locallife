@@ -106,6 +106,7 @@
 <t-dialog
   visible="{{showCancelDialog}}"
   title="取消预订"
+  content="已支付预订将按系统退款策略处理（可能为部分退款）。"
   confirm-btn="确认取消"
   cancel-btn="暂不取消"
   bind:confirm="confirmCancel"

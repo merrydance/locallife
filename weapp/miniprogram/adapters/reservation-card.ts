@@ -59,7 +59,7 @@ export const ReservationCardAdapter = {
         // 拼接菜品预览 (如果有)
         let itemsPreview = ''
         if (dto.items && dto.items.length > 0) {
-            const names = dto.items.slice(0, 3).map(i => i.name).join('、')
+            const names = dto.items.slice(0, 3).map((i) => i.name).join('、')
             itemsPreview = `已点餐品: ${names}${dto.items.length > 3 ? ' 等' : ''}`
         }
 
@@ -88,7 +88,7 @@ export const ReservationCardAdapter = {
      */
     toDetailViewModel(dto: ReservationResponse): ReservationDetailViewModel {
         const base = ReservationCardAdapter.toCardViewModel(dto)
-        const items = (dto.items || []).map(item => ({
+        const items = (dto.items || []).map((item) => ({
              ...item,
              unitPriceDisplay: `¥${((item.unit_price || 0) / 100).toFixed(2)}`,
              totalPriceDisplay: `¥${((item.total_price || (item.unit_price || 0) * item.quantity) / 100).toFixed(2)}`,
@@ -102,7 +102,9 @@ export const ReservationCardAdapter = {
         let createdAt = dto.created_at
         try {
              createdAt = dto.created_at.substring(0, 16).replace('T', ' ')
-        } catch(e) {}
+           } catch (_error) {
+               createdAt = dto.created_at || ''
+           }
 
         return {
             ...base,
@@ -120,8 +122,8 @@ export const ReservationCardAdapter = {
     }
 }
 
-function getStatusStyle(status: ReservationStatus): { text: string; theme: ReservationCardViewModel['statusTagTheme'] } {
-    const map: Record<ReservationStatus, { text: string; theme: ReservationCardViewModel['statusTagTheme'] }> = {
+function getStatusStyle(status: ReservationStatus): { text: string, theme: ReservationCardViewModel['statusTagTheme'] } {
+    const map: Record<ReservationStatus, { text: string, theme: ReservationCardViewModel['statusTagTheme'] }> = {
         'pending': { text: '待支付', theme: 'danger' },
         'paid': { text: '已支付', theme: 'primary' },
         'confirmed': { text: '已确认', theme: 'success' },

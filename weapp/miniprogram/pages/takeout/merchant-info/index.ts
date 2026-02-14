@@ -18,6 +18,22 @@ type RestaurantInfoViewModel = PublicMerchantDetail & {
   delivery_promotions: PublicMerchantDetail['delivery_promotions']
 }
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+    const { userMessage } = error as { userMessage?: unknown }
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     restaurantId: '',
@@ -87,12 +103,12 @@ Page({
         },
         loading: false
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('加载商户信息失败:', error)
       this.setData({ 
         loading: false, 
         isError: true, 
-        errorMsg: error.userMessage || '加载商家详情失败' 
+        errorMsg: getErrorMessage(error, '加载商家详情失败') 
       })
     }
   },

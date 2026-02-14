@@ -227,7 +227,7 @@ export async function checkRoomAvailability(roomId: number, params: CheckRoomAva
  */
 export async function getRoomsByCapacity(merchantId: number, minCapacity: number, maxCapacity?: number): Promise<RoomResponse[]> {
     const response = await getMerchantAvailableRooms(merchantId)
-    return response.rooms.filter(room => {
+    return response.rooms.filter((room) => {
         if (maxCapacity) {
             return room.capacity >= minCapacity && room.capacity <= maxCapacity
         }
@@ -243,7 +243,7 @@ export async function getRoomsByCapacity(merchantId: number, minCapacity: number
  */
 export async function getRoomsByPrice(merchantId: number, maxHourlyRate?: number, maxMinimumSpend?: number): Promise<RoomResponse[]> {
     const response = await getMerchantAvailableRooms(merchantId)
-    return response.rooms.filter(room => {
+    return response.rooms.filter((room) => {
         let match = true
         if (maxHourlyRate && room.hourly_rate > maxHourlyRate) {
             match = false
@@ -262,7 +262,7 @@ export async function getRoomsByPrice(merchantId: number, maxHourlyRate?: number
  */
 export async function getRoomsByType(merchantId: number, roomType: RoomType): Promise<RoomResponse[]> {
     const response = await getMerchantAvailableRooms(merchantId)
-    return response.rooms.filter(room => room.room_type === roomType)
+    return response.rooms.filter((room) => room.room_type === roomType)
 }
 
 /**
@@ -291,7 +291,7 @@ export async function checkMultipleRoomsAvailability(
     params: CheckRoomAvailabilityParams
 ): Promise<RoomAvailabilityResponse[]> {
     const results = await Promise.all(
-        roomIds.map(roomId => checkRoomAvailability(roomId, params))
+        roomIds.map((roomId) => checkRoomAvailability(roomId, params))
     )
     return results
 }
@@ -311,7 +311,7 @@ export async function getAvailableRoomsForTimeSlot(
 ): Promise<RoomResponse[]> {
     const response = await getMerchantAvailableRooms(merchantId)
     const availabilityChecks = await Promise.all(
-        response.rooms.map(room =>
+        response.rooms.map((room) =>
             checkRoomAvailability(room.id, { date, start_time: startTime, end_time: endTime })
         )
     )
@@ -319,7 +319,7 @@ export async function getAvailableRoomsForTimeSlot(
     return response.rooms.filter((_room, index) => {
         const check = availabilityChecks[index]
         // 检查所有时间段是否都可用
-        return check.time_slots?.every(slot => slot.available) ?? false
+        return check.time_slots?.every((slot) => slot.available) ?? false
     })
 }
 

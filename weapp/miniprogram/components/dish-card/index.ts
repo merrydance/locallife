@@ -35,7 +35,7 @@ Component({
 
   methods: {
     onTap() {
-      const dish = this.data.dish as any
+      const dish = this.data.dish as DishCardData
       if (dish) {
         const monthSales = typeof dish.month_sales === 'number'
           ? dish.month_sales

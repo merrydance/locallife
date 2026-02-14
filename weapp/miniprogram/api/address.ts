@@ -83,7 +83,7 @@ export class AddressService {
     return await request({
       url: '/v1/addresses',
       method: 'POST',
-      data: data as any
+      data
     })
   }
 
@@ -95,7 +95,7 @@ export class AddressService {
     return await request({
       url: `/v1/addresses/${id}`,
       method: 'PATCH',  // 后端期望 PATCH
-      data: data as any
+      data
     })
   }
 
@@ -127,7 +127,7 @@ export class AddressService {
    */
   static async getDefaultAddress(): Promise<Address | null> {
     const addresses = await this.getAddresses()
-    return addresses.find(a => a.is_default) || addresses[0] || null
+    return addresses.find((a) => a.is_default) || addresses[0] || null
   }
 }
 

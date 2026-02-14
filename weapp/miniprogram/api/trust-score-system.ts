@@ -74,7 +74,7 @@ export interface TrustScoreHistoryResponse {
         operator_id?: number
         operator_name?: string
         created_at: string
-        details?: Record<string, any>
+        details?: Record<string, unknown>
     }>
     total: number
     page: number
@@ -89,9 +89,9 @@ export interface FraudDetectionRequest extends Record<string, unknown> {
     user_id: number
     role: UserRole
     action_type: string
-    context_data: Record<string, any>
+    context_data: Record<string, unknown>
     ip_address?: string
-    device_info?: Record<string, any>
+    device_info?: Record<string, unknown>
 }
 
 /** 风控检测响应 - 基于swagger api.fraudDetectionResponse */
@@ -265,7 +265,7 @@ export interface TrustScoreRecoveryRequest extends Record<string, unknown> {
     user_id: number
     role: UserRole
     recovery_type: 'training_completion' | 'good_behavior' | 'manual_adjustment'
-    evidence?: Record<string, any>
+    evidence?: Record<string, unknown>
     notes?: string
 }
 
@@ -281,7 +281,7 @@ export class TrustScoreSystemService {
      * @param role 用户角色
      * @param userId 用户ID
      */
-    async getTrustScoreProfile(role: UserRole, userId: number): Promise<TrustScoreProfileResponse> {
+    async getTrustScoreProfile(_role: UserRole, _userId: number): Promise<TrustScoreProfileResponse> {
         return Promise.reject(new Error('trust-score profile is deprecated'))
     }
 
@@ -293,10 +293,10 @@ export class TrustScoreSystemService {
      * @param limit 每页数量
      */
     async getTrustScoreHistory(
-        role: UserRole,
-        userId: number,
-        page: number = 1,
-        limit: number = 20
+        _role: UserRole,
+        _userId: number,
+        _page: number = 1,
+        _limit: number = 20
     ): Promise<TrustScoreHistoryResponse> {
         return Promise.reject(new Error('trust-score history is deprecated'))
     }
@@ -305,7 +305,7 @@ export class TrustScoreSystemService {
      * 提交信任分申诉
      * @param appealData 申诉数据
      */
-    async submitTrustScoreAppeal(appealData: TrustScoreAppealRequest): Promise<TrustScoreAppealResponse> {
+    async submitTrustScoreAppeal(_appealData: TrustScoreAppealRequest): Promise<TrustScoreAppealResponse> {
         return Promise.reject(new Error('trust-score appeal is deprecated'))
     }
 
@@ -313,7 +313,7 @@ export class TrustScoreSystemService {
      * 提交索赔申请
      * @param claimData 索赔数据
      */
-    async submitClaim(claimData: any): Promise<any> {
+    async submitClaim(claimData: SubmitClaimRequest): Promise<SubmitClaimResponse> {
         return request({
             url: '/v1/claims',
             method: 'POST',
@@ -326,7 +326,7 @@ export class TrustScoreSystemService {
      * @param claimId 索赔ID
      * @param reviewData 审核数据
      */
-    async reviewClaim(claimId: number, reviewData: ReviewClaimRequest): Promise<any> {
+    async reviewClaim(claimId: number, reviewData: ReviewClaimRequest): Promise<unknown> {
         return request({
             url: `/v1/claims/${claimId}/review`,
             method: 'PATCH',
@@ -338,7 +338,7 @@ export class TrustScoreSystemService {
      * 申请信任分恢复
      * @param recoveryData 恢复数据
      */
-    async requestTrustScoreRecovery(recoveryData: TrustScoreRecoveryRequest): Promise<any> {
+    async requestTrustScoreRecovery(_recoveryData: TrustScoreRecoveryRequest): Promise<unknown> {
         return Promise.reject(new Error('trust-score recovery is deprecated'))
     }
 }
@@ -367,7 +367,7 @@ export class FraudDetectionService {
      * @param merchantId 商户ID
      * @param suspendData 暂停数据
      */
-    async suspendMerchant(merchantId: number, suspendData: SuspendMerchantRequest): Promise<any> {
+    async suspendMerchant(merchantId: number, suspendData: SuspendMerchantRequest): Promise<unknown> {
         return request({
             url: `/v1/food-safety/merchants/${merchantId}/suspend`,
             method: 'PATCH',
@@ -438,7 +438,7 @@ export class TrustScoreAnalyticsService {
 
         // 评估风险等级
         let riskLevel: 'low' | 'medium' | 'high' = 'low'
-        const highRiskFactors = riskFactors.filter(factor => Math.abs(factor.impact) > 10)
+        const highRiskFactors = riskFactors.filter((factor) => Math.abs(factor.impact) > 10)
         if (highRiskFactors.length > 2) riskLevel = 'high'
         else if (highRiskFactors.length > 0) riskLevel = 'medium'
 
@@ -452,15 +452,15 @@ export class TrustScoreAnalyticsService {
         const improvementPlan = this.generateImprovementPlan(profile)
 
         // 统计限制情况
-        const activeRestrictions = restrictions.filter(r => r.is_active)
+        const activeRestrictions = restrictions.filter((r) => r.is_active)
         const now = new Date()
-        const expiringSoon = activeRestrictions.filter(r => {
+        const expiringSoon = activeRestrictions.filter((r) => {
             if (!r.end_date) return false
             const endDate = new Date(r.end_date)
             const daysUntilExpiry = (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
             return daysUntilExpiry <= 7 && daysUntilExpiry > 0
         })
-        const permanent = activeRestrictions.filter(r => !r.end_date)
+        const permanent = activeRestrictions.filter((r) => !r.end_date)
 
         return {
             healthStatus,
@@ -513,10 +513,10 @@ export class TrustScoreAnalyticsService {
 
         // 威胁分析
         const primaryThreats = patterns
-            .filter(p => p.confidence > 0.7)
-            .map(p => p.pattern_type)
+            .filter((p) => p.confidence > 0.7)
+            .map((p) => p.pattern_type)
 
-        const riskPatterns = patterns.map(p => p.description)
+        const riskPatterns = patterns.map((p) => p.description)
 
         let urgencyLevel: 'low' | 'medium' | 'high' | 'critical' = 'low'
         if (detection.is_blocked) urgencyLevel = 'critical'
@@ -525,16 +525,16 @@ export class TrustScoreAnalyticsService {
 
         // 行动计划
         const immediateActions = actions
-            .filter(a => a.priority === 'high')
-            .map(a => a.action)
+            .filter((a) => a.priority === 'high')
+            .map((a) => a.action)
 
         const shortTermActions = actions
-            .filter(a => a.priority === 'medium')
-            .map(a => a.action)
+            .filter((a) => a.priority === 'medium')
+            .map((a) => a.action)
 
         const monitoringActions = actions
-            .filter(a => a.priority === 'low')
-            .map(a => a.action)
+            .filter((a) => a.priority === 'low')
+            .map((a) => a.action)
 
         // 预估解决时间
         let estimatedResolutionTime = '1-2小时'
@@ -589,7 +589,7 @@ export class TrustScoreAnalyticsService {
             recommendations.push('风险因素较多，建议逐项处理')
         }
 
-        if (profile.restrictions.some(r => r.is_active)) {
+        if (profile.restrictions.some((r) => r.is_active)) {
             recommendations.push('存在活跃限制，建议尽快解除')
         }
 
@@ -661,7 +661,7 @@ export class TrustScoreAnalyticsService {
         }
 
         // 基于风险因素生成改善计划
-        riskFactors.forEach(factor => {
+        riskFactors.forEach((factor) => {
             if (Math.abs(factor.impact) > 5) {
                 plan.push({
                     action: `处理风险因素：${factor.factor}`,
@@ -735,19 +735,19 @@ export class TrustScoreSystemAdapter {
                 serviceScore: data.score_breakdown.service_score,
                 penaltyScore: data.score_breakdown.penalty_score
             },
-            riskFactors: data.risk_factors.map(factor => ({
+            riskFactors: data.risk_factors.map((factor) => ({
                 factor: factor.factor,
                 impact: factor.impact,
                 description: factor.description,
                 createdAt: factor.created_at
             })),
-            recentChanges: data.recent_changes.map(change => ({
+            recentChanges: data.recent_changes.map((change) => ({
                 changeType: change.change_type,
                 amount: change.amount,
                 reason: change.reason,
                 createdAt: change.created_at
             })),
-            restrictions: data.restrictions.map(restriction => ({
+            restrictions: data.restrictions.map((restriction) => ({
                 type: restriction.type,
                 description: restriction.description,
                 startDate: restriction.start_date,
@@ -781,12 +781,12 @@ export class TrustScoreSystemAdapter {
             riskLevel: data.risk_level,
             riskScore: data.risk_score,
             isBlocked: data.is_blocked,
-            detectedPatterns: data.detected_patterns.map(pattern => ({
+            detectedPatterns: data.detected_patterns.map((pattern) => ({
                 patternType: pattern.pattern_type,
                 confidence: pattern.confidence,
                 description: pattern.description
             })),
-            recommendedActions: data.recommended_actions.map(action => ({
+            recommendedActions: data.recommended_actions.map((action) => ({
                 action: action.action,
                 priority: action.priority,
                 description: action.description
@@ -894,7 +894,7 @@ export async function performComprehensiveRiskCheck(
     userId: number,
     role: UserRole,
     actionType: string,
-    contextData: Record<string, any>
+    contextData: Record<string, unknown>
 ): Promise<{
     trustScore: TrustScoreProfileResponse
     fraudDetection: FraudDetectionResponse
@@ -1054,7 +1054,7 @@ export function getTrustScoreColor(score: number): string {
  * 验证风控检测请求
  * @param request 检测请求
  */
-export function validateFraudDetectionRequest(request: FraudDetectionRequest): { valid: boolean; message?: string } {
+export function validateFraudDetectionRequest(request: FraudDetectionRequest): { valid: boolean, message?: string } {
     if (!request.user_id || request.user_id <= 0) {
         return { valid: false, message: '用户ID无效' }
     }
@@ -1078,7 +1078,7 @@ export function validateFraudDetectionRequest(request: FraudDetectionRequest): {
  * 验证食品安全报告请求
  * @param request 报告请求
  */
-export function validateFoodSafetyReportRequest(request: FoodSafetyReportRequest): { valid: boolean; message?: string } {
+export function validateFoodSafetyReportRequest(request: FoodSafetyReportRequest): { valid: boolean, message?: string } {
     if (!request.merchant_id || request.merchant_id <= 0) {
         return { valid: false, message: '商户ID无效' }
     }

@@ -205,7 +205,7 @@ function normalizeBadges(badges?: Array<{ text: string }> | string[]): string[] 
     if (typeof badges[0] === 'string') {
         return badges as string[]
     }
-    return (badges as Array<{ text: string }>).map(badge => badge.text).filter(Boolean)
+    return (badges as Array<{ text: string }>).map((badge) => badge.text).filter(Boolean)
 }
 
 /**
@@ -216,7 +216,7 @@ function extractPreviewItems(order: OrderResponse): PreviewItemViewModel[] {
         return []
     }
 
-    return order.items.slice(0, 3).map(item => ({
+    return order.items.slice(0, 3).map((item) => ({
         dishId: item.dish_id || 0,
         dishName: item.name,  // 对齐swagger: 使用name而非dish_name
         quantity: item.quantity,

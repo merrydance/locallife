@@ -14,6 +14,6 @@ export const withdrawOperator = (data: WithdrawOperatorRequest) => {
   return request({
     url: '/v1/operator/finance/withdraw',
     method: 'POST',
-    data,
+    data
   })
 }

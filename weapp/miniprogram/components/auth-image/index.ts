@@ -1,6 +1,4 @@
 
-import { getToken } from '../../utils/auth'
-import { API_BASE } from '../../utils/request'
 import { resolveImageURL } from '../../utils/image-security'
 
 Component({
@@ -63,10 +61,10 @@ Component({
                 })
                 this.triggerEvent('load', { path: resolvedUrl })
 
-            } catch (e) {
-                console.error('Failed to resolve image URL', e)
+            } catch (error) {
+                console.error('Failed to resolve image URL', error)
                 this.setData({ loading: false, error: true })
-                this.triggerEvent('error', e)
+                this.triggerEvent('error', error)
             }
         },
 
@@ -76,11 +74,11 @@ Component({
             }
         },
 
-        onError(e: any) {
+        onError(e: unknown) {
             this.triggerEvent('error', e)
         },
 
-        onLoad(e: any) {
+        onLoad(e: unknown) {
             this.triggerEvent('load', e)
         }
     }

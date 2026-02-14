@@ -82,7 +82,7 @@ export class ReviewService {
      */
     static async uploadReviewImage(filePath: string): Promise<string> {
         return await uploadFile<{ image_url: string }>(filePath, '/v1/reviews/images/upload', 'image')
-            .then(res => res.image_url)
+            .then((res) => res.image_url)
     }
 }
 

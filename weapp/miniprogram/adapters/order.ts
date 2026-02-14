@@ -16,7 +16,7 @@ const ORDER_TYPE_MAP: Record<string, string> = {
 /**
  * 订单状态映射 - 对齐swagger枚举值
  */
-const ORDER_STATUS_MAP: Record<string, { text: string; color: string }> = {
+const ORDER_STATUS_MAP: Record<string, { text: string, color: string }> = {
   'pending': { text: '待支付', color: '#E34D59' },
   'paid': { text: '已支付', color: '#ED7B2F' },
   'preparing': { text: '制作中', color: '#0052D9' },
@@ -89,7 +89,7 @@ export class OrderAdapter {
       subtotal: item.subtotal,
       unitPriceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
       subtotalDisplay: `¥${(item.subtotal / 100).toFixed(2)}`,
-      customizations: item.customizations?.map(c => `${c.name}: ${c.value}`) || []
+      customizations: item.customizations?.map((c) => `${c.name}: ${c.value}`) || []
     }))
 
     const expectDeliverTime = formatDeliveryWindow(dto.estimated_delivery_at, dto.delivery_eta_minutes)
@@ -134,7 +134,7 @@ function normalizeBadges(badges?: Array<{ text: string }> | string[]): string[] 
   if (typeof badges[0] === 'string') {
     return badges as string[]
   }
-  return (badges as Array<{ text: string }>).map(badge => badge.text).filter(Boolean)
+  return (badges as Array<{ text: string }>).map((badge) => badge.text).filter(Boolean)
 }
 
 // 生成送达时间段文案（例如 12:40-12:50）

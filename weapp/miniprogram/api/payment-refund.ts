@@ -3,7 +3,7 @@
  * 基于swagger.json完全重构，提供支付流程、退款处理和配送费计算
  */
 
-import { request } from '../utils/request';
+import { request } from '../utils/request'
 
 // ==================== 类型定义 ====================
 
@@ -142,17 +142,17 @@ export interface CalculateDeliveryFeeRequest extends Record<string, unknown> {
 
 /** 创建支付订单请求 - 对齐 api.createPaymentOrderRequest */
 export interface CreatePaymentOrderRequest extends Record<string, unknown> {
-    order_id: number;                            // 订单ID（必填）
-    business_type: 'order' | 'reservation';      // 业务类型（必填）
-    payment_type: 'native' | 'miniprogram';      // 支付类型（必填）
+    order_id: number                            // 订单ID（必填）
+    business_type: 'order' | 'reservation'      // 业务类型（必填）
+    payment_type: 'native' | 'miniprogram'      // 支付类型（必填）
 }
 
 /** 创建退款订单请求 - 对齐 api.createRefundOrderRequest */
 export interface CreateRefundOrderRequest extends Record<string, unknown> {
-    payment_order_id: number;                    // 支付订单ID（必填）
-    refund_amount: number;                       // 退款金额（分，必填）
-    refund_type: 'full' | 'partial';             // 退款类型（必填）
-    refund_reason?: string;                      // 退款原因
+    payment_order_id: number                    // 支付订单ID（必填）
+    refund_amount: number                       // 退款金额（分，必填）
+    refund_type: 'full' | 'partial'             // 退款类型（必填）
+    refund_reason?: string                      // 退款原因
 }
 
 export interface ListPaymentOrdersParams {
@@ -178,25 +178,25 @@ export interface ListRefundOrdersByPaymentResponse {
 
 /** 创建配送促销请求 - 对齐 api.createDeliveryPromotionRequest */
 export interface CreateDeliveryPromotionRequest extends Record<string, unknown> {
-    name: string;                                // 促销名称（1-50字符，必填）
-    min_order_amount: number;                    // 最低订单金额（分，0-100000000，必填）
-    discount_amount: number;                     // 折扣金额（分，最大10000000，必填）
-    valid_from: string;                          // 有效期开始（必填）
-    valid_until: string;                         // 有效期结束（必填）
+    name: string                                // 促销名称（1-50字符，必填）
+    min_order_amount: number                    // 最低订单金额（分，0-100000000，必填）
+    discount_amount: number                     // 折扣金额（分，最大10000000，必填）
+    valid_from: string                          // 有效期开始（必填）
+    valid_until: string                         // 有效期结束（必填）
 }
 
 /** 配送促销响应 - 对齐 api.deliveryPromotionResponse */
 export interface DeliveryPromotionResponse {
-    id: number;                                  // 促销ID
-    merchant_id: number;                         // 商户ID
-    name: string;                                // 促销名称
-    min_order_amount: number;                    // 最低订单金额（分）
-    discount_amount: number;                     // 折扣金额（分）
-    valid_from: string;                          // 有效期开始
-    valid_until: string;                         // 有效期结束
-    is_active: boolean;                          // 是否激活
-    created_at: string;                          // 创建时间
-    updated_at: string;                          // 更新时间
+    id: number                                  // 促销ID
+    merchant_id: number                         // 商户ID
+    name: string                                // 促销名称
+    min_order_amount: number                    // 最低订单金额（分）
+    discount_amount: number                     // 折扣金额（分）
+    valid_from: string                          // 有效期开始
+    valid_until: string                         // 有效期结束
+    is_active: boolean                          // 是否激活
+    created_at: string                          // 创建时间
+    updated_at: string                          // 更新时间
 }
 
 // ==================== API 接口函数 ====================
@@ -320,7 +320,7 @@ export class PaymentAdapter {
             created_at: payment.created_at,
             paid_at: payment.paid_at || undefined,
             expired_at: payment.expired_at || undefined
-        };
+        }
     }
 
     /**
@@ -330,7 +330,7 @@ export class PaymentAdapter {
         return {
             payment: this.adaptPayment(result.payment),
             payment_info: result.payment_info
-        };
+        }
     }
 
     /**
@@ -347,7 +347,7 @@ export class PaymentAdapter {
             payment_method: paymentMethod,
             amount,
             description: description || `订单 ${orderId} 支付`
-        };
+        }
     }
 }
 
@@ -369,7 +369,7 @@ export class RefundAdapter {
             operator_id: refund.operator_id ? Number(refund.operator_id) : undefined,
             created_at: refund.created_at,
             processed_at: refund.processed_at || refund.refunded_at || undefined
-        };
+        }
     }
 
     /**
@@ -388,7 +388,7 @@ export class RefundAdapter {
             reason,
             refund_type: refundType,
             operator_id: operatorId
-        };
+        }
     }
 }
 
@@ -424,11 +424,11 @@ export class DeliveryFeeAdapter {
                 promotion_discount: Number(breakdown.promotion_discount),
                 final_fee: Number(breakdown.final_fee)
             },
-            promotions_applied: promotionsApplied.map(promo => ({
+            promotions_applied: promotionsApplied.map((promo) => ({
                 ...promo,
                 discount_amount: Number(promo.discount_amount)
             }))
-        };
+        }
     }
 
     /**
@@ -439,9 +439,9 @@ export class DeliveryFeeAdapter {
         userAddressId: number,
         orderAmount: number,
         options?: {
-            deliveryDistance?: number;
-            peakHour?: boolean;
-            promotionCodes?: string[];
+            deliveryDistance?: number
+            peakHour?: boolean
+            promotionCodes?: string[]
         }
     ): DeliveryFeeCalculateParams {
         return {
@@ -451,7 +451,7 @@ export class DeliveryFeeAdapter {
             delivery_distance: options?.deliveryDistance,
             peak_hour: options?.peakHour,
             promotion_codes: options?.promotionCodes
-        };
+        }
     }
 }
 
@@ -465,35 +465,35 @@ export class PaymentUtils {
      * 创建微信支付
      */
     static async createWechatPayment(orderId: number, amount: number, description?: string): Promise<PaymentResult> {
-        const params = PaymentAdapter.buildPaymentParams(orderId, 'wechat_pay', amount, description);
-        const result = await createPayment(params);
-        return PaymentAdapter.adaptPaymentResult({ payment: result });
+        const params = PaymentAdapter.buildPaymentParams(orderId, 'wechat_pay', amount, description)
+        const result = await createPayment(params)
+        return PaymentAdapter.adaptPaymentResult({ payment: result })
     }
 
     /**
      * 创建支付宝支付
      */
     static async createAlipayPayment(orderId: number, amount: number, description?: string): Promise<PaymentResult> {
-        const params = PaymentAdapter.buildPaymentParams(orderId, 'alipay', amount, description);
-        const result = await createPayment(params);
-        return PaymentAdapter.adaptPaymentResult({ payment: result });
+        const params = PaymentAdapter.buildPaymentParams(orderId, 'alipay', amount, description)
+        const result = await createPayment(params)
+        return PaymentAdapter.adaptPaymentResult({ payment: result })
     }
 
     /**
      * 余额支付
      */
     static async createBalancePayment(orderId: number, amount: number, description?: string): Promise<PaymentResult> {
-        const params = PaymentAdapter.buildPaymentParams(orderId, 'balance', amount, description);
-        const result = await createPayment(params);
-        return PaymentAdapter.adaptPaymentResult({ payment: result });
+        const params = PaymentAdapter.buildPaymentParams(orderId, 'balance', amount, description)
+        const result = await createPayment(params)
+        return PaymentAdapter.adaptPaymentResult({ payment: result })
     }
 
     /**
      * 检查支付状态
      */
     static async checkPaymentStatus(paymentId: number): Promise<Payment> {
-        const payment = await getPaymentById(paymentId);
-        return PaymentAdapter.adaptPayment(payment);
+        const payment = await getPaymentById(paymentId)
+        return PaymentAdapter.adaptPayment(payment)
     }
 
     /**
@@ -508,14 +508,14 @@ export class PaymentUtils {
             status: status as PaymentStatus | undefined,
             page,
             page_size: pageSize
-        });
+        })
 
         return {
-            data: result.payment_orders.map(payment => PaymentAdapter.adaptPayment(payment as Payment)),
+            data: result.payment_orders.map((payment) => PaymentAdapter.adaptPayment(payment as Payment)),
             total: result.total,
             page: result.page_id || page,
             page_size: result.page_size || pageSize
-        };
+        }
     }
 }
 
@@ -528,35 +528,35 @@ export class RefundUtils {
      */
     static async requestFullRefund(paymentId: number, reason: string): Promise<Refund> {
         // 先获取支付信息确定退款金额
-        const payment = await getPaymentById(paymentId);
-        const params = RefundAdapter.buildRefundParams(paymentId, payment.amount, reason, 'full');
-        const refund = await createRefund(params);
-        return RefundAdapter.adaptRefund(refund);
+        const payment = await getPaymentById(paymentId)
+        const params = RefundAdapter.buildRefundParams(paymentId, payment.amount, reason, 'full')
+        const refund = await createRefund(params)
+        return RefundAdapter.adaptRefund(refund)
     }
 
     /**
      * 申请部分退款
      */
     static async requestPartialRefund(paymentId: number, amount: number, reason: string): Promise<Refund> {
-        const params = RefundAdapter.buildRefundParams(paymentId, amount, reason, 'partial');
-        const refund = await createRefund(params);
-        return RefundAdapter.adaptRefund(refund);
+        const params = RefundAdapter.buildRefundParams(paymentId, amount, reason, 'partial')
+        const refund = await createRefund(params)
+        return RefundAdapter.adaptRefund(refund)
     }
 
     /**
      * 获取支付的退款记录
      */
     static async getRefundHistory(paymentId: number): Promise<Refund[]> {
-        const refunds = await getPaymentRefunds(paymentId);
-        return refunds.refund_orders.map(refund => RefundAdapter.adaptRefund(refund));
+        const refunds = await getPaymentRefunds(paymentId)
+        return refunds.refund_orders.map((refund) => RefundAdapter.adaptRefund(refund))
     }
 
     /**
      * 检查退款状态
      */
     static async checkRefundStatus(refundId: number): Promise<Refund> {
-        const refund = await getRefundById(refundId);
-        return RefundAdapter.adaptRefund(refund);
+        const refund = await getRefundById(refundId)
+        return RefundAdapter.adaptRefund(refund)
     }
 }
 
@@ -572,9 +572,9 @@ export class DeliveryFeeUtils {
         userAddressId: number,
         orderAmount: number
     ): Promise<DeliveryFeeResult> {
-        const params = DeliveryFeeAdapter.buildCalculateParams(merchantId, userAddressId, orderAmount);
-        const result = await calculateDeliveryFee(params);
-        return DeliveryFeeAdapter.adaptDeliveryFeeResult(result);
+        const params = DeliveryFeeAdapter.buildCalculateParams(merchantId, userAddressId, orderAmount)
+        const result = await calculateDeliveryFee(params)
+        return DeliveryFeeAdapter.adaptDeliveryFeeResult(result)
     }
 
     /**
@@ -587,10 +587,10 @@ export class DeliveryFeeUtils {
         promotionCodes: string[]
     ): Promise<DeliveryFeeResult> {
         const params = DeliveryFeeAdapter.buildCalculateParams(merchantId, userAddressId, orderAmount, {
-            promotionCodes: promotionCodes
-        });
-        const result = await calculateDeliveryFee(params);
-        return DeliveryFeeAdapter.adaptDeliveryFeeResult(result);
+            promotionCodes
+        })
+        const result = await calculateDeliveryFee(params)
+        return DeliveryFeeAdapter.adaptDeliveryFeeResult(result)
     }
 
     /**
@@ -604,21 +604,21 @@ export class DeliveryFeeUtils {
     ): Promise<DeliveryFeeResult> {
         const params = DeliveryFeeAdapter.buildCalculateParams(merchantId, userAddressId, orderAmount, {
             peakHour: true,
-            deliveryDistance: deliveryDistance
-        });
-        const result = await calculateDeliveryFee(params);
-        return DeliveryFeeAdapter.adaptDeliveryFeeResult(result);
+            deliveryDistance
+        })
+        const result = await calculateDeliveryFee(params)
+        return DeliveryFeeAdapter.adaptDeliveryFeeResult(result)
     }
 
     /**
      * 格式化配送费显示
      */
     static formatDeliveryFee(result: DeliveryFeeResult): {
-        displayText: string;
-        breakdown: string[];
-        hasDiscount: boolean;
+        displayText: string
+        breakdown: string[]
+        hasDiscount: boolean
     } {
-        const breakdown: string[] = [];
+        const breakdown: string[] = []
 
         const breakdownDetail = result.breakdown || {
             base_fee: 0,
@@ -630,32 +630,32 @@ export class DeliveryFeeUtils {
         }
 
         if (breakdownDetail.base_fee > 0) {
-            breakdown.push(`起送费: ¥${breakdownDetail.base_fee.toFixed(2)}`);
+            breakdown.push(`起送费: ¥${breakdownDetail.base_fee.toFixed(2)}`)
         }
 
         if (breakdownDetail.distance_fee > 0) {
-            breakdown.push(`距离费: ¥${breakdownDetail.distance_fee.toFixed(2)}`);
+            breakdown.push(`距离费: ¥${breakdownDetail.distance_fee.toFixed(2)}`)
         }
 
         if (breakdownDetail.peak_hour_fee > 0) {
-            breakdown.push(`高峰费: ¥${breakdownDetail.peak_hour_fee.toFixed(2)}`);
+            breakdown.push(`高峰费: ¥${breakdownDetail.peak_hour_fee.toFixed(2)}`)
         }
 
-        const hasDiscount = breakdownDetail.promotion_discount > 0;
+        const hasDiscount = breakdownDetail.promotion_discount > 0
         if (hasDiscount) {
-            breakdown.push(`优惠减免: -¥${breakdownDetail.promotion_discount.toFixed(2)}`);
+            breakdown.push(`优惠减免: -¥${breakdownDetail.promotion_discount.toFixed(2)}`)
         }
 
         const finalFee = result.final_fee ?? 0
         const displayText = finalFee === 0
             ? '免配送费'
-            : `配送费 ¥${finalFee.toFixed(2)}`;
+            : `配送费 ¥${finalFee.toFixed(2)}`
 
         return {
             displayText,
             breakdown,
             hasDiscount
-        };
+        }
     }
 }
 
@@ -665,7 +665,7 @@ export class DeliveryFeeUtils {
  * 支付状态管理器
  */
 export class PaymentStatusManager {
-    private static paymentPollingMap = new Map<number, ReturnType<typeof setTimeout>>();
+    private static paymentPollingMap = new Map<number, ReturnType<typeof setTimeout>>()
 
     /**
      * 开始轮询支付状态
@@ -676,48 +676,48 @@ export class PaymentStatusManager {
         interval: number = 3000,
         maxAttempts: number = 60
     ): void {
-        let attempts = 0;
+        let attempts = 0
 
         const poll = async () => {
             try {
-                attempts++;
-                const payment = await PaymentUtils.checkPaymentStatus(paymentId);
-                onStatusChange(payment);
+                attempts++
+                const payment = await PaymentUtils.checkPaymentStatus(paymentId)
+                onStatusChange(payment)
 
                 // 如果支付完成或终态，停止轮询
                 if (payment.status === 'paid' || payment.status === 'refunded' || payment.status === 'closed') {
-                    this.stopPaymentPolling(paymentId);
-                    return;
+                    this.stopPaymentPolling(paymentId)
+                    return
                 }
 
                 // 达到最大尝试次数，停止轮询
                 if (attempts >= maxAttempts) {
-                    this.stopPaymentPolling(paymentId);
-                    return;
+                    this.stopPaymentPolling(paymentId)
+                    return
                 }
 
                 // 继续轮询
-                const timeoutId = setTimeout(poll, interval);
-                this.paymentPollingMap.set(paymentId, timeoutId);
+                const timeoutId = setTimeout(poll, interval)
+                this.paymentPollingMap.set(paymentId, timeoutId)
 
             } catch (error) {
-                console.error('轮询支付状态失败:', error);
-                this.stopPaymentPolling(paymentId);
+                console.error('轮询支付状态失败:', error)
+                this.stopPaymentPolling(paymentId)
             }
-        };
+        }
 
         // 开始轮询
-        poll();
+        poll()
     }
 
     /**
      * 停止轮询支付状态
      */
     static stopPaymentPolling(paymentId: number): void {
-        const timeoutId = this.paymentPollingMap.get(paymentId);
+        const timeoutId = this.paymentPollingMap.get(paymentId)
         if (timeoutId) {
-            clearTimeout(timeoutId);
-            this.paymentPollingMap.delete(paymentId);
+            clearTimeout(timeoutId)
+            this.paymentPollingMap.delete(paymentId)
         }
     }
 
@@ -726,9 +726,9 @@ export class PaymentStatusManager {
      */
     static stopAllPolling(): void {
         this.paymentPollingMap.forEach((timeoutId) => {
-            clearTimeout(timeoutId);
-        });
-        this.paymentPollingMap.clear();
+            clearTimeout(timeoutId)
+        })
+        this.paymentPollingMap.clear()
     }
 }
 
@@ -759,4 +759,4 @@ export default {
 
     // 状态管理
     PaymentStatusManager
-};
+}

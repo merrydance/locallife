@@ -68,7 +68,7 @@ export class CouponService {
    * 领取优惠券
    * 注意：后端暂无领取优惠券接口
    */
-  async claimCoupon(couponId: string): Promise<boolean> {
+  async claimCoupon(_couponId: string): Promise<boolean> {
     // TODO: 后端需要实现 POST /v1/vouchers/{id}/claim 接口
     console.warn('claimCoupon: 后端暂无领取优惠券接口')
     return false
@@ -96,8 +96,7 @@ export class CouponService {
   private convertVouchersToCoupons(vouchers: VoucherResponse[]): Coupon[] {
     const now = new Date()
 
-    return vouchers.map(voucher => {
-      const validFrom = new Date(voucher.valid_from)
+    return vouchers.map((voucher) => {
       const validUntil = new Date(voucher.valid_until)
 
       let status: 'AVAILABLE' | 'USED' | 'EXPIRED' = 'AVAILABLE'

@@ -1,7 +1,20 @@
 import { getStableBarHeights } from '../../../../utils/responsive'
-import { DishManagementService, CreateDishRequest, DishResponse } from '../../../../api/dish'
+import { DishManagementService, CreateDishRequest } from '../../../../api/dish'
 import { logger } from '../../../../utils/logger'
-import Message from 'tdesign-miniprogram/message/index'
+
+interface UploadFileItem {
+  url: string
+  status?: 'loading' | 'done' | 'failed'
+  remotePath?: string
+}
+
+interface DishEditPageOptions {
+  id?: string
+}
+
+interface FormInputDetail {
+  value: string
+}
 
 Page({
   data: {
@@ -27,10 +40,10 @@ Page({
     selectedCategoryName: '',
     categoryVisible: false,
     categoryOptions: [] as Array<{ label: string, value: number }>,
-    fileList: [] as any[]
+    fileList: [] as UploadFileItem[]
   },
 
-  onLoad(options: any) {
+  onLoad(options: DishEditPageOptions) {
     const { navBarHeight } = getStableBarHeights()
     const { model } = wx.getSystemInfoSync()
     const isIPhoneX = model.includes('iPhone X') || model.includes('iPhone 11') || model.includes('iPhone 12') || model.includes('iPhone 13')
@@ -51,7 +64,7 @@ Page({
   async loadCategories() {
     try {
       const list = await DishManagementService.getDishCategories()
-      const categoryOptions = list.map(c => ({ label: c.name, value: c.id }))
+      const categoryOptions = list.map((c) => ({ label: c.name, value: c.id }))
       this.setData({ categoryOptions })
     } catch (err) {
       logger.error('Load categories failed', err)
@@ -82,7 +95,7 @@ Page({
       })
     } catch (err) {
       logger.error('Load dish detail failed', err)
-      Message.error({ content: '加载菜品失败', duration: 2000 })
+      wx.showToast({ title: '加载菜品失败', icon: 'none' })
     } finally {
       this.setData({ loading: false })
     }
@@ -90,19 +103,21 @@ Page({
 
   // ==================== 输入处理 ====================
 
-  onInputChange(e: any) {
-    const { field } = e.currentTarget.dataset
+  onInputChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
+    const { field } = e.currentTarget.dataset as { field?: string }
+    if (!field) return
     const { value } = e.detail
     this.setData({ [`formData.${field}`]: value })
   },
 
-  onSwitchChange(e: any) {
-    const { field } = e.currentTarget.dataset
+  onSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const { field } = e.currentTarget.dataset as { field?: string }
+    if (!field) return
     const { value } = e.detail
     this.setData({ [`formData.${field}`]: value })
   },
 
-  onPriceChange(e: any) {
+  onPriceChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
     const val = e.detail.value
     this.setData({
       displayPrice: val,
@@ -110,7 +125,7 @@ Page({
     })
   },
 
-  onMemberPriceChange(e: any) {
+  onMemberPriceChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
     const val = e.detail.value
     this.setData({
       displayMemberPrice: val,
@@ -120,7 +135,7 @@ Page({
 
   // ==================== 图片处理 ====================
 
-  async onImageAdd(e: any) {
+  async onImageAdd(e: WechatMiniprogram.CustomEvent<{ files: Array<{ url: string }> }>) {
     const { files } = e.detail
     wx.showLoading({ title: '上传中...' })
     try {
@@ -150,7 +165,7 @@ Page({
     this.setData({ categoryVisible: true })
   },
 
-  onCategoryConfirm(e: any) {
+  onCategoryConfirm(e: WechatMiniprogram.CustomEvent<{ value: number[], label: string[] }>) {
     const [val] = e.detail.value
     const [label] = e.detail.label
     this.setData({
@@ -168,8 +183,14 @@ Page({
 
   async onSubmit() {
     const { formData } = this.data
-    if (!formData.name) return Message.warning({ content: '请输入菜品名称' })
-    if (formData.price <= 0) return Message.warning({ content: '请输入正确价格' })
+    if (!formData.name) {
+      wx.showToast({ title: '请输入菜品名称', icon: 'none' })
+      return
+    }
+    if (formData.price <= 0) {
+      wx.showToast({ title: '请输入正确价格', icon: 'none' })
+      return
+    }
 
     this.setData({ submitting: true })
     try {
@@ -179,21 +200,18 @@ Page({
         await DishManagementService.createDish(formData as CreateDishRequest)
       }
       
-      Message.success({ 
-        content: '提交成功', 
-        duration: 1500,
-        onClose: () => {
-          const pages = getCurrentPages()
-          const prevPage = pages[pages.length - 2] as any
-          if (prevPage && prevPage.refreshAll) {
-            prevPage.refreshAll()
-          }
-          wx.navigateBack()
+      wx.showToast({ title: '提交成功', icon: 'success' })
+      setTimeout(() => {
+        const pages = getCurrentPages()
+        const prevPage = pages[pages.length - 2] as { refreshAll?: () => void } | undefined
+        if (prevPage?.refreshAll) {
+          prevPage.refreshAll()
         }
-      })
+        wx.navigateBack()
+      }, 1500)
     } catch (err) {
       logger.error('Submit dish failed', err)
-      Message.error({ content: '提交失败，请重试' })
+      wx.showToast({ title: '提交失败，请重试', icon: 'none' })
     } finally {
       this.setData({ submitting: false })
     }

@@ -284,7 +284,7 @@ export class DeliveryProcessService {
     async executeDeliveryAction(
         delivery: DeliveryResponse,
         actionData?: DeliveryActionRequest
-    ): Promise<{ success: boolean; message: string; updatedDelivery?: DeliveryResponse }> {
+    ): Promise<{ success: boolean, message: string, updatedDelivery?: DeliveryResponse }> {
         const nextAction = this.getNextAction(delivery)
 
         if (!nextAction.canExecute) {
@@ -323,10 +323,10 @@ export class DeliveryProcessService {
                 message: `${nextAction.actionText}成功`,
                 updatedDelivery
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             return {
                 success: false,
-                message: error?.message || `${nextAction.actionText}失败`
+                message: error instanceof Error ? error.message : `${nextAction.actionText}失败`
             }
         }
     }
@@ -506,7 +506,7 @@ export function getSmartOrderRecommendations(
     const recommended: RecommendedOrderResponse[] = []
     const others: RecommendedOrderResponse[] = []
 
-    orders.forEach(order => {
+    orders.forEach((order) => {
         // 高优先级：高分且符合偏好
         if (order.total_score >= 80 &&
             (!preferences.maxDistance || order.distance_to_pickup <= preferences.maxDistance) &&
@@ -538,7 +538,7 @@ export function calculateDeliveryEfficiency(deliveries: DeliveryResponse[]): {
     avgEarningsPerKm: number
     completionRate: number
 } {
-    const completedDeliveries = deliveries.filter(d => d.status === 'completed')
+    const completedDeliveries = deliveries.filter((d) => d.status === 'completed')
 
     if (completedDeliveries.length === 0) {
         return {
@@ -563,7 +563,7 @@ export function calculateDeliveryEfficiency(deliveries: DeliveryResponse[]): {
     const avgDeliveryTime = totalDeliveryTime / completedDeliveries.length / (1000 * 60) // 转换为分钟
 
     // 计算准时率（这里需要根据实际业务逻辑调整）
-    const onTimeDeliveries = completedDeliveries.filter(delivery => {
+    const onTimeDeliveries = completedDeliveries.filter((delivery) => {
         if (delivery.estimated_delivery_at && delivery.delivered_at) {
             const estimatedTime = new Date(delivery.estimated_delivery_at).getTime()
             const actualTime = new Date(delivery.delivered_at).getTime()
@@ -651,7 +651,7 @@ export class DeliveryReminderManager {
      * 清除所有提醒
      */
     clearAllReminders(): void {
-        this.reminders.forEach(timeoutId => clearTimeout(timeoutId))
+        this.reminders.forEach((timeoutId) => clearTimeout(timeoutId))
         this.reminders.clear()
     }
 }
@@ -709,7 +709,7 @@ export function calculateEstimatedArrival(startTime: string, estimatedMinutes: n
  * 验证配送操作数据
  * @param actionData 操作数据
  */
-export function validateDeliveryAction(actionData: DeliveryActionRequest): { valid: boolean; message?: string } {
+export function validateDeliveryAction(actionData: DeliveryActionRequest): { valid: boolean, message?: string } {
     if (actionData.latitude && (actionData.latitude < -90 || actionData.latitude > 90)) {
         return { valid: false, message: '纬度范围应在-90到90之间' }
     }

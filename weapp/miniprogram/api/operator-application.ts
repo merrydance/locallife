@@ -1,6 +1,15 @@
 import { request, uploadFile } from '../utils/request'
 import { ApplicationStatus } from './onboarding'
 
+type OCRResult = Record<string, unknown>
+
+export interface AvailableRegion {
+  id: number
+  name: string
+  level?: number
+  parent_name?: string
+}
+
 export interface OperatorApplicationResponse {
   id: number
   user_id: number
@@ -22,9 +31,9 @@ export interface OperatorApplicationResponse {
   updated_at: string
   submitted_at?: string
   reviewed_at?: string
-  business_license_ocr?: any
-  id_card_front_ocr?: any
-  id_card_back_ocr?: any
+  business_license_ocr?: OCRResult
+  id_card_front_ocr?: OCRResult
+  id_card_back_ocr?: OCRResult
 }
 
 export interface CreateOperatorDraftRequest {
@@ -112,7 +121,7 @@ export function ocrOperatorIdCard(filePath: string, side: 'Front' | 'Back') {
  * 获取可申请的区域列表
  */
 export function listAvailableRegions(params: { page_id: number, page_size: number, level?: number }) {
-  return request<{ regions: any[], totalCount: number }>({
+  return request<{ regions: AvailableRegion[], totalCount: number }>({
     url: '/v1/regions/available',
     method: 'GET',
     data: params

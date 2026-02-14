@@ -6,8 +6,11 @@ import { getPublicMerchantDishes as getMerchantDishes, DishDTO, PublicDish } fro
 import CartService from '../../services/cart'
 import { logger } from '../../utils/logger'
 import { ErrorHandler } from '../../utils/error-handler'
-import { BehaviorTracker, EventType } from '../../utils/tracker'
 import { formatPriceNoSymbol } from '../../utils/util'
+
+interface MessageError {
+    message?: string
+}
 
 type DishView = DishDTO & {
     priceDisplay: string
@@ -41,7 +44,7 @@ Page({
         errorMsg: ''
     },
 
-    onLoad(options: { table_id?: string; merchant_id?: string; dev?: string }) {
+    onLoad(options: { table_id?: string, merchant_id?: string, dev?: string }) {
         // 微信扫码进入,参数格式: ?table_id=xxx&merchant_id=xxx
         if (options.table_id && options.merchant_id) {
             this.setData({
@@ -74,12 +77,13 @@ Page({
             await this.checkAndOpenSession()
             await this.loadMenu()
             this.setData({ loading: false })
-        } catch (error: any) {
+        } catch (error: unknown) {
             ErrorHandler.handle(error, 'Dining.init')
+            const message = (error as MessageError).message || '加载失败，请重试'
             this.setData({ 
                 loading: false, 
                 isError: true, 
-                errorMsg: error.message || '加载失败，请重试' 
+                errorMsg: message
             })
         }
     },
@@ -248,7 +252,7 @@ Page({
         }
     },
 
-    onShowDishDetail(e: WechatMiniprogram.CustomEvent) {
+    onShowDishDetail(_e: WechatMiniprogram.CustomEvent) {
         // 暂时不支持在极简点餐页选规格，提示用户
         wx.showToast({ title: '规格选择功能开发中', icon: 'none' })
     },

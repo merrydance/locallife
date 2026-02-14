@@ -71,9 +71,9 @@ export interface MockDish {
   spicy_level: number
   is_premade: boolean
   spec_groups: {
-    id: string,
-    name: string,
-    specs: { id: string; name: string; price_diff: number }[]
+    id: string
+    name: string
+    specs: { id: string, name: string, price_diff: number }[]
   }[]
 }
 

@@ -288,6 +288,32 @@ export class OperatorRiderManagementService {
             data: params
         })
     }
+
+    /**
+     * 暂停骑手
+     * @param riderId 骑手ID
+     * @param data 操作参数
+     */
+    async suspendRider(riderId: number, data: RiderActionRequest): Promise<void> {
+        return request({
+            url: `/v1/operator/riders/${riderId}/suspend`,
+            method: 'POST',
+            data
+        })
+    }
+
+    /**
+     * 恢复骑手
+     * @param riderId 骑手ID
+     * @param data 操作参数
+     */
+    async resumeRider(riderId: number, data: RiderActionRequest): Promise<void> {
+        return request({
+            url: `/v1/operator/riders/${riderId}/resume`,
+            method: 'POST',
+            data
+        })
+    }
 }
 
 // ==================== 骑手分析服务类 ====================
@@ -386,8 +412,8 @@ export class RiderAnalyticsService {
      * @param previousPeriod 上期数据
      */
     analyzeRiderGrowth(
-        currentPeriod: { deliveryCount: number; earnings: number; rating: number; onlineHours: number },
-        previousPeriod: { deliveryCount: number; earnings: number; rating: number; onlineHours: number }
+        currentPeriod: { deliveryCount: number, earnings: number, rating: number, onlineHours: number },
+        previousPeriod: { deliveryCount: number, earnings: number, rating: number, onlineHours: number }
     ): {
         deliveryGrowth: number
         earningsGrowth: number
@@ -461,7 +487,7 @@ export class RiderAnalyticsService {
         let averageCount = 0
         let poorCount = 0
 
-        riders.forEach(rider => {
+        riders.forEach((rider) => {
             // 状态分布
             statusDistribution.set(rider.status, (statusDistribution.get(rider.status) || 0) + 1)
             onlineDistribution.set(rider.online_status, (onlineDistribution.get(rider.online_status) || 0) + 1)
@@ -754,10 +780,10 @@ export async function getRiderManagementDashboard(regionId?: number): Promise<{
     const total = riderList.total ?? riders.length
     const riderSummary = {
         total,
-        active: riders.filter(r => r.status === 'active').length,
-        online: riders.filter(r => r.online_status === 'online').length,
-        suspended: riders.filter(r => r.status === 'suspended').length,
-        pending: riders.filter(r => r.status === 'pending_approval').length
+        active: riders.filter((r) => r.status === 'active').length,
+        online: riders.filter((r) => r.online_status === 'online').length,
+        suspended: riders.filter((r) => r.status === 'suspended').length,
+        pending: riders.filter((r) => r.status === 'pending_approval').length
     }
 
     // 分析骑手分布
@@ -767,7 +793,7 @@ export async function getRiderManagementDashboard(regionId?: number): Promise<{
     const recentRiders = riders.slice(0, 10)
 
     // 获取在线骑手
-    const onlineRiders = riders.filter(r => r.online_status === 'online').slice(0, 20)
+    const onlineRiders = riders.filter((r) => r.online_status === 'online').slice(0, 20)
 
     return {
         riderSummary,
@@ -822,7 +848,7 @@ function generateRiderRecommendations(
     const recommendations: string[] = []
 
     // 基于绩效弱点的建议
-    performance.weaknesses.forEach(weakness => {
+    performance.weaknesses.forEach((weakness) => {
         switch (weakness) {
             case '完成率偏低':
                 recommendations.push('建议加强配送技能培训，提高订单完成率')
@@ -903,7 +929,7 @@ function assessRiderRisk(
     if (rider.stats.total_deliveries === 0) riskScore += 10
 
     // 基于文档完整性
-    const documentCount = Object.values(rider.documents).filter(doc => doc).length
+    const documentCount = Object.values(rider.documents).filter((doc) => doc).length
     if (documentCount < 2) riskScore += 10
 
     if (riskScore >= 50) return 'high'
@@ -968,10 +994,10 @@ export async function batchRiderAction(
     actionData: RiderActionRequest
 ): Promise<{
     success: number[]
-    failed: Array<{ id: number; error: string }>
+    failed: Array<{ id: number, error: string }>
 }> {
     const success: number[] = []
-    const failed: Array<{ id: number; error: string }> = []
+    const failed: Array<{ id: number, error: string }> = []
 
     for (const riderId of riderIds) {
         try {
@@ -1071,7 +1097,7 @@ export function formatDistance(meters: number): string {
  * 验证骑手查询参数
  * @param params 查询参数
  */
-export function validateRiderQueryParams(params: RiderQueryParams): { valid: boolean; message?: string } {
+export function validateRiderQueryParams(params: RiderQueryParams): { valid: boolean, message?: string } {
     if (params.rating_min && (params.rating_min < 0 || params.rating_min > 5)) {
         return { valid: false, message: '最低评分必须在0-5之间' }
     }

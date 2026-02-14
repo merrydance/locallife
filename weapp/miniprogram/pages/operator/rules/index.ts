@@ -17,6 +17,24 @@ interface RulesResponse {
   rules: RuleItem[]
 }
 
+interface RuleCategoryItem {
+  label: string
+  value: RuleItem['category']
+  icon: string
+}
+
+interface RuleCategoryDataset {
+  val?: RuleItem['category']
+}
+
+interface RuleIdDataset {
+  id?: string
+}
+
+interface ValueChangeDetail {
+  value: string
+}
+
 Page({
   data: {
     isLargeScreen: false,
@@ -30,7 +48,7 @@ Page({
       { label: '骑手规则', value: 'rider', icon: 'user' },
       { label: '商户规则', value: 'merchant', icon: 'shop' },
       { label: '平台策略', value: 'platform', icon: 'setting' }
-    ],
+    ] as RuleCategoryItem[],
     
     rules: [] as RuleItem[],
     categorizedRules: {
@@ -60,8 +78,8 @@ Page({
       const res = await request<RulesResponse>({ url: '/v1/operator/rules', method: 'GET' })
       
       // 模拟一些分类数据，以便 UI 展示更丰富（如果是真实后端，这些字段应由后端返回）
-      const enhancedRules = res.rules.map(rule => {
-        let category: any = 'platform'
+      const enhancedRules = res.rules.map((rule) => {
+        let category: RuleItem['category'] = 'platform'
         let icon = 'info-circle'
         
         if (rule.key.includes('RIDER') || rule.key.includes('DELIVERY')) {
@@ -76,9 +94,9 @@ Page({
       })
 
       const categorized = {
-        rider: enhancedRules.filter(r => r.category === 'rider'),
-        merchant: enhancedRules.filter(r => r.category === 'merchant'),
-        platform: enhancedRules.filter(r => r.category === 'platform')
+        rider: enhancedRules.filter((r) => r.category === 'rider'),
+        merchant: enhancedRules.filter((r) => r.category === 'merchant'),
+        platform: enhancedRules.filter((r) => r.category === 'platform')
       }
 
       this.setData({
@@ -97,13 +115,15 @@ Page({
     }
   },
 
-  switchCategory(e: any) {
-    const { val } = e.currentTarget.dataset
+  switchCategory(e: WechatMiniprogram.TouchEvent) {
+    const { val } = e.currentTarget.dataset as RuleCategoryDataset
+    if (!val) return
     this.setData({ activeCategory: val })
   },
 
-  onEditRule(e: any) {
-    const { id } = e.currentTarget.dataset
+  onEditRule(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as RuleIdDataset
+    if (!id) return
     const rule = this.data.rules.find((r) => r.id === id)
     if (!rule) return
 
@@ -120,7 +140,7 @@ Page({
     })
   },
 
-  onValueChange(e: any) {
+  onValueChange(e: WechatMiniprogram.CustomEvent<ValueChangeDetail>) {
     this.setData({ newValue: e.detail.value })
   },
 
@@ -144,7 +164,7 @@ Page({
       wx.showToast({ title: '更新成功', icon: 'success' })
       this.setData({ showEdit: false })
       this.loadRules() // 重新加载以确认为最新数据
-    } catch (err: any) {
+    } catch (err: unknown) {
       wx.hideLoading()
       logger.error('修改规则失败:', err)
       // request.ts 通常会自动显示错误 toast

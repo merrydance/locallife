@@ -1,6 +1,19 @@
 
-import { deliveryFeeService, DeliveryFeeAdapter } from '../../../api/delivery-fee'
+import { deliveryFeeService } from '../../../api/delivery-fee'
 import type { DeliveryFeeConfigResponse, PeakHourConfigResponse, CreateDeliveryFeeConfigRequest, CreatePeakHourConfigRequest } from '../../../api/delivery-fee'
+
+interface RegionConfigPageOptions {
+    id?: string
+}
+
+interface FieldInputEvent {
+    detail: { value: string }
+    currentTarget: { dataset: { field?: string } }
+}
+
+interface DayToggleEvent {
+    currentTarget: { dataset: { day?: number } }
+}
 
 Page({
     data: {
@@ -43,7 +56,7 @@ Page({
         ]
     },
 
-    onLoad(options: any) {
+    onLoad(options: RegionConfigPageOptions) {
         if (options.id) {
             this.setData({ regionId: parseInt(options.id) })
             this.loadData()
@@ -52,7 +65,7 @@ Page({
         }
     },
 
-    onNavHeight(e: any) {
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
         this.setData({
             navBarHeight: e.detail.navBarHeight
         })
@@ -87,9 +100,9 @@ Page({
                 maxDistanceInput: feeConfig ? feeConfig.max_delivery_distance.toString() : '10000'
             })
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err)
-            const errorMsg = err.message || '加载配置失败'
+            const errorMsg = err instanceof Error ? err.message : '加载配置失败'
             this.setData({
                 initialLoading: false,
                 error: errorMsg
@@ -99,16 +112,17 @@ Page({
     },
 
     // 安全加载配置，如果不存在则返回 null
-    async loadFeeConfigSafe(id: number) {
+    async loadFeeConfigSafe(id: number): Promise<DeliveryFeeConfigResponse | null> {
         try {
             return await deliveryFeeService.getRegionConfig(id)
-        } catch (e) {
+        } catch (_e) {
             return null
         }
     },
 
-    onInputChange(e: any) {
+    onInputChange(e: FieldInputEvent) {
         const { field } = e.currentTarget.dataset
+        if (!field) return
         this.setData({ [field]: e.detail.value })
     },
 
@@ -144,19 +158,21 @@ Page({
         this.setData({ showPeakModal: false })
     },
 
-    onPeakFormChange(e: any) {
+    onPeakFormChange(e: FieldInputEvent) {
         const { field } = e.currentTarget.dataset
+        if (!field) return
         this.setData({ [`peakForm.${field}`]: e.detail.value })
     },
 
-    onDayToggle(e: any) {
-        const day = e.currentTarget.dataset.day;
-        const { days } = this.data.peakForm;
+    onDayToggle(e: DayToggleEvent) {
+        const day = e.currentTarget.dataset.day
+        if (!day) return
+        const { days } = this.data.peakForm
         const newDays = days.includes(day)
-            ? days.filter(d => d !== day)
-            : [...days, day].sort();
+            ? days.filter((d) => d !== day)
+            : [...days, day].sort()
 
-        this.setData({ 'peakForm.days': newDays });
+        this.setData({ 'peakForm.days': newDays })
     },
 
     async onSavePeak() {
@@ -186,8 +202,9 @@ Page({
         }
     },
 
-    async onDeletePeak(e: any) {
-        const id = e.currentTarget.dataset.id
+    async onDeletePeak(e: WechatMiniprogram.TouchEvent) {
+        const { id } = e.currentTarget.dataset as { id?: number }
+        if (!id) return
         wx.showModal({
             title: '删除确认',
             content: '确定删除该峰时配置吗？',
@@ -203,6 +220,6 @@ Page({
 
     formatDays(days: number[]) {
         const map = ['', '一', '二', '三', '四', '五', '六', '日']
-        return days.map(d => map[d]).join('、')
+        return days.map((d) => map[d]).join('、')
     }
 })

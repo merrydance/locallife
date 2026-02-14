@@ -14,6 +14,13 @@ const getDatasetId = (event: WechatMiniprogram.BaseEvent): number | null => {
     return Number.isFinite(numericId) ? numericId : null
 }
 
+type CurrentPageWithOptions = {
+        options?: {
+                id?: string
+                orderId?: string
+        }
+}
+
 Page({
     data: {
         paymentId: 0,
@@ -32,7 +39,7 @@ Page({
         showRefundList: false
     },
 
-    onLoad(options: { id?: string; orderId?: string }) {
+    onLoad(options: { id?: string, orderId?: string }) {
         if (options.id) {
             this.setData({ paymentId: parseInt(options.id) })
             this.loadPaymentDetail()
@@ -91,7 +98,8 @@ Page({
 
     onRetry() {
         const pages = getCurrentPages()
-        const options = (pages[pages.length - 1] as any).options
+        const currentPage = pages[pages.length - 1] as CurrentPageWithOptions | undefined
+        const options = currentPage?.options || {}
         if (options.id) {
             this.loadPaymentDetail()
         } else if (options.orderId) {
@@ -122,7 +130,7 @@ Page({
         try {
             const refundsResponse = await getPaymentRefunds(this.data.paymentId)
             // 处理退款显示字段
-            const processedRefunds: RefundView[] = refundsResponse.refund_orders.map(refund => ({
+            const processedRefunds: RefundView[] = refundsResponse.refund_orders.map((refund) => ({
                 ...refund,
                 _amountDisplay: `¥${(refund.refund_amount / 100).toFixed(2)}`,
                 _statusText: this.getRefundStatusText(refund.status),

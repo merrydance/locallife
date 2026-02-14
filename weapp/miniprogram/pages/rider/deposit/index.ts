@@ -1,6 +1,40 @@
-import RiderService, { RiderInfo } from '../../../api/rider'
+import RiderService from '../../../api/rider'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+
+interface DepositRecord {
+    id: number
+    amount: number
+    type: string
+    created_at: string
+    status?: string
+}
+
+interface AmountInputDetail {
+    value: string
+}
+
+interface AmountInputDataset {
+    field?: 'withdrawAmount' | 'rechargeAmount'
+}
+
+interface DepositBalanceResponse {
+    total_deposit: number
+    frozen_deposit: number
+    available_deposit: number
+}
+
+interface DepositListResponse {
+    deposits?: DepositRecord[]
+}
+
+interface DepositPayResponse {
+    pay_params?: WechatMiniprogram.RequestPaymentOption
+}
+
+interface UserMessageError {
+    userMessage?: string
+}
 
 Page({
   data: {
@@ -13,7 +47,7 @@ Page({
     availableDeposit: 0,
     
     // 提现/充值 状态
-    transactions: [] as any[],
+    transactions: [] as DepositRecord[],
     pageID: 1,
     hasMore: true,
     
@@ -34,7 +68,7 @@ Page({
   async refreshAccount() {
     this.setData({ loading: true })
     try {
-        const balance = await RiderService.request('/v1/rider/deposit', 'GET')
+        const balance = await RiderService.request('/v1/rider/deposit', 'GET') as DepositBalanceResponse
         this.setData({
             totalDeposit: balance.total_deposit,
             frozenDeposit: balance.frozen_deposit,
@@ -52,7 +86,7 @@ Page({
         const resp = await RiderService.request('/v1/rider/deposits', 'GET', { 
             page: this.data.pageID, 
             limit: 20 
-        })
+        }) as DepositListResponse
         const list = resp.deposits || []
         this.setData({
             transactions: this.data.pageID === 1 ? list : [...this.data.transactions, ...list],
@@ -71,8 +105,9 @@ Page({
     this.setData({ isRechargeVisible: true, rechargeAmount: '' })
   },
 
-  onInputAmount(e: any) {
-    const { field } = e.currentTarget.dataset
+    onInputAmount(e: WechatMiniprogram.CustomEvent<AmountInputDetail>) {
+        const { field } = e.currentTarget.dataset as AmountInputDataset
+        if (!field) return
     this.setData({ [field]: e.detail.value })
   },
 
@@ -97,7 +132,7 @@ Page({
     try {
         const res = await RiderService.request('/v1/rider/deposit', 'POST', {
             amount: Math.round(amount * 100) // 转为分
-        })
+        }) as DepositPayResponse
         
         if (res.pay_params) {
             wx.requestPayment({
@@ -113,8 +148,10 @@ Page({
                 }
             })
         }
-    } catch (err: any) {
-        wx.showToast({ title: err.userMessage || '充值失败', icon: 'none' })
+    } catch (err: unknown) {
+        const userMessage = (err as UserMessageError).userMessage
+        const message = typeof userMessage === 'string' && userMessage ? userMessage : '充值失败'
+        wx.showToast({ title: message, icon: 'none' })
     } finally {
         wx.hideLoading()
     }
@@ -144,8 +181,10 @@ Page({
         this.setData({ isWithdrawVisible: false })
         this.refreshAccount()
         this.setData({ pageID: 1 }, () => this.loadTransactions())
-    } catch (err: any) {
-        wx.showToast({ title: err.userMessage || '提现失败', icon: 'none' })
+    } catch (err: unknown) {
+        const userMessage = (err as UserMessageError).userMessage
+        const message = typeof userMessage === 'string' && userMessage ? userMessage : '提现失败'
+        wx.showToast({ title: message, icon: 'none' })
     } finally {
         wx.hideLoading()
     }

@@ -55,8 +55,8 @@ export interface TransferDiningSessionRequest {
 
 export interface TransferDiningSessionResponse {
   session: DiningSessionDTO
-  from_table: any
-  to_table: any
+  from_table: Record<string, unknown>
+  to_table: Record<string, unknown>
 }
 
 export interface BillingGroupDTO {

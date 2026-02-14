@@ -6,7 +6,7 @@
  * 3. 预订点菜：直接传 reservation_id 和 merchant_id
  */
 
-import { scanTable, getTableDetail, ScanTableResponse, ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo, ScanTableDishInfo } from '../../../api/table'
+import { scanTable, getTableDetail, ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo, ScanTableDishInfo } from '../../../api/table'
 import {
     getCart,
     addToCart,
@@ -18,7 +18,7 @@ import {
 } from '../../../api/cart'
 import { getReservationDetail } from '../../../api/reservation'
 import { getMerchantDishes, PublicDish } from '../../../api/merchant'
-import type { DishResponse, CustomizationGroup, CustomizationOption } from '../../../api/dish'
+import type { CustomizationGroup } from '../../../api/dish'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getStableBarHeights } from '../../../utils/responsive'
@@ -62,7 +62,7 @@ type CartView = CartResponse & {
     items: CartItemView[]
 }
 
-type MerchantInfoView = ScanTableMerchantInfo | { id: number; name: string; logo_url?: string }
+type MerchantInfoView = ScanTableMerchantInfo | { id: number, name: string, logo_url?: string }
 type TableInfoView = ScanTableTableInfo | { table_no: string }
 
 type DrawerDish = MenuDish & {
@@ -122,7 +122,7 @@ Page({
         errorMessage: ''
     },
 
-    onLoad(options: { reservation_id?: string; merchant_id?: string; table_id?: string; scene?: string }) {
+    onLoad(options: { reservation_id?: string, merchant_id?: string, table_id?: string, scene?: string }) {
         // 设置导航栏高度
         const { navBarHeight } = getStableBarHeights()
         this.setData({ navBarHeight })
@@ -219,12 +219,16 @@ Page({
             } else {
                 throw new Error('无法获取桌台信息')
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('初始化失败:', error)
+            const message =
+                error && typeof error === 'object' && 'message' in error
+                    ? String((error as { message?: string }).message || '')
+                    : ''
             this.setData({
                 loading: false,
                 hasError: true,
-                errorMessage: error.message || '加载失败'
+                errorMessage: message || '加载失败'
             })
         }
     },
@@ -323,11 +327,15 @@ Page({
             // 加载购物车
             await this.loadCart()
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('预订初始化失败:', error)
+            const message =
+                error && typeof error === 'object' && 'message' in error
+                    ? String((error as { message?: string }).message || '')
+                    : ''
             this.setData({
                 hasError: true,
-                errorMessage: error.message || '加载失败'
+                errorMessage: message || '加载失败'
             })
         } finally {
             this.setData({ loading: false })
@@ -390,11 +398,15 @@ Page({
             // 加载购物车
             await this.loadCart()
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('扫码初始化失败:', error)
+            const message =
+                error && typeof error === 'object' && 'message' in error
+                    ? String((error as { message?: string }).message || '')
+                    : ''
             this.setData({
                 hasError: true,
-                errorMessage: error.message || '加载失败'
+                errorMessage: message || '加载失败'
             })
         } finally {
             this.setData({ loading: false })
@@ -546,7 +558,7 @@ Page({
         if (index < 0) return
 
         const target = items[index]
-        const unitPrice = target.unit_price || (target as any).price || 0
+        const unitPrice = target.unit_price || (target as { price?: number }).price || 0
         const prevQty = target.quantity || 0
         const safeNextQty = Math.max(0, nextQty)
 
@@ -623,7 +635,7 @@ Page({
      */
     switchCategory(e: WechatMiniprogram.CustomEvent) {
         const categoryId = e.currentTarget.dataset.id
-        const category = this.data.categories.find(c => c.id === categoryId)
+        const category = this.data.categories.find((c) => c.id === categoryId)
 
         this.setData({
             currentCategoryId: categoryId,
@@ -636,7 +648,7 @@ Page({
      */
     viewDishDetail(e: WechatMiniprogram.CustomEvent) {
         const dishId = e.currentTarget.dataset.id
-        const dish = this.data.currentDishes.find(d => d.id === dishId)
+        const dish = this.data.currentDishes.find((d) => d.id === dishId)
 
         if (dish) {
             this.setData({ selectedDish: dish })
@@ -665,11 +677,11 @@ Page({
         }
 
         // 转换定制组数据格式
-        const spec_groups = (dish.customization_groups || []).map(group => ({
+        const spec_groups = (dish.customization_groups || []).map((group) => ({
             id: String(group.id),
             name: group.name,
             is_required: group.is_required,
-            specs: (group.options || []).map(opt => ({
+            specs: (group.options || []).map((opt) => ({
                 id: String(opt.id),
                 name: opt.tag_name || '选项', // 使用 tag_name
                 price_diff: opt.extra_price || 0,
@@ -679,7 +691,7 @@ Page({
 
         // 初始化选中状态
         const drawerSpecs: Record<string, string> = {}
-        spec_groups.forEach(group => {
+        spec_groups.forEach((group) => {
             // 如果是必选且有选项，默认选中第一个
             if (group.is_required && group.specs.length > 0) {
                 drawerSpecs[group.id] = group.specs[0].id
@@ -860,7 +872,7 @@ Page({
      * 获取购物车中菜品数量
      */
     getCartQuantity(dishId: number): number {
-        const item = this.data.cart?.items.find(item => item.dish_id === dishId)
+        const item = this.data.cart?.items.find((item) => item.dish_id === dishId)
         return item ? item.quantity : 0
     },
 
@@ -950,6 +962,6 @@ Page({
             this.loadCart()
             wx.showToast({ title: '操作失败', icon: 'none' })
         }
-    },
+    }
 
 })

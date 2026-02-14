@@ -90,6 +90,12 @@ type Config struct {
 	// Profit sharing return retry configs
 	ProfitSharingReturnRetryInterval time.Duration `mapstructure:"PROFIT_SHARING_RETURN_RETRY_INTERVAL"`
 	ProfitSharingReturnMaxRetries    int           `mapstructure:"PROFIT_SHARING_RETURN_MAX_RETRIES"`
+
+	// Reservation cancel refund policy (%), role-based and deadline-based
+	ReservationUserRefundPercentBeforeDeadline     int `mapstructure:"RESERVATION_USER_REFUND_PERCENT_BEFORE_DEADLINE"`
+	ReservationUserRefundPercentAfterDeadline      int `mapstructure:"RESERVATION_USER_REFUND_PERCENT_AFTER_DEADLINE"`
+	ReservationMerchantRefundPercentBeforeDeadline int `mapstructure:"RESERVATION_MERCHANT_REFUND_PERCENT_BEFORE_DEADLINE"`
+	ReservationMerchantRefundPercentAfterDeadline  int `mapstructure:"RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE"`
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -120,6 +126,10 @@ func LoadConfig(path string) (config Config, err error) {
 	// Profit sharing return retry defaults
 	viper.SetDefault("PROFIT_SHARING_RETURN_RETRY_INTERVAL", "1m")
 	viper.SetDefault("PROFIT_SHARING_RETURN_MAX_RETRIES", 10)
+	viper.SetDefault("RESERVATION_USER_REFUND_PERCENT_BEFORE_DEADLINE", 100)
+	viper.SetDefault("RESERVATION_USER_REFUND_PERCENT_AFTER_DEADLINE", 0)
+	viper.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_BEFORE_DEADLINE", 100)
+	viper.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE", 100)
 	// Web 登录默认过期时间
 	viper.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
 

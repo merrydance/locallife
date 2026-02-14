@@ -26,14 +26,17 @@ Component({
   },
 
   methods: {
-    onInputChange(e: any) {
-      const { value } = e.detail
+    onInputChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+      const value = e.detail?.value || ''
       this.triggerEvent('change', { value })
     },
 
-    onQuickRemarkTap(e: any) {
-      const { item } = e.currentTarget.dataset
+    onQuickRemarkTap(e: WechatMiniprogram.TouchEvent) {
+      const item = (e.currentTarget.dataset as { item?: string }).item || ''
       let { value } = this.properties
+      if (!item) {
+        return
+      }
       if (value) {
         if (!value.includes(item)) {
           value = `${value}, ${item}`

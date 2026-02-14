@@ -23,6 +23,18 @@ interface TransactionDisplay {
   statusTheme: 'primary' | 'success' | 'warning' | 'error' | 'default'
 }
 
+type MembershipEvent = WechatMiniprogram.CustomEvent & {
+  currentTarget: {
+    dataset: {
+      id?: number
+      item?: {
+        type?: 'REFUND' | 'PAYMENT' | 'TOPUP'
+        id?: string
+      }
+    }
+  }
+}
+
 Page({
   data: {
     balance: 0,
@@ -64,7 +76,7 @@ Page({
       ])
 
       // 1. Process Memberships
-      const memberships: MembershipDisplay[] = (membershipRes.memberships || []).map(m => {
+      const memberships: MembershipDisplay[] = (membershipRes.memberships || []).map((m) => {
         const date = new Date(m.created_at)
         const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
         return {
@@ -86,7 +98,7 @@ Page({
         const amount = isRefund ? p.amount : -p.amount
         
         let statusName = '已完成'
-        let statusTheme: any = 'success'
+        let statusTheme: TransactionDisplay['statusTheme'] = 'success'
         if (p.status === 'pending') { statusName = '待支付'; statusTheme = 'warning' }
         else if (p.status === 'closed') { statusName = '已关闭'; statusTheme = 'default' }
         else if (p.status === 'refunded') { statusName = '已退款'; statusTheme = 'primary' }
@@ -141,11 +153,11 @@ Page({
     })
   },
 
-  onTopUp(e: any) {
+  onTopUp(e: MembershipEvent) {
     const id = e.currentTarget.dataset.id
     if (id) {
        // Target specific membership recharge
-       const m = this.data.memberships.find(item => item.id === id)
+       const m = this.data.memberships.find((item) => item.id === id)
        if (m) {
          wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${m.merchant_id}&activeTab=recharge` })
          return
@@ -165,7 +177,7 @@ Page({
     }
 
     // General selection
-    const names = this.data.memberships.map(m => m.merchant_name)
+    const names = this.data.memberships.map((m) => m.merchant_name)
     wx.showActionSheet({
       itemList: names.slice(0, 6), // Wechat limit is 6
       success: (res) => {
@@ -196,16 +208,19 @@ Page({
     wx.navigateTo({ url: '/pages/user_center/membership/index' })
   },
 
-  onViewMembership(e: any) {
+  onViewMembership(e: MembershipEvent) {
     const id = e.currentTarget.dataset.id
-    const m = this.data.memberships.find(item => item.id === id)
+    const m = this.data.memberships.find((item) => item.id === id)
     if (m) {
       wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${m.merchant_id}` })
     }
   },
 
-  onTransactionDetail(e: any) {
+  onTransactionDetail(e: MembershipEvent) {
     const item = e.currentTarget.dataset.item
+    if (!item?.id || !item.type) {
+      return
+    }
     if (item.type === 'REFUND') {
       wx.navigateTo({ url: `/pages/user_center/refund-detail/index?id=${item.id}` })
     } else {

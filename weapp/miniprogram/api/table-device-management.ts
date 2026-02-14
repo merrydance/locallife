@@ -272,7 +272,7 @@ export class TableManagementService {
      * @param tableId 桌台ID
      * @param imageData 图片数据
      */
-    async uploadTableImage(tableId: number, imageData: { image_url: string; sort_order?: number }): Promise<TableImageResponse> {
+    async uploadTableImage(tableId: number, imageData: { image_url: string, sort_order?: number }): Promise<TableImageResponse> {
         return request({
             url: `/v1/tables/${tableId}/images`,
             method: 'POST',
@@ -417,7 +417,7 @@ export class DeviceManagementService {
      * @param printerId 打印机ID
      * @param testData 测试数据
      */
-    async testPrinter(printerId: number, testData?: TestPrinterRequest): Promise<{ message: string; success: boolean }> {
+    async testPrinter(printerId: number, testData?: TestPrinterRequest): Promise<{ message: string, success: boolean }> {
         return request({
             url: `/v1/merchant/devices/${printerId}/test`,
             method: 'POST',
@@ -620,7 +620,7 @@ export const displayConfigService = new DisplayConfigService()
  */
 export async function getAvailableTables(): Promise<TableResponse[]> {
     const response = await tableManagementService.listTables('table')
-    return (response.tables || []).filter(table => table.status === 'available')
+    return (response.tables || []).filter((table) => table.status === 'available')
 }
 
 /**
@@ -643,16 +643,16 @@ export async function getActivePrinters(): Promise<PrinterResponse[]> {
  * 批量测试打印机
  * @param printerIds 打印机ID列表
  */
-export async function batchTestPrinters(printerIds: number[]): Promise<{ printerId: number; success: boolean; message: string }[]> {
+export async function batchTestPrinters(printerIds: number[]): Promise<{ printerId: number, success: boolean, message: string }[]> {
     const promises = printerIds.map(async (printerId) => {
         try {
             const result = await deviceManagementService.testPrinter(printerId)
             return { printerId, success: result.success, message: result.message }
-        } catch (error: any) {
+        } catch (error: unknown) {
             return {
                 printerId,
                 success: false,
-                message: error?.message || '测试失败'
+                message: error instanceof Error ? error.message : '测试失败'
             }
         }
     })

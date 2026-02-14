@@ -819,7 +819,7 @@ export class PlatformAnalyticsService {
         const userGrowthData = userGrowth.growth_data
         if (userGrowthData.length > 7) {
             const recentWeek = userGrowthData.slice(-7)
-            const weeklyVariance = this.calculateVariance(recentWeek.map(d => d.new_users))
+            const weeklyVariance = this.calculateVariance(recentWeek.map((d) => d.new_users))
             if (weeklyVariance > 1000) {
                 risks.push('用户增长波动较大，增长稳定性存在风险')
             }
@@ -834,7 +834,7 @@ export class PlatformAnalyticsService {
     private generateRegionalInsights(
         topPerformers: RegionComparisonRow[],
         underPerformers: RegionComparisonRow[],
-        averageMetrics: any
+        averageMetrics: { avgGrowthRate: number }
     ): string[] {
         const insights: string[] = []
 
@@ -888,7 +888,7 @@ export class PlatformAnalyticsService {
         if (values.length === 0) return 0
 
         const mean = values.reduce((sum, val) => sum + val, 0) / values.length
-        const squaredDiffs = values.map(val => Math.pow(val - mean, 2))
+        const squaredDiffs = values.map((val) => Math.pow(val - mean, 2))
         return squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length
     }
 }
@@ -970,13 +970,13 @@ export class PlatformDashboardAdapter {
                 newRiders: data.today_stats.new_riders
             },
             orderDistribution: data.order_distribution,
-            hourlyTrends: data.hourly_trends.map(item => ({
+            hourlyTrends: data.hourly_trends.map((item) => ({
                 hour: item.hour,
                 orders: item.orders,
                 gmv: item.gmv,
                 completionRate: item.completion_rate
             })),
-            topRegions: data.top_regions.map(item => ({
+            topRegions: data.top_regions.map((item) => ({
                 regionId: item.region_id,
                 regionName: item.region_name,
                 orders: item.orders,
@@ -1095,8 +1095,8 @@ export async function generatePlatformReport(days: number = 30): Promise<{
             `活跃骑手: ${dashboardData.overview.summary.active_riders.toLocaleString()}`
         ],
         majorAlerts: dashboardData.healthAnalysis.alerts
-            .filter(alert => alert.level === 'error')
-            .map(alert => alert.message)
+            .filter((alert) => alert.level === 'error')
+            .map((alert) => alert.message)
     }
 
     // 生成行动项
@@ -1127,7 +1127,7 @@ export async function generatePlatformReport(days: number = 30): Promise<{
 /**
  * 生成报告行动项
  */
-function generateReportActionItems(dashboardData: any): {
+function generateReportActionItems(dashboardData: Awaited<ReturnType<typeof getPlatformDashboardData>>): {
     immediate: string[]
     shortTerm: string[]
     longTerm: string[]
@@ -1137,7 +1137,7 @@ function generateReportActionItems(dashboardData: any): {
     const longTerm: string[] = []
 
     // 基于健康分析生成行动项
-    dashboardData.healthAnalysis.alerts.forEach((alert: any) => {
+    dashboardData.healthAnalysis.alerts.forEach((alert) => {
         if (alert.level === 'error') {
             immediate.push(`紧急处理: ${alert.message}`)
         } else if (alert.level === 'warning') {
@@ -1251,7 +1251,7 @@ export function formatLargeNumber(num: number, precision: number = 1): string {
  * @param startDate 开始日期
  * @param endDate 结束日期
  */
-export function validateDateRange(startDate: string, endDate: string): { valid: boolean; message?: string } {
+export function validateDateRange(startDate: string, endDate: string): { valid: boolean, message?: string } {
     const start = new Date(startDate)
     const end = new Date(endDate)
 

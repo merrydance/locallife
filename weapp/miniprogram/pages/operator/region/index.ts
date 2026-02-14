@@ -1,8 +1,10 @@
 import { operatorBasicManagementService, OperatorBasicManagementAdapter } from '../../../api/operator-basic-management'
 
+type RegionListItem = ReturnType<typeof OperatorBasicManagementAdapter.adaptRegionResponse>
+
 Page({
     data: {
-        regions: [] as any[],
+        regions: [] as RegionListItem[],
         initialLoading: true,
         loadingMore: false,
         error: '',
@@ -26,7 +28,7 @@ Page({
         }
     },
 
-    onNavHeight(e: any) {
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
         this.setData({
             navBarHeight: e.detail.navBarHeight
         })
@@ -49,7 +51,7 @@ Page({
                 limit: this.data.pageSize
             })
 
-            const newRegions = (res.regions || []).map(r => OperatorBasicManagementAdapter.adaptRegionResponse(r))
+            const newRegions = (res.regions || []).map((r) => OperatorBasicManagementAdapter.adaptRegionResponse(r))
 
             this.setData({
                 regions: reset ? newRegions : [...this.data.regions, ...newRegions],
@@ -59,9 +61,9 @@ Page({
                 loadingMore: false
             })
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err)
-            const errorMsg = err.message || '加载区域列表失败'
+            const errorMsg = err instanceof Error ? err.message : '加载区域列表失败'
             this.setData({
                 error: errorMsg,
                 initialLoading: false,
@@ -76,8 +78,9 @@ Page({
     },
 
     // 跳转到详细配置页
-    onRegionClick(e: any) {
-        const id = e.currentTarget.dataset.id
+    onRegionClick(e: WechatMiniprogram.TouchEvent) {
+        const { id } = e.currentTarget.dataset as { id?: number }
+        if (!id) return
         wx.navigateTo({
             url: `/pages/operator/region/config?id=${id}`
         })

@@ -125,7 +125,7 @@ export class DeliveryService {
     /**
      * 获取骑手位置
      */
-    static async getRiderLocation(deliveryId: number): Promise<{ latitude: number; longitude: number }> {
+    static async getRiderLocation(deliveryId: number): Promise<{ latitude: number, longitude: number }> {
         return await request({
             url: `/v1/delivery/${deliveryId}/rider-location`,
             method: 'GET'

@@ -1,11 +1,44 @@
 import { searchGroups, applyToJoinGroup } from '../../../../api/group-application'
 import { logger } from '../../../../utils/logger'
 
+type NavHeightEvent = {
+  detail: {
+    navBarHeight: number
+  }
+}
+
+type InputEvent = {
+  detail: {
+    value: string
+  }
+}
+
+type ApplyEvent = {
+  currentTarget: {
+    dataset: {
+      id?: number
+      name?: string
+    }
+  }
+}
+
+type GroupItem = Record<string, unknown>
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     navBarHeight: 88,
     keyword: '',
-    groups: [] as any[],
+    groups: [] as GroupItem[],
     searched: false,
     loading: false,
     dialogVisible: false,
@@ -14,11 +47,11 @@ Page({
     applyReason: ''
   },
 
-  onNavHeight(e: any) {
+  onNavHeight(e: NavHeightEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  onSearchChange(e: any) {
+  onSearchChange(e: InputEvent) {
     this.setData({ keyword: e.detail.value })
   },
 
@@ -38,16 +71,20 @@ Page({
     }
   },
 
-  onApply(e: any) {
+  onApply(e: ApplyEvent) {
     const { id, name } = e.currentTarget.dataset
+    if (typeof id !== 'number') {
+      wx.showToast({ title: '集团信息异常', icon: 'none' })
+      return
+    }
     this.setData({
       selectedGroupId: id,
-      selectedGroupName: name,
+      selectedGroupName: typeof name === 'string' ? name : '',
       dialogVisible: true
     })
   },
 
-  onReasonChange(e: any) {
+  onReasonChange(e: InputEvent) {
     this.setData({ applyReason: e.detail.value })
   },
 
@@ -71,9 +108,9 @@ Page({
           wx.navigateBack()
         }
       })
-    } catch (e: any) {
+    } catch (e: unknown) {
       wx.hideLoading()
-      wx.showToast({ title: e.message || '申请失败', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(e, '申请失败'), icon: 'none' })
     }
   }
 })

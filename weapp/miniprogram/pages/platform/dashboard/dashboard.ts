@@ -13,6 +13,16 @@ import type {
 } from '@/api/platform-dashboard'
 import { responsiveBehavior } from '@/utils/responsive'
 
+type DateRangeChangeEvent = WechatMiniprogram.CustomEvent<{ value: string }>
+type ActionTapEvent = WechatMiniprogram.CustomEvent & {
+    currentTarget: {
+        dataset: {
+            url?: string
+        }
+    }
+}
+type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
+
 Page({
     behaviors: [responsiveBehavior],
     data: {
@@ -123,7 +133,7 @@ Page({
     /**
      * 切换日期范围
      */
-    onDateRangeChange(e: any) {
+    onDateRangeChange(e: DateRangeChangeEvent) {
         const index = parseInt(e.detail.value)
         this.setData({ selectedDateRange: index })
         this.loadDashboardData()
@@ -150,7 +160,7 @@ Page({
     /**
      * 快捷操作点击
      */
-    onActionTap(e: any) {
+    onActionTap(e: ActionTapEvent) {
         const { url } = e.currentTarget.dataset
         if (url) {
             wx.navigateTo({ url })
@@ -171,7 +181,7 @@ Page({
             this.loadDashboardData(true) // Silent refresh
         }, 30000)
 
-        this.setData({ refreshTimer: timer as any })
+        this.setData({ refreshTimer: timer as number })
     },
 
     /**
@@ -209,7 +219,7 @@ Page({
     /**
      * 导航栏高度变化
      */
-    onNavHeight(e: any) {
+    onNavHeight(e: NavHeightEvent) {
         this.setData({ navBarHeight: e.detail.navBarHeight })
     }
 })

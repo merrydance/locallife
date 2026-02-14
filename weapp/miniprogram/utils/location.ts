@@ -21,6 +21,14 @@ export interface LocationInfo {
     street_number?: string // 门牌号
 }
 
+interface GlobalLocationData {
+    name?: string
+    address?: string
+    province?: string
+    city?: string
+    district?: string
+}
+
 /**
  * 位置服务类
  */
@@ -28,7 +36,7 @@ class LocationService {
     /**
      * 获取当前位置（经纬度）
      */
-    async getCurrentLocation(): Promise<{ latitude: number; longitude: number }> {
+    async getCurrentLocation(): Promise<{ latitude: number, longitude: number }> {
         return new Promise((resolve, reject) => {
             wx.getLocation({
                 type: 'gcj02', // 返回可以用于wx.openLocation的坐标
@@ -171,7 +179,7 @@ class LocationService {
         try {
             const app = getApp<IAppOption>()
             if (app && app.globalData && app.globalData.latitude && app.globalData.longitude) {
-                const location = app.globalData.location as any
+                const location = app.globalData.location as GlobalLocationData | undefined
                 return {
                     latitude: app.globalData.latitude,
                     longitude: app.globalData.longitude,
@@ -267,7 +275,7 @@ export function getDeviceId(): string {
 
     // 优先使用缓存的device_id
     try {
-        let deviceId = wx.getStorageSync(STORAGE_KEY)
+        const deviceId = wx.getStorageSync(STORAGE_KEY)
         if (deviceId) {
             return deviceId
         }

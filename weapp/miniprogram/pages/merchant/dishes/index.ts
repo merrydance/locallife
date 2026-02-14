@@ -1,7 +1,6 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { DishManagementService, DishResponse, DishCategory } from '../../../api/dish'
 import { logger } from '../../../utils/logger'
-import Dialog from 'tdesign-miniprogram/dialog/index'
 
 Page({
   data: {
@@ -57,7 +56,7 @@ Page({
       const newDishes = res.dishes || []
       // 客户端搜索过滤 (若后端未完全支持 keyword 筛选)
       const filteredDishes = this.data.searchKeyword 
-        ? newDishes.filter(d => d.name.includes(this.data.searchKeyword))
+        ? newDishes.filter((d) => d.name.includes(this.data.searchKeyword))
         : newDishes
 
       this.setData({
@@ -74,7 +73,7 @@ Page({
     }
   },
 
-  onTabChange(e: any) {
+  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: number }>) {
     this.setData({ 
       currentCategoryId: e.detail.value,
       pageId: 1,
@@ -85,7 +84,7 @@ Page({
     })
   },
 
-  onSearchChange(e: any) {
+  onSearchChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ searchKeyword: e.detail.value })
   },
 
@@ -105,8 +104,9 @@ Page({
 
   // ==================== 状态切换 ====================
 
-  async onToggleStatus(e: any) {
-    const { id, online } = e.currentTarget.dataset
+  async onToggleStatus(e: WechatMiniprogram.TouchEvent) {
+    const { id, online } = e.currentTarget.dataset as { id?: number, online?: boolean }
+    if (!id) return
     const targetStatus = !online
     
     wx.showLoading({ title: '处理中...' })
@@ -114,7 +114,7 @@ Page({
       await DishManagementService.updateDishStatus(id, { is_online: targetStatus })
       
       // 更新本地状态
-      const index = this.data.dishes.findIndex(d => d.id === id)
+      const index = this.data.dishes.findIndex((d) => d.id === id)
       if (index > -1) {
         const key = `dishes[${index}].is_online`
         this.setData({ [key]: targetStatus })
@@ -135,30 +135,33 @@ Page({
     wx.navigateTo({ url: '../edit/index' })
   },
 
-  onEditDish(e: any) {
-    const { id } = e.currentTarget.dataset
+  onEditDish(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
     wx.navigateTo({ url: `../edit/index?id=${id}` })
   },
 
-  onDeleteDish(e: any) {
-    const { id } = e.currentTarget.dataset
-    
-    Dialog.confirm({
+  onDeleteDish(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+
+    wx.showModal({
       title: '确认删除',
       content: '删除后无法恢复，确定要删除该菜品吗？',
-      confirmBtn: { content: '确认删除', theme: 'danger' },
-      cancelBtn: '取消',
-    }).then(async () => {
-      try {
-        await DishManagementService.deleteDish(id)
-        this.setData({
-          dishes: this.data.dishes.filter(d => d.id !== id)
-        })
-        wx.showToast({ title: '删除成功', icon: 'success' })
-      } catch (err) {
-        logger.error('Delete dish failed', err)
-        wx.showToast({ title: '删除失败', icon: 'error' })
+      confirmText: '确认删除',
+      cancelText: '取消',
+      success: async (res) => {
+        if (!res.confirm) return
+        try {
+          await DishManagementService.deleteDish(id)
+          this.setData({
+            dishes: this.data.dishes.filter((d) => d.id !== id)
+          })
+          wx.showToast({ title: '删除成功', icon: 'success' })
+        } catch (err) {
+          logger.error('Delete dish failed', err)
+          wx.showToast({ title: '删除失败', icon: 'none' })
+        }
       }
-    }).catch(() => {})
+    })
   }
 })

@@ -18,6 +18,10 @@ const CANCEL_REASONS = [
   '其他原因'
 ]
 
+type PageWithUrgeTimer = {
+  _urgeTimer?: ReturnType<typeof setInterval>
+}
+
 Page({
   data: {
     orderId: '',
@@ -114,13 +118,17 @@ Page({
 
       // 检查催单冷却时间
       this.checkUrgeCooldown()
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: string }).message || '')
+          : ''
       logger.error('Load order detail failed:', error, 'Detail')
       if (!this.data.order) {
         this.setData({ 
           loading: false, 
           isError: true, 
-          errorMsg: error.message || '加载订单详情失败'
+          errorMsg: message || '加载订单详情失败'
         })
       } else {
         wx.showToast({ title: '刷新失败', icon: 'none' })
@@ -144,12 +152,13 @@ Page({
 
   startUrgeCountdown() {
     // Clear existing timer if any to avoid duplicates
-    if ((this as any)._urgeTimer) clearInterval((this as any)._urgeTimer);
+    const page = this as unknown as PageWithUrgeTimer
+    if (page._urgeTimer) clearInterval(page._urgeTimer)
 
-    (this as any)._urgeTimer = setInterval(() => {
+    page._urgeTimer = setInterval(() => {
       const { urgeCountdown } = this.data
       if (urgeCountdown <= 1) {
-        clearInterval((this as any)._urgeTimer)
+        if (page._urgeTimer) clearInterval(page._urgeTimer)
         this.setData({ urgeCountdown: 0 })
       } else {
         this.setData({ urgeCountdown: urgeCountdown - 1 })
@@ -158,7 +167,8 @@ Page({
   },
 
   onUnload() {
-     if ((this as any)._urgeTimer) clearInterval((this as any)._urgeTimer);
+     const page = this as unknown as PageWithUrgeTimer
+     if (page._urgeTimer) clearInterval(page._urgeTimer)
   },
 
   // 复制订单号
@@ -255,8 +265,12 @@ Page({
     wx.showLoading({ title: '再次购买中...' })
     try {
       // 构造购物车上下文
-      const orderType: OrderType = order.type || "takeout"
-      const cartContext: any = { orderType }
+      const orderType: OrderType = order.type || 'takeout'
+      const cartContext: {
+        orderType: OrderType
+        tableId?: number
+        reservationId?: number
+      } = { orderType }
       
       if (orderType === 'dine_in' && order.tableId) {
           cartContext.tableId = order.tableId

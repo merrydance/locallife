@@ -1,14 +1,20 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { tableManagementService, TableResponse } from '../../../api/table-device-management'
 import { logger } from '../../../utils/logger'
-import Dialog from 'tdesign-miniprogram/dialog/dialog'
+
+type TableTab = 'all' | 'table' | 'room'
+
+interface TableView extends TableResponse {
+  statusLabel: string
+  statusTheme: string
+}
 
 Page({
   data: {
     navBarHeight: 88,
     loading: false,
-    currentTab: 'all',
-    tables: [] as any[],
+    currentTab: 'all' as TableTab,
+    tables: [] as TableView[],
     rawTables: [] as TableResponse[]
   },
 
@@ -24,10 +30,10 @@ Page({
     
     try {
       // API 支持 table_type 过滤，但这里我们先拉取全部在前端切也行，或者根据 tab 传参
-      const type = this.data.currentTab === 'all' ? undefined : (this.data.currentTab as any)
+      const type = this.data.currentTab === 'all' ? undefined : this.data.currentTab
       const res = await tableManagementService.listTables(type)
       
-      const formatted = (res.tables || []).map(t => this.formatTable(t))
+      const formatted = (res.tables || []).map((t) => this.formatTable(t))
       this.setData({ 
         tables: formatted,
         rawTables: res.tables || []
@@ -42,7 +48,7 @@ Page({
   },
 
   formatTable(t: TableResponse) {
-    const statusMap: any = {
+    const statusMap: Record<string, { label: string, theme: string }> = {
       'available': { label: '空闲', theme: 'success' },
       'occupied': { label: '就餐中', theme: 'error' },
       'reserved': { label: '已预订', theme: 'warning' },
@@ -57,8 +63,8 @@ Page({
     }
   },
 
-  onTabChange(e: any) {
-    this.setData({ currentTab: e.detail.value }, () => {
+  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: TableTab }>) {
+    this.setData({ currentTab: e.detail.value || 'all' }, () => {
       this.loadTables()
     })
   },
@@ -67,28 +73,31 @@ Page({
     this.loadTables()
   },
 
-  async onReleaseTable(e: any) {
-    const { id, no } = e.currentTarget.dataset
-    
-    Dialog.confirm({
+  async onReleaseTable(e: WechatMiniprogram.TouchEvent) {
+    const { id, no } = e.currentTarget.dataset as { id?: number, no?: string }
+    if (!id) return
+
+    wx.showModal({
       title: '释放确认',
       content: `确认手动释放桌台 ${no} 吗？这将其状态改为“空闲”。`,
-      confirmBtn: '确认释放',
-      cancelBtn: '取消',
-    }).then(async () => {
-      try {
-        await tableManagementService.updateTableStatus(id, { status: 'available' })
-        wx.showToast({ title: '已释放', icon: 'success' })
-        this.loadTables()
-      } catch (err) {
-        logger.error('Release table failed', err)
-        wx.showToast({ title: '操作失败', icon: 'none' })
+      confirmText: '确认释放',
+      cancelText: '取消',
+      success: async (res) => {
+        if (!res.confirm) return
+        try {
+          await tableManagementService.updateTableStatus(id, { status: 'available' })
+          wx.showToast({ title: '已释放', icon: 'success' })
+          this.loadTables()
+        } catch (err) {
+          logger.error('Release table failed', err)
+          wx.showToast({ title: '操作失败', icon: 'none' })
+        }
       }
-    }).catch(() => {})
+    })
   },
 
-  onShowQRCode(e: any) {
-    const { url } = e.currentTarget.dataset
+  onShowQRCode(e: WechatMiniprogram.TouchEvent) {
+    const { url } = e.currentTarget.dataset as { url?: string }
     if (!url) {
       return wx.showToast({ title: '暂无二维码', icon: 'none' })
     }
@@ -103,7 +112,7 @@ Page({
     // wx.navigateTo({ url: './edit/index' })
   },
 
-  onTableClick(e: any) {
+  onTableClick(_e: WechatMiniprogram.TouchEvent) {
     // const { id } = e.currentTarget.dataset
     // wx.navigateTo({ url: `./detail/index?id=${id}` })
   }

@@ -1,8 +1,18 @@
 import { ReservationService } from '../../../api/reservation'
 import { processPayment } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
-import { ReservationCardAdapter, ReservationDetailViewModel, ReservationCardViewModel } from '../../../adapters/reservation-card'
+import { ReservationCardAdapter, ReservationDetailViewModel } from '../../../adapters/reservation-card'
 import { logger } from '../../../utils/logger'
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (error && typeof error === 'object' && 'message' in error) {
+        const { message } = error as { message?: unknown }
+        if (typeof message === 'string' && message.trim()) {
+            return message
+        }
+    }
+    return fallback
+}
 
 // 取消原因
 const CANCEL_REASONS = [
@@ -63,14 +73,14 @@ Page({
                 reservation: viewModel,
                 loading: false
             })
-        } catch (error: any) {
+        } catch (error: unknown) {
             logger.error('Load reservation detail failed', error)
             
             if (isFirstLoad) {
                 this.setData({ 
                     loading: false,
                     isError: true,
-                    errorMessage: error.message || '加载失败'
+                    errorMessage: getErrorMessage(error, '加载失败')
                 })
             } else {
                 wx.showToast({ title: '刷新失败', icon: 'none' })
@@ -98,7 +108,7 @@ Page({
             latitude: 39.9, // Demo default
             longitude: 116.4,
             name: this.data.reservation?.merchantName,
-            address: address
+            address
         })
     },
 

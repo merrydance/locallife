@@ -2,6 +2,16 @@ import DeliveryService, { Delivery } from '../../../api/delivery'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 
+interface RiderTaskDetailOptions {
+    id?: string
+}
+
+interface UserMessageError {
+    userMessage?: string
+}
+
+type DeliveryAction = (deliveryId: number) => Promise<Delivery>
+
 Page({
     data: {
         orderId: 0,
@@ -19,11 +29,11 @@ Page({
         currentStep: 0
     },
 
-    onLoad(options: any) {
+    onLoad(options: RiderTaskDetailOptions) {
         const { navBarHeight } = getStableBarHeights()
         this.setData({ 
             navBarHeight,
-            orderId: Number(options.id)
+            orderId: Number(options.id || 0)
         })
         this.fetchTaskDetail()
     },
@@ -40,7 +50,7 @@ Page({
                 delivery,
                 currentStep: this.mapStatusToStep(delivery.status)
             })
-        } catch (err: any) {
+        } catch (err: unknown) {
             logger.error('Fetch task detail failed', err)
             // 404 错误在 request.ts 中已经有全局提示，这里主要处理数据缺失逻辑
             this.setData({ delivery: null })
@@ -69,7 +79,7 @@ Page({
         const { id, status } = this.data.delivery
         
         let nextAction = ''
-        let actionMethod: any = null
+        let actionMethod: DeliveryAction | null = null
 
         if (status === 'assigned') {
             nextAction = '到达商家'
@@ -86,6 +96,7 @@ Page({
         }
 
         if (!actionMethod) return
+        const method = actionMethod
 
         wx.showModal({
             title: '状态更新',
@@ -94,7 +105,7 @@ Page({
                 if (res.confirm) {
                     wx.showLoading({ title: '同步中...' })
                     try {
-                        const updated = await actionMethod(id)
+                        const updated = await method(id)
                         this.setData({ 
                             delivery: updated,
                             currentStep: this.mapStatusToStep(updated.status)
@@ -104,8 +115,10 @@ Page({
                         if (updated.status === 'completed' || updated.status === 'delivered') {
                             setTimeout(() => wx.navigateBack(), 1500)
                         }
-                    } catch (err: any) {
-                        wx.showToast({ title: err.userMessage || '操作失败', icon: 'none' })
+                    } catch (err: unknown) {
+                        const userMessage = (err as UserMessageError).userMessage
+                        const message = typeof userMessage === 'string' && userMessage ? userMessage : '操作失败'
+                        wx.showToast({ title: message, icon: 'none' })
                     } finally {
                         wx.hideLoading()
                     }
@@ -114,8 +127,8 @@ Page({
         })
     },
 
-    onCallPhone(e: any) {
-        const { phone } = e.currentTarget.dataset
+    onCallPhone(e: WechatMiniprogram.TouchEvent) {
+        const { phone } = e.currentTarget.dataset as { phone?: string }
         if (!phone) return
         wx.makePhoneCall({ phoneNumber: phone })
     },

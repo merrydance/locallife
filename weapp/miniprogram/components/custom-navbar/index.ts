@@ -2,6 +2,10 @@
 
 import { globalStore } from '../../utils/global-store'
 
+type NavbarInstance = WechatMiniprogram.Component.InstanceMethods<WechatMiniprogram.IAnyObject> & {
+  _unsubscribe?: () => void
+}
+
 Component({
   properties: {
     title: {
@@ -44,8 +48,9 @@ Component({
 
     detached() {
       // 取消订阅
-      if ((this as any)._unsubscribe) {
-        (this as any)._unsubscribe()
+      const navbar = this as unknown as NavbarInstance
+      if (navbar._unsubscribe) {
+        navbar._unsubscribe()
       }
     }
   },
@@ -53,7 +58,7 @@ Component({
   methods: {
     initNavBar() {
       // 获取稳定的高度计算逻辑
-      const { getStableBarHeights, isLargeScreen } = require('../../utils/responsive')
+      const { getStableBarHeights } = require('../../utils/responsive')
       const { statusBarHeight, navBarContentHeight, navBarHeight } = getStableBarHeights()
 
       const menuButton = wx.getMenuButtonBoundingClientRect()
@@ -85,17 +90,23 @@ Component({
          * 订阅全局location变化
          */
     subscribeToLocationChanges() {
-      (this as any)._unsubscribe = globalStore.subscribe('location', (newLocation) => {
+      const navbar = this as unknown as NavbarInstance
+      navbar._unsubscribe = globalStore.subscribe('location', (newLocation: unknown) => {
+        const locationData =
+          typeof newLocation === 'object' && newLocation !== null
+            ? (newLocation as { name?: string })
+            : {}
+
         console.log('[Navbar] 收到位置更新通知', {
-          newLocation,
+          newLocation: locationData,
           hasPropertiesLocation: !!this.properties.location,
           willUpdate: !this.properties.location
         })
 
         // 只在必要时更新 - 如果properties没传location,才使用全局的
         if (!this.properties.location) {
-          this.setData({ displayLocation: newLocation.name || '定位中...' })
-          console.log('[Navbar] 已更新 displayLocation:', newLocation.name || '定位中...')
+          this.setData({ displayLocation: locationData.name || '定位中...' })
+          console.log('[Navbar] 已更新 displayLocation:', locationData.name || '定位中...')
         }
       })
     },

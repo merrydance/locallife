@@ -7,6 +7,16 @@ import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { tracker, EventType } from '../../../utils/tracker'
 
+type ValueEvent<T> = WechatMiniprogram.CustomEvent<{ value: T }>
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'userMessage' in error) {
+    const userMessage = (error as { userMessage?: string }).userMessage
+    if (userMessage) return userMessage
+  }
+  return fallback
+}
+
 type ExtraInfo = {
   merchantName?: string
   monthSales?: number
@@ -61,7 +71,7 @@ Page({
     extraInfo: {} as ExtraInfo,
     navBarHeight: 88, // 占位，会被组件更新
     remark: '',
-    quickRemarks: ['少辣', '不要葱', '不要香菜', '少放盐', '多加饭'],
+    quickRemarks: ['少辣', '不要葱', '不要香菜', '少放盐', '多加饭']
   },
 
   onLoad(options: Record<string, string>) {
@@ -91,7 +101,7 @@ Page({
     this.loadComboDetail()
   },
 
-  onNavHeight(e: any) {
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
     this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
   },
 
@@ -132,8 +142,8 @@ Page({
         : ''
 
       const dishImages = (comboData.dish_images && comboData.dish_images.length > 0)
-        ? comboData.dish_images.map(url => getPublicImageUrl(url))
-        : (comboData.dishes || []).map(d => getPublicImageUrl(d.dish_image_url || '')).filter(Boolean)
+        ? comboData.dish_images.map((url) => getPublicImageUrl(url))
+        : (comboData.dishes || []).map((d) => getPublicImageUrl(d.dish_image_url || '')).filter(Boolean)
       const selectedTags: Record<string, string> = {}
 
       const combo: ComboViewModel = {
@@ -146,13 +156,13 @@ Page({
         original_price: originalPrice,
         originalPriceDisplay: formatPriceNoSymbol(originalPrice),
         savings_percent: savingsPercent,
-        dishes: (comboData.dishes || []).map(d => ({
+        dishes: (comboData.dishes || []).map((d) => ({
           ...d,
           quantity: d.quantity || 1,
           dish_image_url: getPublicImageUrl(d.dish_image_url || ''),
           dishPriceDisplay: d.dish_price ? formatPriceNoSymbol(d.dish_price) : undefined
         })),
-        tags: comboData.tags?.map(t => t.name) || [],
+        tags: comboData.tags?.map((t) => t.name) || [],
         merchant_name: extraInfo.merchantName || '商家',
         merchant_id: comboData.merchant_id || Number(this.data.merchantId) || 0,
         month_sales: extraInfo.monthSales || 0,
@@ -161,7 +171,7 @@ Page({
         estimated_delivery_time: extraInfo.estimatedDeliveryTime || 0,
         estimated_delivery_time_display: estimatedDeliveryDisplay,
         dish_images: dishImages,
-        selectedTags: selectedTags,
+        selectedTags,
         is_open: comboData.is_open ?? true,
         status_display: comboData.is_open === false ? '商户休息中' : ''
       }
@@ -180,17 +190,17 @@ Page({
         price: combo.combo_price
       })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('加载套餐详情失败:', error)
       this.setData({ 
         loading: false, 
         isError: true, 
-        errorMsg: error.userMessage || '加载详情失败' 
+        errorMsg: getErrorMessage(error, '加载详情失败') 
       })
     }
   },
 
-  onQuantityChange(e: any) {
+  onQuantityChange(e: ValueEvent<number>) {
     const quantity = e.detail.value
     const totalPrice = (this.data.combo?.combo_price || 0) * quantity
     this.setData({ 
@@ -200,10 +210,10 @@ Page({
     })
   },
 
-  onTagTap(e: any) {
-    const { tag } = e.currentTarget.dataset
+  onTagTap(e: WechatMiniprogram.TouchEvent) {
+    const tag = (e.currentTarget.dataset as { tag?: string }).tag
     const { combo } = this.data
-    if (!combo) return
+    if (!combo || !tag) return
 
     const selectedTags = { ...combo.selectedTags }
     if (selectedTags[tag]) {
@@ -282,20 +292,21 @@ Page({
     }
   },
 
-  onDishTap(e: any) {
-    const { id: dishId } = e.currentTarget.dataset
+  onDishTap(e: WechatMiniprogram.TouchEvent) {
+    const dishId = (e.currentTarget.dataset as { id?: number }).id
     const merchantId = this.data.combo?.merchant_id || this.data.merchantId
     if (dishId && merchantId) {
       wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${dishId}&merchant_id=${merchantId}` })
     }
   },
 
-  onRemarkChange(e: any) {
+  onRemarkChange(e: ValueEvent<string>) {
     this.setData({ remark: e.detail.value })
   },
 
-  onQuickRemarkTap(e: any) {
-    const { item } = e.currentTarget.dataset
+  onQuickRemarkTap(e: WechatMiniprogram.TouchEvent) {
+    const item = (e.currentTarget.dataset as { item?: string }).item
+    if (!item) return
     let { remark } = this.data
     if (remark) {
       if (!remark.includes(item)) {

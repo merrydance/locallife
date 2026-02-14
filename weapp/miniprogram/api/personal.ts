@@ -580,7 +580,7 @@ export function getMembershipDetail(membershipId: number): Promise<MembershipRes
 /**
  * 会员卡充值
  */
-export function rechargeMembership(data: RechargeRequest): Promise<any> {
+export function rechargeMembership(data: RechargeRequest): Promise<RechargeResponse> {
     return request({
         url: '/v1/memberships/recharge',
         method: 'POST',
@@ -816,7 +816,7 @@ export function claimVoucher(voucherId: number): Promise<void> {
 export async function isDishFavorited(dishId: number): Promise<boolean> {
     try {
         const response = await getFavoriteDishes({ page: 1, page_size: 1000 })
-        return response.dishes.some(dish => dish.dish_id === dishId)
+        return response.dishes.some((dish) => dish.dish_id === dishId)
     } catch (error) {
         console.error('检查菜品收藏状态失败:', error)
         return false
@@ -829,7 +829,7 @@ export async function isDishFavorited(dishId: number): Promise<boolean> {
 export async function isMerchantFavorited(merchantId: number): Promise<boolean> {
     try {
         const response = await getFavoriteMerchants({ page: 1, page_size: 1000 })
-        return response.merchants.some(merchant => merchant.merchant_id === merchantId)
+        return response.merchants.some((merchant) => merchant.merchant_id === merchantId)
     } catch (error) {
         console.error('检查商户收藏状态失败:', error)
         return false

@@ -7,16 +7,30 @@ import { getStableBarHeights } from '../../utils/responsive'
 
 const app = getApp<IAppOption>()
 
-function toFriendlyMessage(error: any, fallback: string) {
-  const raw = error?.userMessage || error?.message || ''
+interface MessageError {
+  userMessage?: string
+  message?: string
+}
+
+interface ScanCodeRawPayload {
+  path?: string
+  result?: string
+  rawData?: string
+  scene?: string
+  query?: Record<string, unknown>
+}
+
+function toFriendlyMessage(error: unknown, fallback: string) {
+  const err = error as MessageError
+  const raw = err?.userMessage || err?.message || ''
   const text = String(raw || '').trim()
   if (!text) return fallback
   if (/[\u4e00-\u9fa5]/.test(text)) return text
   const lower = text.toLowerCase()
-  if (lower.includes("sig") && lower.includes("required")) {
+  if (lower.includes('sig') && lower.includes('required')) {
     return '二维码签名缺失，请刷新二维码后重试'
   }
-  if ((lower.includes("ts") || lower.includes("timestamp")) && lower.includes("required")) {
+  if ((lower.includes('ts') || lower.includes('timestamp')) && lower.includes('required')) {
     return '二维码时间戳缺失，请刷新二维码后重试'
   }
   if (lower.includes('signature') || lower.includes('sig') || lower.includes('mismatch')) {
@@ -63,7 +77,7 @@ Page({
     scrollViewHeight: 600,
     loading: false,
     initialLoading: true,
-    error: null as string | null,
+    error: null as string | null
   },
 
   onLoad() {
@@ -110,7 +124,7 @@ Page({
         nickName: info.nickName || info.full_name || info.nickname || '微信用户',
         avatarUrl: info.avatarUrl || info.avatar_url || info.avatar || ''
       },
-      userRoles: roleList.map(r => ({ key: r, label: roleMap[r] || r }))
+      userRoles: roleList.map((r) => ({ key: r, label: roleMap[r] || r }))
     })
 
     this.loadWorkbenches(roleList)
@@ -141,7 +155,7 @@ Page({
         // Update Global Data
         app.globalData.userInfo = {
           nickName: user.full_name || '微信用户',
-          avatarUrl: finalAvatar,
+          avatarUrl: finalAvatar
         } as WechatMiniprogram.UserInfo
 
         // Update Local Data
@@ -217,7 +231,7 @@ Page({
     const workbenches = []
 
     // 商家入口：支持多种角色，或者运营人员
-    if (roles.some(r => ['merchant', 'merchant_boss', 'merchant_staff', 'operator'].includes(r))) {
+    if (roles.some((r) => ['merchant', 'merchant_boss', 'merchant_staff', 'operator'].includes(r))) {
       workbenches.push({
         id: 'merchant',
         name: '商户中心',
@@ -382,17 +396,17 @@ Page({
   },
 
   extractRawPayload(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
-    const anyRes = res as any
-    const path = anyRes.path || ''
-    const result = anyRes.result || ''
-    const rawData = anyRes.rawData || ''
-    const scene = anyRes.scene || ''
-    const query = anyRes.query || {}
-    const codeFromQuery = query.code || ''
+    const rawRes = res as unknown as ScanCodeRawPayload
+    const path = rawRes.path || ''
+    const result = rawRes.result || ''
+    const rawData = rawRes.rawData || ''
+    const scene = rawRes.scene || ''
+    const query = rawRes.query || {}
+    const codeFromQuery = typeof query.code === 'string' ? query.code : ''
     const candidate = [path, result, rawData, scene, codeFromQuery].find((val) => !!val) || ''
     return {
       raw: String(candidate),
-      codeCandidate: String(codeFromQuery || candidate || ''),
+      codeCandidate: String(codeFromQuery || candidate || '')
     }
   },
 
@@ -429,7 +443,7 @@ Page({
           .then(() => {
             wx.showToast({ title: '加入成功', icon: 'success' })
           })
-          .catch((error: any) => {
+          .catch((error: unknown) => {
             const message = toFriendlyMessage(error, '加入失败，请稍后重试')
             wx.showToast({ title: message, icon: 'none' })
           })
@@ -461,7 +475,7 @@ Page({
         try {
           await confirmWebLoginSession(code, sig, ts)
           wx.showToast({ title: '已确认登录', icon: 'success' })
-        } catch (error: any) {
+        } catch (error: unknown) {
           const message = toFriendlyMessage(error, '确认失败，请稍后重试')
           wx.showModal({
             title: '无法登录网页端',
@@ -526,7 +540,7 @@ Page({
     // Update Global Data
     app.globalData.userInfo = {
       ...(app.globalData.userInfo || {}),
-      nickName: nickName
+      nickName
     } as WechatMiniprogram.UserInfo
 
     // Call Backend API

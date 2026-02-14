@@ -1,5 +1,5 @@
 import { request, uploadFile } from '../utils/request'
-import { ApplicationStatus, OCRStatus } from './onboarding'
+import { ApplicationStatus } from './onboarding'
 
 export interface RiderApplicationResponse {
   id: number

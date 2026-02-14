@@ -11,6 +11,11 @@ import {
     type MerchantStatus
 } from '@/api/operator-merchant-management'
 
+interface MerchantListPageDataset {
+    id?: number
+    name?: string
+}
+
 Page({
     data: {
         loading: false,
@@ -47,7 +52,7 @@ Page({
         this.loadMerchants(true)
     },
 
-    onNavHeight(e: any) {
+    onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
         this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
@@ -127,7 +132,7 @@ Page({
     /**
      * 搜索变化
      */
-    onSearchChange(e: any) {
+    onSearchChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
         const keyword = e.detail.value
         this.setData({ searchKeyword: keyword })
 
@@ -141,7 +146,7 @@ Page({
             this.loadMerchants(true)
         }, 500)
 
-        this.setData({ searchTimer: timer as any })
+        this.setData({ searchTimer: timer })
     },
 
     /**
@@ -155,7 +160,7 @@ Page({
     /**
      * 状态筛选变化
      */
-    onStatusFilterChange(e: any) {
+    onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: MerchantStatus | '' }>) {
         this.setData({
             statusFilter: e.detail.value,
             page: 1
@@ -166,8 +171,9 @@ Page({
     /**
      * 点击商户卡片
      */
-    onMerchantTap(e: any) {
-        const { id } = e.currentTarget.dataset
+    onMerchantTap(e: WechatMiniprogram.TouchEvent) {
+        const { id } = e.currentTarget.dataset as MerchantListPageDataset
+        if (!id) return
         wx.navigateTo({
             url: `/pages/operator/merchants/detail/detail?id=${id}`
         })
@@ -176,8 +182,9 @@ Page({
     /**
      * 暂停商户
      */
-    onSuspendTap(e: any) {
-        const { id, name } = e.currentTarget.dataset
+    onSuspendTap(e: WechatMiniprogram.TouchEvent) {
+        const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
+        if (!id || !name) return
         this.setData({
             selectedMerchant: { id, name },
             suspendDialogVisible: true,
@@ -237,8 +244,9 @@ Page({
     /**
      * 恢复商户
      */
-    onResumeTap(e: any) {
-        const { id, name } = e.currentTarget.dataset
+    onResumeTap(e: WechatMiniprogram.TouchEvent) {
+        const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
+        if (!id || !name) return
         this.setData({
             selectedMerchant: { id, name },
             resumeDialogVisible: true

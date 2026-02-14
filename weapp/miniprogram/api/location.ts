@@ -9,7 +9,7 @@ export interface BicyclingDirectionResponse {
     }
 }
 
-export function getBicyclingDirection(params: { from: string; to: string }): Promise<BicyclingDirectionResponse> {
+export function getBicyclingDirection(params: { from: string, to: string }): Promise<BicyclingDirectionResponse> {
     return request({
         url: '/v1/location/direction/bicycling',
         method: 'GET',

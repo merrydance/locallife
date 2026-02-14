@@ -3,7 +3,7 @@
  * 用于格式化预订数据以供前端展示
  */
 
-import { ReservationResponse, ReservationStatus } from '../api/reservation'
+import { ReservationStatus } from '../api/reservation'
 
 export class ReservationAdapter {
 
@@ -80,9 +80,9 @@ export class ReservationAdapter {
    * 验证预订信息是否有效
    */
   static validateReservation(data: {
-    reservation_time: string,
-    party_size: number,
-    contact_name: string,
+    reservation_time: string
+    party_size: number
+    contact_name: string
     contact_phone: string
   }): { valid: boolean, message?: string } {
     if (!data.reservation_time) return { valid: false, message: '请选择预订时间' }

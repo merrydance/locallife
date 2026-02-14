@@ -86,7 +86,7 @@ export class Navigation {
   /**
    * 跳转到支付成功页
    */
-  static toPaymentSuccess(params: { orderId: string; orderNo: string; amount: string }) {
+  static toPaymentSuccess(params: { orderId: string, orderNo: string, amount: string }) {
     wx.redirectTo({
       url: `/pages/orders/success/index?orderId=${params.orderId}&orderNo=${params.orderNo}&amount=${params.amount}`
     })

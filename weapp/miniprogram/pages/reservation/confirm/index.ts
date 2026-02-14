@@ -3,16 +3,46 @@
  * 支持定金模式和全款模式
  */
 
-import { formatTime, formatPriceNoSymbol } from '@/utils/util'
+import { formatPriceNoSymbol } from '@/utils/util'
 import { createReservation, CreateReservationRequest } from '../../../api/reservation'
 import { checkRoomAvailability } from '../../../api/room'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 import { createReservationPayment, invokeWechatPay } from '../../../api/payment'
-import { calculateCart } from '../../../api/cart'
+import { calculateCart, CalculateCartResponse } from '../../../api/cart'
 
 interface TimeSlot {
   time: string
   available: boolean
+}
+
+type PromotionItem = NonNullable<CalculateCartResponse['applied_promotions']>[number] & {
+  amountDisplay: string
+}
+
+type LadderItem = NonNullable<CalculateCartResponse['ladder_promotions']>[number] & {
+  thresholdDisplay: string
+  discountDisplay: string
+  missingNeedDisplay: string
+}
+
+type VoucherTrialItem = NonNullable<CalculateCartResponse['voucher_trials']>[number] & {
+  amountDisplay: string
+  trialPayableDisplay: string
+}
+
+type PaymentAssessmentItem = NonNullable<CalculateCartResponse['payment_assessment']>
+
+interface ReservationCalculationView {
+  subtotal: number
+  discount_amount: number
+  total_amount: number
+  subtotalDisplay: string
+  discountDisplay: string
+  totalDisplay: string
+  applied_promotions: PromotionItem[]
+  ladder_promotions: LadderItem[]
+  voucher_trials: VoucherTrialItem[]
+  payment_assessment: PaymentAssessmentItem | null
 }
 
 Page({
@@ -58,8 +88,11 @@ Page({
       discountDisplay: '0.00',
       total_amount: 0,
       totalDisplay: '0.00',
-      applied_promotions: [] as any[]
-    }
+      applied_promotions: [] as PromotionItem[],
+      ladder_promotions: [] as LadderItem[],
+      voucher_trials: [] as VoucherTrialItem[],
+      payment_assessment: null as PaymentAssessmentItem | null
+    } as ReservationCalculationView
   },
 
   onLoad(options: {
@@ -180,8 +213,8 @@ Page({
       const timeSlots = response.time_slots || []
       // 转换为picker需要的格式：{label, value}，并标记午餐/晚餐
       const availableTimeSlots = timeSlots
-        .filter(slot => slot.available)
-        .map(slot => {
+        .filter((slot) => slot.available)
+        .map((slot) => {
           const mealLabel = this.buildTimeLabel(slot.time, slot.period)
           return { label: mealLabel, value: slot.time }
         })
@@ -194,7 +227,7 @@ Page({
 
       // 验证当前选中的时间是否有效
       if (this.data.form.time) {
-        const isStillAvailable = availableTimeSlots.some(slot => slot.value === this.data.form.time)
+        const isStillAvailable = availableTimeSlots.some((slot) => slot.value === this.data.form.time)
         if (!isStillAvailable) {
           // 如果当前时间不可用，自动切换到第一个可用时段
           if (availableTimeSlots.length > 0) {
@@ -308,10 +341,22 @@ Page({
           discountDisplay: formatPriceNoSymbol(result.discount_amount),
           total_amount: result.total_amount,
           totalDisplay: formatPriceNoSymbol(result.total_amount),
-          applied_promotions: (result.applied_promotions || []).map((p: any) => ({
+          applied_promotions: (result.applied_promotions || []).map((p) => ({
             ...p,
             amountDisplay: formatPriceNoSymbol(p.amount)
-          }))
+          })),
+          ladder_promotions: (result.ladder_promotions || []).map((rule) => ({
+            ...rule,
+            thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
+            discountDisplay: formatPriceNoSymbol(rule.discount || 0),
+            missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
+          })),
+          voucher_trials: (result.voucher_trials || []).map((trial) => ({
+            ...trial,
+            amountDisplay: formatPriceNoSymbol(trial.amount || 0),
+            trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
+          })),
+          payment_assessment: result.payment_assessment || null
         }
       })
     } catch (err) {
@@ -323,7 +368,7 @@ Page({
   },
 
   async onSubmit() {
-    const { form, tableId, paymentMode, merchantId, selectedPaymentMethod } = this.data
+    const { form, tableId, paymentMode, merchantId } = this.data
 
     // 表单验证
     if (!form.date || !form.time || !form.name || !form.phone) {
@@ -365,12 +410,6 @@ Page({
       } else {
         // 定金模式：发起支付
         try {
-          // 修复：确保调用 API 接受的参数正确
-          const paymentParams: any = {
-            reservation_id: reservation.id,
-            use_balance: selectedPaymentMethod === 'balance'
-          }
-          
           const paymentResult = await createReservationPayment(reservation.id)
 
           if (paymentResult.pay_params) {

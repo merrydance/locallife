@@ -13,13 +13,65 @@ import {
   resetMerchantApplication,
   uploadMerchantImage,
   updateMerchantImages,
-  MerchantApplicationDraftResponse,
-  OCRStatus
+  type MerchantApplicationDraftResponse
 } from '../../../../api/onboarding'
 import { resolveImageURL } from '../../../../utils/image-security'
-import { API_CONFIG } from '../../../../config/index'
 
 const DRAFT_KEY = 'merchant_register_draft'
+
+type OCRResult = {
+  status?: string
+  error?: string
+  legal_representative?: string
+  person?: string
+  name?: string
+  enterprise_name?: string
+  reg_num?: string
+  credit_code?: string
+  address?: string
+  valid_period?: string
+  business_scope?: string
+  valid_to?: string
+  id_number?: string
+  gender?: string
+  valid_date?: string
+}
+
+type MerchantDraftExt = MerchantApplicationDraftResponse & {
+  business_address_detail?: string
+  legal_person_contact_address?: string
+  bank_name?: string
+  bank_account?: string
+  bank_account_name?: string
+}
+
+type DraftData = {
+  formData?: Record<string, unknown>
+  licenseImages?: Array<{ url: string, rawUrl?: string }>
+  foodLicenseImages?: Array<{ url: string, rawUrl?: string }>
+  idCardFrontImages?: Array<{ url: string, rawUrl?: string }>
+  idCardBackImages?: Array<{ url: string, rawUrl?: string }>
+  accountPermitImages?: Array<{ url: string, rawUrl?: string }>
+  storefrontImages?: Array<{ url: string, rawUrl?: string }>
+  environmentImages?: Array<{ url: string, rawUrl?: string }>
+  shopImages?: Array<{ url: string, rawUrl?: string }>
+  ocrResults?: {
+    license: OCRResult | null
+    idCard: OCRResult | null
+  }
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object') {
+    const maybeError = error as {
+      userMessage?: string
+      message?: string
+      data?: { message?: string }
+    }
+    return maybeError.userMessage || maybeError.message || maybeError.data?.message || fallback
+  }
+  return fallback
+}
 
 Page({
   data: {
@@ -68,8 +120,8 @@ Page({
 
     // OCR原始结果 (用于一致性校验)
     ocrResults: {
-      license: null as any,
-      idCard: null as any
+      license: null as OCRResult | null,
+      idCard: null as OCRResult | null
     },
 
     // 选择器状态
@@ -117,7 +169,7 @@ Page({
         return
       }
 
-      const data = res as any
+      const data = res as MerchantDraftExt
       console.log('[DEBUG] 后端返回的原始数据:', JSON.stringify(data, null, 2))
       logger.info('[MerchantRegister] 加载申请数据', data, 'initApplication')
 
@@ -139,7 +191,7 @@ Page({
         return
       }
 
-      const safeStr = (val: any): string => {
+      const safeStr = (val: unknown): string => {
         if (val === null || val === undefined || val === true || val === 'true') return ''
         return String(val)
       }
@@ -194,7 +246,7 @@ Page({
 
       // 确保所有数组都是数组，绝不为 null，同时保存 rawUrl 用于重试
       const licenseImages = licenseUrl ? [{ url: licenseUrl, rawUrl: data.business_license_image_url }] : []
-      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, rawUrl: data.food_permit_url }] : []
+      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, rawUrl: data.food_permit_url || undefined }] : []
       const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: data.legal_person_id_front_url }] : []
       const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: data.legal_person_id_back_url }] : []
       const accountPermitImages: Array<{ url: string }> = []
@@ -235,13 +287,13 @@ Page({
 
       logger.debug('[MerchantRegister] initApplication 完成', formData, 'initApplication')
       wx.hideLoading()
-    } catch (e: any) {
+    } catch (e: unknown) {
       wx.hideLoading()
       console.error('[MerchantRegister] initApplication Error:', e)
       // 如果初始化失败，提示用户刷新页面
       wx.showModal({
         title: '加载失败',
-        content: e?.userMessage || '无法加载申请数据，请检查网络后重试',
+        content: getErrorMessage(e, '无法加载申请数据，请检查网络后重试'),
         confirmText: '重试',
         cancelText: '返回',
         success: (res) => {
@@ -313,31 +365,33 @@ Page({
         food_permit_url: this.data.foodLicenseImages[0]?.url,
 
         // Images (Assuming API supports it, otherwise separate call needed)
-        storefront_images: (this.data.storefrontImages || []).map(i => i.url),
-        environment_images: (this.data.environmentImages || []).map(i => i.url)
+        storefront_images: (this.data.storefrontImages || []).map((i) => i.url),
+        environment_images: (this.data.environmentImages || []).map((i) => i.url)
       }
 
       console.log('[MerchantRegister] syncToBackend payload:', JSON.stringify(payload, null, 2))
 
       await updateMerchantBasicInfo(payload)
       console.log('[MerchantRegister] Sync to backend success')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[MerchantRegister] Sync to backend failed', err)
-      console.error('[MerchantRegister] Error details:', err?.originalError || err?.data || err?.message)
+      const errData = err as { originalError?: unknown, data?: unknown, message?: string }
+      console.error('[MerchantRegister] Error details:', errData.originalError || errData.data || errData.message)
       // Silent fail to not interrupt user flow, unless final submit
     }
   },
 
   loadDraft() {
-    const draft = DraftStorage.load(DRAFT_KEY) as any
+    const draft = DraftStorage.load(DRAFT_KEY) as DraftData | null
     if (draft) {
       // 深度清洗 formData (防止 null/true/undefined 导致崩溃)
       const safeFormData = { ...this.data.formData }
 
-      if (draft.formData) {
+      const draftFormData = draft.formData || {}
+      if (draftFormData) {
         // No special sanitization needed for removed fields
-        Object.keys(safeFormData).forEach(key => {
-          let val = draft.formData[key]
+        Object.keys(safeFormData).forEach((key) => {
+          let val = draftFormData[key]
 
           // 1. 强制转为空字符串的情况
           if (val === null || val === undefined) {
@@ -350,9 +404,9 @@ Page({
 
           // 3. 类型赋值
           if (key === 'latitude' || key === 'longitude') {
-            (safeFormData as any)[key] = Number(val) || 0
+            (safeFormData as Record<string, unknown>)[key] = Number(val) || 0
           } else {
-            (safeFormData as any)[key] = String(val)
+            (safeFormData as Record<string, unknown>)[key] = String(val)
           }
         })
       }
@@ -372,7 +426,7 @@ Page({
 
   // ==================== 表单输入 ====================
 
-  updateFormData(key: string, value: any) {
+  updateFormData(key: string, value: unknown) {
     this.setData({ [`formData.${key}`]: value })
     this.saveDraft()
   },
@@ -579,11 +633,11 @@ Page({
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       wx.hideLoading()
       logger.error('[MerchantRegister] 营业执照上传失败', error, 'onLicenseUpload')
       // 显示更具体的错误信息
-      const errMsg = error?.userMessage || error?.message || '上传失败，请重试'
+      const errMsg = getErrorMessage(error, '上传失败，请重试')
       wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
     }
   },
@@ -621,10 +675,10 @@ Page({
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       wx.hideLoading()
       logger.error('[MerchantRegister] 食品许可证上传失败', error, 'onFoodLicenseUpload')
-      const errMsg = error?.userMessage || error?.message || '上传失败，请重试'
+      const errMsg = getErrorMessage(error, '上传失败，请重试')
       wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
     }
   },
@@ -667,10 +721,10 @@ Page({
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       wx.hideLoading()
       logger.error('[MerchantRegister] 身份证正面上传失败', error, 'onIdCardFrontUpload')
-      const errMsg = error?.userMessage || error?.message || '上传失败，请重试'
+      const errMsg = getErrorMessage(error, '上传失败，请重试')
       wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
     }
   },
@@ -708,10 +762,10 @@ Page({
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       wx.hideLoading()
       logger.error('[MerchantRegister] 身份证反面上传失败', error, 'onIdCardBackUpload')
-      const errMsg = error?.userMessage || error?.message || '上传失败，请重试'
+      const errMsg = getErrorMessage(error, '上传失败，请重试')
       wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
     }
   },
@@ -752,7 +806,7 @@ Page({
           if (arr[i].rawUrl === rawUrl) {
             const newArr = [...arr]
             newArr[i] = { ...newArr[i], url: newSignedUrl }
-            this.setData({ [arrayName]: newArr } as any)
+            this.setData({ [arrayName]: newArr } as Record<string, unknown>)
             console.log('[MerchantRegister] 已更新签名 URL:', arrayName, i)
             return
           }
@@ -800,7 +854,7 @@ Page({
   },
 
   // 字段失去焦点时保存
-  onFieldBlur(e: any) {
+  onFieldBlur(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
     const field = e.currentTarget.dataset.field as string
     const value = e.detail.value
 
@@ -860,7 +914,7 @@ Page({
 
       // 保存到后端（使用相对路径）
       await updateMerchantImages({
-        storefront_images: currentImages.map((img: any) => img.rawUrl || img.url)
+        storefront_images: currentImages.map((img) => img.rawUrl || img.url)
       })
 
       wx.hideLoading()
@@ -882,7 +936,7 @@ Page({
     try {
       // 884 require REMOVED
       await updateMerchantImages({
-        storefront_images: images.map((img: any) => img.url)
+        storefront_images: images.map((img) => img.url)
       })
       this.saveDraft()
     } catch (error) {
@@ -935,7 +989,7 @@ Page({
 
       // 保存到后端（使用相对路径）
       await updateMerchantImages({
-        environment_images: currentImages.map((img: any) => img.rawUrl || img.url)
+        environment_images: currentImages.map((img) => img.rawUrl || img.url)
       })
 
       wx.hideLoading()
@@ -957,7 +1011,7 @@ Page({
     try {
       // 960 require REMOVED
       await updateMerchantImages({
-        environment_images: images.map((img: any) => img.url)
+        environment_images: images.map((img) => img.url)
       })
       this.saveDraft()
     } catch (error) {
@@ -994,7 +1048,7 @@ Page({
 
   // ==================== OCR 轮询 ====================
 
-  pollOcrStatus(fieldKey: 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr', callback: (ocr: any) => void) {
+  pollOcrStatus(fieldKey: 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr', callback: (ocr: OCRResult) => void) {
     let attempts = 0
     const maxAttempts = 30 // 30 * 2s = 60s max
     const intervalId = setInterval(async () => {
@@ -1004,7 +1058,7 @@ Page({
         const ocrData = res[fieldKey]
         if (ocrData?.status === 'done') {
           clearInterval(intervalId)
-          callback(ocrData)
+          callback(ocrData as OCRResult)
         } else if (ocrData?.status === 'failed') {
           clearInterval(intervalId)
           wx.showToast({ title: `识别失败: ${ocrData.error || '未知错误'}`, icon: 'none' })
@@ -1100,9 +1154,9 @@ Page({
         // submitted - 开始轮询
         this.startPollingStatus()
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('[MerchantRegister] Submit failed', err)
-      const errMsg = err?.userMessage || err?.message || '提交失败，请重试'
+      const errMsg = getErrorMessage(err, '提交失败，请重试')
       wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
       this.setData({ isSubmitting: false })
     }

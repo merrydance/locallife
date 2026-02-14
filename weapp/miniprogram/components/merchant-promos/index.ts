@@ -94,12 +94,12 @@ Component({
     },
 
     observers: {
-        'merchantId': function(merchantId: number) {
+        'merchantId'(merchantId: number) {
             if (merchantId > 0) {
                 this.loadPromotions()
             }
         },
-        'currentBalance': function(balance: number) {
+        'currentBalance'(balance: number) {
             this.setData({
                 balanceDisplay: formatPriceNoSymbol(balance)
             })
@@ -131,8 +131,8 @@ Component({
                 })
 
                 if (!result) {
-                    this.setData({ loading: false });
-                    return;
+                    this.setData({ loading: false })
+                    return
                 }
 
                 // 客户端过期过滤（防止用户长时间停留页面，期间活动过期）
@@ -146,7 +146,7 @@ Component({
                 const discountRules = (result.discount_rules || []).filter(isNotExpired)
                 
                 // 处理配送优惠（过滤已过期）
-                const deliveryFeeRules = (result.delivery_fee_rules || []).filter(isNotExpired).map(rule => {
+                const deliveryFeeRules = (result.delivery_fee_rules || []).filter(isNotExpired).map((rule) => {
                     const valueStr = formatPriceNoSymbol(rule.value)
                     return {
                         ...rule,
@@ -157,7 +157,7 @@ Component({
                 // 处理优惠券（过滤已过期，改为规则样式展示）
                 const vouchers: VoucherView[] = (result.vouchers || [])
                     .filter(isNotExpired)
-                    .map(v => {
+                    .map((v) => {
                         const minStr = formatPriceNoSymbol(v.min_amount)
                         const valStr = formatPriceNoSymbol(v.value)
                         return {
@@ -171,7 +171,7 @@ Component({
                 // 处理充值规则（过滤已过期）
                 const rechargeRules: RechargeView[] = (result.recharge_rules || [])
                     .filter(isNotExpired)
-                    .map(r => ({
+                    .map((r) => ({
                         ...r,
                         rechargeDisplay: formatPriceNoSymbol(r.min_amount),
                         bonusDisplay: formatPriceNoSymbol(r.bonus_amount),
@@ -225,7 +225,7 @@ Component({
 
             if (recharging || !selectedRechargeId) return
 
-            const selectedRule = rechargeRules.find(r => r.rule_id === selectedRechargeId)
+            const selectedRule = rechargeRules.find((r) => r.rule_id === selectedRechargeId)
             if (!selectedRule) return
 
             this.setData({ recharging: true })

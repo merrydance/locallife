@@ -70,7 +70,7 @@ export interface OrderResponse {
   merchant_phone?: string          // 商户电话
   status: OrderStatus
   status_hint?: string
-  badges?: Array<{ text: string; type?: string; locale?: string }> | string[]
+  badges?: Array<{ text: string, type?: string, locale?: string }> | string[]
   actions?: string[]
   dispatch_order_id?: number
   flow_id?: number
@@ -375,7 +375,7 @@ export async function getActiveOrders(): Promise<OrderResponse[]> {
     'rider_delivered'
   ]
   const results = await Promise.all(
-    statuses.map(status => getOrdersByStatus(status, 20))
+    statuses.map((status) => getOrdersByStatus(status, 20))
   )
   return results.reduce((acc, curr) => acc.concat(curr), [])
 }
@@ -386,7 +386,7 @@ export async function getActiveOrders(): Promise<OrderResponse[]> {
 export async function getHistoryOrders(): Promise<OrderResponse[]> {
   const statuses: OrderStatus[] = ['user_delivered', 'completed', 'cancelled']
   const results = await Promise.all(
-    statuses.map(status => getOrdersByStatus(status, 20))
+    statuses.map((status) => getOrdersByStatus(status, 20))
   )
   return results.reduce((acc, curr) => acc.concat(curr), [])
 }
@@ -428,7 +428,7 @@ export async function createOrderFromCart(
   }
 
   // 2. 将购物车项转换为订单项
-  const items: OrderItemRequest[] = cart.items.map(item => ({
+  const items: OrderItemRequest[] = cart.items.map((item) => ({
     dish_id: item.dish_id,
     combo_id: item.combo_id,
     quantity: item.quantity,
