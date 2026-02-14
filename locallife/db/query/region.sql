@@ -51,7 +51,7 @@ WHERE name = $1 AND parent_id = $2 LIMIT 1;
 SELECT * FROM regions
 WHERE 
   CASE 
-    WHEN sqlc.narg(parent_id)::bigint IS NULL THEN parent_id IS NULL
+    WHEN sqlc.narg(parent_id)::bigint IS NULL THEN TRUE
     ELSE parent_id = sqlc.narg(parent_id)
   END
   AND CASE
@@ -105,7 +105,7 @@ SET qweather_location_id = $2
 WHERE id = $1;
 
 -- name: ListAvailableRegions :many
--- 获取未被运营商占用的区域列表（优化：避免 N+1 查询）
+-- 获取可申请区域列表：排除已被有效运营商占用，且排除已提交/已通过的申请占坑
 SELECT 
   r.*,
   p.name as parent_name
@@ -113,7 +113,23 @@ FROM regions r
 LEFT JOIN regions p ON r.parent_id = p.id
 WHERE 
   NOT EXISTS (
+    SELECT 1
+    FROM operator_regions or_t
+    JOIN operators o ON o.id = or_t.operator_id
+    WHERE or_t.region_id = r.id
+      AND or_t.status = 'active'
+      AND o.status = 'active'
+  )
+  AND
+  NOT EXISTS (
     SELECT 1 FROM operators o WHERE o.region_id = r.id
+  )
+  AND
+  NOT EXISTS (
+    SELECT 1
+    FROM operator_applications oa
+    WHERE oa.region_id = r.id
+      AND oa.status IN ('submitted', 'approved')
   )
   AND CASE 
     WHEN sqlc.narg(parent_id)::bigint IS NULL THEN TRUE

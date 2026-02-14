@@ -1016,7 +1016,7 @@ type Querier interface {
 	// 商户查看所有评价（包含不可见的）
 	ListAllReviewsByMerchant(ctx context.Context, arg ListAllReviewsByMerchantParams) ([]Review, error)
 	ListAllTagsByType(ctx context.Context, type_ string) ([]Tag, error)
-	// 获取未被运营商占用的区域列表（优化：避免 N+1 查询）
+	// 获取可申请区域列表：排除已被有效运营商占用，且排除已提交/已通过的申请占坑
 	ListAvailableRegions(ctx context.Context, arg ListAvailableRegionsParams) ([]ListAvailableRegionsRow, error)
 	ListAvailableRooms(ctx context.Context, merchantID int64) ([]Table, error)
 	// 获取商户的可用包间列表（含主图）供顾客查看

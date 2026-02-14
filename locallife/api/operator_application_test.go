@@ -315,7 +315,7 @@ func TestGetOperatorApplicationAPI(t *testing.T) {
 					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
@@ -535,6 +535,50 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "OK_AutoFillNameFromLegalPerson",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomOperatorApplicationDraft(user.ID, region.ID)
+				app.Name = pgtype.Text{}
+				app.LegalPersonName = pgtype.Text{String: "李四", Valid: true}
+				app.ContactName = pgtype.Text{String: "李四", Valid: true}
+				app.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
+				app.IDCardFrontUrl = pgtype.Text{String: "uploads/front.jpg", Valid: true}
+				app.IDCardBackUrl = pgtype.Text{String: "uploads/back.jpg", Valid: true}
+
+				store.EXPECT().
+					GetOperatorApplicationDraft(gomock.Any(), user.ID).
+					Return(app, nil)
+
+				appWithName := app
+				appWithName.Name = pgtype.Text{String: "李四", Valid: true}
+				store.EXPECT().
+					UpdateOperatorApplicationBasicInfo(gomock.Any(), gomock.Any()).
+					Return(appWithName, nil)
+
+				store.EXPECT().
+					GetOperatorByRegion(gomock.Any(), region.ID).
+					Return(db.Operator{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetPendingOperatorApplicationByRegion(gomock.Any(), region.ID).
+					Return(db.OperatorApplication{}, db.ErrRecordNotFound)
+
+				submittedApp := appWithName
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitOperatorApplication(gomock.Any(), app.ID).
+					Return(submittedApp, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), region.ID).
+					Return(region, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{

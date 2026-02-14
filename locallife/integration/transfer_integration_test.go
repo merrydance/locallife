@@ -157,6 +157,10 @@ func initIntegrationServer(t *testing.T) (*api.Server, *db.SQLStore) {
 			Environment:         "test",
 			TokenSymmetricKey:   util.RandomString(32),
 			AccessTokenDuration: time.Minute,
+			ReservationUserRefundPercentBeforeDeadline:     100,
+			ReservationUserRefundPercentAfterDeadline:      0,
+			ReservationMerchantRefundPercentBeforeDeadline: 100,
+			ReservationMerchantRefundPercentAfterDeadline:  0,
 		}
 		integrationTokenMaker, err = token.NewPasetoMaker(config.TokenSymmetricKey)
 		require.NoError(t, err)

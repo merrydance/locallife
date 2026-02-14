@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -255,7 +256,6 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 // @Produce json
 // @Success 200 {object} operatorApplicationResponse "申请信息"
 // @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 404 {object} ErrorResponse "没有申请记录"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/operator/application [get]
 // @Security BearerAuth
@@ -265,7 +265,7 @@ func (server *Server) getOperatorApplication(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还没有申请记录")))
+			ctx.JSON(http.StatusOK, gin.H{})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -378,7 +378,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 // ==================== 更新基础信息 ====================
 
 type updateOperatorApplicationBasicRequest struct {
-	Name                   *string `json:"name" binding:"omitempty,min=2,max=50"`
+	Name                   *string `json:"name" binding:"omitempty,max=50"`
 	ContactName            *string `json:"contact_name" binding:"omitempty,min=2,max=20"`
 	ContactPhone           *string `json:"contact_phone" binding:"omitempty,len=11"`
 	RequestedContractYears *int32  `json:"requested_contract_years" binding:"omitempty,min=1,max=10"`
@@ -755,6 +755,22 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 		return
 	}
 
+	// 个人运营商兜底：若运营商名称为空，自动使用法人/个人姓名
+	if (!app.Name.Valid || strings.TrimSpace(app.Name.String) == "") && app.LegalPersonName.Valid {
+		legalName := strings.TrimSpace(app.LegalPersonName.String)
+		if legalName != "" {
+			updatedApp, updateErr := server.store.UpdateOperatorApplicationBasicInfo(ctx, db.UpdateOperatorApplicationBasicInfoParams{
+				ID:   app.ID,
+				Name: pgtype.Text{String: legalName, Valid: true},
+			})
+			if updateErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, updateErr))
+				return
+			}
+			app = updatedApp
+		}
+	}
+
 	// 验证必填字段
 	if err := validateOperatorApplicationRequired(app); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -804,9 +820,6 @@ func validateOperatorApplicationRequired(app db.OperatorApplication) error {
 	}
 	if !app.ContactPhone.Valid || app.ContactPhone.String == "" {
 		return errors.New("联系电话不能为空")
-	}
-	if !app.BusinessLicenseUrl.Valid || app.BusinessLicenseUrl.String == "" {
-		return errors.New("请上传营业执照")
 	}
 	if !app.IDCardFrontUrl.Valid || app.IDCardFrontUrl.String == "" {
 		return errors.New("请上传法人身份证正面照")
@@ -865,6 +878,12 @@ func (server *Server) getRegionName(ctx *gin.Context, regionID int64) string {
 	region, err := server.store.GetRegion(ctx, regionID)
 	if err != nil {
 		return ""
+	}
+	if region.ParentID.Valid && region.ParentID.Int64 > 0 {
+		parent, parentErr := server.store.GetRegion(ctx, region.ParentID.Int64)
+		if parentErr == nil && strings.TrimSpace(parent.Name) != "" {
+			return parent.Name + " - " + region.Name
+		}
 	}
 	return region.Name
 }

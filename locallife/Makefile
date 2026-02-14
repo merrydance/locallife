@@ -1,4 +1,4 @@
-DB_URL=postgresql:///ll?host=/var/run/postgresql&sslmode=disable
+DB_URL=postgresql:///locallife_test?host=/var/run/postgresql&sslmode=disable
 
 ＃ network:
 #	docker network create bank-network
@@ -43,6 +43,12 @@ sqlc:
 test:
 	go test -v -cover -short ./...
 
+test-unit:
+	go test -v -cover -short $$(go list ./... | grep -v '/integration$$')
+
+test-integration:
+	go test -v -cover -count=1 -p 1 ./integration
+
 doc-audit:
 	go run ./cmd/doc_audit -report docs/phase0/user_journey_coverage_report.md
 
@@ -78,4 +84,4 @@ evans:
 redis:
 	docker run --name redis -p 6379:6379 -d redis:7-alpine
 
-.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger test server mock proto evans redis sync_regions_test doc-audit
+.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger test test-unit test-integration server mock proto evans redis sync_regions_test doc-audit

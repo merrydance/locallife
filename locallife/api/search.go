@@ -11,6 +11,7 @@ import (
 	"github.com/merrydance/locallife/maps"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 )
@@ -144,6 +145,10 @@ func resolveRegionID(ctx *gin.Context, server *Server, reqRegionID *int64, userL
 	return pgtype.Int8{}, errors.New("region_id is required")
 }
 
+func isRegionUnavailableError(err error) bool {
+	return errors.Is(err, pgx.ErrNoRows)
+}
+
 // searchDishes godoc
 // ... (comments remain same)
 // @Security BearerAuth
@@ -212,6 +217,16 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	// 准备RegionID（全局搜索必须）
 	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
+		if isRegionUnavailableError(err) {
+			ctx.JSON(http.StatusOK, gin.H{
+				"dishes":      []searchDishResponse{},
+				"total":       0,
+				"total_count": 0,
+				"page_id":     req.PageID,
+				"page_size":   req.PageSize,
+			})
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -318,6 +333,16 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 
 	merchantRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
+		if isRegionUnavailableError(err) {
+			ctx.JSON(http.StatusOK, gin.H{
+				"merchants":   []searchMerchantResponse{},
+				"total":       0,
+				"total_count": 0,
+				"page_id":     req.PageID,
+				"page_size":   req.PageSize,
+			})
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -400,6 +425,16 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 	// 准备RegionID（全局搜索必须）
 	comboRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
+		if isRegionUnavailableError(err) {
+			ctx.JSON(http.StatusOK, gin.H{
+				"combos":      []searchComboResponse{},
+				"total":       0,
+				"total_count": 0,
+				"page_id":     req.PageID,
+				"page_size":   req.PageSize,
+			})
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -729,6 +764,16 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	resolvedLat, resolvedLng := resolveUserLocation(ctx, req.UserLatitude, req.UserLongitude)
 	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
+		if isRegionUnavailableError(err) {
+			ctx.JSON(http.StatusOK, gin.H{
+				"rooms":       []searchRoomResponse{},
+				"total":       0,
+				"total_count": 0,
+				"page_id":     req.PageID,
+				"page_size":   req.PageSize,
+			})
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}

@@ -291,7 +291,23 @@ FROM regions r
 LEFT JOIN regions p ON r.parent_id = p.id
 WHERE 
   NOT EXISTS (
+    SELECT 1
+    FROM operator_regions or_t
+    JOIN operators o ON o.id = or_t.operator_id
+    WHERE or_t.region_id = r.id
+      AND or_t.status = 'active'
+      AND o.status = 'active'
+  )
+  AND
+  NOT EXISTS (
     SELECT 1 FROM operators o WHERE o.region_id = r.id
+  )
+  AND
+  NOT EXISTS (
+    SELECT 1
+    FROM operator_applications oa
+    WHERE oa.region_id = r.id
+      AND oa.status IN ('submitted', 'approved')
   )
   AND CASE 
     WHEN $3::bigint IS NULL THEN TRUE
@@ -327,7 +343,7 @@ type ListAvailableRegionsRow struct {
 	ParentName         pgtype.Text    `json:"parent_name"`
 }
 
-// 获取未被运营商占用的区域列表（优化：避免 N+1 查询）
+// 获取可申请区域列表：排除已被有效运营商占用，且排除已提交/已通过的申请占坑
 func (q *Queries) ListAvailableRegions(ctx context.Context, arg ListAvailableRegionsParams) ([]ListAvailableRegionsRow, error) {
 	rows, err := q.db.Query(ctx, listAvailableRegions,
 		arg.Limit,
@@ -406,7 +422,7 @@ const listRegions = `-- name: ListRegions :many
 SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
 WHERE 
   CASE 
-    WHEN $3::bigint IS NULL THEN parent_id IS NULL
+    WHEN $3::bigint IS NULL THEN TRUE
     ELSE parent_id = $3
   END
   AND CASE

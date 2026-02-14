@@ -97,13 +97,18 @@ func TestRegionQueries_ListRegions_Filters(t *testing.T) {
 	require.Equal(t, city1.ID, regions[0].ID)
 	require.Equal(t, city2.ID, regions[1].ID)
 
-	// parent_id 未指定时（NULL），SQL 约定返回 parent_id IS NULL 的根区域
-	rootRegions, err := testStore.ListRegions(ctx, ListRegionsParams{Limit: 200, Offset: 0})
+	// parent_id 未指定时，不按 parent 过滤；至少应包含上面创建的城市
+	allRegions, err := testStore.ListRegions(ctx, ListRegionsParams{Limit: 100000, Offset: 0})
 	require.NoError(t, err)
-	require.NotEmpty(t, rootRegions)
-	for _, r := range rootRegions {
-		require.False(t, r.ParentID.Valid)
+	require.NotEmpty(t, allRegions)
+	ids := make(map[int64]struct{}, len(allRegions))
+	for _, r := range allRegions {
+		ids[r.ID] = struct{}{}
 	}
+	_, ok1 := ids[city1.ID]
+	_, ok2 := ids[city2.ID]
+	require.True(t, ok1)
+	require.True(t, ok2)
 }
 
 func TestRegionQueries_ListRegionChildren(t *testing.T) {

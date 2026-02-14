@@ -28,6 +28,11 @@ type ReservationListItem = RoomItemView | RestaurantItemView
 
 interface MessageError {
   message?: string
+  userMessage?: string
+}
+
+const isNoServiceAreaMessage = (message: string): boolean => {
+  return message.includes('当前区域暂无')
 }
 
 Page({
@@ -216,7 +221,21 @@ Page({
 
     } catch (error: unknown) {
       logger.error('Load items failed', error, 'Reservation')
-      const message = (error as MessageError).message || '加载失败，请重试'
+      const userMessage = (error as MessageError).userMessage
+      const message = (typeof userMessage === 'string' && userMessage)
+        ? userMessage
+        : ((error as MessageError).message || '加载失败，请重试')
+
+      if (isNoServiceAreaMessage(message)) {
+        this.setData({
+          loading: false,
+          isError: false,
+          errorMessage: '',
+          hasMore: false
+        })
+        return
+      }
+
       this.setData({ 
         loading: false,
         isError: true,

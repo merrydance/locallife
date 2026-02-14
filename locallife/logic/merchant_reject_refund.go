@@ -42,16 +42,36 @@ func ProcessMerchantRejectRefund(
 		return result, err
 	}
 	if paymentOrder.Status != "paid" {
-		return result, nil
+		paymentOrders, listErr := store.GetPaymentOrdersByOrder(ctx, pgtype.Int8{Int64: input.OrderID, Valid: true})
+		if listErr != nil {
+			return result, listErr
+		}
+
+		foundPaid := false
+		for _, candidate := range paymentOrders {
+			if candidate.BusinessType == "order" && candidate.Status == "paid" {
+				paymentOrder = candidate
+				foundPaid = true
+				break
+			}
+		}
+
+		if !foundPaid {
+			return result, nil
+		}
 	}
 	result.PaymentOrder = &paymentOrder
 
 	reason := fmt.Sprintf("商户拒单：%s", input.Reason)
 	outRefundNo := generateOutRefundNo()
+	refundType := paymentOrder.PaymentType
+	if refundType == paymentTypeNative {
+		refundType = paymentTypeMiniProgram
+	}
 
 	refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
 		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
+		RefundType:     refundType,
 		RefundAmount:   paymentOrder.Amount,
 		RefundReason:   pgtype.Text{String: reason, Valid: true},
 		OutRefundNo:    outRefundNo,

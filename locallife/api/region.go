@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -87,6 +88,76 @@ type listRegionsRequest struct {
 	ParentID *int64 `form:"parent_id" binding:"omitempty,min=1"`
 	PageID   int32  `form:"page_id" binding:"required,min=1"`
 	PageSize int32  `form:"page_size" binding:"required,min=5,max=100"`
+}
+
+type listAvailableRegionsRequest struct {
+	Level    *int16 `form:"level" binding:"omitempty,min=1,max=4"`
+	ParentID *int64 `form:"parent_id" binding:"omitempty,min=1"`
+	PageID   int32  `form:"page_id" binding:"required,min=1"`
+	PageSize int32  `form:"page_size" binding:"required,min=5,max=100"`
+	Keyword  string `form:"keyword" binding:"omitempty,max=100"`
+}
+
+func filterAvailableRegionsByKeyword(rows []db.ListAvailableRegionsRow, keyword string) []db.ListAvailableRegionsRow {
+	if keyword == "" {
+		return rows
+	}
+
+	lowerKeyword := strings.ToLower(keyword)
+	filtered := make([]db.ListAvailableRegionsRow, 0, len(rows))
+	for _, region := range rows {
+		nameMatched := strings.Contains(strings.ToLower(region.Name), lowerKeyword)
+		parentMatched := region.ParentName.Valid && strings.Contains(strings.ToLower(region.ParentName.String), lowerKeyword)
+		if nameMatched || parentMatched {
+			filtered = append(filtered, region)
+		}
+	}
+
+	return filtered
+}
+
+func paginateAvailableRegions(rows []db.ListAvailableRegionsRow, pageID, pageSize int32) []db.ListAvailableRegionsRow {
+	if pageID <= 0 || pageSize <= 0 {
+		return rows
+	}
+
+	start := int((pageID - 1) * pageSize)
+	if start >= len(rows) {
+		return []db.ListAvailableRegionsRow{}
+	}
+
+	end := start + int(pageSize)
+	if end > len(rows) {
+		end = len(rows)
+	}
+
+	return rows[start:end]
+}
+
+func (server *Server) listAllAvailableRegionsByLevel(ctx *gin.Context, level pgtype.Int2) ([]db.ListAvailableRegionsRow, error) {
+	const batchSize int32 = 200
+	offset := int32(0)
+	allRegions := make([]db.ListAvailableRegionsRow, 0, 512)
+
+	for {
+		rows, err := server.store.ListAvailableRegions(ctx, db.ListAvailableRegionsParams{
+			Limit:  batchSize,
+			Offset: offset,
+			Level:  level,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		allRegions = append(allRegions, rows...)
+		if len(rows) < int(batchSize) {
+			break
+		}
+
+		offset += batchSize
+	}
+
+	return allRegions, nil
 }
 
 // listRegions godoc
@@ -245,6 +316,7 @@ type regionAvailabilityResponse struct {
 // @Produce json
 // @Param parent_id query int false "上级区域ID（可选，用于过滤指定城市下的区县）" minimum(1)
 // @Param level query int false "区域层级" minimum(1) maximum(4)
+// @Param keyword query string false "名称关键词（可选，按区县名模糊过滤）" maxLength(100)
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(100)
 // @Success 200 {object} map[string]interface{} "可申请的区县列表"
@@ -253,7 +325,7 @@ type regionAvailabilityResponse struct {
 // @Security BearerAuth
 // @Router /v1/regions/available [get]
 func (server *Server) listAvailableRegions(ctx *gin.Context) {
-	var req listRegionsRequest
+	var req listAvailableRegionsRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -285,6 +357,25 @@ func (server *Server) listAvailableRegions(ctx *gin.Context) {
 		return
 	}
 
+	keyword := strings.TrimSpace(req.Keyword)
+	if strings.EqualFold(keyword, "undefined") || strings.EqualFold(keyword, "null") {
+		keyword = ""
+	}
+
+	regions = filterAvailableRegionsByKeyword(regions, keyword)
+
+	// 兼容城市名搜索：若当前 parent_id 下无命中，则回退到全局可申请区县再按关键词过滤
+	if keyword != "" && len(regions) == 0 && req.ParentID != nil {
+		fallbackRegions, fallbackErr := server.listAllAvailableRegionsByLevel(ctx, level)
+		if fallbackErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fallbackErr))
+			return
+		}
+
+		matched := filterAvailableRegionsByKeyword(fallbackRegions, keyword)
+		regions = paginateAvailableRegions(matched, req.PageID, req.PageSize)
+	}
+
 	// 转换响应格式
 	availableRegions := make([]availableRegionResponse, len(regions))
 	for i, region := range regions {
@@ -304,11 +395,11 @@ func (server *Server) listAvailableRegions(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"regions":   availableRegions,
-		"total":     len(availableRegions),
+		"regions":     availableRegions,
+		"total":       len(availableRegions),
 		"total_count": len(availableRegions),
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+		"page_id":     req.PageID,
+		"page_size":   req.PageSize,
 	})
 }
 

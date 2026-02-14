@@ -1089,11 +1089,15 @@ export interface DishSearchResult {
  */
 export async function searchDishes(params?: DishSearchParams): Promise<DishSearchResult> {
     // 首页推荐重构：使用搜索接口替代推荐接口
-    // 如果没有关键词，表示获取推荐流
+    // 如果没有关键词，表示获取推荐流（不传 keyword，避免后端将空字符串视为非法参数）
+    const trimmedKeyword = typeof params?.keyword === 'string' ? params.keyword.trim() : ''
     const searchParams: Record<string, unknown> = {
-        keyword: params?.keyword || '', // 空字符串表示推荐流
         page_id: params?.page || 1,
         page_size: params?.limit || 20
+    }
+
+    if (trimmedKeyword) {
+        searchParams.keyword = trimmedKeyword
     }
 
     // 仅当参数存在时才添加，避免传递 undefined 导致后端验证失败

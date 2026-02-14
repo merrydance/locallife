@@ -44,6 +44,10 @@ func TestProcessMerchantRejectRefund_NotPaid(t *testing.T) {
 		GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(db.PaymentOrder{Status: "failed"}, nil)
+	store.EXPECT().
+		GetPaymentOrdersByOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.PaymentOrder{{Status: "failed", BusinessType: "order"}}, nil)
 
 	result, err := ProcessMerchantRejectRefund(
 		context.Background(),

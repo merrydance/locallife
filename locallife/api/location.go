@@ -31,6 +31,63 @@ type reverseGeocodeAPIResponse struct {
 
 var _ reverseGeocodeAPIResponse
 
+type currentRegionByLocationResponse struct {
+	RegionID   int64  `json:"region_id"`
+	RegionName string `json:"region_name"`
+	ParentID   *int64 `json:"parent_id,omitempty"`
+	ParentName string `json:"parent_name,omitempty"`
+}
+
+// getCurrentRegionByLocation resolves current district by latitude/longitude.
+// @Summary 根据经纬度获取当前区县
+// @Description 根据用户当前经纬度匹配系统中的区县 region_id，并返回区县与上级城市信息。
+// @Tags 位置
+// @Produce json
+// @Param latitude query number true "纬度" example(39.908722)
+// @Param longitude query number true "经度" example(116.397499)
+// @Success 200 {object} currentRegionByLocationResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/location/current-region [get]
+func (server *Server) getCurrentRegionByLocation(ctx *gin.Context) {
+	lat, lng, err := parseLatitudeLongitude(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	regionID, err := server.matchRegionID(ctx.Request.Context(), lat, lng)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("match region: %w", err)))
+		return
+	}
+
+	region, err := server.store.GetRegion(ctx, regionID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("当前坐标未匹配到区县")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := currentRegionByLocationResponse{
+		RegionID:   region.ID,
+		RegionName: region.Name,
+	}
+
+	if region.ParentID.Valid {
+		resp.ParentID = &region.ParentID.Int64
+		if parent, parentErr := server.store.GetRegion(ctx, region.ParentID.Int64); parentErr == nil {
+			resp.ParentName = parent.Name
+		}
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
 func parseLatitudeLongitude(ctx *gin.Context) (float64, float64, error) {
 	latStr := ctx.Query("latitude")
 	lngStr := ctx.Query("longitude")

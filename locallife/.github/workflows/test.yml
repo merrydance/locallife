@@ -45,5 +45,8 @@ jobs:
       - name: Run migrations
         run: make migrateup
 
-      - name: Test
-        run: make test
+      - name: Unit tests
+        run: make test-unit
+
+      - name: Integration tests (serial)
+        run: make test-integration

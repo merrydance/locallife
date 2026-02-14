@@ -7,7 +7,16 @@ export interface AvailableRegion {
   id: number
   name: string
   level?: number
+  parent_id?: number
   parent_name?: string
+}
+
+export interface RegionItem {
+  id: number
+  code: string
+  name: string
+  level: number
+  parent_id?: number
 }
 
 export interface OperatorApplicationResponse {
@@ -120,9 +129,20 @@ export function ocrOperatorIdCard(filePath: string, side: 'Front' | 'Back') {
 /**
  * 获取可申请的区域列表
  */
-export function listAvailableRegions(params: { page_id: number, page_size: number, level?: number }) {
+export function listAvailableRegions(params: { page_id: number, page_size: number, level?: number, parent_id?: number, keyword?: string }) {
   return request<{ regions: AvailableRegion[], totalCount: number }>({
     url: '/v1/regions/available',
+    method: 'GET',
+    data: params
+  })
+}
+
+/**
+ * 获取区域列表（用于分级选择）
+ */
+export function listRegions(params: { page_id: number, page_size: number, level?: number, parent_id?: number }) {
+  return request<RegionItem[]>({
+    url: '/v1/regions',
     method: 'GET',
     data: params
   })

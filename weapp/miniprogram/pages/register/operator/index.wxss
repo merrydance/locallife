@@ -300,6 +300,31 @@
   background-color: var(--td-bg-color-container);
 }
 
+.city-picker {
+  border: 1rpx solid var(--td-component-stroke);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-container);
+  padding: 18rpx 24rpx;
+  margin-bottom: var(--spacer-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.city-picker-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.city-picker-value {
+  font-size: 26rpx;
+  color: var(--td-text-color-primary);
+}
+
+.city-picker-value.placeholder {
+  color: var(--td-text-color-placeholder);
+}
+
 .region-list-scroll {
   height: 600rpx; /* Set explicit height for scroll-view */
   padding: 0 var(--spacer-md);

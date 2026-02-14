@@ -8,8 +8,8 @@
   <!-- Content -->
   <view class="content">
     <!-- 1. Has Image -->
-    <block wx:if="{{value}}">
-      <image class="preview-image" src="{{value}}" mode="aspectFill" catch:tap="onPreview" binderror="onImageError" />
+    <block wx:if="{{displayValue}}">
+      <image class="preview-image" src="{{displayValue}}" mode="aspectFill" catch:tap="onPreview" binderror="onImageError" />
       <view class="remove-btn" catch:tap="onRemove" wx:if="{{!disabled}}">
         <t-icon name="close" size="32rpx" color="#fff" />
       </view>

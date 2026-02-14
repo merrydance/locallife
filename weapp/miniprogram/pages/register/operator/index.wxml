@@ -72,7 +72,7 @@
       <view class="card-group">
         <t-input 
           label="运营商名称" 
-          placeholder="公司全称或团队名称" 
+          placeholder="可选，留空将自动使用个人姓名" 
           value="{{formData.name}}" 
           bindchange="onInput" 
           data-field="name" 
@@ -112,11 +112,11 @@
 
     <!-- Step 2: 企业与法人资质 -->
     <view class="step-view animate-fade-in" wx:if="{{currentStep === 2}}">
-      <view class="section-title">资质上传 (必填项标记 *)</view>
+      <view class="section-title">资质上传（身份证必填，营业执照可选）</view>
       
       <view class="upload-section">
         <view class="label-row">
-          <text class="label required">企业营业执照</text>
+          <text class="label">企业营业执照（可选）</text>
         </view>
         <document-uploader 
           type="license" 
@@ -203,7 +203,27 @@
       <t-icon name="close" size="48rpx" bindtap="onCloseRegionPopup" />
     </view>
     <view class="search-bar">
-      <t-search placeholder="搜索省份或区县名称" bind:change="onRegionSearch" />
+      <picker
+        mode="selector"
+        range="{{cityOptions}}"
+        range-key="label"
+        value="{{selectedCityIndex}}"
+        bindchange="onCityChange"
+      >
+        <view class="city-picker">
+          <text class="city-picker-label">所属城市</text>
+          <text class="city-picker-value {{selectedCityName ? '' : 'placeholder'}}">
+            {{selectedCityName || '请选择城市'}}
+          </text>
+        </view>
+      </picker>
+      <t-search
+        model:value="{{regionKeyword}}"
+        placeholder="搜索当前城市下的区县"
+        bind:input="onRegionSearch"
+        bind:change="onRegionSearch"
+        bind:clear="onRegionSearchClear"
+      />
     </view>
     <scroll-view scroll-y class="region-list-scroll">
       <t-radio-group value="{{formData.regionId}}" bind:change="onSelectRegion">

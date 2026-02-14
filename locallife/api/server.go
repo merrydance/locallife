@@ -457,6 +457,7 @@ func (server *Server) setupRouter() {
 	authGroup.DELETE("/addresses/:id", server.deleteUserAddress)
 
 	// M2: 位置服务（需要认证，避免滥用地图 Key）
+	authGroup.GET("/location/current-region", server.getCurrentRegionByLocation)
 	authGroup.GET("/location/reverse-geocode", server.reverseGeocode)
 	authGroup.GET("/location/direction/bicycling", server.getBicyclingRoute)
 

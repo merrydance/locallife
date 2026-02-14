@@ -496,6 +496,9 @@ func CancelReservation(
 	if reservation.Status == reservationStatusPaid || reservation.Status == reservationStatusConfirmed {
 		refundEligible = now.Before(reservation.RefundDeadline)
 		refundPercent = refundPolicy.refundPercent(isMerchant, refundEligible)
+		if !refundEligible && refundPercent <= 0 {
+			return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("退款截止时间已过"))
+		}
 	}
 
 	var currentReservationID pgtype.Int8

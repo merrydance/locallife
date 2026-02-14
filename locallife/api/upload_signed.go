@@ -244,6 +244,9 @@ func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized 
 		}
 		return false, nil
 	case "operators":
+		if entityID == uid {
+			return true, nil
+		}
 		allowed, err := server.canAccessOperatorUpload(ctx, uid, entityID)
 		if err != nil {
 			return false, err

@@ -38,6 +38,49 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function mapSearchBadRequestMessage(url: string, backendMessage: string, fallback: string): string {
+  const normalized = backendMessage.toLowerCase()
+  const isNoRows = normalized.includes('no rows in result set')
+
+  if (!isNoRows) {
+    return fallback
+  }
+
+  if (url.includes('/v1/search/dishes')) {
+    return '当前区域暂无可推荐菜品'
+  }
+  if (url.includes('/v1/search/rooms')) {
+    return '当前区域暂无可预订包间'
+  }
+  if (url.includes('/v1/search/merchants')) {
+    return '当前区域暂无可浏览商家'
+  }
+  if (url.includes('/v1/search/combos')) {
+    return '当前区域暂无可推荐套餐'
+  }
+
+  return '当前区域暂无可用内容'
+}
+
+function isExpectedOperatorApplicationNotFound(
+  method: string,
+  url: string,
+  statusCode: number,
+  backendMessage: string,
+  envelopeCode?: number
+): boolean {
+  if (method !== 'GET' || url !== '/v1/operator/application' || statusCode !== 404) {
+    return false
+  }
+
+  if (envelopeCode === ErrorCode.NOT_FOUND) {
+    return true
+  }
+
+  const normalized = backendMessage.toLowerCase()
+  return normalized.includes('您还没有申请记录') || normalized.includes('no application')
+}
+
 export function uploadFile<T = unknown>(filePath: string, url: string = '/upload/image', name: string = 'file', formData: Record<string, unknown> = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const doUpload = () => {
@@ -265,11 +308,6 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         }
       }
 
-      logger.error(`HTTP错误: ${method} ${url}`, {
-        statusCode: result.statusCode,
-        data: result.data
-      }, 'request')
-
       // 尝试从后端响应中提取错误信息
       const responseData = result.data as unknown
       const envelopeCode = isRecord(responseData) && typeof responseData.code === 'number'
@@ -291,6 +329,19 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         return ''
       })()
 
+      if (isExpectedOperatorApplicationNotFound(method, url, result.statusCode, backendMessage, envelopeCode)) {
+        logger.debug(`预期业务状态: ${method} ${url} 无申请记录`, {
+          statusCode: result.statusCode,
+          code: envelopeCode,
+          message: backendMessage
+        }, 'request')
+      } else {
+        logger.error(`HTTP错误: ${method} ${url}`, {
+          statusCode: result.statusCode,
+          data: result.data
+        }, 'request')
+      }
+
       if (envelopeCode !== undefined) {
         let userMessage = backendMessage || '服务器响应异常,请稍后重试'
         let errorDetail = `API ${envelopeCode}`
@@ -298,6 +349,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
         if (envelopeCode === ErrorCode.BAD_REQUEST) {
           userMessage = backendMessage || '请求参数错误'
+          userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
           if (backendMessage === 'merchant is not accepting takeout orders') {
             userMessage = '商户休息中～'
           }
@@ -351,6 +403,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       if (result.statusCode === 400) {
         // 400 Bad Request - 请求参数错误，显示后端返回的具体错误信息
         userMessage = backendMessage || '请求参数错误'
+        userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
         
         // 关键逻辑：如果是商户休息中，返回更友好的提示
         if (backendMessage === 'merchant is not accepting takeout orders') {
