@@ -888,8 +888,18 @@ func (server *Server) setupRouter() {
 	adminOperatorGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
 		adminOperatorGroup.GET("", server.listPendingOperatorApplicationsAdmin)
+		adminOperatorGroup.GET("/:id", server.getOperatorApplicationDetailAdmin)
 		adminOperatorGroup.POST("/:id/approve", server.approveOperatorApplicationAdmin)
 		adminOperatorGroup.POST("/:id/reject", server.rejectOperatorApplicationAdmin)
+	}
+
+	// 平台管理员审核集团入驻申请
+	adminGroupApplicationGroup := authGroup.Group("/admin/groups/applications")
+	adminGroupApplicationGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		adminGroupApplicationGroup.GET("", server.listGroupApplicationsAdmin)
+		adminGroupApplicationGroup.GET("/:id", server.getGroupApplicationAdmin)
+		adminGroupApplicationGroup.POST("/:id/review", server.reviewGroupApplication)
 	}
 
 	// M14: 通知系统路由

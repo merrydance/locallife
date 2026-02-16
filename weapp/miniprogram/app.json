@@ -55,7 +55,12 @@
       "name": "platform",
       "pages": [
         "dashboard/dashboard",
-        "operators/index"
+        "operators/index",
+        "operators/detail",
+        "rules/index",
+        "riders/index",
+        "groups/index",
+        "groups/detail"
       ],
       "independent": false
     },

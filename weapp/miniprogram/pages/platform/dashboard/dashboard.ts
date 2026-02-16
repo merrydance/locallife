@@ -26,6 +26,12 @@ interface PlatformSummaryCards {
     pendingRiders: string
 }
 
+interface StateCardItem {
+    label: string
+    value: string
+    theme?: 'success' | 'warning' | 'danger'
+}
+
 interface ManagementAction {
     id: string
     title: string
@@ -41,6 +47,7 @@ Page({
         loading: true,
         refreshing: false,
         requesting: false,
+        error: null as string | null,
         overviewData: null as PlatformOverviewResponse | null,
         realtimeData: null as RealtimeDashboardData | null,
         summaryCards: {
@@ -64,15 +71,29 @@ Page({
                 id: 'rules',
                 title: '规则中心',
                 desc: '平台规则与命中审计',
-                icon: 'setting'
+                icon: 'setting',
+                url: '/pages/platform/rules/index'
             },
             {
                 id: 'groups',
                 title: '集团申请审核',
                 desc: '审核集团入驻申请',
-                icon: 'app'
+                icon: 'app',
+                url: '/pages/platform/groups/index'
+            },
+            {
+                id: 'riders',
+                title: '骑手管理',
+                desc: '骑手审核与状态管理',
+                icon: 'undertake-delivery',
+                url: '/pages/platform/riders/index'
             }
         ] as ManagementAction[],
+        realtimeCards: [
+            { label: '在线骑手', value: '0', theme: 'success' },
+            { label: '待处理订单', value: '0', theme: 'warning' },
+            { label: '待审骑手', value: '0', theme: 'danger' }
+        ] as StateCardItem[],
         refreshTimer: null as number | null,
         navBarHeight: 0
     },
@@ -107,7 +128,7 @@ Page({
         }
 
         try {
-            this.setData({ requesting: true })
+            this.setData({ requesting: true, error: null })
             if (!silent) {
                 this.setData({ loading: true })
             }
@@ -121,6 +142,19 @@ Page({
                 platformDashboardService.getRealtimeDashboard()
             ])
 
+            const overviewSummary = overviewData.summary || {
+                total_orders: overviewData.total_orders || 0,
+                total_gmv: overviewData.total_gmv || 0,
+                active_merchants: overviewData.active_merchants || 0
+            }
+
+            const realtimeStats = realtimeData.realtime_stats || {
+                online_riders: 0
+            }
+
+            const pendingOrders = realtimeData.pending_orders || 0
+            const onlineRiders = realtimeStats.online_riders || 0
+
             const actions = this.data.actions.map((item) => {
                 return {
                     ...item,
@@ -132,21 +166,28 @@ Page({
                 overviewData,
                 realtimeData,
                 summaryCards: {
-                    totalOrders: String(overviewData.summary.total_orders || 0),
-                    totalGMV: this.formatAmount(overviewData.summary.total_gmv || 0),
+                    totalOrders: String(overviewSummary.total_orders || 0),
+                    totalGMV: this.formatAmount(overviewSummary.total_gmv || 0),
                     activeUsers: String(overviewData.active_users || 0),
-                    activeMerchants: String(overviewData.summary.active_merchants || 0),
-                    onlineRiders: String(realtimeData.realtime_stats.online_riders || 0),
-                    pendingOrders: String(realtimeData.pending_orders || 0),
+                    activeMerchants: String(overviewSummary.active_merchants || 0),
+                    onlineRiders: String(onlineRiders),
+                    pendingOrders: String(pendingOrders),
                     pendingRiders: '0'
                 },
+                realtimeCards: [
+                    { label: '在线骑手', value: String(onlineRiders), theme: 'success' },
+                    { label: '待处理订单', value: String(pendingOrders), theme: 'warning' },
+                    { label: '待审骑手', value: '0', theme: 'danger' }
+                ],
                 actions
             })
         } catch (error) {
             console.error('加载平台管理中心数据失败:', error)
+            const errMsg = error instanceof Error ? error.message : '加载失败，请稍后重试'
+            this.setData({ error: errMsg })
             if (!silent) {
                 wx.showToast({
-                    title: '加载失败',
+                    title: '加载失败，请重试',
                     icon: 'none'
                 })
             }
@@ -164,25 +205,21 @@ Page({
     async onRefresh() {
         this.setData({ refreshing: true })
         try {
-            await this.loadDashboardData(true) // Silent load to avoid skeleton flash, rely on refresher spinner
+            await this.loadDashboardData(true)
         } finally {
             this.setData({ refreshing: false })
         }
+    },
+
+    onRetry() {
+        this.loadDashboardData()
     },
 
     /**
      * 快捷操作点击
      */
     onActionTap(e: ActionTapEvent) {
-        const { id, url } = e.currentTarget.dataset
-
-        if (id === 'rules' || id === 'groups') {
-            wx.showToast({
-                title: '管理功能建设中',
-                icon: 'none'
-            })
-            return
-        }
+        const { url } = e.currentTarget.dataset
 
         if (url) {
             wx.navigateTo({ url })

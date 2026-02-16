@@ -118,6 +118,27 @@ func (server *Server) listPendingOperatorApplicationsAdmin(ctx *gin.Context) {
 	})
 }
 
+func (server *Server) getOperatorApplicationDetailAdmin(ctx *gin.Context) {
+	var uriReq operatorApplicationIDRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	app, err := server.store.GetOperatorApplicationByID(ctx, uriReq.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	regionName := server.getRegionName(ctx, app.RegionID)
+	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(app, regionName))
+}
+
 func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 

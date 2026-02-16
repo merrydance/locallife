@@ -1,0 +1,112 @@
+.detail-page {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.detail-scroll {
+  height: calc(100vh - 88px);
+}
+
+.detail-container {
+  padding: var(--spacer-md);
+}
+
+.section-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacer-sm);
+}
+
+.title {
+  font-size: var(--font-size-heading);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+}
+
+.section-title {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+  margin-bottom: var(--spacer-sm);
+}
+
+.meta-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-xs);
+}
+
+.meta-label {
+  min-width: 160rpx;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.meta-value {
+  flex: 1;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-primary);
+  word-break: break-all;
+}
+
+.image-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-xs);
+}
+
+.cert-image {
+  width: 240rpx;
+  height: 160rpx;
+  border-radius: var(--radius-sm);
+  border: 1rpx solid var(--td-border-level-1-color);
+  background: var(--td-bg-color-page);
+}
+
+.actions {
+  margin-top: var(--spacer-sm);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacer-sm);
+}
+
+.dialog-content {
+  padding-top: var(--spacer-xs);
+}
+
+.dialog-title {
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--spacer-sm);
+  color: var(--td-text-color-primary);
+}
+
+.skeleton-item {
+  height: 88rpx;
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+  margin-bottom: var(--spacer-sm);
+}
+
+.skeleton-item:last-child {
+  margin-bottom: 0;
+}
+
+.status-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -1,28 +1,111 @@
 @import "../../../styles/responsive.wxss";
 
 .platform-dashboard {
-  background-color: #f5f5f5;
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
   box-sizing: border-box;
 }
 
 .dashboard-scroll {
+  height: 100%;
   box-sizing: border-box;
 }
 
-.container {
-  padding: 24rpx;
+.dashboard-container {
+  padding: var(--spacer-md);
+}
+
+.section-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacer-sm);
 }
 
 .section-title {
-  font-size: 30rpx;
+  font-size: var(--font-size-heading);
+  color: var(--td-text-color-primary);
   font-weight: 600;
-  margin: 20rpx 0 16rpx;
-  color: #222;
 }
 
-.loading-wrap {
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacer-sm);
+}
+
+.skeleton-card {
+  height: 132rpx;
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.state-list {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.state-item {
+  display: flex;
   align-items: center;
-  padding: 32rpx 0;
+  justify-content: center;
+  justify-content: space-between;
+  padding: var(--spacer-sm);
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-page);
+}
+
+.state-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+}
+
+.state-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: var(--radius-round);
+}
+
+.state-success {
+  background: var(--td-success-color);
+}
+
+.state-warning {
+  background: var(--td-warning-color);
+}
+
+.state-danger {
+  background: var(--td-error-color);
+}
+
+.state-label {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.state-value {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+}
+
+.stats-grid,
+.actions-grid {
+  margin-top: var(--spacer-xs);
+}
+
+.status-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

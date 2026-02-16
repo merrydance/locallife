@@ -9,38 +9,74 @@
     bindrefresherrefresh="onRefresh"
     style="height: calc(100vh - {{navBarHeight}}px);"
   >
-    <view class="container">
-      <view class="section-title">基础统计</view>
-      <t-grid border="{{false}}" column="{{2}}">
-        <t-grid-item text="累计订单" description="{{summaryCards.totalOrders}}" icon="order" />
-        <t-grid-item text="累计GMV" description="{{summaryCards.totalGMV}}" icon="money-circle" />
-        <t-grid-item text="活跃用户" description="{{summaryCards.activeUsers}}" icon="user" />
-        <t-grid-item text="活跃商户" description="{{summaryCards.activeMerchants}}" icon="shop" />
-      </t-grid>
+    <view class="dashboard-container">
+      <view class="section-card">
+        <view class="section-head">
+          <text class="section-title">基础统计</text>
+          <t-tag theme="primary" variant="light-outline">近30天</t-tag>
+        </view>
 
-      <view class="section-title">实时状态</view>
-      <t-grid border="{{false}}" column="{{3}}">
-        <t-grid-item text="在线骑手" description="{{summaryCards.onlineRiders}}" />
-        <t-grid-item text="待处理订单" description="{{summaryCards.pendingOrders}}" />
-        <t-grid-item text="待审骑手" description="{{summaryCards.pendingRiders}}" />
-      </t-grid>
+        <view wx:if="{{loading}}" class="skeleton-grid">
+          <view wx:for="{{4}}" wx:key="index" class="skeleton-card skeleton-shimmer"></view>
+        </view>
 
-      <view class="section-title">管理入口</view>
-      <t-grid border="{{false}}" column="{{2}}">
-        <t-grid-item
-          wx:for="{{actions}}"
-          wx:key="id"
-          text="{{item.title}}"
-          description="{{item.desc}}"
-          icon="{{item.icon}}"
-          bind:click="onActionTap"
-          data-id="{{item.id}}"
-          data-url="{{item.url}}"
-        />
-      </t-grid>
+        <t-grid wx:else border="{{false}}" column="{{2}}" class="stats-grid">
+          <t-grid-item text="累计订单" description="{{summaryCards.totalOrders}}" icon="order" />
+          <t-grid-item text="累计GMV" description="{{summaryCards.totalGMV}}" icon="money-circle" />
+          <t-grid-item text="活跃用户" description="{{summaryCards.activeUsers}}" icon="user" />
+          <t-grid-item text="活跃商户" description="{{summaryCards.activeMerchants}}" icon="shop" />
+        </t-grid>
+      </view>
 
-      <view wx:if="{{loading}}" class="loading-wrap">
-        <t-loading text="加载中" size="40rpx" />
+      <view class="section-card">
+        <view class="section-head">
+          <text class="section-title">实时状态</text>
+          <t-tag theme="success" variant="light-outline">自动刷新</t-tag>
+        </view>
+
+        <view wx:if="{{loading}}" class="state-list">
+          <view wx:for="{{3}}" wx:key="index" class="state-item skeleton-shimmer"></view>
+        </view>
+
+        <view wx:else class="state-list">
+          <view wx:for="{{realtimeCards}}" wx:key="label" class="state-item">
+            <view class="state-label-wrap">
+              <view class="state-dot state-{{item.theme}}"></view>
+              <text class="state-label">{{item.label}}</text>
+            </view>
+            <text class="state-value">{{item.value}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-card">
+        <view class="section-head">
+          <text class="section-title">管理入口</text>
+          <t-tag theme="warning" variant="light-outline">按角色开放</t-tag>
+        </view>
+
+        <t-grid border="{{false}}" column="{{2}}" class="actions-grid">
+          <t-grid-item
+            wx:for="{{actions}}"
+            wx:key="id"
+            text="{{item.title}}"
+            description="{{item.desc}}"
+            icon="{{item.icon}}"
+            bind:click="onActionTap"
+            data-id="{{item.id}}"
+            data-url="{{item.url}}"
+          />
+        </t-grid>
+      </view>
+
+      <view wx:if="{{error}}" class="section-card status-wrap">
+        <t-empty icon="error-circle" description="{{error}}">
+          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:if="{{!loading && !error && !summaryCards.totalOrders}}" class="section-card status-wrap">
+        <t-empty description="暂无统计数据" />
       </view>
     </view>
   </scroll-view>

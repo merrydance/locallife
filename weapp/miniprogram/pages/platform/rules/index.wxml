@@ -1,0 +1,67 @@
+<custom-navbar title="规则中心" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="rules-page" style="padding-top: {{navBarHeight}}px;">
+  <scroll-view
+    class="list-scroll"
+    scroll-y
+    refresher-enabled
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onRefresh"
+    bindscrolltolower="onLoadMore"
+  >
+    <view class="rules-container">
+      <view class="summary-card">
+        <text class="summary-title">规则总数</text>
+        <text class="summary-value">{{total}}</text>
+      </view>
+
+      <view wx:if="{{loading}}" class="section-card">
+        <view wx:for="{{3}}" wx:key="index" class="skeleton-item skeleton-shimmer"></view>
+      </view>
+
+      <view wx:if="{{error}}" class="section-card status-wrap">
+        <t-empty icon="error-circle" description="{{error}}">
+          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:if="{{!loading && !error && rules.length === 0}}" class="section-card status-wrap">
+        <t-empty description="暂无规则数据" />
+      </view>
+
+      <view wx:for="{{rules}}" wx:key="id" class="section-card rule-card">
+        <view class="title-row">
+          <view class="name">{{item.name || ('规则#' + item.id)}}</view>
+          <t-tag theme="{{item.status === 'active' ? 'success' : item.status === 'disabled' ? 'danger' : 'warning'}}" variant="dark">{{getStatusLabel(item.status)}}</t-tag>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">规则ID</text>
+          <text class="meta-value">{{item.id}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">分类</text>
+          <text class="meta-value">{{item.category || '-'}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">当前版本</text>
+          <text class="meta-value">{{item.current_version_id || '-'}}</text>
+        </view>
+
+        <view wx:if="{{item.status === 'active'}}" class="actions">
+          <t-button
+            theme="danger"
+            variant="outline"
+            shape="round"
+            size="small"
+            loading="{{submitting}}"
+            bind:tap="onDisableTap"
+            data-id="{{item.id}}"
+            data-name="{{item.name}}"
+          >停用</t-button>
+        </view>
+      </view>
+
+      <view wx:if="{{!loading && !hasMore && rules.length > 0}}" class="no-more">没有更多了</view>
+    </view>
+  </scroll-view>
+</view>

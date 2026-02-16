@@ -131,6 +131,14 @@ export interface AdminOperatorApplicationItem {
     created_at: string
 }
 
+export interface AdminOperatorApplicationDetail extends AdminOperatorApplicationItem {
+    id_card_front_url?: string
+    id_card_back_url?: string
+    reject_reason?: string
+    updated_at?: string
+    reviewed_at?: string
+}
+
 export interface ListAdminOperatorApplicationsResponse {
     applications: AdminOperatorApplicationItem[]
     total: number
@@ -146,6 +154,66 @@ export interface ListAdminOperatorApplicationsParams extends Record<string, unkn
 
 export interface RejectOperatorApplicationRequest extends Record<string, unknown> {
     reject_reason: string
+}
+
+// ==================== 集团入驻审核相关类型 ====================
+
+export interface AdminGroupApplicationItem {
+    id: number
+    applicant_user_id: number
+    group_name: string
+    contact_phone: string
+    license_number?: string
+    license_image_url?: string
+    address?: string
+    region_id?: number
+    status: string
+    reject_reason?: string
+    reviewed_by?: number
+    reviewed_at?: string
+    created_at: string
+    updated_at: string
+}
+
+export interface ListAdminGroupApplicationsResponse {
+    applications: AdminGroupApplicationItem[]
+    total: number
+    page: number
+    limit: number
+    has_more: boolean
+}
+
+export interface ListAdminGroupApplicationsParams extends Record<string, unknown> {
+    status?: 'draft' | 'submitted' | 'approved' | 'rejected'
+    page?: number
+    limit?: number
+}
+
+export interface ReviewGroupApplicationRequest extends Record<string, unknown> {
+    status: 'approved' | 'rejected'
+    reject_reason?: string
+}
+
+// ==================== 平台规则管理相关类型 ====================
+
+export interface PlatformRuleItem {
+    id: number
+    name: string
+    category: string
+    status: string
+    current_version_id?: number
+    created_at?: string
+    updated_at?: string
+}
+
+export interface ListPlatformRulesResponse {
+    rules: PlatformRuleItem[]
+    count: number
+}
+
+export interface ListPlatformRulesParams extends Record<string, unknown> {
+    limit?: number
+    offset?: number
 }
 
 // ==================== 配送费配置相关类型 ====================
@@ -353,6 +421,16 @@ export class PlatformManagementService {
     }
 
     /**
+     * 获取运营商申请详情
+     */
+    async getAdminOperatorApplicationDetail(applicationID: number): Promise<AdminOperatorApplicationDetail> {
+        return request({
+            url: `/v1/admin/operators/applications/${applicationID}`,
+            method: 'GET'
+        })
+    }
+
+    /**
      * 通过运营商申请
      */
     async approveOperatorApplication(applicationID: number): Promise<AdminOperatorApplicationItem> {
@@ -370,6 +448,60 @@ export class PlatformManagementService {
             url: `/v1/admin/operators/applications/${applicationID}/reject`,
             method: 'POST',
             data
+        })
+    }
+
+    /**
+     * 获取集团入驻申请列表（平台）
+     */
+    async getAdminGroupApplications(params: ListAdminGroupApplicationsParams): Promise<ListAdminGroupApplicationsResponse> {
+        return request({
+            url: '/v1/admin/groups/applications',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    /**
+     * 获取集团入驻申请详情（平台）
+     */
+    async getAdminGroupApplicationDetail(applicationID: number): Promise<AdminGroupApplicationItem> {
+        return request({
+            url: `/v1/admin/groups/applications/${applicationID}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 审核集团入驻申请（平台）
+     */
+    async reviewAdminGroupApplication(applicationID: number, data: ReviewGroupApplicationRequest): Promise<AdminGroupApplicationItem> {
+        return request({
+            url: `/v1/admin/groups/applications/${applicationID}/review`,
+            method: 'POST',
+            data
+        })
+    }
+
+    /**
+     * 获取平台规则列表
+     */
+    async getPlatformRules(params: ListPlatformRulesParams): Promise<ListPlatformRulesResponse> {
+        return request({
+            url: '/v1/platform/rules',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    /**
+     * 停用平台规则
+     */
+    async disablePlatformRule(ruleID: number, reason?: string): Promise<PlatformRuleItem> {
+        return request({
+            url: `/v1/platform/rules/${ruleID}/disable`,
+            method: 'POST',
+            data: { reason: reason || '' }
         })
     }
 

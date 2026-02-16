@@ -28,7 +28,20 @@ export function isPublicUploads(urlOrPath: string): boolean {
  */
 function toStoredPath(urlOrPath: string): string | null {
     if (!urlOrPath) return null
-    if (/^https?:\/\//.test(urlOrPath)) return null // External URL
+
+    if (/^https?:\/\//.test(urlOrPath)) {
+        try {
+            const parsedUrl = new URL(urlOrPath)
+            const apiBase = new URL(API_BASE)
+            const isSameHost = parsedUrl.host === apiBase.host
+            if (isSameHost && parsedUrl.pathname.startsWith('/uploads/')) {
+                return parsedUrl.pathname.slice(1)
+            }
+            return null // External URL
+        } catch {
+            return null
+        }
+    }
 
     // Remove leading slash
     return urlOrPath.startsWith('/') ? urlOrPath.slice(1) : urlOrPath
@@ -51,8 +64,14 @@ const signedUrlCache = new Map<string, SignedUrlResponse>()
 export async function resolveImageURL(urlOrPath: string): Promise<string> {
     if (!urlOrPath) return ''
 
-    // 1. External URLs returned as is
-    if (/^https?:\/\//.test(urlOrPath)) return urlOrPath
+    // 1. External URLs returned as is（同域 uploads 绝对 URL 会在 toStoredPath 中转成可签名路径）
+    if (/^https?:\/\//.test(urlOrPath)) {
+        const maybeStoredPath = toStoredPath(urlOrPath)
+        if (!maybeStoredPath) {
+            return urlOrPath
+        }
+        urlOrPath = maybeStoredPath
+    }
 
     // 2. Public paths: append API_BASE
     if (isPublicUploads(urlOrPath)) {
@@ -78,7 +97,9 @@ export async function resolveImageURL(urlOrPath: string): Promise<string> {
         const res = await request<SignedUrlResponse>({
             url: '/v1/uploads/sign',
             method: 'POST',
-            data: { path: '/' + storedPath }
+            data: { path: '/' + storedPath },
+            requestId: `sign_${storedPath}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            context: 'image-sign'
         })
 
         // Cache it

@@ -8,6 +8,9 @@
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-grid": "tdesign-miniprogram/grid/grid",
-        "t-grid-item": "tdesign-miniprogram/grid-item/grid-item"
+        "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-button": "tdesign-miniprogram/button/button",
+        "t-tag": "tdesign-miniprogram/tag/tag"
     }
 }

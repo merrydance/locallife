@@ -40,6 +40,7 @@ p, admin, /v1/admin/riders/:rider_id/reject, POST
 
 # Operator Application Review
 p, admin, /v1/admin/operators/applications, GET
+p, admin, /v1/admin/operators/applications/:id, GET
 p, admin, /v1/admin/operators/applications/:id/approve, POST
 p, admin, /v1/admin/operators/applications/:id/reject, POST
 
@@ -54,6 +55,9 @@ p, admin, /v1/fraud/detect, POST
 # Group Management
 p, admin, /v1/groups, POST
 p, admin, /v1/groups/applications/:id/review, POST
+p, admin, /v1/admin/groups/applications, GET
+p, admin, /v1/admin/groups/applications/:id, GET
+p, admin, /v1/admin/groups/applications/:id/review, POST
 
 # =============================================================================
 # Operator Policies - Regional management

@@ -1,5 +1,8 @@
 import { responsiveBehavior } from '@/utils/responsive'
-import { platformManagementService, type AdminOperatorApplicationItem } from '@/api/platform-management'
+import {
+  platformManagementService,
+  type AdminRiderItem
+} from '@/api/platform-management'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {
@@ -9,6 +12,13 @@ type TapEvent = WechatMiniprogram.CustomEvent & {
       name?: string
     }
   }
+}
+
+function getRiderStatusLabel(status: string): string {
+  if (status === 'approved') return '已通过'
+  if (status === 'rejected') return '已驳回'
+  if (status === 'pending' || status === 'submitted' || status === 'reviewing') return '待审核'
+  return status || '未知'
 }
 
 Page({
@@ -24,7 +34,7 @@ Page({
     limit: 20,
     total: 0,
     hasMore: false,
-    applications: [] as AdminOperatorApplicationItem[],
+    riders: [] as AdminRiderItem[],
     showRejectDialog: false,
     selectedID: 0,
     selectedName: '',
@@ -32,7 +42,7 @@ Page({
   },
 
   onLoad() {
-    this.loadApplications(true)
+    this.loadRiders(true)
   },
 
   onNavHeight(e: NavHeightEvent) {
@@ -42,7 +52,7 @@ Page({
   async onRefresh() {
     this.setData({ refreshing: true })
     try {
-      await this.loadApplications(true)
+      await this.loadRiders(true)
     } finally {
       this.setData({ refreshing: false })
     }
@@ -52,10 +62,10 @@ Page({
     if (!this.data.hasMore || this.data.loading) {
       return
     }
-    await this.loadApplications(false)
+    await this.loadRiders(false)
   },
 
-  async loadApplications(reset: boolean) {
+  async loadRiders(reset: boolean) {
     if (this.data.requesting) {
       return
     }
@@ -63,46 +73,42 @@ Page({
     const page = reset ? 1 : this.data.page + 1
     this.setData({ loading: true, requesting: true, error: null })
     try {
-      const response = await platformManagementService.getAdminOperatorApplications({
+      const response = await platformManagementService.getAdminRiders({
         page,
         limit: this.data.limit
       })
 
       this.setData({
-        applications: reset ? response.applications : this.data.applications.concat(response.applications),
+        riders: reset ? response.riders : this.data.riders.concat(response.riders),
         total: response.total,
         page: response.page,
         hasMore: response.has_more
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载申请失败，请稍后重试'
+      const message = error instanceof Error ? error.message : '加载骑手列表失败，请稍后重试'
       this.setData({ error: message })
-      wx.showToast({ title: '加载申请失败', icon: 'none' })
+      wx.showToast({ title: '加载失败', icon: 'none' })
     } finally {
       this.setData({ loading: false, requesting: false })
     }
   },
 
   onRetry() {
-    this.loadApplications(true)
+    this.loadRiders(true)
   },
 
-  onDetailTap(e: TapEvent) {
-    const id = Number(e.currentTarget.dataset.id || 0)
-    if (!id) return
-    wx.navigateTo({
-      url: `/pages/platform/operators/detail?id=${id}`
-    })
+  getStatusLabel(status: string) {
+    return getRiderStatusLabel(status)
   },
 
   async onApproveTap(e: TapEvent) {
-    const id = Number(e.currentTarget.dataset.id || 0)
-    if (!id) return
+    const riderID = Number(e.currentTarget.dataset.id || 0)
+    if (!riderID || this.data.submitting) return
 
     const confirm = await new Promise<boolean>((resolve) => {
       wx.showModal({
         title: '通过申请',
-        content: '通过后将创建运营商账号并开通对应区域权限。',
+        content: '确认通过该骑手申请？',
         success: (res) => resolve(res.confirm),
         fail: () => resolve(false)
       })
@@ -111,9 +117,9 @@ Page({
 
     try {
       this.setData({ submitting: true })
-      await platformManagementService.approveOperatorApplication(id)
+      await platformManagementService.approveRider(riderID, {})
       wx.showToast({ title: '审核通过', icon: 'success' })
-      await this.loadApplications(true)
+      await this.loadRiders(true)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '审核失败'
       wx.showToast({ title: message, icon: 'none' })
@@ -123,11 +129,11 @@ Page({
   },
 
   onRejectTap(e: TapEvent) {
-    const id = Number(e.currentTarget.dataset.id || 0)
-    if (!id) return
+    const riderID = Number(e.currentTarget.dataset.id || 0)
+    if (!riderID || this.data.submitting) return
 
     this.setData({
-      selectedID: id,
+      selectedID: riderID,
       selectedName: String(e.currentTarget.dataset.name || ''),
       rejectReason: '',
       showRejectDialog: true
@@ -148,23 +154,23 @@ Page({
   },
 
   async onRejectConfirm() {
-    const id = this.data.selectedID
-    const reason = this.data.rejectReason.trim()
-    if (!id) {
+    const riderID = this.data.selectedID
+    const rejectionReason = this.data.rejectReason.trim()
+    if (!riderID || this.data.submitting) {
       this.onRejectCancel()
       return
     }
-    if (!reason) {
+    if (!rejectionReason) {
       wx.showToast({ title: '请输入驳回原因', icon: 'none' })
       return
     }
 
     try {
       this.setData({ submitting: true })
-      await platformManagementService.rejectOperatorApplication(id, { reject_reason: reason })
+      await platformManagementService.rejectRider(riderID, { rejection_reason: rejectionReason })
       wx.showToast({ title: '已驳回', icon: 'success' })
       this.onRejectCancel()
-      await this.loadApplications(true)
+      await this.loadRiders(true)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '驳回失败'
       wx.showToast({ title: message, icon: 'none' })

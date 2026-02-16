@@ -1,4 +1,4 @@
-.operators-page {
+.riders-page {
   min-height: 100vh;
   background: var(--td-bg-color-page);
 }
@@ -7,7 +7,7 @@
   height: calc(100vh - 88px);
 }
 
-.operators-container {
+.riders-container {
   padding: var(--spacer-md);
 }
 
@@ -42,7 +42,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-.app-card {
+.rider-card {
   padding-bottom: var(--spacer-sm);
 }
 

@@ -1,4 +1,4 @@
-.operators-page {
+.rules-page {
   min-height: 100vh;
   background: var(--td-bg-color-page);
 }
@@ -7,7 +7,7 @@
   height: calc(100vh - 88px);
 }
 
-.operators-container {
+.rules-container {
   padding: var(--spacer-md);
 }
 
@@ -42,7 +42,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-.app-card {
+.rule-card {
   padding-bottom: var(--spacer-sm);
 }
 
@@ -109,14 +109,4 @@
   color: var(--td-text-color-placeholder);
   font-size: var(--font-size-xs);
   padding: var(--spacer-sm) 0 var(--spacer-lg);
-}
-
-.dialog-content {
-  padding-top: var(--spacer-xs);
-}
-
-.dialog-title {
-  font-size: var(--font-size-sm);
-  margin-bottom: var(--spacer-sm);
-  color: var(--td-text-color-primary);
 }
