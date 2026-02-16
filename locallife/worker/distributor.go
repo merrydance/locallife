@@ -93,6 +93,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskProcessMerchantWithdrawResult 分发商户提现状态轮询任务
+	DistributeTaskProcessMerchantWithdrawResult(
+		ctx context.Context,
+		payload *MerchantWithdrawResultPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskSendNotification 分发发送通知任务
 	DistributeTaskSendNotification(
 		ctx context.Context,

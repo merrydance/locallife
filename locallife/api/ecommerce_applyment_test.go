@@ -87,32 +87,6 @@ func randomMerchantApplicationForApplyment(userID int64) db.MerchantApplication 
 	}
 }
 
-// randomRiderForApplyment 创建随机骑手
-func randomRiderForApplyment(userID int64) db.Rider {
-	return db.Rider{
-		ID:        util.RandomInt(1, 1000),
-		UserID:    userID,
-		RealName:  util.RandomString(6),
-		Phone:     "13800138000",
-		Status:    "pending_bindbank",
-		CreatedAt: time.Now(),
-	}
-}
-
-// randomRiderApplicationForApplyment 创建随机骑手申请
-func randomRiderApplicationForApplyment(userID int64) db.RiderApplication {
-	return db.RiderApplication{
-		ID:             util.RandomInt(1, 1000),
-		UserID:         userID,
-		RealName:       pgtype.Text{String: util.RandomString(6), Valid: true},
-		Phone:          pgtype.Text{String: "13800138000", Valid: true},
-		IDCardFrontUrl: pgtype.Text{String: "https://example.com/id_front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "https://example.com/id_back.jpg", Valid: true},
-		IDCardOcr:      []byte(`{"name": "张三", "id_number": "110101199001011234", "valid_date": "2020.01.01-2030.01.01"}`),
-		Status:         "approved",
-	}
-}
-
 // randomEcommerceApplymentForTest 创建随机进件记录（测试专用）
 func randomEcommerceApplymentForTest(subjectType string, subjectID int64) db.EcommerceApplyment {
 	return db.EcommerceApplyment{
@@ -578,291 +552,53 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 
 func TestRiderBindBankAPI(t *testing.T) {
 	user, _ := randomUser(t)
-	rider := randomRiderForApplyment(user.ID)
-	riderApplication := randomRiderApplicationForApplyment(user.ID)
 
-	// 创建本地测试图片
-	minJPEG := []byte{
-		0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-		0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-		0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-		0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-		0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-		0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-		0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-		0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01,
-		0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00,
-		0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0A, 0x0B, 0xFF, 0xC4, 0x00, 0xB5, 0x10, 0x00, 0x02, 0x01, 0x03,
-		0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7D,
-		0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x7F, 0xFF,
-		0xD9,
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+
+	body := gin.H{
+		"account_type":      "ACCOUNT_TYPE_PRIVATE",
+		"account_bank":      "招商银行",
+		"bank_address_code": "440300",
+		"account_number":    "6214830012345678",
+		"account_name":      "张三",
+		"contact_phone":     "13800138000",
 	}
-	idFrontPath := writeTestUploadImage(t, "rider_id_front.jpg", minJPEG)
-	idBackPath := writeTestUploadImage(t, "rider_id_back.jpg", minJPEG)
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
 
-	riderApplicationWithTestURL := riderApplication
-	riderApplicationWithTestURL.IDCardFrontUrl = pgtype.Text{String: idFrontPath, Valid: true}
-	riderApplicationWithTestURL.IDCardBackUrl = pgtype.Text{String: idBackPath, Valid: true}
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/applyment/bindbank", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-	testCases := []struct {
-		name          string
-		body          gin.H
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
-		checkResponse func(recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "OK",
-			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_PRIVATE",
-				"account_bank":      "招商银行",
-				"bank_address_code": "440300",
-				"bank_name":         "招商银行深圳分行",
-				"account_number":    "6214830012345678",
-				"account_name":      "张三",
-				"contact_phone":     "13800138000",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
-
-				store.EXPECT().
-					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
-
-				// 使用带测试服务器 URL 的版本
-				store.EXPECT().
-					GetRiderApplicationByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(riderApplicationWithTestURL, nil)
-
-				store.EXPECT().
-					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(randomEcommerceApplymentForTest("rider", rider.ID), nil)
-
-				// Mock 图片上传
-				ecommerceClient.EXPECT().
-					UploadImage(gomock.Any(), gomock.Any(), gomock.Any()).
-					Times(2). // 身份证正面、背面
-					Return(&wechat.ImageUploadResponse{MediaID: "media_id_123"}, nil)
-
-				// Mock 加密
-				ecommerceClient.EXPECT().
-					EncryptSensitiveData(gomock.Any()).
-					Times(5). // 姓名、身份证号、账户名、账号、手机
-					Return("encrypted_data", nil)
-
-				// Mock 提交进件
-				ecommerceClient.EXPECT().
-					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(&wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
-
-				store.EXPECT().
-					UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.EcommerceApplyment{}, nil)
-
-				store.EXPECT().
-					UpdateRiderStatus(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Rider{}, nil)
-			},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var response struct {
-					ApplymentID int64 `json:"applyment_id"`
-				}
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, int64(123456789), response.ApplymentID)
-			},
-		},
-		{
-			name: "RiderNotFound",
-			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_PRIVATE",
-				"account_bank":      "招商银行",
-				"bank_address_code": "440300",
-				"account_number":    "6214830012345678",
-				"account_name":      "张三",
-				"contact_phone":     "13800138000",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Rider{}, db.ErrRecordNotFound)
-			},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidRiderStatus",
-			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_PRIVATE",
-				"account_bank":      "招商银行",
-				"bank_address_code": "440300",
-				"account_number":    "6214830012345678",
-				"account_name":      "张三",
-				"contact_phone":     "13800138000",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				invalidRider := rider
-				invalidRider.Status = "pending"
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(invalidRider, nil)
-			},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "InvalidAccountType",
-			body: gin.H{
-				"account_type":      "ACCOUNT_TYPE_BUSINESS", // 骑手不支持对公账户
-				"account_bank":      "招商银行",
-				"bank_address_code": "440300",
-				"account_number":    "6214830012345678",
-				"account_name":      "张三",
-				"contact_phone":     "13800138000",
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				// No stubs needed - validation fails first
-			},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-	}
-
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-			tc.buildStubs(store, ecommerceClient)
-
-			server := newTestServerWithEcommerce(t, store, ecommerceClient)
-
-			data, err := json.Marshal(tc.body)
-			require.NoError(t, err)
-
-			url := "/v1/rider/applyment/bindbank"
-			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
-			require.NoError(t, err)
-			request.Header.Set("Content-Type", "application/json")
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(recorder)
-		})
-	}
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
 }
 
 // ==================== 骑手开户状态查询测试 ====================
 
 func TestGetRiderApplymentStatusAPI(t *testing.T) {
 	user, _ := randomUser(t)
-	rider := randomRiderForApplyment(user.ID)
 
-	testCases := []struct {
-		name          string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
-		checkResponse func(recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "OK",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-				applyment := randomEcommerceApplymentForTest("rider", rider.ID)
-				applyment.Status = "auditing"
-				store.EXPECT().
-					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(applyment, nil)
-			},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-			},
-		},
-		{
-			name: "NoApplyment",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), user.ID).
-					Times(1).
-					Return(rider, nil)
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
 
-				store.EXPECT().
-					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
-			},
-			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
-			},
-		},
-	}
+	request, err := http.NewRequest(http.MethodGet, "/v1/rider/applyment/status", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
-
-			server := newTestServer(t, store)
-
-			url := "/v1/rider/applyment/status"
-			request, err := http.NewRequest(http.MethodGet, url, nil)
-			require.NoError(t, err)
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(recorder)
-		})
-	}
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
 }
 
 // ==================== 进件回调测试 ====================

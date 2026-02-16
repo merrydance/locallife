@@ -88,6 +88,49 @@ func (q *Queries) GetWithdrawalRecord(ctx context.Context, id int64) (Withdrawal
 	return i, err
 }
 
+const listPendingWithdrawalRecordsByChannel = `-- name: ListPendingWithdrawalRecordsByChannel :many
+SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at FROM withdrawal_records
+WHERE channel = $1
+    AND status = 'pending'
+ORDER BY created_at ASC
+LIMIT $2
+`
+
+type ListPendingWithdrawalRecordsByChannelParams struct {
+	Channel string `json:"channel"`
+	Limit   int32  `json:"limit"`
+}
+
+func (q *Queries) ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error) {
+	rows, err := q.db.Query(ctx, listPendingWithdrawalRecordsByChannel, arg.Channel, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WithdrawalRecord{}
+	for rows.Next() {
+		var i WithdrawalRecord
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Amount,
+			&i.Status,
+			&i.Channel,
+			&i.AccountInfo,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWithdrawalRecords = `-- name: ListWithdrawalRecords :many
 SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at FROM withdrawal_records
 WHERE user_id = $1

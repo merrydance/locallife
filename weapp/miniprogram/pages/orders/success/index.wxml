@@ -4,8 +4,8 @@
   <view class="success-wrap">
     <t-result
       theme="success"
-      title="支付成功"
-      description="您的订单已支付完成，商家正在处理中"
+      title="{{successTitle}}"
+      description="{{successDescription}}"
     />
 
     <view class="order-info-card">
@@ -20,7 +20,7 @@
     </view>
 
     <view class="action-btns">
-      <t-button theme="primary" block size="large" shape="round" bindtap="onViewOrder">查看订单</t-button>
+      <t-button theme="primary" block size="large" shape="round" bindtap="onViewOrder">{{primaryButtonText}}</t-button>
       <t-button theme="default" variant="outline" block size="large" shape="round" bindtap="onGoHome" style="margin-top: 32rpx;">返回首页</t-button>
     </view>
   </view>

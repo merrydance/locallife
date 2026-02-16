@@ -11984,6 +11984,21 @@ func (mr *MockStoreMockRecorder) ListPendingReservationsNearDeadline(ctx, minute
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingReservationsNearDeadline", reflect.TypeOf((*MockStore)(nil).ListPendingReservationsNearDeadline), ctx, minutesBefore)
 }
 
+// ListPendingWithdrawalRecordsByChannel mocks base method.
+func (m *MockStore) ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg db.ListPendingWithdrawalRecordsByChannelParams) ([]db.WithdrawalRecord, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingWithdrawalRecordsByChannel", ctx, arg)
+	ret0, _ := ret[0].([]db.WithdrawalRecord)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingWithdrawalRecordsByChannel indicates an expected call of ListPendingWithdrawalRecordsByChannel.
+func (mr *MockStoreMockRecorder) ListPendingWithdrawalRecordsByChannel(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingWithdrawalRecordsByChannel", reflect.TypeOf((*MockStore)(nil).ListPendingWithdrawalRecordsByChannel), ctx, arg)
+}
+
 // ListPlatformConfigsByKey mocks base method.
 func (m *MockStore) ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]db.PlatformConfig, error) {
 	m.ctrl.T.Helper()

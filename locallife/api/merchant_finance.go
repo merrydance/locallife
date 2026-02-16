@@ -1,15 +1,25 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/wechat"
 
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	merchantWithdrawMinAmount = int64(100) // 1元
+	merchantWithdrawMaxAmount = int64(500000000)
 )
 
 // ==================== 财务概览 ====================
@@ -986,5 +996,379 @@ func (server *Server) listMerchantSettlementTimeline(ctx *gin.Context) {
 		"page":        req.Page,
 		"limit":       req.Limit,
 		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+	})
+}
+
+type merchantAccountBalanceResponse struct {
+	SubMchID           string `json:"sub_mch_id"`
+	AvailableAmount    int64  `json:"available_amount"`
+	PendingAmount      int64  `json:"pending_amount"`
+	WithdrawableAmount int64  `json:"withdrawable_amount"`
+}
+
+type createMerchantWithdrawRequest struct {
+	Amount       int64  `json:"amount" binding:"required,min=100"`
+	Remark       string `json:"remark" binding:"required,max=128"`
+	OutRequestNo string `json:"out_request_no" binding:"omitempty,max=64"`
+}
+
+type merchantWithdrawItem struct {
+	ID           int64  `json:"id"`
+	Amount       int64  `json:"amount"`
+	Status       string `json:"status"`
+	Channel      string `json:"channel"`
+	OutRequestNo string `json:"out_request_no,omitempty"`
+	WithdrawID   string `json:"withdraw_id,omitempty"`
+	SubMchID     string `json:"sub_mch_id,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+type listMerchantWithdrawalsRequest struct {
+	Page  int32 `form:"page" binding:"omitempty,min=1"`
+	Limit int32 `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+type merchantWithdrawAccountInfo struct {
+	MerchantID   int64  `json:"merchant_id"`
+	SubMchID     string `json:"sub_mch_id"`
+	OutRequestNo string `json:"out_request_no"`
+	WithdrawID   string `json:"withdraw_id,omitempty"`
+	Remark       string `json:"remark,omitempty"`
+}
+
+func mapWechatWithdrawStatus(status string) string {
+	switch strings.ToUpper(status) {
+	case "SUCCESS":
+		return "success"
+	case "FAILED", "CLOSED", "ABNORMAL", "CANCELLED":
+		return "failed"
+	default:
+		return "pending"
+	}
+}
+
+func parseMerchantWithdrawAccountInfo(raw []byte) merchantWithdrawAccountInfo {
+	if len(raw) == 0 {
+		return merchantWithdrawAccountInfo{}
+	}
+	var info merchantWithdrawAccountInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return merchantWithdrawAccountInfo{}
+	}
+	return info
+}
+
+func toMerchantWithdrawItem(record db.WithdrawalRecord) merchantWithdrawItem {
+	info := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+	reason := ""
+	if record.Reason.Valid {
+		reason = record.Reason.String
+	}
+
+	return merchantWithdrawItem{
+		ID:           record.ID,
+		Amount:       record.Amount,
+		Status:       record.Status,
+		Channel:      record.Channel,
+		OutRequestNo: info.OutRequestNo,
+		WithdrawID:   info.WithdrawID,
+		SubMchID:     info.SubMchID,
+		Reason:       reason,
+		CreatedAt:    record.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    record.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func (server *Server) getMerchantAndPaymentConfigByOwner(ctx *gin.Context, ownerUserID int64) (db.Merchant, db.MerchantPaymentConfig, error) {
+	merchant, err := server.store.GetMerchantByOwner(ctx, ownerUserID)
+	if err != nil {
+		return db.Merchant{}, db.MerchantPaymentConfig{}, err
+	}
+
+	paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, merchant.ID)
+	if err != nil {
+		return db.Merchant{}, db.MerchantPaymentConfig{}, err
+	}
+
+	if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
+		return db.Merchant{}, db.MerchantPaymentConfig{}, errors.New("merchant payment config is not active")
+	}
+
+	return merchant, paymentConfig, nil
+}
+
+// getMerchantAccountBalance 查询商户收付通账户余额
+func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	_, paymentConfig, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
+			return
+		}
+		if err.Error() == "merchant payment config is not active" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	balance, err := server.ecommerceClient.QueryEcommerceFundBalance(ctx, paymentConfig.SubMchID)
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("query ecommerce fund balance: %w", err)))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, merchantAccountBalanceResponse{
+		SubMchID:           paymentConfig.SubMchID,
+		AvailableAmount:    balance.AvailableAmount,
+		PendingAmount:      balance.PendingAmount,
+		WithdrawableAmount: balance.WithdrawableAmount,
+	})
+}
+
+// createMerchantAccountWithdraw 发起商户收付通提现
+func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		return
+	}
+
+	var req createMerchantWithdrawRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if req.Amount < merchantWithdrawMinAmount || req.Amount > merchantWithdrawMaxAmount {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("withdraw amount out of range")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, paymentConfig, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
+			return
+		}
+		if err.Error() == "merchant payment config is not active" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	outRequestNo := req.OutRequestNo
+	if outRequestNo == "" {
+		outRequestNo = fmt.Sprintf("MW%d%d", merchant.ID, time.Now().UnixNano()/1e6)
+	}
+
+	withdrawResp, err := server.ecommerceClient.CreateEcommerceWithdraw(ctx, &wechat.EcommerceWithdrawRequest{
+		SubMchID:     paymentConfig.SubMchID,
+		OutRequestNo: outRequestNo,
+		Amount:       req.Amount,
+		Remark:       req.Remark,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("create ecommerce withdraw: %w", err)))
+		return
+	}
+
+	accountInfoBytes, _ := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   merchant.ID,
+		SubMchID:     paymentConfig.SubMchID,
+		OutRequestNo: outRequestNo,
+		WithdrawID:   withdrawResp.WithdrawID,
+		Remark:       req.Remark,
+	})
+
+	status := mapWechatWithdrawStatus(withdrawResp.Status)
+	reason := ""
+	if withdrawResp.FailReason != "" {
+		reason = withdrawResp.FailReason
+	}
+
+	record, err := server.store.CreateWithdrawalRecord(ctx, db.CreateWithdrawalRecordParams{
+		UserID:      authPayload.UserID,
+		Amount:      req.Amount,
+		Status:      status,
+		Channel:     "wechat_ecommerce_fund",
+		AccountInfo: accountInfoBytes,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if reason != "" {
+		updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
+			ID:     record.ID,
+			Status: status,
+			Reason: pgtype.Text{String: reason, Valid: true},
+		})
+		if updateErr == nil {
+			record = updated
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"withdrawal": toMerchantWithdrawItem(record),
+		"wechat":     withdrawResp,
+	})
+}
+
+// listMerchantAccountWithdrawals 查询商户提现记录
+func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
+	var req listMerchantWithdrawalsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, _, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID); err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
+			return
+		}
+		if err.Error() == "merchant payment config is not active" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	offset := pageOffset(req.Page, req.Limit)
+	rows, err := server.store.ListWithdrawalRecords(ctx, db.ListWithdrawalRecordsParams{
+		UserID: authPayload.UserID,
+		Limit:  req.Limit,
+		Offset: offset,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	totalCount, err := server.store.CountWithdrawalRecords(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	items := make([]merchantWithdrawItem, 0, len(rows))
+	for _, row := range rows {
+		if row.Channel != "wechat_ecommerce_fund" {
+			continue
+		}
+		items = append(items, toMerchantWithdrawItem(row))
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"withdrawals": items,
+		"total":       totalCount,
+		"total_count": totalCount,
+		"page":        req.Page,
+		"limit":       req.Limit,
+		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+	})
+}
+
+type getMerchantWithdrawalRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// getMerchantAccountWithdrawal 查询单笔提现并同步微信状态
+func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		return
+	}
+
+	var req getMerchantWithdrawalRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	_, _, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
+			return
+		}
+		if err.Error() == "merchant payment config is not active" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	record, err := server.store.GetWithdrawalRecord(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("withdrawal not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if record.UserID != authPayload.UserID || record.Channel != "wechat_ecommerce_fund" {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("no permission to access this withdrawal")))
+		return
+	}
+
+	info := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+	if info.SubMchID != "" && info.OutRequestNo != "" {
+		wxResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, info.SubMchID, info.OutRequestNo)
+		if queryErr == nil {
+			newStatus := mapWechatWithdrawStatus(wxResp.Status)
+			reasonText := ""
+			if wxResp.FailReason != "" {
+				reasonText = wxResp.FailReason
+			}
+
+			if newStatus != record.Status || reasonText != "" {
+				updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
+					ID:     record.ID,
+					Status: newStatus,
+					Reason: pgtype.Text{String: reasonText, Valid: reasonText != ""},
+				})
+				if updateErr == nil {
+					record = updated
+				}
+			}
+
+			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
+				info.WithdrawID = wxResp.WithdrawID
+				if raw, marshalErr := json.Marshal(info); marshalErr == nil {
+					record.AccountInfo = raw
+				}
+			}
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"withdrawal": toMerchantWithdrawItem(record),
 	})
 }

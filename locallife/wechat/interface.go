@@ -135,6 +135,16 @@ type EcommerceClientInterface interface {
 	// QueryEcommerceRefund 查询电商退款
 	QueryEcommerceRefund(ctx context.Context, subMchID, outRefundNo string) (*EcommerceRefundResponse, error)
 
+	// ==================== 账户资金管理 ====================
+	// QueryEcommerceFundBalance 查询二级商户可用余额
+	QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error)
+
+	// CreateEcommerceWithdraw 发起二级商户提现
+	CreateEcommerceWithdraw(ctx context.Context, req *EcommerceWithdrawRequest) (*EcommerceWithdrawResponse, error)
+
+	// QueryEcommerceWithdrawByOutRequestNo 通过外部申请单号查询提现状态
+	QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*EcommerceWithdrawResponse, error)
+
 	// ==================== 通知解密 ====================
 	// DecryptCombinePaymentNotification 解密合单支付通知
 	DecryptCombinePaymentNotification(notification *PaymentNotification) (*CombinePaymentNotification, error)

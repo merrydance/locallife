@@ -149,6 +149,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessProfitSharing, processor.ProcessTaskProfitSharing)
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
 	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
+	mux.HandleFunc(TaskProcessMerchantWithdrawResult, processor.ProcessTaskMerchantWithdrawResult)
 
 	// TrustScore系统任务
 	mux.HandleFunc(TypeHandleSuspiciousPattern, processor.HandleSuspiciousPattern)

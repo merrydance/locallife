@@ -46,6 +46,11 @@ const (
 	// 退款（平台收付通）
 	ecommerceRefundURL      = "/v3/ecommerce/refunds/apply"
 	ecommerceRefundQueryURL = "/v3/ecommerce/refunds/out-refund-no/%s"
+
+	// 账户资金管理（平台收付通）
+	ecommerceFundBalanceURL        = "/v3/ecommerce/fund/balance/%s"
+	ecommerceFundWithdrawURL       = "/v3/ecommerce/fund/withdraw"
+	ecommerceFundWithdrawQueryByNo = "/v3/ecommerce/fund/withdraw/out-request-no/%s"
 )
 
 // EcommerceClient 平台收付通客户端
@@ -886,6 +891,114 @@ func (c *EcommerceClient) QueryEcommerceRefund(ctx context.Context, subMchID, ou
 	var resp EcommerceRefundResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ==================== 账户资金管理 ====================
+
+// EcommerceFundBalanceResponse 二级商户资金账户余额
+type EcommerceFundBalanceResponse struct {
+	SubMchID           string `json:"sub_mchid"`
+	AvailableAmount    int64  `json:"available_amount"`
+	PendingAmount      int64  `json:"pending_amount"`
+	WithdrawableAmount int64  `json:"withdrawable_amount"`
+}
+
+// QueryEcommerceFundBalance 查询二级商户可用余额
+func (c *EcommerceClient) QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error) {
+	url := fmt.Sprintf(ecommerceFundBalanceURL, subMchID)
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query ecommerce fund balance: %w", err)
+	}
+
+	var resp EcommerceFundBalanceResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	if resp.SubMchID == "" {
+		resp.SubMchID = subMchID
+	}
+
+	return &resp, nil
+}
+
+// EcommerceWithdrawRequest 二级商户提现请求
+type EcommerceWithdrawRequest struct {
+	SubMchID     string // 二级商户号
+	OutRequestNo string // 商户提现申请单号
+	Amount       int64  // 提现金额（分）
+	Remark       string // 提现备注
+}
+
+// EcommerceWithdrawResponse 二级商户提现响应
+type EcommerceWithdrawResponse struct {
+	SubMchID     string `json:"sub_mchid"`
+	WithdrawID   string `json:"withdraw_id"`
+	OutRequestNo string `json:"out_request_no"`
+	Amount       int64  `json:"amount"`
+	Status       string `json:"status"`
+	CreateTime   string `json:"create_time"`
+	UpdateTime   string `json:"update_time"`
+	SuccessTime  string `json:"success_time"`
+	FailReason   string `json:"fail_reason"`
+}
+
+// CreateEcommerceWithdraw 发起二级商户提现
+func (c *EcommerceClient) CreateEcommerceWithdraw(ctx context.Context, req *EcommerceWithdrawRequest) (*EcommerceWithdrawResponse, error) {
+	body := map[string]interface{}{
+		"sub_mchid":      req.SubMchID,
+		"out_request_no": req.OutRequestNo,
+		"amount":         req.Amount,
+		"remark":         req.Remark,
+	}
+
+	respBody, err := c.doRequest(ctx, http.MethodPost, ecommerceFundWithdrawURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("create ecommerce withdraw: %w", err)
+	}
+
+	var resp EcommerceWithdrawResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	if resp.SubMchID == "" {
+		resp.SubMchID = req.SubMchID
+	}
+	if resp.OutRequestNo == "" {
+		resp.OutRequestNo = req.OutRequestNo
+	}
+	if resp.Amount == 0 {
+		resp.Amount = req.Amount
+	}
+
+	return &resp, nil
+}
+
+// QueryEcommerceWithdrawByOutRequestNo 通过外部申请单号查询提现状态
+func (c *EcommerceClient) QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*EcommerceWithdrawResponse, error) {
+	url := fmt.Sprintf(ecommerceFundWithdrawQueryByNo+"?sub_mchid=%s", outRequestNo, subMchID)
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query ecommerce withdraw: %w", err)
+	}
+
+	var resp EcommerceWithdrawResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	if resp.SubMchID == "" {
+		resp.SubMchID = subMchID
+	}
+	if resp.OutRequestNo == "" {
+		resp.OutRequestNo = outRequestNo
 	}
 
 	return &resp, nil

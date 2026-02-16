@@ -251,6 +251,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessApplymentResult(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessApplymentResult", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessApplymentResult), varargs...)
 }
 
+// DistributeTaskProcessMerchantWithdrawResult mocks base method.
+func (m *MockTaskDistributor) DistributeTaskProcessMerchantWithdrawResult(ctx context.Context, payload *worker.MerchantWithdrawResultPayload, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskProcessMerchantWithdrawResult", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskProcessMerchantWithdrawResult indicates an expected call of DistributeTaskProcessMerchantWithdrawResult.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessMerchantWithdrawResult(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessMerchantWithdrawResult", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessMerchantWithdrawResult), varargs...)
+}
+
 // DistributeTaskProcessPaymentSuccess mocks base method.
 func (m *MockTaskDistributor) DistributeTaskProcessPaymentSuccess(ctx context.Context, payload *worker.PaymentSuccessPayload, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()

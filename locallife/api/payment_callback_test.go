@@ -1016,6 +1016,16 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 						},
 					}, nil)
 
+				ecommerceClient.EXPECT().
+					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Any(), gomock.Eq(outOrderNo)).
+					Times(1).
+					Return(&wechat.ProfitSharingQueryResponse{
+						Status: "FINISHED",
+						Receivers: []wechat.ProfitSharingReceiverResult{
+							{Result: "SUCCESS", Amount: 100},
+						},
+					}, nil)
+
 				// 查询分账订单
 				store.EXPECT().
 					GetProfitSharingOrderByOutOrderNo(gomock.Any(), gomock.Eq(outOrderNo)).
@@ -1106,6 +1116,16 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 							Result:     "CLOSED",
 							FailReason: "NO_RELATION",
 							Amount:     100,
+						},
+					}, nil)
+
+				ecommerceClient.EXPECT().
+					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Any(), gomock.Eq(outOrderNo)).
+					Times(1).
+					Return(&wechat.ProfitSharingQueryResponse{
+						Status: "FINISHED",
+						Receivers: []wechat.ProfitSharingReceiverResult{
+							{Result: "CLOSED", FailReason: "NO_RELATION", Amount: 100},
 						},
 					}, nil)
 

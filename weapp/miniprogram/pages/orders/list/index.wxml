@@ -6,6 +6,15 @@
     <t-tabs value="{{currentStatus}}" bind:change="onStatusChange" theme="tag" space-evenly="{{false}}" split="{{false}}">
       <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
     </t-tabs>
+    <view wx:if="{{currentStatus === 'pending' && pendingPayableCount > 1}}" class="batch-toolbar">
+      <t-button size="small" variant="outline" shape="round" bindtap="onToggleSelectAllPending">
+        {{selectedPayCount === pendingPayableCount ? '取消全选' : '全选待支付'}}
+      </t-button>
+      <text class="batch-tip">已选{{selectedPayCount}}单</text>
+      <t-button size="small" theme="primary" shape="round" bindtap="onBatchPay" disabled="{{selectedPayCount === 0 || paying}}">
+        合并支付
+      </t-button>
+    </view>
   </view>
 
   <!-- 列表内容 -->
@@ -83,6 +92,10 @@
 
           <view class="footer-actions" catchtap="preventBubble">
             <t-button wx:if="{{item.canCancel}}" size="small" variant="outline" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
+
+            <t-button wx:if="{{item.canPay && currentStatus === 'pending' && pendingPayableCount > 1}}" size="small" variant="outline" shape="round" catchtap="onTogglePaySelect" data-id="{{item.id}}" t-class="action-btn">
+              {{selectedPayMap[item.id] ? '已选' : '选择'}}
+            </t-button>
             
             <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayOrder" data-id="{{item.id}}" t-class="action-btn">去支付</t-button>
             

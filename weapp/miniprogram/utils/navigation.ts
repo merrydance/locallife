@@ -86,9 +86,10 @@ export class Navigation {
   /**
    * 跳转到支付成功页
    */
-  static toPaymentSuccess(params: { orderId: string, orderNo: string, amount: string }) {
+  static toPaymentSuccess(params: { orderId: string, orderNo: string, amount: string, isCombined?: boolean, orderCount?: number }) {
+    const combinedQuery = params.isCombined ? `&combined=1&orderCount=${params.orderCount || 0}` : ''
     wx.redirectTo({
-      url: `/pages/orders/success/index?orderId=${params.orderId}&orderNo=${params.orderNo}&amount=${params.amount}`
+      url: `/pages/orders/success/index?orderId=${params.orderId}&orderNo=${params.orderNo}&amount=${params.amount}${combinedQuery}`
     })
   }
 

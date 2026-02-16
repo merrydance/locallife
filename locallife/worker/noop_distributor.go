@@ -62,6 +62,10 @@ func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReturnResult(ctx co
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskProcessMerchantWithdrawResult(ctx context.Context, payload *MerchantWithdrawResultPayload, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskSendNotification(ctx context.Context, payload *SendNotificationPayload, opts ...asynq.Option) error {
 	return nil
 }

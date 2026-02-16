@@ -1,5 +1,7 @@
 import { getPaymentById, closePayment, getPaymentRefunds, getPayments, PaymentOrder, RefundOrder } from '../../../api/payment-refund'
 import { logger } from '../../../utils/logger'
+import { createPayment as createPaymentOrder, invokeWechatPay } from '../../../api/payment'
+import Navigation from '../../../utils/navigation'
 
 type RefundView = RefundOrder & {
     _amountDisplay: string
@@ -36,6 +38,8 @@ Page({
         statusClass: '',
         paymentMethodText: '',
         showCloseButton: false,
+        showPayButton: false,
+        paying: false,
         showRefundList: false
     },
 
@@ -113,6 +117,7 @@ Page({
         const statusClass = payment.status
         const paymentMethodText = this.getPaymentMethodText(payment.payment_type)
         const showCloseButton = payment.status === 'pending'
+        const showPayButton = payment.status === 'pending' && !!payment.order_id && payment.payment_type === 'miniprogram'
         const showRefundList = false
 
         this.setData({
@@ -122,8 +127,56 @@ Page({
             statusClass,
             paymentMethodText,
             showCloseButton,
+            showPayButton,
             showRefundList
         })
+    },
+
+    async onContinuePay() {
+        if (this.data.paying) return
+
+        const payment = this.data.payment
+        if (!payment || !payment.order_id) {
+            wx.showToast({ title: '订单信息缺失', icon: 'none' })
+            return
+        }
+
+        this.setData({ paying: true })
+        wx.showLoading({ title: '拉起支付...' })
+        try {
+            const latestPayment = await createPaymentOrder({
+                order_id: payment.order_id,
+                payment_type: 'miniprogram',
+                business_type: payment.business_type || 'order'
+            })
+
+            if (latestPayment.pay_params) {
+                await invokeWechatPay(latestPayment.pay_params)
+            } else if (latestPayment.status !== 'paid') {
+                throw new Error('支付参数缺失')
+            }
+
+            if (latestPayment.order_id) {
+                Navigation.toPaymentSuccess({
+                    orderId: String(latestPayment.order_id),
+                    orderNo: latestPayment.out_trade_no || String(latestPayment.order_id),
+                    amount: (latestPayment.amount / 100).toFixed(2)
+                })
+                return
+            }
+
+            wx.showToast({ title: '支付成功', icon: 'success' })
+            if (latestPayment.id) {
+                this.setData({ paymentId: latestPayment.id })
+            }
+            setTimeout(() => this.loadPaymentDetail(), 1200)
+        } catch (error) {
+            logger.error('继续支付失败', error, 'payment-detail.onContinuePay')
+            wx.showToast({ title: '支付未完成', icon: 'none' })
+        } finally {
+            wx.hideLoading()
+            this.setData({ paying: false })
+        }
     },
 
     async loadRefunds() {

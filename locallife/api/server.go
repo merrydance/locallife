@@ -943,6 +943,10 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/daily", server.listMerchantDailyFinance)
 		merchantFinanceGroup.GET("/settlements", server.listMerchantSettlements)
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
+		merchantFinanceGroup.GET("/account/balance", server.getMerchantAccountBalance)
+		merchantFinanceGroup.POST("/account/withdraw", server.createMerchantAccountWithdraw)
+		merchantFinanceGroup.GET("/account/withdrawals", server.listMerchantAccountWithdrawals)
+		merchantFinanceGroup.GET("/account/withdrawals/:id", server.getMerchantAccountWithdrawal)
 	}
 
 	// 商户设备管理路由

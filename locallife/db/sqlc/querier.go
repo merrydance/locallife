@@ -1198,6 +1198,7 @@ type Querier interface {
 	ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error)
 	// Find pending reservations within N minutes of payment deadline (for reminder notifications)
 	ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]TableReservation, error)
+	ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error)
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)

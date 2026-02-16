@@ -23,6 +23,13 @@ LIMIT $2 OFFSET $3;
 SELECT count(*) FROM withdrawal_records
 WHERE user_id = $1;
 
+-- name: ListPendingWithdrawalRecordsByChannel :many
+SELECT * FROM withdrawal_records
+WHERE channel = $1
+    AND status = 'pending'
+ORDER BY created_at ASC
+LIMIT $2;
+
 -- name: UpdateWithdrawalStatus :one
 UPDATE withdrawal_records
 SET 

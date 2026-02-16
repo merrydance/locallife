@@ -12,6 +12,8 @@ import { OrderCardAdapter } from '../../../adapters/order-card'
 import type { OrderCardViewModel } from '../../../adapters/order-card'
 import CartService from '../../../services/cart'
 import { OrderAdapter } from '../../../adapters/order'
+import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay } from '../../../api/payment'
+import Navigation from '../../../utils/navigation'
 
 // 简化后的状态筛选选项，更符合主流外卖APP习惯
 const STATUS_TABS = [
@@ -67,6 +69,10 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 Page({
   data: {
     orders: [] as OrderCardViewModel[],
+    selectedPayMap: {} as Record<number, boolean>,
+    selectedPayCount: 0,
+    pendingPayableCount: 0,
+    paying: false,
     navBarHeight: 88,
     loading: true,
     isError: false,
@@ -177,6 +183,9 @@ Page({
 
       this.setData({
         orders,
+        selectedPayMap: this.pruneSelectedPayMap(orders),
+        selectedPayCount: this.countSelectedPay(this.pruneSelectedPayMap(orders)),
+        pendingPayableCount: this.getPayableOrderIDs(orders).length,
         hasMore: orders.length < totalCount && orderDTOs.length > 0,
         loading: false
       })
@@ -200,8 +209,80 @@ Page({
   onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatus | '' }>) {
     const status = e.detail.value || ''
     if (status === this.data.currentStatus) return
-    this.setData({ currentStatus: status })
+    this.setData({
+      currentStatus: status,
+      selectedPayMap: {},
+      selectedPayCount: 0,
+      pendingPayableCount: 0
+    })
     this.loadOrders(true)
+  },
+
+  getPayableOrderIDs(orders: OrderCardViewModel[]): number[] {
+    return orders.filter((order) => order.canPay).map((order) => order.id)
+  },
+
+  pruneSelectedPayMap(orders: OrderCardViewModel[]): Record<number, boolean> {
+    const payableOrderIDs = this.getPayableOrderIDs(orders)
+    const payableSet = new Set(payableOrderIDs)
+    const nextSelectedMap: Record<number, boolean> = {}
+
+    Object.entries(this.data.selectedPayMap).forEach(([idStr, selected]) => {
+      const id = Number(idStr)
+      if (selected && payableSet.has(id)) {
+        nextSelectedMap[id] = true
+      }
+    })
+
+    return nextSelectedMap
+  },
+
+  countSelectedPay(selectedMap: Record<number, boolean>): number {
+    return Object.values(selectedMap).filter(Boolean).length
+  },
+
+  onTogglePaySelect(e: WechatMiniprogram.BaseEvent) {
+    const id = getDatasetId(e)
+    if (!id) return
+
+    const targetOrder = this.data.orders.find((order) => order.id === id)
+    if (!targetOrder || !targetOrder.canPay) return
+
+    const nextSelectedMap = { ...this.data.selectedPayMap }
+    if (nextSelectedMap[id]) {
+      delete nextSelectedMap[id]
+    } else {
+      nextSelectedMap[id] = true
+    }
+
+    this.setData({
+      selectedPayMap: nextSelectedMap,
+      selectedPayCount: this.countSelectedPay(nextSelectedMap)
+    })
+  },
+
+  onToggleSelectAllPending() {
+    const payableOrderIDs = this.getPayableOrderIDs(this.data.orders)
+    if (payableOrderIDs.length === 0) {
+      this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
+      return
+    }
+
+    const allSelected = payableOrderIDs.every((id) => this.data.selectedPayMap[id])
+    if (allSelected) {
+      this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
+      return
+    }
+
+    const nextSelectedMap: Record<number, boolean> = {}
+    payableOrderIDs.forEach((id) => {
+      nextSelectedMap[id] = true
+    })
+
+    this.setData({
+      selectedPayMap: nextSelectedMap,
+      selectedPayCount: payableOrderIDs.length
+    })
   },
 
   onViewOrder(e: WechatMiniprogram.BaseEvent) {
@@ -244,15 +325,83 @@ Page({
     }
   },
 
-  onPayOrder(e: WechatMiniprogram.BaseEvent) {
+  async onPayOrder(e: WechatMiniprogram.BaseEvent) {
     const id = getDatasetId(e)
     if (!id) {
       wx.showToast({ title: '订单信息缺失', icon: 'none' })
       return
     }
-    wx.navigateTo({
-      url: `/pages/user_center/payment-detail/index?orderId=${id}`
-    })
+
+    await this.paySingleOrder(id)
+  },
+
+  async paySingleOrder(orderId: number) {
+    if (this.data.paying) return
+
+    this.setData({ paying: true })
+    wx.showLoading({ title: '拉起支付...' })
+    try {
+      const payment = await createOrderPayment(orderId)
+      if (payment.pay_params) {
+        await invokeWechatPay(payment.pay_params)
+      }
+
+      this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
+      Navigation.toPaymentSuccess({
+        orderId: String(orderId),
+        orderNo: payment.out_trade_no || String(orderId),
+        amount: (payment.amount / 100).toFixed(2)
+      })
+    } catch (error) {
+      logger.error('单笔支付失败', error, 'List.paySingleOrder')
+      wx.showToast({ title: '支付未完成', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ paying: false })
+    }
+  },
+
+  async onBatchPay() {
+    if (this.data.paying) return
+
+    const selectedOrderIDs = Object.entries(this.data.selectedPayMap)
+      .filter(([, selected]) => selected)
+      .map(([idStr]) => Number(idStr))
+
+    if (selectedOrderIDs.length === 0) {
+      wx.showToast({ title: '请选择待支付订单', icon: 'none' })
+      return
+    }
+
+    if (selectedOrderIDs.length === 1) {
+      await this.paySingleOrder(selectedOrderIDs[0])
+      return
+    }
+
+    this.setData({ paying: true })
+    wx.showLoading({ title: '拉起合并支付...' })
+    try {
+      const combinedPayment = await createCombinedPaymentOrder({ order_ids: selectedOrderIDs })
+      if (combinedPayment.pay_params) {
+        await invokeWechatPay(combinedPayment.pay_params)
+      }
+
+      this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
+      const firstOrderID = combinedPayment.sub_orders?.[0]?.order_id || selectedOrderIDs[0]
+      Navigation.toPaymentSuccess({
+        orderId: String(firstOrderID),
+        orderNo: combinedPayment.combine_out_trade_no || String(firstOrderID),
+        amount: (combinedPayment.total_amount / 100).toFixed(2),
+        isCombined: true,
+        orderCount: selectedOrderIDs.length
+      })
+    } catch (error) {
+      logger.error('合并支付失败', error, 'List.onBatchPay')
+      wx.showToast({ title: '合并支付未完成', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ paying: false })
+    }
   },
 
   onReorder(e: WechatMiniprogram.BaseEvent) {
