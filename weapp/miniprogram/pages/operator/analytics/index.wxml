@@ -32,16 +32,6 @@
           </view>
         </view>
 
-        <!-- 区域分布图 -->
-        <view class="chart-card">
-          <view class="card-header">
-            <text class="card-title">区域订单分布</text>
-          </view>
-          <view class="chart-container">
-            <ec-canvas id="mychart-dom-bar" canvas-id="mychart-bar" ec="{{ ec }}"></ec-canvas>
-          </view>
-        </view>
-
         <!-- 商户排行榜 -->
         <view class="table-card">
           <view class="card-header">

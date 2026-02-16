@@ -61,7 +61,7 @@
           <view class="refund-list">
             <view class="refund-card" wx:for="{{profitSharingReturns}}" wx:key="id">
               <view class="refund-card-header">
-                <text class="refund-card-amount">¥{{(item.amount / 100).toFixed(2)}}</text>
+                <text class="refund-card-amount">¥{{item.amount / 100}}</text>
                 <text class="refund-card-status">{{item.status}}</text>
               </view>
               <view class="refund-card-body">

@@ -115,16 +115,31 @@ Page({
       'merchant_boss': '店长',
       'merchant_staff': '店员',
       'rider': '骑手',
+      'customer': '顾客',
       'operator': '运营',
-      'admin': '管理员'
+      'admin': '管理员',
+      'MERCHANT': '商家',
+      'MERCHANT_BOSS': '店长',
+      'MERCHANT_STAFF': '店员',
+      'RIDER': '骑手',
+      'CUSTOMER': '顾客',
+      'OPERATOR': '运营',
+      'ADMIN': '管理员'
     }
+
+    const nonCustomerRoleList = roleList.filter((r) => {
+      const normalized = String(r || '').toLowerCase()
+      return normalized !== 'customer'
+    })
+
+    const userRoles = nonCustomerRoleList.map((r) => ({ key: r, label: roleMap[r] || r }))
 
     this.setData({
       userInfo: {
         nickName: info.nickName || info.full_name || info.nickname || '微信用户',
         avatarUrl: info.avatarUrl || info.avatar_url || info.avatar || ''
       },
-      userRoles: roleList.map((r) => ({ key: r, label: roleMap[r] || r }))
+      userRoles
     })
 
     this.loadWorkbenches(roleList)

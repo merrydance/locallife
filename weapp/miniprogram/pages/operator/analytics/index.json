@@ -6,7 +6,6 @@
         "t-button": "tdesign-miniprogram/button/button",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-loading": "tdesign-miniprogram/loading/loading",
-        "ec-canvas": "/pages/operator/components/ec-canvas/index",
         "card-skeleton": "/components/card-skeleton/index",
         "list-skeleton": "/components/list-skeleton/index"
     }

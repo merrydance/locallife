@@ -38,6 +38,11 @@ p, admin, /v1/admin/riders, GET
 p, admin, /v1/admin/riders/:rider_id/approve, POST
 p, admin, /v1/admin/riders/:rider_id/reject, POST
 
+# Operator Application Review
+p, admin, /v1/admin/operators/applications, GET
+p, admin, /v1/admin/operators/applications/:id/approve, POST
+p, admin, /v1/admin/operators/applications/:id/reject, POST
+
 # Tag Management
 p, admin, /v1/tags, POST
 

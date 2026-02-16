@@ -14,6 +14,7 @@ interface RequestOptions {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   data?: unknown
+  timeout?: number
   loading?: boolean
   loadingText?: string
   context?: string // 请求上下文,用于批量取消
@@ -183,6 +184,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     data,
     loading = false, // 默认为 false，由页面根据业务逻辑显示骨架屏或局部加载
     loadingText = '加载中...',
+    timeout = API_CONFIG.TIMEOUT,
     context,
     requestId = `${method}_${url}_${Date.now()}`,
     retry = false,
@@ -255,6 +257,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         url: `${API_BASE}${url}`,
         method: method as WechatMiniprogram.RequestOption['method'],
         data: requestData,
+        timeout,
         header: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getToken()}`,

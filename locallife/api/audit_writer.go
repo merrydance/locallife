@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -66,7 +68,7 @@ func (w *DBAuditWriter) Write(ctx *gin.Context, input AuditLogInput) {
 	clientIP := ctx.ClientIP()
 	userAgent := ctx.Request.UserAgent()
 
-	_, err = w.store.CreateAuditLog(ctx, db.CreateAuditLogParams{
+	params := db.CreateAuditLogParams{
 		ActorUserID: pgtype.Int8{Int64: input.ActorUserID, Valid: true},
 		ActorRole:   input.ActorRole,
 		Action:      input.Action,
@@ -78,8 +80,14 @@ func (w *DBAuditWriter) Write(ctx *gin.Context, input AuditLogInput) {
 		ClientIp:    pgtype.Text{String: clientIP, Valid: clientIP != ""},
 		UserAgent:   pgtype.Text{String: userAgent, Valid: userAgent != ""},
 		Metadata:    metadataBytes,
-	})
-	if err != nil {
-		log.Warn().Err(err).Str("action", input.Action).Msg("failed to write audit log")
 	}
+
+	go func(action string, p db.CreateAuditLogParams) {
+		writeCtx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		defer cancel()
+
+		if _, writeErr := w.store.CreateAuditLog(writeCtx, p); writeErr != nil {
+			log.Warn().Err(writeErr).Str("action", action).Msg("failed to write audit log")
+		}
+	}(input.Action, params)
 }

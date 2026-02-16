@@ -3,13 +3,15 @@
 -- name: GetPlatformOverview :one
 -- 平台全局概览
 SELECT 
-    COUNT(DISTINCT CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') THEN o.id END)::int AS total_orders,
-    COALESCE(SUM(CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') AND o.status IN ('user_delivered', 'completed') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
-    COALESCE(SUM(CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') AND o.status IN ('user_delivered', 'completed') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
-    COUNT(DISTINCT CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') THEN o.merchant_id END)::int AS active_merchants,
-    COUNT(DISTINCT CASE WHEN o.created_at >= sqlc.arg('start_at') AND o.created_at <= sqlc.arg('end_at') THEN o.user_id END)::int AS active_users
+        COUNT(*)::int AS total_orders,
+        COALESCE(SUM(CASE WHEN o.status IN ('user_delivered', 'completed') THEN o.final_amount ELSE 0 END), 0)::bigint AS total_gmv,
+        COALESCE(SUM(CASE WHEN o.status IN ('user_delivered', 'completed') THEN o.platform_commission ELSE 0 END), 0)::bigint AS total_commission,
+        COUNT(DISTINCT o.merchant_id)::int AS active_merchants,
+        COUNT(DISTINCT o.user_id)::int AS active_users
 FROM orders o
-WHERE o.status NOT IN ('cancelled');
+WHERE o.created_at >= sqlc.arg('start_at')
+    AND o.created_at <= sqlc.arg('end_at')
+    AND o.status <> 'cancelled';
 
 -- name: GetPlatformDailyStats :many
 -- 平台日统计

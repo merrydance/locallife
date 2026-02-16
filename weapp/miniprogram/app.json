@@ -54,7 +54,8 @@
       "root": "pages/platform",
       "name": "platform",
       "pages": [
-        "dashboard/dashboard"
+        "dashboard/dashboard",
+        "operators/index"
       ],
       "independent": false
     },

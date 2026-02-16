@@ -110,6 +110,44 @@ export interface RejectRiderRequest extends Record<string, unknown> {
     review_notes?: string
 }
 
+// ==================== 运营商审核相关类型 ====================
+
+export interface AdminOperatorApplicationItem {
+    id: number
+    user_id: number
+    region_id: number
+    region_name: string
+    region_code: string
+    name: string
+    contact_name: string
+    contact_phone: string
+    business_license_url: string
+    business_license_number: string
+    legal_person_name: string
+    legal_person_id_number: string
+    requested_contract_years: number
+    status: string
+    submitted_at?: string
+    created_at: string
+}
+
+export interface ListAdminOperatorApplicationsResponse {
+    applications: AdminOperatorApplicationItem[]
+    total: number
+    page: number
+    limit: number
+    has_more: boolean
+}
+
+export interface ListAdminOperatorApplicationsParams extends Record<string, unknown> {
+    page?: number
+    limit?: number
+}
+
+export interface RejectOperatorApplicationRequest extends Record<string, unknown> {
+    reject_reason: string
+}
+
 // ==================== 配送费配置相关类型 ====================
 
 /** 配送费配置响应 - 对齐 api.deliveryFeeConfigResponse */
@@ -300,6 +338,38 @@ export class PlatformManagementService {
             url: `/v1/admin/riders/${riderId}/reject`,
             method: 'POST',
             data: rejectData
+        })
+    }
+
+    /**
+     * 获取待审运营商申请列表
+     */
+    async getAdminOperatorApplications(params: ListAdminOperatorApplicationsParams): Promise<ListAdminOperatorApplicationsResponse> {
+        return request({
+            url: '/v1/admin/operators/applications',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    /**
+     * 通过运营商申请
+     */
+    async approveOperatorApplication(applicationID: number): Promise<AdminOperatorApplicationItem> {
+        return request({
+            url: `/v1/admin/operators/applications/${applicationID}/approve`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 驳回运营商申请
+     */
+    async rejectOperatorApplication(applicationID: number, data: RejectOperatorApplicationRequest): Promise<AdminOperatorApplicationItem> {
+        return request({
+            url: `/v1/admin/operators/applications/${applicationID}/reject`,
+            method: 'POST',
+            data
         })
     }
 
@@ -909,21 +979,52 @@ export async function getPlatformManagementDashboard(): Promise<{
         peakHourConfigs: PeakHourConfigResponse[]
     }
 }> {
+    const emptyMerchantResponse: ListMerchantApplicationsResponse = {
+        applications: [],
+        total: 0,
+        page: 1,
+        limit: 50,
+        has_more: false,
+        stats: {
+            pending_count: 0,
+            approved_count: 0,
+            rejected_count: 0,
+            avg_review_time: 0
+        }
+    }
+
+    const emptyRiderResponse: ListAdminRidersResponse = {
+        riders: [],
+        total: 0,
+        page: 1,
+        limit: 50,
+        has_more: false,
+        stats: {
+            pending_count: 0,
+            approved_count: 0,
+            rejected_count: 0,
+            active_count: 0
+        }
+    }
+
+    // 兼容后端能力差异：商户审核接口可能未开放，骑手接口需显式 page>=1
     const [merchantApps, riders] = await Promise.all([
         platformManagementService.getMerchantApplications({
             status: 'pending',
+            page: 1,
             limit: 50
-        }),
+        }).catch(() => emptyMerchantResponse),
         platformManagementService.getAdminRiders({
             status: 'pending',
+            page: 1,
             limit: 50
-        })
+        }).catch(() => emptyRiderResponse)
     ])
 
-    // 获取所有申请进行效率分析
+    // 获取所有申请进行效率分析（同样做容错，避免单接口失败拖垮大屏）
     const [allMerchantApps, allRiders] = await Promise.all([
-        platformManagementService.getMerchantApplications({ limit: 1000 }),
-        platformManagementService.getAdminRiders({ limit: 1000 })
+        platformManagementService.getMerchantApplications({ page: 1, limit: 1000 }).catch(() => emptyMerchantResponse),
+        platformManagementService.getAdminRiders({ page: 1, limit: 1000 }).catch(() => emptyRiderResponse)
     ])
 
     const merchantEfficiency = reviewAnalyticsService.analyzeMerchantReviewEfficiency(allMerchantApps.applications)

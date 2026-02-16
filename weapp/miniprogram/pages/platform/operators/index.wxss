@@ -1,0 +1,73 @@
+.operators-page {
+  height: 100vh;
+  background: #f5f5f5;
+}
+
+.list-scroll {
+  height: calc(100vh - 88px);
+}
+
+.container {
+  padding: 24rpx;
+}
+
+.page-desc {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 20rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10rpx;
+}
+
+.name {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.meta {
+  color: #666;
+  font-size: 24rpx;
+  margin-bottom: 8rpx;
+}
+
+.actions {
+  margin-top: 10rpx;
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+}
+
+.empty-wrap,
+.loading-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 24rpx 0;
+}
+
+.no-more {
+  text-align: center;
+  color: #999;
+  font-size: 24rpx;
+  padding: 16rpx 0 24rpx;
+}
+
+.dialog-content {
+  padding-top: 8rpx;
+}
+
+.dialog-title {
+  font-size: 26rpx;
+  margin-bottom: 12rpx;
+}

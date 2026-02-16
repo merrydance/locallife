@@ -1,61 +1,79 @@
 /**
- * 超管平台管理大屏
- * 提供实时数据监控、平台概览、排行榜、快捷管理入口
+ * 平台管理中心
+ * 提供基础统计与管理入口（不做大屏展示）
  */
 
-import { getPlatformDashboardData } from '@/api/platform-dashboard'
-import { getPlatformManagementDashboard } from '@/api/platform-management'
-import type {
-    RealtimeDashboardData,
-    PlatformOverviewResponse,
-    MerchantRankingRow,
-    RiderRankingRow
-} from '@/api/platform-dashboard'
+import { platformDashboardService, type RealtimeDashboardData, type PlatformOverviewResponse } from '@/api/platform-dashboard'
 import { responsiveBehavior } from '@/utils/responsive'
 
-type DateRangeChangeEvent = WechatMiniprogram.CustomEvent<{ value: string }>
 type ActionTapEvent = WechatMiniprogram.CustomEvent & {
     currentTarget: {
         dataset: {
+            id?: string
             url?: string
         }
     }
 }
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 
+interface PlatformSummaryCards {
+    totalOrders: string
+    totalGMV: string
+    activeUsers: string
+    activeMerchants: string
+    onlineRiders: string
+    pendingOrders: string
+    pendingRiders: string
+}
+
+interface ManagementAction {
+    id: string
+    title: string
+    desc: string
+    icon: string
+    url?: string
+    badge?: string
+}
+
 Page({
     behaviors: [responsiveBehavior],
     data: {
         loading: true,
         refreshing: false,
-
-        // 实时数据
-        realtimeData: null as RealtimeDashboardData | null,
-
-        // 平台概览
+        requesting: false,
         overviewData: null as PlatformOverviewResponse | null,
-
-        // 排行榜
-        merchantRanking: [] as MerchantRankingRow[],
-        riderRanking: [] as RiderRankingRow[],
-
-        // 待审核数量
-        pendingMerchants: 0,
-        pendingRiders: 0,
-
-        // 日期范围选择
-        dateRangeOptions: [
-            { label: '今日', value: 'today', days: 1 },
-            { label: '近7天', value: 'week', days: 7 },
-            { label: '近30天', value: 'month', days: 30 },
-            { label: '近90天', value: 'quarter', days: 90 }
-        ],
-        selectedDateRange: 2, // 默认近30天
-
-        // 自动刷新定时器
+        realtimeData: null as RealtimeDashboardData | null,
+        summaryCards: {
+            totalOrders: '0',
+            totalGMV: '¥0.00',
+            activeUsers: '0',
+            activeMerchants: '0',
+            onlineRiders: '0',
+            pendingOrders: '0',
+            pendingRiders: '0'
+        } as PlatformSummaryCards,
+        actions: [
+            {
+                id: 'operators',
+                title: '运营商管理',
+                desc: '运营商入驻与区域管理',
+                icon: 'root-list',
+                url: '/pages/platform/operators/index'
+            },
+            {
+                id: 'rules',
+                title: '规则中心',
+                desc: '平台规则与命中审计',
+                icon: 'setting'
+            },
+            {
+                id: 'groups',
+                title: '集团申请审核',
+                desc: '审核集团入驻申请',
+                icon: 'app'
+            }
+        ] as ManagementAction[],
         refreshTimer: null as number | null,
-
-        // 导航栏高度
         navBarHeight: 0
     },
 
@@ -81,30 +99,51 @@ Page({
     },
 
     /**
-     * 加载大屏数据
+     * 加载管理中心数据
      */
     async loadDashboardData(silent = false) {
+        if (this.data.requesting) {
+            return
+        }
+
         try {
+            this.setData({ requesting: true })
             if (!silent) {
                 this.setData({ loading: true })
             }
 
-            // 并行加载所有数据
-            const [dashboardData, managementData] = await Promise.all([
-                getPlatformDashboardData(),
-                getPlatformManagementDashboard()
+            const endDate = new Date().toISOString().split('T')[0]
+            const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+            // 仅加载管理中心基础数据，避免调用不存在的接口
+            const [overviewData, realtimeData] = await Promise.all([
+                platformDashboardService.getPlatformOverview({ start_date: startDate, end_date: endDate }),
+                platformDashboardService.getRealtimeDashboard()
             ])
 
+            const actions = this.data.actions.map((item) => {
+                return {
+                    ...item,
+                    badge: ''
+                }
+            })
+
             this.setData({
-                realtimeData: dashboardData.realtime,
-                overviewData: dashboardData.overview,
-                merchantRanking: dashboardData.merchantRanking.slice(0, 10),
-                riderRanking: dashboardData.riderRanking.slice(0, 10),
-                pendingMerchants: managementData.merchantApplications.pending.length,
-                pendingRiders: managementData.riderApplications.pending.length
+                overviewData,
+                realtimeData,
+                summaryCards: {
+                    totalOrders: String(overviewData.summary.total_orders || 0),
+                    totalGMV: this.formatAmount(overviewData.summary.total_gmv || 0),
+                    activeUsers: String(overviewData.active_users || 0),
+                    activeMerchants: String(overviewData.summary.active_merchants || 0),
+                    onlineRiders: String(realtimeData.realtime_stats.online_riders || 0),
+                    pendingOrders: String(realtimeData.pending_orders || 0),
+                    pendingRiders: '0'
+                },
+                actions
             })
         } catch (error) {
-            console.error('加载大屏数据失败:', error)
+            console.error('加载平台管理中心数据失败:', error)
             if (!silent) {
                 wx.showToast({
                     title: '加载失败',
@@ -112,6 +151,7 @@ Page({
                 })
             }
         } finally {
+            this.setData({ requesting: false })
             if (!silent) {
                 this.setData({ loading: false })
             }
@@ -131,37 +171,19 @@ Page({
     },
 
     /**
-     * 切换日期范围
-     */
-    onDateRangeChange(e: DateRangeChangeEvent) {
-        const index = parseInt(e.detail.value)
-        this.setData({ selectedDateRange: index })
-        this.loadDashboardData()
-    },
-
-    /**
-     * 查看更多商户
-     */
-    onViewMoreMerchants() {
-        wx.navigateTo({
-            url: '/pages/platform/merchants/ranking'
-        })
-    },
-
-    /**
-     * 查看更多骑手
-     */
-    onViewMoreRiders() {
-        wx.navigateTo({
-            url: '/pages/platform/riders/ranking'
-        })
-    },
-
-    /**
      * 快捷操作点击
      */
     onActionTap(e: ActionTapEvent) {
-        const { url } = e.currentTarget.dataset
+        const { id, url } = e.currentTarget.dataset
+
+        if (id === 'rules' || id === 'groups') {
+            wx.showToast({
+                title: '管理功能建设中',
+                icon: 'none'
+            })
+            return
+        }
+
         if (url) {
             wx.navigateTo({ url })
         } else {
@@ -198,22 +220,7 @@ Page({
      * 格式化金额
      */
     formatAmount(amount: number): string {
-        if (amount >= 100000000) { // 1亿以上
-            return `¥${(amount / 100000000).toFixed(2)}亿`
-        } else if (amount >= 10000000) { // 1000万以上
-            return `¥${(amount / 10000000).toFixed(2)}千万`
-        } else if (amount >= 1000000) { // 100万以上
-            return `¥${(amount / 1000000).toFixed(2)}百万`
-        } else if (amount >= 10000) { // 1万以上
-            return `¥${(amount / 10000).toFixed(2)}万`
-        } else {
-            return `¥${(amount / 100).toFixed(2)}`
-        }
-    },
-
-    formatPercentage(value: number): string {
-        const sign = value >= 0 ? '+' : ''
-        return `${sign}${value.toFixed(1)}%`
+        return `¥${(amount / 100).toFixed(2)}`
     },
 
     /**

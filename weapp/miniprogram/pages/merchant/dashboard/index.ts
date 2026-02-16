@@ -2,71 +2,9 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import { MerchantOrderManagementService, KitchenDisplayService } from '../../../api/order-management'
 import { logger } from '../../../utils/logger'
 import dayjs from 'dayjs'
-import * as echarts from '@/libs/echarts'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 
-type EChartInstance = ReturnType<typeof echarts.init>
 type WsUnsubscribe = () => void
-
-interface ChartCanvas {
-  setChart: (chart: EChartInstance) => void
-}
-
-interface MerchantDailyStats {
-  total_revenue: number
-}
-
-let chart: EChartInstance | null = null
-
-function initChart(canvas: ChartCanvas, width: number, height: number, dpr: number) {
-  chart = echarts.init(canvas, null, {
-    width,
-    height,
-    devicePixelRatio: dpr
-  })
-  canvas.setChart(chart)
-
-  const option = {
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '10%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: [],
-      axisLine: { lineStyle: { color: '#999' } },
-      axisLabel: { color: '#999', fontSize: 10 }
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { lineStyle: { type: 'dashed', color: '#eee' } },
-      axisLabel: { color: '#999', fontSize: 10 }
-    },
-    series: [{
-      type: 'line',
-      smooth: true,
-      data: [],
-      symbol: 'circle',
-      symbolSize: 6,
-      itemStyle: { color: '#0052D9' },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(0, 82, 217, 0.2)' },
-          { offset: 1, color: 'rgba(0, 82, 217, 0)' }
-        ])
-      }
-    }]
-  }
-
-  chart.setOption(option)
-  return chart
-}
 
 Page({
   data: {
@@ -95,9 +33,6 @@ Page({
       { id: 5, name: '扬州炒饭', sales: 65, revenue: 130000 }
     ],
     loading: false,
-    ec: {
-      onInit: initChart
-    },
     _wsListeners: [] as WsUnsubscribe[]
   },
 
@@ -196,39 +131,13 @@ Page({
         'pendingCounts.exceptions': kStats?.orders_behind_schedule || 0 // 使用超时单作为异常提醒
       })
 
-      // 3. 加载趋势图
-      this.loadTrendData()
+      // 图表已移除：小程序仅保留简要统计与排行
 
     } catch (err) {
       logger.error('Merchant dashboard refresh failed', err)
     } finally {
       this.setData({ loading: false, initialLoading: false })
       wx.stopPullDownRefresh()
-    }
-  },
-
-  async loadTrendData() {
-    try {
-      // 模拟近7天日期
-      const dates = []
-      const promises: Array<Promise<MerchantDailyStats>> = []
-      for (let i = 6; i >= 0; i--) {
-        const d = dayjs().subtract(i, 'day').format('YYYY-MM-DD')
-        dates.push(dayjs(d).format('MM-DD'))
-        promises.push(MerchantOrderManagementService.getOrderStats({ start_date: d, end_date: d }))
-      }
-
-      const results = await Promise.all(promises)
-      const revenues = results.map((r) => r.total_revenue / 100)
-
-      if (chart) {
-        chart.setOption({
-          xAxis: { data: dates },
-          series: [{ data: revenues }]
-        })
-      }
-    } catch (err) {
-      logger.error('Load trend data failed', err)
     }
   },
 

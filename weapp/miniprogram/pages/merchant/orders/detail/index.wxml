@@ -33,7 +33,7 @@
           <view class="info-label">就餐位置</view>
           <view class="info-value">
             <view class="table-text">{{order.table_no}}号桌</view>
-            <view class="type-text">{{order.order_type_label}}</text>
+            <view class="type-text">{{order.order_type_label}}</view>
           </view>
         </view>
       </view>

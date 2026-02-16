@@ -87,10 +87,24 @@ export class ErrorHandler {
      */
   static handleNetworkError(error: unknown, context?: string): AppError {
     const detail = this.resolveErrorText(error) || '未知错误'
+    const normalized = detail.toLowerCase()
+
+    let userMessage = '网络连接失败,请检查网络设置'
+    if (normalized.includes('timeout') || normalized.includes('timed out')) {
+      userMessage = '请求超时,请稍后重试'
+    } else if (
+      normalized.includes('fail') ||
+      normalized.includes('network') ||
+      normalized.includes('offline') ||
+      normalized.includes('dns')
+    ) {
+      userMessage = '网络不可用,请检查网络设置'
+    }
+
     const appError = new AppError({
       type: ErrorType.NETWORK,
       message: `网络请求失败: ${detail}`,
-      userMessage: '网络连接失败,请检查网络设置'
+      userMessage
     }, error)
 
     // 后端不可用时使用简洁日志

@@ -248,6 +248,12 @@ func integrationDBSource() string {
 	if v := os.Getenv("INTEGRATION_DB_SOURCE"); strings.TrimSpace(v) != "" {
 		return v
 	}
+	if v := os.Getenv("TEST_DB_SOURCE"); strings.TrimSpace(v) != "" {
+		return v
+	}
+	if v := os.Getenv("DB_SOURCE"); strings.TrimSpace(v) != "" {
+		return v
+	}
 	return "postgresql:///locallife_test?sslmode=disable&host=/var/run/postgresql"
 }
 

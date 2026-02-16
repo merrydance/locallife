@@ -96,14 +96,9 @@
       </view>
     </view>
 
-    <!-- 5. 趋势简报 (Placeholder for ECharts) -->
+    <!-- 5. 简要经营排行 -->
     <view class="card-section">
-      <view class="card-title">近7日营收趋势</view>
-      <view class="chart-container">
-        <ec-canvas id="revenue-chart" canvas-id="revenue-chart" ec="{{ ec }}"></ec-canvas>
-      </view>
-
-      <view class="card-title" style="margin-top: 32rpx;">昨日热销排行</view>
+      <view class="card-title">昨日热销排行</view>
       <view class="ranking-list card-section">
         <view class="ranking-item" wx:for="{{hotDishes}}" wx:key="id">
           <view class="rank-num {{index < 3 ? 'top-three' : ''}}">{{index + 1}}</view>

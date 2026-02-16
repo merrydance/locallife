@@ -1,72 +1,7 @@
 import { isLargeScreen } from '@/utils/responsive'
-import * as echarts from '@/libs/echarts'
-
-type EChartInstance = ReturnType<typeof echarts.init>
-
-interface ChartCanvas {
-  setChart: (chart: EChartInstance) => void
-}
-
-function initChart(canvas: ChartCanvas, width: number, height: number, dpr: number) {
-  const chart = echarts.init(canvas, null, {
-    width,
-    height,
-    devicePixelRatio: dpr
-  })
-  canvas.setChart(chart)
-
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: [
-      {
-        type: 'category',
-        data: ['海淀', '朝阳', '西城', '东城', '丰台', '石景山', '通州'],
-        axisTick: {
-          alignWithLabel: true
-        }
-      }
-    ],
-    yAxis: [
-      {
-        type: 'value'
-      }
-    ],
-    series: [
-      {
-        name: '订单分布',
-        type: 'bar',
-        barWidth: '60%',
-        data: [120, 200, 150, 80, 70, 110, 130],
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#0052D9' },
-            { offset: 1, color: '#00A870' }
-          ])
-        }
-      }
-    ]
-  }
-
-  chart.setOption(option)
-  return chart
-}
 
 Page({
   data: {
-    ec: {
-      onInit: initChart
-    },
     isLargeScreen: false,
     navBarHeight: 88,
     loading: false,

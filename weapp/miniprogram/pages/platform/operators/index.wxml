@@ -1,0 +1,76 @@
+<custom-navbar title="运营商管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+
+<view class="operators-page" style="padding-top: {{navBarHeight}}px;">
+  <scroll-view
+    class="list-scroll"
+    scroll-y
+    refresher-enabled
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onRefresh"
+    bindscrolltolower="onLoadMore"
+  >
+    <view class="container">
+      <view class="page-desc">待审核申请 {{total}} 条</view>
+
+      <view wx:if="{{!loading && applications.length === 0}}" class="empty-wrap">
+        <t-empty description="暂无待审运营商申请" />
+      </view>
+
+      <view wx:for="{{applications}}" wx:key="id" class="card">
+        <view class="title-row">
+          <view class="name">{{item.name || item.legal_person_name || ('申请#' + item.id)}}</view>
+          <t-tag theme="warning" variant="light">待审核</t-tag>
+        </view>
+        <view class="meta">联系人：{{item.contact_name || '-'}}</view>
+        <view class="meta">电话：{{item.contact_phone || '-'}}</view>
+        <view class="meta">区域：{{item.region_name}} ({{item.region_code}})</view>
+        <view class="meta">申请时间：{{item.submitted_at || item.created_at}}</view>
+
+        <view class="actions">
+          <t-button
+            theme="danger"
+            variant="outline"
+            size="small"
+            loading="{{submitting}}"
+            bind:tap="onRejectTap"
+            data-id="{{item.id}}"
+            data-name="{{item.name || item.legal_person_name}}"
+          >驳回</t-button>
+          <t-button
+            theme="primary"
+            size="small"
+            loading="{{submitting}}"
+            bind:tap="onApproveTap"
+            data-id="{{item.id}}"
+          >通过</t-button>
+        </view>
+      </view>
+
+      <view wx:if="{{loading}}" class="loading-wrap">
+        <t-loading text="加载中" size="40rpx" />
+      </view>
+
+      <view wx:if="{{!hasMore && applications.length > 0}}" class="no-more">没有更多了</view>
+    </view>
+  </scroll-view>
+
+  <t-dialog
+    visible="{{showRejectDialog}}"
+    title="驳回运营商申请"
+    confirm-btn="确认驳回"
+    cancel-btn="取消"
+    bind:confirm="onRejectConfirm"
+    bind:cancel="onRejectCancel"
+  >
+    <view class="dialog-content">
+      <view class="dialog-title">申请方：{{selectedName || '-'}}</view>
+      <t-textarea
+        value="{{rejectReason}}"
+        placeholder="请输入驳回原因"
+        maxlength="200"
+        indicator
+        bind:change="onRejectReasonChange"
+      />
+    </view>
+  </t-dialog>
+</view>

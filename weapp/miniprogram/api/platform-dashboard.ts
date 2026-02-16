@@ -305,7 +305,9 @@ export class PlatformDashboardService {
     async getRealtimeDashboard(): Promise<RealtimeDashboardData> {
         return request({
             url: '/v1/platform/stats/realtime',
-            method: 'GET'
+            method: 'GET',
+            timeout: 45000,
+            retry: 1
         })
     }
 
@@ -317,7 +319,9 @@ export class PlatformDashboardService {
         return request({
             url: '/v1/platform/stats/overview',
             method: 'GET',
-            data: params
+            data: params,
+            timeout: 45000,
+            retry: 1
         })
     }
 
@@ -998,7 +1002,9 @@ export const platformAnalyticsService = new PlatformAnalyticsService()
 /**
  * 获取平台大屏完整数据
  */
-export async function getPlatformDashboardData(): Promise<{
+export async function getPlatformDashboardData(options?: {
+    includeRegionComparison?: boolean
+}): Promise<{
     realtime: RealtimeDashboardData
     overview: PlatformOverviewResponse
     merchantGrowth: MerchantGrowthResponse
@@ -1010,6 +1016,7 @@ export async function getPlatformDashboardData(): Promise<{
     growthAnalysis: ReturnType<PlatformAnalyticsService['analyzeGrowthTrends']>
     regionalAnalysis: ReturnType<PlatformAnalyticsService['analyzeRegionalPerformance']>
 }> {
+    const includeRegionComparison = options?.includeRegionComparison === true
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -1019,17 +1026,19 @@ export async function getPlatformDashboardData(): Promise<{
         merchantGrowth,
         userGrowth,
         merchantRanking,
-        riderRanking,
-        regionComparison
+        riderRanking
     ] = await Promise.all([
         platformDashboardService.getRealtimeDashboard(),
         platformDashboardService.getPlatformOverview({ start_date: startDate, end_date: endDate }),
         platformDashboardService.getMerchantGrowth({ start_date: startDate, end_date: endDate }),
         platformDashboardService.getUserGrowth({ start_date: startDate, end_date: endDate }),
         platformDashboardService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 20 }),
-        platformDashboardService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 20 }),
-        platformDashboardService.getRegionComparison({ start_date: startDate, end_date: endDate })
+        platformDashboardService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 20 })
     ])
+
+    const regionComparison = includeRegionComparison
+        ? await platformDashboardService.getRegionComparison({ start_date: startDate, end_date: endDate })
+        : []
 
     // 进行数据分析
     const healthAnalysis = platformAnalyticsService.analyzePlatformHealth(overview, realtime)
@@ -1079,7 +1088,7 @@ export async function generatePlatformReport(days: number = 30): Promise<{
         limitations: string[]
     }
 }> {
-    const dashboardData = await getPlatformDashboardData()
+    const dashboardData = await getPlatformDashboardData({ includeRegionComparison: true })
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 

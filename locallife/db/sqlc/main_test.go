@@ -18,11 +18,12 @@ func TestMain(m *testing.M) {
 	// 使用测试数据库连接
 	testDBSource := os.Getenv("TEST_DB_SOURCE")
 	if testDBSource == "" {
+		testDBSource = os.Getenv("DB_SOURCE")
+	}
+	if testDBSource == "" {
 		// 显式走 unix socket，避免某些驱动（例如 pq）将空 host 解析为 TCP/localhost 导致密码认证失败。
 		// 使用 /var/run/postgresql 是大多数 Linux 发行版的默认 socket 路径。
-		// 显式走 unix socket，避免某些驱动（例如 pq）将空 host 解析为 TCP/localhost 导致密码认证失败。
-		// 使用 /var/run/postgresql 是大多数 Linux 发行版的默认 socket 路径。
-		testDBSource = "postgresql:///locallife_dev?sslmode=disable&host=/var/run/postgresql"
+		testDBSource = "postgresql:///locallife_test?sslmode=disable&host=/var/run/postgresql"
 	}
 
 	// [SAFEGUARD] 只执行 Up（不做 Drop/Down），避免破坏性操作。

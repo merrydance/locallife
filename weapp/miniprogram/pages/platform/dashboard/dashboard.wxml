@@ -1,47 +1,48 @@
-<custom-navbar title="平台管理大屏" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+<custom-navbar title="平台管理中心" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view class="platform-dashboard" style="padding-top: {{navBarHeight}}px;">
-  <!-- Skeleton Loading -->
-  <view wx:if="{{loading && !realtimeData}}" class="skeleton-container animate-fade-in">
-    <view class="skeleton-grid">
-      <card-skeleton wx:for="{{4}}" wx:key="index" />
+  <scroll-view
+    scroll-y
+    class="dashboard-scroll"
+    refresher-enabled
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onRefresh"
+    style="height: calc(100vh - {{navBarHeight}}px);"
+  >
+    <view class="container">
+      <view class="section-title">基础统计</view>
+      <t-grid border="{{false}}" column="{{2}}">
+        <t-grid-item text="累计订单" description="{{summaryCards.totalOrders}}" icon="order" />
+        <t-grid-item text="累计GMV" description="{{summaryCards.totalGMV}}" icon="money-circle" />
+        <t-grid-item text="活跃用户" description="{{summaryCards.activeUsers}}" icon="user" />
+        <t-grid-item text="活跃商户" description="{{summaryCards.activeMerchants}}" icon="shop" />
+      </t-grid>
+
+      <view class="section-title">实时状态</view>
+      <t-grid border="{{false}}" column="{{3}}">
+        <t-grid-item text="在线骑手" description="{{summaryCards.onlineRiders}}" />
+        <t-grid-item text="待处理订单" description="{{summaryCards.pendingOrders}}" />
+        <t-grid-item text="待审骑手" description="{{summaryCards.pendingRiders}}" />
+      </t-grid>
+
+      <view class="section-title">管理入口</view>
+      <t-grid border="{{false}}" column="{{2}}">
+        <t-grid-item
+          wx:for="{{actions}}"
+          wx:key="id"
+          text="{{item.title}}"
+          description="{{item.desc}}"
+          icon="{{item.icon}}"
+          bind:click="onActionTap"
+          data-id="{{item.id}}"
+          data-url="{{item.url}}"
+        />
+      </t-grid>
+
+      <view wx:if="{{loading}}" class="loading-wrap">
+        <t-loading text="加载中" size="40rpx" />
+      </view>
     </view>
-    <view style="height: 20rpx;"></view>
-    <list-skeleton row="3" />
-  </view>
-
-  <block wx:else>
-    <!-- 1. 手机端布局 (Mobile) -->
-    <match-media max-width="749">
-      <scroll-view scroll-y class="dashboard-scroll" refresher-enabled refresher-triggered="{{refreshing}}" bindrefresherrefresh="onRefresh" style="height: calc(100vh - {{navBarHeight}}px);">
-        <view class="responsive-container">
-          <include src="./templates/mobile-content.wxml" />
-        </view>
-      </scroll-view>
-    </match-media>
-
-    <!-- 2. 平板端布局 (Tablet) -->
-    <match-media min-width="750" max-width="1279">
-      <scroll-view scroll-y class="dashboard-scroll" style="height: calc(100vh - {{navBarHeight}}px);">
-        <view class="responsive-container">
-          <include src="./templates/tablet-content.wxml" />
-        </view>
-      </scroll-view>
-    </match-media>
-
-    <!-- 3. PC窗口布局 (PC-Window) -->
-    <match-media min-width="1280" max-width="1599">
-      <view class="responsive-container">
-        <include src="./templates/pc-content.wxml" />
-      </view>
-    </match-media>
-
-    <!-- 4. PC全屏布局 (PC-Full) -->
-    <match-media min-width="1600">
-      <view class="pc-full-constraint">
-        <include src="./templates/pc-content-full.wxml" />
-      </view>
-    </match-media>
-  </block>
+  </scroll-view>
 </view>
 

@@ -883,6 +883,15 @@ func (server *Server) setupRouter() {
 		adminRiderGroup.POST("/:rider_id/reject", server.rejectRider)
 	}
 
+	// 平台管理员审核运营商申请
+	adminOperatorGroup := authGroup.Group("/admin/operators/applications")
+	adminOperatorGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		adminOperatorGroup.GET("", server.listPendingOperatorApplicationsAdmin)
+		adminOperatorGroup.POST("/:id/approve", server.approveOperatorApplicationAdmin)
+		adminOperatorGroup.POST("/:id/reject", server.rejectOperatorApplicationAdmin)
+	}
+
 	// M14: 通知系统路由
 	notificationsGroup := authGroup.Group("/notifications")
 	{
