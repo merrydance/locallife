@@ -44,7 +44,18 @@ func (store *SQLStore) ApproveRiderApplicationTx(ctx context.Context, arg Approv
 		// Create rider record (idempotent if already exists)
 		existingRider, err := q.GetRiderByUserID(ctx, result.Application.UserID)
 		if err == nil {
-			result.Rider = existingRider
+			if existingRider.Status == "pending" || existingRider.Status == "pending_bindbank" {
+				updatedRider, updateErr := q.UpdateRiderStatus(ctx, UpdateRiderStatusParams{
+					ID:     existingRider.ID,
+					Status: "active",
+				})
+				if updateErr != nil {
+					return fmt.Errorf("update existing rider status: %w", updateErr)
+				}
+				result.Rider = updatedRider
+			} else {
+				result.Rider = existingRider
+			}
 			return nil
 		}
 		if !errors.Is(err, ErrRecordNotFound) {
@@ -60,6 +71,14 @@ func (store *SQLStore) ApproveRiderApplicationTx(ctx context.Context, arg Approv
 		})
 		if err != nil {
 			return fmt.Errorf("create rider: %w", err)
+		}
+
+		result.Rider, err = q.UpdateRiderStatus(ctx, UpdateRiderStatusParams{
+			ID:     result.Rider.ID,
+			Status: "active",
+		})
+		if err != nil {
+			return fmt.Errorf("update rider status to active: %w", err)
 		}
 
 		return nil

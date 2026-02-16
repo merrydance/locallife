@@ -1056,8 +1056,30 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 			operator = op
 		}
 
+		riderOpenID := ""
+		if profitSharingOrder.RiderAmount > 0 && profitSharingOrder.RiderID.Valid {
+			rider, getRiderErr := server.store.GetRider(ctx, profitSharingOrder.RiderID.Int64)
+			if getRiderErr != nil {
+				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, getRiderErr))
+				return
+			}
+			user, getUserErr := server.store.GetUser(ctx, rider.UserID)
+			if getUserErr != nil {
+				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, getUserErr))
+				return
+			}
+			if user.WechatOpenid == "" {
+				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("rider wechat openid not configured")))
+				return
+			}
+			riderOpenID = user.WechatOpenid
+		}
+
 		hasProcessing := false
-		processReturn := func(outReturnNo, returnMchID, description string, amount int64) error {
+		processReturn := func(outReturnNo, returnAccountType, returnAccount, description string, amount int64) error {
 			returnRecord, err := server.store.CreateProfitSharingReturn(ctx, db.CreateProfitSharingReturnParams{
 				RefundOrderID:        refundOrder.ID,
 				ProfitSharingOrderID: profitSharingOrder.ID,
@@ -1065,7 +1087,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 				SubMchid:             paymentConfig.SubMchID,
 				OutOrderNo:           profitSharingOrder.OutOrderNo,
 				OutReturnNo:          outReturnNo,
-				ReturnMchid:          returnMchID,
+				ReturnMchid:          returnAccount,
 				Amount:               amount,
 				Status:               "pending",
 			})
@@ -1074,13 +1096,14 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 			}
 
 			returnResp, err := server.ecommerceClient.CreateProfitSharingReturn(ctx, &wechat.ProfitSharingReturnRequest{
-				SubMchID:    paymentConfig.SubMchID,
-				OrderID:     profitSharingOrder.SharingOrderID.String,
-				OutOrderNo:  profitSharingOrder.OutOrderNo,
-				OutReturnNo: outReturnNo,
-				ReturnMchID: returnMchID,
-				Amount:      amount,
-				Description: description,
+				SubMchID:          paymentConfig.SubMchID,
+				OrderID:           profitSharingOrder.SharingOrderID.String,
+				OutOrderNo:        profitSharingOrder.OutOrderNo,
+				OutReturnNo:       outReturnNo,
+				ReturnAccountType: returnAccountType,
+				ReturnAccount:     returnAccount,
+				Amount:            amount,
+				Description:       description,
 			})
 			if err != nil {
 				_, _ = server.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
@@ -1138,7 +1161,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 
 		if profitSharingOrder.PlatformCommission > 0 {
 			outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
-			if err := processReturn(outReturnNo, server.ecommerceClient.GetSpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission); err != nil {
+			if err := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, server.ecommerceClient.GetSpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission); err != nil {
 				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 				ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("profit sharing return failed")))
 				return
@@ -1146,7 +1169,15 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 		}
 		if profitSharingOrder.OperatorCommission > 0 {
 			outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
-			if err := processReturn(outReturnNo, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
+			if err := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
+				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("profit sharing return failed")))
+				return
+			}
+		}
+		if profitSharingOrder.RiderAmount > 0 {
+			outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
+			if err := processReturn(outReturnNo, wechat.ReceiverTypePersonal, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount); err != nil {
 				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 				ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("profit sharing return failed")))
 				return

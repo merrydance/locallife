@@ -623,8 +623,8 @@ func (c *EcommerceClient) FinishProfitSharing(ctx context.Context, subMchID, tra
 
 // ReceiverType 分账接收方类型
 const (
-	ReceiverTypeMerchant = "MERCHANT_ID"      // 商户号
-	ReceiverTypePersonal = "PERSONAL_OPENID"  // 个人openid
+	ReceiverTypeMerchant = "MERCHANT_ID"     // 商户号
+	ReceiverTypePersonal = "PERSONAL_OPENID" // 个人openid
 )
 
 // RelationType 分账关系类型
@@ -639,12 +639,12 @@ const (
 
 // AddReceiverRequest 添加分账接收方请求
 type AddReceiverRequest struct {
-	AppID           string `json:"appid"`                      // 应用ID
-	Type            string `json:"type"`                       // 接收方类型：MERCHANT_ID/PERSONAL_OPENID
-	Account         string `json:"account"`                    // 接收方账号（商户号或openid）
-	Name            string `json:"name,omitempty"`             // 接收方名称（需要加密）
-	EncryptedName   string `json:"encrypted_name,omitempty"`   // 加密后的接收方名称
-	RelationType    string `json:"relation_type"`              // 与分账方的关系类型
+	AppID         string `json:"appid"`                    // 应用ID
+	Type          string `json:"type"`                     // 接收方类型：MERCHANT_ID/PERSONAL_OPENID
+	Account       string `json:"account"`                  // 接收方账号（商户号或openid）
+	Name          string `json:"name,omitempty"`           // 接收方名称（需要加密）
+	EncryptedName string `json:"encrypted_name,omitempty"` // 加密后的接收方名称
+	RelationType  string `json:"relation_type"`            // 与分账方的关系类型
 }
 
 // AddReceiverResponse 添加分账接收方响应
@@ -727,9 +727,14 @@ type ProfitSharingReturnRequest struct {
 	OrderID     string // 微信分账单号
 	OutOrderNo  string // 商户分账单号
 	OutReturnNo string // 商户回退单号
-	ReturnMchID string // 回退商户号
-	Amount      int64  // 回退金额（分）
-	Description string // 回退描述
+	// 回退接收方（兼容两种写法）
+	// 推荐：ReturnAccountType + ReturnAccount
+	// 兼容：ReturnMchID（历史商户号字段）
+	ReturnAccountType string // MERCHANT_ID / PERSONAL_OPENID
+	ReturnAccount     string // 商户号或openid
+	ReturnMchID       string // 回退商户号（兼容旧逻辑）
+	Amount            int64  // 回退金额（分）
+	Description       string // 回退描述
 }
 
 // ProfitSharingReturnResponse 分账回退响应
@@ -754,9 +759,15 @@ func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *Pr
 		"order_id":      req.OrderID,
 		"out_order_no":  req.OutOrderNo,
 		"out_return_no": req.OutReturnNo,
-		"return_mchid":  req.ReturnMchID,
 		"amount":        req.Amount,
 		"description":   req.Description,
+	}
+
+	if req.ReturnAccountType != "" && req.ReturnAccount != "" {
+		body["return_account_type"] = req.ReturnAccountType
+		body["return_account"] = req.ReturnAccount
+	} else if req.ReturnMchID != "" {
+		body["return_mchid"] = req.ReturnMchID
 	}
 
 	respBody, err := c.doRequest(ctx, http.MethodPost, profitSharingReturnURL, body)

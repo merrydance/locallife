@@ -104,7 +104,7 @@ type approveRiderRequest struct {
 
 // approveRider godoc
 // @Summary 审核通过骑手申请（管理员）
-// @Description 管理员审核通过骑手入驻申请，骑手状态从pending变为pending_bindbank，需要完成微信支付开户才能接单
+// @Description 管理员审核通过骑手入驻申请，骑手状态变为active，可直接接单
 // @Tags 骑手管理
 // @Accept json
 // @Produce json
@@ -134,16 +134,15 @@ func (server *Server) approveRider(ctx *gin.Context) {
 		return
 	}
 
-	if rider.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该骑手不是待审核状态")))
+	if rider.Status != "pending" && rider.Status != "pending_bindbank" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该骑手状态不允许审核通过")))
 		return
 	}
 
-	// 审核通过后设置为 pending_bindbank 状态
-	// 骑手需要完成微信支付开户后才能正常接单
+	// 审核通过后直接激活，无需骑手开户流程
 	updated, err := server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
 		ID:     req.ID,
-		Status: "pending_bindbank",
+		Status: "active",
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

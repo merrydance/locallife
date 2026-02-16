@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -683,8 +684,51 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 		return
 	}
 
-	// 根据分账结果更新订单状态
-	switch resource.Receiver.Result {
+	queryResp, queryErr := server.ecommerceClient.QueryProfitSharing(ctx, resource.SubMchID, resource.TransactionID, resource.OutOrderNo)
+	if queryErr != nil {
+		log.Warn().Err(queryErr).
+			Str("out_order_no", resource.OutOrderNo).
+			Msg("query profit sharing detail failed, fallback to single receiver event")
+	}
+
+	finalResult := strings.ToUpper(resource.Receiver.Result)
+	finalFailReason := resource.Receiver.FailReason
+
+	if queryErr == nil {
+		allSuccess := strings.ToUpper(queryResp.Status) == "FINISHED"
+		hasFailed := false
+		failedReasons := make([]string, 0)
+
+		for _, receiver := range queryResp.Receivers {
+			result := strings.ToUpper(receiver.Result)
+			switch result {
+			case "SUCCESS":
+				// pass
+			case "FAILED", "CLOSED":
+				hasFailed = true
+				if receiver.FailReason != "" {
+					failedReasons = append(failedReasons, receiver.FailReason)
+				}
+				allSuccess = false
+			default:
+				allSuccess = false
+			}
+		}
+
+		switch {
+		case hasFailed:
+			finalResult = "FAILED"
+			if len(failedReasons) > 0 {
+				finalFailReason = strings.Join(failedReasons, ";")
+			}
+		case allSuccess:
+			finalResult = "SUCCESS"
+		default:
+			finalResult = "PROCESSING"
+		}
+	}
+
+	switch finalResult {
 	case "SUCCESS":
 		_, err = server.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID)
 		if err != nil {
@@ -701,7 +745,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 			Str("out_order_no", resource.OutOrderNo).
 			Msg("profit sharing completed successfully")
 
-	case "CLOSED", "FAILED":
+	case "FAILED", "CLOSED":
 		_, err = server.store.UpdateProfitSharingOrderToFailed(ctx, profitSharingOrder.ID)
 		if err != nil {
 			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "update_profit_sharing_order").Inc()
@@ -710,13 +754,19 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 		log.Error().
 			Int64("profit_sharing_order_id", profitSharingOrder.ID).
 			Str("out_order_no", resource.OutOrderNo).
-			Str("result", resource.Receiver.Result).
-			Str("fail_reason", resource.Receiver.FailReason).
+			Str("result", finalResult).
+			Str("fail_reason", finalFailReason).
 			Msg("⚠️ profit sharing failed - manual review required")
+
+	case "PROCESSING":
+		log.Info().
+			Int64("profit_sharing_order_id", profitSharingOrder.ID).
+			Str("out_order_no", resource.OutOrderNo).
+			Msg("profit sharing still processing")
 
 	default:
 		log.Warn().
-			Str("result", resource.Receiver.Result).
+			Str("result", finalResult).
 			Str("out_order_no", resource.OutOrderNo).
 			Msg("unknown profit sharing result")
 	}
@@ -741,8 +791,8 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 			&worker.ProfitSharingResultPayload{
 				ProfitSharingOrderID: profitSharingOrder.ID,
 				OutOrderNo:           resource.OutOrderNo,
-				Result:               resource.Receiver.Result,
-				FailReason:           resource.Receiver.FailReason,
+				Result:               finalResult,
+				FailReason:           finalFailReason,
 				MerchantID:           profitSharingOrder.MerchantID,
 			},
 			asynq.MaxRetry(3),
@@ -1147,22 +1197,11 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 				log.Error().Err(err).Int64("merchant_id", applyment.SubjectID).Msg("update merchant status")
 			}
 		case "rider":
-			// 更新骑手的二级商户号
-			_, err = server.store.UpdateRiderSubMchID(ctx, db.UpdateRiderSubMchIDParams{
-				ID:       applyment.SubjectID,
-				SubMchID: pgtype.Text{String: resource.SubMchID, Valid: true},
-			})
-			if err != nil {
-				log.Error().Err(err).Int64("rider_id", applyment.SubjectID).Msg("update rider sub_mch_id")
-			}
-			// 更新骑手状态为 active
-			_, err = server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-				ID:     applyment.SubjectID,
-				Status: "active",
-			})
-			if err != nil {
-				log.Error().Err(err).Int64("rider_id", applyment.SubjectID).Msg("update rider status")
-			}
+			log.Warn().
+				Int64("applyment_id", applyment.ID).
+				Int64("rider_id", applyment.SubjectID).
+				Str("sub_mch_id", resource.SubMchID).
+				Msg("rider applyment callback received but rider onboarding is disabled in current mode")
 		}
 	} else {
 		// 更新进件状态

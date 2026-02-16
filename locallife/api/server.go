@@ -810,10 +810,6 @@ func (server *Server) setupRouter() {
 		riderGroup.POST("/application/healthcert", server.uploadRiderHealthCert) // 上传健康证
 		riderGroup.POST("/application/submit", server.submitRiderApplication)    // 提交申请
 		riderGroup.POST("/application/reset", server.resetRiderApplication)      // 重置申请（被拒后）
-
-		// 骑手开户（微信支付二级商户进件）
-		riderGroup.POST("/applyment/bindbank", server.riderBindBank)        // 绑定银行卡开户
-		riderGroup.GET("/applyment/status", server.getRiderApplymentStatus) // 获取开户状态
 		riderGroup.GET("/me", server.getRiderMe)
 
 		// 押金管理
