@@ -1,0 +1,78 @@
+<custom-navbar
+  title="资金账户"
+  back="{{true}}"
+  home="{{false}}"
+  color="#1f2937"
+  background="#ffffff"
+></custom-navbar>
+
+<view class="page" style="padding-top: {{navBarHeight}}px;">
+  <scroll-view
+    class="content"
+    scroll-y
+    refresher-enabled
+    bindrefresherrefresh="onPullDownRefresh"
+  >
+    <view class="section">
+      <view class="section-title">账户余额</view>
+      <t-cell-group theme="card">
+        <t-cell title="可提现余额" note="¥{{formatAmount(balance.withdrawable_amount)}}" />
+        <t-cell title="账户可用余额" note="¥{{formatAmount(balance.available_amount)}}" />
+        <t-cell title="待结算金额" note="¥{{formatAmount(balance.pending_amount)}}" />
+      </t-cell-group>
+    </view>
+
+    <view class="section">
+      <view class="section-title">发起提现</view>
+      <t-cell-group theme="card">
+        <t-input
+          type="number"
+          label="提现金额"
+          placeholder="请输入金额（元）"
+          value="{{withdrawAmountYuan}}"
+          bindchange="onWithdrawAmountChange"
+        />
+        <t-input
+          label="备注"
+          placeholder="请输入提现备注"
+          value="{{withdrawRemark}}"
+          bindchange="onWithdrawRemarkChange"
+        />
+      </t-cell-group>
+
+      <view class="submit-wrap">
+        <t-button
+          theme="primary"
+          size="large"
+          block
+          loading="{{submitting}}"
+          disabled="{{loading || submitting}}"
+          bindtap="onSubmitWithdraw"
+        >
+          提交提现申请
+        </t-button>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-title">提现记录</view>
+      <t-cell-group theme="card">
+        <block wx:if="{{withdrawals.length > 0}}">
+          <view wx:for="{{withdrawals}}" wx:key="id" class="record-item">
+            <view class="record-row">
+              <text class="record-amount">¥{{formatAmount(item.amount)}}</text>
+              <t-tag theme="{{getStatusTheme(item.status)}}" variant="light">{{getStatusText(item.status)}}</t-tag>
+            </view>
+            <view class="record-meta">创建时间：{{item.created_at}}</view>
+            <view class="record-meta" wx:if="{{item.completed_at}}">完成时间：{{item.completed_at}}</view>
+            <view class="record-meta" wx:if="{{item.remark}}">备注：{{item.remark}}</view>
+            <view class="record-meta" wx:if="{{item.failure_reason}}">失败原因：{{item.failure_reason}}</view>
+          </view>
+        </block>
+        <t-empty wx:else description="暂无提现记录" />
+      </t-cell-group>
+    </view>
+  </scroll-view>
+
+  <t-loading wx:if="{{loading}}" text="加载中" fullscreen />
+</view>

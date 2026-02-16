@@ -1,4 +1,4 @@
-<custom-navbar title="骑手钱包" showBack="{{true}}" />
+<custom-navbar title="押金账户" showBack="{{true}}" />
 
 <scroll-view 
   scroll-y 
@@ -9,32 +9,33 @@
   <!-- 1. 余额总览卡片 -->
   <view class="wallet-card">
     <view class="balance-main">
-      <text class="label">可用余额 (元)</text>
+      <text class="label">可用押金 (元)</text>
       <view class="value">¥{{availableDeposit / 100}}</view>
     </view>
     
     <view class="balance-sub">
       <view class="sub-item">
-        <text class="sub-label">总资产</text>
+        <text class="sub-label">押金总额</text>
         <text class="sub-value">¥{{totalDeposit / 100}}</text>
       </view>
       <view class="balance-divider"></view>
       <view class="sub-item">
-        <text class="sub-label">待评价/冻结</text>
+        <text class="sub-label">冻结押金</text>
         <text class="sub-value">¥{{frozenDeposit / 100}}</text>
       </view>
     </view>
 
+    <view class="wallet-tip">配送分账资金将直接进入微信零钱，本页仅展示押金与账单记录</view>
+
     <view class="wallet-actions">
       <t-button block theme="primary" shape="round" bindtap="onShowRecharge">充值押金</t-button>
-      <t-button block variant="outline" theme="primary" shape="round" bindtap="onShowWithdraw">提取余额</t-button>
     </view>
   </view>
 
   <!-- 2. 交易记录列表 -->
   <view class="history-section">
     <view class="section-header">
-      <text class="section-title">收支明细</text>
+      <text class="section-title">账单明细</text>
     </view>
 
     <view class="history-list" wx:if="{{transactions.length > 0}}">
@@ -47,11 +48,11 @@
           />
         </view>
         <view class="item-info">
-          <view class="item-title">{{item.type === 'deposit' ? '押金充值' : (item.type === 'withdraw' ? '余额提现' : (item.type === 'freeze' ? '接单预扣' : '配送收益'))}}</view>
+          <view class="item-title">{{getTransactionTypeText(item.type)}}</view>
           <view class="item-time">{{item.created_at}}</view>
         </view>
-        <view class="item-amount {{item.amount > 0 ? 'positive' : 'negative'}}">
-          {{item.amount > 0 ? '+' : ''}}{{item.amount / 100}}
+        <view class="item-amount {{getTransactionAmountClass(item.amount, item.type)}}">
+          {{formatTransactionAmount(item.amount, item.type)}}
         </view>
       </view>
       <view class="load-more-tip" wx:if="{{!hasMore}}">没有更多记录了</view>
@@ -80,29 +81,5 @@
       t-class="amount-input"
     />
     <view class="dialog-tips">上线需保持押金不少于 100.00 元</view>
-  </view>
-</t-dialog>
-
-<!-- 提现弹窗 -->
-<t-dialog
-  visible="{{isWithdrawVisible}}"
-  title="提现申请"
-  confirm-btn="{{ {content: '提交申请', variant: 'base', theme: 'primary'} }}"
-  cancel-btn="取消"
-  bind:confirm="confirmWithdraw"
-  bind:cancel="onCloseDialog"
->
-  <view slot="content" class="dialog-content">
-    <t-input
-      placeholder="请输入提现金额"
-      type="digit"
-      label="金额(元)"
-      value="{{withdrawAmount}}"
-      data-field="withdrawAmount"
-      bind:change="onInputAmount"
-      suffix="全部提现"
-      t-class="amount-input"
-    />
-    <view class="dialog-tips">可提取余额 ¥{{availableDeposit / 100}}</view>
   </view>
 </t-dialog>

@@ -129,6 +129,7 @@
       "name": "merchant",
       "pages": [
         "dashboard/index",
+        "finance/index",
         "dishes/index",
         "dishes/edit/index",
         "orders/list/index",

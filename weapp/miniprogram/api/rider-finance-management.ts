@@ -37,12 +37,6 @@ export interface DepositRechargeRequest extends Record<string, unknown> {
     remark?: string
 }
 
-/** 提现请求 - 基于swagger api.withdrawRequest */
-export interface WithdrawRequest extends Record<string, unknown> {
-    amount: number
-    remark?: string
-}
-
 /** 保证金流水查询参数 */
 export interface DepositHistoryParams extends Record<string, unknown> {
     page: number
@@ -156,18 +150,6 @@ export class RiderFinanceManagementService {
             limit: params.limit,
             has_more: (deposits?.length || 0) >= params.limit
         }
-    }
-
-    /**
-     * 申请提现
-     * @param withdrawData 提现数据
-     */
-    async withdrawDeposit(withdrawData: WithdrawRequest): Promise<DepositResponse> {
-        return request({
-            url: '/v1/rider/withdraw',
-            method: 'POST',
-            data: withdrawData
-        })
     }
 
     /**
@@ -616,27 +598,6 @@ export function formatAmount(amount: number, showUnit: boolean = true): string {
 }
 
 /**
- * 验证提现金额
- * @param amount 提现金额（分）
- * @param availableDeposit 可用保证金
- */
-export function validateWithdrawAmount(amount: number, availableDeposit: number): { valid: boolean, message?: string } {
-    if (amount < 100) {
-        return { valid: false, message: '提现金额不能少于1元' }
-    }
-
-    if (amount > 5000000) {
-        return { valid: false, message: '单次提现金额不能超过50000元' }
-    }
-
-    if (amount > availableDeposit) {
-        return { valid: false, message: '提现金额不能超过可用余额' }
-    }
-
-    return { valid: true }
-}
-
-/**
  * 验证充值金额
  * @param amount 充值金额（分）
  */
@@ -650,25 +611,4 @@ export function validateRechargeAmount(amount: number): { valid: boolean, messag
     }
 
     return { valid: true }
-}
-
-/**
- * 计算提现手续费
- * @param amount 提现金额（分）
- */
-export function calculateWithdrawFee(amount: number): {
-    fee: number
-    actualAmount: number
-    feeRate: number
-} {
-    // 这里需要根据实际的手续费规则调整
-    const feeRate = 0.001 // 0.1%
-    const fee = Math.max(100, amount * feeRate) // 最低1元手续费
-    const actualAmount = amount - fee
-
-    return {
-        fee,
-        actualAmount,
-        feeRate: feeRate * 100
-    }
 }

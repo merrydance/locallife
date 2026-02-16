@@ -170,7 +170,7 @@ Page({
   },
 
   onFinanceInfo() {
-    wx.showToast({ title: '跳转财务流水', icon: 'none' })
+    wx.navigateTo({ url: '/pages/merchant/finance/index' })
   },
 
   onPrinterSettings() {

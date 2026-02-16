@@ -10,7 +10,7 @@
         <view class="credit-tag">信用分: {{riderInfo.credit_score || 100}}</view>
       </view>
       <view class="wallet-entry" bindtap="onGoToWallet">
-        <text>我的钱包</text>
+        <text>押金与账单</text>
         <t-icon name="chevron-right" size="32rpx" />
       </view>
     </view>

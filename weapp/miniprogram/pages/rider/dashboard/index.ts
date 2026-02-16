@@ -373,7 +373,7 @@ Page({
   },
 
   /**
-   * 提现/钱包
+   * 钱包
    */
   onGoToWallet() {
     wx.navigateTo({ url: '/pages/rider/deposit/index' })

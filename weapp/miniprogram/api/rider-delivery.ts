@@ -159,14 +159,6 @@ export interface DepositRecordResponse {
     created_at: string                           // 创建时间
 }
 
-/**
- * 提现请求 - 对齐 api.withdrawRequest
- */
-export interface WithdrawRequest extends Record<string, unknown> {
-    amount: number                               // 提现金额（分）
-    remark?: string                              // 备注
-}
-
 // ==================== 配送任务管理服务 ====================
 
 /**
@@ -449,17 +441,6 @@ export class RiderFinanceService {
         })
     }
 
-    /**
-     * 提现
-     * POST /v1/rider/withdraw
-     */
-    static async withdraw(data: WithdrawRequest): Promise<void> {
-        return await request({
-            url: '/v1/rider/withdraw',
-            method: 'POST',
-            data
-        })
-    }
 }
 
 // ==================== 配送管理适配器 ====================

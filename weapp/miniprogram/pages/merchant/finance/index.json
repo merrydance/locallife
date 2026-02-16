@@ -1,0 +1,13 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading"
+  }
+}

@@ -106,6 +106,12 @@ const navGroups: NavGroup[] = [
         icon: Wallet,
       },
       {
+        label: "资金账户",
+        href: "/merchant/finance/account",
+        activePrefix: "/merchant/finance/account",
+        icon: Wallet,
+      },
+      {
         label: "索赔追偿",
         href: "/merchant/claims",
         activePrefix: "/merchant/claims",

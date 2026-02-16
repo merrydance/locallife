@@ -69,6 +69,13 @@
   gap: 24rpx;
 }
 
+.wallet-tip {
+  margin: 0 0 24rpx;
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+  line-height: 1.6;
+}
+
 /* 历史列表 */
 .history-section {
   padding: var(--spacer-md);

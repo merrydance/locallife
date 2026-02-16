@@ -15,7 +15,7 @@ interface AmountInputDetail {
 }
 
 interface AmountInputDataset {
-    field?: 'withdrawAmount' | 'rechargeAmount'
+    field?: 'rechargeAmount'
 }
 
 interface DepositBalanceResponse {
@@ -36,6 +36,34 @@ interface UserMessageError {
     userMessage?: string
 }
 
+const transactionTypeTextMap: Record<string, string> = {
+    deposit: '押金充值',
+    recharge: '押金充值',
+    freeze: '接单预扣',
+    unfreeze: '押金解冻',
+    deduct: '押金扣减',
+    refund: '押金退回',
+    withdraw: '账单变动',
+    withdraw_rollback: '提现回滚',
+    split_income: '分账入账（微信零钱）',
+    income: '分账入账（微信零钱）',
+    earning: '分账入账（微信零钱）'
+}
+
+const transactionAmountSignMap: Record<string, 1 | -1> = {
+    deposit: 1,
+    recharge: 1,
+    unfreeze: 1,
+    refund: 1,
+    withdraw_rollback: 1,
+    split_income: 1,
+    income: 1,
+    earning: 1,
+    freeze: -1,
+    deduct: -1,
+    withdraw: -1
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -52,8 +80,6 @@ Page({
     hasMore: true,
     
     // 弹窗控制
-    isWithdrawVisible: false,
-    withdrawAmount: '',
     isRechargeVisible: false,
     rechargeAmount: ''
   },
@@ -97,10 +123,6 @@ Page({
     }
   },
 
-  onShowWithdraw() {
-    this.setData({ isWithdrawVisible: true, withdrawAmount: '' })
-  },
-
   onShowRecharge() {
     this.setData({ isRechargeVisible: true, rechargeAmount: '' })
   },
@@ -113,8 +135,7 @@ Page({
 
   onCloseDialog() {
     this.setData({
-        isRechargeVisible: false,
-        isWithdrawVisible: false
+                isRechargeVisible: false
     })
   },
 
@@ -157,42 +178,33 @@ Page({
     }
   },
 
-  /**
-   * 提交提现
-   */
-  async confirmWithdraw() {
-    const amount = parseFloat(this.data.withdrawAmount)
-    if (isNaN(amount) || amount <= 0) {
-        wx.showToast({ title: '请输入正确金额', icon: 'none' })
-        return
-    }
-
-    if (amount * 100 > this.data.availableDeposit) {
-        wx.showToast({ title: '可用余额不足', icon: 'none' })
-        return
-    }
-
-    wx.showLoading({ title: '提现处理中...' })
-    try {
-        await RiderService.request('/v1/rider/withdraw', 'POST', {
-            amount: Math.round(amount * 100)
-        })
-        wx.showToast({ title: '提现申请已提交', icon: 'success' })
-        this.setData({ isWithdrawVisible: false })
-        this.refreshAccount()
-        this.setData({ pageID: 1 }, () => this.loadTransactions())
-    } catch (err: unknown) {
-        const userMessage = (err as UserMessageError).userMessage
-        const message = typeof userMessage === 'string' && userMessage ? userMessage : '提现失败'
-        wx.showToast({ title: message, icon: 'none' })
-    } finally {
-        wx.hideLoading()
-    }
-  },
-
   onReachBottom() {
     if (this.data.hasMore) {
         this.setData({ pageID: this.data.pageID + 1 }, () => this.loadTransactions())
     }
+    },
+
+    getTransactionTypeText(type: string): string {
+        return transactionTypeTextMap[type] || '账单变动'
+    },
+
+    formatTransactionAmount(amount: number, type: string): string {
+        const sign = transactionAmountSignMap[type]
+        if (sign === 1) {
+            return `+${(Math.abs(amount) / 100).toFixed(2)}`
+        }
+        if (sign === -1) {
+            return `-${(Math.abs(amount) / 100).toFixed(2)}`
+        }
+        const raw = amount / 100
+        const prefix = raw > 0 ? '+' : ''
+        return `${prefix}${raw.toFixed(2)}`
+    },
+
+    getTransactionAmountClass(amount: number, type: string): string {
+        const sign = transactionAmountSignMap[type]
+        if (sign === 1) return 'positive'
+        if (sign === -1) return 'negative'
+        return amount >= 0 ? 'positive' : 'negative'
   }
 })
