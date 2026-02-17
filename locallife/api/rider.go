@@ -206,15 +206,15 @@ func (server *Server) rejectRider(ctx *gin.Context) {
 // 押金常量定义
 const (
 	// MinDepositAmount 最小充值金额：100分 = 1元
-	MinDepositAmount = int64(100)
+	MinDepositAmount = 1 * fenPerYuan
 	// MaxDepositAmount 最大充值金额：1000000分 = 10000元
-	MaxDepositAmount = int64(1000000)
+	MaxDepositAmount = 10000 * fenPerYuan
 	// MinWithdrawAmount 最小提现金额：100分 = 1元
-	MinWithdrawAmount = int64(100)
+	MinWithdrawAmount = 1 * fenPerYuan
 	// MaxWithdrawAmount 单次最大提现金额：5000000分 = 50000元
-	MaxWithdrawAmount = int64(5000000)
+	MaxWithdrawAmount = 50000 * fenPerYuan
 	// MinOnlineDeposit 上线所需最低押金：10000分 = 100元
-	MinOnlineDeposit = int64(10000)
+	MinOnlineDeposit = 100 * fenPerYuan
 )
 
 type depositRequest struct {
@@ -692,7 +692,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		resp.OnlineBlockReason = "账号未激活"
 	} else if availableDeposit < MinOnlineDeposit {
 		resp.CanGoOnline = false
-		resp.OnlineBlockReason = fmt.Sprintf("押金不足，需要至少%d元", MinOnlineDeposit/100)
+		resp.OnlineBlockReason = fmt.Sprintf("押金不足，需要至少%s元", fenToYuanString(MinOnlineDeposit, 0))
 	} else {
 		resp.CanGoOnline = true
 	}
@@ -1040,14 +1040,6 @@ func (server *Server) listRiders(ctx *gin.Context) {
 		PageID:     req.Page,
 		PageSize:   req.Limit,
 	})
-}
-
-// ==================== 辅助函数 ====================
-
-func numericFromFloat(f float64) pgtype.Numeric {
-	var n pgtype.Numeric
-	n.Scan(f)
-	return n
 }
 
 // ==================== 延时申报与异常上报 ====================

@@ -107,7 +107,7 @@ Page({
         operatorBasicManagementService.getFinanceOverview(),
         operatorAnalyticsService.getRealtimeStats(),
         operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending' }),
-        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending_approval' }),
+        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending' }),
         operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
         operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
         operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate),

@@ -208,7 +208,7 @@ func TestRechargeMembershipAPI(t *testing.T) {
 						UserID:       user.ID,
 						OutTradeNo:   gomock.Any().String(),
 						BusinessType: "membership_recharge",
-						Amount:       10000,
+						Amount:       100 * fenPerYuan,
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

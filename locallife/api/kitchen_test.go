@@ -504,7 +504,7 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 		ID:          1,
 		MerchantID:  merchant.ID,
 		Name:        "测试菜品",
-		Price:       1000,
+		Price:       10 * fenPerYuan,
 		PrepareTime: 20, // 20分钟制作时间
 		ImageUrl:    pgtype.Text{String: "https://example.com/dish.jpg", Valid: true},
 	}

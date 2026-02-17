@@ -513,7 +513,7 @@ func convertUserMembershipResponse(m db.ListUserMembershipsRow) membershipRespon
 		TotalRecharged: m.TotalRecharged,
 		TotalConsumed:  m.TotalConsumed,
 		CreatedAt:      m.CreatedAt,
-		UpdatedAt:      optionalTime(m.UpdatedAt),
+		UpdatedAt:      pgTimeToPtr(m.UpdatedAt),
 	}
 	if m.LogoUrl.Valid {
 		rsp.LogoURL = normalizeUploadURLForClient(m.LogoUrl.String)
@@ -531,7 +531,7 @@ func convertRechargeRuleResponse(rule db.RechargeRule) rechargeRuleResponse {
 		ValidFrom:      rule.ValidFrom,
 		ValidUntil:     rule.ValidUntil,
 		CreatedAt:      rule.CreatedAt,
-		UpdatedAt:      optionalTime(rule.UpdatedAt),
+		UpdatedAt:      pgTimeToPtr(rule.UpdatedAt),
 	}
 }
 

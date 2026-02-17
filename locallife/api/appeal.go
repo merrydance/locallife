@@ -1377,7 +1377,7 @@ func buildAppealNotificationContent(payload *worker.ProcessAppealResultPayload, 
 }
 
 func formatMoney(amount int64) string {
-	return strconv.FormatFloat(float64(amount)/100, 'f', 2, 64) + "元"
+	return fenToYuanString(amount, 2) + "元"
 }
 
 func getClaimTypeLabel(claimType string) string {

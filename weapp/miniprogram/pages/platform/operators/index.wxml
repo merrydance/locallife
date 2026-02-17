@@ -11,8 +11,32 @@
   >
     <view class="operators-container">
       <view class="summary-card">
-        <text class="summary-title">待审核申请</text>
-        <text class="summary-value">{{total}}</text>
+        <text class="summary-title">申请总数</text>
+        <text class="summary-value">{{filterStats.all || total}}</text>
+      </view>
+
+      <view class="section-card controls-card">
+        <view class="filter-row">
+          <view class="filter-chip {{statusFilter === 'all' ? 'active' : ''}}" data-name="all" bind:tap="onFilterChange">
+            全部 ({{filterStats.all}})
+          </view>
+          <view class="filter-chip {{statusFilter === 'submitted' ? 'active' : ''}}" data-name="submitted" bind:tap="onFilterChange">
+            待审核 ({{filterStats.submitted}})
+          </view>
+          <view class="filter-chip {{statusFilter === 'approved' ? 'active' : ''}}" data-name="approved" bind:tap="onFilterChange">
+            已通过 ({{filterStats.approved}})
+          </view>
+          <view class="filter-chip {{statusFilter === 'rejected' ? 'active' : ''}}" data-name="rejected" bind:tap="onFilterChange">
+            已驳回 ({{filterStats.rejected}})
+          </view>
+        </view>
+
+        <view class="sort-row">
+          <text class="sort-label">排序</text>
+          <picker mode="selector" range="{{sortOptionLabels}}" value="{{sortIndex}}" bindchange="onSortPickerChange">
+            <view class="sort-picker">{{sortOptionLabels[sortIndex]}}</view>
+          </picker>
+        </view>
       </view>
 
       <view wx:if="{{loading}}" class="section-card">
@@ -26,13 +50,13 @@
       </view>
 
       <view wx:if="{{!loading && !error && applications.length === 0}}" class="section-card status-wrap">
-        <t-empty description="暂无待审运营商申请" />
+        <t-empty description="当前筛选下暂无运营商申请" />
       </view>
 
-      <view wx:for="{{applications}}" wx:key="id" class="section-card app-card">
+      <view wx:for="{{applications}}" wx:key="id" class="section-card app-card" bind:tap="onDetailTap" data-id="{{item.id}}">
         <view class="title-row">
           <view class="name">{{item.name || item.legal_person_name || ('申请#' + item.id)}}</view>
-          <t-tag theme="warning" variant="dark">待审核</t-tag>
+          <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
         </view>
         <view class="meta-row">
           <text class="meta-label">联系人</text>
@@ -50,58 +74,9 @@
           <text class="meta-label">申请时间</text>
           <text class="meta-value">{{item.submitted_at || item.created_at}}</text>
         </view>
-
-        <view class="actions">
-          <t-button
-            theme="primary"
-            variant="outline"
-            shape="round"
-            size="small"
-            bind:tap="onDetailTap"
-            data-id="{{item.id}}"
-          >详情</t-button>
-          <t-button
-            theme="danger"
-            variant="outline"
-            shape="round"
-            size="small"
-            loading="{{submitting}}"
-            bind:tap="onRejectTap"
-            data-id="{{item.id}}"
-            data-name="{{item.name || item.legal_person_name}}"
-          >驳回</t-button>
-          <t-button
-            theme="primary"
-            shape="round"
-            size="small"
-            loading="{{submitting}}"
-            bind:tap="onApproveTap"
-            data-id="{{item.id}}"
-          >通过</t-button>
-        </view>
       </view>
 
       <view wx:if="{{!loading && !hasMore && applications.length > 0}}" class="no-more">没有更多了</view>
     </view>
   </scroll-view>
-
-  <t-dialog
-    visible="{{showRejectDialog}}"
-    title="驳回运营商申请"
-    confirm-btn="确认驳回"
-    cancel-btn="取消"
-    bind:confirm="onRejectConfirm"
-    bind:cancel="onRejectCancel"
-  >
-    <view class="dialog-content">
-      <view class="dialog-title">申请方：{{selectedName || '-'}}</view>
-      <t-textarea
-        value="{{rejectReason}}"
-        placeholder="请输入驳回原因"
-        maxlength="200"
-        indicator
-        bind:change="onRejectReasonChange"
-      />
-    </view>
-  </t-dialog>
 </view>

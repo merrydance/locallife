@@ -244,6 +244,9 @@ func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized 
 		}
 		return false, nil
 	case "operators":
+		if isAdmin {
+			return true, nil
+		}
 		if entityID == uid {
 			return true, nil
 		}
@@ -253,9 +256,6 @@ func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized 
 		}
 		if allowed {
 			return true, nil
-		}
-		if isIDCardPath(normalized) {
-			return isAdmin, nil
 		}
 		return false, nil
 	default:

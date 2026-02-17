@@ -29,7 +29,7 @@ type PlatformSessionState = {
 
 const PlatformSessionContext = createContext<PlatformSessionState | null>(null);
 
-const PLATFORM_ROLES = ["admin", "operator"];
+const PLATFORM_ROLES = ["admin"];
 
 export function PlatformSessionProvider({
   children,

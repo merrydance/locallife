@@ -782,7 +782,7 @@ func convertVoucherResponse(v db.Voucher) voucherResponse {
 	}
 
 	return rsp
-	
+
 }
 func convertUserVoucherResponseFromList(v db.ListUserVouchersRow) userVoucherResponse {
 	return userVoucherResponse{
@@ -796,10 +796,10 @@ func convertUserVoucherResponseFromList(v db.ListUserVouchersRow) userVoucherRes
 		Amount:         v.Amount,
 		MinOrderAmount: v.MinOrderAmount,
 		Status:         v.Status,
-		OrderID:        optionalInt64(v.OrderID),
+		OrderID:        pgInt8ToPtr(v.OrderID),
 		ObtainedAt:     v.ObtainedAt,
 		ExpiresAt:      v.ExpiresAt,
-		UsedAt:         optionalTime(v.UsedAt),
+		UsedAt:         pgTimeToPtr(v.UsedAt),
 	}
 }
 
@@ -815,10 +815,10 @@ func convertUserVoucherResponseFromAvailable(v db.ListUserAvailableVouchersRow) 
 		Amount:         v.Amount,
 		MinOrderAmount: v.MinOrderAmount,
 		Status:         v.Status,
-		OrderID:        optionalInt64(v.OrderID),
+		OrderID:        pgInt8ToPtr(v.OrderID),
 		ObtainedAt:     v.ObtainedAt,
 		ExpiresAt:      v.ExpiresAt,
-		UsedAt:         optionalTime(v.UsedAt),
+		UsedAt:         pgTimeToPtr(v.UsedAt),
 	}
 }
 
@@ -833,25 +833,9 @@ func convertUserVoucherResponseForMerchant(v db.ListUserAvailableVouchersForMerc
 		Amount:         v.Amount,
 		MinOrderAmount: v.MinOrderAmount,
 		Status:         v.Status,
-		OrderID:        optionalInt64(v.OrderID),
+		OrderID:        pgInt8ToPtr(v.OrderID),
 		ObtainedAt:     v.ObtainedAt,
 		ExpiresAt:      v.ExpiresAt,
-		UsedAt:         optionalTime(v.UsedAt),
+		UsedAt:         pgTimeToPtr(v.UsedAt),
 	}
-}
-
-func optionalInt64(v pgtype.Int8) *int64 {
-	if !v.Valid {
-		return nil
-	}
-	value := v.Int64
-	return &value
-}
-
-func optionalTime(v pgtype.Timestamptz) *time.Time {
-	if !v.Valid {
-		return nil
-	}
-	value := v.Time
-	return &value
 }

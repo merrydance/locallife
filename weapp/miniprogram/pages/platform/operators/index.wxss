@@ -42,6 +42,51 @@
   box-shadow: var(--shadow-sm);
 }
 
+.controls-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-xs);
+}
+
+.filter-chip {
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.filter-chip.active {
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-light);
+  font-weight: 600;
+}
+
+.sort-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sort-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.sort-picker {
+  padding: 8rpx 16rpx;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-primary);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
 .app-card {
   padding-bottom: var(--spacer-sm);
 }
@@ -91,13 +136,6 @@
   color: var(--td-text-color-primary);
 }
 
-.actions {
-  margin-top: var(--spacer-sm);
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacer-sm);
-}
-
 .status-wrap {
   display: flex;
   align-items: center;
@@ -109,14 +147,4 @@
   color: var(--td-text-color-placeholder);
   font-size: var(--font-size-xs);
   padding: var(--spacer-sm) 0 var(--spacer-lg);
-}
-
-.dialog-content {
-  padding-top: var(--spacer-xs);
-}
-
-.dialog-title {
-  font-size: var(--font-size-sm);
-  margin-bottom: var(--spacer-sm);
-  color: var(--td-text-color-primary);
 }

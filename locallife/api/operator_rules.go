@@ -50,7 +50,7 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 	// 1. 商户入驻保证金 (从 operator 表获取, 单位: 分 -> 元)
 	// MerchantDeposit is int64 (fen)
-	merchantDeposit := fmt.Sprintf("%.2f", float64(operator.MerchantDeposit)/100.0)
+	merchantDeposit := fenToYuanString(operator.MerchantDeposit, 2)
 
 	rules = append(rules, RuleItem{
 		ID:    "rule_1",
@@ -63,7 +63,7 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 	// 2. 骑手入驻押金 (从 operator 表获取, 单位: 分 -> 元)
 	// RiderDeposit is int64 (fen)
-	riderDeposit := fmt.Sprintf("%.2f", float64(operator.RiderDeposit)/100.0)
+	riderDeposit := fenToYuanString(operator.RiderDeposit, 2)
 	rules = append(rules, RuleItem{
 		ID:    "rule_2",
 		Name:  "骑手入驻押金",
@@ -90,12 +90,12 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	if err == nil {
 		// 4. 基础运费
 		// BaseFee 是分，转换为元
-		baseFee := float64(feeConfig.BaseFee) / 100.0
+		baseFee := fenToYuanString(feeConfig.BaseFee, 2)
 		rules = append(rules, RuleItem{
 			ID:    "rule_4",
 			Name:  "基础运费",
 			Key:   "BASE_DELIVERY_FEE",
-			Value: fmt.Sprintf("%.2f", baseFee),
+			Value: baseFee,
 			Unit:  "元",
 			Desc:  "配送的基础费用（含基础距离）",
 		})
@@ -112,23 +112,23 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 		// 6. 超距加价
 		// ExtraFeePerKm 是分，转换为元
-		extraFee := float64(feeConfig.ExtraFeePerKm) / 100.0
+		extraFee := fenToYuanString(feeConfig.ExtraFeePerKm, 2)
 		rules = append(rules, RuleItem{
 			ID:    "rule_6",
 			Name:  "超距加价",
 			Key:   "EXTRA_FEE_PER_KM",
-			Value: fmt.Sprintf("%.2f", extraFee),
+			Value: extraFee,
 			Unit:  "元/km",
 			Desc:  "超出基础距离后每公里的加价",
 		})
 
 		// 8. 最低运费
-		minFee := float64(feeConfig.MinFee) / 100.0
+		minFee := fenToYuanString(feeConfig.MinFee, 2)
 		rules = append(rules, RuleItem{
 			ID:    "rule_8",
 			Name:  "最低运费",
 			Key:   "MIN_DELIVERY_FEE",
-			Value: fmt.Sprintf("%.2f", minFee),
+			Value: minFee,
 			Unit:  "元",
 			Desc:  "配送费的最低下限",
 		})
@@ -136,7 +136,7 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		// 9. 最高运费 (MaxFee is nullable)
 		maxFeeVal := "不限"
 		if feeConfig.MaxFee.Valid {
-			maxFeeVal = fmt.Sprintf("%.2f", float64(feeConfig.MaxFee.Int64)/100.0)
+			maxFeeVal = fenToYuanString(feeConfig.MaxFee.Int64, 2)
 		}
 		rules = append(rules, RuleItem{
 			ID:    "rule_9",
@@ -302,7 +302,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		newRate := rate / 100.0
 		arg := db.UpdateOperatorParams{
 			ID:             operator.ID,
-			CommissionRate: float64ToPgNumeric(newRate),
+			CommissionRate: numericFromFloat(newRate),
 		}
 		_, err = server.store.UpdateOperator(ctx, arg)
 		if err != nil {
@@ -324,7 +324,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 
 		// Update operators table
 		// Convert to fen (int64)
-		valInt := int64(val * 100)
+		valInt := yuanToFen(val)
 		arg := db.UpdateOperatorRulesParams{
 			ID: operator.ID,
 		}
@@ -353,7 +353,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 					BaseFee:       DefaultBaseFee,
 					BaseDistance:  DefaultBaseDistance,
 					ExtraFeePerKm: DefaultExtraFeePerKm,
-					ValueRatio:    float64ToPgNumeric(DefaultValueRatio),
+					ValueRatio:    numericFromFloat(DefaultValueRatio),
 					MinFee:        DefaultMinFee,
 					IsActive:      true,
 				})
@@ -391,7 +391,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
 					return
 				}
-				arg.BaseFee = pgtype.Int8{Int64: int64(val * 100), Valid: true}
+				arg.BaseFee = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
 			case "BASE_DISTANCE":
 				if val < 0 {
 					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离不能为负数")))
@@ -403,13 +403,13 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
 					return
 				}
-				arg.ExtraFeePerKm = pgtype.Int8{Int64: int64(val * 100), Valid: true}
+				arg.ExtraFeePerKm = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
 			case "MIN_DELIVERY_FEE":
 				if val < 0 {
 					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
 					return
 				}
-				arg.MinFee = pgtype.Int8{Int64: int64(val * 100), Valid: true}
+				arg.MinFee = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
 			case "MAX_DELIVERY_FEE":
 				if val <= 0 {
 					// 0 or negative considered as no limit or clear limit?
@@ -417,7 +417,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 					// User might enter 0. Let's treat 0 as "No Limit" (NULL).
 					arg.MaxFee = pgtype.Int8{Valid: false}
 				} else {
-					arg.MaxFee = pgtype.Int8{Int64: int64(val * 100), Valid: true}
+					arg.MaxFee = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
 				}
 			case "DELIVERY_VALUE_RATIO":
 				if val < 0 || val > 100 {
@@ -425,7 +425,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 					return
 				}
 				// Percent to ratio: 1% -> 0.01
-				arg.ValueRatio = float64ToPgNumeric(val / 100.0)
+				arg.ValueRatio = numericFromFloat(val / 100.0)
 			}
 		}
 
@@ -451,7 +451,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		arg := db.UpdateOperatorRulesParams{
 			ID: operator.ID,
 		}
-		valNumeric := float64ToPgNumeric(val)
+		valNumeric := numericFromFloat(val)
 
 		switch key {
 		case "WEATHER_COEFF_EXTREME":
@@ -493,10 +493,4 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 	})
 
 	ctx.JSON(http.StatusOK, MessageResponse{Message: "修改成功"})
-}
-
-func float64ToPgNumeric(f float64) pgtype.Numeric {
-	var n pgtype.Numeric
-	_ = n.Scan(fmt.Sprintf("%f", f))
-	return n
 }

@@ -1395,7 +1395,7 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 	rider.IsOnline = true
 	rider.Status = "active"
 	rider.RegionID = pgtype.Int8{Int64: 1, Valid: true}
-	rider.DepositAmount = 10000 // 100元
+	rider.DepositAmount = 100 * fenPerYuan
 	rider.FrozenDeposit = 0
 
 	orderID := util.RandomInt(1, 1000)
@@ -1422,7 +1422,7 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				lowDepositRider := rider
-				lowDepositRider.DepositAmount = 1000 // 只有10元
+				lowDepositRider.DepositAmount = 10 * fenPerYuan
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					AnyTimes().

@@ -608,7 +608,7 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 		Distance:       distanceMeters,
 
 		EstimatedDeliveryTime: deliveryTimeSeconds,
-		EstimatedDeliveryFee:  int(float64(distanceMeters)/1000*100 + 300), // Simple fee: 3 RMB base + 1 RMB/km
+		EstimatedDeliveryFee:  int(yuanToFen(float64(distanceMeters)/1000) + yuanToFen(3)), // Simple fee: 3 RMB base + 1 RMB/km
 	}
 
 	// DEBUG LOG for searchDishes to trace fee issues

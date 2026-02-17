@@ -680,9 +680,9 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 
 	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
 	paymentOrder.Status = "paid"
-	paymentOrder.Amount = 10000
+	paymentOrder.Amount = 100 * fenPerYuan
 
-	refundOrder := randomRefundOrder(paymentOrder.ID, 10000)
+	refundOrder := randomRefundOrder(paymentOrder.ID, 100*fenPerYuan)
 
 	testCases := []struct {
 		name          string

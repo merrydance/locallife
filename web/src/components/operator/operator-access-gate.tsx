@@ -47,7 +47,7 @@ export function OperatorAccessGate({
         )}
         <div className={cn("flex flex-col gap-3", state.mode === "login" && "pt-2")}>
           <Button asChild>
-            <Link href="/merchant/login">前往登录</Link>
+            <Link href="/login">前往登录</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link href="/">返回首页</Link>

@@ -362,14 +362,14 @@ func (server *Server) scanTable(ctx *gin.Context) {
 
 // formatDeliveryReturnDesc 格式化满返描述
 func formatDeliveryReturnDesc(minAmount, returnAmount int64) string {
-	return "满" + strconv.FormatFloat(float64(minAmount)/100, 'f', 0, 64) +
-		"元返" + strconv.FormatFloat(float64(returnAmount)/100, 'f', 0, 64) + "元运费"
+	return "满" + fenToYuanString(minAmount, 0) +
+		"元返" + fenToYuanString(returnAmount, 0) + "元运费"
 }
 
 // formatDiscountDesc 格式化满减描述
 func formatDiscountDesc(minAmount, discountValue int64) string {
-	return "满" + strconv.FormatFloat(float64(minAmount)/100, 'f', 0, 64) +
-		"元减" + strconv.FormatFloat(float64(discountValue)/100, 'f', 0, 64) + "元"
+	return "满" + fenToYuanString(minAmount, 0) +
+		"元减" + fenToYuanString(discountValue, 0) + "元"
 }
 
 // generateTableQRCodeResponse 生成二维码响应

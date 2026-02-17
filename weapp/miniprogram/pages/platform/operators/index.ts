@@ -1,12 +1,26 @@
 import { responsiveBehavior } from '@/utils/responsive'
 import { platformManagementService, type AdminOperatorApplicationItem } from '@/api/platform-management'
 
+type OperatorApplicationStatus = 'all' | 'submitted' | 'approved' | 'rejected'
+type SortBy =
+  | 'latest'
+  | 'earliest'
+  | 'name_asc'
+  | 'name_desc'
+  | 'approved_first'
+  | 'rejected_first'
+  | 'submitted_first'
+type OperatorStatusTheme = 'warning' | 'success' | 'danger' | 'default'
+type OperatorApplicationDisplayItem = AdminOperatorApplicationItem & {
+  statusLabel: string
+  statusTheme: OperatorStatusTheme
+}
+
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {
   currentTarget: {
     dataset: {
       id?: number | string
-      name?: string
     }
   }
 }
@@ -18,20 +32,33 @@ Page({
     loading: false,
     requesting: false,
     refreshing: false,
-    submitting: false,
     error: null as string | null,
     page: 1,
     limit: 20,
     total: 0,
     hasMore: false,
-    applications: [] as AdminOperatorApplicationItem[],
-    showRejectDialog: false,
-    selectedID: 0,
-    selectedName: '',
-    rejectReason: ''
+    rawApplications: [] as AdminOperatorApplicationItem[],
+    applications: [] as OperatorApplicationDisplayItem[],
+    statusFilter: 'all' as OperatorApplicationStatus,
+    sortBy: 'latest' as SortBy,
+    sortOptionLabels: ['最新提交', '最早提交', '名称 A-Z', '名称 Z-A', '通过在前', '拒绝在前', '待审在前'],
+    sortOptions: ['latest', 'earliest', 'name_asc', 'name_desc', 'approved_first', 'rejected_first', 'submitted_first'] as SortBy[],
+    sortIndex: 0,
+    filterStats: {
+      all: 0,
+      submitted: 0,
+      approved: 0,
+      rejected: 0
+    }
   },
 
   onLoad() {
+    this.loadApplications(true)
+  },
+
+  onShow() {
+    if (this.data.requesting) return
+    if (this.data.rawApplications.length === 0) return
     this.loadApplications(true)
   },
 
@@ -68,11 +95,20 @@ Page({
         limit: this.data.limit
       })
 
+      const merged = reset
+        ? (response.applications || [])
+        : this.mergeApplications(this.data.rawApplications, response.applications || [])
+
+      const filterStats = this.buildFilterStats(merged)
+      const displayed = this.applyFilterAndSort(merged, this.data.statusFilter, this.data.sortBy)
+
       this.setData({
-        applications: reset ? response.applications : this.data.applications.concat(response.applications),
+        rawApplications: merged,
+        applications: displayed,
         total: response.total,
         page: response.page,
-        hasMore: response.has_more
+        hasMore: response.has_more,
+        filterStats
       })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '加载申请失败，请稍后重试'
@@ -87,89 +123,129 @@ Page({
     this.loadApplications(true)
   },
 
+  mergeApplications(
+    existing: AdminOperatorApplicationItem[],
+    incoming: AdminOperatorApplicationItem[]
+  ): AdminOperatorApplicationItem[] {
+    if (!incoming.length) return existing
+    const map = new Map<number, AdminOperatorApplicationItem>()
+    existing.forEach((item) => map.set(item.id, item))
+    incoming.forEach((item) => map.set(item.id, item))
+    return Array.from(map.values())
+  },
+
+  buildFilterStats(list: AdminOperatorApplicationItem[]) {
+    return {
+      all: list.length,
+      submitted: list.filter((item) => item.status === 'submitted').length,
+      approved: list.filter((item) => item.status === 'approved').length,
+      rejected: list.filter((item) => item.status === 'rejected').length
+    }
+  },
+
+  getStatusLabel(status: string): string {
+    if (status === 'submitted') return '待审核'
+    if (status === 'approved') return '已通过'
+    if (status === 'rejected') return '已驳回'
+    return status || '未知状态'
+  },
+
+  getStatusTheme(status: string): 'warning' | 'success' | 'danger' | 'default' {
+    if (status === 'submitted') return 'warning'
+    if (status === 'approved') return 'success'
+    if (status === 'rejected') return 'danger'
+    return 'default'
+  },
+
+  getSortTime(item: AdminOperatorApplicationItem): number {
+    const source = item.submitted_at || item.created_at
+    const t = source ? new Date(source).getTime() : 0
+    return Number.isFinite(t) ? t : 0
+  },
+
+  getStatusPriority(status: string, sortBy: SortBy): number {
+    if (sortBy === 'approved_first') {
+      if (status === 'approved') return 0
+      if (status === 'submitted') return 1
+      if (status === 'rejected') return 2
+      return 3
+    }
+    if (sortBy === 'rejected_first') {
+      if (status === 'rejected') return 0
+      if (status === 'submitted') return 1
+      if (status === 'approved') return 2
+      return 3
+    }
+    if (sortBy === 'submitted_first') {
+      if (status === 'submitted') return 0
+      if (status === 'approved') return 1
+      if (status === 'rejected') return 2
+      return 3
+    }
+    return 0
+  },
+
+  applyFilterAndSort(
+    source: AdminOperatorApplicationItem[],
+    statusFilter: OperatorApplicationStatus,
+    sortBy: SortBy
+  ): OperatorApplicationDisplayItem[] {
+    let list = source
+    if (statusFilter !== 'all') {
+      list = list.filter((item) => item.status === statusFilter)
+    }
+
+    const sorted = [...list]
+    sorted.sort((a, b) => {
+      if (sortBy === 'latest') return this.getSortTime(b) - this.getSortTime(a)
+      if (sortBy === 'earliest') return this.getSortTime(a) - this.getSortTime(b)
+
+      if (sortBy === 'approved_first' || sortBy === 'rejected_first' || sortBy === 'submitted_first') {
+        const rank = this.getStatusPriority(a.status, sortBy) - this.getStatusPriority(b.status, sortBy)
+        if (rank !== 0) return rank
+        return this.getSortTime(b) - this.getSortTime(a)
+      }
+
+      const nameA = (a.name || a.legal_person_name || '').toLowerCase()
+      const nameB = (b.name || b.legal_person_name || '').toLowerCase()
+      if (sortBy === 'name_asc') return nameA.localeCompare(nameB, 'zh-CN')
+      return nameB.localeCompare(nameA, 'zh-CN')
+    })
+
+    return sorted.map((item) => ({
+      ...item,
+      statusLabel: this.getStatusLabel(item.status),
+      statusTheme: this.getStatusTheme(item.status)
+    }))
+  },
+
+  onFilterChange(e: TapEvent) {
+    const status = (e.currentTarget.dataset.name || 'all') as OperatorApplicationStatus
+    if (status === this.data.statusFilter) return
+
+    const applications = this.applyFilterAndSort(this.data.rawApplications, status, this.data.sortBy)
+    this.setData({
+      statusFilter: status,
+      applications
+    })
+  },
+
+  onSortPickerChange(e: WechatMiniprogram.CustomEvent<{ value: number | string }>) {
+    const index = Number(e.detail.value || 0)
+    const sortBy = this.data.sortOptions[index] || 'latest'
+    const applications = this.applyFilterAndSort(this.data.rawApplications, this.data.statusFilter, sortBy)
+    this.setData({
+      sortIndex: index,
+      sortBy,
+      applications
+    })
+  },
+
   onDetailTap(e: TapEvent) {
     const id = Number(e.currentTarget.dataset.id || 0)
     if (!id) return
     wx.navigateTo({
       url: `/pages/platform/operators/detail?id=${id}`
     })
-  },
-
-  async onApproveTap(e: TapEvent) {
-    const id = Number(e.currentTarget.dataset.id || 0)
-    if (!id) return
-
-    const confirm = await new Promise<boolean>((resolve) => {
-      wx.showModal({
-        title: '通过申请',
-        content: '通过后将创建运营商账号并开通对应区域权限。',
-        success: (res) => resolve(res.confirm),
-        fail: () => resolve(false)
-      })
-    })
-    if (!confirm) return
-
-    try {
-      this.setData({ submitting: true })
-      await platformManagementService.approveOperatorApplication(id)
-      wx.showToast({ title: '审核通过', icon: 'success' })
-      await this.loadApplications(true)
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '审核失败'
-      wx.showToast({ title: message, icon: 'none' })
-    } finally {
-      this.setData({ submitting: false })
-    }
-  },
-
-  onRejectTap(e: TapEvent) {
-    const id = Number(e.currentTarget.dataset.id || 0)
-    if (!id) return
-
-    this.setData({
-      selectedID: id,
-      selectedName: String(e.currentTarget.dataset.name || ''),
-      rejectReason: '',
-      showRejectDialog: true
-    })
-  },
-
-  onRejectReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ rejectReason: e.detail.value || '' })
-  },
-
-  onRejectCancel() {
-    this.setData({
-      showRejectDialog: false,
-      selectedID: 0,
-      selectedName: '',
-      rejectReason: ''
-    })
-  },
-
-  async onRejectConfirm() {
-    const id = this.data.selectedID
-    const reason = this.data.rejectReason.trim()
-    if (!id) {
-      this.onRejectCancel()
-      return
-    }
-    if (!reason) {
-      wx.showToast({ title: '请输入驳回原因', icon: 'none' })
-      return
-    }
-
-    try {
-      this.setData({ submitting: true })
-      await platformManagementService.rejectOperatorApplication(id, { reject_reason: reason })
-      wx.showToast({ title: '已驳回', icon: 'success' })
-      this.onRejectCancel()
-      await this.loadApplications(true)
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '驳回失败'
-      wx.showToast({ title: message, icon: 'none' })
-    } finally {
-      this.setData({ submitting: false })
-    }
   }
 })

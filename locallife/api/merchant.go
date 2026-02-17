@@ -876,10 +876,11 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 	deliveryPromos, err := server.store.ListActiveDeliveryPromotionsByMerchant(ctx, merchantID)
 	if err == nil {
 		for _, promo := range deliveryPromos {
+			minAmountYuan := fenToYuanString(promo.MinOrderAmount, 0)
 			response.DeliveryFeeRules = append(response.DeliveryFeeRules, promotionItem{
 				Type:        "delivery_fee_return",
-				Title:       fmt.Sprintf("满%d返运费", promo.MinOrderAmount/100),
-				Description: fmt.Sprintf("订单满%d元，返还运费", promo.MinOrderAmount/100),
+				Title:       fmt.Sprintf("满%s返运费", minAmountYuan),
+				Description: fmt.Sprintf("订单满%s元，返还运费", minAmountYuan),
 				MinAmount:   promo.MinOrderAmount,
 				Value:       promo.DiscountAmount, // 实际返还金额
 				ValidUntil:  promo.ValidUntil.Format("2006-01-02"),
@@ -891,10 +892,12 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 	discounts, err := server.store.ListActiveDiscountRules(ctx, merchantID)
 	if err == nil {
 		for _, d := range discounts {
+			minAmountYuan := fenToYuanString(d.MinOrderAmount, 0)
+			discountYuan := fenToYuanString(d.DiscountAmount, 0)
 			response.DiscountRules = append(response.DiscountRules, promotionItem{
 				Type:        "discount",
-				Title:       fmt.Sprintf("满%d减%d", d.MinOrderAmount/100, d.DiscountAmount/100),
-				Description: fmt.Sprintf("订单满%d元，立减%d元", d.MinOrderAmount/100, d.DiscountAmount/100),
+				Title:       fmt.Sprintf("满%s减%s", minAmountYuan, discountYuan),
+				Description: fmt.Sprintf("订单满%s元，立减%s元", minAmountYuan, discountYuan),
 				MinAmount:   d.MinOrderAmount,
 				Value:       d.DiscountAmount,
 				ValidUntil:  d.ValidUntil.Format("2006-01-02"),
@@ -912,10 +915,12 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 		for _, v := range vouchers {
 			remaining := v.TotalQuantity - v.ClaimedQuantity
 			if remaining > 0 {
+				minAmountYuan := fenToYuanString(v.MinOrderAmount, 0)
+				voucherAmountYuan := fenToYuanString(v.Amount, 0)
 				response.Vouchers = append(response.Vouchers, promotionItem{
 					Type:        "voucher",
 					Title:       v.Name,
-					Description: fmt.Sprintf("满%d可用，减%d元", v.MinOrderAmount/100, v.Amount/100),
+					Description: fmt.Sprintf("满%s可用，减%s元", minAmountYuan, voucherAmountYuan),
 					MinAmount:   v.MinOrderAmount,
 					Value:       v.Amount,
 					ValidUntil:  v.ValidUntil.Format("2006-01-02"),
@@ -930,10 +935,13 @@ func (server *Server) getMerchantPromotions(ctx *gin.Context) {
 	if err == nil {
 		for _, r := range rechargeRules {
 			total := r.RechargeAmount + r.BonusAmount
+			rechargeYuan := fenToYuanString(r.RechargeAmount, 0)
+			bonusYuan := fenToYuanString(r.BonusAmount, 0)
+			totalYuan := fenToYuanString(total, 0)
 			response.RechargeRules = append(response.RechargeRules, promotionItem{
 				Type:        "recharge",
-				Title:       fmt.Sprintf("充%d送%d", r.RechargeAmount/100, r.BonusAmount/100),
-				Description: fmt.Sprintf("充值%d元，赠送%d元，到账%d元", r.RechargeAmount/100, r.BonusAmount/100, total/100),
+				Title:       fmt.Sprintf("充%s送%s", rechargeYuan, bonusYuan),
+				Description: fmt.Sprintf("充值%s元，赠送%s元，到账%s元", rechargeYuan, bonusYuan, totalYuan),
 				MinAmount:   r.RechargeAmount,
 				Value:       r.BonusAmount,
 				BonusAmount: r.BonusAmount,

@@ -5,12 +5,16 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   LayoutDashboard,
+  PanelsTopLeft,
   ScrollText,
   ShieldCheck,
+  Store,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useOperatorSession } from "@/components/providers/operator-session-provider";
+import { buildConsolePortals, type ConsolePortalKey } from "@/lib/role-portals";
 import { cn } from "@/lib/utils";
 
 const navGroups: Array<{
@@ -81,6 +85,14 @@ const navGroups: Array<{
 
 export function OperatorSidebar() {
   const pathname = usePathname();
+  const session = useOperatorSession();
+  const rolePortals = buildConsolePortals(session?.roles ?? []);
+
+  const portalIconMap: Record<ConsolePortalKey, LucideIcon> = {
+    merchant: Store,
+    operator: ShieldCheck,
+    platform: PanelsTopLeft,
+  };
 
   return (
     <aside className="hidden w-64 border-r bg-card/50 lg:flex lg:flex-col">
@@ -123,6 +135,39 @@ export function OperatorSidebar() {
             </div>
           </div>
         ))}
+
+        {rolePortals.length > 0 && (
+          <div className="space-y-3">
+            <div className="space-y-1 px-2">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">
+                角色入口
+              </div>
+              <div className="text-[11px] text-muted-foreground">按权限显示可访问控制台</div>
+            </div>
+            <div className="space-y-1">
+              {rolePortals.map((portal) => {
+                const active = pathname?.startsWith(portal.activePrefix);
+                const Icon = portalIconMap[portal.key];
+                return (
+                  <Link
+                    key={portal.key}
+                    href={portal.href}
+                    prefetch={false}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
+                      active
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{portal.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </nav>
     </aside>
   );

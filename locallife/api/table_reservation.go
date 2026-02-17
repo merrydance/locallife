@@ -29,10 +29,10 @@ const (
 
 // 超时和退款配置
 const (
-	PaymentTimeoutMinutes    = 30    // 支付超时时间：30分钟
-	RefundDeadlineHours      = 2     // 退款截止：预定时间前2小时
-	DefaultDepositAmount     = 10000 // 默认定金：100元（分）
-	ReservationDurationHours = 4     // 用餐时段时长：4小时（用于时间段冲突检测）
+	PaymentTimeoutMinutes    = 30               // 支付超时时间：30分钟
+	RefundDeadlineHours      = 2                // 退款截止：预定时间前2小时
+	DefaultDepositAmount     = 100 * fenPerYuan // 默认定金：100元（分）
+	ReservationDurationHours = 4                // 用餐时段时长：4小时（用于时间段冲突检测）
 )
 
 type createReservationRequest struct {

@@ -333,7 +333,7 @@ func TestDepositRiderAPI(t *testing.T) {
 						UserID:       user.ID,
 						PaymentType:  "miniprogram",
 						BusinessType: "rider_deposit",
-						Amount:       10000,
+						Amount:       100 * fenPerYuan,
 						Status:       "pending",
 						OutTradeNo:   "test_order_123",
 					}, nil)
@@ -368,7 +368,7 @@ func TestDepositRiderAPI(t *testing.T) {
 		{
 			name: "RiderNotFound",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "充值押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -387,7 +387,7 @@ func TestDepositRiderAPI(t *testing.T) {
 		{
 			name: "RiderNotActive",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "充值押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -438,8 +438,8 @@ func TestDepositRiderAPI(t *testing.T) {
 func TestGetRiderDepositBalanceAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
-	rider.DepositAmount = 50000 // 500元
-	rider.FrozenDeposit = 5000  // 冻结50元
+	rider.DepositAmount = 500 * fenPerYuan
+	rider.FrozenDeposit = 50 * fenPerYuan
 
 	testCases := []struct {
 		name          string
@@ -462,9 +462,9 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp depositBalanceResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, int64(50000), resp.TotalDeposit)
-				require.Equal(t, int64(5000), resp.FrozenDeposit)
-				require.Equal(t, int64(45000), resp.AvailableDeposit)
+				require.Equal(t, int64(500*fenPerYuan), resp.TotalDeposit)
+				require.Equal(t, int64(50*fenPerYuan), resp.FrozenDeposit)
+				require.Equal(t, int64(450*fenPerYuan), resp.AvailableDeposit)
 			},
 		},
 		{
@@ -526,8 +526,8 @@ func TestWithdrawRiderAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
 	rider.Status = "active"
-	rider.DepositAmount = 50000 // 500元
-	rider.FrozenDeposit = 5000  // 冻结50元
+	rider.DepositAmount = 500 * fenPerYuan
+	rider.FrozenDeposit = 50 * fenPerYuan
 
 	testCases := []struct {
 		name          string
@@ -539,7 +539,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: map[string]interface{}{
-				"amount": 10000, // 100元
+				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -564,15 +564,15 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Return(db.WithdrawDepositTxResult{
 						Rider: db.Rider{
 							ID:            rider.ID,
-							DepositAmount: 40000,
-							FrozenDeposit: 5000,
+							DepositAmount: 400 * fenPerYuan,
+							FrozenDeposit: 50 * fenPerYuan,
 						},
 						DepositLog: db.RiderDeposit{
 							ID:           1,
 							RiderID:      rider.ID,
-							Amount:       10000,
+							Amount:       100 * fenPerYuan,
 							Type:         "withdraw",
-							BalanceAfter: 40000,
+							BalanceAfter: 400 * fenPerYuan,
 						},
 					}, nil)
 			},
@@ -580,7 +580,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp depositResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, int64(10000), resp.Amount)
+				require.Equal(t, int64(100*fenPerYuan), resp.Amount)
 				require.Equal(t, "withdraw", resp.Type)
 			},
 		},
@@ -624,7 +624,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		{
 			name: "RiderNotActive",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -645,7 +645,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		{
 			name: "InsufficientBalance",
 			body: map[string]interface{}{
-				"amount": 100000, // 超过可用余额 45000
+				"amount": 1000 * fenPerYuan, // 超过可用余额 450元
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -664,7 +664,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		{
 			name: "HasActiveDeliveries",
 			body: map[string]interface{}{
-				"amount": 10000,
+				"amount": 100 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -721,8 +721,8 @@ func TestListRiderDepositsAPI(t *testing.T) {
 
 	// 创建测试押金流水
 	deposits := []db.RiderDeposit{
-		{ID: 1, RiderID: rider.ID, Amount: 10000, Type: "deposit", BalanceAfter: 10000},
-		{ID: 2, RiderID: rider.ID, Amount: 5000, Type: "withdraw", BalanceAfter: 5000},
+		{ID: 1, RiderID: rider.ID, Amount: 100 * fenPerYuan, Type: "deposit", BalanceAfter: 100 * fenPerYuan},
+		{ID: 2, RiderID: rider.ID, Amount: 50 * fenPerYuan, Type: "withdraw", BalanceAfter: 50 * fenPerYuan},
 	}
 
 	testCases := []struct {

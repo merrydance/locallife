@@ -142,11 +142,11 @@ func TestUpdateOperatorApplicationBusinessLicense(t *testing.T) {
 	app := createRandomOperatorApplication(t)
 
 	ocrData := map[string]string{
-		"company_name":     "测试公司",
-		"legal_person":     "张三",
-		"credit_code":      "91310000MA1K8F2M6A",
-		"registered_date":  "2020-01-01",
-		"business_scope":   "餐饮服务",
+		"company_name":    "测试公司",
+		"legal_person":    "张三",
+		"credit_code":     "91310000MA1K8F2M6A",
+		"registered_date": "2020-01-01",
+		"business_scope":  "餐饮服务",
 	}
 	ocrJSON, _ := json.Marshal(ocrData)
 
@@ -342,25 +342,30 @@ func TestResetOperatorApplicationToDraft(t *testing.T) {
 // ==================== List Tests ====================
 
 func TestListPendingOperatorApplications(t *testing.T) {
-	// 创建多个待审核的申请
+	// 创建多个申请并提交
 	for i := 0; i < 3; i++ {
 		app := createCompleteOperatorApplication(t)
 		_, err := testStore.SubmitOperatorApplication(context.Background(), app.ID)
 		require.NoError(t, err)
 	}
 
-	// 列出待审核的申请
+	// 列出申请（包含 submitted/approved/rejected）
 	apps, err := testStore.ListPendingOperatorApplications(context.Background(), ListPendingOperatorApplicationsParams{
 		Limit:  10,
 		Offset: 0,
 	})
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(apps), 3, "应该至少有3个待审核的申请")
+	require.GreaterOrEqual(t, len(apps), 3, "应该至少有3个申请")
 
-	// 验证返回的都是submitted状态
+	// 验证返回状态属于可见范围，并且至少包含一个 submitted
+	hasSubmitted := false
 	for _, app := range apps {
-		require.Equal(t, "submitted", app.Status)
+		require.Contains(t, []string{"submitted", "approved", "rejected"}, app.Status)
+		if app.Status == "submitted" {
+			hasSubmitted = true
+		}
 	}
+	require.True(t, hasSubmitted, "列表中应包含至少一个 submitted 状态申请")
 }
 
 func TestCountPendingOperatorApplications(t *testing.T) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -21,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { RuleHitRow, RuleSummary } from "@/types/platform-stats";
 
 export default function PlatformRulesPage() {
+  const searchParams = useSearchParams();
   const [rules, setRules] = useState<RuleSummary[]>([]);
   const [selectedRuleId, setSelectedRuleId] = useState<string>("");
   const [hits, setHits] = useState<RuleHitRow[] | null>(null);
@@ -67,6 +69,15 @@ export default function PlatformRulesPage() {
     [rules, selectedRuleId]
   );
   const displayHits = selectedRuleId ? hits ?? [] : [];
+
+  useEffect(() => {
+    const view = searchParams?.get("view");
+    if (view !== "hits") return;
+    const timer = window.setTimeout(() => {
+      document.getElementById("hits")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [searchParams, selectedRuleId, hits]);
 
   return (
     <PageShell>

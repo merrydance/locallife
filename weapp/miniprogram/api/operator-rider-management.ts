@@ -9,7 +9,7 @@ import { request } from '../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 骑手状态枚举 */
-export type RiderStatus = 'active' | 'suspended' | 'pending_approval' | 'rejected' | 'offline'
+export type RiderStatus = 'pending' | 'active' | 'suspended' | 'pending_approval' | 'rejected' | 'offline'
 
 /** 骑手在线状态枚举 */
 export type RiderOnlineStatus = 'online' | 'offline' | 'busy' | 'break'

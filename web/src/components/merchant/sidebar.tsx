@@ -25,6 +25,8 @@ import {
   Boxes,
   Building2,
   Receipt,
+  ShieldCheck,
+  PanelsTopLeft,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +35,7 @@ import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import { buildConsolePortals, type ConsolePortalKey } from "@/lib/role-portals";
 import { cn } from "@/lib/utils";
 
 type MerchantSessionLike = ReturnType<typeof useMerchantSession>;
@@ -219,11 +222,20 @@ export function MerchantSidebar() {
 
   const confirmLogout = () => {
     session?.logout();
-    router.replace("/merchant/login");
+    router.replace("/login");
   };
 
   // 商户名称：优先使用API返回的名称，否则显示加载中或默认值
   const merchantName = session?.merchant?.name || (session?.isReady ? "我的店铺" : null);
+  const rolePortals = buildConsolePortals(session?.roles ?? [], {
+    hasMerchantAccess: true,
+  });
+
+  const portalIconMap: Record<ConsolePortalKey, LucideIcon> = {
+    merchant: Store,
+    operator: ShieldCheck,
+    platform: PanelsTopLeft,
+  };
 
   return (
     <aside
@@ -336,6 +348,42 @@ export function MerchantSidebar() {
             </div>
           );
         })}
+
+        {rolePortals.length > 0 && (
+          <div className="mt-4">
+            {!collapsed && (
+              <div className="px-2 mb-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  角色入口
+                </span>
+              </div>
+            )}
+            {collapsed && <Separator className="my-2" />}
+
+            <div className="space-y-0.5">
+              {rolePortals.map((portal) => {
+                const active = pathname.startsWith(portal.activePrefix);
+                const Icon = portalIconMap[portal.key];
+                return (
+                  <Link key={portal.key} href={portal.href} title={portal.label} prefetch={false}>
+                    <span
+                      className={cn(
+                        "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                        collapsed && "justify-center px-2"
+                      )}
+                    >
+                      <Icon className={cn("size-4 shrink-0", active && "text-primary")} />
+                      {!collapsed && <span className="truncate">{portal.label}</span>}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* 底部：退出登录 */}

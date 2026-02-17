@@ -208,7 +208,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		UserID:      updatedPaymentOrder.UserID,
 		Type:        "payment",
 		Title:       "支付成功",
-		Content:     fmt.Sprintf("您的订单支付已完成，支付金额%.2f元", float64(updatedPaymentOrder.Amount)/100),
+		Content:     fmt.Sprintf("您的订单支付已完成，支付金额%s元", fenToYuanString(updatedPaymentOrder.Amount, 2)),
 		RelatedType: "payment",
 		RelatedID:   updatedPaymentOrder.ID,
 		ExtraData: map[string]any{

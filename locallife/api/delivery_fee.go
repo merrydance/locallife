@@ -1075,10 +1075,10 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 
 // 默认运费配置常量（当区域没有配置时使用）
 const (
-	DefaultBaseFee             int64   = 500 // 默认基础运费 5 元
+	DefaultBaseFee             int64   = 5 * fenPerYuan // 默认基础运费 5 元
 	DefaultBaseDistance        int32   = 3000
-	DefaultExtraFeePerKm       int64   = 100 // 1 元/km
-	DefaultMinFee              int64   = 500 // 5 元
+	DefaultExtraFeePerKm       int64   = 1 * fenPerYuan // 1 元/km
+	DefaultMinFee              int64   = 5 * fenPerYuan // 5 元
 	DefaultValueRatio          float64 = 0.01
 	DefaultWeatherCoefficient  float64 = 1.0
 	DefaultPeakHourCoefficient float64 = 1.0

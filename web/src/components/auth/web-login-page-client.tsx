@@ -6,7 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMerchantSession } from "@/components/providers/merchant-session-provider";
+import {
+  buildConsolePortals,
+  pickLandingPortal,
+  setLastPortal,
+} from "@/lib/role-portals";
 import { cn } from "@/lib/utils";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE?.trim() || "/v1").replace(
@@ -29,6 +33,11 @@ type WebLoginConsumeResponse = {
   access_token_expires_at: string;
   refresh_token: string;
   refresh_token_expires_at: string;
+};
+
+type UserProfile = {
+  id: number;
+  roles: string[];
 };
 
 async function publicPost<T>(path: string, body?: Record<string, unknown>) {
@@ -87,7 +96,6 @@ export function WebLoginPageClient() {
   const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const pollingRef = useRef<number | null>(null);
-  const merchantSession = useMerchantSession();
   const consumingRef = useRef(false);
   const lastConsumeAttemptRef = useRef(0);
   const creatingRef = useRef(false);
@@ -143,6 +151,58 @@ export function WebLoginPageClient() {
     if (!session?.code) return "";
     return session.qr_payload || `web-login:${session.code}`;
   }, [session?.code, session?.qr_payload]);
+
+  const authGet = useCallback(async <T,>(
+    path: string,
+    accessToken: string,
+    options: { allow403?: boolean; allow404?: boolean } = {}
+  ): Promise<T | null> => {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "X-Response-Envelope": "1",
+      },
+      cache: "no-store",
+    });
+
+    if ((options.allow403 && response.status === 403) || (options.allow404 && response.status === 404)) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+
+    const json = (await response.json()) as { data?: T; code?: number; message?: string } | T;
+    if (json && typeof json === "object" && "code" in json && typeof json.code === "number") {
+      if (json.code !== 0) {
+        throw new Error(json.message || "Request failed");
+      }
+      return (json as { data?: T }).data ?? null;
+    }
+    if (json && typeof json === "object" && "data" in json) {
+      return (json as { data?: T }).data ?? null;
+    }
+    return json as T;
+  }, []);
+
+  const resolveLandingPath = useCallback(async (accessToken: string): Promise<string | null> => {
+    const user = await authGet<UserProfile>("/users/me", accessToken);
+    if (!user) return null;
+    const merchantProfile = await authGet<unknown>("/merchants/me", accessToken, {
+      allow403: true,
+      allow404: true,
+    });
+    const portals = buildConsolePortals(user.roles || [], {
+      hasMerchantAccess: !!merchantProfile,
+    });
+    const landingPortal = pickLandingPortal(portals);
+    if (!landingPortal) return null;
+    setLastPortal(landingPortal.key);
+    return landingPortal.href;
+  }, [authGet]);
 
   const createSession = useCallback(async () => {
     if (creatingRef.current) return;
@@ -205,18 +265,20 @@ export function WebLoginPageClient() {
       window.localStorage.setItem("refresh_token", result.refresh_token);
       setIsRedirecting(true);
       try {
-        logInfo("merchant_session:refresh");
-        await merchantSession?.refresh();
-        logInfo("redirect:replace", "/merchant/dashboard");
-        router.replace("/merchant/dashboard");
-        logInfo("redirect:hard", "/merchant/dashboard");
-        window.location.href = "/merchant/dashboard";
+        const landingPath = await resolveLandingPath(result.access_token);
+        if (!landingPath) {
+          throw new Error("NO_CONSOLE_ACCESS");
+        }
+        logInfo("redirect:replace", landingPath);
+        router.replace(landingPath);
+        logInfo("redirect:hard", landingPath);
+        window.location.href = landingPath;
       } catch {
-        logWarn("merchant_session:refresh_failed");
+        logWarn("session:resolve_landing_failed");
         window.localStorage.removeItem("access_token");
         window.localStorage.removeItem("refresh_token");
         setIsRedirecting(false);
-        setError("当前账号不是商户主账号，无法登录工作台");
+        setError("当前账号暂无可访问的控制台权限");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -237,7 +299,7 @@ export function WebLoginPageClient() {
       }
       consumingRef.current = false;
     }
-  }, [router, merchantSession, logInfo, logWarn]);
+  }, [router, resolveLandingPath, logInfo, logWarn]);
 
   const handleStatus = useCallback(async (status: WebLoginSessionStatus) => {
     logInfo("status:update", {
@@ -317,17 +379,20 @@ export function WebLoginPageClient() {
     redirectingRef.current = true;
     setIsRedirecting(true);
     logInfo("auto_redirect:token_found");
-    Promise.resolve(merchantSession?.refresh())
-      .then(() => {
-        logInfo("auto_redirect:success", "/merchant/dashboard");
-        window.location.href = "/merchant/dashboard";
+    resolveLandingPath(token)
+      .then((landingPath) => {
+        if (!landingPath) {
+          throw new Error("NO_CONSOLE_ACCESS");
+        }
+        logInfo("auto_redirect:success", landingPath);
+        window.location.href = landingPath;
       })
       .catch(() => {
         logWarn("auto_redirect:failed");
         redirectingRef.current = false;
         setIsRedirecting(false);
       });
-  }, [merchantSession, logInfo, logWarn]);
+  }, [resolveLandingPath, logInfo, logWarn]);
 
   useEffect(() => {
     if (!loginPayload) return;

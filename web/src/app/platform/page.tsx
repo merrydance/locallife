@@ -22,6 +22,7 @@ export default function PlatformDashboardPage() {
   const [overview, setOverview] = useState<PlatformOverviewResponse | null>(null);
   const [dailyStats, setDailyStats] = useState<PlatformDailyStatRow[]>([]);
   const [rules, setRules] = useState<RuleSummary[]>([]);
+  const [rulesWarning, setRulesWarning] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
 
@@ -30,19 +31,27 @@ export default function PlatformDashboardPage() {
     Promise.all([
       apiGet<PlatformOverviewResponse>("/platform/stats/overview", range),
       apiGet<PlatformDailyStatRow[]>("/platform/stats/daily", range),
-      apiGet<{ rules: RuleSummary[] }>("/platform/rules", { limit: 6, offset: 0 }),
     ])
-      .then(([overviewData, dailyData, rulesData]) => {
+      .then(([overviewData, dailyData]) => {
         setOverview(overviewData);
         setDailyStats(dailyData ?? []);
-        setRules(rulesData?.rules ?? []);
         setLoadState("loaded");
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : "加载失败";
         setError(message);
         setLoadState("error");
+      });
+
+    apiGet<{ rules: RuleSummary[] }>("/platform/rules", { limit: 6, offset: 0 })
+      .then((rulesData) => {
+        setRules(rulesData?.rules ?? []);
       })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "规则数据加载失败";
+        setRulesWarning(message);
+        setRules([]);
+      });
   }, []);
 
   const orderGrowth = useMemo(() => {
@@ -142,6 +151,11 @@ export default function PlatformDashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {rulesWarning && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                规则中心数据暂不可用：{rulesWarning}
+              </div>
+            )}
             {rules.length === 0 && !loading ? (
               <div className="text-sm text-muted-foreground">暂无规则变更记录</div>
             ) : (

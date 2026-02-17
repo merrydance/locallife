@@ -53,7 +53,6 @@ Page({
     application: null as AdminOperatorApplicationDetail | null,
     statusLabel: '',
     statusTheme: 'primary' as StatusTheme,
-    showRejectDialog: false,
     rejectReason: ''
   },
 
@@ -138,42 +137,34 @@ Page({
     }
   },
 
-  onRejectTap() {
-    if (this.data.submitting) return
-    this.setData({
-      showRejectDialog: true,
-      rejectReason: ''
-    })
-  },
-
   onRejectReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ rejectReason: e.detail.value || '' })
   },
 
-  onRejectCancel() {
-    this.setData({
-      showRejectDialog: false,
-      rejectReason: ''
-    })
-  },
-
-  async onRejectConfirm() {
+  async onRejectTap() {
     const id = this.data.applicationID
     const reason = this.data.rejectReason.trim()
-    if (!id || this.data.submitting) {
-      this.onRejectCancel()
-      return
-    }
+    if (!id || this.data.submitting) return
     if (!reason) {
       wx.showToast({ title: '请输入驳回原因', icon: 'none' })
       return
     }
 
+    const confirm = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: '驳回申请',
+        content: '确认驳回该申请？',
+        success: (res) => resolve(res.confirm),
+        fail: () => resolve(false)
+      })
+    })
+    if (!confirm) return
+
     try {
       this.setData({ submitting: true })
       await platformManagementService.rejectOperatorApplication(id, { reject_reason: reason })
       wx.showToast({ title: '已驳回', icon: 'success' })
-      this.onRejectCancel()
+      this.setData({ rejectReason: '' })
       await this.loadDetail()
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '驳回失败'

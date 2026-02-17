@@ -157,7 +157,7 @@ type Querier interface {
 	CountOrderUrges(ctx context.Context, orderID int64) (int64, error)
 	CountOrdersByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountOrdersByMerchantAndStatus(ctx context.Context, arg CountOrdersByMerchantAndStatusParams) (int64, error)
-	// 统计待审核申请数量
+	// 统计申请数量（包含 submitted/approved/rejected）
 	CountPendingOperatorApplications(ctx context.Context) (int64, error)
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
 	CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error)
@@ -1191,7 +1191,7 @@ type Querier interface {
 	// 获取超时未接单的配送单
 	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
-	// 列出待审核的申请（平台管理员用）
+	// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
 	// ==================== 订单超时清理 ====================
 	// 获取超时未支付的 pending 订单（创建时间早于指定时间）

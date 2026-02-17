@@ -19,7 +19,6 @@ import (
 	"github.com/merrydance/locallife/util"
 )
 
-
 const defaultWebLoginSessionTTL = 5 * time.Minute
 
 // ==================== Web 登录扫码 ====================
@@ -355,14 +354,6 @@ func (server *Server) confirmWebLoginSession(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	if _, err := server.resolveMerchantForUser(ctx, authPayload.UserID); err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("需要商家账号才能确认")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
 	if session.Status == "confirmed" {
 		if session.UserID.Valid && session.UserID.Int64 == authPayload.UserID {
 			ctx.JSON(http.StatusOK, newWebLoginSessionStatusResponse(session))

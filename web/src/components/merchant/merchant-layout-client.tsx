@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { MerchantSidebar } from "@/components/merchant/sidebar";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { RealtimeNotificationHandler } from "@/components/merchant/realtime-notification-handler";
+import { setLastPortal } from "@/lib/role-portals";
 
 export function MerchantLayoutClient({
   children,
@@ -19,9 +20,15 @@ export function MerchantLayoutClient({
   useEffect(() => {
     if (isLogin) return;
     if (session?.isReady && !session.isAuthenticated) {
-      router.replace("/merchant/login");
+      router.replace("/login");
     }
   }, [isLogin, router, session?.isAuthenticated, session?.isReady]);
+
+  useEffect(() => {
+    if (pathname?.startsWith("/merchant")) {
+      setLastPortal("merchant");
+    }
+  }, [pathname]);
 
   if (isLogin) {
     return (

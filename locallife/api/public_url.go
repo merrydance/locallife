@@ -2,6 +2,7 @@ package api
 
 import (
 	"net"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -10,14 +11,34 @@ import (
 func externalBaseURL(ctx *gin.Context) string {
 	scheme := strings.TrimSpace(ctx.GetHeader("X-Forwarded-Proto"))
 	if scheme == "" {
-		if ctx.Request.TLS != nil {
-			scheme = "https"
-		} else {
-			scheme = "http"
+		origin := strings.TrimSpace(ctx.GetHeader("Origin"))
+		if origin != "" {
+			if parsed, err := url.Parse(origin); err == nil {
+				if parsed.Scheme != "" {
+					scheme = parsed.Scheme
+				}
+			}
+		}
+		if scheme == "" {
+			if ctx.Request.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
 		}
 	}
 
 	host := strings.TrimSpace(ctx.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		origin := strings.TrimSpace(ctx.GetHeader("Origin"))
+		if origin != "" {
+			if parsed, err := url.Parse(origin); err == nil {
+				if parsed.Host != "" {
+					host = parsed.Host
+				}
+			}
+		}
+	}
 	if host == "" {
 		host = strings.TrimSpace(ctx.Request.Host)
 	}

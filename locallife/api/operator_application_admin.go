@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -50,6 +51,32 @@ type operatorApplicationIDRequest struct {
 
 type rejectOperatorApplicationAdminRequest struct {
 	RejectReason string `json:"reject_reason" binding:"required,min=2,max=200"`
+}
+
+func operatorNameFromApprovedApplication(app db.OperatorApplication) string {
+	if app.BusinessLicenseUrl.Valid && strings.TrimSpace(app.BusinessLicenseUrl.String) != "" && len(app.BusinessLicenseOcr) > 0 {
+		var ocr BusinessLicenseOCRData
+		if err := json.Unmarshal(app.BusinessLicenseOcr, &ocr); err == nil {
+			enterpriseName := strings.TrimSpace(ocr.EnterpriseName)
+			if enterpriseName != "" {
+				return enterpriseName
+			}
+		}
+	}
+
+	if name := strings.TrimSpace(app.Name.String); name != "" {
+		return name
+	}
+
+	if legalName := strings.TrimSpace(app.LegalPersonName.String); legalName != "" {
+		return legalName
+	}
+
+	if contactName := strings.TrimSpace(app.ContactName.String); contactName != "" {
+		return contactName
+	}
+
+	return ""
 }
 
 func (server *Server) listPendingOperatorApplicationsAdmin(ctx *gin.Context) {
@@ -195,9 +222,10 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		return
 	}
 
-	operatorName := strings.TrimSpace(approved.Name.String)
+	operatorName := operatorNameFromApprovedApplication(approved)
 	if operatorName == "" {
-		operatorName = strings.TrimSpace(approved.LegalPersonName.String)
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("运营商名称不能为空，请补全申请资料后再审核")))
+		return
 	}
 	contactName := strings.TrimSpace(approved.ContactName.String)
 	if contactName == "" {

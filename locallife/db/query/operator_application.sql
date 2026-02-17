@@ -135,21 +135,21 @@ WHERE id = $1 AND status = 'rejected'
 RETURNING *;
 
 -- name: ListPendingOperatorApplications :many
--- 列出待审核的申请（平台管理员用）
+-- 列出申请（平台管理员用，包含 submitted/approved/rejected）
 SELECT 
   oa.*,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
 JOIN regions r ON r.id = oa.region_id
-WHERE oa.status = 'submitted'
-ORDER BY oa.submitted_at ASC
+WHERE oa.status IN ('submitted', 'approved', 'rejected')
+ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountPendingOperatorApplications :one
--- 统计待审核申请数量
+-- 统计申请数量（包含 submitted/approved/rejected）
 SELECT COUNT(*) FROM operator_applications
-WHERE status = 'submitted';
+WHERE status IN ('submitted', 'approved', 'rejected');
 
 -- name: ListOperatorApplications :many
 -- 列出所有申请（支持状态筛选）

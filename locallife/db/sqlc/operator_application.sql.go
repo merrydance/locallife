@@ -62,10 +62,10 @@ func (q *Queries) ApproveOperatorApplication(ctx context.Context, arg ApproveOpe
 
 const countPendingOperatorApplications = `-- name: CountPendingOperatorApplications :one
 SELECT COUNT(*) FROM operator_applications
-WHERE status = 'submitted'
+WHERE status IN ('submitted', 'approved', 'rejected')
 `
 
-// 统计待审核申请数量
+// 统计申请数量（包含 submitted/approved/rejected）
 func (q *Queries) CountPendingOperatorApplications(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countPendingOperatorApplications)
 	var count int64
@@ -376,8 +376,8 @@ SELECT
   r.code as region_code
 FROM operator_applications oa
 JOIN regions r ON r.id = oa.region_id
-WHERE oa.status = 'submitted'
-ORDER BY oa.submitted_at ASC
+WHERE oa.status IN ('submitted', 'approved', 'rejected')
+ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -414,7 +414,7 @@ type ListPendingOperatorApplicationsRow struct {
 	RegionCode             string             `json:"region_code"`
 }
 
-// 列出待审核的申请（平台管理员用）
+// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 func (q *Queries) ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error) {
 	rows, err := q.db.Query(ctx, listPendingOperatorApplications, arg.Limit, arg.Offset)
 	if err != nil {

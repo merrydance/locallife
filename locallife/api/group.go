@@ -182,27 +182,6 @@ func newGroupPoliciesResponse(policy db.GroupPolicy) groupPoliciesResponse {
 	}
 }
 
-func pgTextToPtr(val pgtype.Text) *string {
-	if val.Valid {
-		return &val.String
-	}
-	return nil
-}
-
-func pgInt8ToPtr(val pgtype.Int8) *int64 {
-	if val.Valid {
-		return &val.Int64
-	}
-	return nil
-}
-
-func pgTimeToPtr(val pgtype.Timestamptz) *time.Time {
-	if val.Valid {
-		return &val.Time
-	}
-	return nil
-}
-
 func (server *Server) requireGroupRole(ctx *gin.Context, groupID int64, allowedRoles ...string) (string, bool) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	role, err := server.store.GetGroupMemberRole(ctx, db.GetGroupMemberRoleParams{

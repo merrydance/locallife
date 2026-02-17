@@ -543,7 +543,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 					Times(1).
 					Return(false, nil)
 
-				// 解密后金额为20000（200元）
+				// 解密后金额为200元，与订单金额不匹配
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
 					Times(1).
@@ -556,18 +556,18 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 							Currency      string `json:"currency"`
 							PayerCurrency string `json:"payer_currency"`
 						}{
-							Total: 20000, // 200元，与订单金额不匹配
+							Total: 200 * fenPerYuan,
 						},
 					}, nil)
 
-				// 订单金额为10000（100元）
+				// 订单金额为100元
 				store.EXPECT().
 					GetPaymentOrderByOutTradeNo(gomock.Any(), gomock.Eq(outTradeNo)).
 					Times(1).
 					Return(db.PaymentOrder{
 						ID:           1,
 						OutTradeNo:   outTradeNo,
-						Amount:       10000, // 100元
+						Amount:       100 * fenPerYuan,
 						Status:       "pending",
 						UserID:       100,
 						BusinessType: "order",
@@ -1012,7 +1012,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 						}{
 							Result:     "SUCCESS",
 							FailReason: "",
-							Amount:     100,
+							Amount:     1 * fenPerYuan,
 						},
 					}, nil)
 
@@ -1022,7 +1022,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					Return(&wechat.ProfitSharingQueryResponse{
 						Status: "FINISHED",
 						Receivers: []wechat.ProfitSharingReceiverResult{
-							{Result: "SUCCESS", Amount: 100},
+							{Result: "SUCCESS", Amount: 1 * fenPerYuan},
 						},
 					}, nil)
 
@@ -1115,7 +1115,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 						}{
 							Result:     "CLOSED",
 							FailReason: "NO_RELATION",
-							Amount:     100,
+							Amount:     1 * fenPerYuan,
 						},
 					}, nil)
 
@@ -1125,7 +1125,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					Return(&wechat.ProfitSharingQueryResponse{
 						Status: "FINISHED",
 						Receivers: []wechat.ProfitSharingReceiverResult{
-							{Result: "CLOSED", FailReason: "NO_RELATION", Amount: 100},
+							{Result: "CLOSED", FailReason: "NO_RELATION", Amount: 1 * fenPerYuan},
 						},
 					}, nil)
 

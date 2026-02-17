@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { usePlatformSession } from "@/components/providers/platform-session-provider";
 import { cn } from "@/lib/utils";
 
-const PLATFORM_REQUIRED_ROLES = ["admin", "operator"];
+const PLATFORM_REQUIRED_ROLES = ["admin"];
 
 export function PlatformAccessGate({
   children,
@@ -47,7 +47,7 @@ export function PlatformAccessGate({
         )}
         <div className={cn("flex flex-col gap-3", state.mode === "login" && "pt-2")}>
           <Button asChild>
-            <Link href="/merchant/login">前往登录</Link>
+            <Link href="/login">前往登录</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link href="/">返回首页</Link>

@@ -84,14 +84,9 @@
   gap: var(--spacer-sm);
 }
 
-.dialog-content {
-  padding-top: var(--spacer-xs);
-}
-
-.dialog-title {
-  font-size: var(--font-size-sm);
+.reject-input-wrap {
+  margin-top: var(--spacer-xs);
   margin-bottom: var(--spacer-sm);
-  color: var(--td-text-color-primary);
 }
 
 .skeleton-item {

@@ -1098,7 +1098,7 @@ func TestCancelOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GetPaymentOrdersByOrder(gomock.Any(), gomock.Eq(pgtype.Int8{Int64: order.ID, Valid: true})).
 					Times(1).
-					Return([]db.PaymentOrder{{ID: 1, OrderID: pgtype.Int8{Int64: order.ID, Valid: true}, Status: "paid", Amount: 1000}}, nil)
+					Return([]db.PaymentOrder{{ID: 1, OrderID: pgtype.Int8{Int64: order.ID, Valid: true}, Status: "paid", Amount: 10 * fenPerYuan}}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2845,7 +2845,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 	merchant.Status = "active"
 	merchant.IsOpen = true
 	dish := randomDish(merchant.ID, nil)
-	dish.Price = 5000 // 设置为50元，5个就是250元，满足100元最低消费
+	dish.Price = 50 * fenPerYuan // 设置为50元，5个就是250元，满足100元最低消费
 	table := randomTable(merchant.ID)
 	table.Status = "available"
 	session := db.DiningSession{
@@ -2884,8 +2884,8 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 		MerchantID:        merchant.ID,
 		Code:              "VOUCHER001",
 		Name:              "满100减10",
-		Amount:            1000,                                                      // 10元
-		MinOrderAmount:    10000,                                                     // 最低100元
+		Amount:            10 * fenPerYuan,                                           // 10元
+		MinOrderAmount:    100 * fenPerYuan,                                          // 最低100元
 		AllowedOrderTypes: []string{"takeout", "dine_in", "takeaway", "reservation"}, // 默认允许所有
 	}
 
@@ -3224,7 +3224,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 
 				// 设置菜品价格为50元
 				lowPriceDish := dish
-				lowPriceDish.Price = 5000 // 50元
+				lowPriceDish.Price = 50 * fenPerYuan
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
@@ -3272,7 +3272,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 
 				// 菜品价格很低，5个只有100元
 				lowPriceDish := dish
-				lowPriceDish.Price = 2000 // 20元
+				lowPriceDish.Price = 20 * fenPerYuan
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
@@ -3289,8 +3289,8 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 
 				// 优惠券金额大于订单金额（满100减200）
 				largeVoucher := userVoucher
-				largeVoucher.Amount = 20000         // 200元优惠
-				largeVoucher.MinOrderAmount = 10000 // 最低100元
+				largeVoucher.Amount = 200 * fenPerYuan
+				largeVoucher.MinOrderAmount = 100 * fenPerYuan
 				store.EXPECT().
 					GetUserVoucher(gomock.Any(), userVoucher.ID).
 					Times(1).
@@ -3571,8 +3571,8 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 		ID:             1,
 		MerchantID:     merchant.ID,
 		UserID:         user.ID,
-		Balance:        50000, // 500元余额
-		TotalRecharged: 50000,
+		Balance:        500 * fenPerYuan,
+		TotalRecharged: 500 * fenPerYuan,
 		TotalConsumed:  0,
 	}
 
@@ -4027,7 +4027,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 
 				// 设置固定价格的菜品：200元/个，2个=400元
 				fixedPriceDish := dish
-				fixedPriceDish.Price = 20000 // 200元
+				fixedPriceDish.Price = 200 * fenPerYuan
 				store.EXPECT().
 					GetDish(gomock.Any(), dish.ID).
 					Times(1).
@@ -4044,7 +4044,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 
 				// 余额只有100元，不够支付400元的订单
 				partialBalanceMembership := membership
-				partialBalanceMembership.Balance = 10000 // 100元
+				partialBalanceMembership.Balance = 100 * fenPerYuan
 				store.EXPECT().
 					GetMembershipByMerchantAndUser(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -4061,7 +4061,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					DoAndReturn(func(ctx interface{}, arg db.CreateOrderTxParams) (db.CreateOrderTxResult, error) {
 						// 验证部分余额支付：订单400元，余额100元，只用100元
 						require.NotNil(t, arg.MembershipID)
-						require.Equal(t, int64(10000), arg.BalancePaid) // 只使用100元余额
+						require.Equal(t, int64(100*fenPerYuan), arg.BalancePaid) // 只使用100元余额
 						return db.CreateOrderTxResult{
 							Order: db.Order{
 								ID:          1,
@@ -4069,9 +4069,9 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 								UserID:      user.ID,
 								MerchantID:  merchant.ID,
 								OrderType:   "dine_in",
-								Subtotal:    40000, // 200*2
-								BalancePaid: 10000,
-								TotalAmount: 40000,
+								Subtotal:    400 * fenPerYuan, // 200*2
+								BalancePaid: 100 * fenPerYuan,
+								TotalAmount: 400 * fenPerYuan,
 								Status:      "pending",
 								CreatedAt:   time.Now(),
 							},
@@ -4125,7 +4125,7 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 	merchant.Status = "active"
 	merchant.IsOpen = true
 	dish := randomDish(merchant.ID, nil)
-	dish.Price = 20000 // 200元
+	dish.Price = 200 * fenPerYuan
 	table := randomTable(merchant.ID)
 	session := db.DiningSession{
 		ID:         1,
@@ -4163,8 +4163,8 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 		MerchantID:        merchant.ID,
 		Code:              "VOUCHER001",
 		Name:              "满100减10",
-		Amount:            1000,                                                      // 10元
-		MinOrderAmount:    10000,                                                     // 最低100元
+		Amount:            10 * fenPerYuan,
+		MinOrderAmount:    100 * fenPerYuan,
 		AllowedOrderTypes: []string{"takeout", "dine_in", "takeaway", "reservation"}, // 允许所有类型
 	}
 
@@ -4173,8 +4173,8 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 		ID:             1,
 		MerchantID:     merchant.ID,
 		UserID:         user.ID,
-		Balance:        50000, // 500元余额
-		TotalRecharged: 50000,
+		Balance:        500 * fenPerYuan,
+		TotalRecharged: 500 * fenPerYuan,
 		TotalConsumed:  0,
 	}
 
