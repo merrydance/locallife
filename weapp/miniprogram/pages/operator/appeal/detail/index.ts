@@ -15,6 +15,7 @@ Page({
         appeal: null as AppealResponse | null,
         recovery: null as ClaimRecoveryResponse | null,
         replyContent: '',
+        compensationAmount: '',
         showRejectDialog: false,
         initialLoading: true,
         loading: false,
@@ -81,6 +82,10 @@ Page({
         this.setData({ replyContent: e.detail.value })
     },
 
+    onCompensationInput(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+        this.setData({ compensationAmount: e.detail.value })
+    },
+
     async onApprove() {
         // Assume 'resolved' is the success status or we have a specific approve action
         await this.handleAppeal('approved')
@@ -100,10 +105,21 @@ Page({
     },
 
     async handleAppeal(status: 'approved' | 'rejected') {
-        const { id, replyContent } = this.data
-        if (status === 'rejected' && (!replyContent || replyContent.trim().length < 5)) {
-            wx.showToast({ title: '驳回说明至少5个字符', icon: 'none' })
+        const { id, replyContent, compensationAmount, appeal } = this.data
+        if (!replyContent || replyContent.trim().length < 5) {
+            wx.showToast({ title: '审核备注至少5个字符', icon: 'none' })
             return
+        }
+
+        let compensationFen: number | undefined
+        if (status === 'approved') {
+            const fallbackClaimAmount = Number((appeal as unknown as Record<string, unknown>)?.claim_amount || 0)
+            const parsed = compensationAmount ? Math.floor(parseFloat(compensationAmount) * 100) : fallbackClaimAmount
+            if (!parsed || parsed <= 0) {
+                wx.showToast({ title: '通过时需填写补偿金额', icon: 'none' })
+                return
+            }
+            compensationFen = parsed
         }
 
         try {
@@ -111,7 +127,8 @@ Page({
             wx.showLoading({ title: '处理中...', mask: true })
             await operatorAppealReviewService.reviewAppeal(id, {
                 status,
-                review_notes: replyContent
+                review_notes: replyContent,
+                compensation_amount: compensationFen
             })
             wx.showToast({ title: '处理成功', icon: 'success' })
             setTimeout(() => wx.navigateBack(), 1500)

@@ -53,8 +53,10 @@ export interface CreateAppealRequest extends Record<string, unknown> {
 
 /** 申诉列表查询参数 */
 export interface AppealsQueryParams extends Record<string, unknown> {
-    page_id: number
-    page_size: number
+    page?: number
+    limit?: number
+    page_id?: number
+    page_size?: number
     status?: AppealStatus
 }
 

@@ -1,22 +1,33 @@
-<custom-navbar title="规则中心" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+<custom-navbar title="平台规则配置" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
-<view class="rules-page" style="padding-top: {{navBarHeight}}px;">
-  <scroll-view
-    class="list-scroll"
-    scroll-y
-    refresher-enabled
-    refresher-triggered="{{refreshing}}"
-    bindrefresherrefresh="onRefresh"
-    bindscrolltolower="onLoadMore"
-  >
-    <view class="rules-container">
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="sidebar-tabs">
+    <view
+      wx:for="{{categories}}"
+      wx:key="value"
+      class="side-tab {{activeCategory === item.value ? 'active' : ''}}"
+      bindtap="onCategoryChange"
+      data-val="{{item.value}}"
+    >
+      <t-icon name="{{item.icon}}" size="40rpx" />
+      <text>{{item.label}}</text>
+    </view>
+  </view>
+
+  <scroll-view scroll-y class="rules-content">
+    <view class="content-inner">
+      <view class="welcome-header">
+        <view class="title">平台规则中心</view>
+        <view class="subtitle">平台级规则统一维护，不区分区县，支持按分类管理与修改。</view>
+      </view>
+
       <view class="summary-card">
         <text class="summary-title">规则总数</text>
         <text class="summary-value">{{total}}</text>
       </view>
 
       <view wx:if="{{loading}}" class="section-card">
-        <view wx:for="{{3}}" wx:key="index" class="skeleton-item skeleton-shimmer"></view>
+        <view wx:for="{{3}}" wx:key="index" class="skeleton-item"></view>
       </view>
 
       <view wx:if="{{error}}" class="section-card status-wrap">
@@ -25,43 +36,76 @@
         </t-empty>
       </view>
 
-      <view wx:if="{{!loading && !error && rules.length === 0}}" class="section-card status-wrap">
-        <t-empty description="暂无规则数据" />
+      <view class="rules-list" wx:if="{{!loading && !error}}">
+        <block wx:if="{{categorizedRules[activeCategory] && categorizedRules[activeCategory].length > 0}}">
+          <view class="rule-card" wx:for="{{categorizedRules[activeCategory]}}" wx:key="id">
+            <view class="rule-icon">
+              <t-icon name="setting" size="48rpx" color="var(--td-brand-color)" />
+            </view>
+
+            <view class="rule-info">
+              <view class="rule-top">
+                <text class="name">{{item.name || ('规则#' + item.id)}}</text>
+                <t-tag theme="success" variant="light-outline" size="small">生效中</t-tag>
+              </view>
+
+              <view class="meta-row">
+                <text class="meta-label">规则ID</text>
+                <text class="meta-value">{{item.key}}</text>
+              </view>
+              <view class="meta-row">
+                <text class="meta-label">分类</text>
+                <text class="meta-value">{{item.categoryLabel}}</text>
+              </view>
+              <view class="meta-row">
+                <text class="meta-label">当前值</text>
+                <text class="meta-value">{{item.value}}{{item.unit}}</text>
+              </view>
+
+              <view class="actions" wx:if="{{item.editable}}">
+                <t-button
+                  theme="primary"
+                  variant="outline"
+                  shape="round"
+                  size="small"
+                  loading="{{submitting}}"
+                  bind:tap="onEditTap"
+                  data-key="{{item.key}}"
+                  data-name="{{item.name}}"
+                >修改</t-button>
+              </view>
+            </view>
+          </view>
+        </block>
+
+        <view class="section-card status-wrap" wx:else>
+          <t-empty description="该分类下暂无规则" />
+        </view>
       </view>
-
-      <view wx:for="{{rules}}" wx:key="id" class="section-card rule-card">
-        <view class="title-row">
-          <view class="name">{{item.name || ('规则#' + item.id)}}</view>
-          <t-tag theme="{{item.status === 'active' ? 'success' : item.status === 'disabled' ? 'danger' : 'warning'}}" variant="dark">{{getStatusLabel(item.status)}}</t-tag>
-        </view>
-        <view class="meta-row">
-          <text class="meta-label">规则ID</text>
-          <text class="meta-value">{{item.id}}</text>
-        </view>
-        <view class="meta-row">
-          <text class="meta-label">分类</text>
-          <text class="meta-value">{{item.category || '-'}}</text>
-        </view>
-        <view class="meta-row">
-          <text class="meta-label">当前版本</text>
-          <text class="meta-value">{{item.current_version_id || '-'}}</text>
-        </view>
-
-        <view wx:if="{{item.status === 'active'}}" class="actions">
-          <t-button
-            theme="danger"
-            variant="outline"
-            shape="round"
-            size="small"
-            loading="{{submitting}}"
-            bind:tap="onDisableTap"
-            data-id="{{item.id}}"
-            data-name="{{item.name}}"
-          >停用</t-button>
-        </view>
-      </view>
-
-      <view wx:if="{{!loading && !hasMore && rules.length > 0}}" class="no-more">没有更多了</view>
     </view>
   </scroll-view>
+
+  <t-dialog
+    visible="{{showEdit}}"
+    title="修改平台规则"
+    confirm-btn="{{ { content: '保存修改', theme: 'primary' } }}"
+    cancel-btn="取消"
+    bind:confirm="onConfirmEdit"
+    bind:cancel="onCloseEdit"
+  >
+    <view slot="content" class="dialog-content">
+      <view class="edit-target">
+        <text class="target-name">{{editingRule.name}}</text>
+        <text class="target-desc">{{editingRule.desc}}</text>
+      </view>
+      <t-input
+        value="{{newValue}}"
+        placeholder="请输入新值"
+        label="规则数值"
+        suffix="{{editingRule.unit}}"
+        align="right"
+        bind:change="onValueChange"
+      />
+    </view>
+  </t-dialog>
 </view>

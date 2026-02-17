@@ -4,8 +4,20 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	mockdb "github.com/merrydance/locallife/db/mock"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
+
+func mustNumeric(t *testing.T, v string) pgtype.Numeric {
+	t.Helper()
+	var n pgtype.Numeric
+	err := n.Scan(v)
+	require.NoError(t, err)
+	return n
+}
 
 func TestCalculateCoefficient_SunnyWeather(t *testing.T) {
 	// 晴天
@@ -191,4 +203,50 @@ func TestFinalCoefficient(t *testing.T) {
 
 	// 1.3 * 1.2 = 1.56
 	require.InDelta(t, 1.56, coef.FinalCoefficient(), 0.001)
+}
+
+func TestCalculateCoefficient_UseRegionRuleConfigFirst(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	regionID := int64(330106)
+
+	store.EXPECT().
+		GetRegionRuleConfigByRegion(gomock.Any(), regionID).
+		Return(db.RegionRuleConfig{
+			WeatherCoeffHeavy: mustNumeric(t, "1.66"),
+		}, nil)
+
+	weather := &WeatherNow{Text: "暴雨", Temp: "22"}
+	coef := CalculateCoefficient(context.Background(), store, regionID, weather, nil)
+
+	require.Equal(t, "heavy_rain", coef.WeatherType)
+	require.InDelta(t, 1.66, coef.Coefficient, 0.0001)
+}
+
+func TestCalculateCoefficient_FallbackToPlatformConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	regionID := int64(330106)
+
+	store.EXPECT().
+		GetRegionRuleConfigByRegion(gomock.Any(), regionID).
+		Return(db.RegionRuleConfig{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: "WEATHER_COEFF_LIGHT",
+			ScopeType: "city",
+			ScopeID:   pgtype.Int8{Int64: regionID, Valid: true},
+		}).
+		Return(db.PlatformConfig{ConfigValue: []byte("1.28")}, nil)
+
+	weather := &WeatherNow{Text: "小雨", Temp: "18"}
+	coef := CalculateCoefficient(context.Background(), store, regionID, weather, nil)
+
+	require.Equal(t, "light_rain", coef.WeatherType)
+	require.InDelta(t, 1.28, coef.Coefficient, 0.0001)
 }

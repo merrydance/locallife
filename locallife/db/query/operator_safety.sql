@@ -19,8 +19,24 @@ WHERE id = $1 LIMIT 1;
 -- name: ListSafetyReportsByRegion :many
 SELECT * FROM safety_reports
 WHERE region_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3;
+
+-- name: CountSafetyReportsByRegion :one
+SELECT COUNT(*) FROM safety_reports
+WHERE region_id = $1;
+
+-- name: ListSafetyReportsByRegionAndStatus :many
+SELECT * FROM safety_reports
+WHERE region_id = $1
+    AND status = $2
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $4;
+
+-- name: CountSafetyReportsByRegionAndStatus :one
+SELECT COUNT(*) FROM safety_reports
+WHERE region_id = $1
+    AND status = $2;
 
 -- name: UpdateSafetyReportStatus :one
 UPDATE safety_reports

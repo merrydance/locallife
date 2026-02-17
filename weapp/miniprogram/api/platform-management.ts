@@ -216,6 +216,25 @@ export interface ListPlatformRulesParams extends Record<string, unknown> {
     offset?: number
 }
 
+export interface PlatformOperatorRuleItem {
+    id: string
+    name: string
+    key: string
+    value: string
+    unit: string
+    desc: string
+    category: string
+    editable: boolean
+}
+
+export interface ListPlatformOperatorRulesResponse {
+    rules: PlatformOperatorRuleItem[]
+}
+
+export interface UpdatePlatformOperatorRuleRequest extends Record<string, unknown> {
+    value: string
+}
+
 // ==================== 配送费配置相关类型 ====================
 
 /** 配送费配置响应 - 对齐 api.deliveryFeeConfigResponse */
@@ -502,6 +521,27 @@ export class PlatformManagementService {
             url: `/v1/platform/rules/${ruleID}/disable`,
             method: 'POST',
             data: { reason: reason || '' }
+        })
+    }
+
+    /**
+     * 获取平台维护的运营规则（运营侧展示为“平台维护”）
+     */
+    async getPlatformOperatorRules(): Promise<ListPlatformOperatorRulesResponse> {
+        return request({
+            url: '/v1/platform/operator-rules',
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 更新平台维护的运营规则
+     */
+    async updatePlatformOperatorRule(key: string, data: UpdatePlatformOperatorRuleRequest): Promise<{ message: string }> {
+        return request({
+            url: `/v1/platform/operator-rules/${key}`,
+            method: 'PATCH',
+            data
         })
     }
 

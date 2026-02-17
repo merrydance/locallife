@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "骑手详情",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-button": "tdesign-miniprogram/button/button",
+    "card-skeleton": "/components/card-skeleton/index"
+  }
+}

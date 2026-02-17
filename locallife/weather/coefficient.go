@@ -133,12 +133,41 @@ func calculateBaseCoefficient(ctx context.Context, store db.Store, regionID int6
 		"light_snow":    1.10,
 	}
 
+	var regionRuleConfig db.RegionRuleConfig
+	hasRegionRuleConfig := false
+	if store != nil {
+		if cfg, err := store.GetRegionRuleConfigByRegion(ctx, regionID); err == nil {
+			regionRuleConfig = cfg
+			hasRegionRuleConfig = true
+		}
+	}
+
 	// 尝试从 DB 读取配置覆盖默认值
 	getConfig := func(key string) float64 {
 		// 先检查是否有默认值
 		defVal := 1.00
 		if v, ok := defaultMultipliers[key]; ok {
 			defVal = v
+		}
+
+		if hasRegionRuleConfig {
+			var v pgtype.Numeric
+			switch key {
+			case "extreme":
+				v = regionRuleConfig.WeatherCoeffExtreme
+			case "heavy_rain", "heavy_snow":
+				v = regionRuleConfig.WeatherCoeffHeavy
+			case "moderate_rain", "moderate_snow":
+				v = regionRuleConfig.WeatherCoeffModerate
+			case "light_rain", "light_snow":
+				v = regionRuleConfig.WeatherCoeffLight
+			}
+
+			if v.Valid {
+				if f, err := v.Float64Value(); err == nil {
+					return f.Float64
+				}
+			}
 		}
 
 		// DB Map Key

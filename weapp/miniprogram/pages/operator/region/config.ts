@@ -32,27 +32,27 @@ Page({
         baseFeeInput: '', // 元
         baseDistanceInput: '', // 米
         extraFeeInput: '', // 元/km
-        minOrderInput: '', // 元
-        maxDistanceInput: '', // 米
+        valueRatioInput: '', // %
+        minFeeInput: '', // 元
+        maxFeeInput: '', // 元，空表示不限
 
         // 峰时弹窗
         showPeakModal: false,
         peakForm: {
             startTime: '11:00',
             endTime: '13:00',
-            multiplier: '1.5',
-            extraFee: '0',
-            days: [1, 2, 3, 4, 5] // 默认周一到周五
+            coefficient: '1.50',
+            days: [1, 2, 3, 4, 5] // 0=周日, 1-5=周一到周五
         },
 
         daysOptions: [
+            { value: 0, label: '日' },
             { value: 1, label: '一' },
             { value: 2, label: '二' },
             { value: 3, label: '三' },
             { value: 4, label: '四' },
             { value: 5, label: '五' },
-            { value: 6, label: '六' },
-            { value: 7, label: '日' }
+            { value: 6, label: '六' }
         ]
     },
 
@@ -95,9 +95,10 @@ Page({
                 // 初始化表单显示
                 baseFeeInput: feeConfig ? (feeConfig.base_fee / 100).toString() : '0',
                 baseDistanceInput: feeConfig ? feeConfig.base_distance.toString() : '3000',
-                extraFeeInput: feeConfig ? (feeConfig.extra_distance_fee / 100).toString() : '1',
-                minOrderInput: feeConfig ? (feeConfig.min_order_amount / 100).toString() : '0',
-                maxDistanceInput: feeConfig ? feeConfig.max_delivery_distance.toString() : '10000'
+                extraFeeInput: feeConfig ? (feeConfig.extra_fee_per_km / 100).toString() : '1',
+                valueRatioInput: feeConfig ? (feeConfig.value_ratio * 100).toString() : '1',
+                minFeeInput: feeConfig ? (feeConfig.min_fee / 100).toString() : '0',
+                maxFeeInput: feeConfig && typeof feeConfig.max_fee === 'number' ? (feeConfig.max_fee / 100).toString() : ''
             })
 
         } catch (err: unknown) {
@@ -128,15 +129,18 @@ Page({
 
     async onSaveFeeConfig() {
         try {
-            const { regionId, baseFeeInput, baseDistanceInput, extraFeeInput, minOrderInput, maxDistanceInput } = this.data
+            const { regionId, baseFeeInput, baseDistanceInput, extraFeeInput, valueRatioInput, minFeeInput, maxFeeInput } = this.data
+
+            const maxFee = maxFeeInput === '' ? undefined : Math.round(parseFloat(maxFeeInput) * 100)
 
             const data: CreateDeliveryFeeConfigRequest = {
+                region_id: regionId,
                 base_fee: parseFloat(baseFeeInput) * 100,
                 base_distance: parseInt(baseDistanceInput),
-                extra_distance_fee: parseFloat(extraFeeInput) * 100,
-                min_order_amount: parseFloat(minOrderInput) * 100,
-                max_delivery_distance: parseInt(maxDistanceInput),
-                is_active: true
+                extra_fee_per_km: parseFloat(extraFeeInput) * 100,
+                value_ratio: parseFloat(valueRatioInput) / 100,
+                min_fee: parseFloat(minFeeInput) * 100,
+                max_fee: maxFee
             }
 
             wx.showLoading({ title: '保存中' })
@@ -166,7 +170,7 @@ Page({
 
     onDayToggle(e: DayToggleEvent) {
         const day = e.currentTarget.dataset.day
-        if (!day) return
+        if (day === undefined) return
         const { days } = this.data.peakForm
         const newDays = days.includes(day)
             ? days.filter((d) => d !== day)
@@ -179,13 +183,11 @@ Page({
         const { regionId, peakForm } = this.data
 
         const data: CreatePeakHourConfigRequest = {
+            region_id: regionId,
             start_time: peakForm.startTime,
             end_time: peakForm.endTime,
-            multiplier: parseFloat(peakForm.multiplier),
-            extra_fee: parseFloat(peakForm.extraFee) * 100,
-            days_of_week: peakForm.days,
-            is_active: true,
-            name: '高峰时段'
+            coefficient: parseFloat(peakForm.coefficient),
+            days_of_week: peakForm.days
         }
 
         try {
@@ -219,7 +221,7 @@ Page({
     },
 
     formatDays(days: number[]) {
-        const map = ['', '一', '二', '三', '四', '五', '六', '日']
+        const map = ['日', '一', '二', '三', '四', '五', '六']
         return days.map((d) => map[d]).join('、')
     }
 })

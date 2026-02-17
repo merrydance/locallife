@@ -1,0 +1,104 @@
+.page-container {
+  min-height: 100vh;
+  background: #f6f7fb;
+}
+
+.content {
+  padding: 24rpx;
+}
+
+.header-section {
+  margin-bottom: 20rpx;
+}
+
+.title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.subtitle {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #86909c;
+}
+
+.region-picker-card {
+  margin-bottom: 20rpx;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 18rpx 0;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.peak-item {
+  margin-bottom: 12rpx;
+}
+
+.popup-content {
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 20rpx 24rpx 28rpx;
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.popup-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.form-item-col {
+  margin-top: 18rpx;
+}
+
+.label {
+  display: block;
+  font-size: 24rpx;
+  color: #4e5969;
+  margin-bottom: 12rpx;
+}
+
+.days-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.day-tag {
+  width: 72rpx;
+  height: 60rpx;
+  border-radius: 10rpx;
+  border: 1rpx solid #dcdfe6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #4e5969;
+  background: #fff;
+}
+
+.day-tag.active {
+  color: #0052d9;
+  border-color: #0052d9;
+  background: rgba(0, 82, 217, 0.06);
+}
+
+.popup-footer {
+  margin-top: 20rpx;
+}

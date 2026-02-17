@@ -1,0 +1,41 @@
+<custom-navbar title="食安事件详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view wx:if="{{loading}}">
+    <list-skeleton row="6" />
+  </view>
+
+  <view wx:elif="{{report}}">
+    <view class="card">
+      <view class="header-row">
+        <text class="title">{{report.title}}</text>
+        <t-tag theme="{{report.status === 'pending' ? 'warning' : (report.status === 'resolved' ? 'success' : 'danger')}}" variant="light-outline">{{report.status}}</t-tag>
+      </view>
+      <view class="meta">事件ID：{{report.id}}</view>
+      <view class="meta">等级：{{report.level}}</view>
+      <view class="meta">时间：{{report.created_at}}</view>
+      <view class="desc">{{report.description}}</view>
+      <view class="meta">涉及商户：{{report.merchant_ids.length ? report.merchant_ids.join(', ') : '无'}}</view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">处置报告</view>
+      <t-radio-group value="{{resolutionStatus}}" bindchange="onResolutionStatusChange">
+        <t-radio value="resolved" label="已处理" />
+        <t-radio value="rejected" label="驳回" />
+      </t-radio-group>
+      <t-textarea label="处置说明" placeholder="填写处置结果与结论" value="{{resolutionNotes}}" bindchange="onResolutionNotesChange" />
+      <t-input label="恢复商户ID" placeholder="可选，多个用英文逗号分隔" value="{{recoverMerchantIdsRaw}}" bindchange="onRecoverMerchantIdsChange" />
+      <t-input label="恢复原因" placeholder="有恢复商户时必填" value="{{recoverReason}}" bindchange="onRecoverReasonChange" />
+      <t-button theme="primary" block bindtap="onSubmitResolution">提交处置</t-button>
+    </view>
+
+    <view class="card">
+      <view class="section-title">恢复商户上线</view>
+      <t-input label="商户ID" placeholder="输入商户ID" value="{{singleResumeMerchantId}}" bindchange="onSingleResumeMerchantIdChange" />
+      <t-input label="恢复原因" placeholder="输入恢复原因" value="{{singleResumeReason}}" bindchange="onSingleResumeReasonChange" />
+      <t-button theme="success" block bindtap="onResumeSingleMerchant">恢复上线</t-button>
+    </view>
+  </view>
+
+  <t-empty wx:else icon="info-circle" description="事件不存在或无权限" />
+</view>

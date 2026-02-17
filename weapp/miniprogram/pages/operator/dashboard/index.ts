@@ -130,7 +130,7 @@ Page({
       const pendingItems = [
         ...(merchantsPending.merchants || []).map((m) => ({ id: m.id, type: 'MERCHANT', name: m.name, time: m.created_at })),
         ...(ridersPending.riders || []).map((r) => ({ id: r.id, type: 'RIDER', name: r.name, time: r.created_at })),
-        ...(appeals.appeals || []).map((a) => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.title}`, time: a.created_at }))
+        ...(appeals.appeals || []).map((a) => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.reason || ('#' + a.id)}`, time: a.created_at }))
       ] as PendingApprovalItem[]
 
       pendingItems.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
@@ -216,14 +216,18 @@ Page({
   onPendingTap(e: WechatMiniprogram.TouchEvent) {
     const { id, type } = e.currentTarget.dataset as { id?: number, type?: PendingApprovalItem['type'] }
     let url = ''
-    if (type === 'MERCHANT') url = `/pages/operator/merchants/detail/detail?id=${id}`
-    else if (type === 'RIDER') url = `/pages/operator/riders/detail/detail?id=${id}`
-    else if (type === 'APPEAL') url = `/pages/operator/appeals/detail/detail?id=${id}`
+    if (type === 'MERCHANT') url = `/pages/operator/merchants/detail/index?id=${id}`
+    else if (type === 'RIDER') url = `/pages/operator/riders/detail/index?id=${id}`
+    else if (type === 'APPEAL') url = `/pages/operator/appeal/detail/index?id=${id}`
     
     if (url) wx.navigateTo({ url })
   },
 
+  onPendingViewAll() {
+    wx.navigateTo({ url: '/pages/operator/appeal/list/index' })
+  },
+
   onWithdrawTap() {
-    wx.navigateTo({ url: '/pages/operator/finance/withdraw' })
+    wx.navigateTo({ url: '/pages/operator/finance/withdraw/index' })
   }
 })

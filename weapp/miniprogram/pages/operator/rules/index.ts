@@ -9,7 +9,9 @@ interface RuleItem {
   value: string
   unit: string
   desc: string
-  category: 'rider' | 'merchant' | 'platform'
+  editable: boolean
+  category: 'delivery' | 'weather' | 'timeslot'
+  action?: 'edit' | 'navigate_peak'
   icon?: string
 }
 
@@ -27,6 +29,11 @@ interface RuleCategoryDataset {
   val?: RuleItem['category']
 }
 
+interface RulesPageOptions {
+  region_id?: string
+  region_name?: string
+}
+
 interface RuleIdDataset {
   id?: string
 }
@@ -42,19 +49,22 @@ Page({
     loading: false,
     initialLoading: true,
     error: null as string | null,
+
+    selectedRegionId: 0,
+    selectedRegionName: '',
     
-    activeCategory: 'rider',
+    activeCategory: 'delivery',
     categories: [
-      { label: '骑手规则', value: 'rider', icon: 'user' },
-      { label: '商户规则', value: 'merchant', icon: 'shop' },
-      { label: '平台策略', value: 'platform', icon: 'setting' }
+      { label: '运费参数', value: 'delivery', icon: 'chart' },
+      { label: '时段系数', value: 'timeslot', icon: 'time' },
+      { label: '天气系数', value: 'weather', icon: 'cloud' }
     ] as RuleCategoryItem[],
     
     rules: [] as RuleItem[],
     categorizedRules: {
-      rider: [] as RuleItem[],
-      merchant: [] as RuleItem[],
-      platform: [] as RuleItem[]
+      delivery: [] as RuleItem[],
+      timeslot: [] as RuleItem[],
+      weather: [] as RuleItem[]
     },
 
     // 编辑弹窗
@@ -63,40 +73,49 @@ Page({
     newValue: ''
   },
 
-  onLoad() {
+  onLoad(options: RulesPageOptions) {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ 
       isLargeScreen: isLargeScreen(),
       navBarHeight 
     })
+    const selectedRegionId = Number(options?.region_id || 0)
+    const selectedRegionName = options?.region_name ? decodeURIComponent(options.region_name) : ''
+
+    if (!selectedRegionId) {
+      wx.redirectTo({ url: '/pages/operator/region/index?target=rules' })
+      return
+    }
+
+    this.setData({ selectedRegionId, selectedRegionName })
     this.loadRules()
   },
 
   async loadRules() {
     this.setData({ loading: true, error: null })
     try {
-      const res = await request<RulesResponse>({ url: '/v1/operator/rules', method: 'GET' })
+      const data = this.data.selectedRegionId > 0 ? { region_id: this.data.selectedRegionId } : undefined
+      const res = await request<RulesResponse>({ url: '/v1/operator/rules', method: 'GET', data })
       
-      // 模拟一些分类数据，以便 UI 展示更丰富（如果是真实后端，这些字段应由后端返回）
+      // 按后端返回的 category/editable 渲染，避免前端猜测 key 造成漂移
       const enhancedRules = res.rules.map((rule) => {
-        let category: RuleItem['category'] = 'platform'
-        let icon = 'info-circle'
-        
-        if (rule.key.includes('RIDER') || rule.key.includes('DELIVERY')) {
-          category = 'rider'
-          icon = 'user-assignment'
-        } else if (rule.key.includes('MERCHANT') || rule.key.includes('COMMISSION')) {
-          category = 'merchant'
-          icon = 'shop'
+        const category: RuleItem['category'] =
+          rule.category === 'weather' || rule.category === 'timeslot' ? rule.category : 'delivery'
+
+        let icon = 'chart'
+        if (category === 'weather') {
+          icon = 'cloud'
+        } else if (category === 'timeslot') {
+          icon = 'time'
         }
-        
+
         return { ...rule, category, icon }
       })
 
       const categorized = {
-        rider: enhancedRules.filter((r) => r.category === 'rider'),
-        merchant: enhancedRules.filter((r) => r.category === 'merchant'),
-        platform: enhancedRules.filter((r) => r.category === 'platform')
+        delivery: enhancedRules.filter((r) => r.category === 'delivery'),
+        timeslot: enhancedRules.filter((r) => r.category === 'timeslot'),
+        weather: enhancedRules.filter((r) => r.category === 'weather')
       }
 
       this.setData({
@@ -127,9 +146,15 @@ Page({
     const rule = this.data.rules.find((r) => r.id === id)
     if (!rule) return
 
-    // 天气系数由系统同步，通常不允许手动修改（除非有特殊业务逻辑）
-    if (rule.key === 'WEATHER_COEFFICIENT') {
-      wx.showToast({ title: '该项由气象接口同步，无法手动修改', icon: 'none' })
+    if (!rule.editable) {
+      wx.showToast({ title: '该项由平台统一维护，运营商不可修改', icon: 'none' })
+      return
+    }
+
+    if (rule.action === 'navigate_peak') {
+      const regionName = this.data.selectedRegionName ? `&region_name=${encodeURIComponent(this.data.selectedRegionName)}` : ''
+      const query = this.data.selectedRegionId > 0 ? `?region_id=${this.data.selectedRegionId}${regionName}` : ''
+      wx.navigateTo({ url: `/pages/operator/timeslot/index${query}` })
       return
     }
 
@@ -154,10 +179,11 @@ Page({
 
     try {
       wx.showLoading({ title: '保存中...', mask: true })
+      const regionQuery = this.data.selectedRegionId > 0 ? `?region_id=${this.data.selectedRegionId}` : ''
       await request({ 
-        url: `/v1/operator/rules/${editingRule.key}`, 
+        url: `/v1/operator/rules/${editingRule.key}${regionQuery}`, 
         method: 'PATCH', 
-        data: { value: newValue } 
+        data: { value: newValue }
       })
       
       wx.hideLoading()

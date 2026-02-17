@@ -11,6 +11,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countSafetyReportsByRegion = `-- name: CountSafetyReportsByRegion :one
+SELECT COUNT(*) FROM safety_reports
+WHERE region_id = $1
+`
+
+func (q *Queries) CountSafetyReportsByRegion(ctx context.Context, regionID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countSafetyReportsByRegion, regionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSafetyReportsByRegionAndStatus = `-- name: CountSafetyReportsByRegionAndStatus :one
+SELECT COUNT(*) FROM safety_reports
+WHERE region_id = $1
+    AND status = $2
+`
+
+type CountSafetyReportsByRegionAndStatusParams struct {
+	RegionID int64  `json:"region_id"`
+	Status   string `json:"status"`
+}
+
+func (q *Queries) CountSafetyReportsByRegionAndStatus(ctx context.Context, arg CountSafetyReportsByRegionAndStatusParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSafetyReportsByRegionAndStatus, arg.RegionID, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createSafetyReport = `-- name: CreateSafetyReport :one
 INSERT INTO safety_reports (
     reporter_id,
@@ -94,7 +124,7 @@ func (q *Queries) GetSafetyReport(ctx context.Context, id int64) (SafetyReport, 
 const listSafetyReportsByRegion = `-- name: ListSafetyReportsByRegion :many
 SELECT id, reporter_id, region_id, title, description, level, merchant_ids, images, status, resolution_notes, created_at, updated_at FROM safety_reports
 WHERE region_id = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -106,6 +136,59 @@ type ListSafetyReportsByRegionParams struct {
 
 func (q *Queries) ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error) {
 	rows, err := q.db.Query(ctx, listSafetyReportsByRegion, arg.RegionID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SafetyReport{}
+	for rows.Next() {
+		var i SafetyReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReporterID,
+			&i.RegionID,
+			&i.Title,
+			&i.Description,
+			&i.Level,
+			&i.MerchantIds,
+			&i.Images,
+			&i.Status,
+			&i.ResolutionNotes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSafetyReportsByRegionAndStatus = `-- name: ListSafetyReportsByRegionAndStatus :many
+SELECT id, reporter_id, region_id, title, description, level, merchant_ids, images, status, resolution_notes, created_at, updated_at FROM safety_reports
+WHERE region_id = $1
+    AND status = $2
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $4
+`
+
+type ListSafetyReportsByRegionAndStatusParams struct {
+	RegionID int64  `json:"region_id"`
+	Status   string `json:"status"`
+	Limit    int32  `json:"limit"`
+	Offset   int32  `json:"offset"`
+}
+
+func (q *Queries) ListSafetyReportsByRegionAndStatus(ctx context.Context, arg ListSafetyReportsByRegionAndStatusParams) ([]SafetyReport, error) {
+	rows, err := q.db.Query(ctx, listSafetyReportsByRegionAndStatus,
+		arg.RegionID,
+		arg.Status,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}

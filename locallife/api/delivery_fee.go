@@ -47,6 +47,21 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 	}
 
 	if !manages {
+		// 兼容旧模型：operator.region_id 仍视为可管理区域
+		if operator.RegionID > 0 && operator.RegionID == regionID {
+			return &operator, nil
+		}
+
+		// 兼容更旧模型：user_roles.related_entity_id 记录 region_id
+		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+		operatorRole, roleErr := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
+			UserID: authPayload.UserID,
+			Role:   "operator",
+		})
+		if roleErr == nil && operatorRole.RelatedEntityID.Valid && operatorRole.RelatedEntityID.Int64 == regionID {
+			return &operator, nil
+		}
+
 		return nil, errors.New("you do not have permission to manage this region")
 	}
 
@@ -57,10 +72,27 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 func (server *Server) getOperatorRegionID(ctx *gin.Context) (int64, error) {
 	// 如果中间件已经设置了 operator，直接使用
 	if op, ok := GetOperatorFromContext(ctx); ok {
-		if op.RegionID == 0 {
-			return 0, errors.New("operator has no assigned region")
+		if op.RegionID > 0 {
+			return op.RegionID, nil
 		}
-		return op.RegionID, nil
+
+		// 新模型：从 operator_regions 表获取活跃区域（多区域场景取排序后的首个）
+		regionRelations, err := server.store.ListOperatorRegions(ctx, op.ID)
+		if err == nil && len(regionRelations) > 0 {
+			return regionRelations[0].RegionID, nil
+		}
+
+		// 兼容老模型：回退 user_roles.related_entity_id
+		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+		operatorRole, roleErr := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
+			UserID: authPayload.UserID,
+			Role:   "operator",
+		})
+		if roleErr == nil && operatorRole.RelatedEntityID.Valid {
+			return operatorRole.RelatedEntityID.Int64, nil
+		}
+
+		return 0, errors.New("operator has no assigned region")
 	}
 
 	// 向后兼容：从数据库查询
@@ -515,7 +547,7 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 		DaysOfWeek: req.DaysOfWeek,
 		IsActive:   true,
 	}
-	arg.Coefficient.Scan(req.Coefficient)
+	arg.Coefficient = numericFromFloat(req.Coefficient)
 
 	config, err := server.store.CreatePeakHourConfig(ctx, arg)
 	if err != nil {

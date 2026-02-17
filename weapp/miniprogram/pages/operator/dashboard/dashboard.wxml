@@ -97,7 +97,7 @@
         </view>
 
         <!-- 骑手统计 -->
-        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/riders/list/list">
+        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/riders/index">
           <view class="stat-header">
             <t-icon name="user" size="24px" color="#52c41a" />
             <text class="stat-title">骑手管理</text>
@@ -123,7 +123,7 @@
         </view>
 
         <!-- 申诉统计 -->
-        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/appeals/list/list">
+        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/appeal/list/index">
           <view class="stat-header">
             <t-icon name="service" size="24px" color="#faad14" />
             <text class="stat-title">客诉处理</text>
@@ -149,7 +149,7 @@
         </view>
 
         <!-- 数据分析 -->
-        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/analytics/dashboard/dashboard">
+        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/analytics/index">
           <view class="stat-header">
             <t-icon name="chart" size="24px" color="#722ed1" />
             <text class="stat-title">数据分析</text>

@@ -130,22 +130,52 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 		req.Limit = 20
 	}
 
-	// 获取运营商管理的区域ID
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
+	response := make([]regionResponse, 0)
+
+	// 优先使用 operator_regions 关系表（权限判断同源，避免返回无权限区域）
+	if op, ok := GetOperatorFromContext(ctx); ok {
+		regionRelations, err := server.store.ListOperatorRegions(ctx, op.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if len(regionRelations) > 0 {
+			for _, rel := range regionRelations {
+				region, regionErr := server.store.GetRegion(ctx, rel.RegionID)
+				if regionErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
+					return
+				}
+				response = append(response, newRegionResponse(region))
+			}
+		} else if op.RegionID > 0 {
+			// 兼容旧模型：operator.region_id
+			region, regionErr := server.store.GetRegion(ctx, op.RegionID)
+			if regionErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
+				return
+			}
+			response = append(response, newRegionResponse(region))
+		}
 	}
 
-	// 获取区域详情
-	region, err := server.store.GetRegion(ctx, regionID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	// 兜底：旧鉴权模型（user_roles.related_entity_id）
+	if len(response) == 0 {
+		regionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
 
-	// 构造响应（当前运营商仅关联一个区域）
-	response := []regionResponse{newRegionResponse(region)}
+		region, err := server.store.GetRegion(ctx, regionID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		response = append(response, newRegionResponse(region))
+	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"regions":     response,

@@ -24,8 +24,8 @@
         </view>
         <view class="row">
           <text class="label">申诉状态</text>
-          <t-tag theme="{{appeal.status === 'pending' ? 'warning' : 'success'}}" size="small" variant="light-outline">
-            {{appeal.status === 'pending' ? '待处理' : '已完成'}}
+          <t-tag theme="{{appeal.status === 'pending' ? 'warning' : (appeal.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="light-outline">
+            {{appeal.status === 'pending' ? '待处理' : (appeal.status === 'approved' ? '已通过' : '已驳回')}}
           </t-tag>
         </view>
         <view class="row">
@@ -70,6 +70,13 @@
 
       <view class="card input-card" wx:if="{{appeal.status === 'pending'}}">
         <view class="section-title">处理处理</view>
+        <t-input
+          label="补偿金额(元)"
+          type="digit"
+          value="{{compensationAmount}}"
+          placeholder="通过时必填，不填则使用索赔金额"
+          bind:change="onCompensationInput"
+        />
         <t-textarea 
           label="审核备注" 
           placeholder="请输入处理说明（必填，至少5个字符）" 

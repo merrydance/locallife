@@ -62,10 +62,10 @@ Page({
 
         // 快捷入口
         quickActions: [
-            { id: 'merchants', icon: 'shop', label: '商户管理', url: '/pages/operator/merchants/list/list' },
-            { id: 'riders', icon: 'user', label: '骑手管理', url: '/pages/operator/riders/list/list' },
-            { id: 'analytics', icon: 'chart', label: '数据分析', url: '/pages/operator/analytics/dashboard/dashboard' },
-            { id: 'appeals', icon: 'service', label: '客诉处理', url: '/pages/operator/appeals/list/list' }
+            { id: 'merchants', icon: 'shop', label: '商户管理', url: '/pages/operator/merchants/index' },
+            { id: 'riders', icon: 'user', label: '骑手管理', url: '/pages/operator/riders/index' },
+            { id: 'analytics', icon: 'chart', label: '数据分析', url: '/pages/operator/analytics/index' },
+            { id: 'appeals', icon: 'service', label: '客诉处理', url: '/pages/operator/appeal/list/index' }
         ]
     },
 
@@ -181,7 +181,7 @@ Page({
      */
     onFinanceDetailTap() {
         wx.navigateTo({
-            url: '/pages/operator/finance/overview/overview'
+            url: '/pages/operator/finance/withdraw/index'
         })
     },
 
@@ -192,7 +192,7 @@ Page({
         const { selectedRegionId } = this.data
         if (selectedRegionId) {
             wx.navigateTo({
-                url: `/pages/operator/regions/detail/detail?id=${selectedRegionId}`
+                url: `/pages/operator/region/config?id=${selectedRegionId}`
             })
         }
     },

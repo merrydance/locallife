@@ -26,41 +26,32 @@
           <view wx:for="{{merchants}}" wx:key="id" class="merchant-card">
             <view class="card-header">
               <text class="merchant-name">{{item.name}}</text>
-              <t-tag theme="{{item.status === 'ACTIVE' ? 'success' : 'danger'}}" size="small" variant="light-outline">
-                {{item.status === 'ACTIVE' ? '营业中' : '已封禁'}}
+              <t-tag theme="{{item.status === 'approved' ? 'success' : (item.status === 'pending' ? 'warning' : 'danger')}}" size="small" variant="light-outline">
+                {{item.status === 'approved' ? '已通过' : (item.status === 'pending' ? '待审核' : item.status)}}
               </t-tag>
             </view>
 
             <view class="card-body">
               <view class="info-row">
-                <text class="label">负责人:</text>
-                <text class="value">{{item.owner}}</text>
+                <text class="label">店主用户ID:</text>
+                <text class="value">{{item.owner_user_id}}</text>
               </view>
               <view class="info-row">
                 <text class="label">联系电话:</text>
                 <text class="value">{{item.phone}}</text>
               </view>
               <view class="info-row">
-                <text class="label">评分:</text>
-                <text class="value rating">⭐ {{item.rating}}</text>
+                <text class="label">区域ID:</text>
+                <text class="value">{{item.region_id}}</text>
               </view>
               <view class="info-row">
-                <text class="label">总订单:</text>
-                <text class="value">{{item.order_count}}</text>
+                <text class="label">营业状态:</text>
+                <text class="value">{{item.is_open ? '营业中' : '休息中'}}</text>
               </view>
             </view>
 
             <view class="card-actions">
               <t-button size="small" theme="default" variant="outline" data-id="{{item.id}}" bindtap="onViewDetail">查看详情</t-button>
-              <t-button 
-                size="small" 
-                theme="{{item.status === 'ACTIVE' ? 'danger' : 'primary'}}" 
-                data-id="{{item.id}}" 
-                data-status="{{item.status}}"
-                bindtap="onToggleStatus"
-              >
-                {{item.status === 'ACTIVE' ? '封禁' : '解封'}}
-              </t-button>
             </view>
           </view>
         </view>

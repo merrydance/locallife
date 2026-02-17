@@ -1,4 +1,10 @@
 import { isLargeScreen } from '@/utils/responsive'
+import { operatorAnalyticsService } from '../../../api/operator-analytics'
+import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
+
+function formatCurrencyFen(amount: number): string {
+  return `¥${(Number(amount || 0) / 100).toFixed(2)}`
+}
 
 Page({
   data: {
@@ -7,19 +13,8 @@ Page({
     loading: false,
     initialLoading: true,
     error: null as string | null,
-    metrics: [
-      { label: '总GMV', value: '¥1,254,300', change: '+15%', trend: 'up' },
-      { label: '活跃商户', value: '45', change: '+2', trend: 'up' },
-      { label: '活跃骑手', value: '28', change: '-1', trend: 'down' },
-      { label: '总订单', value: '12,580', change: '+8%', trend: 'up' }
-    ],
-    topMerchants: [
-      { rank: 1, name: '老上海本帮菜', gmv: 85000, orders: 1250 },
-      { rank: 2, name: '川味小馆', gmv: 62000, orders: 980 },
-      { rank: 3, name: '北京烤鸭', gmv: 58000, orders: 850 },
-      { rank: 4, name: '西北面馆', gmv: 45000, orders: 1100 },
-      { rank: 5, name: '日式料理', gmv: 42000, orders: 600 }
-    ]
+    metrics: [] as Array<{ label: string; value: string; change: string; trend: 'up' | 'down' }>,
+    topMerchants: [] as Array<{ rank: number; name: string; gmv: string; orders: number }>
   },
 
   onLoad() {
@@ -30,10 +25,75 @@ Page({
   async loadData() {
     this.setData({ loading: true, error: null })
     try {
-      // 模拟 API 加载延迟
-      await new Promise((resolve) => setTimeout(resolve, 800))
+      const end = new Date()
+      const start = new Date()
+      start.setDate(end.getDate() - 7)
+      const startDate = start.toISOString().split('T')[0]
+      const endDate = end.toISOString().split('T')[0]
+
+      const [realtime, trends, ranking] = await Promise.all([
+        operatorAnalyticsService.getRealtimeStats(),
+        operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate),
+        operatorMerchantManagementService.getMerchantRanking({
+          start_date: startDate,
+          end_date: endDate,
+          limit: 5
+        })
+      ])
+
+      const trendList = Array.isArray(trends) ? trends : []
+      const latest = trendList[trendList.length - 1] || { total_gmv: 0, order_count: 0 }
+      const previous = trendList[trendList.length - 2] || { total_gmv: 0, order_count: 0 }
+      const calcChange = (current: number, prev: number) => {
+        if (!prev) return '+0%'
+        const rate = ((current - prev) / prev) * 100
+        const signed = rate >= 0 ? `+${rate.toFixed(1)}%` : `${rate.toFixed(1)}%`
+        return signed
+      }
+      const gmvChange = calcChange(Number(latest.total_gmv || 0), Number(previous.total_gmv || 0))
+      const ordersChange = calcChange(Number(latest.order_count || 0), Number(previous.order_count || 0))
+
+      const metrics = [
+        {
+          label: '近7天GMV',
+          value: formatCurrencyFen(Number(latest.total_gmv || 0)),
+          change: gmvChange,
+          trend: gmvChange.startsWith('-') ? 'down' : 'up'
+        },
+        {
+          label: '活跃商户',
+          value: String(realtime.active_merchant_count || 0),
+          change: `待审 ${realtime.pending_merchant_count || 0}`,
+          trend: 'up' as const
+        },
+        {
+          label: '活跃骑手',
+          value: String(realtime.active_rider_count || 0),
+          change: `待审 ${realtime.pending_rider_count || 0}`,
+          trend: 'up' as const
+        },
+        {
+          label: '近7天订单',
+          value: String(latest.order_count || 0),
+          change: ordersChange,
+          trend: ordersChange.startsWith('-') ? 'down' : 'up'
+        }
+      ]
+
+      const rankingList = (Array.isArray((ranking as unknown as { rankings?: unknown[] }).rankings)
+        ? (ranking as unknown as { rankings: Array<Record<string, unknown>> }).rankings
+        : (Array.isArray(ranking) ? ranking : [])) as Array<Record<string, unknown>>
+
+      const topMerchants = rankingList.slice(0, 5).map((item, index) => ({
+        rank: index + 1,
+        name: String(item.merchant_name || '-'),
+        gmv: (Number(item.total_sales || item.total_gmv || 0) / 100).toFixed(2),
+        orders: Number(item.order_count || 0)
+      }))
       
       this.setData({
+        metrics,
+        topMerchants,
         initialLoading: false,
         loading: false
       })

@@ -76,6 +76,10 @@
   color: #999;
 }
 
+.region-picker {
+  margin-bottom: 24rpx;
+}
+
 /* 规则卡片 */
 .rule-card {
   background-color: #fff;
@@ -87,11 +91,6 @@
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
   position: relative;
   overflow: hidden;
-  transition: transform 0.2s ease;
-}
-
-.rule-card:active {
-  transform: scale(0.98);
 }
 
 .rule-icon {
@@ -112,8 +111,15 @@
 
 .rule-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   margin-bottom: 12rpx;
+}
+
+.rule-top-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .rule-top .name {
@@ -121,6 +127,7 @@
   font-weight: 600;
   color: #333;
   margin-right: 16rpx;
+  min-width: 0;
 }
 
 .current-badge {
@@ -133,8 +140,9 @@
 
 .value-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   margin-bottom: 16rpx;
+  gap: 10rpx;
 }
 
 .value-row .num {
@@ -147,7 +155,6 @@
 .value-row .unit {
   font-size: 24rpx;
   color: #999;
-  margin-left: 8rpx;
 }
 
 .rule-info .desc {
@@ -158,9 +165,6 @@
 }
 
 .edit-btn {
-  position: absolute;
-  top: 30rpx;
-  right: 30rpx;
   display: flex;
   align-items: center;
   color: #666;
@@ -168,10 +172,20 @@
   background: #f6f6f6;
   padding: 8rpx 20rpx;
   border-radius: 30rpx;
+  flex-shrink: 0;
 }
 
 .edit-btn text {
   margin-left: 6rpx;
+}
+
+.readonly-badge {
+  color: #999;
+  font-size: 22rpx;
+  background: #f3f3f3;
+  padding: 8rpx 20rpx;
+  border-radius: 30rpx;
+  flex-shrink: 0;
 }
 
 /* 弹窗样式 */

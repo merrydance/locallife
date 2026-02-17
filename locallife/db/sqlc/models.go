@@ -1393,6 +1393,29 @@ type RegionExternalMapping struct {
 	CreatedAt    time.Time   `json:"created_at"`
 }
 
+// 区县级规则配置表，按 region 维度管理运营规则
+type RegionRuleConfig struct {
+	ID int64 `json:"id"`
+	// 区县ID
+	RegionID int64 `json:"region_id"`
+	// 平台抽成比例（0.03=3%）
+	CommissionRate pgtype.Numeric `json:"commission_rate"`
+	// 商户押金（分）
+	MerchantDeposit int64 `json:"merchant_deposit"`
+	// 骑手押金（分）
+	RiderDeposit int64 `json:"rider_deposit"`
+	// 极端天气系数
+	WeatherCoeffExtreme pgtype.Numeric `json:"weather_coeff_extreme"`
+	// 暴雨雪天气系数
+	WeatherCoeffHeavy pgtype.Numeric `json:"weather_coeff_heavy"`
+	// 中雨雪天气系数
+	WeatherCoeffModerate pgtype.Numeric `json:"weather_coeff_moderate"`
+	// 小雨雪天气系数
+	WeatherCoeffLight pgtype.Numeric     `json:"weather_coeff_light"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ReservationInventory struct {
 	ID            int64              `json:"id"`
 	ReservationID int64              `json:"reservation_id"`

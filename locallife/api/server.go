@@ -993,7 +993,7 @@ func (server *Server) setupRouter() {
 		// 商户管理（完整CRUD + 暂停/恢复）
 		operatorStatsGroup.GET("/merchants", server.listOperatorMerchants)
 		operatorStatsGroup.GET("/merchants/:id", server.getOperatorMerchant)
-		// 规则驱动：运营商不提供暂停/恢复入口
+		operatorStatsGroup.POST("/merchants/:id/resume", server.ResumeMerchant)
 
 		// 骑手管理（完整CRUD + 暂停/恢复）
 		operatorStatsGroup.GET("/riders", server.listOperatorRiders)
@@ -1010,7 +1010,10 @@ func (server *Server) setupRouter() {
 		// And withdraw.
 
 		// 食安熔断 (New)
+		operatorStatsGroup.GET("/reports/safety", server.listSafetyReports)
 		operatorStatsGroup.POST("/reports/safety", server.submitSafetyReport)
+		operatorStatsGroup.GET("/reports/safety/:id", server.getSafetyReportDetail)
+		operatorStatsGroup.POST("/reports/safety/:id/resolve", server.resolveSafetyReport)
 
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
 		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
@@ -1086,6 +1089,13 @@ func (server *Server) setupRouter() {
 		platformRulesGroup.POST("/:id/disable", server.disableRule)
 		platformRulesGroup.POST("/:id/rollback", server.rollbackRule)
 		platformRulesGroup.GET("/hits", server.listRuleHits)
+	}
+
+	platformOperatorRulesGroup := authGroup.Group("/platform/operator-rules")
+	platformOperatorRulesGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		platformOperatorRulesGroup.GET("", server.listPlatformOperatorRules)
+		platformOperatorRulesGroup.PATCH("/:key", server.updatePlatformOperatorRule)
 	}
 
 	// 用户索赔路由

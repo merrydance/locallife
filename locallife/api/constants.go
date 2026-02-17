@@ -63,4 +63,14 @@ const (
 	// Cart Constants (购物车相关常量)
 	// P1-016 修复：单品最大数量
 	CartItemMaxQuantity = 99
+
+	// Safety Report Constants (食安事件常量)
+	SafetyReportStatusPending  = "pending"
+	SafetyReportStatusResolved = "resolved"
+	SafetyReportStatusRejected = "rejected"
+
+	SafetyReportLevelLow      = "low"
+	SafetyReportLevelMedium   = "medium"
+	SafetyReportLevelHigh     = "high"
+	SafetyReportLevelCritical = "critical"
 )

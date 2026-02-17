@@ -25,8 +25,9 @@
               <t-input label="基础配送费" placeholder="请输入金额" suffix="元" type="digit" value="{{baseFeeInput}}" data-field="baseFeeInput" bind:change="onInputChange" align="right" />
               <t-input label="基础距离" placeholder="请输入距离" suffix="米" type="number" value="{{baseDistanceInput}}" data-field="baseDistanceInput" bind:change="onInputChange" align="right" />
               <t-input label="超距加价" placeholder="请输入金额" suffix="元/km" type="digit" value="{{extraFeeInput}}" data-field="extraFeeInput" bind:change="onInputChange" align="right" />
-              <t-input label="起送金额" placeholder="请输入金额" suffix="元" type="digit" value="{{minOrderInput}}" data-field="minOrderInput" bind:change="onInputChange" align="right" />
-              <t-input label="最大配送范围" placeholder="请输入距离" suffix="米" type="number" value="{{maxDistanceInput}}" data-field="maxDistanceInput" bind:change="onInputChange" align="right" />
+                <t-input label="货值费率" placeholder="请输入比例" suffix="%" type="digit" value="{{valueRatioInput}}" data-field="valueRatioInput" bind:change="onInputChange" align="right" />
+                <t-input label="最低运费" placeholder="请输入金额" suffix="元" type="digit" value="{{minFeeInput}}" data-field="minFeeInput" bind:change="onInputChange" align="right" />
+                <t-input label="最高运费" placeholder="留空表示不限" suffix="元" type="digit" value="{{maxFeeInput}}" data-field="maxFeeInput" bind:change="onInputChange" align="right" />
           </t-cell-group>
           
           <view class="btn-wrapper">
@@ -43,10 +44,10 @@
           <view class="peak-list">
               <block wx:for="{{peakConfigs}}" wx:key="id">
                   <view class="peak-item-wrapper">
-                      <t-cell title="{{item.start_time}} - {{item.end_time}}" description="周{{tools.formatDays(item.days_of_week)}} | 加价 {{item.extra_fee/100}}元 | {{item.multiplier}}倍">
-                          <view slot="right-icon" bind:tap="onDeletePeak" data-id="{{item.id}}">
-                              <t-icon name="delete" size="48rpx" color="#d9001b" />
-                          </view>
+                  <t-cell title="{{item.start_time}} - {{item.end_time}}" description="周{{tools.formatDays(item.days_of_week)}} | 系数 {{item.coefficient}}x">
+                  <view slot="right-icon" bind:tap="onDeletePeak" data-id="{{item.id}}">
+                    <t-icon name="delete" size="48rpx" color="#d9001b" />
+                  </view>
                       </t-cell>
                   </view>
               </block>
@@ -72,8 +73,7 @@
                 <t-cell title="结束时间" note="{{peakForm.endTime}}" arrow />
               </picker>
               
-              <t-input label="加价金额" placeholder="0.00" suffix="元" type="digit" value="{{peakForm.extraFee}}" data-field="extraFee" bind:change="onPeakFormChange"/>
-              <t-input label="倍率" placeholder="1.0" suffix="倍" type="digit" value="{{peakForm.multiplier}}" data-field="multiplier" bind:change="onPeakFormChange"/>
+              <t-input label="时段系数" placeholder="1.50" suffix="x" type="digit" value="{{peakForm.coefficient}}" data-field="coefficient" bind:change="onPeakFormChange"/>
               
               <view class="form-item-col">
                   <text class="label">生效日期</text>
@@ -101,7 +101,7 @@
 module.exports = {
   formatDays: function(days) {
     if (!days) return '';
-    var map = ['','一','二','三','四','五','六','日'];
+    var map = ['日','一','二','三','四','五','六'];
     return days.map(function(d){ return map[d] }).join('、');
   },
   includes: function(arr, val) {

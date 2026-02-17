@@ -1015,6 +1015,16 @@ func (server *Server) ResumeMerchant(ctx *gin.Context) {
 		return
 	}
 
+	if err = server.store.UnsuspendMerchant(ctx, merchantID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("unsuspend merchant %d: %w", merchantID, err)))
+		return
+	}
+
+	if err = server.store.UnsuspendMerchantTakeout(ctx, merchantID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("unsuspend merchant takeout %d: %w", merchantID, err)))
+		return
+	}
+
 	// 更新商户状态为正常
 	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
 		ID:     merchantID,

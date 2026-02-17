@@ -3,7 +3,8 @@
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
   <t-tabs value="{{status}}" bind:change="onTabChange" t-class="sticky-tabs">
     <t-tab-panel label="待处理" value="pending" />
-    <t-tab-panel label="已处理" value="processed" />
+    <t-tab-panel label="已通过" value="approved" />
+    <t-tab-panel label="已驳回" value="rejected" />
   </t-tabs>
 
   <view class="content">
@@ -28,9 +29,9 @@
               <text class="time">{{item.created_at}}</text>
             </view>
             <view class="card-footer">
-              <text class="user">用户ID: {{item.user_id}}</text>
-              <t-tag theme="{{item.status === 'pending' ? 'warning' : 'success'}}" size="small" variant="light-outline">
-                {{item.status === 'pending' ? '待处理' : '已完成'}}
+              <text class="user">申诉人ID: {{item.appellant_id}}</text>
+              <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="light-outline">
+                {{item.status === 'pending' ? '待处理' : (item.status === 'approved' ? '已通过' : '已驳回')}}
               </t-tag>
             </view>
           </view>

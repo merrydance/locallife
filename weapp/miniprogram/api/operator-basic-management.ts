@@ -169,6 +169,35 @@ export interface SubmitSafetyReportRequest extends Record<string, unknown> {
     level: 'low' | 'medium' | 'high' | 'critical'
 }
 
+export interface SafetyReportItem {
+    id: number
+    reporter_id: number
+    region_id: number
+    title: string
+    description: string
+    level: 'low' | 'medium' | 'high' | 'critical'
+    merchant_ids: number[]
+    images: string[]
+    status: 'pending' | 'resolved' | 'rejected'
+    resolution_notes?: string
+    created_at: string
+    updated_at: string
+}
+
+export interface SafetyReportListResponse {
+    items: SafetyReportItem[]
+    page: number
+    limit: number
+    has_more: boolean
+}
+
+export interface ResolveSafetyReportRequest extends Record<string, unknown> {
+    status: 'resolved' | 'rejected'
+    resolution_notes: string
+    recover_merchant_ids?: number[]
+    recover_reason?: string
+}
+
 // ==================== 运营商基础管理服务类 ====================
 
 /**
@@ -288,6 +317,68 @@ export class OperatorBasicManagementService {
             url: '/v1/operator/reports/safety',
             method: 'POST',
             data
+        })
+    }
+
+    /**
+     * 获取食安事件列表
+     */
+    async getSafetyReports(params?: {
+        page?: number
+        limit?: number
+        status?: 'pending' | 'resolved' | 'rejected'
+    }): Promise<SafetyReportListResponse> {
+        const query: {
+            page?: number
+            limit?: number
+            status?: 'pending' | 'resolved' | 'rejected'
+        } = {
+            page: params?.page,
+            limit: params?.limit
+        }
+        if (params?.status) {
+            query.status = params.status
+        }
+
+        return request({
+            url: '/v1/operator/reports/safety',
+            method: 'GET',
+            data: query
+        })
+    }
+
+    /**
+     * 获取食安事件详情
+     */
+    async getSafetyReportDetail(reportId: number): Promise<SafetyReportItem> {
+        return request({
+            url: `/v1/operator/reports/safety/${reportId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 处理食安事件并可恢复商户上线
+     */
+    async resolveSafetyReport(reportId: number, data: ResolveSafetyReportRequest): Promise<{
+        report: SafetyReportItem
+        recovered_merchant_ids: number[]
+    }> {
+        return request({
+            url: `/v1/operator/reports/safety/${reportId}/resolve`,
+            method: 'POST',
+            data
+        })
+    }
+
+    /**
+     * 手动恢复商户上线
+     */
+    async resumeMerchant(merchantId: number, reason: string): Promise<{ message: string }> {
+        return request({
+            url: `/v1/operator/merchants/${merchantId}/resume`,
+            method: 'POST',
+            data: { reason }
         })
     }
 }

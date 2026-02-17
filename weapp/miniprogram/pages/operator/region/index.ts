@@ -1,6 +1,11 @@
 import { operatorBasicManagementService, OperatorBasicManagementAdapter } from '../../../api/operator-basic-management'
 
 type RegionListItem = ReturnType<typeof OperatorBasicManagementAdapter.adaptRegionResponse>
+type RegionPageTarget = 'delivery' | 'rules'
+
+interface RegionPageOptions {
+    target?: string
+}
 
 Page({
     data: {
@@ -11,10 +16,19 @@ Page({
         page: 1,
         pageSize: 20,
         hasMore: true,
-        navBarHeight: 0
+        navBarHeight: 0,
+        target: 'delivery' as RegionPageTarget,
+        pageTitle: '区域管理',
+        subtitle: '管理您所负责的区域及其配送运费规则'
     },
 
-    onLoad() {
+    onLoad(options: RegionPageOptions) {
+        const target: RegionPageTarget = options?.target === 'rules' ? 'rules' : 'delivery'
+        this.setData({
+            target,
+            pageTitle: target === 'rules' ? '选择规则配置区县' : '区域管理',
+            subtitle: target === 'rules' ? '请先选择要配置的区县，再进入规则配置页' : '管理您所负责的区域及其配送运费规则'
+        })
         this.loadRegions(true)
     },
 
@@ -56,7 +70,7 @@ Page({
             this.setData({
                 regions: reset ? newRegions : [...this.data.regions, ...newRegions],
                 page: this.data.page + 1,
-                hasMore: res.has_more,
+                hasMore: newRegions.length === this.data.pageSize,
                 initialLoading: false,
                 loadingMore: false
             })
@@ -79,8 +93,17 @@ Page({
 
     // 跳转到详细配置页
     onRegionClick(e: WechatMiniprogram.TouchEvent) {
-        const { id } = e.currentTarget.dataset as { id?: number }
+        const { id, name } = e.currentTarget.dataset as { id?: number; name?: string }
         if (!id) return
+
+        if (this.data.target === 'rules') {
+            const regionName = name ? encodeURIComponent(name) : ''
+            wx.navigateTo({
+                url: `/pages/operator/rules/index?region_id=${id}&region_name=${regionName}`
+            })
+            return
+        }
+
         wx.navigateTo({
             url: `/pages/operator/region/config?id=${id}`
         })

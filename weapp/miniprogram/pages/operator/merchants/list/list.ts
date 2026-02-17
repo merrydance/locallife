@@ -175,7 +175,7 @@ Page({
         const { id } = e.currentTarget.dataset as MerchantListPageDataset
         if (!id) return
         wx.navigateTo({
-            url: `/pages/operator/merchants/detail/detail?id=${id}`
+            url: `/pages/operator/merchants/detail/index?id=${id}`
         })
     },
 

@@ -196,6 +196,8 @@ type Querier interface {
 	// 按区域和状态统计骑手数量
 	CountRidersByRegionWithStatus(ctx context.Context, arg CountRidersByRegionWithStatusParams) (int64, error)
 	CountRidersByStatus(ctx context.Context, status string) (int64, error)
+	CountSafetyReportsByRegion(ctx context.Context, regionID int64) (int64, error)
+	CountSafetyReportsByRegionAndStatus(ctx context.Context, arg CountSafetyReportsByRegionAndStatusParams) (int64, error)
 	// Count for pagination
 	CountSearchCombosGlobal(ctx context.Context, arg CountSearchCombosGlobalParams) (int64, error)
 	// 统计商户内菜品搜索结果总数
@@ -784,6 +786,8 @@ type Querier interface {
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	// 平台日统计
 	GetPlatformDailyStats(ctx context.Context, arg GetPlatformDailyStatsParams) ([]GetPlatformDailyStatsRow, error)
+	GetPlatformOperatorRuleBaselineFromOperator(ctx context.Context) (GetPlatformOperatorRuleBaselineFromOperatorRow, error)
+	GetPlatformOperatorRuleBaselineFromRegion(ctx context.Context) (GetPlatformOperatorRuleBaselineFromRegionRow, error)
 	// M12: 平台端统计查询
 	// 平台全局概览
 	GetPlatformOverview(ctx context.Context, arg GetPlatformOverviewParams) (GetPlatformOverviewRow, error)
@@ -835,6 +839,7 @@ type Querier interface {
 	GetRegionComparison(ctx context.Context, arg GetRegionComparisonParams) ([]GetRegionComparisonRow, error)
 	// 区域日趋势（基于实际分账数据）
 	GetRegionDailyTrend(ctx context.Context, arg GetRegionDailyTrendParams) ([]GetRegionDailyTrendRow, error)
+	GetRegionRuleConfigByRegion(ctx context.Context, regionID int64) (RegionRuleConfig, error)
 	// M12: 运营商统计查询
 	//
 	// 说明: 运营商结算通过微信电商分账系统实时处理，每笔订单支付时自动分账
@@ -1264,6 +1269,7 @@ type Querier interface {
 	// Phase1: 规则读取查询（草案）
 	ListRules(ctx context.Context, arg ListRulesParams) ([]Rule, error)
 	ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error)
+	ListSafetyReportsByRegionAndStatus(ctx context.Context, arg ListSafetyReportsByRegionAndStatusParams) ([]SafetyReport, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
 	ListTableTags(ctx context.Context, tableID int64) ([]ListTableTagsRow, error)
@@ -1415,6 +1421,12 @@ type Querier interface {
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
+	UpdateAllOperatorsCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error
+	UpdateAllOperatorsMerchantDeposit(ctx context.Context, merchantDeposit int64) error
+	UpdateAllOperatorsRiderDeposit(ctx context.Context, riderDeposit int64) error
+	UpdateAllRegionRuleConfigCommissionRate(ctx context.Context, commissionRate pgtype.Numeric) error
+	UpdateAllRegionRuleConfigMerchantDeposit(ctx context.Context, merchantDeposit int64) error
+	UpdateAllRegionRuleConfigRiderDeposit(ctx context.Context, riderDeposit int64) error
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
 	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error
 	UpdateBehaviorBlocklistStatus(ctx context.Context, arg UpdateBehaviorBlocklistStatusParams) error
@@ -1611,6 +1623,7 @@ type Querier interface {
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
 	UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error)
+	UpsertRegionRuleConfig(ctx context.Context, arg UpsertRegionRuleConfigParams) (RegionRuleConfig, error)
 	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)
 	// ==========================================
 	// 设备指纹查询（M9欺诈检测）

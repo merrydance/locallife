@@ -38,6 +38,8 @@ p, admin, /v1/platform/rules, GET
 p, admin, /v1/platform/rules, POST
 p, admin, /v1/platform/rules/*, GET
 p, admin, /v1/platform/rules/*, POST
+p, admin, /v1/platform/operator-rules, GET
+p, admin, /v1/platform/operator-rules/:key, PATCH
 
 # Rider Management
 p, admin, /v1/admin/riders, GET
@@ -104,7 +106,13 @@ p, operator, /v1/admin/riders/:rider_id/reject, POST
 p, operator, /v1/operator/appeals, GET
 p, operator, /v1/operator/appeals/:id, GET
 p, operator, /v1/operator/appeals/:id/review, POST
+p, operator, /v1/operator/claims/:id/recovery, GET
+p, operator, /v1/operator/claims/:id/recovery/waive, POST
+p, operator, /v1/operator/merchants/:id/resume, POST
+p, operator, /v1/operator/reports/safety, GET
 p, operator, /v1/operator/reports/safety, POST
+p, operator, /v1/operator/reports/safety/:id, GET
+p, operator, /v1/operator/reports/safety/:id/resolve, POST
 
 # Operator Finance
 p, operator, /v1/operators/me/finance/overview, GET

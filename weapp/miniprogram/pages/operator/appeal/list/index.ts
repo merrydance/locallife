@@ -6,7 +6,7 @@ Page({
         loading: false,
         initialLoading: true,
         error: null as string | null,
-        status: 'pending' as 'pending' | 'processed',
+        status: 'pending' as 'pending' | 'approved' | 'rejected',
         navBarHeight: 88
     },
 
@@ -35,9 +35,9 @@ Page({
         try {
             // Using operator service for operator page
             const res = await operatorAppealReviewService.getPendingAppeals({
-                status: this.data.status === 'pending' ? 'pending' : 'approved',
-                page_id: 1,
-                page_size: 20
+                status: this.data.status,
+                page: 1,
+                limit: 20
             })
             
             this.setData({
@@ -59,7 +59,7 @@ Page({
         this.loadAppeals()
     },
 
-    onTabChange(e: WechatMiniprogram.CustomEvent<{ value: 'pending' | 'processed' }>) {
+    onTabChange(e: WechatMiniprogram.CustomEvent<{ value: 'pending' | 'approved' | 'rejected' }>) {
         this.setData({ status: e.detail.value })
         this.loadAppeals()
     },

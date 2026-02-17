@@ -1,11 +1,14 @@
 {
-  "navigationBarTitleText": "规则中心",
+  "navigationBarTitleText": "平台规则配置",
   "navigationBarBackgroundColor": "#1890ff",
   "navigationBarTextStyle": "white",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-tag": "tdesign-miniprogram/tag/tag"
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-input": "tdesign-miniprogram/input/input"
   }
 }

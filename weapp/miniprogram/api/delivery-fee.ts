@@ -36,21 +36,23 @@ export interface DeliveryFeeConfigResponse {
     region_id: number
     base_fee: number             // 基础配送费(分)
     base_distance: number        // 基础配送距离(米)
-    extra_distance_fee: number   // 超出距离每公里的费用(分)
-    min_order_amount: number     // 起送价(分)
-    max_delivery_distance: number// 最大配送范围(米)
+    extra_fee_per_km: number     // 超出距离每公里的费用(分)
+    value_ratio: number          // 货值费率(0.01 = 1%)
+    min_fee: number              // 最低运费(分)
+    max_fee?: number             // 最高运费(分), 空表示不限
     is_active: boolean
     created_at: string
 }
 
 /** 创建/更新配送费配置请求 */
 export interface CreateDeliveryFeeConfigRequest {
+    region_id: number
     base_fee: number
     base_distance: number
-    extra_distance_fee: number
-    min_order_amount: number
-    max_delivery_distance: number
-    is_active?: boolean
+    extra_fee_per_km: number
+    value_ratio: number
+    min_fee: number
+    max_fee?: number
 }
 
 /** 峰时配置响应 */
@@ -59,22 +61,19 @@ export interface PeakHourConfigResponse {
     region_id: number
     start_time: string // HH:MM
     end_time: string   // HH:MM
-    multiplier: number // 倍率 (e.g. 1.5)
-    extra_fee: number  // 额外加价(分)
-    days_of_week: number[] // [1,2,3,4,5,6,7]
+    coefficient: number // 倍率 (e.g. 1.5)
+    days_of_week: number[] // [0,1,2,3,4,5,6]，0=周日
     is_active: boolean
     name?: string
 }
 
 /** 创建峰时配置请求 */
 export interface CreatePeakHourConfigRequest {
+    region_id: number
     start_time: string
     end_time: string
-    multiplier: number
-    extra_fee: number
+    coefficient: number
     days_of_week: number[]
-    name?: string
-    is_active?: boolean
 }
 
 /** 配送优惠响应 */
@@ -121,7 +120,7 @@ export class DeliveryFeeService {
      */
     async getRegionConfig(regionId: number): Promise<DeliveryFeeConfigResponse> {
         return request({
-            url: `/v1/delivery-fee/config/${regionId}`,
+            url: `/v1/delivery-fee/regions/${regionId}/config`,
             method: 'GET'
         })
     }
@@ -132,24 +131,27 @@ export class DeliveryFeeService {
      * @param data 配置数据
      */
     async updateRegionConfig(regionId: number, data: CreateDeliveryFeeConfigRequest): Promise<DeliveryFeeConfigResponse> {
-        // 尝试创建，如果已存在则后端会返回409建议走PATCH，或者前端先查询。
-        // 根据Swagger，POST是Create，PATCH是Update。
-        // 这里合并逻辑：通常业务上会先Get，若无则Post，若有则Patch。
-        // 或者是为了简化 UI 调用，我们可以拆分。
-        
-        // 此处严格遵循 Swagger: POST /delivery-fee/regions/{id}/config
-        return request({
-            url: `/v1/delivery-fee/regions/${regionId}/config`,
-            method: 'POST',
-            data
-        })
+        const payload = { ...data, region_id: regionId }
+        try {
+            return await request({
+                url: `/v1/delivery-fee/regions/${regionId}/config`,
+                method: 'PATCH',
+                data: payload
+            })
+        } catch (_e) {
+            return request({
+                url: `/v1/delivery-fee/regions/${regionId}/config`,
+                method: 'POST',
+                data: payload
+            })
+        }
     }
     
     async patchRegionConfig(regionId: number, data: Partial<CreateDeliveryFeeConfigRequest>): Promise<DeliveryFeeConfigResponse> {
         return request({
             url: `/v1/delivery-fee/regions/${regionId}/config`,
             method: 'PATCH',
-            data
+            data: { ...data, region_id: regionId }
         })
     }
 

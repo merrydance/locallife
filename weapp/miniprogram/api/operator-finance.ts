@@ -12,7 +12,7 @@ export interface WithdrawOperatorRequest {
  */
 export const withdrawOperator = (data: WithdrawOperatorRequest) => {
   return request({
-    url: '/v1/operator/finance/withdraw',
+    url: '/v1/operators/me/finance/withdraw',
     method: 'POST',
     data
   })
