@@ -1030,6 +1030,7 @@ export async function batchRiderAction(
 export function formatRiderStatus(status: RiderStatus): string {
     const statusMap: Record<RiderStatus, string> = {
         active: '正常',
+        pending: '待处理',
         suspended: '暂停',
         pending_approval: '待审核',
         rejected: '审核拒绝',

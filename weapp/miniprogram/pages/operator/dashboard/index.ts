@@ -96,41 +96,30 @@ Page({
       
       // 1. 并行获取各项数据（财务概览失败不阻断运营中心）
       const [
-          financeOverviewResult,
-          realtimeStatsResult,
-          merchantsPendingResult,
-          ridersPendingResult,
-          merchantRankingResult,
-          riderRankingResult,
-          dailyTrendsResult,
-          appealsResult
-      ] = await Promise.allSettled([
-        operatorBasicManagementService.getFinanceOverview(),
+        financeOverview,
+        realtimeStats,
+        merchantsPending,
+        ridersPending,
+        merchantRanking,
+        riderRanking,
+        dailyTrends,
+        appeals
+      ] = await Promise.all([
+        operatorBasicManagementService.getFinanceOverview().catch(() => null),
         operatorAnalyticsService.getRealtimeStats(),
-        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending' }),
-        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending' }),
-        operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
-        operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5 }),
-        operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate),
+        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending' })
+          .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }> })),
+        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending' })
+          .catch(() => ({ riders: [] as Array<{ id: number, name: string, created_at: string }> })),
+        operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5 })
+          .catch(() => []),
+        operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5 })
+          .catch(() => []),
+        operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate)
+          .catch(() => []),
         appealService.getAppealList({ page: 1, limit: 5, status: 'pending' })
+          .catch(() => ({ appeals: [] as Array<{ id: number, reason: string, created_at: string }> }))
       ])
-
-      if (realtimeStatsResult.status !== 'fulfilled') throw realtimeStatsResult.reason
-
-      const realtimeStats = realtimeStatsResult.value
-      const financeOverview = financeOverviewResult.status === 'fulfilled' ? financeOverviewResult.value : null
-      const merchantsPending = merchantsPendingResult.status === 'fulfilled'
-        ? merchantsPendingResult.value
-        : { merchants: [] as Array<{ id: number, name: string, created_at: string }> }
-      const ridersPending = ridersPendingResult.status === 'fulfilled'
-        ? ridersPendingResult.value
-        : { riders: [] as Array<{ id: number, name: string, created_at: string }> }
-      const merchantRanking = merchantRankingResult.status === 'fulfilled' ? merchantRankingResult.value : []
-      const riderRanking = riderRankingResult.status === 'fulfilled' ? riderRankingResult.value : []
-      const dailyTrends = dailyTrendsResult.status === 'fulfilled' ? dailyTrendsResult.value : []
-      const appeals = appealsResult.status === 'fulfilled'
-        ? appealsResult.value
-        : { appeals: [] as Array<{ id: number, reason: string, created_at: string }> }
 
       // 格式化处理各维度数据，确保兼容性
       const today = new Date().toISOString().split('T')[0]
@@ -139,16 +128,19 @@ Page({
       const todayTrend = trends.find((t) => t.date === today) || { total_gmv: 0, order_count: 0, operator_income: 0 }
       
       const merchantRankList = Array.isArray(merchantRanking) ? merchantRanking : []
-      const riderRankList = (Array.isArray(riderRanking) ? riderRanking : []).map((r) => ({
+      const riderRankList = (Array.isArray(riderRanking) ? riderRanking : []).map((r: Record<string, unknown>) => ({
         ...r,
-        completion_rate: typeof r.completion_rate === 'number' ? r.completion_rate.toFixed(1) : '0.0'
+        completion_rate:
+          typeof r.completion_rate === 'number'
+            ? r.completion_rate.toFixed(1)
+            : '0.0'
       }))
 
       // 待办事项组合
       const pendingItems = [
-        ...(merchantsPending.merchants || []).map((m) => ({ id: m.id, type: 'MERCHANT', name: m.name, time: m.created_at })),
-        ...(ridersPending.riders || []).map((r) => ({ id: r.id, type: 'RIDER', name: r.name, time: r.created_at })),
-        ...(appeals.appeals || []).map((a) => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.reason || ('#' + a.id)}`, time: a.created_at }))
+        ...(merchantsPending.merchants || []).map((m: { id: number, name: string, created_at: string }) => ({ id: m.id, type: 'MERCHANT', name: m.name, time: m.created_at })),
+        ...(ridersPending.riders || []).map((r: { id: number, name: string, created_at: string }) => ({ id: r.id, type: 'RIDER', name: r.name, time: r.created_at })),
+        ...(appeals.appeals || []).map((a: { id: number, reason?: string, created_at: string }) => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.reason || ('#' + a.id)}`, time: a.created_at }))
       ] as PendingApprovalItem[]
 
       pendingItems.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
@@ -178,8 +170,8 @@ Page({
         error: null
       })
 
-      if (financeOverviewResult.status !== 'fulfilled') {
-        console.warn('运营中心财务概览降级：', financeOverviewResult.reason)
+      if (!financeOverview) {
+        console.warn('运营中心财务概览降级：finance overview unavailable')
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '数据加载失败，请重试'

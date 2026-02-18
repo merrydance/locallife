@@ -316,7 +316,7 @@ export class RiderFinanceManagementAdapter {
     static adaptWithdrawRequest(data: {
         amount: number
         remark?: string
-    }): WithdrawRequest {
+    }): DepositRechargeRequest {
         return {
             amount: data.amount,
             remark: data.remark

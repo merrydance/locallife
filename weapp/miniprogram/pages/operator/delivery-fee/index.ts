@@ -4,8 +4,6 @@ interface DeliveryFeeConfigView {
     base_fee: number
     base_distance: number
     extra_distance_fee: number
-    min_order_amount: number
-    max_delivery_distance: number
     is_active: boolean
     night_surcharge: number
     night_start: string
@@ -27,8 +25,6 @@ Page({
             base_fee: 0,
             base_distance: 0,
             extra_distance_fee: 0,
-            min_order_amount: 0,
-            max_delivery_distance: 0,
             is_active: true,
             night_surcharge: 0,
             night_start: '22:00',
@@ -72,8 +68,7 @@ Page({
                 config: {
                     ...config,
                     base_fee: config.base_fee / 100,
-                    extra_distance_fee: config.extra_distance_fee / 100,
-                    min_order_amount: config.min_order_amount / 100,
+                    extra_distance_fee: config.extra_fee_per_km / 100,
                     // Mock additional fields if not present in API response yet
                     night_surcharge: nightSurcharge / 100,
                     night_start: nightStart,
@@ -131,12 +126,13 @@ Page({
             wx.showLoading({ title: '保存中' })
 
             const submitData = {
+                region_id: regionId,
                 base_fee: Number(config.base_fee) * 100,
                 base_distance: Number(config.base_distance),
-                extra_distance_fee: Number(config.extra_distance_fee) * 100,
-                min_order_amount: Number(config.min_order_amount) * 100,
-                max_delivery_distance: Number(config.max_delivery_distance),
-                is_active: config.is_active
+                extra_fee_per_km: Number(config.extra_distance_fee) * 100,
+                value_ratio: 0,
+                min_fee: 0,
+                max_fee: undefined
                 // Add unknown fields only if API supports them, otherwise this might just be local state
             }
 
