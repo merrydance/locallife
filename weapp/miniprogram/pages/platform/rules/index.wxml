@@ -21,41 +21,6 @@
         <view class="subtitle">平台级规则统一维护，不区分区县，支持按分类管理与修改。</view>
       </view>
 
-      <view class="section-card">
-        <view class="section-title">分账比例配置（全局）</view>
-        <view class="meta-row">
-          <text class="meta-label">平台佣金比例</text>
-          <t-input
-            value="{{platformRateInput}}"
-            type="number"
-            placeholder="0-100"
-            suffix="%"
-            align="right"
-            bind:change="onPlatformRateChange"
-          />
-        </view>
-        <view class="meta-row">
-          <text class="meta-label">运营商佣金比例</text>
-          <t-input
-            value="{{operatorRateInput}}"
-            type="number"
-            placeholder="0-100"
-            suffix="%"
-            align="right"
-            bind:change="onOperatorRateChange"
-          />
-        </view>
-        <view class="actions">
-          <t-button
-            theme="primary"
-            shape="round"
-            size="small"
-            loading="{{commissionSubmitting}}"
-            bind:tap="onSaveProfitSharingConfig"
-          >保存分账配置</t-button>
-        </view>
-      </view>
-
       <view class="summary-card">
         <text class="summary-title">规则总数</text>
         <text class="summary-value">{{total}}</text>
@@ -133,7 +98,26 @@
         <text class="target-name">{{editingRule.name}}</text>
         <text class="target-desc">{{editingRule.desc}}</text>
       </view>
+      <block wx:if="{{editingRule.key === 'COMMISSION_CONFIG'}}">
+        <t-input
+          value="{{commissionDialogPlatformRate}}"
+          placeholder="0-100"
+          label="平台佣金比例"
+          suffix="%"
+          align="right"
+          bind:change="onCommissionDialogPlatformRateChange"
+        />
+        <t-input
+          value="{{commissionDialogOperatorRate}}"
+          placeholder="0-100"
+          label="运营商佣金比例"
+          suffix="%"
+          align="right"
+          bind:change="onCommissionDialogOperatorRateChange"
+        />
+      </block>
       <t-input
+        wx:else
         value="{{newValue}}"
         placeholder="请输入新值"
         label="规则数值"

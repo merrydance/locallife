@@ -83,26 +83,8 @@ export interface OperatorRegionStatsResponse {
     }
 }
 
-/** 趋势分析响应 - 基于swagger api.operatorTrendDailyResponse */
-export interface OperatorTrendDailyResponse {
-    trends: OperatorDailyTrendItem[]
-    summary: {
-        total_days: number
-        avg_daily_orders: number
-        avg_daily_gmv: number
-        avg_daily_commission: number
-        best_day: {
-            date: string
-            orders: number
-            gmv: number
-        }
-        worst_day: {
-            date: string
-            orders: number
-            gmv: number
-        }
-    }
-}
+/** 趋势分析响应 - 对齐后端 /v1/operator/trend/daily（数组） */
+export type OperatorTrendDailyResponse = OperatorDailyTrendItem[]
 
 /** 日趋势项 - 基于swagger api.operatorDailyTrendItem */
 export interface OperatorDailyTrendItem {
@@ -285,14 +267,15 @@ export class OperatorAnalyticsService {
      * @param endDate 结束日期
      */
     async getDailyTrend(regionId?: number, startDate?: string, endDate?: string): Promise<OperatorTrendDailyResponse> {
+        const data: Record<string, string | number> = {}
+        if (typeof regionId === 'number') data.region_id = regionId
+        if (startDate) data.start_date = startDate
+        if (endDate) data.end_date = endDate
+
         return request({
             url: '/v1/operator/trend/daily',
             method: 'GET',
-            data: {
-                region_id: regionId,
-                start_date: startDate,
-                end_date: endDate
-            }
+            data
         })
     }
 

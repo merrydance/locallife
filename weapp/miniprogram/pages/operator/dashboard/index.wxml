@@ -28,7 +28,6 @@
         <view class="finance-card">
           <view class="finance-header">
             <view class="balance-title">可提现余额 (元)</view>
-            <view class="withdraw-btn" bindtap="onWithdrawTap">提现</view>
           </view>
           <view class="balance-value">{{finance.balance_display}}</view>
           <view class="income-row">

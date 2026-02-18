@@ -30,34 +30,53 @@ export default function OperatorRegionsPage() {
 
   useEffect(() => {
     const range = getRecentRange(14);
-    apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 1 })
-      .then((regionList) => {
-        const regionId = regionList.regions?.[0]?.id;
-        if (!regionId) {
-          throw new Error("未找到区域信息");
+    Promise.allSettled([
+      apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 1 }),
+      apiGet<OperatorDailyTrendRow[]>("/operator/trend/daily", range),
+    ]).then(async ([regionListResult, trendResult]) => {
+      const errors: string[] = [];
+
+      if (trendResult.status === "fulfilled") {
+        setTrend(trendResult.value ?? []);
+      } else {
+        setTrend([]);
+        errors.push("趋势数据暂不可用");
+      }
+
+      if (regionListResult.status === "fulfilled") {
+        const regionId = regionListResult.value.regions?.[0]?.id;
+        if (regionId) {
+          const statsResult = await Promise.allSettled([
+            apiGet<OperatorRegionStatsResponse>(`/operator/regions/${regionId}/stats`, range),
+          ]);
+          if (statsResult[0].status === "fulfilled") {
+            setRegionStats(statsResult[0].value);
+          } else {
+            setRegionStats(null);
+            errors.push("区域统计暂不可用");
+          }
+        } else {
+          setRegionStats(null);
+          errors.push("未找到区域信息");
         }
-        return Promise.all([
-          apiGet<OperatorRegionStatsResponse>(
-            `/operator/regions/${regionId}/stats`,
-            range
-          ),
-          apiGet<OperatorDailyTrendRow[]>("/operator/trend/daily", range),
-        ]);
-      })
-      .then(([statsData, trendData]) => {
-        setRegionStats(statsData);
-        setTrend(trendData ?? []);
-        setLoadState("loaded");
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "加载失败";
-        setError(message);
-        setLoadState("error");
+      } else {
+        setRegionStats(null);
+        errors.push("区域信息暂不可用");
+      }
+
+      setError(errors.length > 0 ? errors.join("；") : null);
+      setLoadState("loaded");
       });
   }, []);
 
   const summaryCards = useMemo(() => {
-    if (!regionStats) return [] as Array<{ title: string; value: string; description: string }>;
+    if (!regionStats)
+      return [
+        { title: "商户数", value: "--", description: "区域统计暂不可用" },
+        { title: "订单数", value: "--", description: "区域统计暂不可用" },
+        { title: "GMV", value: "--", description: "区域统计暂不可用" },
+        { title: "平台佣金", value: "--", description: "区域统计暂不可用" },
+      ] as Array<{ title: string; value: string; description: string }>;
     return [
       {
         title: "商户数",

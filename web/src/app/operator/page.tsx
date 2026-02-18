@@ -28,26 +28,47 @@ export default function OperatorDashboardPage() {
 
   useEffect(() => {
     const range = getRecentRange(14);
-    Promise.all([
+    Promise.allSettled([
       apiGet<OperatorFinanceOverviewResponse>("/operators/me/finance/overview"),
       apiGet<OperatorDailyTrendRow[]>("/operator/trend/daily", range),
-      apiGet<OperatorRealtimeStatsResponse>("/operator/stats/realtime").catch(() => null),
+      apiGet<OperatorRealtimeStatsResponse>("/operator/stats/realtime"),
     ])
-      .then(([financeData, trendData, realtimeData]) => {
-        setFinance(financeData);
-        setTrend(trendData ?? []);
-        setRealtime(realtimeData);
+      .then(([financeResult, trendResult, realtimeResult]) => {
+        const errors: string[] = [];
+
+        if (financeResult.status === "fulfilled") {
+          setFinance(financeResult.value);
+        } else {
+          setFinance(null);
+          errors.push("财务概览暂不可用");
+        }
+
+        if (trendResult.status === "fulfilled") {
+          setTrend(trendResult.value ?? []);
+        } else {
+          setTrend([]);
+          errors.push("趋势数据暂不可用");
+        }
+
+        if (realtimeResult.status === "fulfilled") {
+          setRealtime(realtimeResult.value);
+        } else {
+          setRealtime(null);
+        }
+
+        setError(errors.length > 0 ? errors.join("；") : null);
         setLoadState("loaded");
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "加载失败";
-        setError(message);
-        setLoadState("error");
       });
   }, []);
 
   const summaryCards = useMemo(() => {
-    if (!finance) return [] as Array<{ title: string; value: string; description: string }>;
+    if (!finance)
+      return [
+        { title: "当月 GMV", value: "--", description: "财务数据暂不可用" },
+        { title: "当月运营商收入", value: "--", description: "财务数据暂不可用" },
+        { title: "当月订单数", value: "--", description: "财务数据暂不可用" },
+        { title: "累计结算平台佣金", value: "--", description: "财务数据暂不可用" },
+      ] as Array<{ title: string; value: string; description: string }>;
     return [
       {
         title: "当月 GMV",

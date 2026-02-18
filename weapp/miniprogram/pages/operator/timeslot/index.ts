@@ -1,6 +1,10 @@
 import { deliveryFeeService } from '../../../api/delivery-fee'
 import type { PeakHourConfigResponse, CreatePeakHourConfigRequest } from '../../../api/delivery-fee'
 
+interface PeakHourViewItem extends PeakHourConfigResponse {
+  daysText: string
+}
+
 interface TimeslotPageOptions {
   region_id?: string
   region_name?: string
@@ -15,6 +19,10 @@ interface DayToggleEvent {
   currentTarget: { dataset: { day?: number } }
 }
 
+interface DaysChangeEvent {
+  detail: { value: Array<string | number> }
+}
+
 Page({
   data: {
     selectedRegionId: 0,
@@ -22,10 +30,11 @@ Page({
 
     initialLoading: true,
     loading: false,
+    saving: false,
     error: '',
     navBarHeight: 0,
 
-    peakConfigs: [] as PeakHourConfigResponse[],
+    peakConfigs: [] as PeakHourViewItem[],
 
     showPeakModal: false,
     peakForm: {
@@ -55,8 +64,13 @@ Page({
       return
     }
 
-    this.setData({ selectedRegionId, selectedRegionName, initialLoading: false })
+    this.setData({ selectedRegionId, selectedRegionName })
     this.loadPeakConfigs(selectedRegionId)
+  },
+
+  formatDays(days: number[]) {
+    const map = ['日', '一', '二', '三', '四', '五', '六']
+    return (days || []).map((d) => map[d] || '').filter(Boolean).join('、')
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
@@ -67,10 +81,14 @@ Page({
     this.setData({ loading: true, error: '' })
     try {
       const peakConfigs = await deliveryFeeService.getPeakConfigs(regionId)
-      this.setData({ peakConfigs, loading: false })
+      const mapped = peakConfigs.map((item) => ({
+        ...item,
+        daysText: this.formatDays(item.days_of_week)
+      }))
+      this.setData({ peakConfigs: mapped, loading: false, initialLoading: false })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '加载时段配置失败'
-      this.setData({ loading: false, error: message })
+      this.setData({ loading: false, initialLoading: false, error: message })
     }
   },
 
@@ -83,7 +101,15 @@ Page({
   },
 
   onAddPeak() {
-    this.setData({ showPeakModal: true })
+    this.setData({
+      showPeakModal: true,
+      peakForm: {
+        startTime: '11:00',
+        endTime: '13:00',
+        coefficient: '1.50',
+        days: [1, 2, 3, 4, 5]
+      }
+    })
   },
 
   onClosePeakModal() {
@@ -96,22 +122,35 @@ Page({
     this.setData({ [`peakForm.${field}`]: e.detail.value })
   },
 
-  onDayToggle(e: DayToggleEvent) {
-    const day = e.currentTarget.dataset.day
-    if (day === undefined) return
+  onDaysChange(e: DaysChangeEvent) {
+  const values = e.detail?.value || []
+  const nextDays = values
+    .map((value) => parseInt(String(value), 10))
+    .filter((value) => !isNaN(value) && value >= 0 && value <= 6)
+    .sort((a, b) => a - b)
 
-    const { days } = this.data.peakForm
-    const nextDays = days.includes(day)
-      ? days.filter((item) => item !== day)
-      : [...days, day].sort()
-
-    this.setData({ 'peakForm.days': nextDays })
+  this.setData({ 'peakForm.days': nextDays })
   },
 
   async onSavePeak() {
-    const { selectedRegionId, peakForm } = this.data
+    const { selectedRegionId, peakForm, saving } = this.data
+    if (saving) return
     if (!selectedRegionId) {
       wx.showToast({ title: '请先选择区县', icon: 'none' })
+      return
+    }
+
+    const coefficient = parseFloat(peakForm.coefficient)
+    if (!Number.isFinite(coefficient) || coefficient < 1) {
+      wx.showToast({ title: '时段系数需不小于1', icon: 'none' })
+      return
+    }
+    if (peakForm.startTime >= peakForm.endTime) {
+      wx.showToast({ title: '结束时间需晚于开始时间', icon: 'none' })
+      return
+    }
+    if (!peakForm.days.length) {
+      wx.showToast({ title: '请至少选择一天', icon: 'none' })
       return
     }
 
@@ -119,20 +158,20 @@ Page({
       region_id: selectedRegionId,
       start_time: peakForm.startTime,
       end_time: peakForm.endTime,
-      coefficient: parseFloat(peakForm.coefficient),
+      coefficient,
       days_of_week: peakForm.days
     }
 
     try {
-      wx.showLoading({ title: '保存中' })
+      this.setData({ saving: true })
       await deliveryFeeService.createPeakConfig(selectedRegionId, data)
-      wx.hideLoading()
       this.setData({ showPeakModal: false })
       await this.loadPeakConfigs(selectedRegionId)
       wx.showToast({ title: '添加成功', icon: 'success' })
     } catch (_err) {
-      wx.hideLoading()
-      wx.showToast({ title: '添加失败', icon: 'error' })
+      wx.showToast({ title: '添加失败', icon: 'none' })
+    } finally {
+      this.setData({ saving: false })
     }
   },
 
@@ -151,7 +190,7 @@ Page({
           await this.loadPeakConfigs(this.data.selectedRegionId)
           wx.showToast({ title: '删除成功', icon: 'success' })
         } catch (_err) {
-          wx.showToast({ title: '删除失败', icon: 'error' })
+          wx.showToast({ title: '删除失败', icon: 'none' })
         }
       }
     })

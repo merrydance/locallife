@@ -1,104 +1,177 @@
 .page-container {
-  min-height: 100vh;
-  background: #f6f7fb;
+  height: 100vh;
+  background: var(--td-bg-color-page);
+  overflow: hidden;
 }
 
-.content {
-  padding: 24rpx;
+.rules-content {
+  height: 100%;
 }
 
-.header-section {
-  margin-bottom: 20rpx;
+.content-inner {
+  padding: var(--spacer-md);
+}
+
+.welcome-header {
+  margin-bottom: var(--spacer-md);
 }
 
 .title {
-  font-size: 34rpx;
+  font-size: var(--font-size-heading);
+  color: var(--td-text-color-primary);
   font-weight: 600;
-  color: #1f2329;
+  margin-bottom: var(--spacer-xxs);
 }
 
 .subtitle {
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  color: #86909c;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
 }
 
-.region-picker-card {
-  margin-bottom: 20rpx;
+.section-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
 }
 
-.section-header {
+.status-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skeleton-item {
+  height: 88rpx;
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+  margin-bottom: var(--spacer-sm);
+}
+
+.skeleton-item:last-child {
+  margin-bottom: 0;
+}
+
+.title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 18rpx 0;
+  margin-bottom: var(--spacer-sm);
 }
 
-.section-title {
-  font-size: 28rpx;
+.summary-title {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
   font-weight: 600;
-  color: #1f2329;
 }
 
-.peak-item {
-  margin-bottom: 12rpx;
+.rules-list {
+  margin-top: var(--spacer-sm);
 }
 
-.popup-content {
-  background: #fff;
-  border-radius: 24rpx 24rpx 0 0;
-  padding: 20rpx 24rpx 28rpx;
+.rule-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: flex-start;
 }
 
-.popup-header {
+.rule-icon {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: var(--spacer-sm);
+  flex-shrink: 0;
+}
+
+.rule-info {
+  flex: 1;
+}
+
+.rule-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: var(--spacer-xs);
 }
 
-.popup-title {
-  font-size: 30rpx;
+.name {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
   font-weight: 600;
-  color: #1f2329;
 }
 
-.form-item-col {
-  margin-top: 18rpx;
+.meta-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-xs);
 }
 
-.label {
-  display: block;
-  font-size: 24rpx;
-  color: #4e5969;
-  margin-bottom: 12rpx;
+.meta-label {
+  min-width: 120rpx;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.meta-value {
+  flex: 1;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-primary);
+}
+
+.actions {
+  margin-top: var(--spacer-xs);
+  display: flex;
+  justify-content: flex-end;
 }
 
 .days-select {
   display: flex;
   flex-wrap: wrap;
-  gap: 12rpx;
+  gap: var(--spacer-xxs);
 }
 
 .day-tag {
-  width: 72rpx;
+  width: 76rpx;
   height: 60rpx;
-  border-radius: 10rpx;
-  border: 1rpx solid #dcdfe6;
+  border-radius: var(--radius-sm);
+  border: 1rpx solid var(--td-component-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24rpx;
-  color: #4e5969;
-  background: #fff;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  background: var(--td-bg-color-container);
 }
 
 .day-tag.active {
-  color: #0052d9;
-  border-color: #0052d9;
-  background: rgba(0, 82, 217, 0.06);
+  color: var(--td-brand-color);
+  border-color: var(--td-brand-color);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
-.popup-footer {
-  margin-top: 20rpx;
+.dialog-content {
+  padding: var(--spacer-xs) 0;
+}
+
+.form-item-col {
+  margin-top: var(--spacer-sm);
+}
+
+.label {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  margin-bottom: var(--spacer-xs);
 }

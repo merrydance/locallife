@@ -1,4 +1,4 @@
-<custom-navbar title="提现申请" showBack="{{true}}" />
+<custom-navbar title="提现申请" show-back="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page" style="padding-top: {{navBarHeight}}px;">
   <scroll-view

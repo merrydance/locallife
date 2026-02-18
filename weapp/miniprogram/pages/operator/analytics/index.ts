@@ -52,31 +52,33 @@ Page({
       }
       const gmvChange = calcChange(Number(latest.total_gmv || 0), Number(previous.total_gmv || 0))
       const ordersChange = calcChange(Number(latest.order_count || 0), Number(previous.order_count || 0))
+      const gmvTrend: 'up' | 'down' = gmvChange.startsWith('-') ? 'down' : 'up'
+      const ordersTrend: 'up' | 'down' = ordersChange.startsWith('-') ? 'down' : 'up'
 
       const metrics = [
         {
           label: '近7天GMV',
-          value: formatCurrencyFen(Number(latest.total_gmv || 0)),
+          value: formatCurrencyFen(Number(latest.total_gmv ?? 0)),
           change: gmvChange,
-          trend: gmvChange.startsWith('-') ? 'down' : 'up'
+          trend: gmvTrend
         },
         {
           label: '活跃商户',
-          value: String(realtime.active_merchant_count || 0),
-          change: `待审 ${realtime.pending_merchant_count || 0}`,
+          value: String(realtime.active_merchant_count ?? 0),
+          change: `待审 ${realtime.pending_merchant_count ?? 0}`,
           trend: 'up' as const
         },
         {
           label: '活跃骑手',
-          value: String(realtime.active_rider_count || 0),
-          change: `待审 ${realtime.pending_rider_count || 0}`,
+          value: String(realtime.active_rider_count ?? 0),
+          change: `待审 ${realtime.pending_rider_count ?? 0}`,
           trend: 'up' as const
         },
         {
           label: '近7天订单',
-          value: String(latest.order_count || 0),
+          value: String(latest.order_count ?? 0),
           change: ordersChange,
-          trend: ordersChange.startsWith('-') ? 'down' : 'up'
+          trend: ordersTrend
         }
       ]
 

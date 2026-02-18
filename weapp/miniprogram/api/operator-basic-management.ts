@@ -80,17 +80,6 @@ export interface OperatorFinanceOverviewResponse {
         operator_income: number       // 累计运营商可得金额
         total_gmv: number             // 累计交易额
     }
-    total_commission?: number
-    today_commission?: number
-    week_commission?: number
-    month_commission?: number
-    pending_settlement?: number
-    settled_amount?: number
-    commission_rate?: number
-    merchant_count?: number
-    active_merchant_count?: number
-    order_count?: number
-    gmv?: number
 }
 
 /** 佣金明细响应 - 对齐 api.operatorCommissionResponse */
@@ -250,13 +239,14 @@ export class OperatorBasicManagementService {
      * @param endDate 结束日期
      */
     async getFinanceOverview(startDate?: string, endDate?: string): Promise<OperatorFinanceOverviewResponse> {
+        const data: Record<string, string> = {}
+        if (startDate) data.start_date = startDate
+        if (endDate) data.end_date = endDate
+
         return request({
             url: '/v1/operators/me/finance/overview',
             method: 'GET',
-            data: {
-                start_date: startDate,
-                end_date: endDate
-            }
+            data
         })
     }
 
@@ -635,17 +625,17 @@ export class OperatorBasicManagementAdapter {
         gmv: number
     } {
         return {
-            totalCommission: data.total_commission ?? 0,
-            todayCommission: data.today_commission ?? 0,
-            weekCommission: data.week_commission ?? 0,
-            monthCommission: data.month_commission ?? 0,
-            pendingSettlement: data.pending_settlement ?? 0,
-            settledAmount: data.settled_amount ?? 0,
-            commissionRate: data.commission_rate ?? 0,
-            merchantCount: data.merchant_count ?? 0,
-            activeMerchantCount: data.active_merchant_count ?? 0,
-            orderCount: data.order_count ?? 0,
-            gmv: data.gmv ?? 0
+            totalCommission: data.total?.total_commission ?? 0,
+            todayCommission: 0,
+            weekCommission: 0,
+            monthCommission: data.current_month?.total_commission ?? 0,
+            pendingSettlement: data.current_month?.pending_commission ?? 0,
+            settledAmount: data.total?.settled_commission ?? 0,
+            commissionRate: data.operator_share_ratio ?? 0,
+            merchantCount: 0,
+            activeMerchantCount: 0,
+            orderCount: data.current_month?.total_orders ?? 0,
+            gmv: data.total?.total_gmv ?? 0
         }
     }
 

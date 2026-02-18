@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -28,6 +29,55 @@ type listPlatformOperatorRulesResponse struct {
 
 type updatePlatformOperatorRuleRequest struct {
 	Value string `json:"value" binding:"required"`
+}
+
+const (
+	merchantDepositConfigKey = "platform_rule.merchant_deposit_fen"
+	riderDepositConfigKey    = "platform_rule.rider_deposit_fen"
+)
+
+type depositConfigValue struct {
+	AmountFen int64 `json:"amount_fen"`
+}
+
+func (server *Server) getGlobalDepositFen(ctx *gin.Context, configKey string) (int64, bool, error) {
+	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: configKey,
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+
+	if len(config.ConfigValue) == 0 {
+		return 0, false, nil
+	}
+
+	var payload depositConfigValue
+	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
+		return 0, false, err
+	}
+
+	return payload.AmountFen, true, nil
+}
+
+func (server *Server) upsertGlobalDepositFen(ctx *gin.Context, configKey string, amountFen int64) error {
+	payload, err := json.Marshal(depositConfigValue{AmountFen: amountFen})
+	if err != nil {
+		return err
+	}
+
+	_, err = server.store.UpsertPlatformConfig(ctx, db.UpsertPlatformConfigParams{
+		ConfigKey:   configKey,
+		ConfigValue: payload,
+		ScopeType:   "global",
+		ScopeID:     pgtype.Int8{Valid: false},
+	})
+	return err
 }
 
 func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
@@ -65,6 +115,20 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fallbackErr))
 			return
 		}
+	}
+
+	if configuredMerchantDeposit, ok, cfgErr := server.getGlobalDepositFen(ctx, merchantDepositConfigKey); cfgErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+		return
+	} else if ok {
+		merchantDeposit = configuredMerchantDeposit
+	}
+
+	if configuredRiderDeposit, ok, cfgErr := server.getGlobalDepositFen(ctx, riderDepositConfigKey); cfgErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+		return
+	} else if ok {
+		riderDeposit = configuredRiderDeposit
 	}
 
 	rules := []platformOperatorRuleItem{
@@ -248,6 +312,10 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 		}
 
 		amountFen := yuanToFen(value)
+		if err := server.upsertGlobalDepositFen(ctx, merchantDepositConfigKey, amountFen); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		if err := server.store.UpdateAllRegionRuleConfigMerchantDeposit(ctx, amountFen); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -264,6 +332,10 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 		}
 
 		amountFen := yuanToFen(value)
+		if err := server.upsertGlobalDepositFen(ctx, riderDepositConfigKey, amountFen); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		if err := server.store.UpdateAllRegionRuleConfigRiderDeposit(ctx, amountFen); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return

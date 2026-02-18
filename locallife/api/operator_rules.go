@@ -34,6 +34,40 @@ type operatorRulesQuery struct {
 	RegionID int64 `form:"region_id" binding:"omitempty,gt=0"`
 }
 
+const (
+	operatorMerchantDepositConfigKey = "platform_rule.merchant_deposit_fen"
+	operatorRiderDepositConfigKey    = "platform_rule.rider_deposit_fen"
+)
+
+type operatorDepositConfigValue struct {
+	AmountFen int64 `json:"amount_fen"`
+}
+
+func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey string) (int64, bool, error) {
+	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
+		ConfigKey: configKey,
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+
+	if len(config.ConfigValue) == 0 {
+		return 0, false, nil
+	}
+
+	var payload operatorDepositConfigValue
+	if err := json.Unmarshal(config.ConfigValue, &payload); err != nil {
+		return 0, false, err
+	}
+
+	return payload.AmountFen, true, nil
+}
+
 func weatherRuleKeyToPlatformConfigKey(key string) (string, error) {
 	switch key {
 	case "WEATHER_COEFF_EXTREME":
@@ -128,6 +162,20 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		weatherCoeffLight = regionRuleConfig.WeatherCoeffLight
 	}
 
+	if configuredMerchantDeposit, ok, cfgErr := server.getOperatorGlobalDepositFen(ctx, operatorMerchantDepositConfigKey); cfgErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+		return
+	} else if ok {
+		merchantDepositValue = configuredMerchantDeposit
+	}
+
+	if configuredRiderDeposit, ok, cfgErr := server.getOperatorGlobalDepositFen(ctx, operatorRiderDepositConfigKey); cfgErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
+		return
+	} else if ok {
+		riderDepositValue = configuredRiderDeposit
+	}
+
 	// 1. 商户入驻保证金 (只读展示，平台维护)
 	merchantDeposit := fenToYuanString(merchantDepositValue, 2)
 	rules = append(rules, RuleItem{
@@ -158,7 +206,7 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	commissionRate := pgNumericToFloat64(commissionRateNumeric) * 100
 	rules = append(rules, RuleItem{
 		ID:       "rule_3",
-		Name:     "平台抽成比例",
+		Name:     "运营商抽成比例",
 		Key:      "PLATFORM_COMMISSION",
 		Value:    fmt.Sprintf("%.1f", commissionRate),
 		Unit:     "%",
@@ -260,11 +308,67 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 				ID:       "rule_4",
 				Name:     "基础运费",
 				Key:      "BASE_DELIVERY_FEE",
-				Value:    "未配置",
+				Value:    fenToYuanString(DefaultBaseFee, 2),
 				Unit:     "元",
 				Desc:     "配送基础费用，运营商可调整",
 				Category: "delivery",
 				Editable: true,
+			})
+
+			rules = append(rules, RuleItem{
+				ID:       "rule_5",
+				Name:     "基础距离",
+				Key:      "BASE_DISTANCE",
+				Value:    fmt.Sprintf("%d", DefaultBaseDistance),
+				Unit:     "米",
+				Desc:     "基础运费包含的配送距离，运营商可调整",
+				Category: "delivery",
+				Editable: true,
+			})
+
+			rules = append(rules, RuleItem{
+				ID:       "rule_6",
+				Name:     "超距加价",
+				Key:      "EXTRA_FEE_PER_KM",
+				Value:    fenToYuanString(DefaultExtraFeePerKm, 2),
+				Unit:     "元/km",
+				Desc:     "超出基础距离后每公里的加价，运营商可调整",
+				Category: "delivery",
+				Editable: true,
+			})
+
+			rules = append(rules, RuleItem{
+				ID:       "rule_8",
+				Name:     "最低运费",
+				Key:      "MIN_DELIVERY_FEE",
+				Value:    fenToYuanString(DefaultMinFee, 2),
+				Unit:     "元",
+				Desc:     "配送费的最低下限，运营商可调整",
+				Category: "delivery",
+				Editable: true,
+			})
+
+			rules = append(rules, RuleItem{
+				ID:       "rule_9",
+				Name:     "最高运费",
+				Key:      "MAX_DELIVERY_FEE",
+				Value:    "不限",
+				Unit:     "元",
+				Desc:     "配送费的最高上限（0或不填代表不限），运营商可调整",
+				Category: "delivery",
+				Editable: true,
+			})
+
+			rules = append(rules, RuleItem{
+				ID:       "rule_10",
+				Name:     "货值费率",
+				Key:      "DELIVERY_VALUE_RATIO",
+				Value:    fmt.Sprintf("%.2f", DefaultValueRatio*100),
+				Unit:     "%",
+				Desc:     "按订单货值收取的附加费率，运营商可调整",
+				Category: "delivery",
+				Editable: true,
+				Action:   "edit",
 			})
 		}
 	}

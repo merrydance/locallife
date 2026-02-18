@@ -1,8 +1,9 @@
 {
-  "navigationBarTitleText": "提现申请",
   "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
     "t-input": "tdesign-miniprogram/input/input",
     "t-empty": "tdesign-miniprogram/empty/empty"
-  }
+  },
+  "navigationStyle": "custom"
 }

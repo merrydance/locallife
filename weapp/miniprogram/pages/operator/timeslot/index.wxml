@@ -1,94 +1,117 @@
-<custom-navbar title="时段系数配置" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="时段系数配置" show-back="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <view class="content">
-    <view class="header-section">
-      <view class="title">时段系数配置</view>
-      <view class="subtitle">当前区县：{{selectedRegionName || ('ID: ' + selectedRegionId)}}，保存后立即生效</view>
-    </view>
-
-    <view wx:if="{{error && !initialLoading}}" class="error-container">
-      <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
-      </t-empty>
-    </view>
-
-    <view wx:elif="{{initialLoading}}" class="skeleton-container">
-      <card-skeleton />
-      <view style="height: 20rpx;"></view>
-      <card-skeleton />
-    </view>
-
-    <view wx:else>
-      <view class="section-header">
-        <view class="section-title">时段系数列表</view>
-        <t-button size="small" theme="primary" bind:tap="onAddPeak">新增时段</t-button>
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <scroll-view scroll-y class="rules-content">
+    <view class="content-inner">
+      <view class="welcome-header">
+        <view class="title">时段系数配置</view>
+        <view class="subtitle">当前区域：{{selectedRegionName || ('ID: ' + selectedRegionId)}}，保存后立即生效</view>
       </view>
 
-      <view class="peak-list" wx:if="{{peakConfigs.length > 0}}">
-        <block wx:for="{{peakConfigs}}" wx:key="id">
-          <view class="peak-item">
-            <t-cell title="{{item.start_time}} - {{item.end_time}}" description="周{{tools.formatDays(item.days_of_week)}} | 系数 {{item.coefficient}}x">
-              <view slot="right-icon" bind:tap="onDeletePeak" data-id="{{item.id}}">
-                <t-icon name="delete" size="44rpx" color="#d9001b" />
+      <view class="section-card">
+        <view class="meta-row">
+          <text class="meta-label">配置区域</text>
+          <text class="meta-value">{{selectedRegionName || ('ID: ' + selectedRegionId)}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{initialLoading}}" class="section-card">
+        <view wx:for="{{3}}" wx:key="index" class="skeleton-item"></view>
+      </view>
+
+      <view wx:elif="{{error}}" class="section-card status-wrap">
+        <t-empty icon="error-circle" description="{{error}}">
+          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:else>
+        <view class="title-row">
+          <text class="summary-title">时段系数列表</text>
+          <t-button size="small" theme="primary" shape="round" bind:tap="onAddPeak">新增时段</t-button>
+        </view>
+
+        <view class="rules-list" wx:if="{{peakConfigs.length > 0}}">
+          <view class="rule-card" wx:for="{{peakConfigs}}" wx:key="id">
+            <view class="rule-icon">
+              <t-icon name="time" size="48rpx" color="var(--td-brand-color)" />
+            </view>
+
+            <view class="rule-info">
+              <view class="rule-top">
+                <text class="name">{{item.start_time}} - {{item.end_time}}</text>
+                <t-tag theme="success" variant="light-outline" size="small">生效中</t-tag>
               </view>
-            </t-cell>
-          </view>
-        </block>
-      </view>
 
-      <t-empty wx:else icon="info-circle-filled" description="该区域暂无时段系数配置" />
-    </view>
-  </view>
+              <view class="meta-row">
+                <text class="meta-label">生效日期</text>
+                <text class="meta-value">周{{item.daysText}}</text>
+              </view>
+              <view class="meta-row">
+                <text class="meta-label">时段系数</text>
+                <text class="meta-value">{{item.coefficient}}x</text>
+              </view>
 
-  <t-popup visible="{{showPeakModal}}" placement="bottom" bind:visible-change="onClosePeakModal">
-    <view class="popup-content">
-      <view class="popup-header">
-        <view class="popup-title">新增时段系数</view>
-        <t-icon name="close" size="48rpx" bind:tap="onClosePeakModal" />
-      </view>
-      <view class="popup-body">
-        <picker mode="time" value="{{peakForm.startTime}}" data-field="startTime" bindchange="onPeakFormChange">
-          <t-cell title="开始时间" note="{{peakForm.startTime}}" arrow />
-        </picker>
-        <picker mode="time" value="{{peakForm.endTime}}" data-field="endTime" bindchange="onPeakFormChange">
-          <t-cell title="结束时间" note="{{peakForm.endTime}}" arrow />
-        </picker>
-
-        <t-input label="时段系数" placeholder="1.50" suffix="x" type="digit" value="{{peakForm.coefficient}}" data-field="coefficient" bind:change="onPeakFormChange" />
-
-        <view class="form-item-col">
-          <text class="label">生效日期</text>
-          <view class="days-select">
-            <view
-              wx:for="{{daysOptions}}"
-              wx:key="value"
-              class="day-tag {{tools.includes(peakForm.days, item.value) ? 'active' : ''}}"
-              bindtap="onDayToggle"
-              data-day="{{item.value}}"
-            >
-              {{item.label}}
+              <view class="actions">
+                <t-button
+                  theme="danger"
+                  variant="outline"
+                  shape="round"
+                  size="small"
+                  bind:tap="onDeletePeak"
+                  data-id="{{item.id}}"
+                >删除</t-button>
+              </view>
             </view>
           </view>
         </view>
-      </view>
-      <view class="popup-footer">
-        <t-button theme="primary" block bind:tap="onSavePeak">保存配置</t-button>
+
+        <view wx:else class="section-card status-wrap">
+          <t-empty description="该区域暂无时段系数配置" />
+        </view>
       </view>
     </view>
-  </t-popup>
-</view>
+  </scroll-view>
 
-<wxs module="tools">
-module.exports = {
-  formatDays: function(days) {
-    if (!days) return '';
-    var map = ['日','一','二','三','四','五','六'];
-    return days.map(function(d){ return map[d] }).join('、');
-  },
-  includes: function(arr, val) {
-    if (!arr) return false;
-    return arr.indexOf(val) > -1;
-  }
-}
-</wxs>
+  <t-dialog
+    visible="{{showPeakModal}}"
+    title="新增时段系数"
+    confirm-btn="{{ { content: '保存配置', theme: 'primary', loading: saving } }}"
+    cancel-btn="取消"
+    bind:confirm="onSavePeak"
+    bind:cancel="onClosePeakModal"
+  >
+    <view slot="content" class="dialog-content">
+      <picker mode="time" value="{{peakForm.startTime}}" data-field="startTime" bindchange="onPeakFormChange">
+        <t-cell title="开始时间" note="{{peakForm.startTime}}" arrow />
+      </picker>
+      <picker mode="time" value="{{peakForm.endTime}}" data-field="endTime" bindchange="onPeakFormChange">
+        <t-cell title="结束时间" note="{{peakForm.endTime}}" arrow />
+      </picker>
+
+      <t-input
+        label="时段系数"
+        placeholder="1.50"
+        suffix="x"
+        type="digit"
+        value="{{peakForm.coefficient}}"
+        data-field="coefficient"
+        bind:change="onPeakFormChange"
+      />
+
+      <view class="form-item-col">
+        <text class="label">生效日期</text>
+        <t-checkbox-group value="{{peakForm.days}}" bind:change="onDaysChange">
+          <view class="days-select">
+            <t-checkbox
+              wx:for="{{daysOptions}}"
+              wx:key="value"
+              value="{{item.value}}"
+              label="{{item.label}}"
+            />
+          </view>
+        </t-checkbox-group>
+      </view>
+    </view>
+  </t-dialog>
+</view>

@@ -59,6 +59,8 @@ Page({
     commissionConfigId: 0,
     platformRateInput: '',
     operatorRateInput: '',
+    commissionDialogPlatformRate: '',
+    commissionDialogOperatorRate: '',
     activeCategory: 'all',
     categories: [
       { label: '全部', value: 'all', icon: 'app' }
@@ -87,7 +89,13 @@ Page({
     this.setData({ loading: true, error: null })
     try {
       const response = await platformManagementService.getPlatformOperatorRules()
-      const mapped = (response.rules || []).map((rule) => {
+      const rawRules = response.rules || []
+      const platformCommissionRule = rawRules.find((rule) => rule.key === 'PLATFORM_COMMISSION')
+      const operatorCommissionRule = rawRules.find((rule) => rule.key === 'OPERATOR_COMMISSION')
+
+      const mapped = rawRules
+        .filter((rule) => rule.key !== 'PLATFORM_COMMISSION' && rule.key !== 'OPERATOR_COMMISSION')
+        .map((rule) => {
         const categoryKey = normalizeCategory(rule.category)
         return {
           ...rule,
@@ -95,7 +103,31 @@ Page({
           categoryLabel: displayCategory(categoryKey),
           status: 'active' as const
         }
-      })
+        })
+
+      if (platformCommissionRule && operatorCommissionRule) {
+        const platformRate = String(platformCommissionRule.value || '')
+        const operatorRate = String(operatorCommissionRule.value || '')
+
+        mapped.unshift({
+          id: 'platform_rule_commission_combined',
+          name: '佣金比例配置',
+          key: 'COMMISSION_CONFIG',
+          value: `平台 ${platformRate}% / 运营商 ${operatorRate}%`,
+          unit: '',
+          desc: '统一维护平台与运营商佣金比例',
+          category: 'platform',
+          editable: true,
+          categoryKey: 'platform',
+          categoryLabel: '平台维护',
+          status: 'active'
+        })
+
+        this.setData({
+          platformRateInput: platformRate,
+          operatorRateInput: operatorRate
+        })
+      }
 
       const categoryKeys = Array.from(new Set(mapped.map((item) => item.categoryKey)))
       const categories: PlatformRuleCategory[] = [
@@ -153,9 +185,8 @@ Page({
           operatorRateInput: String(globalConfig.operator_rate)
         })
       }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载分账配置失败'
-      this.setData({ error: message })
+    } catch {
+      // 分账配置加载失败时不阻断规则页；佣金展示可回退到规则接口
     }
   },
 
@@ -220,12 +251,31 @@ Page({
     this.setData({ activeCategory: next })
   },
 
+  onCommissionDialogPlatformRateChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({ commissionDialogPlatformRate: String(e?.detail?.value || '') })
+  },
+
+  onCommissionDialogOperatorRateChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({ commissionDialogOperatorRate: String(e?.detail?.value || '') })
+  },
+
   onEditTap(e: RuleActionEvent) {
     const key = String(e.currentTarget.dataset.key || '')
     if (!key) return
 
     const rule = this.data.rules.find((item) => item.key === key)
     if (!rule) return
+
+    if (rule.key === 'COMMISSION_CONFIG') {
+      this.setData({
+        showEdit: true,
+        editingRule: rule,
+        commissionDialogPlatformRate: this.data.platformRateInput,
+        commissionDialogOperatorRate: this.data.operatorRateInput,
+        newValue: ''
+      })
+      return
+    }
 
     this.setData({
       showEdit: true,
@@ -240,12 +290,88 @@ Page({
   },
 
   onCloseEdit() {
-    this.setData({ showEdit: false, editingRule: null, newValue: '' })
+    this.setData({
+      showEdit: false,
+      editingRule: null,
+      newValue: '',
+      commissionDialogPlatformRate: '',
+      commissionDialogOperatorRate: ''
+    })
   },
 
   async onConfirmEdit() {
     const { editingRule, newValue, submitting } = this.data
-    if (!editingRule || submitting || newValue === '') return
+    if (!editingRule || submitting) return
+
+    if (editingRule.key === 'COMMISSION_CONFIG') {
+      const platformRate = Number(this.data.commissionDialogPlatformRate)
+      const operatorRate = Number(this.data.commissionDialogOperatorRate)
+
+      if (!Number.isFinite(platformRate) || !Number.isFinite(operatorRate)) {
+        wx.showToast({ title: '请输入有效数字', icon: 'none' })
+        return
+      }
+      if (platformRate < 0 || platformRate > 100 || operatorRate < 0 || operatorRate > 100) {
+        wx.showToast({ title: '比例需在0-100之间', icon: 'none' })
+        return
+      }
+      if (platformRate + operatorRate > 100) {
+        wx.showToast({ title: '比例之和不能超过100', icon: 'none' })
+        return
+      }
+
+      try {
+        this.setData({ commissionSubmitting: true, submitting: true })
+
+        let configID = this.data.commissionConfigId
+        if (configID <= 0) {
+          const latest = await platformManagementService.listPlatformProfitSharingConfigs({
+            status: 'active',
+            order_source: 'all',
+            page: 1,
+            limit: 50
+          })
+          const globalConfig = (latest.items || []).find(
+            (item: PlatformProfitSharingConfigItem) => !item.region_id && !item.merchant_id
+          )
+          configID = globalConfig?.id || 0
+        }
+
+        const payload = {
+          status: 'active',
+          order_source: 'all',
+          platform_rate: Math.round(platformRate),
+          operator_rate: Math.round(operatorRate),
+          rider_enabled: true,
+          priority: 100
+        }
+
+        if (configID > 0) {
+          await platformManagementService.updatePlatformProfitSharingConfig(configID, payload)
+        } else {
+          await platformManagementService.createPlatformProfitSharingConfig(payload)
+        }
+
+        this.setData({
+          showEdit: false,
+          editingRule: null,
+          newValue: '',
+          commissionDialogPlatformRate: '',
+          commissionDialogOperatorRate: ''
+        })
+        wx.showToast({ title: '佣金配置已更新', icon: 'success' })
+        await this.loadProfitSharingConfig()
+        await this.loadRules()
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : '更新失败'
+        wx.showToast({ title: message, icon: 'none' })
+      } finally {
+        this.setData({ commissionSubmitting: false, submitting: false })
+      }
+      return
+    }
+
+    if (newValue === '') return
 
     if (newValue === editingRule.value) {
       wx.showToast({ title: '值未变化', icon: 'none' })

@@ -94,17 +94,17 @@ Page({
       const { timeDimension } = this.data
       const { startDate, endDate } = this.getDateRange(timeDimension)
       
-      // 1. 并行获取各项数据
+      // 1. 并行获取各项数据（财务概览失败不阻断运营中心）
       const [
-          financeOverview, 
-          realtimeStats, 
-          merchantsPending, 
-          ridersPending, 
-          merchantRanking, 
-          riderRanking,
-          dailyTrends,
-          appeals
-      ] = await Promise.all([
+          financeOverviewResult,
+          realtimeStatsResult,
+          merchantsPendingResult,
+          ridersPendingResult,
+          merchantRankingResult,
+          riderRankingResult,
+          dailyTrendsResult,
+          appealsResult
+      ] = await Promise.allSettled([
         operatorBasicManagementService.getFinanceOverview(),
         operatorAnalyticsService.getRealtimeStats(),
         operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending' }),
@@ -114,6 +114,23 @@ Page({
         operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate),
         appealService.getAppealList({ page: 1, limit: 5, status: 'pending' })
       ])
+
+      if (realtimeStatsResult.status !== 'fulfilled') throw realtimeStatsResult.reason
+
+      const realtimeStats = realtimeStatsResult.value
+      const financeOverview = financeOverviewResult.status === 'fulfilled' ? financeOverviewResult.value : null
+      const merchantsPending = merchantsPendingResult.status === 'fulfilled'
+        ? merchantsPendingResult.value
+        : { merchants: [] as Array<{ id: number, name: string, created_at: string }> }
+      const ridersPending = ridersPendingResult.status === 'fulfilled'
+        ? ridersPendingResult.value
+        : { riders: [] as Array<{ id: number, name: string, created_at: string }> }
+      const merchantRanking = merchantRankingResult.status === 'fulfilled' ? merchantRankingResult.value : []
+      const riderRanking = riderRankingResult.status === 'fulfilled' ? riderRankingResult.value : []
+      const dailyTrends = dailyTrendsResult.status === 'fulfilled' ? dailyTrendsResult.value : []
+      const appeals = appealsResult.status === 'fulfilled'
+        ? appealsResult.value
+        : { appeals: [] as Array<{ id: number, reason: string, created_at: string }> }
 
       // 格式化处理各维度数据，确保兼容性
       const today = new Date().toISOString().split('T')[0]
@@ -138,27 +155,32 @@ Page({
 
       this.setData({
         stats: {
-          total_gmv_display: formatPriceNoSymbol(financeOverview.total.total_gmv || 0),
-          total_orders: financeOverview.current_month.total_orders || 0,
+          total_gmv_display: formatPriceNoSymbol(financeOverview?.total?.total_gmv ?? 0),
+          total_orders: financeOverview?.current_month?.total_orders ?? 0,
           active_merchants: realtimeStats.active_merchant_count,
           active_riders: realtimeStats.active_rider_count,
           today_gmv_display: formatPriceNoSymbol(todayTrend.total_gmv),
           today_orders: todayTrend.order_count,
           // 使用后端计算的运营商可得金额，不再前端硬编码分成比例
-          today_income_display: formatPriceNoSymbol(todayTrend.operator_income || 0)
+          today_income_display: formatPriceNoSymbol(todayTrend.operator_income ?? 0)
         },
         finance: {
           // 使用后端返回的 operator_income 字段，遵循 SSOT 原则
-          balance_display: formatPriceNoSymbol(financeOverview.total.operator_income || 0),
-          total_income_display: formatPriceNoSymbol(financeOverview.total.operator_income || 0),
-          current_month_income_display: formatPriceNoSymbol(financeOverview.current_month.operator_income || 0)
+          balance_display: formatPriceNoSymbol(financeOverview?.total?.operator_income ?? 0),
+          total_income_display: formatPriceNoSymbol(financeOverview?.total?.operator_income ?? 0),
+          current_month_income_display: formatPriceNoSymbol(financeOverview?.current_month?.operator_income ?? 0)
         },
         merchantRankings: merchantRankList,
         riderRankings: riderRankList,
         pending_approvals: pendingItems.slice(0, 5),
         pending_count: pendingItems.length,
-        loading: false
+        loading: false,
+        error: null
       })
+
+      if (financeOverviewResult.status !== 'fulfilled') {
+        console.warn('运营中心财务概览降级：', financeOverviewResult.reason)
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '数据加载失败，请重试'
       console.error('加载运营仪表盘失败:', error)
@@ -233,10 +255,6 @@ Page({
 
   onPendingViewAll() {
     wx.navigateTo({ url: '/pages/operator/appeal/list/index' })
-  },
-
-  onWithdrawTap() {
-    wx.navigateTo({ url: '/pages/operator/finance/withdraw/index' })
   },
 
   onOpenApplyment() {

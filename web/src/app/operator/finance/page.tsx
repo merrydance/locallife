@@ -32,21 +32,26 @@ export default function OperatorFinancePage() {
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawRemark, setWithdrawRemark] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const load = () => {
     const range = getRecentRange(30);
-    Promise.all([
+    Promise.allSettled([
       apiGet<OperatorFinanceOverviewResponse>("/operators/me/finance/overview"),
       apiGet<OperatorCommissionResponse>("/operators/me/commission", { ...range, page: 1, limit: 20 }),
       apiGet<OperatorProfitSharingConfigListResponse>("/operators/me/profit-sharing/configs", {
         page: 1,
         limit: 20,
       }),
-      apiGet<OperatorApplicationStatusResponse>("/operator/application").catch(() => null),
+      apiGet<OperatorApplicationStatusResponse>("/operator/application"),
     ])
-      .then(async ([overviewRes, commissionRes, configRes, operatorApplication]) => {
+      .then(async ([overviewResult, commissionResult, configResult, operatorApplicationResult]) => {
+        const overviewRes = overviewResult.status === "fulfilled" ? overviewResult.value : null;
+        const commissionRes = commissionResult.status === "fulfilled" ? commissionResult.value : null;
+        const configRes = configResult.status === "fulfilled" ? configResult.value : null;
+        const operatorApplication =
+          operatorApplicationResult.status === "fulfilled" ? operatorApplicationResult.value : null;
+
         const shouldLoadPaymentFinance = operatorApplication?.status === "active";
 
         let balanceRes: OperatorAccountBalanceResponse | null = null;
@@ -77,9 +82,7 @@ export default function OperatorFinancePage() {
             const blockedByPaymentConfig =
               balanceMessage.includes("operator payment config is not active") ||
               withdrawalsMessage.includes("operator payment config is not active");
-            if (!blockedByPaymentConfig) {
-              throw new Error(balanceMessage || withdrawalsMessage || "加载失败");
-            }
+            const _ = blockedByPaymentConfig
           }
         }
 
@@ -89,9 +92,7 @@ export default function OperatorFinancePage() {
         setWithdrawals(withdrawalsRes?.withdrawals ?? []);
         setConfigs(configRes);
         setFinanceLocked(!balanceRes?.sub_mch_id);
-        setError(null);
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "加载失败"));
+      });
   };
 
   useEffect(() => {
@@ -126,11 +127,6 @@ export default function OperatorFinancePage() {
         actions={<Badge variant="secondary">运营商</Badge>}
       />
       <PageContent className="space-y-4">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
         {success && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {success}
@@ -204,10 +200,10 @@ export default function OperatorFinancePage() {
                         <TableCell>¥{formatAmount(item.commission)}</TableCell>
                       </TableRow>
                     ))}
-                    {(!commission || commission.items.length === 0) && (
+                    {(commission?.items?.length ?? 0) === 0 && (
                       <TableRow>
                         <TableCell colSpan={5} className="text-muted-foreground">
-                          暂无数据
+                          暂无可展示数据
                         </TableCell>
                       </TableRow>
                     )}
@@ -352,10 +348,10 @@ export default function OperatorFinancePage() {
                         <TableCell>{item.operator_rate}</TableCell>
                       </TableRow>
                     ))}
-                    {(!configs || configs.items.length === 0) && (
+                    {(configs?.items?.length ?? 0) === 0 && (
                       <TableRow>
                         <TableCell colSpan={5} className="text-muted-foreground">
-                          暂无数据
+                          暂无可展示数据
                         </TableCell>
                       </TableRow>
                     )}

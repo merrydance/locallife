@@ -1,5 +1,5 @@
 import { operatorBasicManagementService } from '../../../../api/operator-basic-management'
-import { withdrawOperator } from '../../../../api/operator-finance'
+import { getOperatorAccountBalance, withdrawOperator } from '../../../../api/operator-finance'
 import { getStableBarHeights } from '../../../../utils/responsive'
 
 interface AmountChangeDetail {
@@ -28,6 +28,10 @@ Page({
     this.loadOverview()
   },
 
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+    this.setData({ navBarHeight: e.detail?.navBarHeight || this.data.navBarHeight })
+  },
+
   onPullDownRefresh() {
     this.loadOverview()
   },
@@ -35,13 +39,21 @@ Page({
   async loadOverview() {
     this.setData({ loadingOverview: true, loadError: '' })
     try {
-      const overview = await operatorBasicManagementService.getFinanceOverview()
+      const [overview, balance] = await Promise.all([
+        operatorBasicManagementService.getFinanceOverview().catch(() => null),
+        getOperatorAccountBalance().catch(() => null)
+      ])
+
+      const withdrawableAmountFen = balance?.withdrawable_amount ?? 0
+      const loadError = balance ? '' : '可提现余额加载失败，请稍后重试'
+
       this.setData(
         {
-          availableAmountFen: overview?.total?.operator_income || 0,
-          totalIncomeFen: overview?.total?.operator_income || 0,
-          currentMonthIncomeFen: overview?.current_month?.operator_income || 0,
-          operatorShareRatio: overview?.operator_share_ratio || 0
+          availableAmountFen: withdrawableAmountFen,
+          totalIncomeFen: overview?.total?.operator_income ?? 0,
+          currentMonthIncomeFen: overview?.current_month?.operator_income ?? 0,
+          operatorShareRatio: overview?.operator_share_ratio ?? 0,
+          loadError
         },
         () => this.updateSubmitState()
       )
