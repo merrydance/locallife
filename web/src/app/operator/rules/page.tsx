@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,8 +24,8 @@ export default function OperatorRulesPage() {
   const [rules, setRules] = useState<OperatorRulesResponse["rules"]>([]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const loadRegions = useCallback(() => {
     apiGet<OperatorRegionListResponse>("/operator/regions", { page: 1, limit: 100 })
@@ -37,10 +39,9 @@ export default function OperatorRulesPage() {
     })
       .then((res) => {
         setRules(res.rules ?? []);
-        setError(null);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "加载规则失败");
+        toast.error(err instanceof Error ? err.message : "加载规则失败");
       });
   }, [regionId]);
 
@@ -64,21 +65,27 @@ export default function OperatorRulesPage() {
   const onEdit = (key: string, value: string) => {
     setEditingKey(key);
     setEditingValue(value);
-    setMessage(null);
   };
 
   const onSave = async () => {
     if (!editingKey) return;
 
-    await apiPatch(
-      `/operator/rules/${editingKey}${regionId === "all" ? "" : `?region_id=${regionId}`}`,
-      { value: editingValue }
-    );
+    setSaving(true);
+    try {
+      await apiPatch(
+        `/operator/rules/${editingKey}${regionId === "all" ? "" : `?region_id=${regionId}`}`,
+        { value: editingValue }
+      );
 
-    setEditingKey(null);
-    setEditingValue("");
-    setMessage("规则已更新");
-    loadRules();
+      setEditingKey(null);
+      setEditingValue("");
+      toast.success("规则已更新");
+      loadRules();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "规则更新失败");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const activeRules = categorized[activeCategory];
@@ -132,17 +139,6 @@ export default function OperatorRulesPage() {
           </CardContent>
         </Card>
 
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        {message && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {message}
-          </div>
-        )}
-
         <Card>
           <CardHeader>
             <CardTitle>规则列表</CardTitle>
@@ -188,7 +184,7 @@ export default function OperatorRulesPage() {
                         {rule.editable ? (
                           editing ? (
                             <div className="flex gap-2">
-                              <Button size="sm" onClick={onSave}>
+                              <Button size="sm" onClick={() => setSaveConfirmOpen(true)} disabled={saving}>
                                 保存
                               </Button>
                               <Button
@@ -229,6 +225,15 @@ export default function OperatorRulesPage() {
             </Table>
           </CardContent>
         </Card>
+
+        <ConfirmDialog
+          open={saveConfirmOpen}
+          onOpenChange={setSaveConfirmOpen}
+          title="确认保存规则修改？"
+          description="保存后将按当前区域配置生效。"
+          confirmText="确认保存"
+          onConfirm={onSave}
+        />
       </PageContent>
     </PageShell>
   );

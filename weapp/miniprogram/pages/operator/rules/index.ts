@@ -39,7 +39,7 @@ interface RuleIdDataset {
 }
 
 interface ValueChangeDetail {
-  value: string
+  value?: string
 }
 
 Page({
@@ -166,7 +166,8 @@ Page({
   },
 
   onValueChange(e: WechatMiniprogram.CustomEvent<ValueChangeDetail>) {
-    this.setData({ newValue: e.detail.value })
+    const value = typeof e.detail?.value === 'string' ? e.detail.value : ''
+    this.setData({ newValue: value })
   },
 
   onCloseEdit() {

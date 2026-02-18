@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -37,6 +38,12 @@ export default function PlatformRegionsPage() {
       })
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
   const loading = loadState === "loading";
 
   return (
@@ -47,11 +54,6 @@ export default function PlatformRegionsPage() {
         actions={<Badge variant="outline">实时</Badge>}
       />
       <PageContent>
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
         <Card>
           <CardHeader>
             <CardTitle>区域概览</CardTitle>

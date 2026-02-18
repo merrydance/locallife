@@ -46,6 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { apiGet, apiPost, resolveProtectedMediaCandidates } from "@/lib/api";
 import type {
   AdminOperatorApplicationItem,
@@ -85,6 +86,8 @@ export default function PlatformOperatorApplicationsPage() {
     >
   >({});
   const [summary, setSummary] = useState({ total: 0, hasMore: false });
+  const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -222,11 +225,21 @@ export default function PlatformOperatorApplicationsPage() {
   const reviewInDetail = async (decision: "approve" | "reject") => {
     if (!detail || detail.status !== "submitted") return;
     if (decision === "approve") {
-      await approve(detail.id);
-      setDetailOpen(false);
-      setDetail(null);
+      setApproveConfirmOpen(true);
       return;
     }
+    setRejectConfirmOpen(true);
+  };
+
+  const confirmApproveInDetail = async () => {
+    if (!detail) return;
+    await approve(detail.id);
+    setDetailOpen(false);
+    setDetail(null);
+  };
+
+  const confirmRejectInDetail = async () => {
+    if (!detail) return;
     await reject(detail.id, detailRejectReason);
   };
 
@@ -611,6 +624,25 @@ export default function PlatformOperatorApplicationsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ConfirmDialog
+          open={approveConfirmOpen}
+          onOpenChange={setApproveConfirmOpen}
+          title="确认通过该申请？"
+          description="通过后将生效并创建对应运营商账号。"
+          confirmText="确认通过"
+          onConfirm={confirmApproveInDetail}
+        />
+
+        <ConfirmDialog
+          open={rejectConfirmOpen}
+          onOpenChange={setRejectConfirmOpen}
+          title="确认驳回该申请？"
+          description="驳回后需申请方按驳回原因补充材料再提交。"
+          confirmText="确认驳回"
+          variant="destructive"
+          onConfirm={confirmRejectInDetail}
+        />
       </PageContent>
     </PageShell>
   );

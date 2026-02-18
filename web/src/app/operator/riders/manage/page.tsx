@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,12 @@ export default function OperatorRidersManagePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
 
   const loadDetail = (id: number) => {
     apiGet<OperatorRiderDetail>(`/operator/riders/${id}`)
@@ -95,12 +102,6 @@ export default function OperatorRidersManagePage() {
             <Button onClick={load}>重新加载</Button>
           </CardContent>
         </Card>
-
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
 
         <Card>
           <CardHeader>

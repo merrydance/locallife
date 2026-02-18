@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,6 +65,12 @@ export default function OperatorPeakHoursPage() {
     if (!regionId) return;
     load(regionId);
   }, [regionId, load]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
 
   const createConfig = async () => {
     if (!regionId) return;
@@ -159,12 +166,6 @@ export default function OperatorPeakHoursPage() {
             </div>
           </CardContent>
         </Card>
-
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
 
         <Card>
           <CardHeader>

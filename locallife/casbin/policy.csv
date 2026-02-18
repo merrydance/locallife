@@ -213,6 +213,7 @@ p, merchant_owner, /v1/delivery-fee/promotions/:id, DELETE
 
 # Reservation Management (Merchant)
 p, merchant_owner, /v1/reservations/merchant, GET
+p, merchant_owner, /v1/reservations/merchant/dishes, GET
 p, merchant_owner, /v1/reservations/:id/confirm, POST
 p, merchant_owner, /v1/reservations/:id/complete, POST
 p, merchant_owner, /v1/reservations/:id/no-show, POST
@@ -236,6 +237,10 @@ p, merchant_owner, /v1/kitchen/orders/:id/ready, POST
 # Claims & Appeals (Merchant)
 p, merchant_owner, /v1/merchant/claims, GET
 p, merchant_owner, /v1/merchant/claims/:id, GET
+p, merchant_owner, /v1/merchant/claims/:id/decision, GET
+p, merchant_owner, /v1/merchant/claims/behavior-summary, GET
+p, merchant_owner, /v1/merchant/claims/:id/recovery, GET
+p, merchant_owner, /v1/merchant/claims/:id/recovery/pay, POST
 p, merchant_owner, /v1/merchant/appeals, POST
 p, merchant_owner, /v1/merchant/appeals, GET
 p, merchant_owner, /v1/merchant/appeals/:id, GET
@@ -328,8 +333,17 @@ p, merchant_staff, /v1/inventory/stats, GET
 
 # Reservations (read-only + confirm)
 p, merchant_staff, /v1/reservations/merchant, GET
+p, merchant_staff, /v1/reservations/merchant/dishes, GET
 p, merchant_staff, /v1/reservations/:id/confirm, POST
 p, merchant_staff, /v1/reservations/:id/complete, POST
+
+# Claims (read-only + recovery)
+p, merchant_staff, /v1/merchant/claims, GET
+p, merchant_staff, /v1/merchant/claims/:id, GET
+p, merchant_staff, /v1/merchant/claims/:id/decision, GET
+p, merchant_staff, /v1/merchant/claims/behavior-summary, GET
+p, merchant_staff, /v1/merchant/claims/:id/recovery, GET
+p, merchant_staff, /v1/merchant/claims/:id/recovery/pay, POST
 
 # Tables (read-only)
 p, merchant_staff, /v1/tables, GET

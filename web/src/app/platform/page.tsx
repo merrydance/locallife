@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -54,6 +55,12 @@ export default function PlatformDashboardPage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
   const orderGrowth = useMemo(() => {
     if (dailyStats.length < 2) return null;
     const last = dailyStats[dailyStats.length - 1]?.order_count ?? 0;
@@ -105,11 +112,6 @@ export default function PlatformDashboardPage() {
         actions={<Badge variant="secondary">平台端</Badge>}
       />
       <PageContent className="space-y-8">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {(
             loading

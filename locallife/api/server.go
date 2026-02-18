@@ -695,6 +695,7 @@ func (server *Server) setupRouter() {
 
 		// 商户管理
 		reservationsGroup.GET("/merchant", server.listMerchantReservations)
+		reservationsGroup.GET("/merchant/dishes", server.listMerchantReservationDishes)
 		reservationsGroup.GET("/merchant/today", server.listTodayReservations) // 今日预订
 		reservationsGroup.GET("/merchant/stats", server.getReservationStats)
 		reservationsGroup.POST("/merchant/create", server.merchantCreateReservation) // 商户代客创建
@@ -766,6 +767,7 @@ func (server *Server) setupRouter() {
 	{
 		merchantClaimsGroup.GET("/claims", server.listMerchantClaims)
 		merchantClaimsGroup.GET("/claims/:id", server.getMerchantClaimDetail)
+		merchantClaimsGroup.GET("/claims/:id/decision", server.getMerchantClaimDecision)
 		merchantClaimsGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
 		merchantClaimsGroup.GET("/claims/:id/recovery", server.getMerchantClaimRecovery)
 		merchantClaimsGroup.POST("/claims/:id/recovery/pay", server.payMerchantClaimRecovery)

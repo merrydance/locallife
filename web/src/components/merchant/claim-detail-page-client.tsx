@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ClipboardList } from "lucide-react";
+import { ArrowLeft, ClipboardList, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,24 @@ import {
   PageShell,
 } from "@/components/merchant/layout/page-shell";
 import { apiGet, apiPost, formatAmount } from "@/lib/api";
+import {
+  formatClaimType,
+  formatDecisionCompensationSource,
+  formatDecisionReasonCode,
+  formatDecisionResponsibleParty,
+  formatDecisionStatus,
+} from "@/lib/claim-display";
+import {
+  formatAppealStatus,
+  formatClaimStatus,
+  formatRecoveryStatus,
+} from "@/lib/operator-display";
 import { cn } from "@/lib/utils";
 import type {
   ClaimRecoveryResponse,
+  MerchantClaimBehaviorSummaryResponse,
+  MerchantClaimDecision,
+  MerchantClaimDecisionResponse,
   MerchantClaimDetailResponse,
 } from "@/types/claim-recovery";
 
@@ -35,12 +50,6 @@ const RECOVERY_STATUS_STYLES: Record<string, string> = {
   paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
   waived: "bg-slate-100 text-slate-700 border-slate-200",
   appealed: "bg-blue-100 text-blue-700 border-blue-200",
-};
-
-const APPEAL_STATUS_LABELS: Record<string, string> = {
-  pending: "待处理",
-  approved: "已通过",
-  rejected: "已驳回",
 };
 
 const APPEAL_STATUS_STYLES: Record<string, string> = {
@@ -82,9 +91,13 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
   const [loading, setLoading] = useState(true);
   const [claim, setClaim] = useState<MerchantClaimDetailResponse | null>(null);
   const [recovery, setRecovery] = useState<ClaimRecoveryResponse | null>(null);
+  const [behaviorSummary, setBehaviorSummary] = useState<MerchantClaimBehaviorSummaryResponse | null>(null);
+  const [decision, setDecision] = useState<MerchantClaimDecision | null>(null);
   const [paying, setPaying] = useState(false);
   const [appealReason, setAppealReason] = useState("");
   const [appealSubmitting, setAppealSubmitting] = useState(false);
+
+  const formatAbnormalRate = (value: number) => `${(value * 100).toFixed(2)}%`;
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -93,14 +106,21 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
         `/merchant/claims/${claimId}`
       );
       setClaim(detail);
-      try {
-        const recoveryDetail = await apiGet<ClaimRecoveryResponse>(
-          `/merchant/claims/${claimId}/recovery`
-        );
-        setRecovery(recoveryDetail);
-      } catch {
-        setRecovery(null);
-      }
+
+      const [recoveryResult, summaryResult, decisionResult] = await Promise.allSettled([
+        apiGet<ClaimRecoveryResponse>(`/merchant/claims/${claimId}/recovery`),
+        apiGet<MerchantClaimBehaviorSummaryResponse>(
+          `/merchant/claims/behavior-summary`,
+          { order_id: detail.order_id }
+        ),
+        apiGet<MerchantClaimDecisionResponse>(`/merchant/claims/${claimId}/decision`),
+      ]);
+
+      setRecovery(recoveryResult.status === "fulfilled" ? recoveryResult.value : null);
+      setBehaviorSummary(summaryResult.status === "fulfilled" ? summaryResult.value : null);
+      setDecision(
+        decisionResult.status === "fulfilled" ? decisionResult.value.decision : null
+      );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "加载索赔详情失败";
       toast.error(message);
@@ -192,7 +212,7 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
                 </CardHeader>
                 <CardContent className="grid gap-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">索赔状态：{claim.status}</Badge>
+                    <Badge variant="outline">索赔状态：{formatClaimStatus(claim.status)}</Badge>
                     {claim.appeal_status && (
                       <Badge
                         variant="outline"
@@ -201,17 +221,35 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
                           APPEAL_STATUS_STYLES[claim.appeal_status] || ""
                         )}
                       >
-                        申诉状态：{APPEAL_STATUS_LABELS[claim.appeal_status] || claim.appeal_status}
+                        申诉状态：{formatAppealStatus(claim.appeal_status)}
                       </Badge>
                     )}
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">订单号</span>
-                    <span className="font-medium">{claim.order_no}</span>
+                    <Link
+                      href={`/merchant/orders/${claim.order_id}`}
+                      className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                    >
+                      {claim.order_no}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">订单金额</span>
+                    <span>¥{formatAmount(claim.order_amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">索赔用户</span>
+                    <span>{claim.user_name || "-"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">用户手机号</span>
+                    <span>{claim.user_phone || "-"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">索赔类型</span>
-                    <span>{claim.claim_type}</span>
+                    <span>{formatClaimType(claim.claim_type)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">索赔金额</span>
@@ -227,14 +265,96 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">索赔状态</span>
-                    <span>{claim.status}</span>
+                    <span>{formatClaimStatus(claim.status)}</span>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <span className="text-muted-foreground">索赔说明</span>
+                    <span className="text-muted-foreground">索赔原因</span>
                     <p className="text-sm text-foreground">{claim.description}</p>
                   </div>
                 </CardContent>
               </Card>
+
+              {decision && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>判定依据</CardTitle>
+                    <CardDescription>平台判责与赔付来源信息</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">责任方</span>
+                      <span>{formatDecisionResponsibleParty(decision.responsible_party)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">赔付来源</span>
+                      <span>{formatDecisionCompensationSource(decision.compensation_source)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">判定状态</span>
+                      <span>{formatDecisionStatus(decision.decision_status)}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground">原因码</span>
+                      <div className="flex flex-wrap gap-2">
+                        {decision.reason_codes?.length ? (
+                          decision.reason_codes.map((reasonCode) => (
+                            <Badge key={reasonCode} variant="outline" className="font-normal">
+                              {formatDecisionReasonCode(reasonCode)}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground">判定摘要</span>
+                      <p className="text-sm text-foreground">{decision.trace_summary || "-"}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {behaviorSummary && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>用户回溯摘要</CardTitle>
+                    <CardDescription>
+                      统计窗口：{behaviorSummary.window.start_date} ~ {behaviorSummary.window.end_date}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 text-sm md:grid-cols-3">
+                    <div className="rounded-lg border p-3">
+                      <div className="mb-2 text-sm font-semibold">用户</div>
+                      <div className="space-y-1 text-muted-foreground">
+                        <div>订单数：{behaviorSummary.user.total_orders}</div>
+                        <div>异常索赔：{behaviorSummary.user.abnormal_claims}</div>
+                        <div>异常率：{formatAbnormalRate(behaviorSummary.user.abnormal_rate)}</div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="mb-2 text-sm font-semibold">商户</div>
+                      <div className="space-y-1 text-muted-foreground">
+                        <div>订单数：{behaviorSummary.merchant.total_orders}</div>
+                        <div>异常索赔：{behaviorSummary.merchant.abnormal_claims}</div>
+                        <div>异常率：{formatAbnormalRate(behaviorSummary.merchant.abnormal_rate)}</div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="mb-2 text-sm font-semibold">骑手</div>
+                      {behaviorSummary.rider ? (
+                        <div className="space-y-1 text-muted-foreground">
+                          <div>订单数：{behaviorSummary.rider.total_orders}</div>
+                          <div>异常索赔：{behaviorSummary.rider.abnormal_claims}</div>
+                          <div>异常率：{formatAbnormalRate(behaviorSummary.rider.abnormal_rate)}</div>
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground">无骑手数据</div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader>
@@ -265,7 +385,9 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
                           <div className="font-medium">申诉处理</div>
                           <div className="text-muted-foreground">申诉已提交并进入审核</div>
                         </div>
-                        <span className="text-muted-foreground">{claim.appeal_status || "-"}</span>
+                        <span className="text-muted-foreground">
+                          {claim.appeal_status ? formatAppealStatus(claim.appeal_status) : "-"}
+                        </span>
                       </div>
                     </>
                   )}
@@ -281,7 +403,7 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
                   <CardContent className="grid gap-3 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">申诉状态</span>
-                      <span>{claim.appeal_status || "-"}</span>
+                      <span>{claim.appeal_status ? formatAppealStatus(claim.appeal_status) : "-"}</span>
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-muted-foreground">申诉原因</span>
@@ -346,7 +468,7 @@ export function ClaimDetailPageClient({ claimId }: { claimId: string }) {
                         variant="outline"
                         className={cn("font-normal", RECOVERY_STATUS_STYLES[recovery.status])}
                       >
-                        {recovery.status}
+                        {formatRecoveryStatus(recovery.status)}
                       </Badge>
                     </div>
                     <div className="flex justify-between">

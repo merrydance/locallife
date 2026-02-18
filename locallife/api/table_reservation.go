@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -623,6 +624,186 @@ type listMerchantReservationsRequest struct {
 	Status   string `form:"status,omitempty" binding:"omitempty,oneof=pending paid confirmed completed cancelled expired no_show"` // 状态筛选
 	PageID   int32  `form:"page_id" binding:"required,min=1"`
 	PageSize int32  `form:"page_size" binding:"required,min=5,max=200"`
+}
+
+type listMerchantReservationDishesRequest struct {
+	Date string `form:"date" binding:"required"` // YYYY-MM-DD
+}
+
+type reservationDishReference struct {
+	ReservationID   int64  `json:"reservation_id"`
+	ReservationTime string `json:"reservation_time"`
+	TableNo         string `json:"table_no,omitempty"`
+	ContactName     string `json:"contact_name,omitempty"`
+	Status          string `json:"status"`
+	Quantity        int16  `json:"quantity"`
+}
+
+type reservationDishSummaryItem struct {
+	Type             string                     `json:"type"`
+	DishID           *int64                     `json:"dish_id,omitempty"`
+	ComboID          *int64                     `json:"combo_id,omitempty"`
+	Name             string                     `json:"name"`
+	TotalQuantity    int64                      `json:"total_quantity"`
+	ReservationCount int64                      `json:"reservation_count"`
+	References       []reservationDishReference `json:"references"`
+}
+
+// listMerchantReservationDishes 商户按天查看预订菜品备菜清单
+// @Summary 获取商户预订菜品备菜清单
+// @Description 按日期聚合预订中的菜品/套餐数量，便于后厨备菜
+// @Tags 预定管理-商户
+// @Accept json
+// @Produce json
+// @Param date query string true "日期 (YYYY-MM-DD)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "非商户"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Security BearerAuth
+// @Router /v1/reservations/merchant/dishes [get]
+func (server *Server) listMerchantReservationDishes(ctx *gin.Context) {
+	var req listMerchantReservationDishesRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	reservationDate, err := parseISODate(req.Date, "invalid date format")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	reservations, err := server.store.ListReservationsByMerchantAndDate(ctx, db.ListReservationsByMerchantAndDateParams{
+		MerchantID:      merchant.ID,
+		ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	type aggValue struct {
+		item    reservationDishSummaryItem
+		seenRes map[int64]struct{}
+	}
+
+	agg := map[string]*aggValue{}
+	for _, reservation := range reservations {
+		if reservation.Status == "cancelled" || reservation.Status == "expired" || reservation.Status == "no_show" {
+			continue
+		}
+
+		items, err := server.store.ListReservationItems(ctx, reservation.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		reservationTime := ""
+		if reservation.ReservationTime.Valid {
+			hours := reservation.ReservationTime.Microseconds / 1000000 / 3600
+			minutes := (reservation.ReservationTime.Microseconds / 1000000 % 3600) / 60
+			reservationTime = time.Date(0, 1, 1, int(hours), int(minutes), 0, 0, time.UTC).Format("15:04")
+		}
+
+		for _, item := range items {
+			if !item.DishID.Valid && !item.ComboID.Valid {
+				continue
+			}
+
+			var key string
+			var name string
+			typ := "dish"
+
+			if item.DishID.Valid {
+				key = fmt.Sprintf("dish:%d", item.DishID.Int64)
+				if item.DishName.Valid {
+					name = item.DishName.String
+				}
+			} else {
+				typ = "combo"
+				key = fmt.Sprintf("combo:%d", item.ComboID.Int64)
+				if item.ComboName.Valid {
+					name = item.ComboName.String
+				}
+			}
+
+			if name == "" {
+				name = "未命名"
+			}
+
+			entry, ok := agg[key]
+			if !ok {
+				summary := reservationDishSummaryItem{
+					Type:       typ,
+					Name:       name,
+					References: make([]reservationDishReference, 0, 8),
+				}
+				if item.DishID.Valid {
+					dishID := item.DishID.Int64
+					summary.DishID = &dishID
+				}
+				if item.ComboID.Valid {
+					comboID := item.ComboID.Int64
+					summary.ComboID = &comboID
+				}
+
+				entry = &aggValue{
+					item:    summary,
+					seenRes: map[int64]struct{}{},
+				}
+				agg[key] = entry
+			}
+
+			entry.item.TotalQuantity += int64(item.Quantity)
+			if _, seen := entry.seenRes[reservation.ID]; !seen {
+				entry.item.ReservationCount++
+				entry.seenRes[reservation.ID] = struct{}{}
+			}
+			entry.item.References = append(entry.item.References, reservationDishReference{
+				ReservationID:   reservation.ID,
+				ReservationTime: reservationTime,
+				TableNo:         reservation.TableNo,
+				ContactName:     reservation.ContactName,
+				Status:          reservation.Status,
+				Quantity:        item.Quantity,
+			})
+		}
+	}
+
+	result := make([]reservationDishSummaryItem, 0, len(agg))
+	for _, value := range agg {
+		sort.Slice(value.item.References, func(i, j int) bool {
+			return value.item.References[i].ReservationTime < value.item.References[j].ReservationTime
+		})
+		result = append(result, value.item)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TotalQuantity == result[j].TotalQuantity {
+			return result[i].Name < result[j].Name
+		}
+		return result[i].TotalQuantity > result[j].TotalQuantity
+	})
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"date":  req.Date,
+		"items": result,
+	})
 }
 
 // listMerchantReservations 商户查看预定列表

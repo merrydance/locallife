@@ -143,6 +143,7 @@ export interface OperatorAppealDetail {
   review_notes?: string;
   compensation_amount?: number;
   claim_approved_amount?: number;
+  lookback_result?: string;
 }
 
 export interface ClaimRecoveryResponse {

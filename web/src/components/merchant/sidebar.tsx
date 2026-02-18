@@ -90,6 +90,12 @@ const navGroups: NavGroup[] = [
         activePrefix: "/merchant/reservations",
         icon: CalendarCheck,
       },
+      {
+        label: "预订备菜清单",
+        href: "/merchant/reservations/dishes",
+        activePrefix: "/merchant/reservations/dishes",
+        icon: PanelsTopLeft,
+      },
     ],
   },
   {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -41,6 +42,12 @@ export default function OperatorMerchantsPage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
   const loading = loadState === "loading";
 
   return (
@@ -51,11 +58,6 @@ export default function OperatorMerchantsPage() {
         actions={<Badge variant="secondary">近 30 天</Badge>}
       />
       <PageContent className="space-y-4">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
         <Card>
           <CardHeader>
             <CardTitle>商户销售排行</CardTitle>

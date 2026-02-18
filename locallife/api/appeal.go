@@ -135,6 +135,17 @@ type merchantClaimResponse struct {
 	AppealStatus   *string    `json:"appeal_status,omitempty"`
 }
 
+type merchantClaimDecisionResponse struct {
+	DecisionID         int64    `json:"decision_id"`
+	ResponsibleParty   string   `json:"responsible_party"`
+	CompensationSource string   `json:"compensation_source"`
+	DecisionStatus     string   `json:"decision_status"`
+	ReasonCodes        []string `json:"reason_codes"`
+	TraceSummary       *string  `json:"trace_summary,omitempty"`
+	CreatedAt          string   `json:"created_at"`
+	UpdatedAt          string   `json:"updated_at"`
+}
+
 // listMerchantClaims 商户查看收到的索赔列表
 // @Summary 获取商户收到的索赔列表
 // @Description 商户查看已批准的索赔列表，包含订单信息和申诉状态
@@ -290,6 +301,78 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, response)
+}
+
+// getMerchantClaimDecision 商户查看索赔判定依据
+// @Summary 获取索赔判定依据
+// @Description 商户查看该索赔对应订单的最新行为判定信息（责任方、赔付来源、原因码、判定摘要）
+// @Tags 商户申诉管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "索赔ID"
+// @Success 200 {object} map[string]interface{} "成功返回判定依据"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "非商户用户"
+// @Failure 404 {object} map[string]interface{} "索赔不存在"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /v1/merchant/claims/{id}/decision [get]
+func (server *Server) getMerchantClaimDecision(ctx *gin.Context) {
+	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid claim id")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.getMerchantFromUserID(ctx, authPayload.UserID)
+	if err != nil {
+		return
+	}
+
+	claim, err := server.store.GetMerchantClaimDetailForMerchant(ctx, db.GetMerchantClaimDetailForMerchantParams{
+		ID:         claimID,
+		MerchantID: merchant.ID,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	decisions, err := server.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: claim.OrderID, Valid: true})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if len(decisions) == 0 {
+		ctx.JSON(http.StatusOK, gin.H{"decision": nil})
+		return
+	}
+
+	latest := decisions[0]
+	var traceSummary *string
+	if latest.TraceSummary.Valid {
+		traceSummary = &latest.TraceSummary.String
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"decision": merchantClaimDecisionResponse{
+			DecisionID:         latest.ID,
+			ResponsibleParty:   latest.ResponsibleParty,
+			CompensationSource: latest.CompensationSource,
+			DecisionStatus:     latest.DecisionStatus,
+			ReasonCodes:        latest.ReasonCodes,
+			TraceSummary:       traceSummary,
+			CreatedAt:          latest.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:          latest.UpdatedAt.Format(time.RFC3339),
+		},
+	})
 }
 
 type createMerchantAppealRequest struct {

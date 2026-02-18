@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageContent, PageHeader, PageShell } from "@/components/merchant/layout/page-shell";
@@ -19,6 +20,12 @@ export default function OperatorRealtimePage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
   const cards = [
     { label: "活跃商户", value: data?.active_merchant_count ?? 0 },
     { label: "活跃骑手", value: data?.active_rider_count ?? 0 },
@@ -34,11 +41,6 @@ export default function OperatorRealtimePage() {
         actions={<Badge variant="secondary">实时</Badge>}
       />
       <PageContent className="space-y-4">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {cards.map((card) => (
             <Card key={card.label}>

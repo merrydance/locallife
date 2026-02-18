@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,18 @@ export default function OperatorMerchantsManagePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (message) {
+      toast.success(message);
+    }
+  }, [message]);
 
   const loadDetail = (id: number) => {
     apiGet<OperatorMerchantDetail>(`/operator/merchants/${id}`)
@@ -110,17 +123,6 @@ export default function OperatorMerchantsManagePage() {
             <Button onClick={load}>重新加载</Button>
           </CardContent>
         </Card>
-
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        {message && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {message}
-          </div>
-        )}
 
         <Card>
           <CardHeader>

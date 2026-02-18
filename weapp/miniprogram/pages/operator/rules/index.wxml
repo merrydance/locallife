@@ -86,6 +86,7 @@
           label="规则数值"
           suffix="{{editingRule.unit}}"
           align="right"
+          bind:change="onValueChange"
           bind:input="onValueChange"
         />
       </view>

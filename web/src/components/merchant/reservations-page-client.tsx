@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   RefreshCw, 
@@ -493,9 +494,14 @@ export function ReservationsPageClient({
         title="预订管理" 
         description="管理包间预订、签到及菜品预备状态"
         actions={
-          <Button variant="outline" size="sm" className="h-9 px-4 border-slate-200" onClick={refreshAll}>
-            <RefreshCw className="h-4 w-4 mr-2" />刷新
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-9 px-4 border-slate-200" asChild>
+              <Link href="/merchant/reservations/dishes">预订备菜清单</Link>
+            </Button>
+            <Button variant="outline" size="sm" className="h-9 px-4 border-slate-200" onClick={refreshAll}>
+              <RefreshCw className="h-4 w-4 mr-2" />刷新
+            </Button>
+          </div>
         }
       />
       <PageContent>

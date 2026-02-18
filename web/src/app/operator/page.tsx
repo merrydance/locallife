@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -61,6 +62,12 @@ export default function OperatorDashboardPage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
   const summaryCards = useMemo(() => {
     if (!finance)
       return [
@@ -109,12 +116,6 @@ export default function OperatorDashboardPage() {
         actions={<Badge variant="secondary">运营商</Badge>}
       />
       <PageContent className="space-y-4">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {realtimeCards.map((card) => (
             <Card key={card.label}>

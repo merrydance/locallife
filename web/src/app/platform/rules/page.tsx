@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -79,6 +80,12 @@ export default function PlatformRulesPage() {
     return () => window.clearTimeout(timer);
   }, [searchParams, selectedRuleId, hits]);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
   return (
     <PageShell>
       <PageHeader
@@ -87,11 +94,6 @@ export default function PlatformRulesPage() {
         actions={<Badge variant="secondary">规则中心</Badge>}
       />
       <PageContent className="space-y-6">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
         <Card>
           <CardHeader>
             <CardTitle>规则列表</CardTitle>

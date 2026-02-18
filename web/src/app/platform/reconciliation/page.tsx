@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -57,6 +58,12 @@ export default function PlatformReconciliationPage() {
       })
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
   const loading = loadState === "loading";
 
   return (
@@ -67,11 +74,6 @@ export default function PlatformReconciliationPage() {
         actions={<Badge variant="secondary">对账中</Badge>}
       />
       <PageContent>
-        {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
         <Card>
           <CardHeader>
             <CardTitle>分账对账汇总</CardTitle>

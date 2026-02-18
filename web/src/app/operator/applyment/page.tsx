@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -119,6 +120,18 @@ export default function OperatorApplymentPage() {
     loadStatus();
   }, [loadStatus]);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (success) {
+      toast.success(success);
+    }
+  }, [success]);
+
   const statusCode = status?.status || "pending";
   const isOpened = statusCode === "finish" && Boolean(status?.sub_mch_id);
   const canSubmitOpenInfo = statusCode === "pending" || statusCode === "rejected" || statusCode === "rejected_sign";
@@ -153,17 +166,6 @@ export default function OperatorApplymentPage() {
         actions={<Badge variant="secondary">运营商</Badge>}
       />
       <PageContent className="space-y-4">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {success}
-          </div>
-        )}
-
         <Card>
           <CardHeader>
             <CardTitle>开户状态</CardTitle>

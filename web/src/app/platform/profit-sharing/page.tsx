@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +83,18 @@ export default function PlatformProfitSharingPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (success) {
+      toast.success(success);
+    }
+  }, [success]);
+
   const globalConfig = useMemo(
     () => configs.find((item) => !item.region_id && !item.merchant_id),
     [configs]
@@ -146,17 +159,6 @@ export default function PlatformProfitSharingPage() {
         actions={<Badge variant="secondary">平台侧</Badge>}
       />
       <PageContent className="space-y-4">
-        {error && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {success}
-          </div>
-        )}
-
         <Card>
           <CardHeader>
             <CardTitle>当前全局比例</CardTitle>
