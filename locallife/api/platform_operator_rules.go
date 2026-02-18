@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
 
@@ -29,13 +31,26 @@ type updatePlatformOperatorRuleRequest struct {
 }
 
 func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
-	commissionRate := numericFromFloat(0.03)
+	platformRate := int32(2)
+	operatorRate := int32(3)
 	merchantDeposit := int64(500000)
 	riderDeposit := int64(20000)
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	if config, err := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+		OrderSource: "takeout",
+		MerchantID:  pgtype.Int8{Valid: false},
+		RegionID:    pgtype.Int8{Valid: false},
+	}); err == nil {
+		platformRate = config.PlatformRate
+		operatorRate = config.OperatorRate
+	} else if !isNotFoundError(err) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 
 	baseline, err := server.store.GetPlatformOperatorRuleBaselineFromRegion(ctx)
 	if err == nil {
-		commissionRate = baseline.CommissionRate
 		merchantDeposit = baseline.MerchantDeposit
 		riderDeposit = baseline.RiderDeposit
 	} else if !isNotFoundError(err) {
@@ -44,7 +59,6 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 	} else {
 		fallback, fallbackErr := server.store.GetPlatformOperatorRuleBaselineFromOperator(ctx)
 		if fallbackErr == nil {
-			commissionRate = fallback.CommissionRate
 			merchantDeposit = fallback.MerchantDeposit
 			riderDeposit = fallback.RiderDeposit
 		} else if !isNotFoundError(fallbackErr) {
@@ -53,15 +67,24 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 		}
 	}
 
-	commissionPercent := pgNumericToFloat64(commissionRate) * 100
 	rules := []platformOperatorRuleItem{
 		{
 			ID:       "platform_rule_1",
-			Name:     "平台抽成比例",
+			Name:     "平台佣金比例",
 			Key:      "PLATFORM_COMMISSION",
-			Value:    strconv.FormatFloat(commissionPercent, 'f', 2, 64),
+			Value:    strconv.FormatFloat(float64(platformRate), 'f', 2, 64),
 			Unit:     "%",
-			Desc:     "平台对订单收取的服务费比例（全局生效）",
+			Desc:     "平台佣金比例（分账配置来源）",
+			Category: "platform",
+			Editable: true,
+		},
+		{
+			ID:       "platform_rule_1_1",
+			Name:     "运营商佣金比例",
+			Key:      "OPERATOR_COMMISSION",
+			Value:    strconv.FormatFloat(float64(operatorRate), 'f', 2, 64),
+			Unit:     "%",
+			Desc:     "运营商佣金比例（分账配置来源）",
 			Category: "platform",
 			Editable: true,
 		},
@@ -87,7 +110,65 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 		},
 	}
 
+	_ = authPayload
+
 	ctx.JSON(http.StatusOK, listPlatformOperatorRulesResponse{Rules: rules})
+}
+
+func (server *Server) upsertGlobalProfitSharingConfig(ctx *gin.Context, platformRate, operatorRate int32, actorID int64) error {
+	configs, err := server.store.ListProfitSharingConfigs(ctx, db.ListProfitSharingConfigsParams{
+		Column1: "active",
+		Column2: "",
+		Column3: 0,
+		Column4: 0,
+		Limit:   200,
+		Offset:  0,
+	})
+	if err != nil {
+		return err
+	}
+
+	updated := false
+	for _, cfg := range configs {
+		if cfg.MerchantID.Valid || cfg.RegionID.Valid {
+			continue
+		}
+		if cfg.OrderSource != "all" {
+			continue
+		}
+		_, err := server.store.UpdateProfitSharingConfigTx(ctx, db.UpdateProfitSharingConfigTxParams{
+			ActorID:   actorID,
+			ActorRole: RoleAdmin,
+			Params: db.UpdateProfitSharingConfigParams{
+				ID:           cfg.ID,
+				PlatformRate: pgtype.Int4{Int32: platformRate, Valid: true},
+				OperatorRate: pgtype.Int4{Int32: operatorRate, Valid: true},
+			},
+		})
+		if err != nil {
+			return err
+		}
+		updated = true
+	}
+
+	if updated {
+		return nil
+	}
+
+	_, err = server.store.CreateProfitSharingConfigTx(ctx, db.CreateProfitSharingConfigTxParams{
+		ActorID:   actorID,
+		ActorRole: RoleAdmin,
+		Params: db.CreateProfitSharingConfigParams{
+			Status:       "active",
+			OrderSource:  "all",
+			PlatformRate: platformRate,
+			OperatorRate: operatorRate,
+			RiderEnabled: true,
+			Priority:     100,
+			CreatedBy:    pgtype.Int8{Int64: actorID, Valid: true},
+		},
+	})
+	return err
 }
 
 func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
@@ -105,19 +186,57 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	switch key {
 	case "PLATFORM_COMMISSION":
 		if value < 0 || value > 100 {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("比例必须在 0-100 之间")))
 			return
 		}
-
-		rate := numericFromFloat(value / 100.0)
-		if err := server.store.UpdateAllRegionRuleConfigCommissionRate(ctx, rate); err != nil {
+		current, currentErr := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+			OrderSource: "takeout",
+			MerchantID:  pgtype.Int8{Valid: false},
+			RegionID:    pgtype.Int8{Valid: false},
+		})
+		operatorRate := int32(3)
+		if currentErr == nil {
+			operatorRate = current.OperatorRate
+		} else if !isNotFoundError(currentErr) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, currentErr))
+			return
+		}
+		if value+float64(operatorRate) > 100 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("平台比例与运营商比例之和不能超过100")))
+			return
+		}
+		if err := server.upsertGlobalProfitSharingConfig(ctx, int32(value), operatorRate, authPayload.UserID); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		if err := server.store.UpdateAllOperatorsCommissionRate(ctx, rate); err != nil {
+
+	case "OPERATOR_COMMISSION":
+		if value < 0 || value > 100 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("比例必须在 0-100 之间")))
+			return
+		}
+		current, currentErr := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+			OrderSource: "takeout",
+			MerchantID:  pgtype.Int8{Valid: false},
+			RegionID:    pgtype.Int8{Valid: false},
+		})
+		platformRate := int32(2)
+		if currentErr == nil {
+			platformRate = current.PlatformRate
+		} else if !isNotFoundError(currentErr) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, currentErr))
+			return
+		}
+		if float64(platformRate)+value > 100 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("平台比例与运营商比例之和不能超过100")))
+			return
+		}
+		if err := server.upsertGlobalProfitSharingConfig(ctx, platformRate, int32(value), authPayload.UserID); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -159,7 +278,6 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   RoleAdmin,

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	api "github.com/merrydance/locallife/api"
@@ -183,41 +185,63 @@ func enforceTestCasbin(t *testing.T) {
 }
 
 func resetIntegrationData(t *testing.T) {
-	_, err := integrationPool.Exec(context.Background(), `
-		TRUNCATE TABLE
-			notifications,
-			user_notification_preferences,
-			order_status_logs,
-			profit_sharing_returns,
-			profit_sharing_orders,
-			delivery_pool,
-			deliveries,
-			rider_deposits,
-			rider_locations,
-			riders,
-			payment_orders,
-			order_items,
-			orders,
-			carts,
-			cart_items,
-			user_addresses,
-			dish_tags,
-			dish_ingredients,
-			dishes,
-			merchant_profiles,
-			table_transfer_logs,
-			billing_group_orders,
-			billing_group_members,
-			billing_groups,
-			dining_sessions,
-			table_reservations,
-			tables,
-			merchants,
-			users,
-			regions
-		RESTART IDENTITY CASCADE;
-	`)
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		_, err = integrationPool.Exec(context.Background(), `
+			TRUNCATE TABLE
+				notifications,
+				user_notification_preferences,
+				order_status_logs,
+				profit_sharing_returns,
+				profit_sharing_orders,
+				delivery_pool,
+				deliveries,
+				rider_deposits,
+				rider_locations,
+				riders,
+				payment_orders,
+				order_items,
+				orders,
+				carts,
+				cart_items,
+				user_addresses,
+				dish_tags,
+				dish_ingredients,
+				dishes,
+				merchant_profiles,
+				table_transfer_logs,
+				billing_group_orders,
+				billing_group_members,
+				billing_groups,
+				dining_sessions,
+				table_reservations,
+				tables,
+				merchants,
+				users,
+				regions
+			RESTART IDENTITY CASCADE;
+		`)
+		if err == nil {
+			return
+		}
+
+		if !isDeadlockError(err) {
+			break
+		}
+
+		time.Sleep(time.Duration(attempt+1) * 50 * time.Millisecond)
+	}
+
 	require.NoError(t, err)
+}
+
+func isDeadlockError(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+
+	return pgErr.Code == "40P01"
 }
 
 func ensureIntegrationDatabase(t *testing.T) {
@@ -248,13 +272,7 @@ func integrationDBSource() string {
 	if v := os.Getenv("INTEGRATION_DB_SOURCE"); strings.TrimSpace(v) != "" {
 		return v
 	}
-	if v := os.Getenv("TEST_DB_SOURCE"); strings.TrimSpace(v) != "" {
-		return v
-	}
-	if v := os.Getenv("DB_SOURCE"); strings.TrimSpace(v) != "" {
-		return v
-	}
-	return "postgresql:///locallife_test?sslmode=disable&host=/var/run/postgresql"
+	return "postgresql:///locallife_integration_test?sslmode=disable&host=/var/run/postgresql"
 }
 
 func integrationAdminSource() string {
@@ -275,7 +293,7 @@ func integrationDBName() string {
 			return name
 		}
 	}
-	return "locallife_test"
+	return "locallife_integration_test"
 }
 
 func integrationMigrationURL(t *testing.T) string {

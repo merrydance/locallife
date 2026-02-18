@@ -18,6 +18,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiGet, formatAmount, getRecentRange } from "@/lib/api";
 import type { PlatformProfitSharingReconciliationRow } from "@/types/platform-stats";
 
+function formatReconciliationStatus(status: string) {
+  switch (status) {
+    case "pending":
+      return "待分账";
+    case "processing":
+      return "分账中";
+    case "success":
+      return "已完成";
+    case "failed":
+      return "失败";
+    case "reversed":
+      return "已回退";
+    default:
+      return "未知状态";
+  }
+}
+
 export default function PlatformReconciliationPage() {
   const [rows, setRows] = useState<PlatformProfitSharingReconciliationRow[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "error">("loading");
@@ -88,7 +105,7 @@ export default function PlatformReconciliationPage() {
                 )}
                 {rows.map((row) => (
                   <TableRow key={row.status}>
-                    <TableCell className="font-medium">{row.status}</TableCell>
+                    <TableCell className="font-medium">{formatReconciliationStatus(row.status)}</TableCell>
                     <TableCell>{row.total_orders}</TableCell>
                     <TableCell>¥{formatAmount(row.total_amount)}</TableCell>
                     <TableCell>¥{formatAmount(row.total_platform_commission)}</TableCell>

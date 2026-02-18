@@ -1,7 +1,8 @@
 import { responsiveBehavior } from '@/utils/responsive'
 import {
   platformManagementService,
-  type PlatformOperatorRuleItem
+  type PlatformOperatorRuleItem,
+  type PlatformProfitSharingConfigItem
 } from '@/api/platform-management'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
@@ -52,8 +53,12 @@ Page({
     navBarHeight: 0,
     loading: false,
     submitting: false,
+    commissionSubmitting: false,
     error: null as string | null,
     total: 0,
+    commissionConfigId: 0,
+    platformRateInput: '',
+    operatorRateInput: '',
     activeCategory: 'all',
     categories: [
       { label: '全部', value: 'all', icon: 'app' }
@@ -69,6 +74,7 @@ Page({
 
   onLoad() {
     this.loadRules()
+    this.loadProfitSharingConfig()
   },
 
   onNavHeight(e: NavHeightEvent) {
@@ -124,6 +130,89 @@ Page({
 
   onRetry() {
     this.loadRules()
+    this.loadProfitSharingConfig()
+  },
+
+  async loadProfitSharingConfig() {
+    try {
+      const response = await platformManagementService.listPlatformProfitSharingConfigs({
+        status: 'active',
+        order_source: 'all',
+        page: 1,
+        limit: 50
+      })
+
+      const globalConfig = (response.items || []).find(
+        (item: PlatformProfitSharingConfigItem) => !item.region_id && !item.merchant_id
+      )
+
+      if (globalConfig) {
+        this.setData({
+          commissionConfigId: globalConfig.id,
+          platformRateInput: String(globalConfig.platform_rate),
+          operatorRateInput: String(globalConfig.operator_rate)
+        })
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '加载分账配置失败'
+      this.setData({ error: message })
+    }
+  },
+
+  onPlatformRateChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({ platformRateInput: String(e?.detail?.value || '') })
+  },
+
+  onOperatorRateChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
+    this.setData({ operatorRateInput: String(e?.detail?.value || '') })
+  },
+
+  async onSaveProfitSharingConfig() {
+    const { commissionSubmitting, commissionConfigId, platformRateInput, operatorRateInput } = this.data
+    if (commissionSubmitting) return
+
+    const platformRate = Number(platformRateInput)
+    const operatorRate = Number(operatorRateInput)
+
+    if (!Number.isFinite(platformRate) || !Number.isFinite(operatorRate)) {
+      wx.showToast({ title: '请输入有效数字', icon: 'none' })
+      return
+    }
+    if (platformRate < 0 || platformRate > 100 || operatorRate < 0 || operatorRate > 100) {
+      wx.showToast({ title: '比例需在0-100之间', icon: 'none' })
+      return
+    }
+    if (platformRate + operatorRate > 100) {
+      wx.showToast({ title: '比例之和不能超过100', icon: 'none' })
+      return
+    }
+
+    try {
+      this.setData({ commissionSubmitting: true, error: null })
+      const payload = {
+        status: 'active',
+        order_source: 'all',
+        platform_rate: Math.round(platformRate),
+        operator_rate: Math.round(operatorRate),
+        rider_enabled: true,
+        priority: 100
+      }
+
+      if (commissionConfigId > 0) {
+        await platformManagementService.updatePlatformProfitSharingConfig(commissionConfigId, payload)
+      } else {
+        await platformManagementService.createPlatformProfitSharingConfig(payload)
+      }
+
+      wx.showToast({ title: '分账配置已保存', icon: 'success' })
+      await this.loadProfitSharingConfig()
+      await this.loadRules()
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '保存失败'
+      wx.showToast({ title: message, icon: 'none' })
+    } finally {
+      this.setData({ commissionSubmitting: false })
+    }
   },
 
   onCategoryChange(e: CategoryChangeEvent) {

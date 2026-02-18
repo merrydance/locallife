@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -9,6 +10,19 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
+
+func validateProfitSharingRates(platformRate, operatorRate int32) error {
+	if platformRate < 0 || platformRate > 100 {
+		return errors.New("platform_rate must be between 0 and 100")
+	}
+	if operatorRate < 0 || operatorRate > 100 {
+		return errors.New("operator_rate must be between 0 and 100")
+	}
+	if platformRate+operatorRate > 100 {
+		return errors.New("platform_rate + operator_rate must be less than or equal to 100")
+	}
+	return nil
+}
 
 type profitSharingConfigResponse struct {
 	ID           int64   `json:"id"`
@@ -100,6 +114,10 @@ type createProfitSharingConfigRequest struct {
 func (server *Server) createProfitSharingConfig(ctx *gin.Context) {
 	var req createProfitSharingConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if err := validateProfitSharingRates(req.PlatformRate, req.OperatorRate); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -261,6 +279,21 @@ func (server *Server) updateProfitSharingConfig(ctx *gin.Context) {
 	var req updateProfitSharingConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if req.PlatformRate != nil && req.OperatorRate != nil {
+		if err := validateProfitSharingRates(*req.PlatformRate, *req.OperatorRate); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+	if req.PlatformRate != nil && (*req.PlatformRate < 0 || *req.PlatformRate > 100) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("platform_rate must be between 0 and 100")))
+		return
+	}
+	if req.OperatorRate != nil && (*req.OperatorRate < 0 || *req.OperatorRate > 100) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("operator_rate must be between 0 and 100")))
 		return
 	}
 

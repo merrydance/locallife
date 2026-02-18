@@ -403,11 +403,11 @@ func TestReplyReviewAPI(t *testing.T) {
 					Times(1).
 					Return(review, nil)
 
-					// Mock GetUser (for wechat openid)
-					store.EXPECT().
-						GetUser(gomock.Any(), gomock.Eq(user.ID)).
-						Times(1).
-						Return(user, nil)
+				// Mock GetUser (for wechat openid)
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(user, nil)
 
 				// Mock UpdateMerchantReply
 				store.EXPECT().
@@ -546,7 +546,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 	operatorUser, _ := randomUser(t)
 	user, _ := randomUser(t)
 	regionID := int64(1)
-	
+
 	// 创建带有 RegionID 的商户
 	merchant := db.Merchant{
 		ID:          util.RandomInt(1, 1000),
@@ -561,9 +561,9 @@ func TestDeleteReviewAPI(t *testing.T) {
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
-	
+
 	review := randomReview(user.ID, merchant.ID)
-	
+
 	operator := db.Operator{
 		ID:       util.RandomInt(1, 100),
 		UserID:   operatorUser.ID,
@@ -665,6 +665,9 @@ func TestDeleteReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				notManagedOperator := operator
+				notManagedOperator.RegionID = regionID + 999
+
 				// Mock for CasbinRoleMiddleware
 				store.EXPECT().
 					ListUserRoles(gomock.Any(), operatorUser.ID).
@@ -675,7 +678,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), gomock.Eq(operatorUser.ID)).
 					Times(1).
-					Return(operator, nil)
+					Return(notManagedOperator, nil)
 
 				// Mock GetReview
 				store.EXPECT().
@@ -692,11 +695,19 @@ func TestDeleteReviewAPI(t *testing.T) {
 				// Mock checkOperatorManagesRegion - operator doesn't manage this region
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
+						OperatorID: notManagedOperator.ID,
 						RegionID:   regionID,
 					}).
 					Times(1).
 					Return(false, nil)
+
+				store.EXPECT().
+					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
+						UserID: operatorUser.ID,
+						Role:   "operator",
+					}).
+					Times(1).
+					Return(db.UserRole{UserID: operatorUser.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: notManagedOperator.RegionID, Valid: true}}, nil)
 
 				store.EXPECT().
 					DeleteReview(gomock.Any(), gomock.Any()).

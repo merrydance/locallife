@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
@@ -58,7 +59,7 @@ function statusBadge(status: string) {
   if (status === "submitted") return <Badge>待审核</Badge>;
   if (status === "approved") return <Badge variant="secondary">已通过</Badge>;
   if (status === "rejected") return <Badge variant="destructive">已驳回</Badge>;
-  return <Badge variant="outline">{status}</Badge>;
+  return <Badge variant="outline">未知状态</Badge>;
 }
 
 function formatDateTime(value?: string) {
@@ -485,11 +486,13 @@ export default function PlatformOperatorApplicationsPage() {
                             {item.url ? (
                               asset?.state === "ready" && asset.url ? (
                                 <div className="overflow-hidden rounded-md border bg-muted/30">
-                                  <img
+                                  <Image
                                     src={asset.url}
                                     alt={item.label}
+                                    width={960}
+                                    height={420}
+                                    unoptimized
                                     className="h-52 w-full object-contain"
-                                    loading="lazy"
                                     onError={() => {
                                       const key = item.url;
                                       if (!key) return;

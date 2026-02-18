@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/token"
 )
 
 // ==================== 区域统计 ====================
@@ -381,6 +383,18 @@ type getOperatorStatsRequest struct {
 	EndDate   string `form:"end_date" binding:"required"`
 }
 
+func (server *Server) getCurrentOperatorID(ctx *gin.Context) (int64, error) {
+	if operator, ok := GetOperatorFromContext(ctx); ok {
+		return operator.ID, nil
+	}
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return operator.ID, nil
+}
+
 // getRegionDailyTrend 获取区域日趋势
 // @Summary 获取每日趋势
 // @Description 获取运营商管理区域的每日订单、GMV、佣金等趋势数据
@@ -425,14 +439,39 @@ func (server *Server) getRegionDailyTrend(ctx *gin.Context) {
 		return
 	}
 
+	operatorID, err := server.getCurrentOperatorID(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
 	result := make([]regionDailyTrendRow, len(trends))
 	for i, trend := range trends {
+		dayStart := time.Date(
+			trend.Date.Time.Year(),
+			trend.Date.Time.Month(),
+			trend.Date.Time.Day(),
+			0, 0, 0, 0,
+			time.Local,
+		)
+		dayEnd := dayStart.Add(24*time.Hour - time.Second)
+
+		operatorStats, opErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
+			OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+			StartAt:    dayStart,
+			EndAt:      dayEnd,
+		})
+		operatorIncome := int64(0)
+		if opErr == nil {
+			operatorIncome = operatorStats.TotalOperatorCommission
+		}
+
 		result[i] = regionDailyTrendRow{
 			Date:            trend.Date.Time.Format("2006-01-02"),
 			OrderCount:      trend.OrderCount,
 			TotalGMV:        trend.TotalGmv,
 			TotalCommission: trend.Commission,
-			OperatorIncome:  int64(float64(trend.Commission) * OperatorRevenueShareRatio),
+			OperatorIncome:  operatorIncome,
 			ActiveMerchants: trend.ActiveMerchants,
 			ActiveUsers:     trend.ActiveUsers,
 		}
@@ -480,6 +519,12 @@ type operatorFinanceOverviewResponse struct {
 // @Security BearerAuth
 // @Router /v1/operators/me/finance/overview [get]
 func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
+	operatorID, err := server.getCurrentOperatorID(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
 	// 获取运营商管理的区域ID
 	regionID, err := server.getOperatorRegionID(ctx)
 	if err != nil {
@@ -513,12 +558,20 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 	if err == nil {
 		response.CurrentMonth.TotalGMV = monthStats.TotalGmv
 		response.CurrentMonth.TotalCommission = monthStats.TotalCommission
-		response.CurrentMonth.OperatorIncome = int64(float64(monthStats.TotalCommission) * OperatorRevenueShareRatio)
 		response.CurrentMonth.TotalOrders = monthStats.TotalOrders
 		// 分账完成的佣金 = 统计的佣金（因为 GetRegionStats 只统计 status='finished' 的记录）
 		response.CurrentMonth.SettledCommission = monthStats.TotalCommission
 		// 微信电商分账是实时的，不存在"待分账"状态
 		response.CurrentMonth.PendingCommission = 0
+	}
+
+	monthOperatorStats, monthOperatorErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
+		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+		StartAt:    monthStart,
+		EndAt:      monthEnd,
+	})
+	if monthOperatorErr == nil {
+		response.CurrentMonth.OperatorIncome = monthOperatorStats.TotalOperatorCommission
 	}
 
 	// 查询累计统计（全部历史分账成功的订单）
@@ -534,12 +587,24 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 	if err == nil {
 		response.Total.TotalGMV = totalStats.TotalGmv
 		response.Total.TotalCommission = totalStats.TotalCommission
-		response.Total.OperatorIncome = int64(float64(totalStats.TotalCommission) * OperatorRevenueShareRatio)
 		response.Total.SettledCommission = totalStats.TotalCommission // 全部是已分账的
 	}
 
-	// 添加分成比例信息
-	response.OperatorShareRatio = OperatorRevenueShareRatio
+	totalOperatorStats, totalOperatorErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
+		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+		StartAt:    allTimeStart,
+		EndAt:      allTimeEnd,
+	})
+	if totalOperatorErr == nil {
+		response.Total.OperatorIncome = totalOperatorStats.TotalOperatorCommission
+	}
+
+	// 添加分成比例信息（基于实时累计结果计算）
+	if response.Total.TotalCommission > 0 {
+		response.OperatorShareRatio = float64(response.Total.OperatorIncome) / float64(response.Total.TotalCommission)
+	} else {
+		response.OperatorShareRatio = 0
+	}
 
 	ctx.JSON(http.StatusOK, response)
 }

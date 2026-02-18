@@ -235,6 +235,54 @@ export interface UpdatePlatformOperatorRuleRequest extends Record<string, unknow
     value: string
 }
 
+export interface PlatformProfitSharingConfigItem {
+    id: number
+    status: string
+    order_source: string
+    region_id?: number
+    merchant_id?: number
+    platform_rate: number
+    operator_rate: number
+    rider_enabled: boolean
+    priority: number
+    effective_at?: string
+    expires_at?: string
+    created_by?: number
+    created_at: string
+    updated_at: string
+}
+
+export interface PlatformProfitSharingConfigListResponse {
+    items: PlatformProfitSharingConfigItem[]
+    page: number
+    limit: number
+}
+
+export interface ListPlatformProfitSharingConfigsParams extends Record<string, unknown> {
+    status?: string
+    order_source?: string
+    page?: number
+    limit?: number
+}
+
+export interface CreatePlatformProfitSharingConfigRequest extends Record<string, unknown> {
+    status: string
+    order_source: string
+    platform_rate: number
+    operator_rate: number
+    rider_enabled?: boolean
+    priority?: number
+}
+
+export interface UpdatePlatformProfitSharingConfigRequest extends Record<string, unknown> {
+    status?: string
+    order_source?: string
+    platform_rate?: number
+    operator_rate?: number
+    rider_enabled?: boolean
+    priority?: number
+}
+
 // ==================== 配送费配置相关类型 ====================
 
 /** 配送费配置响应 - 对齐 api.deliveryFeeConfigResponse */
@@ -540,6 +588,46 @@ export class PlatformManagementService {
     async updatePlatformOperatorRule(key: string, data: UpdatePlatformOperatorRuleRequest): Promise<{ message: string }> {
         return request({
             url: `/v1/platform/operator-rules/${key}`,
+            method: 'PATCH',
+            data
+        })
+    }
+
+    /**
+     * 获取平台分账配置列表
+     */
+    async listPlatformProfitSharingConfigs(
+        params: ListPlatformProfitSharingConfigsParams
+    ): Promise<PlatformProfitSharingConfigListResponse> {
+        return request({
+            url: '/v1/platform/profit-sharing/configs',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    /**
+     * 创建平台分账配置
+     */
+    async createPlatformProfitSharingConfig(
+        data: CreatePlatformProfitSharingConfigRequest
+    ): Promise<PlatformProfitSharingConfigItem> {
+        return request({
+            url: '/v1/platform/profit-sharing/configs',
+            method: 'POST',
+            data
+        })
+    }
+
+    /**
+     * 更新平台分账配置
+     */
+    async updatePlatformProfitSharingConfig(
+        configId: number,
+        data: UpdatePlatformProfitSharingConfigRequest
+    ): Promise<PlatformProfitSharingConfigItem> {
+        return request({
+            url: `/v1/platform/profit-sharing/configs/${configId}`,
             method: 'PATCH',
             data
         })

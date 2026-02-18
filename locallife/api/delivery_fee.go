@@ -151,6 +151,13 @@ type deliveryFeeConfigResponse struct {
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 }
 
+func validateMinMaxFee(minFee int64, maxFee *int64) error {
+	if maxFee != nil && *maxFee < minFee {
+		return errors.New("max_fee cannot be less than min_fee")
+	}
+	return nil
+}
+
 func newDeliveryFeeConfigResponse(config db.DeliveryFeeConfig) deliveryFeeConfigResponse {
 	rsp := deliveryFeeConfigResponse{
 		ID:            config.ID,
@@ -198,6 +205,11 @@ func newDeliveryFeeConfigResponse(config db.DeliveryFeeConfig) deliveryFeeConfig
 func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	var req createDeliveryFeeConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if err := validateMinMaxFee(req.MinFee, req.MaxFee); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -357,6 +369,26 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 
 	arg := db.UpdateDeliveryFeeConfigParams{
 		ID: existingConfig.ID,
+	}
+
+	effectiveMinFee := existingConfig.MinFee
+	if req.MinFee != nil {
+		effectiveMinFee = *req.MinFee
+	}
+
+	var effectiveMaxFee *int64
+	if existingConfig.MaxFee.Valid {
+		currentMaxFee := existingConfig.MaxFee.Int64
+		effectiveMaxFee = &currentMaxFee
+	}
+	if req.MaxFee != nil {
+		newMaxFee := *req.MaxFee
+		effectiveMaxFee = &newMaxFee
+	}
+
+	if err := validateMinMaxFee(effectiveMinFee, effectiveMaxFee); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
 	}
 
 	if req.BaseFee != nil {

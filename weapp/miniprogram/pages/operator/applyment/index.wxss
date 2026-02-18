@@ -1,0 +1,76 @@
+.page {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.content {
+  height: calc(100vh - 88rpx);
+  box-sizing: border-box;
+  padding: var(--spacer-md);
+}
+
+.card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-title {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-sm);
+}
+
+.status-item {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-xs);
+}
+
+.field-group {
+  margin-bottom: var(--spacer-sm);
+}
+
+.guide-text {
+  margin-bottom: var(--spacer-sm);
+  border-radius: var(--radius-sm);
+  padding: var(--spacer-sm);
+  background: var(--td-bg-color-component);
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.field-label {
+  margin-bottom: var(--spacer-xs);
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+}
+
+.submit-wrap {
+  margin-top: var(--spacer-md);
+}
+
+.error-banner,
+.success-banner {
+  border-radius: var(--radius-sm);
+  padding: var(--spacer-sm);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--spacer-sm);
+}
+
+.error-banner {
+  background: var(--td-error-color-1);
+  color: var(--td-error-color-7);
+}
+
+.success-banner {
+  background: var(--td-success-color-1);
+  color: var(--td-success-color-7);
+}
+
+.safe-bottom {
+  height: calc(var(--safe-area-bottom) + var(--spacer-lg));
+}

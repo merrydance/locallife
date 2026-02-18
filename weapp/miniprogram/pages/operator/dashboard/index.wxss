@@ -307,3 +307,8 @@
 .safe-bottom {
   height: env(safe-area-inset-bottom);
 }
+
+.error-actions {
+  display: flex;
+  gap: 16rpx;
+}

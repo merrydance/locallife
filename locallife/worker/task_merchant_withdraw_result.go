@@ -15,6 +15,8 @@ import (
 const (
 	TaskProcessMerchantWithdrawResult = "payment:process_merchant_withdraw_result"
 	merchantWithdrawMaxRetry          = 5
+	merchantWithdrawChannel           = "wechat_ecommerce_fund"
+	operatorWithdrawChannel           = "wechat_ecommerce_fund_operator"
 )
 
 // MerchantWithdrawResultPayload 商户提现状态轮询任务载荷
@@ -24,7 +26,8 @@ type MerchantWithdrawResultPayload struct {
 }
 
 type merchantWithdrawAccountInfo struct {
-	MerchantID   int64  `json:"merchant_id"`
+	MerchantID   int64  `json:"merchant_id,omitempty"`
+	OperatorID   int64  `json:"operator_id,omitempty"`
 	SubMchID     string `json:"sub_mch_id"`
 	OutRequestNo string `json:"out_request_no"`
 	WithdrawID   string `json:"withdraw_id,omitempty"`
@@ -88,7 +91,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 		return fmt.Errorf("get withdrawal record: %w", err)
 	}
 
-	if record.Channel != "wechat_ecommerce_fund" {
+	if record.Channel != merchantWithdrawChannel && record.Channel != operatorWithdrawChannel {
 		return fmt.Errorf("withdrawal channel mismatch: %w", asynq.SkipRetry)
 	}
 

@@ -162,6 +162,18 @@ func TestGetRegionStatsAPI(t *testing.T) {
 						RegionID:   operator.RegionID + 999,
 					}).
 					Return(false, nil)
+
+				store.EXPECT().
+					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
+						UserID: user.ID,
+						Role:   "operator",
+					}).
+					Return(db.UserRole{
+						UserID:          user.ID,
+						Role:            "operator",
+						Status:          "active",
+						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -488,6 +500,14 @@ func TestGetRegionDailyTrendAPI(t *testing.T) {
 				store.EXPECT().
 					GetRegionDailyTrend(gomock.Any(), gomock.Any()).
 					Return(trends, nil)
+
+				store.EXPECT().
+					GetOperatorProfitSharingStats(gomock.Any(), gomock.Any()).
+					Return(db.GetOperatorProfitSharingStatsRow{
+						TotalOrders:             5,
+						TotalAmount:             25000,
+						TotalOperatorCommission: 450,
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -579,6 +599,22 @@ func TestGetOperatorFinanceOverviewAPI(t *testing.T) {
 						TotalOrders:     500,
 						TotalGmv:        500000,
 						TotalCommission: 15000,
+					}, nil)
+
+				store.EXPECT().
+					GetOperatorProfitSharingStats(gomock.Any(), gomock.Any()).
+					Return(db.GetOperatorProfitSharingStatsRow{
+						TotalOrders:             100,
+						TotalAmount:             100000,
+						TotalOperatorCommission: 1800,
+					}, nil)
+
+				store.EXPECT().
+					GetOperatorProfitSharingStats(gomock.Any(), gomock.Any()).
+					Return(db.GetOperatorProfitSharingStatsRow{
+						TotalOrders:             500,
+						TotalAmount:             500000,
+						TotalOperatorCommission: 9000,
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {

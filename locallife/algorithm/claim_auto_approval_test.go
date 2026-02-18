@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -281,6 +282,10 @@ func TestEvaluateClaim_PlatformPay(t *testing.T) {
 		PlatformPayCount: 1, // 已有1次平台垫付（需要>=2才触发RejectService）
 	}, nil)
 
+	store.EXPECT().
+		IncrementUserPlatformPayCount(gomock.Any(), gomock.Any()).
+		Return(nil)
+
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
 		1,    // userID
@@ -316,6 +321,25 @@ func TestEvaluateClaim_RejectService(t *testing.T) {
 		PlatformPayCount: 2, // 已有2次平台垫付 → RejectService
 	}, nil)
 
+	store.EXPECT().
+		GetActiveBehaviorBlocklist(gomock.Any(), db.GetActiveBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   int64(1),
+		}).
+		Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: "behavior_trace.reject_service_cooldown_days",
+			ScopeType: "global",
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+
+	store.EXPECT().
+		CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
+		Return(db.BehaviorBlocklist{}, nil)
+
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
 		1,    // userID
@@ -331,9 +355,6 @@ func TestEvaluateClaim_RejectService(t *testing.T) {
 	require.True(t, decision.Approved) // 照赔
 	require.Equal(t, CompensationSourcePlatform, decision.CompensationSource)
 	require.Equal(t, ClaimBehaviorRejectService, decision.BehaviorStatus)
-
-	// 等待异步处理完成
-	time.Sleep(100 * time.Millisecond)
 
 	// 验证拒绝服务通知已发送
 	require.Len(t, notifier.notifications, 1)
@@ -462,6 +483,7 @@ func TestCheckRiderDamageHistory_AtThreshold_TriggerPenalty(t *testing.T) {
 
 	// 记录餐损统计
 	store.EXPECT().IncrementRiderDamageIncident(gomock.Any(), int64(1)).Return(nil)
+	store.EXPECT().SuspendRider(gomock.Any(), gomock.Any()).Return(nil)
 
 	err := caa.CheckRiderDamageHistory(context.Background(), 1)
 	require.NoError(t, err)

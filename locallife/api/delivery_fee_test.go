@@ -239,6 +239,45 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "InvalidMinMaxConflict",
+			body: gin.H{
+				"region_id":        regionID,
+				"base_fee":         config.BaseFee,
+				"base_distance":    config.BaseDistance,
+				"extra_fee_per_km": config.ExtraFeePerKm,
+				"max_fee":          int64(100),
+				"min_fee":          int64(200),
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				// RoleMiddleware 调用
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: user.ID, Role: "operator", Status: "active"}}, nil)
+
+				// OperatorMiddleware 调用
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				// ValidateOperatorRegionMiddleware 调用
+				store.EXPECT().
+					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
+						OperatorID: operator.ID,
+						RegionID:   regionID,
+					}).
+					Times(1).
+					Return(true, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name: "DuplicateConfig",
 			body: gin.H{
 				"region_id":        regionID,

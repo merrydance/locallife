@@ -1047,16 +1047,22 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		}
 	}
 
-	// 计算分账金额（单位：分）
-	platformCommission = totalAmount * int64(platformRate) / 100
-	if hasOperator {
-		operatorCommission = totalAmount * int64(operatorRate) / 100
+	distributableAmount := totalAmount - riderAmount
+	if distributableAmount < 0 {
+		distributableAmount = 0
 	}
-	merchantAmount = totalAmount - platformCommission - operatorCommission - riderAmount
+
+	// 计算分账金额（单位：分）
+	platformCommission = distributableAmount * int64(platformRate) / 100
+	if hasOperator {
+		operatorCommission = distributableAmount * int64(operatorRate) / 100
+	}
+	merchantAmount = distributableAmount - platformCommission - operatorCommission
 	if merchantAmount < 0 {
 		log.Warn().
 			Int64("payment_order_id", payload.PaymentOrderID).
 			Int64("total_amount", totalAmount).
+			Int64("distributable_amount", distributableAmount).
 			Int64("platform_commission", platformCommission).
 			Int64("operator_commission", operatorCommission).
 			Int64("rider_amount", riderAmount).
@@ -1133,7 +1139,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			DeliveryFee:         deliveryFee,
 			RiderID:             riderID,
 			RiderAmount:         riderAmount,
-			DistributableAmount: totalAmount,
+			DistributableAmount: distributableAmount,
 			PlatformRate:        platformRate,
 			OperatorRate:        operatorRate,
 			PlatformCommission:  platformCommission,

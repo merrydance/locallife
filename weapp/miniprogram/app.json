@@ -39,6 +39,7 @@
         "delivery-fee/index",
         "safety/report/index",
         "safety/detail/index",
+        "applyment/index",
         "finance/withdraw/index",
         "appeal/list/index",
         "appeal/detail/index"

@@ -143,7 +143,7 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 				behaviorResult.TakeoutOrders, behaviorResult.ClaimCount+1)
 			decision.ShouldWarn = true
 			// 记录警告
-			go caa.recordUserWarning(ctx, userID, decision.Warning)
+			caa.recordUserWarning(ctx, userID, decision.Warning)
 		} else {
 			// 已被警告：仍秒赔，但记录提示
 			decision.Reason = "已触发警告，仍秒赔"
@@ -159,7 +159,7 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 			"您的索赔行为异常（近3个月%d单索赔%d次），本次由平台垫付。如继续异常行为，将被拒绝服务。",
 			behaviorResult.TakeoutOrders, behaviorResult.ClaimCount+1)
 		// 记录平台垫付
-		go caa.recordPlatformPay(ctx, userID, decision.Warning)
+		caa.recordPlatformPay(ctx, userID, decision.Warning)
 
 	case ClaimBehaviorRejectService:
 		// 拒绝服务用户：照赔 + 平台垫付 + 拒绝后续服务
@@ -168,7 +168,7 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 		decision.CompensationSource = CompensationSourcePlatform
 		decision.Warning = "您的账号因索赔行为异常已被限制服务，本次索赔由平台垫付。"
 		// 触发拒绝服务流程
-		go caa.triggerRejectService(ctx, userID)
+		caa.triggerRejectService(ctx, userID)
 	}
 
 	return decision, nil

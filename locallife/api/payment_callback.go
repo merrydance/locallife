@@ -1164,6 +1164,9 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 
 	// 映射状态
 	newStatus := mapApplymentStateToDBStatus(resource.ApplymentState)
+	if newStatus == "finish" && resource.SubMchID == "" {
+		newStatus = "submitted"
+	}
 
 	// 如果有二级商户号，说明开户成功
 	if resource.SubMchID != "" {
@@ -1202,6 +1205,14 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 				Int64("rider_id", applyment.SubjectID).
 				Str("sub_mch_id", resource.SubMchID).
 				Msg("rider applyment callback received but rider onboarding is disabled in current mode")
+		case "operator":
+			_, err = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
+				ID:       applyment.SubjectID,
+				SubMchID: pgtype.Text{String: resource.SubMchID, Valid: true},
+			})
+			if err != nil {
+				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("update operator sub_mch_id")
+			}
 		}
 	} else {
 		// 更新进件状态
@@ -1212,6 +1223,16 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		})
 		if err != nil {
 			log.Error().Err(err).Int64("applyment_id", applyment.ID).Msg("update applyment status")
+		}
+
+		if applyment.SubjectType == "operator" && (newStatus == "rejected" || newStatus == "canceled") {
+			_, err = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
+				ID:     applyment.SubjectID,
+				Status: "pending_bindbank",
+			})
+			if err != nil {
+				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("reset operator status to pending_bindbank")
+			}
 		}
 	}
 

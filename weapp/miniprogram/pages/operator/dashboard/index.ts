@@ -55,6 +55,7 @@ Page({
     loading: false,
     initialLoading: true,
     error: null as string | null,
+    showApplymentEntry: false,
     navBarHeight: 88
   },
 
@@ -161,9 +162,16 @@ Page({
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '数据加载失败，请重试'
       console.error('加载运营仪表盘失败:', error)
+      const normalized = message.toLowerCase()
+      const showApplymentEntry =
+        normalized.includes('operator account is not active') ||
+        normalized.includes('operator is not active') ||
+        normalized.includes('开户') ||
+        normalized.includes('bindbank')
       this.setData({ 
         loading: false,
-        error: message
+        error: message,
+        showApplymentEntry
       })
     }
   },
@@ -229,5 +237,9 @@ Page({
 
   onWithdrawTap() {
     wx.navigateTo({ url: '/pages/operator/finance/withdraw/index' })
+  },
+
+  onOpenApplyment() {
+    wx.navigateTo({ url: '/pages/operator/applyment/index' })
   }
 })

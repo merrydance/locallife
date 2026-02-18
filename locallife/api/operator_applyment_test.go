@@ -374,10 +374,13 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				testOperator := operator
+				testOperator.Status = "active"
+
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
 					Times(1).
-					Return(operator, nil)
+					Return(testOperator, nil)
 
 				applyment := randomEcommerceApplymentForTest("operator", operator.ID)
 				applyment.Status = "pending"
@@ -391,6 +394,7 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				var response operatorApplymentStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "pending", response.Status)
+				require.Equal(t, "待提交", response.StatusDesc)
 			},
 		},
 		{
@@ -421,6 +425,33 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "FinishWithoutSubMch_ShouldFallbackToSubmitted",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				applyment := randomEcommerceApplymentForTest("operator", operator.ID)
+				applyment.Status = "finish"
+				applyment.SubMchID = pgtype.Text{Valid: false}
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(applyment, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response operatorApplymentStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "submitted", response.Status)
+				require.Empty(t, response.SubMchID)
+			},
+		},
+		{
 			name: "NoApplyment",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -437,7 +468,10 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response operatorApplymentStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "pending", response.Status)
 			},
 		},
 		{

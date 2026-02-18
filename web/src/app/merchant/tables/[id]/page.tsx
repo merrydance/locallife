@@ -53,6 +53,21 @@ const fallbackDetail: TableItem = {
   tags: [],
 };
 
+function formatTableStatus(status: string) {
+  switch (status) {
+    case "available":
+      return "空闲";
+    case "occupied":
+      return "占用";
+    case "cleaning":
+      return "清洁中";
+    case "disabled":
+      return "停用";
+    default:
+      return "未知状态";
+  }
+}
+
 const fallbackImages: TableImage[] = [];
 
 function normalizeImages(
@@ -104,7 +119,7 @@ export default async function TableDetailPage({
           <h1 className="text-xl font-semibold">桌台详情</h1>
           <p className="text-sm text-muted-foreground">桌台号 {detail.table_no}</p>
         </div>
-        <Badge variant="outline">{detail.status}</Badge>
+          <Badge variant="outline">{formatTableStatus(detail.status)}</Badge>
       </div>
 
       <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">

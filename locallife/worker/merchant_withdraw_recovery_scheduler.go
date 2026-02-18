@@ -67,23 +67,26 @@ func (s *MerchantWithdrawRecoveryScheduler) runOnce() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	records, err := s.store.ListPendingWithdrawalRecordsByChannel(ctx, db.ListPendingWithdrawalRecordsByChannelParams{
-		Channel: "wechat_ecommerce_fund",
-		Limit:   merchantWithdrawRecoveryBatchLimit,
-	})
-	if err != nil {
-		log.Error().Err(err).Msg("list pending merchant withdrawal records failed")
-		return
-	}
-
-	for _, record := range records {
-		err := s.distributor.DistributeTaskProcessMerchantWithdrawResult(
-			ctx,
-			&MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID, RetryCount: 0},
-			asynq.Queue(QueueDefault),
-		)
+	channels := []string{merchantWithdrawChannel, operatorWithdrawChannel}
+	for _, channel := range channels {
+		records, err := s.store.ListPendingWithdrawalRecordsByChannel(ctx, db.ListPendingWithdrawalRecordsByChannelParams{
+			Channel: channel,
+			Limit:   merchantWithdrawRecoveryBatchLimit,
+		})
 		if err != nil {
-			log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Msg("enqueue merchant withdraw recovery task failed")
+			log.Error().Err(err).Str("channel", channel).Msg("list pending withdrawal records failed")
+			continue
+		}
+
+		for _, record := range records {
+			err := s.distributor.DistributeTaskProcessMerchantWithdrawResult(
+				ctx,
+				&MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID, RetryCount: 0},
+				asynq.Queue(QueueDefault),
+			)
+			if err != nil {
+				log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Str("channel", channel).Msg("enqueue withdraw recovery task failed")
+			}
 		}
 	}
 }

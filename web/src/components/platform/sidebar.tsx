@@ -15,6 +15,7 @@ import {
   Landmark,
   LogOut,
   PanelsTopLeft,
+  Percent,
   ShieldAlert,
   ShieldCheck,
   Store,
@@ -99,6 +100,13 @@ const navGroups: Array<{
     label: "分账与对账",
     description: "分账复核与对账",
     items: [
+      {
+        label: "分账比例配置",
+        href: "/platform/profit-sharing",
+        activePrefix: "/platform/profit-sharing",
+        icon: Percent,
+        requiredRoles: ["admin"],
+      },
       {
         label: "分账复核",
         href: "/platform/reconciliation",

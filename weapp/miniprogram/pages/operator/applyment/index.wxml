@@ -1,0 +1,62 @@
+<custom-navbar title="微信支付开户" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page" style="padding-top: {{navBarHeight}}px;">
+  <scroll-view class="content" scroll-y refresher-enabled bindrefresherrefresh="onPullDownRefresh">
+    <view wx:if="{{error}}" class="error-banner">{{error}}</view>
+    <view wx:if="{{success}}" class="success-banner">{{success}}</view>
+
+    <view class="card">
+      <view class="card-title">开户状态</view>
+      <view wx:if="{{loading}}" class="status-item">加载中...</view>
+      <block wx:else>
+        <view class="status-item">状态：{{statusView.statusDesc}}</view>
+        <view class="status-item">申请单号：{{statusView.applymentId}}</view>
+        <view class="status-item">子商户号：{{statusView.subMchId}}</view>
+        <view class="status-item">驳回原因：{{statusView.rejectReason}}</view>
+        <view wx:if="{{statusView.signURL}}" class="status-item">
+          <t-button theme="primary" variant="outline" size="small" bindtap="onOpenSignUrl">复制签约链接</t-button>
+        </view>
+      </block>
+    </view>
+
+    <view wx:if="{{statusView.isOpened}}" class="card">
+      <view class="card-title">已开通微信支付商户</view>
+      <view class="status-item">当前状态：开户成功，可正常经营与提现。</view>
+      <view class="status-item">微信二级商户号：{{statusView.subMchId}}</view>
+      <view class="status-item">微信申请单号：{{statusView.applymentId}}</view>
+    </view>
+
+    <view wx:if="{{statusView.isInReview && !statusView.isOpened}}" class="card">
+      <view class="card-title">开户审核中</view>
+      <view class="status-item">微信支付开户信息已提交，请等待审核结果。</view>
+      <view class="status-item">审核期间无需重复填写开户信息。</view>
+    </view>
+
+    <view wx:if="{{statusView.canSubmitOpenInfo && !statusView.isOpened}}" class="card">
+      <view class="card-title">提交开户信息</view>
+      <view class="guide-text">{{statusView.guideText}}</view>
+
+      <view class="field-group">
+        <view class="field-label">账户类型</view>
+        <t-radio-group value="{{form.account_type}}" bindchange="onAccountTypeChange">
+          <t-radio value="ACCOUNT_TYPE_PRIVATE" label="对私账户" />
+          <t-radio value="ACCOUNT_TYPE_BUSINESS" label="对公账户" />
+        </t-radio-group>
+      </view>
+
+      <t-input label="开户银行" placeholder="例如：中国工商银行" value="{{form.account_bank}}" data-field="account_bank" bindchange="onInputChange" />
+      <t-input label="开户银行地区编码" placeholder="例如：440300" value="{{form.bank_address_code}}" data-field="bank_address_code" bindchange="onInputChange" />
+      <t-input label="开户支行全称" placeholder="可选" value="{{form.bank_name}}" data-field="bank_name" bindchange="onInputChange" />
+      <t-input label="银行账号" placeholder="请输入银行卡号" value="{{form.account_number}}" data-field="account_number" bindchange="onInputChange" />
+      <t-input label="开户名称" placeholder="对私填姓名；对公填公司名" value="{{form.account_name}}" data-field="account_name" bindchange="onInputChange" />
+      <t-input label="联系手机号" placeholder="用于微信审核联系" value="{{form.contact_phone}}" data-field="contact_phone" bindchange="onInputChange" />
+      <t-input label="联系邮箱" placeholder="可选" value="{{form.contact_email}}" data-field="contact_email" bindchange="onInputChange" />
+
+      <view class="submit-wrap">
+        <t-button theme="primary" block size="large" loading="{{submitting}}" bindtap="onSubmit">提交微信支付开户</t-button>
+      </view>
+    </view>
+
+    <view class="safe-bottom"></view>
+  </scroll-view>
+</view>

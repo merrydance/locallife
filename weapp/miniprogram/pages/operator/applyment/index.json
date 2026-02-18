@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "微信支付开户",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-radio": "tdesign-miniprogram/radio/radio",
+    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group"
+  }
+}

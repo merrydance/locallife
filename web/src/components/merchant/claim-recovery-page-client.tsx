@@ -33,7 +33,6 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type {
   ClaimRecoveryResponse,
-  ClaimRecoveryStatus,
   MerchantClaimItem,
   MerchantClaimsResponse,
 } from "@/types/claim-recovery";

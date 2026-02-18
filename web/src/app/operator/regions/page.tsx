@@ -91,7 +91,7 @@ export default function OperatorRegionsPage() {
         description="区域经营指标与日趋势"
         actions={<Badge variant="secondary">近 14 天</Badge>}
       />
-      <PageContent className="space-y-8">
+      <PageContent className="space-y-4">
         {error && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}
@@ -117,7 +117,7 @@ export default function OperatorRegionsPage() {
                 <div className="text-2xl font-semibold">
                   {loading ? "--" : card.value}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {loading ? "获取统计中" : card.description}
                 </p>
               </CardContent>

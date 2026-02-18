@@ -859,8 +859,8 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
-	// 检查运营商状态：必须是 pending_bindbank
-	if operator.Status != "pending_bindbank" {
+	// 检查运营商状态：待绑卡或绑卡提交流程中
+	if operator.Status != "pending_bindbank" && operator.Status != "bindbank_submitted" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("运营商状态不正确，当前状态: %s", operator.Status)))
 		return
 	}
@@ -1223,7 +1223,18 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("未找到开户申请记录")))
+			status := mapOperatorStatusToApplymentStatus(operator.Status)
+			updatedAt := operator.CreatedAt
+			if operator.UpdatedAt.Valid {
+				updatedAt = operator.UpdatedAt.Time
+			}
+
+			ctx.JSON(http.StatusOK, operatorApplymentStatusResponse{
+				Status:     status,
+				StatusDesc: getApplymentStatusDesc(status),
+				CreatedAt:  operator.CreatedAt,
+				UpdatedAt:  updatedAt,
+			})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1237,6 +1248,15 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 			wxResp, err := server.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
 			if err == nil {
 				newStatus := mapWechatApplymentStatus(wxResp.ApplymentState)
+				if newStatus == "finish" && wxResp.SubMchID == "" {
+					newStatus = "submitted"
+				}
+				if newStatus == "rejected" || newStatus == "canceled" {
+					_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
+						ID:     operator.ID,
+						Status: "pending_bindbank",
+					})
+				}
 				if newStatus != applyment.Status {
 					// 状态有变化，更新数据库
 					updateParams := db.UpdateEcommerceApplymentStatusParams{
@@ -1270,8 +1290,8 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	}
 
 	resp := operatorApplymentStatusResponse{
-		Status:     applyment.Status,
-		StatusDesc: getApplymentStatusDesc(applyment.Status),
+		Status:     normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != ""),
+		StatusDesc: getApplymentStatusDesc(normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")),
 		CreatedAt:  applyment.CreatedAt,
 		UpdatedAt:  applyment.UpdatedAt,
 	}
@@ -1290,4 +1310,26 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func normalizeApplymentStatus(status string, hasSubMchID bool) string {
+	if status == "finish" && !hasSubMchID {
+		return "submitted"
+	}
+	return status
+}
+
+func mapOperatorStatusToApplymentStatus(operatorStatus string) string {
+	switch operatorStatus {
+	case "pending_bindbank", "approved":
+		return "pending"
+	case "bindbank_submitted":
+		return "submitted"
+	case "bindbank_rejected":
+		return "rejected"
+	case "active":
+		return "pending"
+	default:
+		return "pending"
+	}
 }

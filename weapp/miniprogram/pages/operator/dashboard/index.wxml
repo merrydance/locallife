@@ -4,7 +4,10 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+      <view slot="action" class="error-actions">
+        <t-button theme="primary" size="small" bindtap="onRetry">重试</t-button>
+        <t-button wx:if="{{showApplymentEntry}}" theme="primary" variant="outline" size="small" bindtap="onOpenApplyment">去微信开户</t-button>
+      </view>
     </t-empty>
   </view>
 
@@ -128,6 +131,12 @@
               <t-icon name="chart-bar" size="48rpx" />
             </view>
             <text>提现管理</text>
+          </navigator>
+          <navigator url="/pages/operator/applyment/index" class="menu-item">
+            <view class="menu-icon-bg color-default">
+              <t-icon name="secured" size="48rpx" />
+            </view>
+            <text>微信开户</text>
           </navigator>
           <navigator url="/pages/operator/region/index?target=rules" class="menu-item">
             <view class="menu-icon-bg color-default">

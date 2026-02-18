@@ -1,80 +1,403 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/wechat"
 )
 
+const (
+	operatorWithdrawMinAmount = int64(100) // 1元
+	operatorWithdrawMaxAmount = int64(500000000)
+	operatorWithdrawChannel   = "wechat_ecommerce_fund_operator"
+)
+
+type operatorAccountBalanceResponse struct {
+	SubMchID           string `json:"sub_mch_id"`
+	AvailableAmount    int64  `json:"available_amount"`
+	PendingAmount      int64  `json:"pending_amount"`
+	WithdrawableAmount int64  `json:"withdrawable_amount"`
+}
+
 type withdrawOperatorRequest struct {
-	Amount int64 `json:"amount" binding:"required,min=100"` // 最小提现1元 (100分)
+	Amount       int64  `json:"amount" binding:"required,min=100"`
+	Remark       string `json:"remark" binding:"omitempty,max=128"`
+	OutRequestNo string `json:"out_request_no" binding:"omitempty,max=64"`
+}
+
+type operatorWithdrawItem struct {
+	ID           int64  `json:"id"`
+	Amount       int64  `json:"amount"`
+	Status       string `json:"status"`
+	Channel      string `json:"channel"`
+	OutRequestNo string `json:"out_request_no,omitempty"`
+	WithdrawID   string `json:"withdraw_id,omitempty"`
+	SubMchID     string `json:"sub_mch_id,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+type listOperatorWithdrawalsRequest struct {
+	Page  int32 `form:"page" binding:"omitempty,min=1"`
+	Limit int32 `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+type getOperatorWithdrawalRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+type operatorWithdrawAccountInfo struct {
+	OperatorID   int64  `json:"operator_id"`
+	SubMchID     string `json:"sub_mch_id"`
+	OutRequestNo string `json:"out_request_no"`
+	WithdrawID   string `json:"withdraw_id,omitempty"`
+	Remark       string `json:"remark,omitempty"`
+}
+
+func parseOperatorWithdrawAccountInfo(raw []byte) operatorWithdrawAccountInfo {
+	if len(raw) == 0 {
+		return operatorWithdrawAccountInfo{}
+	}
+
+	var info operatorWithdrawAccountInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return operatorWithdrawAccountInfo{}
+	}
+
+	return info
+}
+
+func toOperatorWithdrawItem(record db.WithdrawalRecord) operatorWithdrawItem {
+	info := parseOperatorWithdrawAccountInfo(record.AccountInfo)
+	reason := ""
+	if record.Reason.Valid {
+		reason = record.Reason.String
+	}
+
+	return operatorWithdrawItem{
+		ID:           record.ID,
+		Amount:       record.Amount,
+		Status:       record.Status,
+		Channel:      record.Channel,
+		OutRequestNo: info.OutRequestNo,
+		WithdrawID:   info.WithdrawID,
+		SubMchID:     info.SubMchID,
+		Reason:       reason,
+		CreatedAt:    record.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    record.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func normalizeOperatorWithdrawRemark(remark string) string {
+	if remark == "" {
+		return "运营商提现"
+	}
+	return remark
+}
+
+func (server *Server) getActiveOperatorForFinance(ctx *gin.Context, userID int64) (db.Operator, error) {
+	operator, err := server.getOperatorFromUserID(ctx, userID)
+	if err != nil {
+		return db.Operator{}, err
+	}
+
+	if operator.Status != "active" {
+		return db.Operator{}, errors.New("operator is not active")
+	}
+
+	if !operator.SubMchID.Valid || operator.SubMchID.String == "" {
+		return db.Operator{}, errors.New("operator payment config is not active")
+	}
+
+	return operator, nil
+}
+
+// getOperatorAccountBalance 查询运营商收付通账户余额
+func (server *Server) getOperatorAccountBalance(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	operator, err := server.getActiveOperatorForFinance(ctx, authPayload.UserID)
+	if err != nil {
+		switch err.Error() {
+		case "operator is not active":
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+		case "operator payment config is not active":
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		default:
+			return
+		}
+		return
+	}
+
+	balance, err := server.ecommerceClient.QueryEcommerceFundBalance(ctx, operator.SubMchID.String)
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("query ecommerce fund balance: %w", err)))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, operatorAccountBalanceResponse{
+		SubMchID:           operator.SubMchID.String,
+		AvailableAmount:    balance.AvailableAmount,
+		PendingAmount:      balance.PendingAmount,
+		WithdrawableAmount: balance.WithdrawableAmount,
+	})
 }
 
 // withdrawOperator 运营商提现
 // @Summary 运营商提现
-// @Description 运营商申请提现到绑定的微信支付账户
+// @Description 运营商发起收付通提现到绑定银行卡
 // @Tags 运营商财务
 // @Accept json
 // @Produce json
 // @Param request body withdrawOperatorRequest true "提现请求"
-// @Success 200 {object} MessageResponse "提现申请提交成功"
+// @Success 200 {object} map[string]interface{} "提现申请提交成功"
 // @Failure 400 {object} ErrorResponse "参数错误或余额不足"
 // @Failure 403 {object} ErrorResponse "无权限"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
-// @Router /v1/operator/finance/withdraw [post]
+// @Router /v1/operators/me/finance/withdraw [post]
 func (server *Server) withdrawOperator(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		return
+	}
+
 	var req withdrawOperatorRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
+	if req.Amount < operatorWithdrawMinAmount || req.Amount > operatorWithdrawMaxAmount {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("withdraw amount out of range")))
+		return
+	}
 
-	// 1. 获取运营商ID
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	userID := authPayload.UserID
-
-	// 2. 验证运营商状态
-	// 注意: 实际项目中应将 getOperatorFromUserID 优化为只需一次查询即可获取所需状态和余额
-	// 这里假设 getOperatorFromUserID 已经检查了基本存在性
-	operator, err := server.getOperatorFromUserID(ctx, userID)
+	operator, err := server.getActiveOperatorForFinance(ctx, authPayload.UserID)
 	if err != nil {
-		// getOperatorFromUserID 内部已经处理了错误响应
-		return
-	}
-
-	if operator.Status != "active" {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator is not active")))
-		return
-	}
-	// 3. 检查是否绑定了提现账户
-	if len(operator.WalletAccount) == 0 || string(operator.WalletAccount) == "{}" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("wallet account not bound")))
-		return
-	}
-
-	// 4. 执行提现事务 (包含检查余额、扣减余额、创建记录)
-	txArg := db.WithdrawOperatorTxParams{
-		OperatorID: operator.ID,
-		Amount:     req.Amount,
-		Channel:    "wechat",
-	}
-
-	_, err = server.store.WithdrawOperatorTx(ctx, txArg)
-	if err != nil {
-		if errors.Is(err, db.ErrInsufficientBalance) {
+		switch err.Error() {
+		case "operator is not active":
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+		case "operator payment config is not active":
 			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		default:
 			return
 		}
-
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, MessageResponse{
-		Message: "withdrawal request submitted successfully",
+	balance, err := server.ecommerceClient.QueryEcommerceFundBalance(ctx, operator.SubMchID.String)
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("query ecommerce fund balance: %w", err)))
+		return
+	}
+	if req.Amount > balance.WithdrawableAmount {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("insufficient withdrawable balance")))
+		return
+	}
+
+	outRequestNo := req.OutRequestNo
+	if outRequestNo == "" {
+		outRequestNo = fmt.Sprintf("OW%d%d", operator.ID, time.Now().UnixNano()/1e6)
+	}
+	remark := normalizeOperatorWithdrawRemark(req.Remark)
+
+	withdrawResp, err := server.ecommerceClient.CreateEcommerceWithdraw(ctx, &wechat.EcommerceWithdrawRequest{
+		SubMchID:     operator.SubMchID.String,
+		OutRequestNo: outRequestNo,
+		Amount:       req.Amount,
+		Remark:       remark,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("create ecommerce withdraw: %w", err)))
+		return
+	}
+
+	accountInfoBytes, _ := json.Marshal(operatorWithdrawAccountInfo{
+		OperatorID:   operator.ID,
+		SubMchID:     operator.SubMchID.String,
+		OutRequestNo: outRequestNo,
+		WithdrawID:   withdrawResp.WithdrawID,
+		Remark:       remark,
+	})
+
+	status := mapWechatWithdrawStatus(withdrawResp.Status)
+	record, err := server.store.CreateWithdrawalRecord(ctx, db.CreateWithdrawalRecordParams{
+		UserID:      authPayload.UserID,
+		Amount:      req.Amount,
+		Status:      status,
+		Channel:     operatorWithdrawChannel,
+		AccountInfo: accountInfoBytes,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if withdrawResp.FailReason != "" {
+		updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
+			ID:     record.ID,
+			Status: status,
+			Reason: pgtype.Text{String: withdrawResp.FailReason, Valid: true},
+		})
+		if updateErr == nil {
+			record = updated
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"withdrawal": toOperatorWithdrawItem(record),
+		"wechat":     withdrawResp,
+	})
+}
+
+// listOperatorWithdrawals 查询运营商提现记录
+func (server *Server) listOperatorWithdrawals(ctx *gin.Context) {
+	var req listOperatorWithdrawalsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, err := server.getActiveOperatorForFinance(ctx, authPayload.UserID); err != nil {
+		switch err.Error() {
+		case "operator is not active":
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+		case "operator payment config is not active":
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		default:
+			return
+		}
+		return
+	}
+
+	offset := pageOffset(req.Page, req.Limit)
+	rows, err := server.store.ListWithdrawalRecords(ctx, db.ListWithdrawalRecordsParams{
+		UserID: authPayload.UserID,
+		Limit:  req.Limit,
+		Offset: offset,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	totalCount, err := server.store.CountWithdrawalRecords(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	items := make([]operatorWithdrawItem, 0, len(rows))
+	for _, row := range rows {
+		if row.Channel != operatorWithdrawChannel {
+			continue
+		}
+		items = append(items, toOperatorWithdrawItem(row))
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"withdrawals": items,
+		"total":       totalCount,
+		"total_count": totalCount,
+		"page":        req.Page,
+		"limit":       req.Limit,
+		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+	})
+}
+
+// getOperatorWithdrawal 查询单笔提现并同步微信状态
+func (server *Server) getOperatorWithdrawal(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		return
+	}
+
+	var req getOperatorWithdrawalRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, err := server.getActiveOperatorForFinance(ctx, authPayload.UserID); err != nil {
+		switch err.Error() {
+		case "operator is not active":
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+		case "operator payment config is not active":
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		default:
+			return
+		}
+		return
+	}
+
+	record, err := server.store.GetWithdrawalRecord(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("withdrawal not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if record.UserID != authPayload.UserID || record.Channel != operatorWithdrawChannel {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("no permission to access this withdrawal")))
+		return
+	}
+
+	info := parseOperatorWithdrawAccountInfo(record.AccountInfo)
+	if info.SubMchID != "" && info.OutRequestNo != "" {
+		wxResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, info.SubMchID, info.OutRequestNo)
+		if queryErr == nil {
+			newStatus := mapWechatWithdrawStatus(wxResp.Status)
+			reasonText := ""
+			if wxResp.FailReason != "" {
+				reasonText = wxResp.FailReason
+			}
+
+			if newStatus != record.Status || reasonText != "" {
+				updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
+					ID:     record.ID,
+					Status: newStatus,
+					Reason: pgtype.Text{String: reasonText, Valid: reasonText != ""},
+				})
+				if updateErr == nil {
+					record = updated
+				}
+			}
+
+			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
+				info.WithdrawID = wxResp.WithdrawID
+				if raw, marshalErr := json.Marshal(info); marshalErr == nil {
+					record.AccountInfo = raw
+				}
+			}
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"withdrawal": toOperatorWithdrawItem(record),
 	})
 }

@@ -366,10 +366,10 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 检查 operator 状态
-		if operator.Status != "active" {
+		// 检查 operator 状态：审核通过后即可访问运营商页面；仅资金能力依赖微信开户
+		if !isOperatorConsoleAccessibleStatus(operator.Status) {
 			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("operator account is not active"),
+				errors.New("operator account is not available"),
 			))
 			return
 		}
@@ -377,6 +377,15 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 		// 缓存到 context
 		ctx.Set(operatorKey, operator)
 		ctx.Next()
+	}
+}
+
+func isOperatorConsoleAccessibleStatus(status string) bool {
+	switch status {
+	case "active", "approved", "pending_bindbank", "bindbank_submitted", "bindbank_rejected":
+		return true
+	default:
+		return false
 	}
 }
 

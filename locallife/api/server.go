@@ -1032,7 +1032,10 @@ func (server *Server) setupRouter() {
 	{
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
+		operatorsGroup.GET("/finance/account/balance", server.getOperatorAccountBalance)
 		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
+		operatorsGroup.GET("/finance/withdrawals", server.listOperatorWithdrawals)
+		operatorsGroup.GET("/finance/withdrawals/:id", server.getOperatorWithdrawal)
 		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
 
 		operatorRulesProxyGroup := operatorsGroup.Group("/rules")

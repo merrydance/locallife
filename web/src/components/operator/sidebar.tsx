@@ -4,11 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Building2,
+  CircleDollarSign,
   LayoutDashboard,
   PanelsTopLeft,
+  ShieldAlert,
   ScrollText,
   ShieldCheck,
   Store,
+  Timer,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -24,6 +28,7 @@ const navGroups: Array<{
     label: string;
     href: string;
     activePrefix: string;
+    exact?: boolean;
     icon: LucideIcon;
   }>;
 }> = [
@@ -35,19 +40,28 @@ const navGroups: Array<{
         label: "总览",
         href: "/operator",
         activePrefix: "/operator",
+        exact: true,
         icon: LayoutDashboard,
       },
     ],
   },
   {
     label: "规则与治理",
-    description: "区域规则配置",
+    description: "规则与时段系数",
     items: [
       {
         label: "规则配置",
         href: "/operator/rules",
         activePrefix: "/operator/rules",
+        exact: true,
         icon: ScrollText,
+      },
+      {
+        label: "时段系数",
+        href: "/operator/peak-hours",
+        activePrefix: "/operator/peak-hours",
+        exact: true,
+        icon: Timer,
       },
     ],
   },
@@ -59,13 +73,29 @@ const navGroups: Array<{
         label: "商户排行",
         href: "/operator/merchants",
         activePrefix: "/operator/merchants",
+        exact: true,
         icon: Users,
+      },
+      {
+        label: "商户管理",
+        href: "/operator/merchants/manage",
+        activePrefix: "/operator/merchants/manage",
+        exact: true,
+        icon: Store,
       },
       {
         label: "骑手排行",
         href: "/operator/riders",
         activePrefix: "/operator/riders",
+        exact: true,
         icon: ShieldCheck,
+      },
+      {
+        label: "骑手管理",
+        href: "/operator/riders/manage",
+        activePrefix: "/operator/riders/manage",
+        exact: true,
+        icon: Users,
       },
     ],
   },
@@ -77,7 +107,48 @@ const navGroups: Array<{
         label: "日趋势",
         href: "/operator/regions",
         activePrefix: "/operator/regions",
+        exact: true,
         icon: BarChart3,
+      },
+    ],
+  },
+  {
+    label: "治理与风控",
+    description: "申诉与食安处理",
+    items: [
+      {
+        label: "申诉处理",
+        href: "/operator/appeals",
+        activePrefix: "/operator/appeals",
+        exact: true,
+        icon: ShieldCheck,
+      },
+      {
+        label: "食安事件",
+        href: "/operator/safety",
+        activePrefix: "/operator/safety",
+        exact: true,
+        icon: ShieldAlert,
+      },
+    ],
+  },
+  {
+    label: "财务中心",
+    description: "佣金与提现",
+    items: [
+      {
+        label: "微信开户",
+        href: "/operator/applyment",
+        activePrefix: "/operator/applyment",
+        exact: true,
+        icon: Building2,
+      },
+      {
+        label: "财务管理",
+        href: "/operator/finance",
+        activePrefix: "/operator/finance",
+        exact: true,
+        icon: CircleDollarSign,
       },
     ],
   },
@@ -86,7 +157,7 @@ const navGroups: Array<{
 export function OperatorSidebar() {
   const pathname = usePathname();
   const session = useOperatorSession();
-  const rolePortals = buildConsolePortals(session?.roles ?? []);
+  const rolePortals = buildConsolePortals(session?.roles ?? []).filter((portal) => portal.key !== "operator");
 
   const portalIconMap: Record<ConsolePortalKey, LucideIcon> = {
     merchant: Store,
@@ -114,7 +185,9 @@ export function OperatorSidebar() {
             </div>
             <div className="space-y-1">
               {group.items.map((item) => {
-                const active = pathname?.startsWith(item.activePrefix);
+                const active = item.exact
+                  ? pathname === item.href
+                  : pathname?.startsWith(item.activePrefix);
                 const Icon = item.icon;
                 return (
                   <Link
@@ -146,7 +219,7 @@ export function OperatorSidebar() {
             </div>
             <div className="space-y-1">
               {rolePortals.map((portal) => {
-                const active = pathname?.startsWith(portal.activePrefix);
+                const active = pathname === portal.href || pathname?.startsWith(`${portal.activePrefix}/`);
                 const Icon = portalIconMap[portal.key];
                 return (
                   <Link

@@ -187,6 +187,30 @@ func TestLoadOperatorMiddleware(t *testing.T) {
 			},
 		},
 		{
+			name: "OK_PendingBindBank",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.UserRole{
+						{ID: 1, UserID: user.ID, Role: RoleOperator, Status: "active"},
+					}, nil)
+
+				pendingOperator := operator
+				pendingOperator.Status = "pending_bindbank"
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(pendingOperator, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
 			name: "Forbidden_OperatorNotFound",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)

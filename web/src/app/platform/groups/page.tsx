@@ -48,7 +48,7 @@ function statusTag(status: string) {
   if (status === "approved") return <Badge variant="secondary">已通过</Badge>;
   if (status === "rejected") return <Badge variant="destructive">已驳回</Badge>;
   if (status === "draft") return <Badge variant="outline">草稿</Badge>;
-  return <Badge variant="outline">{status}</Badge>;
+  return <Badge variant="outline">未知状态</Badge>;
 }
 
 export default function PlatformGroupApplicationsPage() {

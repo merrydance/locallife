@@ -16,10 +16,12 @@ import {
 } from "@/components/merchant/layout/page-shell";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiGet, formatAmount, getRecentRange } from "@/lib/api";
+import type { OperatorRealtimeStatsResponse } from "@/types/operator-console";
 import type { OperatorDailyTrendRow, OperatorFinanceOverviewResponse } from "@/types/operator-stats";
 
 export default function OperatorDashboardPage() {
   const [finance, setFinance] = useState<OperatorFinanceOverviewResponse | null>(null);
+  const [realtime, setRealtime] = useState<OperatorRealtimeStatsResponse | null>(null);
   const [trend, setTrend] = useState<OperatorDailyTrendRow[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -29,10 +31,12 @@ export default function OperatorDashboardPage() {
     Promise.all([
       apiGet<OperatorFinanceOverviewResponse>("/operators/me/finance/overview"),
       apiGet<OperatorDailyTrendRow[]>("/operator/trend/daily", range),
+      apiGet<OperatorRealtimeStatsResponse>("/operator/stats/realtime").catch(() => null),
     ])
-      .then(([financeData, trendData]) => {
+      .then(([financeData, trendData, realtimeData]) => {
         setFinance(financeData);
         setTrend(trendData ?? []);
+        setRealtime(realtimeData);
         setLoadState("loaded");
       })
       .catch((err: unknown) => {
@@ -61,7 +65,7 @@ export default function OperatorDashboardPage() {
         description: "分账成功订单",
       },
       {
-        title: "累计结算佣金",
+        title: "累计结算平台佣金",
         value: `¥${formatAmount(finance.total.settled_commission)}`,
         description: "历史累计", 
       },
@@ -69,6 +73,12 @@ export default function OperatorDashboardPage() {
   }, [finance]);
 
   const loading = loadState === "loading";
+  const realtimeCards = [
+    { label: "活跃商户", value: realtime?.active_merchant_count ?? 0 },
+    { label: "活跃骑手", value: realtime?.active_rider_count ?? 0 },
+    { label: "待审商户", value: realtime?.pending_merchant_count ?? 0 },
+    { label: "待审骑手", value: realtime?.pending_rider_count ?? 0 },
+  ];
 
   return (
     <PageShell>
@@ -77,12 +87,26 @@ export default function OperatorDashboardPage() {
         description="区域经营与分账收入概览"
         actions={<Badge variant="secondary">运营商</Badge>}
       />
-      <PageContent className="space-y-8">
+      <PageContent className="space-y-4">
         {error && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {realtimeCards.map((card) => (
+            <Card key={card.label}>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-muted-foreground">{card.label}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold">{loading ? "--" : card.value}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {(loading
             ? Array.from({ length: 4 }, (_, idx) => ({
@@ -102,7 +126,7 @@ export default function OperatorDashboardPage() {
                 <div className="text-2xl font-semibold">
                   {loading ? "--" : card.value}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {loading ? "获取统计中" : card.description}
                 </p>
               </CardContent>

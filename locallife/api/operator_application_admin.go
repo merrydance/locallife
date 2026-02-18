@@ -255,7 +255,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 			Valid: false,
 		},
 		CommissionRate:    numericFromFloat(0.10),
-		Status:            "active",
+		Status:            "pending_bindbank",
 		ContractStartDate: startDate,
 		ContractEndDate:   endDate,
 		ContractYears:     years,

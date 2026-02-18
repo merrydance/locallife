@@ -1376,6 +1376,16 @@ func TestUpdateRiderLocationGeofenceEvents(t *testing.T) {
 		Times(1).
 		Return(delivery, nil)
 
+	store.EXPECT().
+		CreateDeliveryLocationEvent(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.DeliveryLocationEvent{}, nil)
+
+	store.EXPECT().
+		ListDeliveryLocationsSince(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.RiderLocation{}, nil)
+
 	server := newTestServer(t, store)
 	server.config.GeofenceRadiusMeters = 80
 	server.config.GeofenceDwellMinSeconds = 60

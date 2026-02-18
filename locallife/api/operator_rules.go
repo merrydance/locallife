@@ -531,6 +531,30 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			}
 		}
 
+		effectiveMinFee := feeConfig.MinFee
+		if arg.MinFee.Valid {
+			effectiveMinFee = arg.MinFee.Int64
+		}
+
+		var effectiveMaxFee *int64
+		if feeConfig.MaxFee.Valid {
+			currentMaxFee := feeConfig.MaxFee.Int64
+			effectiveMaxFee = &currentMaxFee
+		}
+		if key == "MAX_DELIVERY_FEE" {
+			if arg.MaxFee.Valid {
+				updatedMaxFee := arg.MaxFee.Int64
+				effectiveMaxFee = &updatedMaxFee
+			} else {
+				effectiveMaxFee = nil
+			}
+		}
+
+		if err := validateMinMaxFee(effectiveMinFee, effectiveMaxFee); err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+
 		_, err = server.store.UpdateDeliveryFeeConfig(ctx, arg)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

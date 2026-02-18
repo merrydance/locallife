@@ -338,6 +338,18 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 						RegionID:   differentRegionMerchant.RegionID,
 					}).
 					Return(false, nil)
+
+				store.EXPECT().
+					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
+						UserID: user.ID,
+						Role:   "operator",
+					}).
+					Return(db.UserRole{
+						UserID:          user.ID,
+						Role:            "operator",
+						Status:          "active",
+						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
+					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -537,6 +549,7 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 				store.EXPECT().
 					GetRiderPremiumScore(gomock.Any(), rider.ID).
 					Return(int16(80), nil)
+
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -582,6 +595,9 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				differentRegionRider := rider
+				differentRegionRider.RegionID = pgtype.Int8{Int64: operator.RegionID + 1, Valid: true}
+
 				store.EXPECT().
 					ListUserRoles(gomock.Any(), user.ID).
 					Return([]db.UserRole{{
@@ -597,14 +613,27 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetRider(gomock.Any(), rider.ID).
-					Return(rider, nil)
+					Return(differentRegionRider, nil)
 
 				store.EXPECT().
 					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
 						OperatorID: operator.ID,
-						RegionID:   rider.RegionID.Int64,
+						RegionID:   differentRegionRider.RegionID.Int64,
 					}).
 					Return(false, nil)
+
+				store.EXPECT().
+					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
+						UserID: user.ID,
+						Role:   "operator",
+					}).
+					Return(db.UserRole{
+						UserID:          user.ID,
+						Role:            "operator",
+						Status:          "active",
+						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
+					}, nil)
+
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)

@@ -50,9 +50,9 @@ export default function OperatorRidersPage() {
         description="区域内骑手履约与收入排行"
         actions={<Badge variant="secondary">近 30 天</Badge>}
       />
-      <PageContent>
+      <PageContent className="space-y-4">
         {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}

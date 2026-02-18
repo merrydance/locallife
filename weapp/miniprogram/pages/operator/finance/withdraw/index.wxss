@@ -1,0 +1,135 @@
+.page {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.content {
+  height: calc(100vh - 88rpx);
+  box-sizing: border-box;
+  padding: var(--spacer-md);
+}
+
+.card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-title {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-sm);
+}
+
+.balance-label {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.balance-value {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  color: var(--td-brand-color);
+  line-height: 1.2;
+  margin: var(--spacer-xs) 0 var(--spacer-md);
+}
+
+.metrics-row {
+  display: flex;
+  align-items: center;
+  background: var(--td-bg-color-page);
+  border-radius: var(--radius-sm);
+  padding: var(--spacer-sm);
+}
+
+.metric-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.metric-value {
+  margin-top: var(--spacer-xs);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.metric-divider {
+  width: 1rpx;
+  height: 56rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  margin: 0 var(--spacer-sm);
+}
+
+.share-ratio {
+  margin-top: var(--spacer-sm);
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.hint-row {
+  margin: var(--spacer-sm) 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.error-text {
+  margin-bottom: var(--spacer-sm);
+  font-size: var(--font-size-xs);
+  color: var(--td-error-color);
+}
+
+.state-wrap {
+  padding: var(--spacer-sm) 0;
+}
+
+.skeleton-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.skeleton-row {
+  display: flex;
+  gap: var(--spacer-sm);
+}
+
+.skeleton-line {
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-lg {
+  width: 56%;
+  height: 68rpx;
+}
+
+.skeleton-sm {
+  flex: 1;
+  height: 96rpx;
+}
+
+.skeleton-input {
+  width: 100%;
+  height: 80rpx;
+}
+
+.skeleton-btn {
+  width: 100%;
+  height: 88rpx;
+}
+
+.safe-bottom {
+  height: calc(var(--safe-area-bottom) + var(--spacer-lg));
+}

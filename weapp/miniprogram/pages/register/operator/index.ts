@@ -154,8 +154,8 @@ Page({
         if (res.status === 'submitted') {
           this.setData({ currentStep: 4 })
         } else if (res.status === 'approved') {
-          wx.showToast({ title: '您已是合伙人' })
-          setTimeout(() => wx.reLaunch({ url: '/pages/operator/dashboard/index' }), 1500)
+          wx.showToast({ title: '审核通过，请先完成微信开户', icon: 'none' })
+          setTimeout(() => wx.reLaunch({ url: '/pages/operator/applyment/index' }), 1500)
         } else if (res.status === 'rejected') {
           wx.showModal({
             title: '审核未通过',

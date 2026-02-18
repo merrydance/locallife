@@ -228,10 +228,18 @@ func TestUpdateEcommerceApplymentSubMchID(t *testing.T) {
 func TestListEcommerceApplymentsBySubject(t *testing.T) {
 	merchant := createRandomMerchantForTest(t)
 
+	before, err := testStore.ListEcommerceApplymentsBySubject(context.Background(), ListEcommerceApplymentsBySubjectParams{
+		SubjectType: "merchant",
+		SubjectID:   merchant.ID,
+	})
+	require.NoError(t, err)
+
 	// 创建多个进件记录
 	n := 3
+	createdIDs := make(map[int64]struct{}, n)
 	for i := 0; i < n; i++ {
-		createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+		created := createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
+		createdIDs[created.ID] = struct{}{}
 	}
 
 	applyments, err := testStore.ListEcommerceApplymentsBySubject(context.Background(), ListEcommerceApplymentsBySubjectParams{
@@ -239,13 +247,19 @@ func TestListEcommerceApplymentsBySubject(t *testing.T) {
 		SubjectID:   merchant.ID,
 	})
 	require.NoError(t, err)
-	require.Len(t, applyments, n)
+	require.Len(t, applyments, len(before)+n)
 
 	// 验证所有记录都属于该商户
 	for _, a := range applyments {
 		require.Equal(t, "merchant", a.SubjectType)
 		require.Equal(t, merchant.ID, a.SubjectID)
 	}
+
+	// 验证新创建记录都在结果中
+	for _, a := range applyments {
+		delete(createdIDs, a.ID)
+	}
+	require.Empty(t, createdIDs)
 }
 
 func TestListEcommerceApplymentsByStatus(t *testing.T) {

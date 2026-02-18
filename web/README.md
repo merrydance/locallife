@@ -1,5 +1,12 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## UI Standards
+
+- Unified entry: [WEB_UI_STANDARDS.md](WEB_UI_STANDARDS.md)
+- Guardrails: [DESIGN_GUARDRAILS.md](DESIGN_GUARDRAILS.md)
+- Merchant historical reference: [src/styles/design-system.md](src/styles/design-system.md)
+- Constraint constants: [src/styles/ui-constraints.ts](src/styles/ui-constraints.ts)
+
 ## Getting Started
 
 First, run the development server:
