@@ -213,6 +213,30 @@ export interface ReservationStats {
   no_show_count: number
 }
 
+export interface MerchantReservationDishReference {
+  reservation_id: number
+  reservation_time: string
+  table_no?: string
+  contact_name?: string
+  status: ReservationStatus
+  quantity: number
+}
+
+export interface MerchantReservationDishSummaryItem {
+  type: 'dish' | 'combo'
+  dish_id?: number
+  combo_id?: number
+  name: string
+  total_quantity: number
+  reservation_count: number
+  references: MerchantReservationDishReference[]
+}
+
+export interface MerchantReservationDishesSummaryResponse {
+  date: string
+  items: MerchantReservationDishSummaryItem[]
+}
+
 // ==================== 预订服务 ====================
 
 export class ReservationService {
@@ -375,6 +399,18 @@ export class ReservationService {
   }
 
   /**
+   * 商户按天获取预订菜品/套餐汇总
+   * GET /v1/reservations/merchant/dishes
+   */
+  static async getMerchantReservationDishes(date: string): Promise<MerchantReservationDishesSummaryResponse> {
+    return await request({
+      url: '/v1/reservations/merchant/dishes',
+      method: 'GET',
+      data: { date }
+    })
+  }
+
+  /**
    * 商户代客创建预订
    * POST /v1/reservations/merchant/create
    */
@@ -450,6 +486,7 @@ export const openDiningSession = ReservationService.openDiningSession
 export const getMerchantReservations = ReservationService.getMerchantReservations
 export const getTodayReservations = ReservationService.getTodayReservations
 export const getReservationStats = ReservationService.getReservationStats
+export const getMerchantReservationDishes = ReservationService.getMerchantReservationDishes
 export const merchantCreateReservation = ReservationService.merchantCreateReservation
 export const updateReservation = ReservationService.updateReservation
 export const confirmReservationByMerchant = ReservationService.confirmReservation

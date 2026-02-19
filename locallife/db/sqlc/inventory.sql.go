@@ -309,14 +309,25 @@ func (q *Queries) ListDailyInventoryByDate(ctx context.Context, date pgtype.Date
 
 const listDailyInventoryByMerchant = `-- name: ListDailyInventoryByMerchant :many
 SELECT 
-  di.id, di.merchant_id, di.dish_id, di.date, di.total_quantity, di.sold_quantity, di.created_at, di.updated_at, di.reserved_quantity,
+  COALESCE(di.id, 0) as id,
+  d.merchant_id as merchant_id,
+  d.id as dish_id,
+  $2::date as date,
+  COALESCE(di.total_quantity, -1) as total_quantity,
+  COALESCE(di.sold_quantity, 0) as sold_quantity,
+  COALESCE(di.created_at, now()) as created_at,
+  COALESCE(di.updated_at, now()) as updated_at,
+  COALESCE(di.reserved_quantity, 0) as reserved_quantity,
   d.name as dish_name,
   d.price as dish_price
-FROM daily_inventory di
-JOIN dishes d ON di.dish_id = d.id
-WHERE 
-  di.merchant_id = $1
+FROM dishes d
+LEFT JOIN daily_inventory di ON di.dish_id = d.id
+  AND di.merchant_id = d.merchant_id
   AND di.date = $2
+WHERE 
+  d.merchant_id = $1
+  AND d.is_online = true
+  AND d.deleted_at IS NULL
 ORDER BY d.name ASC
 `
 

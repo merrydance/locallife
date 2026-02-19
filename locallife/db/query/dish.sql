@@ -35,6 +35,11 @@ JOIN merchant_dish_categories mdc ON c.id = mdc.category_id
 WHERE mdc.merchant_id = $1
 ORDER BY mdc.sort_order ASC, c.name ASC;
 
+-- name: ListGlobalDishCategories :many
+SELECT id, name, deleted_at FROM dish_categories
+WHERE deleted_at IS NULL
+ORDER BY name ASC;
+
 -- name: UpdateMerchantDishCategoryOrder :one
 UPDATE merchant_dish_categories
 SET

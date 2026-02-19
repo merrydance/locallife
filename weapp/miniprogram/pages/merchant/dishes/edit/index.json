@@ -1,18 +1,14 @@
 {
   "usingComponents": {
-    "t-navbar": "tdesign-miniprogram/navbar/navbar",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-icon": "tdesign-miniprogram/icon/icon",
     "t-input": "tdesign-miniprogram/input/input",
     "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-switch": "tdesign-miniprogram/switch/switch",
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-    "t-image": "tdesign-miniprogram/image/image",
     "t-picker": "tdesign-miniprogram/picker/picker",
-    "t-message": "tdesign-miniprogram/message/message",
-    "t-dialog": "tdesign-miniprogram/dialog/dialog",
-    "t-divider": "tdesign-miniprogram/divider/divider",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
+    "t-loading": "tdesign-miniprogram/loading/loading",
     "t-upload": "tdesign-miniprogram/upload/upload",
     "custom-navbar": "/components/custom-navbar/index"
   },

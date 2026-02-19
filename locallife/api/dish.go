@@ -95,6 +95,10 @@ type listDishCategoriesResponse struct {
 	Categories []dishCategoryResponse `json:"categories"`
 }
 
+type listGlobalDishCategoriesResponse struct {
+	Categories []dishCategoryResponse `json:"categories"`
+}
+
 // listDishCategories godoc
 // @Summary 获取菜品分类列表
 // @Description 获取当前商户的所有菜品分类
@@ -140,6 +144,50 @@ func (server *Server) listDishCategories(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listDishCategoriesResponse{
+		Categories: result,
+	})
+}
+
+// listGlobalDishCategories godoc
+// @Summary 获取全局菜品分类列表
+// @Description 获取全局可复用菜品分类（用于商户关联）
+// @Tags 菜品管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} listGlobalDishCategoriesResponse "分类列表"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/dishes/categories/global [get]
+// @Security BearerAuth
+func (server *Server) listGlobalDishCategories(ctx *gin.Context) {
+	// 保持与其他商户接口一致，验证当前用户具备商户身份
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	_, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if isNoRows(err) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant by owner: %w", err)))
+		return
+	}
+
+	globalCategories, err := server.store.ListGlobalDishCategories(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list global dish categories: %w", err)))
+		return
+	}
+
+	result := make([]dishCategoryResponse, len(globalCategories))
+	for i, cat := range globalCategories {
+		result[i] = dishCategoryResponse{
+			ID:        cat.ID,
+			Name:      cat.Name,
+			SortOrder: 0,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, listGlobalDishCategoriesResponse{
 		Categories: result,
 	})
 }

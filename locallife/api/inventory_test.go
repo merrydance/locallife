@@ -320,7 +320,7 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "NotFound",
+			name: "CreateWhenMissing",
 			body: gin.H{
 				"dish_id":        dishID,
 				"date":           "2025-11-25",
@@ -330,6 +330,11 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				dish := randomDish(merchant.ID, nil)
+				dish.ID = dishID
+				createdInventory := randomDailyInventory(merchant.ID, dishID)
+				createdInventory.TotalQuantity = 200
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					AnyTimes().
@@ -339,9 +344,19 @@ func TestUpdateDailyInventoryAPI(t *testing.T) {
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.DailyInventory{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					CreateDailyInventory(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(createdInventory, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 	}
@@ -744,7 +759,7 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 			},
 		},
 		{
-			name:   "NotFound",
+			name:   "CreateWhenMissing",
 			dishID: dishID,
 			body: gin.H{
 				"date":           "2025-11-25",
@@ -754,6 +769,11 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				dish := randomDish(merchant.ID, nil)
+				dish.ID = dishID
+				createdInventory := randomDailyInventory(merchant.ID, dishID)
+				createdInventory.TotalQuantity = 200
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					AnyTimes().
@@ -763,9 +783,19 @@ func TestUpdateSingleInventoryAPI(t *testing.T) {
 					GetDailyInventory(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.DailyInventory{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dishID)).
+					Times(1).
+					Return(dish, nil)
+
+				store.EXPECT().
+					CreateDailyInventory(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(createdInventory, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{

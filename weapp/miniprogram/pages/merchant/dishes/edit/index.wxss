@@ -1,36 +1,44 @@
 .page-container {
-  background-color: var(--td-bg-color-page);
+  background: var(--td-bg-color-page);
   min-height: 100vh;
-  padding-bottom: 200rpx;
+  padding-bottom: 220rpx;
 }
 
-.form-section {
-  padding: 32rpx 0;
+.form-shell {
+  padding: var(--spacer-md);
 }
 
-.upload-wrap {
-  padding: 32rpx;
-  background-color: #fff;
-  margin: 0 32rpx 32rpx;
-  border-radius: 16rpx;
+.card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
 }
 
-.form-label {
-  font-size: 28rpx;
+.section-title {
+  font-size: var(--font-size-base);
   color: var(--td-text-color-primary);
-  font-weight: 500;
-  margin-bottom: 24rpx;
+  font-weight: 600;
+  margin-bottom: var(--spacer-md);
 }
 
-.textarea-wrap {
-  padding: 32rpx;
-  background-color: #fff;
+.helper-text {
+  margin-top: var(--spacer-sm);
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
 }
 
-.card-wrap {
-  margin: 0 32rpx 32rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
+.uploading-row {
+  margin-top: var(--spacer-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+}
+
+.uploading-text {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
 }
 
 /* 底部操作栏 */
@@ -39,16 +47,12 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background-color: #fff;
-  padding: 24rpx 32rpx;
-  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
-  z-index: 100;
+  background: var(--td-bg-color-container);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+  z-index: var(--z-index-fixed);
 }
 
 .footer-bar.iphone-x {
-  padding-bottom: 64rpx;
-}
-
-.dialog-content {
-  padding: 32rpx 0;
+  padding-bottom: calc(var(--spacer-md) + env(safe-area-inset-bottom));
 }

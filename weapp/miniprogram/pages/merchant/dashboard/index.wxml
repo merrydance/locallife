@@ -1,6 +1,9 @@
 <custom-navbar title="商户工作台" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <t-empty wx:if="{{accessDenied}}" icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+
+  <block wx:else>
   <t-skeleton 
     loading="{{initialLoading}}" 
     rowCol="{{ [{ width: '100%', height: '300rpx' }] }}" 
@@ -60,55 +63,48 @@
     t-class="skeleton-body"
     rowCol="{{ [1, 1, { width: '100%', height: '400rpx' }, 1, 1] }}"
   >
-    <!-- 3. 功能矩阵 (Grid) -->
     <view class="card-section">
-      <view class="card-title">经营助手</view>
-      <t-grid column="{{4}}" border="{{false}}" theme="card">
-        <t-grid-item text="菜品管理" icon="view-module" bind:tap="onManageDishes" />
-        <t-grid-item text="房费库存" icon="calendar" bind:tap="onManageInventory" />
-        <t-grid-item text="评价管理" icon="chat" bind:tap="onManageReviews" />
-        <t-grid-item text="营销配置" icon="gift" bind:tap="onManagePromotions" />
-        <t-grid-item text="财务流水" icon="money" bind:tap="onFinanceInfo" />
-        <t-grid-item text="打印设置" icon="print" bind:tap="onPrinterSettings" />
-        <t-grid-item text="多店管理" icon="root-list" bind:tap="onManageChain" />
-        <t-grid-item text="运营分析" icon="chart-bar" bind:tap="onGoToAnalytics" />
-      </t-grid>
-    </view>
+      <view class="card-title">订单流</view>
+      <t-tabs value="{{currentOrderTab}}" bind:change="onOrderTabChange" t-class="order-tabs">
+        <t-tab-panel label="待接单" value="paid" />
+        <t-tab-panel label="制作中" value="preparing" />
+        <t-tab-panel label="待完成" value="ready" />
+        <t-tab-panel label="已完成" value="completed" />
+      </t-tabs>
 
-    <!-- 4. 实时待处理事项 -->
-    <view class="card-section">
-      <view class="card-title">待处理事项</view>
-      <view class="pending-list">
-        <t-cell-group theme="card">
-          <t-cell title="待接外卖单" arrow hover bind:tap="onPendingTakeout">
-            <t-badge count="{{pendingCounts.takeout}}" slot="note" />
-            <t-icon name="assignment" slot="left-icon" />
-          </t-cell>
-          <t-cell title="待确认预定" arrow hover bind:tap="onPendingReservations">
-            <t-badge count="{{pendingCounts.reservation}}" slot="note" />
-            <t-icon name="calendar-event" slot="left-icon" />
-          </t-cell>
-          <t-cell title="异常配送订单" arrow hover bind:tap="onExceptionOrders">
-            <t-badge count="{{pendingCounts.exceptions}}" dot slot="note" />
-            <t-icon name="error-circle" slot="left-icon" color="var(--td-error-color)" />
-          </t-cell>
-        </t-cell-group>
+      <view wx:if="{{orderFlowLoading && !orderFlow.length}}" class="loading-state">
+        <t-loading theme="circular" text="加载订单中..." vertical />
       </view>
-    </view>
 
-    <!-- 5. 简要经营排行 -->
-    <view class="card-section">
-      <view class="card-title">昨日热销排行</view>
-      <view class="ranking-list card-section">
-        <view class="ranking-item" wx:for="{{hotDishes}}" wx:key="id">
-          <view class="rank-num {{index < 3 ? 'top-three' : ''}}">{{index + 1}}</view>
-          <view class="dish-info">
-            <text class="dish-name">{{item.name}}</text>
-            <text class="dish-sales">销量 {{item.sales}}</text>
+      <t-empty wx:elif="{{!orderFlow.length}}" icon="info-circle" description="当前分类暂无订单" />
+
+      <view wx:else class="order-flow-list">
+        <view class="order-card" wx:for="{{orderFlow}}" wx:key="id" data-id="{{item.id}}" bindtap="onOrderTap">
+          <view class="order-header">
+            <view class="order-left">
+              <t-tag size="small" variant="light">{{item.order_type_label}}</t-tag>
+              <text class="order-no">#{{item.order_no_short}}</text>
+            </view>
+            <text class="order-status" style="color: {{item.status_color}}">{{item.status_label}}</text>
           </view>
-          <view class="dish-revenue">¥{{item.revenue / 100}}</view>
+
+          <view class="order-items">
+            <text wx:for="{{item.items}}" wx:key="id" wx:for-item="dish" wx:if="{{index < 2}}" class="order-item-line">
+              {{dish.name}} x{{dish.quantity}}
+            </text>
+          </view>
+
+          <view class="order-footer">
+            <text class="order-time">{{item.time_label}}</text>
+            <text class="order-total">¥{{item.total_amount / 100}}</text>
+          </view>
+        </view>
+
+        <view class="more-wrap">
+          <t-button size="small" variant="outline" theme="primary" bind:tap="onGoOrderList">查看更多订单</t-button>
         </view>
       </view>
     </view>
   </t-skeleton>
+  </block>
 </view>

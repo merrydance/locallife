@@ -1,0 +1,92 @@
+<custom-navbar title="{{isEdit ? '编辑套餐' : '新建套餐'}}" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{loading}}" class="loading-state">
+    <t-loading theme="circular" text="加载中..." vertical />
+  </view>
+
+  <block wx:else>
+    <view class="section">
+      <view class="section-title">1. 选择菜品（可多选）</view>
+      <view class="filter-row">
+        <text class="filter-label">仅显示已上架菜品</text>
+        <t-switch value="{{showOnlineOnly}}" size="small" bind:change="onShowOnlineOnlyChange" />
+      </view>
+      <checkbox-group bindchange="onDishCheckChange">
+        <view class="dish-option" wx:for="{{dishes}}" wx:key="id">
+          <checkbox
+            value="{{item.id}}"
+            checked="{{item.checked}}"
+            color="var(--td-brand-color)"
+          />
+          <view class="dish-meta">
+            <view class="dish-name">{{item.name}}</view>
+            <view class="dish-extra">¥{{item.price / 100}} · {{item.is_online ? '已上架' : '未上架'}}</view>
+          </view>
+        </view>
+      </checkbox-group>
+      <t-empty wx:if="{{!dishes.length}}" icon="info-circle" description="暂无可选菜品，请先创建菜品" />
+    </view>
+
+    <view class="section">
+      <view class="section-title">2. 价格策略（单选）</view>
+      <radio-group bindchange="onPricingModeChange">
+        <label class="radio-option" wx:for="{{pricingModeOptions}}" wx:key="value">
+          <radio
+            value="{{item.value}}"
+            checked="{{pricingMode === item.value}}"
+            color="var(--td-brand-color)"
+            disabled="{{item.value === 'keep' && !isEdit}}"
+          />
+          <text class="radio-label">{{item.label}}</text>
+        </label>
+      </radio-group>
+    </view>
+
+    <view class="section">
+      <view class="section-title">3. 上下架状态（单选）</view>
+      <radio-group bindchange="onOnlineChoiceChange">
+        <label class="radio-option">
+          <radio value="online" checked="{{onlineChoice === 'online'}}" color="var(--td-brand-color)" />
+          <text class="radio-label">创建后上架</text>
+        </label>
+        <label class="radio-option">
+          <radio value="offline" checked="{{onlineChoice === 'offline'}}" color="var(--td-brand-color)" />
+          <text class="radio-label">先不上架</text>
+        </label>
+      </radio-group>
+    </view>
+
+    <view class="summary-card">
+      <view class="summary-row">
+        <text class="label">套餐名称</text>
+        <text class="value">{{autoName}}</text>
+      </view>
+      <view class="summary-row">
+        <text class="label">已选菜品</text>
+        <text class="value">{{selectedDishIds.length}} 个</text>
+      </view>
+      <view class="summary-row">
+        <text class="label">原价合计</text>
+        <text class="value">¥{{originalTotal / 100}}</text>
+      </view>
+      <view class="summary-row">
+        <text class="label">套餐价格</text>
+        <text class="value">¥{{comboPricePreview / 100}}</text>
+      </view>
+      <view class="summary-note">名称自动生成：{{autoName}}</view>
+    </view>
+
+    <view class="footer">
+      <t-button
+        block
+        theme="primary"
+        loading="{{submitting}}"
+        disabled="{{selectedDishIds.length === 0}}"
+        bind:tap="onSubmit"
+      >
+        {{isEdit ? '保存套餐' : '创建套餐'}}
+      </t-button>
+    </view>
+  </block>
+</view>

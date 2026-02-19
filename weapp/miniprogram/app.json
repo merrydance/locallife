@@ -138,9 +138,15 @@
       "name": "merchant",
       "pages": [
         "dashboard/index",
+        "config/index",
         "finance/index",
         "dishes/index",
+        "dishes/categories/index",
         "dishes/edit/index",
+        "combos/index",
+        "combos/edit/index",
+        "inventory/index",
+        "reservations/index",
         "orders/list/index",
         "orders/detail/index",
         "tables/index"

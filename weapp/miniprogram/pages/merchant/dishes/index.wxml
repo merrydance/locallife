@@ -1,15 +1,19 @@
 <custom-navbar title="菜品管理" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="header-actions">
+    <t-button size="small" variant="outline" theme="primary" bind:tap="onManageCategories">分类管理</t-button>
+  </view>
+
   <!-- 搜索栏 -->
   <view class="search-wrap">
     <t-search placeholder="搜索菜品名称" bind:change="onSearchChange" bind:submit="onSearchSubmit" center />
   </view>
 
   <!-- 分类筛选 -->
-  <t-tabs defaultValue="{{0}}" bind:change="onTabChange" t-class="tabs-container">
+  <t-tabs value="{{currentCategoryId}}" bind:change="onTabChange" t-class="tabs-container">
     <t-tab-panel label="全部" value="{{0}}" />
-    <t-tab-panel wx:for="{{categories}}" wx:key="id" label="{{item.name}}" value="{{item.id}}" />
+    <t-tab-panel wx:for="{{categories || []}}" wx:key="id" label="{{item.name}}" value="{{item.id}}" />
   </t-tabs>
 
   <!-- 菜品列表 -->
@@ -21,10 +25,10 @@
     <t-empty wx:elif="{{!loading && !dishes.length}}" icon="info-circle" description="暂无菜品" />
 
     <block wx:else>
-      <t-swipe-cell wx:for="{{dishes}}" wx:key="id" right="{{swipeActions}}">
+      <t-swipe-cell wx:for="{{dishes || []}}" wx:key="id">
         <view class="dish-item" bindtap="onEditDish" data-id="{{item.id}}">
           <view class="dish-main">
-            <image class="dish-img" src="{{item.image_url}}" mode="aspectFill" />
+            <image class="dish-img" src="{{item.image_url || '/assets/icons/empty.svg'}}" mode="aspectFill" binderror="onDishImageError" data-id="{{item.id}}" />
             <view class="dish-info">
               <view class="dish-name-row">
                 <text class="dish-name">{{item.name}}</text>
@@ -46,7 +50,6 @@
         </view>
         
         <view slot="right" class="swipe-action-wrap">
-          <view class="action-btn edit-btn" bindtap="onEditDish" data-id="{{item.id}}">编辑</view>
           <view class="action-btn delete-btn" bindtap="onDeleteDish" data-id="{{item.id}}">删除</view>
         </view>
       </t-swipe-cell>

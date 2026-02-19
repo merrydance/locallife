@@ -1,0 +1,100 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+  padding-bottom: 24rpx;
+}
+
+.toolbar {
+  padding: 24rpx 32rpx;
+}
+
+.date-trigger {
+  background: var(--td-bg-color-container);
+  border-radius: 10rpx;
+  padding: 20rpx;
+  color: var(--td-text-color-primary);
+  font-size: 28rpx;
+}
+
+.loading-state {
+  padding: 120rpx 0;
+  text-align: center;
+  color: var(--td-text-color-secondary);
+  font-size: 26rpx;
+}
+
+.empty-state {
+  padding: 120rpx 0;
+  text-align: center;
+  color: var(--td-text-color-secondary);
+  font-size: 26rpx;
+}
+
+.inventory-list {
+  padding: 0 24rpx;
+}
+
+.inventory-card {
+  background: var(--td-bg-color-container);
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dish-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: 14rpx;
+}
+
+.actions {
+  gap: 12rpx;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.input-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.qty-input {
+  width: 180rpx;
+  height: 64rpx;
+  border: 1rpx solid var(--td-component-border);
+  border-radius: 10rpx;
+  background: var(--td-bg-color-container);
+  padding: 0 18rpx;
+  font-size: 28rpx;
+  color: var(--td-text-color-primary);
+  box-sizing: border-box;
+}
+
+.unlimited-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.unlimited-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.unlimited-switch {
+  transform: scale(0.9);
+  transform-origin: left center;
+}

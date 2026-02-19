@@ -2,7 +2,10 @@ package weather
 
 import (
 	"context"
+	"errors"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,7 +20,11 @@ type Scheduler struct {
 	store         db.Store
 	weatherClient QweatherClient
 	cache         WeatherCache
+	invalidRegion map[int64]time.Time
+	invalidMu     sync.RWMutex
 }
+
+var errWeatherNoSuchLocation = errors.New("weather: no such location")
 
 // NewScheduler 创建调度器
 func NewScheduler(store db.Store, weatherClient QweatherClient, cache WeatherCache) *Scheduler {
@@ -26,6 +33,7 @@ func NewScheduler(store db.Store, weatherClient QweatherClient, cache WeatherCac
 		store:         store,
 		weatherClient: weatherClient,
 		cache:         cache,
+		invalidRegion: make(map[int64]time.Time),
 	}
 }
 
@@ -82,7 +90,25 @@ func (s *Scheduler) FetchAllWeather(ctx context.Context) error {
 	log.Info().Int("count", len(regions)).Msg("fetching weather for regions")
 
 	for _, region := range regions {
+		if s.shouldSkipRegion(region.ID) {
+			log.Warn().
+				Int64("region_id", region.ID).
+				Str("region_name", region.Name).
+				Msg("skip weather fetch for temporarily invalid region location")
+			continue
+		}
+
 		if err := s.fetchRegionWeather(ctx, region); err != nil {
+			if isNoSuchLocationError(err) {
+				s.markRegionInvalid(region.ID, 6*time.Hour)
+				log.Warn().
+					Err(err).
+					Int64("region_id", region.ID).
+					Str("region_name", region.Name).
+					Msg("region weather location invalid, marked temporarily skipped")
+				continue
+			}
+
 			log.Error().
 				Err(err).
 				Int64("region_id", region.ID).
@@ -167,11 +193,14 @@ func (s *Scheduler) getLocationID(ctx context.Context, region db.GetRegionsWithD
 
 	cityResp, err := s.weatherClient.LookupCity(ctx, region.Name, cityName)
 	if err != nil {
+		if isNoSuchLocationError(err) {
+			return "", 0, 0, errWeatherNoSuchLocation
+		}
 		return "", 0, 0, err
 	}
 
 	if len(cityResp.Location) == 0 {
-		return "", 0, 0, nil
+		return "", 0, 0, errWeatherNoSuchLocation
 	}
 
 	loc := cityResp.Location[0]
@@ -188,6 +217,46 @@ func (s *Scheduler) getLocationID(ctx context.Context, region db.GetRegionsWithD
 	}
 
 	return locationID, lat, lon, nil
+}
+
+func isNoSuchLocationError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, errWeatherNoSuchLocation) {
+		return true
+	}
+
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such location") ||
+		strings.Contains(message, "cannot find the location") ||
+		strings.Contains(message, "/no-such-location")
+}
+
+func (s *Scheduler) shouldSkipRegion(regionID int64) bool {
+	s.invalidMu.RLock()
+	until, ok := s.invalidRegion[regionID]
+	s.invalidMu.RUnlock()
+
+	if !ok {
+		return false
+	}
+
+	if time.Now().After(until) {
+		s.invalidMu.Lock()
+		delete(s.invalidRegion, regionID)
+		s.invalidMu.Unlock()
+		return false
+	}
+
+	return true
+}
+
+func (s *Scheduler) markRegionInvalid(regionID int64, duration time.Duration) {
+	s.invalidMu.Lock()
+	s.invalidRegion[regionID] = time.Now().Add(duration)
+	s.invalidMu.Unlock()
 }
 
 // saveToDatabase 保存天气数据到数据库

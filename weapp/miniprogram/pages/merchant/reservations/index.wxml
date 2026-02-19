@@ -1,0 +1,64 @@
+<custom-navbar title="预订订单日汇总" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="toolbar">
+    <picker mode="date" value="{{date}}" bindchange="onDateChange">
+      <view class="date-trigger">汇总日期：{{date}}</view>
+    </picker>
+    <t-button size="small" variant="outline" theme="primary" bind:tap="onGoOrderList">查看订单流转</t-button>
+  </view>
+
+  <view class="summary-card">
+    <view class="summary-item">
+      <text class="label">预订单数</text>
+      <text class="value">{{summary.reservationCount}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="label">涉及桌台</text>
+      <text class="value">{{summary.tableCount}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="label">备菜SKU</text>
+      <text class="value">{{summary.dishKinds}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="label">备菜总量</text>
+      <text class="value">{{summary.dishTotalQuantity}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-state">
+    <t-loading theme="circular" text="加载中..." vertical />
+  </view>
+
+  <view class="section">
+    <view class="section-title">备菜明细</view>
+    <t-empty wx:if="{{!dishSummary.length && !loading}}" icon="info-circle" description="暂无备菜数据" />
+    <view wx:else class="dish-list">
+      <view class="dish-card" wx:for="{{dishSummary}}" wx:key="name">
+        <view class="dish-header">
+          <text class="dish-name">{{item.name}}</text>
+          <text class="dish-total">x{{item.total_quantity}}</text>
+        </view>
+        <view class="dish-meta">{{item.type === 'combo' ? '套餐' : '菜品'}} · 覆盖 {{item.reservation_count}} 个预订</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">预订列表（当日）</view>
+    <t-empty wx:if="{{!reservations.length && !loading}}" icon="info-circle" description="暂无预订" />
+    <view wx:else class="reservation-list">
+      <view class="reservation-card" wx:for="{{reservations}}" wx:key="id">
+        <view class="row">
+          <text class="table">{{item.table_no || '未分配桌台'}}</text>
+          <text class="time">{{item.reservation_time}}</text>
+        </view>
+        <view class="row secondary">
+          <text>{{item.contact_name}} · {{item.contact_phone}}</text>
+          <text>{{item.status}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1686,6 +1686,38 @@ func (q *Queries) ListDishesForMenu(ctx context.Context, merchantID int64) ([]Li
 	return items, nil
 }
 
+const listGlobalDishCategories = `-- name: ListGlobalDishCategories :many
+SELECT id, name, deleted_at FROM dish_categories
+WHERE deleted_at IS NULL
+ORDER BY name ASC
+`
+
+type ListGlobalDishCategoriesRow struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+func (q *Queries) ListGlobalDishCategories(ctx context.Context) ([]ListGlobalDishCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, listGlobalDishCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGlobalDishCategoriesRow{}
+	for rows.Next() {
+		var i ListGlobalDishCategoriesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.DeletedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeAllDishIngredients = `-- name: RemoveAllDishIngredients :exec
 DELETE FROM dish_ingredients
 WHERE dish_id = $1

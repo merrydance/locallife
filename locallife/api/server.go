@@ -566,6 +566,7 @@ func (server *Server) setupRouter() {
 		// 菜品分类
 		dishesGroup.POST("/categories", server.createDishCategory)
 		dishesGroup.GET("/categories", server.listDishCategories)
+		dishesGroup.GET("/categories/global", server.listGlobalDishCategories)
 		dishesGroup.PATCH("/categories/:id", server.updateDishCategory)
 		dishesGroup.DELETE("/categories/:id", server.deleteDishCategory)
 

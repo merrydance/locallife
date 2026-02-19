@@ -245,8 +245,8 @@ Page({
   loadWorkbenches(roles: string[]) {
     const workbenches = []
 
-    // 商家入口：支持多种角色，或者运营人员
-    if (roles.some((r) => ['merchant', 'merchant_boss', 'merchant_staff', 'operator'].includes(r))) {
+    // 商家入口：仅商户相关角色
+    if (roles.some((r) => ['merchant', 'merchant_boss', 'merchant_staff'].includes(r))) {
       workbenches.push({
         id: 'merchant',
         name: '商户中心',

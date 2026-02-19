@@ -1,10 +1,21 @@
 import { getStableBarHeights } from '../../../utils/responsive'
-import { MerchantOrderManagementService, KitchenDisplayService } from '../../../api/order-management'
+import { MerchantOrderManagementService, OrderManagementAdapter, OrderResponse } from '../../../api/order-management'
+import { MerchantStatsService } from '../../../api/merchant-stats'
+import { getUserInfo } from '../../../api/auth'
 import { logger } from '../../../utils/logger'
 import dayjs from 'dayjs'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 
 type WsUnsubscribe = () => void
+type OrderStatusTab = 'paid' | 'preparing' | 'ready' | 'completed'
+
+interface DashboardOrderItem extends OrderResponse {
+  order_no_short: string
+  order_type_label: string
+  status_label: string
+  status_color: string
+  time_label: string
+}
 
 Page({
   data: {
@@ -20,23 +31,15 @@ Page({
       orderCount: 0,
       avgOrderPrice: 0
     },
-    pendingCounts: {
-      takeout: 0,
-      reservation: 0,
-      exceptions: 0
-    },
-    hotDishes: [
-      { id: 1, name: '招牌红烧肉', sales: 128, revenue: 627200 },
-      { id: 2, name: '清蒸鲈鱼', sales: 95, revenue: 836000 },
-      { id: 3, name: '手撕包菜', sales: 88, revenue: 193600 },
-      { id: 4, name: '酸菜鱼', sales: 72, revenue: 561600 },
-      { id: 5, name: '扬州炒饭', sales: 65, revenue: 130000 }
-    ],
+    currentOrderTab: 'paid' as OrderStatusTab,
+    orderFlowLoading: false,
+    orderFlow: [] as DashboardOrderItem[],
     loading: false,
+    accessDenied: false,
     _wsListeners: [] as WsUnsubscribe[]
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     
@@ -45,10 +48,18 @@ Page({
     if (currentMerchant) {
       this.setData({ merchantInfo: currentMerchant })
     }
+
+    const hasAccess = await this.ensureMerchantAccess()
+    if (!hasAccess) {
+      this.setData({ accessDenied: true, initialLoading: false })
+      return
+    }
+
     this.initWebSocket()
   },
 
   onShow() {
+    if (this.data.accessDenied) return
     this.refreshData()
   },
 
@@ -58,6 +69,26 @@ Page({
 
   onUnload() {
     this.cleanupWebSocket()
+  },
+
+  async ensureMerchantAccess() {
+    try {
+      const user = await getUserInfo()
+      const normalizedRoles = (user.roles || []).map((role) => String(role).toLowerCase())
+      const isMerchant = normalizedRoles.some((role) =>
+        ['merchant', 'merchant_owner', 'merchant_boss', 'merchant_staff'].includes(role)
+      )
+
+      if (!isMerchant) {
+        wx.showToast({ title: '当前账号无商户权限', icon: 'none' })
+      }
+
+      return isMerchant
+    } catch (err) {
+      logger.error('Check merchant access failed', err)
+      wx.showToast({ title: '无法校验商户权限', icon: 'none' })
+      return false
+    }
   },
 
   initWebSocket() {
@@ -79,7 +110,7 @@ Page({
           confirmText: '去处理',
           success: (res) => {
             if (res.confirm) {
-              this.onPendingTakeout()
+              this.onGoOrderList()
             }
           }
         })
@@ -103,35 +134,29 @@ Page({
 
     try {
       const today = dayjs().format('YYYY-MM-DD')
-      
-      // 1. 获取今日统计
-      try {
-        const stats = await MerchantOrderManagementService.getOrderStats({
+
+      const [overviewRes] = await Promise.allSettled([
+        MerchantStatsService.getOverview({
           start_date: today,
           end_date: today
         })
+      ])
+
+      if (overviewRes.status === 'fulfilled') {
+        const overview = overviewRes.value
+        const orderCount = overview.total_orders || 0
+        const revenue = overview.total_sales || 0
         this.setData({
           todayStats: {
-            revenue: stats.total_revenue,
-            orderCount: stats.total_orders,
-            avgOrderPrice: stats.avg_order_value
+            revenue,
+            orderCount,
+            avgOrderPrice: orderCount > 0 ? Math.round(revenue / orderCount) : 0
           }
         })
-      } catch (err) {
-        logger.error('Failed to fetch merchant stats', err)
+      } else {
+        logger.error('Failed to fetch merchant overview', overviewRes.reason)
       }
-
-      // 2. 获取待处理计数 (使用真实的 KDS 统计)
-      const kitchenOrders = await KitchenDisplayService.getKitchenOrders()
-      const kStats = kitchenOrders.stats
-
-      this.setData({
-        'pendingCounts.takeout': kStats?.new_count || 0,
-        'pendingCounts.reservation': kStats?.preparing_count || 0, // 借用制作中作为任务提醒
-        'pendingCounts.exceptions': kStats?.orders_behind_schedule || 0 // 使用超时单作为异常提醒
-      })
-
-      // 图表已移除：小程序仅保留简要统计与排行
+      await this.loadOrderFlow(this.data.currentOrderTab)
 
     } catch (err) {
       logger.error('Merchant dashboard refresh failed', err)
@@ -145,7 +170,49 @@ Page({
     this.refreshData()
   },
 
-  onToggleOpen() {
+  async loadOrderFlow(status: OrderStatusTab) {
+    this.setData({ orderFlowLoading: true })
+    try {
+      const orders = await MerchantOrderManagementService.getOrderList({
+        page_id: 1,
+        page_size: 10,
+        status
+      })
+      const orderList = Array.isArray(orders) ? orders : []
+      const orderFlow = orderList.map((order) => ({
+        ...order,
+        order_no_short: order.order_no.slice(-6).toUpperCase(),
+        order_type_label: OrderManagementAdapter.formatOrderType(order.order_type),
+        status_label: OrderManagementAdapter.formatOrderStatus(order.status),
+        status_color: OrderManagementAdapter.getStatusColor(order.status),
+        time_label: dayjs(order.created_at).format('HH:mm')
+      }))
+      this.setData({ orderFlow })
+    } catch (err) {
+      logger.error('Load dashboard order flow failed', err)
+      this.setData({ orderFlow: [] })
+    } finally {
+      this.setData({ orderFlowLoading: false })
+    }
+  },
+
+  onOrderTabChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatusTab }>) {
+    const value = e.detail.value
+    this.setData({ currentOrderTab: value })
+    this.loadOrderFlow(value)
+  },
+
+  onGoOrderList() {
+    wx.navigateTo({ url: `/pages/merchant/orders/list/index?status=${this.data.currentOrderTab}` })
+  },
+
+  onOrderTap(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+    wx.navigateTo({ url: `/pages/merchant/orders/detail/index?id=${id}` })
+  },
+
+  onToggleBusiness() {
     this.setData({ isOpen: !this.data.isOpen })
     wx.showToast({
       title: this.data.isOpen ? '营业中' : '休息中',
@@ -153,43 +220,7 @@ Page({
     })
   },
 
-  onManageDishes() {
-    wx.navigateTo({ url: '/pages/merchant/dishes/index' })
-  },
-
-  onManageInventory() {
-    wx.navigateTo({ url: '/pages/merchant/tables/index' })
-  },
-
-  onManageReviews() {
-    wx.showToast({ title: '跳转评价管理', icon: 'none' })
-  },
-
-  onPromotionConfig() {
-    wx.showToast({ title: '跳转营销配置', icon: 'none' })
-  },
-
-  onFinanceInfo() {
-    wx.navigateTo({ url: '/pages/merchant/finance/index' })
-  },
-
-  onPrinterSettings() {
-    wx.showToast({ title: '跳转打印设置', icon: 'none' })
-  },
-
-  onManageChain() {
-    wx.showToast({ title: '跳转连锁管理', icon: 'none' })
-  },
-
-  onPendingTakeout() {
-    wx.navigateTo({ url: '/pages/merchant/orders/list/index?status=paid' })
-  },
-
-  onPendingReservations() {
-    wx.navigateTo({ url: '/pages/merchant/orders/list/index?status=paid' }) // 暂时共用
-  },
-
-  onExceptionOrders() {
-    wx.showToast({ title: '跳转异常单', icon: 'none' })
+  onGoToSettings() {
+    wx.navigateTo({ url: '/pages/merchant/config/index' })
   }
 })

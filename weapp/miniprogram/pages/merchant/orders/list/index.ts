@@ -17,6 +17,7 @@ interface MerchantOrderListItem extends OrderResponse {
 
 interface OrdersPageOptions {
   status?: OrderStatus
+  order_type?: OrderResponse['order_type']
 }
 
 Page({
@@ -25,6 +26,8 @@ Page({
     loading: false,
     orders: [] as MerchantOrderListItem[],
     currentStatus: 'paid' as OrderStatus,
+    orderTypeFilter: '' as '' | OrderResponse['order_type'],
+    pageTitle: '订单管理',
     page: 1,
     pageSize: 10,
     hasMore: true
@@ -34,7 +37,13 @@ Page({
     const { navBarHeight } = getStableBarHeights()
     this.setData({ 
       navBarHeight,
-      currentStatus: options.status || 'paid'
+      currentStatus: options.status || 'paid',
+      orderTypeFilter: options.order_type || '',
+      pageTitle: options.order_type === 'takeout'
+        ? '外卖订单'
+        : options.order_type === 'dine_in'
+          ? '堂食订单'
+          : '订单管理'
     })
     this.loadOrders(true)
   },
@@ -52,7 +61,11 @@ Page({
         status: this.data.currentStatus || undefined
       })
 
-      const formattedOrders = (res || []).map((o) => this.formatOrder(o))
+      const sourceOrders = this.data.orderTypeFilter
+        ? (res || []).filter((order) => order.order_type === this.data.orderTypeFilter)
+        : (res || [])
+
+      const formattedOrders = sourceOrders.map((o) => this.formatOrder(o))
       
       this.setData({
         orders: reset ? formattedOrders : [...this.data.orders, ...formattedOrders],

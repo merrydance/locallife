@@ -10919,6 +10919,21 @@ func (mr *MockStoreMockRecorder) ListFraudPatterns(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListFraudPatterns", reflect.TypeOf((*MockStore)(nil).ListFraudPatterns), ctx, arg)
 }
 
+// ListGlobalDishCategories mocks base method.
+func (m *MockStore) ListGlobalDishCategories(ctx context.Context) ([]db.ListGlobalDishCategoriesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListGlobalDishCategories", ctx)
+	ret0, _ := ret[0].([]db.ListGlobalDishCategoriesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListGlobalDishCategories indicates an expected call of ListGlobalDishCategories.
+func (mr *MockStoreMockRecorder) ListGlobalDishCategories(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListGlobalDishCategories", reflect.TypeOf((*MockStore)(nil).ListGlobalDishCategories), ctx)
+}
+
 // ListGroupJoinRequestsByGroup mocks base method.
 func (m *MockStore) ListGroupJoinRequestsByGroup(ctx context.Context, groupID int64) ([]db.MerchantGroupJoinRequest, error) {
 	m.ctrl.T.Helper()

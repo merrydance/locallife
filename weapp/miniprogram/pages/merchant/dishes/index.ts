@@ -1,5 +1,6 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { DishManagementService, DishResponse, DishCategory } from '../../../api/dish'
+import { API_BASE } from '../../../utils/request'
 import { logger } from '../../../utils/logger'
 
 Page({
@@ -12,11 +13,7 @@ Page({
     searchKeyword: '',
     pageId: 1,
     pageSize: 20,
-    hasMore: true,
-    swipeActions: [
-      { text: '编辑', theme: 'primary' },
-      { text: '删除', theme: 'danger' }
-    ]
+    hasMore: true
   },
 
   onLoad() {
@@ -36,9 +33,10 @@ Page({
   async loadCategories() {
     try {
       const categories = await DishManagementService.getDishCategories()
-      this.setData({ categories })
+      this.setData({ categories: Array.isArray(categories) ? categories : [] })
     } catch (err) {
       logger.error('Failed to load dish categories', err)
+      this.setData({ categories: [] })
     }
   },
 
@@ -47,13 +45,25 @@ Page({
     
     this.setData({ loading: true })
     try {
-      const res = await DishManagementService.listDishes({
-        category_id: this.data.currentCategoryId || undefined,
+      const params: {
+        category_id?: number
+        page_id: number
+        page_size: number
+      } = {
         page_id: this.data.pageId,
         page_size: this.data.pageSize
-      })
+      }
+      if (this.data.currentCategoryId > 0) {
+        params.category_id = this.data.currentCategoryId
+      }
 
-      const newDishes = res.dishes || []
+      const res = await DishManagementService.listDishes(params)
+
+      const sourceDishes = Array.isArray(res?.dishes) ? res.dishes.filter((dish) => !!dish) : []
+      const newDishes = sourceDishes.map((dish) => ({
+        ...dish,
+        image_url: this.normalizeImageUrl(dish.image_url)
+      }))
       // 客户端搜索过滤 (若后端未完全支持 keyword 筛选)
       const filteredDishes = this.data.searchKeyword 
         ? newDishes.filter((d) => d.name.includes(this.data.searchKeyword))
@@ -73,9 +83,10 @@ Page({
     }
   },
 
-  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: number }>) {
+  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: string | number }>) {
+    const nextCategoryId = Number(e.detail?.value || 0)
     this.setData({ 
-      currentCategoryId: e.detail.value,
+      currentCategoryId: Number.isFinite(nextCategoryId) ? nextCategoryId : 0,
       pageId: 1,
       dishes: [],
       hasMore: true
@@ -100,6 +111,28 @@ Page({
 
   onReachBottom() {
     this.loadDishes()
+  },
+
+  onManageCategories() {
+    wx.navigateTo({ url: '/pages/merchant/dishes/categories/index' })
+  },
+
+  onLoadMore() {
+    this.loadDishes()
+  },
+
+  normalizeImageUrl(path?: string) {
+    if (!path) return ''
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('wxfile://') || path.startsWith('data:')) {
+      return path
+    }
+    if (path.startsWith('//')) {
+      return `https:${path}`
+    }
+    if (path.startsWith('/')) {
+      return `${API_BASE}${path}`
+    }
+    return `${API_BASE}/${path}`
   },
 
   // ==================== 状态切换 ====================
@@ -132,12 +165,25 @@ Page({
   // ==================== 编辑/删除 ====================
 
   onAddDish() {
-    wx.navigateTo({ url: '../edit/index' })
+    wx.navigateTo({ url: './edit/index' })
   },
 
   onEditDish(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as { id?: number }
-    wx.navigateTo({ url: `../edit/index?id=${id}` })
+    wx.navigateTo({ url: `./edit/index?id=${id}` })
+  },
+
+  onDishImageError(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+
+    const index = this.data.dishes.findIndex((d) => d.id === id)
+    if (index < 0) return
+    if (this.data.dishes[index].image_url === '/assets/icons/empty.svg') return
+
+    this.setData({
+      [`dishes[${index}].image_url`]: '/assets/icons/empty.svg'
+    })
   },
 
   onDeleteDish(e: WechatMiniprogram.TouchEvent) {

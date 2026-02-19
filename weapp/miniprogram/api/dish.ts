@@ -259,6 +259,7 @@ export interface DailyInventoryResponse {
     dish_id: number                              // 菜品ID
     id: number                                   // 库存记录ID
     merchant_id: number                          // 商户ID
+    reserved_quantity: number                    // 预留数量
     sold_quantity: number                        // 已售数量
     total_quantity: number                       // 总库存数量
 }
@@ -281,6 +282,7 @@ export interface DailyInventoryWithDishResponse {
     dish_price: number
     id: number
     merchant_id: number
+    reserved_quantity: number
     sold_quantity: number
     total_quantity: number
 }
@@ -605,10 +607,31 @@ export class DishManagementService {
         page_id: number
         page_size: number
     }): Promise<ListDishesResponse> {
+        const query: {
+            category_id?: number
+            is_online?: boolean
+            is_available?: boolean
+            page_id: number
+            page_size: number
+        } = {
+            page_id: params.page_id,
+            page_size: params.page_size
+        }
+
+        if (typeof params.category_id === 'number' && Number.isFinite(params.category_id)) {
+            query.category_id = params.category_id
+        }
+        if (typeof params.is_online === 'boolean') {
+            query.is_online = params.is_online
+        }
+        if (typeof params.is_available === 'boolean') {
+            query.is_available = params.is_available
+        }
+
         return await request({
             url: '/v1/dishes',
             method: 'GET',
-            data: params
+            data: query
         })
     }
 
@@ -625,13 +648,12 @@ export class DishManagementService {
     }
 
     /**
-     * 获取菜品详情（消费者端）
-     * GET /v1/public/dishes/{id}
-     * 注意：使用公开接口，无需商户权限
+     * 获取菜品详情（商户端）
+     * GET /v1/dishes/{id}
      */
     static async getDishDetail(dishId: number): Promise<DishResponse> {
         return await request({
-            url: `/v1/public/dishes/${dishId}`,
+            url: `/v1/dishes/${dishId}`,
             method: 'GET'
         })
     }
@@ -661,15 +683,14 @@ export class DishManagementService {
 
     /**
      * 更新菜品状态
-     * PATCH /v1/dishes/{id}/status (使用PUT方法)
+     * PATCH /v1/dishes/{id}/status
      */
     static async updateDishStatus(dishId: number, data: {
-        is_online?: boolean
-        is_available?: boolean
+        is_online: boolean
     }): Promise<void> {
         return await request({
             url: `/v1/dishes/${dishId}/status`,
-            method: 'PUT',
+            method: 'PATCH',
             data
         })
     }
@@ -723,6 +744,18 @@ export class DishManagementService {
     }
 
     /**
+     * 获取全局菜品分类列表
+     * GET /v1/dishes/categories/global
+     */
+    static async getGlobalDishCategories(): Promise<DishCategory[]> {
+        const response = await request<{ categories: DishCategory[] }>({
+            url: '/v1/dishes/categories/global',
+            method: 'GET'
+        })
+        return response.categories || []
+    }
+
+    /**
      * 创建菜品分类
      * POST /v1/dishes/categories
      */
@@ -736,12 +769,12 @@ export class DishManagementService {
 
     /**
      * 更新菜品分类
-     * PUT /v1/dishes/categories/{id}
+     * PATCH /v1/dishes/categories/{id}
      */
     static async updateDishCategory(id: number, data: CreateDishCategoryRequest): Promise<DishCategory> {
         return await request({
             url: `/v1/dishes/categories/${id}`,
-            method: 'PUT',
+            method: 'PATCH',
             data
         })
     }

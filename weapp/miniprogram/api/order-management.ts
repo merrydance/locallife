@@ -160,11 +160,17 @@ export class MerchantOrderManagementService {
         page_size: number                          // 每页数量（必填，5-50）
         status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'delivering' | 'completed' | 'cancelled'  // 状态筛选
     }): Promise<OrderResponse[]> {
-        return await request({
+        const response = await request<OrderResponse[] | { orders?: OrderResponse[] }>({
             url: '/v1/merchant/orders',
             method: 'GET',
             data: params
         })
+
+        if (Array.isArray(response)) {
+            return response
+        }
+
+        return response.orders || []
     }
 
     /**

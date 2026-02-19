@@ -276,7 +276,51 @@ func (server *Server) updateDailyInventory(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("inventory not found")))
+			dish, dishErr := server.store.GetDish(ctx, req.DishID)
+			if dishErr != nil {
+				if isNotFoundError(dishErr) {
+					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
+					return
+				}
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, dishErr))
+				return
+			}
+			if dish.MerchantID != merchant.ID {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
+				return
+			}
+
+			totalQuantity := int32(-1)
+			if req.TotalQuantity != nil {
+				totalQuantity = *req.TotalQuantity
+			}
+			soldQuantity := int32(0)
+			if req.SoldQuantity != nil {
+				soldQuantity = *req.SoldQuantity
+			}
+
+			created, createErr := server.store.CreateDailyInventory(ctx, db.CreateDailyInventoryParams{
+				MerchantID:    merchant.ID,
+				DishID:        req.DishID,
+				Date:          pgtype.Date{Time: date, Valid: true},
+				TotalQuantity: totalQuantity,
+				SoldQuantity:  soldQuantity,
+			})
+			if createErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, createErr))
+				return
+			}
+
+			ctx.JSON(http.StatusOK, dailyInventoryResponse{
+				ID:               created.ID,
+				MerchantID:       created.MerchantID,
+				DishID:           created.DishID,
+				Date:             created.Date.Time.Format("2006-01-02"),
+				TotalQuantity:    created.TotalQuantity,
+				SoldQuantity:     created.SoldQuantity,
+				ReservedQuantity: created.ReservedQuantity,
+				Available:        calculateAvailable(created.TotalQuantity, created.SoldQuantity, created.ReservedQuantity),
+			})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -604,7 +648,51 @@ func (server *Server) updateSingleInventory(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("inventory not found for this dish")))
+			dish, dishErr := server.store.GetDish(ctx, uri.DishID)
+			if dishErr != nil {
+				if isNotFoundError(dishErr) {
+					ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
+					return
+				}
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, dishErr))
+				return
+			}
+			if dish.MerchantID != merchant.ID {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
+				return
+			}
+
+			totalQuantity := int32(-1)
+			if req.TotalQuantity != nil {
+				totalQuantity = *req.TotalQuantity
+			}
+			soldQuantity := int32(0)
+			if req.SoldQuantity != nil {
+				soldQuantity = *req.SoldQuantity
+			}
+
+			created, createErr := server.store.CreateDailyInventory(ctx, db.CreateDailyInventoryParams{
+				MerchantID:    merchant.ID,
+				DishID:        uri.DishID,
+				Date:          pgtype.Date{Time: date, Valid: true},
+				TotalQuantity: totalQuantity,
+				SoldQuantity:  soldQuantity,
+			})
+			if createErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, createErr))
+				return
+			}
+
+			ctx.JSON(http.StatusOK, dailyInventoryResponse{
+				ID:               created.ID,
+				MerchantID:       created.MerchantID,
+				DishID:           created.DishID,
+				Date:             created.Date.Time.Format("2006-01-02"),
+				TotalQuantity:    created.TotalQuantity,
+				SoldQuantity:     created.SoldQuantity,
+				ReservedQuantity: created.ReservedQuantity,
+				Available:        calculateAvailable(created.TotalQuantity, created.SoldQuantity, created.ReservedQuantity),
+			})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

@@ -1,0 +1,46 @@
+<custom-navbar title="库存设置" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="toolbar">
+    <picker mode="date" value="{{date}}" bindchange="onDateChange">
+      <view class="date-trigger">{{date}}</view>
+    </picker>
+  </view>
+
+  <view wx:if="{{loading && !hasInventories}}" class="loading-state">加载中...</view>
+
+  <view wx:elif="{{!loading && !hasInventories}}" class="empty-state">暂无上架菜品</view>
+
+  <view wx:else class="inventory-list">
+    <view class="inventory-card" wx:for="{{inventories}}" wx:key="id">
+      <view class="dish-name">{{item.dish_name}}</view>
+
+      <view class="row actions">
+        <view class="unlimited-wrap">
+          <text class="unlimited-label">无限</text>
+          <switch
+            class="unlimited-switch"
+            checked="{{item.draft_total_quantity === -1}}"
+            data-index="{{index}}"
+            bindchange="onUnlimitedChange"
+            color="var(--td-brand-color)"
+          />
+        </view>
+        <view class="input-wrap">
+          <view class="input-label">库存</view>
+          <input
+            class="qty-input"
+            type="number"
+            placeholder="数量"
+            value="{{item.draft_total_quantity === -1 ? '' : item.draft_total_quantity}}"
+            disabled="{{item.draft_total_quantity === -1}}"
+            data-index="{{index}}"
+            bindblur="onQuantityInput"
+            confirm-type="done"
+          />
+        </view>
+        <t-button size="small" theme="primary" loading="{{item.submitting}}" data-index="{{index}}" bind:tap="onSave">保存</t-button>
+      </view>
+    </view>
+  </view>
+</view>
