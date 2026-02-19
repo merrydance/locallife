@@ -51,8 +51,8 @@ Page({
     try {
       const response = await InventoryManagementService.getDailyInventory(date)
 
-      const rawList = Array.isArray((response as any)?.inventories)
-        ? ((response as any).inventories as Array<DailyInventoryWithDishResponse | null>)
+      const rawList = Array.isArray(response?.inventories)
+        ? (response.inventories as Array<DailyInventoryWithDishResponse | null>)
         : []
 
       const inventories = rawList

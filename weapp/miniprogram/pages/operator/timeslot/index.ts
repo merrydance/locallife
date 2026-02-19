@@ -15,10 +15,6 @@ interface FieldInputEvent {
   currentTarget: { dataset: { field?: string } }
 }
 
-interface DayToggleEvent {
-  currentTarget: { dataset: { day?: number } }
-}
-
 interface DaysChangeEvent {
   detail: { value: Array<string | number> }
 }

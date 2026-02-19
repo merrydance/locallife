@@ -13,8 +13,8 @@ Page({
     loading: false,
     initialLoading: true,
     error: null as string | null,
-    metrics: [] as Array<{ label: string; value: string; change: string; trend: 'up' | 'down' }>,
-    topMerchants: [] as Array<{ rank: number; name: string; gmv: string; orders: number }>
+    metrics: [] as Array<{ label: string, value: string, change: string, trend: 'up' | 'down' }>,
+    topMerchants: [] as Array<{ rank: number, name: string, gmv: string, orders: number }>
   },
 
   onLoad() {

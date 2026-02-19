@@ -137,7 +137,7 @@ Page({
       this.setData({ [`formData.${field}`]: Number.isFinite(prepareTime) ? prepareTime : 0 })
       return
     }
-    this.setData({ [`formData.${field}`]: value.trimStart() })
+    this.setData({ [`formData.${field}`]: value.replace(/^\s+/, '') })
   },
 
   onSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {

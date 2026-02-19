@@ -34,7 +34,7 @@
     <block wx:else>
       <!-- 空状态 -->
       <view wx:if="{{orders.length === 0}}" class="empty-state">
-        <t-empty image="order" description="暂无相关订单" />
+        <t-empty icon="order-adjustment" description="暂无相关订单" />
       </view>
 
       <!-- 订单卡片 -->

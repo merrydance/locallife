@@ -4,7 +4,7 @@
  * 包含：桌台管理、设备管理、显示配置、二维码管理
  */
 
-import { request } from '../utils/request'
+import { request, uploadFile } from '../utils/request'
 
 // ==================== 数据类型定义 ====================
 
@@ -278,6 +278,13 @@ export class TableManagementService {
             method: 'POST',
             data: imageData
         })
+    }
+
+    /**
+     * 上传桌台图片文件，返回可关联的 image_url
+     */
+    async uploadTableImageFile(filePath: string): Promise<{ image_url: string }> {
+        return uploadFile<{ image_url: string }>(filePath, '/v1/tables/images/upload', 'image')
     }
 
     /**

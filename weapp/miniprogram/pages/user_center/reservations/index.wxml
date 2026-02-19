@@ -25,7 +25,7 @@
 
       <!-- 空状态 -->
       <view wx:elif="{{reservations.length === 0}}" class="empty-state animate-fade-in">
-        <t-empty image="order" description="暂无预订记录" />
+        <t-empty icon="order-adjustment" description="暂无预订记录" />
       </view>
 
       <!-- 预订卡片列表 -->

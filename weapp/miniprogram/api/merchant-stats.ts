@@ -17,7 +17,7 @@ export interface TopSellingDishRow {
 }
 
 export class MerchantStatsService {
-  static async getOverview(params: { start_date: string; end_date: string }): Promise<MerchantOverviewResponse> {
+  static async getOverview(params: { start_date: string, end_date: string }): Promise<MerchantOverviewResponse> {
     return await request({
       url: '/v1/merchant/stats/overview',
       method: 'GET',
@@ -25,7 +25,7 @@ export class MerchantStatsService {
     })
   }
 
-  static async getTopSellingDishes(params: { start_date: string; end_date: string; limit?: number }): Promise<TopSellingDishRow[]> {
+  static async getTopSellingDishes(params: { start_date: string, end_date: string, limit?: number }): Promise<TopSellingDishRow[]> {
     return await request({
       url: '/v1/merchant/stats/dishes/top',
       method: 'GET',

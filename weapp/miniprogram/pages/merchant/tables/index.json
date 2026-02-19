@@ -10,6 +10,7 @@
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-popup": "tdesign-miniprogram/popup/popup",
     "custom-navbar": "/components/custom-navbar/index"
   },
   "navigationStyle": "custom"

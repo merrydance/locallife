@@ -135,15 +135,11 @@ Page({
     try {
       const today = dayjs().format('YYYY-MM-DD')
 
-      const [overviewRes] = await Promise.allSettled([
-        MerchantStatsService.getOverview({
+      try {
+        const overview = await MerchantStatsService.getOverview({
           start_date: today,
           end_date: today
         })
-      ])
-
-      if (overviewRes.status === 'fulfilled') {
-        const overview = overviewRes.value
         const orderCount = overview.total_orders || 0
         const revenue = overview.total_sales || 0
         this.setData({
@@ -153,8 +149,8 @@ Page({
             avgOrderPrice: orderCount > 0 ? Math.round(revenue / orderCount) : 0
           }
         })
-      } else {
-        logger.error('Failed to fetch merchant overview', overviewRes.reason)
+      } catch (overviewErr) {
+        logger.error('Failed to fetch merchant overview', overviewErr)
       }
       await this.loadOrderFlow(this.data.currentOrderTab)
 

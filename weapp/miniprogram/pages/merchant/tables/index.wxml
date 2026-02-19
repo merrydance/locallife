@@ -2,9 +2,9 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
   <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="tabs-container" sticky offsetTop="{{navBarHeight}}">
-    <t-tab-panel label="全部" value="all" />
-    <t-tab-panel label="普通桌台" value="table" />
-    <t-tab-panel label="包间" value="room" />
+    <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
+    <t-tab-panel label="普通桌台" value="table"><view /></t-tab-panel>
+    <t-tab-panel label="包间" value="room"><view /></t-tab-panel>
   </t-tabs>
 
   <view class="content-section">
@@ -12,21 +12,15 @@
       <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
     </view>
 
-    <t-empty wx:elif="{{!tables.length}}" icon="info-circle" description="暂无桌台数据" />
+    <t-empty wx:elif="{{!(tables && tables.length)}}" icon="info-circle" description="暂无桌台数据" />
 
     <view wx:else class="table-grid">
-      <view 
-        class="table-card {{item.status}}" 
-        wx:for="{{tables}}" 
-        wx:key="id"
-        bindtap="onTableClick"
-        data-id="{{item.id}}"
-      >
+      <view class="table-card {{item.status}}" wx:for="{{tables}}" wx:key="id" bindtap="onTableClick" data-id="{{item.id}}">
         <view class="table-header">
           <text class="table-no">{{item.table_no}}</text>
           <t-tag size="extra-small" variant="light" theme="{{item.statusTheme}}">{{item.statusLabel}}</t-tag>
         </view>
-        
+
         <view class="table-body">
           <view class="capacity">
             <t-icon name="user" size="24rpx" />
@@ -36,24 +30,130 @@
         </view>
 
         <view class="table-footer" wx:if="{{item.status === 'occupied' || item.status === 'reserved'}}">
-           <t-button 
-            size="extra-small" 
-            theme="primary" 
-            variant="outline" 
-            catchtap="onReleaseTable" 
-            data-id="{{item.id}}" 
-            data-no="{{item.table_no}}"
-           >手动释放</t-button>
+          <t-button size="extra-small" theme="primary" variant="outline" catchtap="onReleaseTable" data-id="{{item.id}}" data-no="{{item.table_no}}">手动释放</t-button>
         </view>
         <view class="table-footer" wx:else>
-           <t-icon name="qrcode" size="32rpx" color="var(--td-text-color-placeholder)" catchtap="onShowQRCode" data-url="{{item.qr_code_url}}" />
+          <t-icon name="qrcode" size="32rpx" color="var(--td-text-color-placeholder)" catchtap="onShowQRCode" data-id="{{item.id}}" data-url="{{item.qr_code_url}}" />
         </view>
       </view>
     </view>
   </view>
 
-  <!-- 悬浮添加按钮 (可选逻辑) -->
   <t-fab icon="add" bind:click="onAddTable" />
+
+  <t-popup wx:if="{{formVisible}}" visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
+    <view class="form-popup">
+      <view class="form-title">{{isEdit ? '编辑桌台' : '新增桌台'}}</view>
+
+      <view class="form-item">
+        <text class="form-label">桌号</text>
+        <input class="form-input" value="{{formData.table_no}}" data-field="table_no" placeholder="如 A01 / VIP-1" bindinput="onTextInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">桌台类型</text>
+        <radio-group class="inline-options" bindchange="onTypeChange">
+          <label class="inline-option">
+            <radio value="table" checked="{{formData.table_type === 'table'}}" color="var(--td-brand-color)" />
+            <text>大厅</text>
+          </label>
+          <label class="inline-option">
+            <radio value="room" checked="{{formData.table_type === 'room'}}" color="var(--td-brand-color)" />
+            <text>包间</text>
+          </label>
+        </radio-group>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">容纳人数</text>
+        <input class="form-input" type="number" value="{{formData.capacity}}" placeholder="1-100" bindinput="onCapacityInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">最低消费（元，可选）</text>
+        <input class="form-input" type="digit" value="{{formData.minimum_spend_yuan}}" data-field="minimum_spend_yuan" placeholder="例如 88.00" bindinput="onTextInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">描述（可选）</text>
+        <textarea class="form-textarea" value="{{formData.description}}" data-field="description" placeholder="位置、朝向、环境说明" bindinput="onTextInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">访问码（可选）</text>
+        <input class="form-input" password value="{{formData.access_code}}" data-field="access_code" placeholder="4-32位，仅更新时可重置" bindinput="onTextInput" />
+      </view>
+
+      <view class="form-item" wx:if="{{isEdit}}">
+        <text class="form-label">状态</text>
+        <radio-group class="inline-options" bindchange="onStatusChange">
+          <label class="inline-option">
+            <radio value="available" checked="{{formData.status === 'available'}}" color="var(--td-brand-color)" />
+            <text>空闲</text>
+          </label>
+          <label class="inline-option">
+            <radio value="occupied" checked="{{formData.status === 'occupied'}}" color="var(--td-brand-color)" />
+            <text>占用</text>
+          </label>
+          <label class="inline-option">
+            <radio value="disabled" checked="{{formData.status === 'disabled'}}" color="var(--td-brand-color)" />
+            <text>停用</text>
+          </label>
+        </radio-group>
+      </view>
+
+      <view class="form-item">
+        <view class="form-label">标签</view>
+        <view class="tag-manage-actions">
+          <t-button size="small" variant="outline" bindtap="onCreateTag" loading="{{tagSubmitting}}">新增标签</t-button>
+        </view>
+        <checkbox-group bindchange="onTagChange" wx:if="{{availableTags}}">
+          <view class="tags-grid">
+            <label class="tag-option" wx:for="{{availableTags}}" wx:key="id">
+              <checkbox value="{{item.id + ''}}" checked="{{formData.tag_ids.indexOf(item.id) !== -1}}" color="var(--td-brand-color)" />
+              <text class="tag-name">{{item.name}}</text>
+              <text class="tag-delete" data-id="{{item.id}}" data-name="{{item.name}}" catchtap="onDeleteTag">移除</text>
+            </label>
+          </view>
+        </checkbox-group>
+      </view>
+
+      <view class="form-item">
+        <view class="form-label">桌台图片</view>
+        <view class="image-actions">
+          <t-button size="small" variant="outline" bindtap="onChooseImage" loading="{{imageUploading}}">添加图片</t-button>
+        </view>
+        <view class="image-list" wx:if="{{isEdit && tableImages}}">
+          <view class="image-item" wx:for="{{tableImages}}" wx:key="image_url">
+            <image class="image-thumb" src="{{item.image_url}}" mode="aspectFill" data-url="{{item.image_url}}" bindtap="onPreviewImage" />
+            <view class="image-meta">
+              <text class="image-primary" wx:if="{{item.is_primary}}">主图</text>
+              <text class="image-link" wx:else data-image-id="{{item.id}}" bindtap="onSetPrimaryImage">设为主图</text>
+              <text class="image-link danger" data-image-id="{{item.id}}" bindtap="onDeleteImage">删除</text>
+            </view>
+          </view>
+        </view>
+        <view class="image-list" wx:elif="{{!isEdit && pendingImagePreviews}}">
+          <view class="image-item" wx:for="{{pendingImagePreviews}}" wx:key="*this">
+            <image class="image-thumb" src="{{item}}" mode="aspectFill" data-url="{{item}}" bindtap="onPreviewImage" />
+            <view class="image-meta">
+              <text class="image-link danger" data-index="{{index}}" bindtap="onDeleteImage">删除</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="form-item" wx:if="{{isEdit}}">
+        <view class="form-label">二维码</view>
+        <t-button size="small" variant="outline" bindtap="onGenerateQRCode">生成并预览</t-button>
+      </view>
+
+      <view class="form-actions">
+        <t-button variant="outline" theme="default" bind:tap="onCloseForm">取消</t-button>
+        <t-button theme="primary" loading="{{formSubmitting}}" bind:tap="onSubmitForm">保存</t-button>
+      </view>
+    </view>
+  </t-popup>
 </view>
 
 <t-dialog id="t-dialog" />

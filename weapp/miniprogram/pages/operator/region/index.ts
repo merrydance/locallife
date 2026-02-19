@@ -93,7 +93,7 @@ Page({
 
     // 跳转到详细配置页
     onRegionClick(e: WechatMiniprogram.TouchEvent) {
-        const { id, name } = e.currentTarget.dataset as { id?: number; name?: string }
+        const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
         if (!id) return
 
         if (this.data.target === 'rules') {
