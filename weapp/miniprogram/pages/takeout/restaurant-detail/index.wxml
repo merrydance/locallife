@@ -1,7 +1,16 @@
 <custom-navbar title="{{restaurant.name || '餐厅详情'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <!-- 1. 餐厅头图 (App Shell) -->
-<view class="header-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: {{navBarHeight}}px; background-image: url('{{restaurant.cover_image || restaurant.logo_url || ''}}')">
+<view class="header-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: {{navBarHeight}}px;">
+  <!-- 背景图：使用 t-image 支持 lazy 和 fallback -->
+  <t-image
+    class="header-bg-image"
+    src="{{restaurant.cover_image || restaurant.logo_url || ''}}"
+    mode="aspectFill"
+    lazy
+    use-error-placeholder
+    error-placeholder-src="/assets/icons/dish.svg"
+  />
   <!-- 骨架屏占位 -->
   <view wx:if="{{loading && !restaurant}}" class="header-skeleton skeleton-shimmer"></view>
   
@@ -27,6 +36,7 @@
     </view>
   </view>
 </view>
+<!-- header-section closing handled below -->
 
 <!-- 2. Tab 导航 (App Shell) -->
 <view class="tabs-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: calc({{navBarHeight}}px + {{headerCollapsed ? '100rpx' : '320rpx'}});">
@@ -181,7 +191,7 @@
     </block>
     <block wx:elif="{{rooms.length > 0}}">
       <view wx:for="{{rooms}}" wx:key="id" class="room-item" data-id="{{item.id}}" bindtap="onRoomTap">
-        <t-image class="room-image" src="{{item.primary_image || '/assets/placeholder-room.jpg'}}" mode="aspectFill" lazy />
+        <t-image class="room-image" src="{{item.primary_image}}" mode="aspectFill" lazy use-error-placeholder error-placeholder-src="/assets/icons/dish.svg" />
         <view class="room-info">
           <view class="room-name">{{item.name}}</view>
           <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
@@ -189,7 +199,7 @@
           </view>
           <view class="room-meta">
             <text>可容纳 {{item.capacity}} 人</text>
-            <text class="room-price">¥{{item.minimum_spend / 100}} 起</text>
+            <text class="room-price">¥{{item.minimumSpendDisplay}} 起</text>
           </view>
         </view>
       </view>

@@ -321,7 +321,8 @@ Page({
       return (result.rooms || []).map((room: PublicRoom) => ({
         ...room,
         primary_image: room.primary_image ? getPublicImageUrl(room.primary_image) : '',
-        minimum_spend: room.minimum_spend || 0 // 防御性处理：防止 NaN
+        minimum_spend: room.minimum_spend || 0,
+        minimumSpendDisplay: formatPriceNoSymbol(room.minimum_spend || 0)
       }))
     } catch (error) {
       console.error('加载包间失败:', error)

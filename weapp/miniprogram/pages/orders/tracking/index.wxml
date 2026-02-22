@@ -68,7 +68,7 @@
     <!-- 骑手信息 -->
     <view class="rider-card animate-slide-up" wx:if="{{riderPhone}}" style="animation-delay: 0.1s;">
       <view class="rider-info">
-        <image class="avatar" src="/assets/rider.png" mode="aspectFill" />
+        <image class="avatar" src="{{riderAvatarUrl || '/assets/icons/rider.svg'}}" mode="aspectFill" />
         <view>
           <view class="rider-name">{{riderName}}</view>
           <view class="rider-desc">{{riderPhoneDisplay}}</view>

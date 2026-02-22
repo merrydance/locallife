@@ -26,6 +26,10 @@ Component({
       type: Boolean,
       value: false
     },
+    hideFee: {
+      type: Boolean,
+      value: false  // 堂食/包间场景不显示配送费提示
+    },
     dockBottom: {
       type: Boolean,
       value: false  // 贴底模式，用于餐厅详情页

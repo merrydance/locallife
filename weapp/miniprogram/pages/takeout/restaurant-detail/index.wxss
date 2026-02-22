@@ -46,10 +46,22 @@
   left: 0;
   right: 0;
   height: 320rpx;
+  background-color: var(--td-bg-color-secondarycontainer);
   background-size: cover;
   background-position: center;
   z-index: 10;
+  overflow: hidden;
   transition: height var(--transition-base), top var(--transition-base);
+}
+
+/* 背景图：t-image 完全覆盖 header-section */
+.header-bg-image {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0;
 }
 
 .header-section.collapsed {

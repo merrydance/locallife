@@ -61,7 +61,7 @@
         <view class="icon-wrap withdraw">
           <t-image src="/assets/icons/withdraw-out.svg" mode="aspectFit" width="48rpx" height="48rpx" />
         </view>
-        <text class="disabled">提现</text>
+        <text>提现</text>
       </view>
       <view class="action-item" bindtap="onGoToCoupons">
         <view class="icon-wrap coupon">

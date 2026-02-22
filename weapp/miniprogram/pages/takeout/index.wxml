@@ -80,7 +80,7 @@
 
         <!-- 空状态 (Four States - Empty) -->
         <view wx:elif="{{!loading}}" class="empty-entry">
-          <t-empty description="当前区域暂无可服务商户" />
+          <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
           <view class="empty-actions">
             <t-button theme="primary" size="large" block bind:tap="onMerchantRegister">商户入驻</t-button>
             <t-button variant="outline" size="large" block bind:tap="onOperatorRegister">运营商入驻</t-button>
@@ -107,7 +107,7 @@
 
         <!-- 空状态 -->
         <view wx:elif="{{!loading}}" class="empty-entry">
-          <t-empty description="当前区域暂无可服务商户" />
+          <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
           <view class="empty-actions">
             <t-button theme="primary" size="large" block bind:tap="onMerchantRegister">商户入驻</t-button>
             <t-button variant="outline" size="large" block bind:tap="onOperatorRegister">运营商入驻</t-button>
@@ -139,7 +139,7 @@
 
         <!-- 空状态 -->
         <view wx:elif="{{!loading}}" class="empty-entry">
-          <t-empty description="当前区域暂无可服务商户" />
+          <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
           <view class="empty-actions">
             <t-button theme="primary" size="large" block bind:tap="onMerchantRegister">商户入驻</t-button>
             <t-button variant="outline" size="large" block bind:tap="onOperatorRegister">运营商入驻</t-button>

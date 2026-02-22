@@ -104,6 +104,7 @@
     totalPrice="{{totalPrice}}" 
     totalCount="{{totalCount}}" 
     dockBottom="{{true}}"
+    hideFee="{{true}}"
     bind:toggle="toggleCartVisible"
     bind:checkout="goToCheckout"
   />

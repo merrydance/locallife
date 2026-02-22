@@ -48,7 +48,7 @@
         <view wx:elif="{{order.status === 'cancelled'}}" class="status-desc">{{order.cancelReason || '订单已取消'}}</view>
         <view wx:else class="status-desc">订单编号: {{order.orderNo}}</view>
       </view>
-      <t-icon name="{{order.status === 'completed' ? 'check-circle' : 'time'}}" size="56rpx" color="#333" />
+      <t-icon name="{{order.status === 'completed' ? 'check-circle' : (order.status === 'cancelled' ? 'close-circle' : (order.status === 'delivering' ? 'cart' : (order.status === 'pending' ? 'timer' : 'time')))}}" size="56rpx" color="#333" />
     </view>
 
     <!-- 操作引导区 (如去支付/物流) -->

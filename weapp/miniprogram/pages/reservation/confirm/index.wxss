@@ -68,3 +68,64 @@
 .t-cell-group__wrapper {
   margin-top: 0;
 }
+
+/* ========== P1-6: 费用明细卡片 ========== */
+.price-section {
+  margin: 24rpx;
+  background: var(--td-bg-color-container, #fff);
+  padding: 24rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+.price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  font-size: 28rpx;
+}
+
+.price-row:last-child {
+  margin-bottom: 0;
+}
+
+.price-row-label {
+  color: var(--td-text-color-secondary, #666);
+}
+
+.price-row-value {
+  color: var(--td-text-color-primary, #333);
+  font-weight: 500;
+}
+
+.price-row-discount-label {
+  color: var(--td-text-color-secondary, #666);
+}
+
+.price-row-discount-value {
+  color: var(--td-text-color-secondary, #666);
+}
+
+.price-row-total {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid var(--td-bg-color-secondarycontainer, #eee);
+}
+
+.price-row-total-label {
+  font-weight: bold;
+  color: var(--td-text-color-primary, #333);
+  font-size: 30rpx;
+}
+
+.price-row-total-value {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: var(--td-error-color, #E34D59);
+}
+
+.payment-selector {
+  padding: 16rpx 24rpx;
+}
+

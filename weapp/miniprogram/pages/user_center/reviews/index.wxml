@@ -88,7 +88,7 @@
           <t-loading theme="circular" size="32rpx" text="正在搜寻更多记忆..." />
         </view>
         <view class="no-more" wx:if="{{!hasMore && reviews.length > 0}}">
-          一览无余，评价也是一种风景 🍃
+          已加载全部评价
         </view>
       </view>
     </scroll-view>
