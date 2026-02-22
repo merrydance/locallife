@@ -1,0 +1,154 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page, #F6F6F6);
+}
+
+/* Tabs + 全部已读 */
+.tabs-bar {
+  display: flex;
+  align-items: center;
+  background: var(--td-bg-color-container, #fff);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-right: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+.tabs-bar .t-tabs {
+  flex: 1;
+}
+
+.read-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 8rpx 16rpx;
+  flex-shrink: 0;
+}
+
+.read-all-text {
+  font-size: 24rpx;
+  color: #666;
+}
+
+/* 骨架 */
+.skeleton-wrap {
+  padding: 24rpx;
+}
+.skeleton-item {
+  margin-bottom: 24rpx;
+}
+
+/* 空状态 */
+.empty-state {
+  margin-top: 120rpx;
+}
+
+/* 滚动容器 */
+.list-scroll {
+  height: calc(100vh - 200rpx);
+}
+
+.list-inner {
+  padding: 16rpx 24rpx;
+}
+
+/* 通知卡片 */
+.notif-card {
+  display: flex;
+  gap: 24rpx;
+  align-items: flex-start;
+  background: var(--td-bg-color-container, #fff);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+  transition: opacity 0.3s;
+}
+
+.notif-card.read {
+  opacity: 0.65;
+}
+
+/* 类型图标 */
+.notif-icon-wrap {
+  position: relative;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-orange { background: #FF6B00; }
+.icon-green  { background: #2ba471; }
+.icon-blue   { background: #0052D9; }
+.icon-gray   { background: #999; }
+.icon-red    { background: #E34D59; }
+
+.unread-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 20rpx;
+  height: 20rpx;
+  background: #E34D59;
+  border-radius: 50%;
+  border: 3rpx solid #fff;
+}
+
+/* 通知内容 */
+.notif-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.notif-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notif-time {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder, #aaa);
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.notif-content {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary, #666);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* 加载更多 */
+.load-more {
+  text-align: center;
+  padding: 32rpx 0;
+}
+
+.no-more {
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder, #aaa);
+  padding: 32rpx 0;
+}

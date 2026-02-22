@@ -84,6 +84,11 @@
       ]
     },
     {
+      "root": "pages/notification",
+      "name": "notification",
+      "pages": ["index"]
+    },
+    {
       "root": "pages/dine-in",
       "name": "dinein",
       "pages": [
@@ -111,6 +116,10 @@
     },
     {
       "root": "pages/takeout/restaurant-detail",
+      "pages": ["index"]
+    },
+    {
+      "root": "pages/takeout/search",
       "pages": ["index"]
     },
     {

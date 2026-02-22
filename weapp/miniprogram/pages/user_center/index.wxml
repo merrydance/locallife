@@ -1,5 +1,19 @@
 <custom-navbar title="我的" showLocation="{{false}}" bind:navheight="onNavHeight" />
 
+<!-- 消息铃铛悬浮按钮 -->
+<view
+  class="notif-bell-float"
+  style="top: calc({{navBarHeight}}px - 56rpx)"
+  bindtap="onNotifTap"
+>
+  <t-icon name="notification" size="44rpx" color="#333" />
+  <view wx:if="{{unreadCount > 0}}" class="notif-badge">
+    {{unreadCount > 99 ? '99+' : unreadCount}}
+  </view>
+</view>
+
+
+
 <!-- Skyline 需要用 scroll-view 实现页面滚动 -->
 <scroll-view 
   scroll-y 

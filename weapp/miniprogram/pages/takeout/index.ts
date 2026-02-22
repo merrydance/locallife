@@ -77,19 +77,77 @@ Page({
     cartTotalPrice: 0,
     address: '点此获取位置',
     navBarHeight: 88,
-    scrollViewHeight: 600, // 动态计算
+    scrollViewHeight: 600,
     searchKeyword: '',
     page: 1,
     hasMore: true,
-    loading: true, // 初始设为 true，确保首屏骨架屏立即显示
+    loading: true,
     isError: false,
     errorMsg: '',
-    // 位置状态
-    needLocation: false, // 是否需要用户手动定位
-    // 下拉刷新状态
+    needLocation: false,
     refresherTriggered: false,
-    // 预传数据状态
-    isPrefetching: false
+    isPrefetching: false,
+    // 首页 Banner
+    banners: [
+      {
+        id: 1,
+        title: '新客专享开销',
+        subtitle: '首单外卖下单减兘10元，等你来抢',
+        tag: '新客优惠',
+        bg: 'linear-gradient(135deg, #FF6B00 0%, #FF9A3C 100%)',
+        icon: '/assets/icons/dish.svg',
+        url: ''
+      },
+      {
+        id: 2,
+        title: '月卡会员',
+        subtitle: '充値享携手优惠，套餐折上折',
+        tag: '尊享权益',
+        bg: 'linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)',
+        icon: '/assets/icons/wallet-safe.svg',
+        url: '/pages/user_center/wallet/index'
+      },
+      {
+        id: 3,
+        title: '包间预订',
+        subtitle: '精品包间待君驾到，一键预订锁女好位',
+        tag: '极致体验',
+        bg: 'linear-gradient(135deg, #0052D9 0%, #2979FF 100%)',
+        icon: '/assets/icons/plate.svg',
+        url: '/pages/reservation/index'
+      }
+    ],
+    // 4宫格快捷入口
+    quickEntries: [
+      {
+        id: 1,
+        label: '外卖',
+        icon: '/assets/icons/dish.svg',
+        bg: 'rgba(255, 107, 0, 0.1)',
+        url: ''
+      },
+      {
+        id: 2,
+        label: '预订',
+        icon: '/assets/icons/plate.svg',
+        bg: 'rgba(0, 82, 217, 0.1)',
+        url: '/pages/reservation/index'
+      },
+      {
+        id: 3,
+        label: '会员卡',
+        icon: '/assets/icons/wallet-safe.svg',
+        bg: 'rgba(0, 137, 123, 0.1)',
+        url: '/pages/user_center/wallet/index'
+      },
+      {
+        id: 4,
+        label: '优惠券',
+        icon: '/assets/icons/coupon-ticket.svg',
+        bg: 'rgba(255, 152, 0, 0.1)',
+        url: '/pages/user_center/coupons/index'
+      }
+    ]
   },
 
   // 预加载缓存 (不放在 data 中以免触发渲染)
@@ -183,6 +241,31 @@ Page({
     wx.navigateTo({
       url: '/pages/register/operator/index'
     })
+  },
+
+  // Gap 1: 搜索框点击跳转到独立搜索页（不再直接聚焦）
+  onSearchTap() {
+    wx.navigateTo({ url: '/pages/takeout/search/index' })
+  },
+
+  // Gap 7: Banner 点击跳转
+  onBannerTap(e: WechatMiniprogram.CustomEvent) {
+    const { item } = e.currentTarget.dataset as { item: { url: string } }
+    if (item?.url) {
+      wx.navigateTo({ url: item.url })
+    }
+  },
+
+  // Gap 7: 快捷入口点击跳转
+  onQuickEntryTap(e: WechatMiniprogram.CustomEvent) {
+    const { url } = e.currentTarget.dataset as { url: string }
+    if (url) {
+      wx.navigateTo({ url })
+    }
+    // 外卖入口（url 为空）则回到当前页顶部
+    else {
+      wx.pageScrollTo({ scrollTop: 0, duration: 300 })
+    }
   },
 
   onShow() {

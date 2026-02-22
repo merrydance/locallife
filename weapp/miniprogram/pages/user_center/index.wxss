@@ -193,3 +193,33 @@
   justify-content: center;
   align-items: center;
 }
+
+/* ========== Gap 4: 消息铃铛悬浮 ========== */
+.notif-bell-float {
+  position: fixed;
+  right: 24rpx;
+  width: 72rpx;
+  height: 72rpx;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notif-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 32rpx;
+  height: 32rpx;
+  background: #E34D59;
+  border-radius: 999rpx;
+  border: 3rpx solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18rpx;
+  color: #fff;
+  padding: 0 6rpx;
+  box-sizing: border-box;
+}

@@ -4,6 +4,7 @@ import { bindMerchant } from '../../api/personal'
 import { logger } from '../../utils/logger'
 import { UploadService } from '../../api/upload'
 import { getStableBarHeights } from '../../utils/responsive'
+import { notificationService } from '../../api/notification'
 
 const app = getApp<IAppOption>()
 
@@ -77,7 +78,8 @@ Page({
     scrollViewHeight: 600,
     loading: false,
     initialLoading: true,
-    error: null as string | null
+    error: null as string | null,
+    unreadCount: 0  // Gap 4: 消息未读数
   },
 
   onLoad() {
@@ -98,6 +100,8 @@ Page({
     }
     // Always try to fetch fresh data on show to ensure persistence check
     this.refreshUserInfo()
+    // Gap 4: 获取未读消息数
+    this.fetchUnreadCount()
   },
 
   updateUser(
@@ -237,6 +241,21 @@ Page({
     Navigation.toWallet()
   },
 
+
+  // Gap 4: 获取未读消息数
+  async fetchUnreadCount() {
+    try {
+      const res = await notificationService.getUnreadCount()
+      this.setData({ unreadCount: res.count || 0 })
+    } catch (err) {
+      logger.warn('获取未读消息失败', err, 'UserCenter.fetchUnreadCount')
+    }
+  },
+
+  // Gap 4: 跳转通知中心
+  onNotifTap() {
+    wx.navigateTo({ url: '/pages/notification/index' })
+  },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })

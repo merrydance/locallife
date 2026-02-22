@@ -1,0 +1,210 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page, #F6F6F6);
+}
+
+/* 搜索框 */
+.search-bar {
+  background: var(--td-bg-color-container, #fff);
+  padding: 12rpx 16rpx;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+/* ======= 初始态 ======= */
+.initial-section {
+  padding: 24rpx;
+}
+
+.block-section {
+  margin-bottom: 40rpx;
+}
+
+.block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.block-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+}
+
+.clear-btn {
+  padding: 8rpx;
+}
+
+/* Chips */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: var(--td-bg-color-container, #fff);
+  border: 1rpx solid var(--td-bg-color-secondarycontainer, #eee);
+  border-radius: 999rpx;
+  padding: 10rpx 24rpx;
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary, #666);
+}
+
+.chip.hot-top {
+  color: #FF6B00;
+  border-color: rgba(255, 107, 0, 0.3);
+  background: rgba(255, 107, 0, 0.06);
+}
+
+/* ======= 建议态 ======= */
+.suggest-list {
+  background: var(--td-bg-color-container, #fff);
+}
+
+.suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer, #f5f5f5);
+}
+
+.suggest-text {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--td-text-color-primary, #333);
+}
+
+.suggest-type {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder, #aaa);
+}
+
+/* ======= 结果态 ======= */
+.results-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-tabs {
+  background: var(--td-bg-color-container, #fff);
+  position: sticky;
+  top: 88rpx;
+  z-index: 5;
+}
+
+.searching-wrap {
+  text-align: center;
+  padding: 80rpx 0;
+}
+
+.empty-state {
+  margin-top: 80rpx;
+}
+
+.result-scroll {
+  height: calc(100vh - 320rpx);
+}
+
+/* 菜品行 */
+.dish-row {
+  display: flex;
+  gap: 24rpx;
+  align-items: center;
+  padding: 24rpx;
+  background: var(--td-bg-color-container, #fff);
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer, #f5f5f5);
+}
+
+.dish-img {
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.dish-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dish-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+  margin-bottom: 8rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dish-shop {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary, #666);
+  margin-bottom: 8rpx;
+}
+
+.dish-price {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: var(--td-brand-color, #FF6B00);
+}
+
+/* 商家行 */
+.merchant-row {
+  display: flex;
+  gap: 24rpx;
+  align-items: flex-start;
+  padding: 24rpx;
+  background: var(--td-bg-color-container, #fff);
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer, #f5f5f5);
+}
+
+.merchant-logo {
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.merchant-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.merchant-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+  margin-bottom: 8rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merchant-meta {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary, #666);
+  margin-bottom: 12rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-row {
+  display: flex;
+  gap: 8rpx;
+  flex-wrap: wrap;
+}
+
+.tag-chip {
+  font-size: 20rpx;
+  color: var(--td-brand-color, #FF6B00);
+  background: rgba(255,107,0,0.08);
+  border-radius: 4rpx;
+  padding: 2rpx 12rpx;
+}
