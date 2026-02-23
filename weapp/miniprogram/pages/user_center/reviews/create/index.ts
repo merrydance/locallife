@@ -28,6 +28,7 @@ Page({
     selectedTags: [] as string[],
 
     // 表单数据
+    rating: 0,
     content: '',
     fileList: [] as ReviewUploadFile[],
     maxImages: 9,
@@ -67,6 +68,10 @@ Page({
 
   onContentChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ content: e.detail.value })
+  },
+
+  onRatingChange(e: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    this.setData({ rating: e.detail.value })
   },
 
   onTagTap(e: WechatMiniprogram.TouchEvent) {
@@ -158,6 +163,7 @@ Page({
 
       const reviewData: CreateReviewParams = {
         order_id: orderId,
+        rating: this.data.rating,
         content,
         tags: this.data.selectedTags.length > 0 ? this.data.selectedTags : undefined,
         images: remoteImages.length > 0 ? remoteImages : undefined

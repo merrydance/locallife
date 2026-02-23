@@ -234,34 +234,13 @@
 }
 
 /* 购物车弹窗样式 */
-.cart-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
-}
-
-.cart-mask {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  z-index: 1;
-}
-
 .cart-modal-content {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
   background: #fff;
   border-radius: 32rpx 32rpx 0 0;
   padding-bottom: env(safe-area-inset-bottom);
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  z-index: 2;
 }
 
 .cart-header {

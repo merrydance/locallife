@@ -19,6 +19,8 @@ interface ReviewDisplay {
   logoUrl: string
   content: string
   images: string[]
+  rating: number
+  tags: string[]
   createdAt: string
   isVisible: boolean
   merchantReply?: string
@@ -58,6 +60,8 @@ Page({
         merchantId: r.merchant_id,
         merchantName: r.merchant_name || `商户 #${r.merchant_id}`,
         logoUrl: r.merchant_logo || '/assets/icons/shop.svg',
+        rating: r.rating || 5,
+        tags: r.tags || [],
         content: r.content,
         images: r.images || [],
         createdAt: formatTime(new Date(r.created_at)),

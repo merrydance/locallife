@@ -39,11 +39,41 @@
   gap: var(--spacer-sm);
 }
 
+/* ========== 发现页增强样式 ========== */
+.section-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-md);
+  padding: 0 8rpx;
+}
 
+.special-offers-section {
+  margin-bottom: var(--spacer-lg);
+}
 
+.offers-scroll {
+  width: 100%;
+}
 
-/* 行布局 */
+.offers-list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--spacer-md);
+  padding: 4rpx; /* for shadow clipping */
+  padding-bottom: var(--spacer-sm);
+}
 
+.offer-item {
+  width: 540rpx;
+  flex-shrink: 0;
+}
+
+.nearby-merchants-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
 
 .loading-wrapper {
   display: flex;

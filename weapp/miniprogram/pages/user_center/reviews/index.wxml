@@ -45,6 +45,11 @@
             <view class="date">{{item.createdAt}}</view>
           </view>
 
+          <!-- 新增：星级评分 -->
+          <view class="rating-row" style="margin-bottom: 16rpx; display: flex; align-items: center;">
+            <t-rate value="{{item.rating}}" size="28" readonly disabled />
+          </view>
+
           <!-- 标签行 -->
           <view class="tag-row" wx:if="{{item.tags && item.tags.length > 0}}">
             <text class="review-tag" wx:for="{{item.tags}}" wx:key="*this">{{item}}</text>

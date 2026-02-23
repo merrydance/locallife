@@ -169,6 +169,8 @@ func (c *tiandituDistrictClient) query(ctx context.Context, post map[string]any)
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://www.tianditu.gov.cn/")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -8,23 +8,23 @@
  */
 page {
   /* ========== TDesign主题色覆盖 ========== */
-  /* 品牌主色 - 活力珊瑚 #FF6B58 (30%使用) */
-  --td-brand-color: #FF6B58;
-  --td-brand-color-1: #FFF5F3;
-  --td-brand-color-2: #FFE8E5;
-  --td-brand-color-3: #FFD4CE;
-  --td-brand-color-4: #FFBFB6;
-  --td-brand-color-5: #FFAA9E;
-  --td-brand-color-6: #FF9586;
-  --td-brand-color-7: #FF806E;
-  --td-brand-color-8: #FF6B58;
-  --td-brand-color-9: #E66A5C;
-  --td-brand-color-10: #CC5E50;
+  /* 品牌主色 - 活力暖橙 #FF6B00 (30%使用) */
+  --td-brand-color: #FF6B00;
+  --td-brand-color-1: #FFF0E0;
+  --td-brand-color-2: #FFE1C2;
+  --td-brand-color-3: #FFD2A3;
+  --td-brand-color-4: #FFC385;
+  --td-brand-color-5: #FFB466;
+  --td-brand-color-6: #FFA547;
+  --td-brand-color-7: #FF9629;
+  --td-brand-color-8: #FF880A;
+  --td-brand-color-9: #E66000;
+  --td-brand-color-10: #CC5500;
   
   /* 浅色背景变量映射到最淡的色阶，确保文字对比度 */
   --td-brand-color-light: var(--td-brand-color-1);
-  --td-brand-color-focus: #E66A5C;
-  --td-brand-color-disabled: #FFBFB6;
+  --td-brand-color-focus: #E66000;
+  --td-brand-color-disabled: #FFC385;
   
   /* 辅助色 - 极客深青 #00897B (10%使用) */
   --td-success-color: #00897B;
@@ -60,9 +60,14 @@ page {
   --td-text-color-anti: rgba(255, 255, 255, 0.87); /* 白色文字 */
   
   /* ========== 自定义品牌变量 ========== */
-  /* 用于价格、促销等特殊场景 */
-  --brand-coral: #FF6B58;
-  --brand-coral-gradient: linear-gradient(135deg, #FF8A75 0%, #FF6B58 100%);
+  --brand-primary: #FF6B00;       /* 主色：暖橙 */
+  --brand-primary-light: #FFF0E0; /* 浅主色背景 */
+  --brand-secondary: #1A1A2E;     /* 深夜蓝（优质质感） */
+  --brand-accent: #FFD166;        /* 强调黄 */
+  
+  /* 兼容旧变量 */
+  --brand-coral: #FF6B00;
+  --brand-coral-gradient: linear-gradient(135deg, #FF9629 0%, #FF6B00 100%);
   --brand-teal: #00897B;
   --brand-mustard: #FFC107;
   
@@ -70,15 +75,17 @@ page {
   --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8rpx 24rpx rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 4rpx 20rpx rgba(0,0,0,0.06);
+  --shadow-float: 0 8rpx 32rpx rgba(0,0,0,0.12);
 
   /* ========== 消费侧卡片设计 Token ========== */
   /* 仅用于消费侧组件，不影响商户侧 */
   --customer-card-padding: 24rpx;
   --customer-card-gap: 24rpx;
   --customer-card-margin: 16rpx;
-  --customer-card-radius: 16rpx;
-  --customer-card-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
-  --customer-card-shadow-active: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  --customer-card-radius: 24rpx;
+  --customer-card-shadow: var(--shadow-card);
+  --customer-card-shadow-active: var(--shadow-sm);
   --customer-image-size: 180rpx;
   --customer-image-radius: 12rpx;
   --customer-title-size: 32rpx;
@@ -112,7 +119,9 @@ page {
   --radius-md: 12rpx;   /* 中 (标准卡片/图片) */
   --radius-lg: 16rpx;   /* 大 (大卡片/弹窗) */
   --radius-xl: 24rpx;   /* 超大 (底部面板) */
+  --radius-card: 24rpx; /* 新标准卡片 */
   --radius-round: 999rpx; /* 全圆 (胶囊/头像) */
+  --radius-pill: 999rpx; /* 药丸 */
 
   /* ========== 统一层级系统 (Z-Index System) ========== */
   --z-index-base: 1;
@@ -133,8 +142,8 @@ page {
 /* ========== 深色模式 ========== */
 page[data-theme="dark"] {
   /* 品牌色微调（深色模式下更柔和） */
-  --td-brand-color: #FF8A7A;
-  --td-brand-color-8: #FF8A7A;
+  --td-brand-color: #FFA547;
+  --td-brand-color-8: #FFA547;
   
   /* 背景色 */
   --td-bg-color-page: #121212;
@@ -157,8 +166,8 @@ page[data-theme="dark"] {
   --td-error-color: #FF6B6B;
   
   /* 品牌色 */
-  --brand-coral: #FF8A7A;
-  --brand-coral-gradient: linear-gradient(135deg, #FF9B8B 0%, #FF8A7A 100%);
+  --brand-coral: #FFA547;
+  --brand-coral-gradient: linear-gradient(135deg, #FFB466 0%, #FFA547 100%);
   --brand-teal: #26A69A;
   --brand-mustard: #FFD54F;
   

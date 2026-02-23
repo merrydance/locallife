@@ -110,8 +110,7 @@
   />
 
 <!-- 购物车弹窗 -->
-<view wx:if="{{cartVisible}}" class="cart-modal">
-  <view class="cart-mask" bindtap="hideCart"></view>
+<t-popup visible="{{cartVisible}}" placement="bottom" bind:visible-change="hideCart">
   <view class="cart-modal-content">
     <view class="cart-header">
       <text class="cart-title">购物车 ({{cart.total_quantity}})</text>
@@ -164,7 +163,7 @@
       </t-button>
     </view>
   </view>
-</view>
+</t-popup>
 
 <!-- 定制选择 Drawer -->
 <t-popup visible="{{drawerVisible}}" placement="bottom" bind:visible-change="closeCustomDrawer">

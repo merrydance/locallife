@@ -51,12 +51,23 @@ Component({
       } else {
         this.setData({ computedDeliveryDisplay: display })
       }
+    },
+    'totalCount'(count: number) {
+      if (count > 0) {
+        this.setData({ isBouncing: true })
+        const that = this as any
+        if (that._bounceTimer) clearTimeout(that._bounceTimer)
+        that._bounceTimer = setTimeout(() => {
+          this.setData({ isBouncing: false })
+        }, 300)
+      }
     }
   },
 
   data: {
     computedPriceDisplay: '0.00',
-    computedDeliveryDisplay: ''
+    computedDeliveryDisplay: '',
+    isBouncing: false
   },
 
   methods: {

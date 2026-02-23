@@ -14,6 +14,14 @@
       </view>
     </view>
 
+    <!-- 1.5 星级评分 -->
+    <view class="content-card animate-slide-up" style="animation-delay: 0.02s">
+      <view class="card-title">总体评分</view>
+      <view class="rate-wrap" style="padding: 24rpx 0;">
+        <t-rate value="{{rating}}" size="28" bind:change="onRatingChange" />
+      </view>
+    </view>
+
     <!-- 2. 快捷标签 -->
     <view class="content-card animate-slide-up" style="animation-delay: 0.05s">
       <view class="card-title">快捷评价 <text class="subtitle">(可多选)</text></view>
@@ -65,7 +73,7 @@
         theme="primary" 
         size="large" 
         block 
-        disabled="{{content.length < 10 || submitting}}"
+        disabled="{{content.length < 10 || rating === 0 || submitting}}"
         loading="{{submitting}}"
         bindtap="onSubmit"
       >

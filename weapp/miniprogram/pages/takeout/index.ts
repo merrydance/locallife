@@ -492,39 +492,7 @@ Page({
   },
 
   async loadCategories() {
-    // 根据当前 Tab 获取对应类型的标签
-    const { activeTab } = this.data
-    let tagType = 'dish' // 默认菜品标签
-    if (activeTab === 'packages') {
-      tagType = 'combo'
-    } else if (activeTab === 'restaurants') {
-      tagType = 'merchant'
-    }
-
-    try {
-      const tags = await getTags(tagType)
-      const tagList = tags.map((tag) => ({ id: String(tag.id), name: tag.name }))
-
-      // 添加"全部"选项作为第一个
-      const categories: Category[] = [
-        { id: '', name: '全部' },
-        ...tagList
-      ]
-      this.setData({
-        categories,
-        activeCategoryId: '' // 默认选中"全部"
-      })
-    } catch (error) {
-      console.error('加载标签失败', error)
-      // 后备：硬编码标签
-      const categories: Category[] = [
-        { id: '', name: '全部' },
-        { id: '1', name: '热销' },
-        { id: '2', name: '主食' },
-        { id: '3', name: '小吃' }
-      ]
-      this.setData({ categories, activeCategoryId: '' })
-    }
+    // 发现型首页不再需要分类，留空或移除
   },
 
   async loadData() {
@@ -534,14 +502,15 @@ Page({
     this.setData({ loading: true, isError: false })
 
     try {
-      const { activeTab } = this.data
-
-      if (activeTab === 'dishes') {
-        await this.loadDishes(this.data.page === 1)
-      } else if (activeTab === 'restaurants') {
-        await this.loadRestaurants(this.data.page === 1)
+      if (this.data.page === 1) {
+        // 第一页同时加载套餐横条和商家瀑布流
+        await Promise.all([
+          this.loadPackages(true),
+          this.loadRestaurants(true)
+        ])
       } else {
-        await this.loadPackages(this.data.page === 1)
+        // 后续只加载商家瀑布流
+        await this.loadRestaurants(false)
       }
     } catch (error: unknown) {
       ErrorHandler.handle(error, 'Takeout.loadData')

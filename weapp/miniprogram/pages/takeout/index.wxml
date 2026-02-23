@@ -60,25 +60,7 @@
     </view>
   </view>
 
-  <!-- 3个Tab (App Shell) -->
-  <view class="tabs-section">
-    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
-      <t-tab-panel label="菜品列表" value="dishes" />
-      <t-tab-panel label="餐厅列表" value="restaurants" />
-      <t-tab-panel label="套餐列表" value="packages" />
-    </t-tabs>
-  </view>
-
-  <!-- 分类导航 (App Shell - Persistent if data exists) -->
-  <view class="category-section" wx:if="{{categories.length > 1}}">
-    <category-tabs 
-      categories="{{categories}}"
-      activeId="{{activeCategoryId}}"
-      bind:change="onTabCategoryChange"
-    />
-  </view>
-
-  <!-- 内容区域 -->
+  <!-- 内容区域 (发现型排版) -->
   <view class="content-section">
     <!-- 0. 位置引导提示 (Persistent state) -->
     <view wx:if="{{needLocation}}" class="location-guide">
@@ -98,36 +80,29 @@
     </view>
 
     <block wx:else>
-      <!-- 菜品列表 Tab -->
-      <view wx:if="{{activeTab === 'dishes'}}">
-        <!-- 骨架屏 (Four States - Loading) -->
-        <block wx:if="{{loading && dishes.length === 0}}">
-          <dish-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" />
-        </block>
-        
-        <!-- 真实数据 (Four States - Success) -->
-        <block wx:elif="{{dishes.length > 0}}">
-          <dish-card 
-            wx:for="{{dishes}}" 
-            wx:key="id"
-            dish="{{item}}"
-            bind:add="onAddCart"
-          />
-          <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
-        </block>
-
-        <!-- 空状态 (Four States - Empty) -->
-        <view wx:elif="{{!loading}}" class="empty-entry">
-          <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
-          <view class="empty-actions">
-            <t-button theme="primary" size="large" block bind:tap="onMerchantRegister">商户入驻</t-button>
-            <t-button variant="outline" size="large" block bind:tap="onOperatorRegister">运营商入驻</t-button>
+      <!-- 限时特惠专区 (横滑) -->
+      <view class="special-offers-section" wx:if="{{packages.length > 0}}">
+        <view class="section-title">限时特惠</view>
+        <scroll-view class="offers-scroll" scroll-x="{{true}}" show-scrollbar="{{false}}">
+          <view class="offers-list">
+            <package-card 
+              wx:for="{{packages}}" 
+              wx:key="id" 
+              package="{{item}}" 
+              class="offer-item"
+              data-id="{{item.id}}"
+              data-merchant-id="{{item.merchantId}}"
+              bind:click="onPackageTap"
+              bind:add="onAddComboToCart"
+            />
           </view>
-        </view>
+        </scroll-view>
       </view>
 
-      <!-- 餐厅列表 Tab -->
-      <view wx:if="{{activeTab === 'restaurants'}}">
+      <!-- 附近商家 (主 Feed) -->
+      <view class="nearby-merchants-section">
+        <view class="section-title">附近商家</view>
+        
         <!-- 骨架屏 -->
         <block wx:if="{{loading && restaurants.length === 0}}">
           <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
@@ -153,52 +128,20 @@
         </view>
       </view>
 
-      <!-- 套餐列表 Tab -->
-      <view wx:if="{{activeTab === 'packages'}}">
-        <!-- 骨架屏 -->
-        <block wx:if="{{loading && packages.length === 0}}">
-          <dish-skeleton wx:for="{{[1,2,3,4]}}" wx:key="*this" />
-        </block>
-
-        <!-- 真实数据 -->
-        <block wx:elif="{{packages.length > 0}}">
-          <package-card 
-            wx:for="{{packages}}" 
-            wx:key="id" 
-            package="{{item}}" 
-            class="package-item"
-            data-id="{{item.id}}"
-            data-merchant-id="{{item.merchantId}}"
-            bind:click="onPackageTap"
-            bind:add="onAddComboToCart"
-          />
-          <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
-        </block>
-
-        <!-- 空状态 -->
-        <view wx:elif="{{!loading}}" class="empty-entry">
-          <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
-          <view class="empty-actions">
-            <t-button theme="primary" size="large" block bind:tap="onMerchantRegister">商户入驻</t-button>
-            <t-button variant="outline" size="large" block bind:tap="onOperatorRegister">运营商入驻</t-button>
-          </view>
-        </view>
-      </view>
-
       <!-- 触底加载提示 -->
-      <view wx:if="{{loading && (dishes.length > 0 || restaurants.length > 0 || packages.length > 0)}}" class="loading-wrapper">
+      <view wx:if="{{loading && restaurants.length > 0}}" class="loading-wrapper">
         <t-loading theme="circular" size="40rpx" text="加载中..." />
       </view>
     </block>
   </view>
   
   <!-- 底部安全区占位 (购物车显示时) -->
-  <view wx:if="{{(activeTab === 'dishes' || activeTab === 'packages') && cartTotalCount > 0}}" style="height: 120rpx;"></view>
+  <view wx:if="{{cartTotalCount > 0}}" style="height: 120rpx;"></view>
 </scroll-view>
 
 <!-- 购物车栏 (App Shell - Persistent Action) -->
 <cart-bar 
-  wx:if="{{(activeTab === 'dishes' || activeTab === 'packages') && cartTotalCount > 0}}"
+  wx:if="{{cartTotalCount > 0}}"
   totalCount="{{cartTotalCount}}"
   totalPrice="{{cartTotalPrice}}"
   bind:checkout="onCheckout"

@@ -5,6 +5,7 @@ export interface Review {
     order_id: number
     user_id: number
     merchant_id: number
+    rating: number
     content: string
     tags?: string[]       // 快捷标签
     images?: string[]
@@ -26,6 +27,7 @@ export interface ListReviewsResponse {
 // Params
 export interface CreateReviewParams {
     order_id: number
+    rating: number
     content: string
     tags?: string[]       // 快捷标签
     images?: string[]
