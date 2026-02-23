@@ -116,6 +116,11 @@
       </view>
     </view>
 
+    <!-- 确认收货底栏 -->
+    <view wx:if="{{delivery.status === 'delivered'}}" class="confirm-card animate-slide-up" style="margin: 32rpx 24rpx; padding-bottom: calc(env(safe-area-inset-bottom) + 32rpx);">
+      <t-button theme="primary" size="large" shape="round" block bindtap="onConfirmReceipt">确认收货</t-button>
+    </view>
+
     <!-- 刷新按钮 -->
     <view class="refresh-btn" bindtap="onRefresh">
       <t-icon name="refresh" size="32rpx" />

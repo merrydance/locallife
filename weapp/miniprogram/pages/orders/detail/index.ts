@@ -259,25 +259,30 @@ Page({
   },
 
   async onReorder() {
-    const { order } = this.data
-    if (!order) return
+    const { order, orderDTO } = this.data
+    if (!order || !orderDTO) return
 
+    // 针对不同类型的再来一单路由
+    const orderType = orderDTO.order_type || 'takeout'
+
+    if (orderType === 'dine_in') {
+        const tableId = orderDTO.table_id || order.tableId
+        wx.navigateTo({ url: `/pages/dine-in/menu/menu?table_id=${tableId || ''}&merchant_id=${order.merchantId}` })
+        return
+    }
+
+    if (orderType === 'reservation') {
+        wx.navigateTo({ url: `/pages/reservation/create/index?merchantId=${order.merchantId}` })
+        return
+    }
+
+    // takeout 和 takeaway 继续走购物车逻辑
     wx.showLoading({ title: '再次购买中...' })
     try {
       // 构造购物车上下文
-      const orderType: OrderType = order.type || 'takeout'
       const cartContext: {
         orderType: OrderType
-        tableId?: number
-        reservationId?: number
       } = { orderType }
-      
-      if (orderType === 'dine_in' && order.tableId) {
-          cartContext.tableId = order.tableId
-      }
-      if (orderType === 'reservation' && order.reservationId) {
-          cartContext.reservationId = order.reservationId
-      }
 
       await CartService.loadCart(order.merchantId, cartContext)
 
@@ -347,11 +352,14 @@ Page({
       content: '确认已收到订单？',
       success: async (res) => {
         if (res.confirm) {
+          wx.showLoading({ title: '处理中...' })
           try {
             await confirmOrder(parseInt(this.data.orderId))
+            wx.hideLoading()
             wx.showToast({ title: '确认成功', icon: 'success' })
             this.loadOrderDetail()
           } catch (error) {
+            wx.hideLoading()
             logger.error('确认收货失败', error, 'Detail.onConfirmReceipt')
             wx.showToast({ title: '确认失败', icon: 'error' })
           }

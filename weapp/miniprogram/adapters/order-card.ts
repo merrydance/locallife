@@ -24,6 +24,7 @@ export interface OrderCardViewModel {
     actions?: string[]
     itemCount: number
     merchantId: number
+    merchantPhone?: string
 }
 
 export interface PreviewItemViewModel {
@@ -38,7 +39,7 @@ export const OrderCardAdapter = {
      * 将OrderResponse转换为OrderCardViewModel
      */
     toCardViewModel(order: OrderResponse): OrderCardViewModel {
-        const status = mapStatus(order.status)
+        const status = mapStatus(order)
         const actions = order.actions || []
         const canCancel = actions.includes('cancel')
         // 列表页不直接跳支付，统一在详情页处理
@@ -49,7 +50,7 @@ export const OrderCardAdapter = {
             merchantName: order.merchant_name || '未知商户',
             status,
             statusClass: status,
-            statusLabel: getStatusLabel(order.status, order.status_hint),
+            statusLabel: getStatusLabel(order),
             highlight: generateHighlight(order),
             createTimeDisplay: formatCreatedAt(order.created_at),
             totalDisplay: formatPrice(getPayableAmount(order)),
@@ -60,7 +61,8 @@ export const OrderCardAdapter = {
             canPay,
             actions,
             itemCount: order.items ? order.items.reduce((acc, item) => acc + item.quantity, 0) : 0,
-            merchantId: order.merchant_id
+            merchantId: order.merchant_id,
+            merchantPhone: order.merchant_phone
         }
     },
 
@@ -91,7 +93,16 @@ export const OrderCardAdapter = {
 /**
  * 映射订单状态到展示状态
  */
-function mapStatus(status: string): 'ready' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled' {
+function mapStatus(order: OrderResponse): 'ready' | 'delivering' | 'preparing' | 'completed' | 'pending' | 'cancelled' {
+    const status = order.status
+    
+    // Reservations: Prevent premature "preparing" mapping
+    if (order.order_type === 'reservation' && status === 'paid') {
+        if (order.fulfillment_status !== 'preparing' && order.fulfillment_status !== 'ready' && order.fulfillment_status !== 'completed') {
+            return 'pending'
+        }
+    }
+
     switch (status) {
         case 'user_delivered':
         case 'completed':
@@ -118,15 +129,31 @@ function mapStatus(status: string): 'ready' | 'delivering' | 'preparing' | 'comp
 /**
  * 获取状态标签
  */
-function getStatusLabel(status: string, statusHint?: string): string {
-    if (statusHint && statusHint.trim()) {
-        return statusHint
+function getStatusLabel(order: OrderResponse): string {
+    if (order.status_hint && order.status_hint.trim()) {
+        return order.status_hint
     }
+    
+    const status = order.status
+    
+    // Reservations: Prevent premature "制作中"
+    if (order.order_type === 'reservation' && status === 'paid') {
+        if (order.fulfillment_status !== 'preparing' && order.fulfillment_status !== 'ready' && order.fulfillment_status !== 'completed') {
+            return '等待制作'
+        }
+    }
+
+    // Contextual ready labels
+    if (status === 'ready') {
+        if (order.order_type === 'takeaway') return '请到店取餐'
+        if (order.order_type === 'dine_in' || order.order_type === 'reservation') return '已出餐/已上齐'
+        return '等待跑腿接单'
+    }
+
     const labels: Record<string, string> = {
         'pending': '待支付',
         'paid': '商家已接单',
         'preparing': '制作中',
-        'ready': '等待跑腿接单',
         'courier_accepted': '骑手已接单',
         'picked': '骑手已取餐',
         'delivering': '派送中',
@@ -145,12 +172,18 @@ function generateHighlight(order: OrderResponse): string {
     if (order.status_hint && order.status_hint.trim()) {
         return order.status_hint
     }
+    
     if (order.order_type === 'reservation') {
-        return '预订点菜订单'
+        const time = order.estimated_delivery_at ? formatCreatedAt(order.estimated_delivery_at) : ''
+        return time ? `预约时间: ${time.replace('今天 · ', '').replace('昨天 · ', '')}` : '预订点菜订单'
     }
     if (order.order_type === 'dine_in') {
-        return '堂食订单'
+        return order.table_id ? `堂食 - 桌号: ${order.table_id}` : '堂食订单'
     }
+    if (order.order_type === 'takeaway') {
+        return '打包自取订单'
+    }
+
     switch (order.status) {
         case 'courier_accepted':
             return '骑手已接单，正在前往取餐'

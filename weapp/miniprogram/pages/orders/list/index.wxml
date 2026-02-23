@@ -93,6 +93,8 @@
           <view class="footer-actions" catchtap="preventBubble">
             <t-button wx:if="{{item.canCancel}}" size="small" variant="outline" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
 
+            <t-button wx:if="{{orderType === 'dine_in' || orderType === 'reservation'}}" size="small" variant="outline" icon="call" shape="round" catchtap="onCallMerchant" data-phone="{{item.merchantPhone}}" t-class="action-btn">联系商家</t-button>
+
             <t-button wx:if="{{item.canPay && currentStatus === 'pending' && pendingPayableCount > 1}}" size="small" variant="outline" shape="round" catchtap="onTogglePaySelect" data-id="{{item.id}}" t-class="action-btn">
               {{selectedPayMap[item.id] ? '已选' : '选择'}}
             </t-button>

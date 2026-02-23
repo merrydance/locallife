@@ -63,6 +63,12 @@
        </view>
     </view>
 
+    <!-- 打包自取：取餐码展示 -->
+    <view wx:if="{{order.type === 'takeaway' && orderDTO.pickup_code_masked}}" class="pickup-card card" style="text-align: center; padding: 40rpx 0;">
+      <view style="font-size: 28rpx; color: #666; margin-bottom: 16rpx;">取餐码</view>
+      <view style="font-size: 64rpx; font-weight: bold; color: var(--brand-primary, #FF6B00);">{{orderDTO.pickup_code_masked}}</view>
+    </view>
+
     <!-- 商品明细卡片 -->
     <view class="order-card card">
       <!-- 商户头 -->
@@ -170,6 +176,7 @@
          <t-button wx:if="{{showPayButton}}" theme="primary" size="medium" shape="round" bindtap="onPayOrder">去支付</t-button>
          <t-button wx:if="{{showUrgeButton}}" theme="primary" variant="outline" size="medium" shape="round" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">{{urgeCountdown > 0 ? urgeCountdown + 's' : '催单'}}</t-button>
          <t-button wx:if="{{showConfirmButton}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">确认收货</t-button>
+         <t-button wx:if="{{order.type === 'takeaway' && orderDTO.status === 'ready'}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">我已取餐</t-button>
          <t-button wx:if="{{showReviewButton}}" theme="primary" variant="outline" size="medium" shape="round" bindtap="onReview">{{isReviewed ? '查看评价' : '发表评价'}}</t-button>
          <t-button wx:if="{{order.status === 'completed'}}" theme="primary" size="medium" shape="round" bindtap="onReorder">再来一单</t-button>
       </view>

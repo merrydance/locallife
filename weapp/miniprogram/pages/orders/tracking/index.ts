@@ -2,6 +2,7 @@ import DeliveryService, {
   DeliveryResponse
 } from '../../../api/delivery'
 import { getBicyclingDirection } from '../../../api/location'
+import { confirmOrder } from '../../../api/order'
 import { logger } from '../../../utils/logger'
 
 interface MapPoint {
@@ -115,6 +116,30 @@ Page({
       clearInterval(this.data.locationTimer)
       this.setData({ locationTimer: null })
     }
+  },
+
+  async onConfirmReceipt() {
+    wx.showModal({
+      title: '确认收货',
+      content: '确认已收到包裹？',
+      success: async (res) => {
+        if (res.confirm) {
+          wx.showLoading({ title: '处理中...' })
+          try {
+            await confirmOrder(this.data.orderId)
+            wx.hideLoading()
+            wx.showToast({ title: '确认成功', icon: 'success' })
+            setTimeout(() => {
+              wx.navigateBack({ delta: 1 })
+            }, 1000)
+          } catch (error) {
+            wx.hideLoading()
+            logger.error('确认收货失败', error, 'Tracking.onConfirmReceipt')
+            wx.showToast({ title: '确认失败', icon: 'error' })
+          }
+        }
+      }
+    })
   },
 
   async loadDeliveryData() {

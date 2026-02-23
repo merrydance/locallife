@@ -97,8 +97,14 @@ Page({
       takeaway: '自取订单'
     }
     
+    let statusTabs = [...STATUS_TABS]
+    if (orderType === 'dine_in' || orderType === 'takeaway' || orderType === 'reservation') {
+        statusTabs = statusTabs.filter(tab => tab.value !== 'delivering')
+    }
+    
     this.setData({
       orderType,
+      statusTabs,
       pageTitle: titleMap[orderType] || '我的订单'
     })
     
@@ -125,6 +131,15 @@ Page({
 
   // 防止冒泡
   preventBubble() {},
+
+  onCallMerchant(e: WechatMiniprogram.BaseEvent) {
+    const phone = e.currentTarget.dataset.phone
+    if (phone) {
+      wx.makePhoneCall({ phoneNumber: phone })
+    } else {
+      wx.showToast({ title: '暂无商家电话', icon: 'none' })
+    }
+  },
 
   async loadOrders(reset = false) {
     if (this.data.loading && !reset) return
