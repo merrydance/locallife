@@ -526,7 +526,7 @@ Page({
   onShareAppMessage(): WechatMiniprogram.Page.ICustomShareContent {
     const { restaurantId, restaurant } = this.data as {
       restaurantId: number | string
-      restaurant?: { name?: string; cover_image?: string }
+      restaurant?: { name?: string, cover_image?: string }
     }
     return {
       title: restaurant?.name ? `${restaurant.name} — 一起来吃！` : '发现一家好店，快来看看！',
@@ -538,7 +538,7 @@ Page({
   // Gap 8: 分享到朋友圈
   onShareTimeline(): WechatMiniprogram.Page.ICustomTimelineContent {
     const { restaurant } = this.data as {
-      restaurant?: { name?: string; cover_image?: string }
+      restaurant?: { name?: string, cover_image?: string }
     }
     return {
       title: restaurant?.name ? `${restaurant.name} — 美食推荐` : '发现一家好店',

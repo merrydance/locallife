@@ -99,7 +99,7 @@ Page({
     
     let statusTabs = [...STATUS_TABS]
     if (orderType === 'dine_in' || orderType === 'takeaway' || orderType === 'reservation') {
-        statusTabs = statusTabs.filter(tab => tab.value !== 'delivering')
+        statusTabs = statusTabs.filter((tab) => tab.value !== 'delivering')
     }
     
     this.setData({

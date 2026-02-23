@@ -223,7 +223,7 @@ Page({
 
   // 点击结果跳转
   onDishTap(e: WechatMiniprogram.CustomEvent) {
-    const { id, merchantId } = e.currentTarget.dataset as { id: number; merchantId: number }
+    const { id, merchantId } = e.currentTarget.dataset as { id: number, merchantId: number }
     wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${id}&merchant_id=${merchantId}` })
   },
 

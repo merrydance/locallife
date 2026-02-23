@@ -384,7 +384,7 @@ Page({
   // Gap 8: 分享给朋友
   onShareAppMessage(): WechatMiniprogram.Page.ICustomShareContent {
     const { dish } = this.data as {
-      dish?: { id?: number; name?: string; images?: string[]; shop_id?: number }
+      dish?: { id?: number, name?: string, images?: string[], shop_id?: number }
     }
     return {
       title: dish?.name ? `${dish.name} — 好吃到停不下来！` : '发现一道美食，快来尝尝！',
@@ -396,7 +396,7 @@ Page({
   // Gap 8: 分享到朋友圈
   onShareTimeline(): WechatMiniprogram.Page.ICustomTimelineContent {
     const { dish } = this.data as {
-      dish?: { name?: string; images?: string[] }
+      dish?: { name?: string, images?: string[] }
     }
     return {
       title: dish?.name ? `${dish.name} — 美食推荐` : '发现一道美食',
