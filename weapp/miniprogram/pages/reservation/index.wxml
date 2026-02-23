@@ -18,7 +18,7 @@
   <view class="top-bar">
     <t-button 
       class="filter-btn-new"
-      theme="primary" 
+      theme="default" 
       variant="outline"
       icon="filter" 
       size="medium" 
@@ -116,7 +116,7 @@
             bind:change="onDateTagChange"
             data-value="{{item.value}}"
             shape="round"
-            variant="light-outline"
+            
           />
         </view>
       </view>
@@ -133,7 +133,7 @@
             bind:change="onTimeTagChange"
             data-value="{{item.value}}"
             shape="round"
-            variant="light-outline"
+            
           />
         </view>
       </view>
@@ -150,7 +150,7 @@
             bind:change="onGuestTagChange"
             data-value="{{item.value}}"
             shape="round"
-            variant="light-outline"
+            
           />
         </view>
       </view>
@@ -167,14 +167,13 @@
             bind:change="onPriceTagChange"
             data-value="{{item.value}}"
             shape="round"
-            variant="light-outline"
            />
         </view>
       </view>
     </scroll-view>
 
     <view class="drawer-footer">
-      <t-button variant="outline" theme="primary" shape="round" block bind:tap="resetFilter">重置</t-button>
+      <t-button variant="outline" theme="default" shape="round" block bind:tap="resetFilter">重置</t-button>
       <t-button theme="primary" shape="round" block bind:tap="applyFilter">查看结果</t-button>
     </view>
   </view>
