@@ -25,7 +25,7 @@
   <!-- 错误状态 -->
   <view wx:elif="{{hasError}}" class="error-container">
     <t-empty icon="error-circle" description="{{errorMessage || '由于网络原因，菜单加载失败'}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetry" style="margin-top: 24rpx;">重试</t-button>
+    <t-button theme="primary" variant="outline" shape="round" bindtap="onRetry" style="margin-top: 24rpx;">重试</t-button>
   </view>
 
   <!-- 主要内容 -->
@@ -36,7 +36,7 @@
         <text class="label">桌号：</text>
         <text class="value">{{tableNo}}</text>
       </view>
-      <t-button class="call-btn" size="extra-small" theme="primary" variant="outline" bindtap="callService">呼叫服务</t-button>
+      <t-button class="call-btn" size="extra-small" shape="round" theme="primary" variant="outline" bindtap="callService">呼叫服务</t-button>
     </view>
 
     <!-- 菜品列表 -->
@@ -63,7 +63,7 @@
               <text class="dish-name">{{item.name}}</text>
               <text wx:if="{{item.description}}" class="dish-desc">{{item.description}}</text>
               <view class="dish-tags" wx:if="{{item.tags && item.tags.length > 0}}">
-                <t-tag wx:for="{{item.tags || []}}" wx:for-item="tag" wx:key="*this" size="small" theme="primary" variant="dark">{{tag}}</t-tag>
+                <t-tag wx:for="{{item.tags || []}}" wx:for-item="tag" wx:key="*this" size="small" theme="primary" variant="light">{{tag}}</t-tag>
               </view>
               <view class="dish-price-row">
                 <text class="dish-price">¥{{item.priceDisplay}}</text>
@@ -128,6 +128,12 @@
           <view class="cart-row">
             <text class="item-spec">{{item.spec_text || '标准'}}</text>
             <view class="item-stepper">
+              <t-tag 
+            size="small" 
+            theme="primary" 
+            variant="light"
+            wx:for="{{currentDish.tags || []}}" 
+            wx:key="*this">{{item}}</t-tag>
               <t-button 
                 size="small" 
                 icon="remove" 
@@ -158,7 +164,7 @@
         <text class="total-label">合计</text>
         <text class="total-amount">¥{{cart.subtotalDisplay}}</text>
       </view>
-      <t-button class="checkout-btn" theme="primary" bindtap="goToCheckout">
+      <t-button class="checkout-btn" shape="round" theme="primary" bindtap="goToCheckout">
         去下单 ({{cart.total_quantity}})
       </t-button>
     </view>
@@ -202,7 +208,7 @@
           <t-button size="small" icon="add" shape="circle" theme="primary" bindtap="onDrawerIncrease" />
         </view>
       </view>
-      <t-button theme="primary" size="large" block bindtap="onConfirmCustom">加入购物车</t-button>
+      <t-button theme="primary" size="large" shape="round" block bindtap="onConfirmCustom">加入购物车</t-button>
     </view>
   </view>
 </t-popup>

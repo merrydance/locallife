@@ -12,7 +12,7 @@
       maxlength="200"
       indicator
     />
-    <t-button theme="primary" block loading="{{submitting}}" bindtap="onSubmit">提交上报</t-button>
+    <t-button theme="primary" block shape="round" loading="{{submitting}}" bindtap="onSubmit">提交上报</t-button>
   </view>
 
   <!-- 历史记录 -->

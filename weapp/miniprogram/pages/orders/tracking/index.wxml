@@ -75,7 +75,7 @@
         </view>
       </view>
       <view class="rider-actions">
-        <button class="primary" bindtap="onCallRider">联系骑手</button>
+        <t-button theme="primary" shape="round" size="small" variant="outline" icon="call" bindtap="onCallRider">联系骑手</t-button>
       </view>
     </view>
 

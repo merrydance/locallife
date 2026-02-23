@@ -56,7 +56,7 @@
           
           <view class="item-info">
             <text class="item-name">{{cartItem.name}}</text>
-            <t-tag wx:if="{{cartItem.specDisplay}}" variant="dark" theme="primary" size="small" class="item-specs-tag">{{cartItem.specDisplay}}</t-tag>
+            <t-tag wx:if="{{cartItem.specDisplay}}" variant="light" theme="primary" size="small" class="item-specs-tag">{{cartItem.specDisplay}}</t-tag>
             <view class="item-price-row">
               <text class="item-price">{{cartItem.priceDisplay}}</text>
               <!-- 数量操作 -->

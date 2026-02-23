@@ -164,7 +164,7 @@
             >
               <view class="order-header">
                 <view class="status-left">
-                  <t-tag theme="{{item.status === 'assigned' || item.status === 'picking' ? 'warning' : 'success'}}" variant="dark" size="small">{{item.status_desc}}</t-tag>
+                  <t-tag theme="{{item.status === 'assigned' || item.status === 'picking' ? 'warning' : 'success'}}" variant="light-outline" size="small">{{item.status_desc}}</t-tag>
                   <text class="item-count" wx:if="{{item.item_count > 0}}">{{item.item_count}}件商品</text>
                 </view>
                 <view class="order-no">#{{item.order_no || item.order_id}}</view>

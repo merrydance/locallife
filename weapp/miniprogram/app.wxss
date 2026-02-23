@@ -107,7 +107,14 @@ page {
   --spacer-xxs: 4rpx;   /* 极微 */
   --spacer-xs: 8rpx;    /* 紧凑 (icon-text) */
   --spacer-sm: 16rpx;   /* 小 (card-margin, tag-gap) */
-  --spacer-md: 24rpx;   /* 中 (card-padding) */
+  --spacer-md: 24rpx;   /* TDesign Component Overrides - 按钮形状收口为大圆角 */
+  --td-button-border-radius: 999px;
+  --td-button-large-border-radius: 999px;
+  --td-button-medium-border-radius: 999px;
+  --td-button-small-border-radius: 999px;
+  --td-button-extra-small-border-radius: 999px;
+
+  /* Cart Bar Specific Overrides */
   --spacer-lg: 32rpx;   /* 大 (section-gap) */
   --spacer-xl: 48rpx;   /* 超大 */
   --spacer-xxl: 64rpx;  /* 巨型 */
