@@ -32,7 +32,7 @@ const TYPE_TITLE_MAP: Record<UserClaimType, string> = {
 }
 
 /** 提交结果 → 展示信息映射 */
-const RESULT_CONFIG: Record<string, { icon: string; color: string; title: string }> = {
+const RESULT_CONFIG: Record<string, { icon: string, color: string, title: string }> = {
   instant: { icon: 'check-circle-filled', color: '#2e7d32', title: '秒赔成功' },
   auto: { icon: 'check-circle-filled', color: '#2e7d32', title: '审核通过' },
   manual: { icon: 'time-filled', color: '#ff9800', title: '已提交审核' },
@@ -57,7 +57,7 @@ Page({
     typeClass: '',
 
     // 订单
-    selectedOrder: null as { id: number; orderNo: string; amount: number; amountDisplay: string } | null,
+    selectedOrder: null as { id: number, orderNo: string, amount: number, amountDisplay: string } | null,
 
     // 表单
     amountInput: '',
@@ -73,11 +73,13 @@ Page({
     approvedAmountDisplay: ''
   },
 
-  onNavHeight(e: WechatMiniprogram.CustomEvent<{ height: number }>) {
-    this.setData({ navBarHeight: e.detail.height })
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
+    if (e.detail.navBarHeight !== null && e.detail.navBarHeight !== undefined) {
+      this.setData({ navBarHeight: e.detail.navBarHeight })
+    }
   },
 
-  onLoad(options: { claimType?: string; orderId?: string }) {
+  onLoad(options: { claimType?: string, orderId?: string }) {
     const claimType = (options.claimType || 'foreign-object') as UserClaimType
     this.setData({
       claimType,
@@ -114,7 +116,7 @@ Page({
     wx.navigateTo({
       url: '/pages/orders/list/index?tab=completed&selectMode=1',
       events: {
-        onOrderSelected: (order: { id: number; orderNo: string; totalAmount: number }) => {
+        onOrderSelected: (order: { id: number, orderNo: string, totalAmount: number }) => {
           this.setData({
             selectedOrder: {
               id: order.id,
@@ -179,7 +181,10 @@ Page({
         resultIcon: config.icon,
         resultColor: config.color,
         resultTitle: config.title,
-        approvedAmountDisplay: result.approved_amount != null ? formatAmount(result.approved_amount) : '',
+        approvedAmountDisplay:
+          result.approved_amount !== null && result.approved_amount !== undefined
+            ? formatAmount(result.approved_amount)
+            : '',
         submitting: false
       })
     } catch (err: unknown) {
