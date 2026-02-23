@@ -332,7 +332,7 @@ Page({
   },
 
   onContact() {
-    wx.makePhoneCall({ phoneNumber: '400-800-8888' })
+    wx.navigateTo({ url: '/pages/user_center/service_center/index' })
   },
 
   // 扫码入职 - 直接打开相机扫码

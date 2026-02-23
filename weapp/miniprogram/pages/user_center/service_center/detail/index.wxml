@@ -1,0 +1,55 @@
+<custom-navbar title="工单详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view wx:if="{{loading}}" class="loading-container">
+    <t-loading theme="circular" size="40rpx" text="加载中..." />
+  </view>
+
+  <view wx:elif="{{isError}}" class="error-container">
+    <t-empty icon="info-circle" description="{{errorMsg}}" />
+  </view>
+
+  <view wx:elif="{{claim}}" class="detail-content animate-fade-in">
+    <!-- 状态卡片 -->
+    <view class="status-card">
+      <t-icon name="{{statusIcon}}" size="80rpx" color="{{statusColor}}" />
+      <text class="status-title">{{claim.statusText}}</text>
+      <text wx:if="{{claim.reviewNotes}}" class="status-desc">{{claim.reviewNotes}}</text>
+    </view>
+
+    <!-- 索赔信息 -->
+    <view class="info-card">
+      <view class="info-title">索赔信息</view>
+      <view class="info-row">
+        <text class="info-label">问题类型</text>
+        <t-tag size="small" variant="outline">{{claim.claimTypeText}}</t-tag>
+      </view>
+      <view class="info-row">
+        <text class="info-label">索赔金额</text>
+        <text class="info-value info-value--amount">¥{{claim.claimAmountDisplay}}</text>
+      </view>
+      <view wx:if="{{claim.approvedAmountDisplay}}" class="info-row">
+        <text class="info-label">赔付金额</text>
+        <text class="info-value info-value--approved">¥{{claim.approvedAmountDisplay}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">关联订单</text>
+        <text class="info-value">{{claim.orderId}}</text>
+      </view>
+      <view class="info-row">
+        <text class="info-label">提交时间</text>
+        <text class="info-value">{{claim.createTimeDisplay}}</text>
+      </view>
+      <view wx:if="{{claim.reviewedAtDisplay}}" class="info-row">
+        <text class="info-label">处理时间</text>
+        <text class="info-value">{{claim.reviewedAtDisplay}}</text>
+      </view>
+    </view>
+
+    <!-- 问题描述 -->
+    <view class="info-card">
+      <view class="info-title">问题描述</view>
+      <text class="desc-text">{{claim.description}}</text>
+    </view>
+  </view>
+</view>

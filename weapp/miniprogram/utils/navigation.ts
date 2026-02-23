@@ -256,6 +256,33 @@ export class Navigation {
     })
   }
 
+  /**
+   * 跳转到客服中心
+   */
+  static toServiceCenter() {
+    wx.navigateTo({
+      url: '/pages/user_center/service_center/index'
+    })
+  }
+
+  /**
+   * 跳转到索赔提交页
+   */
+  static toSubmitClaim(claimType: string, orderId?: string) {
+    let url = `/pages/user_center/service_center/submit/index?claimType=${claimType}`
+    if (orderId) url += `&orderId=${orderId}`
+    wx.navigateTo({ url })
+  }
+
+  /**
+   * 跳转到索赔详情页
+   */
+  static toClaimDetail(claimId: number) {
+    wx.navigateTo({
+      url: `/pages/user_center/service_center/detail/index?id=${claimId}`
+    })
+  }
+
 
   // ==================== 骑手相关 ====================
 

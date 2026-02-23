@@ -201,15 +201,10 @@ Page({
 
   // 联系客服
   onContact() {
-     wx.showModal({
-        title: '联系客服',
-        content: '即将拨打平台客服电话 400-888-8888',
-        success: (res) => {
-           if (res.confirm) {
-              wx.makePhoneCall({ phoneNumber: '4008888888' })
-           }
-        }
-     })
+    const orderId = this.data.orderId
+    wx.navigateTo({
+      url: `/pages/user_center/service_center/index${orderId ? '?orderId=' + orderId : ''}`
+    })
   },
 
   onCancelOrder() {

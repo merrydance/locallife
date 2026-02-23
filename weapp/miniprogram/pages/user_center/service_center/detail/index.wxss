@@ -1,0 +1,105 @@
+.page-container {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  justify-content: center;
+  padding: 120rpx 0;
+}
+
+.detail-content {
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+/* ========== Status Card ========== */
+.status-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  padding: 48rpx 32rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.06);
+}
+
+.status-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.status-desc {
+  font-size: 28rpx;
+  color: #666;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ========== Info Card ========== */
+.info-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.info-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16rpx 0;
+}
+
+.info-label {
+  font-size: 28rpx;
+  color: #999;
+}
+
+.info-value {
+  font-size: 28rpx;
+  color: #333;
+}
+
+.info-value--amount {
+  font-weight: 600;
+  font-size: 30rpx;
+}
+
+.info-value--approved {
+  font-weight: 600;
+  font-size: 30rpx;
+  color: #2e7d32;
+}
+
+.desc-text {
+  font-size: 28rpx;
+  color: #555;
+  line-height: 1.8;
+}
+
+/* ========== Animation ========== */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}

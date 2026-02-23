@@ -151,6 +151,10 @@
       "pages": ["index"]
     },
     {
+      "root": "pages/user_center/service_center",
+      "pages": ["index", "submit/index", "detail/index"]
+    },
+    {
       "root": "pages/merchant",
       "name": "merchant",
       "pages": [

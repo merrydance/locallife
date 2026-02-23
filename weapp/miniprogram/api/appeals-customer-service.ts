@@ -101,6 +101,31 @@ export interface ClaimsQueryParams extends Record<string, unknown> {
     claim_type?: ClaimType
 }
 
+// ==================== 用户索赔提交相关类型 ====================
+
+/** 用户提交索赔类型枚举 - 对齐后端 SubmitClaimRequest.claim_type */
+export type UserClaimType = 'foreign-object' | 'damage' | 'timeout' | 'food-safety'
+
+/** 用户提交索赔请求 - 对齐后端 SubmitClaimRequest */
+export interface SubmitClaimRequest extends Record<string, unknown> {
+    order_id: number
+    claim_type: UserClaimType
+    claim_amount: number            // 单位：分，最高 100000000 (1万元)
+    claim_reason: string            // 5-1000 字符
+    device_fingerprint?: string     // 可选
+}
+
+/** 用户提交索赔响应 - 对齐后端 SubmitClaimResponse */
+export interface SubmitClaimResponse {
+    claim_id: number
+    status: 'instant' | 'auto' | 'manual' | 'platform-pay'
+    approved_amount?: number
+    compensation_source?: string    // merchant | rider | platform
+    reason: string
+    refund_eta?: string             // 秒赔/自动通过时提供预计到账时间
+    warning?: string                // 警告信息
+}
+
 // ==================== 评价回复相关类型 ====================
 
 /** 评价响应 - 基于swagger api.reviewResponse */
@@ -228,6 +253,17 @@ export class AppealManagementService {
  * 提供索赔的查询、处理等功能
  */
 export class ClaimManagementService {
+    /**
+     * 用户提交索赔
+     */
+    async submitClaim(data: SubmitClaimRequest): Promise<SubmitClaimResponse> {
+        return request({
+            url: '/v1/claims',
+            method: 'POST',
+            data
+        })
+    }
+
     /**
      * 获取用户索赔列表
      * @param params 查询参数
