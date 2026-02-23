@@ -251,20 +251,41 @@ Page({
   // Gap 7: Banner 点击跳转
   onBannerTap(e: WechatMiniprogram.CustomEvent) {
     const { item } = e.currentTarget.dataset as { item: { url: string } }
-    if (item?.url) {
+    if (!item?.url) return
+
+    const TAB_PAGES = [
+      'pages/takeout/index',
+      'pages/reservation/index',
+      'pages/user_center/index',
+      'pages/dining/index'
+    ]
+    const isTab = TAB_PAGES.some((p) => item.url.includes(p))
+
+    if (isTab) {
+      wx.switchTab({ url: item.url })
+    } else {
       wx.navigateTo({ url: item.url })
     }
   },
 
   // Gap 7: 快捷入口点击跳转
+  // tabBar 页面（外卖/预订/我的）用 switchTab，普通页用 navigateTo
   onQuickEntryTap(e: WechatMiniprogram.CustomEvent) {
     const { url } = e.currentTarget.dataset as { url: string }
-    if (url) {
+    if (!url) return  // 外卖入口就在当前页，无需跳转
+
+    const TAB_PAGES = [
+      'pages/takeout/index',
+      'pages/reservation/index',
+      'pages/user_center/index',
+      'pages/dining/index'
+    ]
+    const isTab = TAB_PAGES.some((p) => url.includes(p))
+
+    if (isTab) {
+      wx.switchTab({ url })
+    } else {
       wx.navigateTo({ url })
-    }
-    // 外卖入口（url 为空）则回到当前页顶部
-    else {
-      wx.pageScrollTo({ scrollTop: 0, duration: 300 })
     }
   },
 
