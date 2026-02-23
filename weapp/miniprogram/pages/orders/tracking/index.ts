@@ -94,9 +94,26 @@ Page({
   },
 
   onUnload() {
-    // 清理定时器
-    if (this.data.locationTimer) {
+    this.stopLocationTracking()
+  },
+
+  onHide() {
+    // 页面隐藏时暂停轮询（用户切到其他页面）
+    this.stopLocationTracking()
+  },
+
+  onShow() {
+    // 页面重新显示时恢复轮询（副作用：也刻刷新一次位置）
+    if (this.data.deliveryId) {
+      this.updateRiderLocation()
+      this.startLocationTracking()
+    }
+  },
+
+  stopLocationTracking() {
+    if (this.data.locationTimer !== null) {
       clearInterval(this.data.locationTimer)
+      this.setData({ locationTimer: null })
     }
   },
 
