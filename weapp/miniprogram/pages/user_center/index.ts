@@ -331,7 +331,22 @@ Page({
     }
   },
 
-  onContact() {
+  async onContact() {
+    // 【MOCK DATA FOR PREVIEW】
+    const system = wx.getSystemInfoSync()
+    if (system.platform === 'devtools') {
+       wx.showActionSheet({
+         itemList: ['拨打客服电话 (400-888-8888)', '在线客服 (模拟)', '查看常见问题'],
+         success: (res) => {
+           if (res.tapIndex === 1) {
+             wx.showModal({ title: '在线客服', content: '您好，这里是乐客来福在线客服。请问有什么可以帮您？', showCancel: false })
+           } else if (res.tapIndex === 0) {
+             wx.makePhoneCall({ phoneNumber: '4008888888' })
+           }
+         }
+       })
+       return
+    }
     wx.makePhoneCall({ phoneNumber: '400-800-8888' })
   },
 

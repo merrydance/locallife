@@ -81,7 +81,61 @@ Page({
     locationTimer: null as number | null
   },
 
-  onLoad(options: { orderId?: string }) {
+  onLoad(options: { orderId?: string, mock?: string }) {
+    // 【MOCK DATA FOR PREVIEW】
+    if (options.mock === '1') {
+      const mockDelivery: DeliveryResponse = {
+        id: 2048,
+        order_id: 1024,
+        status: 'delivering',
+        rider_id: 88,
+        pickup_address: '宁晋县西关街12号 宁晋味道',
+        delivery_address: '凤凰路88号 乐客公寓A座',
+        pickup_latitude: 37.618,
+        pickup_longitude: 114.921,
+        delivery_latitude: 37.625,
+        delivery_longitude: 114.935,
+        pickup_phone: '13900001111',
+        estimated_delivery_at: '2026-02-23T12:45:00Z',
+        created_at: '2026-02-23T12:05:00Z',
+        assigned_at: '2026-02-23T12:08:00Z',
+        picked_at: '2026-02-23T12:15:00Z',
+        delivery_fee: 500,
+        rider_earnings: 450
+      }
+
+      this.setData({
+        orderId: 1024,
+        deliveryId: 2048,
+        delivery: mockDelivery,
+        riderName: '张小哥',
+        riderPhone: '13900001111',
+        riderPhoneDisplay: '139****1111',
+        estimatedDeliveryTime: '12:45',
+        deliveryStatus: 'delivering',
+        deliveryStatusText: '骑手正在配送',
+        progress: this.generateProgress(mockDelivery),
+        loading: false,
+        mapCenter: { latitude: 37.621, longitude: 114.928 },
+        markers: [
+          this.buildMarker(1, { latitude: 37.618, longitude: 114.921 }, '商家', '/assets/merchant.png'),
+          this.buildMarker(2, { latitude: 37.622, longitude: 114.930 }, '骑手', '/assets/rider.png'),
+          this.buildMarker(3, { latitude: 37.625, longitude: 114.935 }, '我', '/assets/customer.png')
+        ],
+        polyline: [{
+          points: [
+            { latitude: 37.618, longitude: 114.921 },
+            { latitude: 37.622, longitude: 114.930 },
+            { latitude: 37.625, longitude: 114.935 }
+          ],
+          color: '#1d63ff',
+          width: 8,
+          arrowLine: true
+        }]
+      })
+      return
+    }
+
     const orderId = options.orderId ? parseInt(options.orderId) : NaN
     if (Number.isFinite(orderId) && orderId > 0) {
       this.setData({ orderId })

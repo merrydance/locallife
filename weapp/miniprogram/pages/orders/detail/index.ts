@@ -47,7 +47,91 @@ Page({
     urgeCountdown: 0  // 催单倒计时（秒）
   },
 
-  onLoad(options: { id?: string }) {
+  onLoad(options: { id?: string, mock?: string }) {
+    // 【MOCK DATA FOR PREVIEW: CONFIRM MODAL】
+    if (options.mock === '2') {
+      this.setData({
+        orderId: '1024',
+        order: {
+          orderNo: 'LL202602230001',
+          status: 'delivering',
+          statusText: '待收货',
+          merchantId: 'M001',
+          merchantName: '宁晋味道',
+          payableAmount: 6800,
+          payableAmountDisplay: '¥68.00',
+          createTime: '2026-02-23 12:00:00',
+          address: '乐客公寓A座',
+          contactName: '张三',
+          contactPhone: '138****8888',
+          type: 'takeout' as OrderType,
+          items: []
+        },
+        loading: false,
+        showConfirmButton: true
+      }, () => {
+        // 自动弹出确认框
+        this.onConfirmReceipt()
+      })
+      return
+    }
+
+    // 【MOCK DATA FOR PREVIEW】
+    if (options.mock === '1') {
+      this.setData({
+        orderId: '1024',
+        order: {
+          orderNo: 'LL202602230001',
+          status: 'delivering',
+          statusText: '配送中',
+          merchantId: 'M001',
+          merchantName: '宁晋味道 (总店)',
+          merchantPhone: '0319-1234567',
+          payableAmount: 6800,
+          payableAmountDisplay: '¥68.00',
+          deliveryFee: 500,
+          deliveryFeeDisplay: '¥5.00',
+          discountAmount: 1000,
+          discountAmountDisplay: '-¥10.00',
+          createTime: '2026-02-23 12:00:00',
+          expectDeliverTime: '12:45',
+          address: '河北省邢台市宁晋县凤凰路88号乐客公寓A座',
+          contactName: '张三',
+          contactPhone: '138****8888',
+          type: 'takeout' as OrderType,
+          items: [
+            {
+              id: 1,
+              name: '招牌红烧肉',
+              unitPrice: 5800,
+              unitPriceDisplay: '¥58.00',
+              quantity: 1,
+              subtotal: 5800,
+              subtotalDisplay: '¥58.00',
+              imageUrl: 'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?q=80&w=200&h=200&auto=format&fit=crop',
+              customizations: ['五花肉', '加微辣']
+            },
+            {
+              id: 2,
+              name: '清炒时蔬',
+              unitPrice: 1500,
+              unitPriceDisplay: '¥15.00',
+              quantity: 1,
+              subtotal: 1500,
+              subtotalDisplay: '¥15.00',
+              imageUrl: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?q=80&w=200&h=200&auto=format&fit=crop',
+              customizations: ['蒜蓉', '少油']
+            }
+          ]
+        },
+        loading: false,
+        showTrackingButton: true,
+        showContactButton: true,
+        showUrgeButton: true
+      })
+      return
+    }
+
     if (options.id) {
       this.setData({ orderId: options.id })
       this.loadOrderDetail()
