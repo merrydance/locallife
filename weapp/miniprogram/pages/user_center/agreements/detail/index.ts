@@ -1,5 +1,18 @@
 import { AgreementService, AgreementDetail } from '../../../../api/agreement'
 
+function stripAgreementHtmlHeader(html: string): string {
+  if (!html) return html
+
+  // Remove the first document title inside the HTML to avoid duplicate titles
+  // (navbar title + page title + <h1> in rich-text).
+  let out = html.replace(/<h1\b[^>]*>[\s\S]*?<\/h1>/i, '')
+
+  // Remove the publish-date paragraph if present; the page already shows published_on.
+  out = out.replace(/<p\b[^>]*class=["']publish-date["'][^>]*>[\s\S]*?<\/p>/i, '')
+
+  return out
+}
+
 Page({
   data: {
     agreement: {} as AgreementDetail,
@@ -10,13 +23,9 @@ Page({
   },
 
   onLoad(options: { type: string, title?: string }) {
-    if (options.title) {
-      let title = decodeURIComponent(options.title)
-      // Simplify common title suffixes
-      title = title.replace(/(协议|政策|说明|规范)$/, '')
-      this.setData({ title })
-    }
-    
+    // Keep navbar title short to avoid wrapping; show the real title in the page body.
+    this.setData({ title: '协议详情' })
+
     if (options.type) {
       this.fetchAgreementDetail(options.type)
     } else {
@@ -42,6 +51,10 @@ Page({
       // SQL Date might need formatting if it's not a simple string
       if (res.published_on && typeof res.published_on === 'string') {
         res.published_on = res.published_on.split('T')[0]
+      }
+
+      if (res.content && typeof res.content === 'string') {
+        res.content = stripAgreementHtmlHeader(res.content)
       }
 
       this.setData({ agreement: res })

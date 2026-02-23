@@ -15,7 +15,6 @@
     <block wx:elif="{{agreement}}">
       <view class="agreement-article">
         <view class="article-header">
-          <view class="article-title">{{agreement.title}}</view>
           <view class="article-meta">
             <text>版本: {{agreement.version}}</text>
             <text wx:if="{{agreement.published_on}}">发布日期: {{agreement.published_on}}</text>
