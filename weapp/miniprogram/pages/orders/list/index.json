@@ -2,7 +2,6 @@
     "navigationBarTitleText": "我的订单",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
-        "virtual-list": "/components/virtual-list/virtual-list",
         "list-skeleton": "/components/list-skeleton/index",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-tabs": "tdesign-miniprogram/tabs/tabs",
