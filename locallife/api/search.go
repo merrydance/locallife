@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -288,6 +290,16 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		}
 	}
 
+	// 后台记录搜索历史 + 热词
+	if req.Keyword != "" {
+		authPayload, ok := ctx.Get(authorizationPayloadKey)
+		if ok {
+			if p, ok2 := authPayload.(*token.Payload); ok2 {
+				server.recordSearchKeyword(p.UserID, req.Keyword, "dish")
+			}
+		}
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"dishes":      response,
 		"total":       total,
@@ -377,6 +389,16 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	// 如果用户提供了位置，计算精确距离（展示用）和运费
 	if resolvedLat != nil && resolvedLng != nil && server.mapClient != nil {
 		server.calculateSearchMerchantDistancesAndFees(ctx, response, *resolvedLat, *resolvedLng)
+	}
+
+	// 后台记录搜索历史 + 热词
+	if req.Keyword != "" {
+		authPayload, ok := ctx.Get(authorizationPayloadKey)
+		if ok {
+			if p, ok2 := authPayload.(*token.Payload); ok2 {
+				server.recordSearchKeyword(p.UserID, req.Keyword, "merchant")
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -1088,4 +1110,231 @@ func combosToMerchantLocs(rows []db.SearchCombosGlobalRow) map[int64]maps.Locati
 		}
 	}
 	return locs
+}
+
+// =============================================================================
+// 搜索历史 & 热门关键词 & 搜索建议 API
+// =============================================================================
+
+// ── 搜索历史 ─────────────────────────────────────────────────────────────────
+
+type listSearchHistoryRequest struct {
+	Limit int32 `form:"limit" binding:"omitempty,min=1,max=50"`
+}
+
+// listSearchHistory godoc
+// @Summary 获取搜索历史
+// @Tags Search
+// @Security BearerAuth
+// @Router /v1/search/history [get]
+func (server *Server) listSearchHistory(ctx *gin.Context) {
+	var req listSearchHistoryRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	limit := req.Limit
+	if limit == 0 {
+		limit = 10
+	}
+
+	payload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	history, err := server.store.ListSearchHistory(ctx, db.ListSearchHistoryParams{
+		UserID: payload.UserID,
+		Limit:  limit,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"history": history})
+}
+
+type deleteSearchHistoryRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+// deleteSearchHistory godoc
+// @Summary 删除单条搜索历史
+// @Tags Search
+// @Security BearerAuth
+// @Router /v1/search/history/{id} [delete]
+func (server *Server) deleteSearchHistory(ctx *gin.Context) {
+	var req deleteSearchHistoryRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	payload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	if err := server.store.DeleteSearchHistory(ctx, db.DeleteSearchHistoryParams{
+		ID:     req.ID,
+		UserID: payload.UserID,
+	}); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "ok"})
+}
+
+// clearSearchHistory godoc
+// @Summary 清除全部搜索历史
+// @Tags Search
+// @Security BearerAuth
+// @Router /v1/search/history [delete]
+func (server *Server) clearSearchHistory(ctx *gin.Context) {
+	payload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	if err := server.store.ClearSearchHistory(ctx, payload.UserID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "ok"})
+}
+
+// ── 热门搜索 ─────────────────────────────────────────────────────────────────
+
+type getPopularKeywordsRequest struct {
+	Type  string `form:"type" binding:"omitempty,oneof=dish merchant combo room"`
+	Limit int32  `form:"limit" binding:"omitempty,min=1,max=20"`
+}
+
+// getPopularKeywords godoc
+// @Summary 获取热门搜索关键词
+// @Tags Search
+// @Security BearerAuth
+// @Router /v1/search/popular [get]
+func (server *Server) getPopularKeywords(ctx *gin.Context) {
+	var req getPopularKeywordsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	ktype := req.Type
+	if ktype == "" {
+		ktype = "dish"
+	}
+	limit := req.Limit
+	if limit == 0 {
+		limit = 10
+	}
+
+	keywords, err := server.store.GetPopularKeywords(ctx, db.GetPopularKeywordsParams{
+		Type:  ktype,
+		Limit: limit,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"keywords": keywords})
+}
+
+// ── 搜索建议 ─────────────────────────────────────────────────────────────────
+
+type getSearchSuggestionsRequest struct {
+	Keyword string `form:"keyword" binding:"required,min=1,max=50"`
+	Type    string `form:"type" binding:"omitempty,oneof=dish merchant"`
+	Limit   int32  `form:"limit" binding:"omitempty,min=1,max=10"`
+}
+
+type searchSuggestionItem struct {
+	Keyword string `json:"keyword"`
+	Type    string `json:"type"`
+}
+
+// getSearchSuggestions godoc
+// @Summary 实时搜索建议（前缀匹配）
+// @Tags Search
+// @Security BearerAuth
+// @Router /v1/search/suggestions [get]
+func (server *Server) getSearchSuggestions(ctx *gin.Context) {
+	var req getSearchSuggestionsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	limit := req.Limit
+	if limit == 0 {
+		limit = 8
+	}
+
+	suggestions := []searchSuggestionItem{}
+
+	// 从搜索历史中前缀匹配（个性化建议优先）
+	payload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	history, _ := server.store.ListSearchHistory(ctx, db.ListSearchHistoryParams{
+		UserID: payload.UserID,
+		Limit:  50,
+	})
+	seen := make(map[string]bool)
+	prefix := req.Keyword
+	for _, h := range history {
+		if len(suggestions) >= int(limit) {
+			break
+		}
+		if len(h.Keyword) >= len(prefix) && h.Keyword[:len(prefix)] == prefix {
+			if !seen[h.Keyword] {
+				suggestions = append(suggestions, searchSuggestionItem{Keyword: h.Keyword, Type: h.Type})
+				seen[h.Keyword] = true
+			}
+		}
+	}
+
+	// 从热门关键词补充
+	if len(suggestions) < int(limit) {
+		ktype := req.Type
+		if ktype == "" {
+			ktype = "dish"
+		}
+		popular, _ := server.store.GetPopularKeywords(ctx, db.GetPopularKeywordsParams{
+			Type:  ktype,
+			Limit: 20,
+		})
+		for _, p := range popular {
+			if len(suggestions) >= int(limit) {
+				break
+			}
+			if len(p.Keyword) >= len(prefix) && p.Keyword[:len(prefix)] == prefix {
+				if !seen[p.Keyword] {
+					suggestions = append(suggestions, searchSuggestionItem{Keyword: p.Keyword, Type: p.Type})
+					seen[p.Keyword] = true
+				}
+			}
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"suggestions": suggestions})
+}
+
+// ── 辅助：统一搜索入口（记录历史 + 热词）────────────────────────────────────
+
+// recordSearchKeyword 在后台 goroutine 中记录搜索历史和更新热词计数，不阻塞请求
+func (server *Server) recordSearchKeyword(userID int64, keyword, ktype string) {
+	if keyword == "" {
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		// 记录用户历史（upsert）
+		_, _ = server.store.UpsertSearchHistory(ctx, db.UpsertSearchHistoryParams{
+			UserID:  userID,
+			Keyword: keyword,
+			Type:    ktype,
+		})
+		// 更新热词计数
+		_ = server.store.IncrementPopularKeyword(ctx, db.IncrementPopularKeywordParams{
+			Keyword: keyword,
+			Type:    ktype,
+		})
+	}()
 }

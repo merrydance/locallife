@@ -397,8 +397,13 @@ func (server *Server) setupRouter() {
 	{
 		searchGroup.GET("/dishes", server.searchDishes)
 		searchGroup.GET("/merchants", server.searchMerchants)
-		searchGroup.GET("/combos", server.searchCombos) // 套餐搜索
-		searchGroup.GET("/rooms", server.searchRooms)   // 包间搜索：按日期、时段、人数、菜系等条件
+		searchGroup.GET("/combos", server.searchCombos)                // 套餐搜索
+		searchGroup.GET("/rooms", server.searchRooms)                  // 包间搜索
+		searchGroup.GET("/history", server.listSearchHistory)          // 搜索历史
+		searchGroup.DELETE("/history", server.clearSearchHistory)      // 清除全部历史
+		searchGroup.DELETE("/history/:id", server.deleteSearchHistory) // 删除单条
+		searchGroup.GET("/popular", server.getPopularKeywords)         // 热门关键词
+		searchGroup.GET("/suggestions", server.getSearchSuggestions)   // 实时建议
 	}
 
 	// 餐厅优惠活动

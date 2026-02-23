@@ -816,6 +816,20 @@ func (mr *MockStoreMockRecorder) ClearMultipleCarts(ctx, dollar_1 any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMultipleCarts", reflect.TypeOf((*MockStore)(nil).ClearMultipleCarts), ctx, dollar_1)
 }
 
+// ClearSearchHistory mocks base method.
+func (m *MockStore) ClearSearchHistory(ctx context.Context, userID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearSearchHistory", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearSearchHistory indicates an expected call of ClearSearchHistory.
+func (mr *MockStoreMockRecorder) ClearSearchHistory(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearSearchHistory", reflect.TypeOf((*MockStore)(nil).ClearSearchHistory), ctx, userID)
+}
+
 // CloseDiningSession mocks base method.
 func (m *MockStore) CloseDiningSession(ctx context.Context, id int64) (db.DiningSession, error) {
 	m.ctrl.T.Helper()
@@ -3665,6 +3679,21 @@ func (mr *MockStoreMockRecorder) CreateSafetyReport(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSafetyReport", reflect.TypeOf((*MockStore)(nil).CreateSafetyReport), ctx, arg)
 }
 
+// CreateSearchHistory mocks base method.
+func (m *MockStore) CreateSearchHistory(ctx context.Context, arg db.CreateSearchHistoryParams) (db.SearchHistory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateSearchHistory", ctx, arg)
+	ret0, _ := ret[0].(db.SearchHistory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateSearchHistory indicates an expected call of CreateSearchHistory.
+func (mr *MockStoreMockRecorder) CreateSearchHistory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSearchHistory", reflect.TypeOf((*MockStore)(nil).CreateSearchHistory), ctx, arg)
+}
+
 // CreateSession mocks base method.
 func (m *MockStore) CreateSession(ctx context.Context, arg db.CreateSessionParams) (db.Session, error) {
 	m.ctrl.T.Helper()
@@ -4613,6 +4642,20 @@ func (m *MockStore) DeleteReview(ctx context.Context, id int64) error {
 func (mr *MockStoreMockRecorder) DeleteReview(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReview", reflect.TypeOf((*MockStore)(nil).DeleteReview), ctx, id)
+}
+
+// DeleteSearchHistory mocks base method.
+func (m *MockStore) DeleteSearchHistory(ctx context.Context, arg db.DeleteSearchHistoryParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSearchHistory", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteSearchHistory indicates an expected call of DeleteSearchHistory.
+func (mr *MockStoreMockRecorder) DeleteSearchHistory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSearchHistory", reflect.TypeOf((*MockStore)(nil).DeleteSearchHistory), ctx, arg)
 }
 
 // DeleteTable mocks base method.
@@ -7878,6 +7921,21 @@ func (mr *MockStoreMockRecorder) GetPopularDishes(ctx, limit any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPopularDishes", reflect.TypeOf((*MockStore)(nil).GetPopularDishes), ctx, limit)
 }
 
+// GetPopularKeywords mocks base method.
+func (m *MockStore) GetPopularKeywords(ctx context.Context, arg db.GetPopularKeywordsParams) ([]db.GetPopularKeywordsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPopularKeywords", ctx, arg)
+	ret0, _ := ret[0].([]db.GetPopularKeywordsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPopularKeywords indicates an expected call of GetPopularKeywords.
+func (mr *MockStoreMockRecorder) GetPopularKeywords(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPopularKeywords", reflect.TypeOf((*MockStore)(nil).GetPopularKeywords), ctx, arg)
+}
+
 // GetPopularMerchants mocks base method.
 func (m *MockStore) GetPopularMerchants(ctx context.Context, arg db.GetPopularMerchantsParams) ([]db.GetPopularMerchantsRow, error) {
 	m.ctrl.T.Helper()
@@ -9750,6 +9808,20 @@ func (m *MockStore) IncrementMerchantForeignObjectClaim(ctx context.Context, mer
 func (mr *MockStoreMockRecorder) IncrementMerchantForeignObjectClaim(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementMerchantForeignObjectClaim", reflect.TypeOf((*MockStore)(nil).IncrementMerchantForeignObjectClaim), ctx, merchantID)
+}
+
+// IncrementPopularKeyword mocks base method.
+func (m *MockStore) IncrementPopularKeyword(ctx context.Context, arg db.IncrementPopularKeywordParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IncrementPopularKeyword", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// IncrementPopularKeyword indicates an expected call of IncrementPopularKeyword.
+func (mr *MockStoreMockRecorder) IncrementPopularKeyword(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementPopularKeyword", reflect.TypeOf((*MockStore)(nil).IncrementPopularKeyword), ctx, arg)
 }
 
 // IncrementRiderDamageIncident mocks base method.
@@ -12837,6 +12909,21 @@ func (m *MockStore) ListSafetyReportsByRegionAndStatus(ctx context.Context, arg 
 func (mr *MockStoreMockRecorder) ListSafetyReportsByRegionAndStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSafetyReportsByRegionAndStatus", reflect.TypeOf((*MockStore)(nil).ListSafetyReportsByRegionAndStatus), ctx, arg)
+}
+
+// ListSearchHistory mocks base method.
+func (m *MockStore) ListSearchHistory(ctx context.Context, arg db.ListSearchHistoryParams) ([]db.ListSearchHistoryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListSearchHistory", ctx, arg)
+	ret0, _ := ret[0].([]db.ListSearchHistoryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListSearchHistory indicates an expected call of ListSearchHistory.
+func (mr *MockStoreMockRecorder) ListSearchHistory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSearchHistory", reflect.TypeOf((*MockStore)(nil).ListSearchHistory), ctx, arg)
 }
 
 // ListSuspendedRegions mocks base method.
@@ -17350,6 +17437,21 @@ func (m *MockStore) UpsertReservationInventory(ctx context.Context, arg db.Upser
 func (mr *MockStoreMockRecorder) UpsertReservationInventory(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertReservationInventory", reflect.TypeOf((*MockStore)(nil).UpsertReservationInventory), ctx, arg)
+}
+
+// UpsertSearchHistory mocks base method.
+func (m *MockStore) UpsertSearchHistory(ctx context.Context, arg db.UpsertSearchHistoryParams) (db.SearchHistory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertSearchHistory", ctx, arg)
+	ret0, _ := ret[0].(db.SearchHistory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertSearchHistory indicates an expected call of UpsertSearchHistory.
+func (mr *MockStoreMockRecorder) UpsertSearchHistory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertSearchHistory", reflect.TypeOf((*MockStore)(nil).UpsertSearchHistory), ctx, arg)
 }
 
 // UpsertUserDevice mocks base method.
