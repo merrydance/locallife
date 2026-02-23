@@ -109,3 +109,39 @@
     opacity: 1;
   }
 }
+
+/* ========== Gap 2: 星级评分 ========== */
+.rate-wrap {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.rate-label {
+  font-size: 26rpx;
+  color: #FF8C00;
+  font-weight: 600;
+}
+
+/* ========== Gap 2: 快捷标签 ========== */
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.tag-chip {
+  padding: 12rpx 24rpx;
+  font-size: 24rpx;
+  border-radius: 999rpx;
+  background: #f5f5f5;
+  color: #666;
+  border: 2rpx solid transparent;
+  transition: all 0.2s;
+}
+
+.tag-chip.selected {
+  background: #fff0e6;
+  color: #FF6B00;
+  border-color: #FF6B00;
+}

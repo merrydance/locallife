@@ -20,6 +20,17 @@ Page({
     initialLoading: true,
     submitting: false,
 
+    // 评分
+    rating: 5,
+    ratingLabels: ['很差', '较差', '一般', '较好', '非常好'],
+
+    // 快捷标签
+    quickTags: [
+      '山珍多汁', '卖相工整', '分量足', '右葛油产品', '干净卫生',
+      '服务好', '送餐快', '包装好', '性价比高', '值得复垂'
+    ] as string[],
+    selectedTags: [] as string[],
+
     // 表单数据
     content: '',
     fileList: [] as ReviewUploadFile[],
@@ -60,6 +71,22 @@ Page({
 
   onContentChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ content: e.detail.value })
+  },
+
+  onRatingChange(e: WechatMiniprogram.CustomEvent<{ value: number }>) {
+    this.setData({ rating: e.detail.value })
+  },
+
+  onTagTap(e: WechatMiniprogram.TouchEvent) {
+    const { tag } = e.currentTarget.dataset as { tag: string }
+    const selected = [...this.data.selectedTags]
+    const idx = selected.indexOf(tag)
+    if (idx === -1) {
+      selected.push(tag)
+    } else {
+      selected.splice(idx, 1)
+    }
+    this.setData({ selectedTags: selected })
   },
 
   // 图片添加回调
@@ -140,6 +167,8 @@ Page({
       const reviewData: CreateReviewParams = {
         order_id: orderId,
         content,
+        rating: this.data.rating,
+        tags: this.data.selectedTags.length > 0 ? this.data.selectedTags : undefined,
         images: remoteImages.length > 0 ? remoteImages : undefined
       }
 

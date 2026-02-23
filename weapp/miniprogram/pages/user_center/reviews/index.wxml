@@ -45,6 +45,20 @@
             <view class="date">{{item.createdAt}}</view>
           </view>
 
+          <!-- 星级 + 标签 -->
+          <view class="rating-row">
+            <t-rate
+              value="{{item.rating || 5}}"
+              size="28rpx"
+              gap="4"
+              disabled
+            />
+            <text class="rating-text">{{item.rating || 5}}分</text>
+          </view>
+          <view class="tag-row" wx:if="{{item.tags && item.tags.length > 0}}">
+            <text class="review-tag" wx:for="{{item.tags}}" wx:key="*this">{{item}}</text>
+          </view>
+
           <!-- 评价内容 -->
           <view class="card-body">
             <view class="content-text">{{item.content}}</view>
