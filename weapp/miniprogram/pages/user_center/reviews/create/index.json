@@ -7,7 +7,6 @@
     "t-message": "tdesign-miniprogram/message/message",
     "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
     "t-divider": "tdesign-miniprogram/divider/divider",
-    "t-rate": "tdesign-miniprogram/rate/rate",
     "custom-navbar": "/components/custom-navbar/index"
   },
   "navigationStyle": "custom"

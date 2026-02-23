@@ -14,22 +14,8 @@
       </view>
     </view>
 
-    <!-- 2. 整体评分 -->
+    <!-- 2. 快捷标签 -->
     <view class="content-card animate-slide-up" style="animation-delay: 0.05s">
-      <view class="card-title">综合评分</view>
-      <view class="rate-wrap">
-        <t-rate
-          value="{{rating}}"
-          size="48rpx"
-          gap="12"
-          bind:change="onRatingChange"
-        />
-        <text class="rate-label">{{ratingLabels[rating - 1] || '请评分'}}</text>
-      </view>
-    </view>
-
-    <!-- 3. 快捷标签 -->
-    <view class="content-card animate-slide-up" style="animation-delay: 0.08s">
       <view class="card-title">快捷评价 <text class="subtitle">(可多选)</text></view>
       <view class="tag-grid">
         <view
@@ -42,7 +28,7 @@
       </view>
     </view>
 
-    <!-- 4. 评价内容 -->
+    <!-- 3. 评价内容 -->
     <view class="content-card animate-slide-up" style="animation-delay: 0.1s">
       <view class="card-title">评价内容</view>
       <t-textarea

@@ -6,7 +6,6 @@ export interface Review {
     user_id: number
     merchant_id: number
     content: string
-    rating?: number       // 1–5
     tags?: string[]       // 快捷标签
     images?: string[]
     is_visible: boolean
@@ -28,7 +27,6 @@ export interface ListReviewsResponse {
 export interface CreateReviewParams {
     order_id: number
     content: string
-    rating?: number       // 1–5 星
     tags?: string[]       // 快捷标签
     images?: string[]
 }

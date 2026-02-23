@@ -51,20 +51,6 @@
   color: #999;
 }
 
-/* Gap 2: 星级展示行 */
-.rating-row {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  margin-bottom: 12rpx;
-}
-
-.rating-text {
-  font-size: 22rpx;
-  color: #FF8C00;
-  font-weight: 500;
-}
-
 /* Gap 2: 标签行 */
 .tag-row {
   display: flex;
