@@ -127,6 +127,7 @@ SET
     fulfillment_status = COALESCE(sqlc.narg('fulfillment_status'), fulfillment_status),
     updated_at = now()
 WHERE id = sqlc.arg('id')
+    AND status = sqlc.arg('expected_status')
 RETURNING *;
 
 -- name: MarkOrderReplaced :one
@@ -159,6 +160,7 @@ SET
     completed_at = now(),
     updated_at = now()
 WHERE id = $1
+    AND status NOT IN ('cancelled', 'completed')
 RETURNING *;
 
 -- name: UpdateOrderToCourierAccepted :one
@@ -250,9 +252,10 @@ SET
     status = 'cancelled',
     fulfillment_status = 'cancelled',
     cancelled_at = now(),
-    cancel_reason = $2,
+    cancel_reason = sqlc.arg('cancel_reason'),
     updated_at = now()
-WHERE id = $1
+WHERE id = sqlc.arg('id')
+    AND status = sqlc.arg('expected_status')
 RETURNING *;
 
 -- name: GetOrderStats :one

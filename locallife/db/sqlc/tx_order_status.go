@@ -47,6 +47,7 @@ func (store *SQLStore) UpdateOrderStatusTx(ctx context.Context, arg UpdateOrderS
 			ID:                arg.OrderID,
 			Status:            arg.NewStatus,
 			FulfillmentStatus: fulfillment,
+			ExpectedStatus:    arg.OldStatus,
 		})
 		if err != nil {
 			return fmt.Errorf("update order status: %w", err)
@@ -163,8 +164,9 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 		}
 
 		result.Order, err = q.UpdateOrderToCancelled(ctx, UpdateOrderToCancelledParams{
-			ID:           arg.OrderID,
-			CancelReason: cancelReason,
+			ID:             arg.OrderID,
+			CancelReason:   cancelReason,
+			ExpectedStatus: arg.OldStatus,
 		})
 		if err != nil {
 			return fmt.Errorf("update order to cancelled: %w", err)

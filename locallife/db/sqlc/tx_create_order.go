@@ -370,6 +370,7 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, arg Process
 		ID:                order.ID,
 		Status:            OrderStatusPaid,
 		FulfillmentStatus: pgtype.Text{String: newFulfillment, Valid: true},
+		ExpectedStatus:    OrderStatusPending,
 	})
 	if err != nil {
 		return result, fmt.Errorf("update order status: %w", err)

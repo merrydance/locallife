@@ -40,11 +40,11 @@ func ConfirmTakeoutOrder(ctx context.Context, store db.Store, input ConfirmOrder
 		return ConfirmOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("only takeout orders can be confirmed"))
 	}
 
-	if order.Status == "completed" {
+	if order.Status == db.OrderStatusCompleted {
 		return ConfirmOrderResult{Order: order, AlreadyCompleted: true}, nil
 	}
 
-	if order.Status != "rider_delivered" && order.Status != "user_delivered" {
+	if order.Status != db.OrderStatusRiderDelivered && order.Status != db.OrderStatusUserDelivered {
 		return ConfirmOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("order is not ready for confirmation"))
 	}
 
@@ -56,7 +56,7 @@ func ConfirmTakeoutOrder(ctx context.Context, store db.Store, input ConfirmOrder
 	_, _ = store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
 		OrderID:      order.ID,
 		FromStatus:   pgtype.Text{String: order.Status, Valid: true},
-		ToStatus:     "completed",
+		ToStatus:     db.OrderStatusCompleted,
 		OperatorID:   pgtype.Int8{Int64: input.UserID, Valid: true},
 		OperatorType: pgtype.Text{String: "user", Valid: true},
 		Notes:        pgtype.Text{String: "用户确认收货并完成订单", Valid: true},

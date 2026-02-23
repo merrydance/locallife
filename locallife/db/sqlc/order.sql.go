@@ -2081,6 +2081,7 @@ SET
     fulfillment_status = COALESCE($2, fulfillment_status),
     updated_at = now()
 WHERE id = $3
+    AND status = $4
 RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
 `
 
@@ -2088,10 +2089,16 @@ type UpdateOrderStatusParams struct {
 	Status            string      `json:"status"`
 	FulfillmentStatus pgtype.Text `json:"fulfillment_status"`
 	ID                int64       `json:"id"`
+	ExpectedStatus    string      `json:"expected_status"`
 }
 
 func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error) {
-	row := q.db.QueryRow(ctx, updateOrderStatus, arg.Status, arg.FulfillmentStatus, arg.ID)
+	row := q.db.QueryRow(ctx, updateOrderStatus,
+		arg.Status,
+		arg.FulfillmentStatus,
+		arg.ID,
+		arg.ExpectedStatus,
+	)
 	var i Order
 	err := row.Scan(
 		&i.ID,
@@ -2151,19 +2158,21 @@ SET
     status = 'cancelled',
     fulfillment_status = 'cancelled',
     cancelled_at = now(),
-    cancel_reason = $2,
+    cancel_reason = $1,
     updated_at = now()
-WHERE id = $1
+WHERE id = $2
+    AND status = $3
 RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
 `
 
 type UpdateOrderToCancelledParams struct {
-	ID           int64       `json:"id"`
-	CancelReason pgtype.Text `json:"cancel_reason"`
+	CancelReason   pgtype.Text `json:"cancel_reason"`
+	ID             int64       `json:"id"`
+	ExpectedStatus string      `json:"expected_status"`
 }
 
 func (q *Queries) UpdateOrderToCancelled(ctx context.Context, arg UpdateOrderToCancelledParams) (Order, error) {
-	row := q.db.QueryRow(ctx, updateOrderToCancelled, arg.ID, arg.CancelReason)
+	row := q.db.QueryRow(ctx, updateOrderToCancelled, arg.CancelReason, arg.ID, arg.ExpectedStatus)
 	var i Order
 	err := row.Scan(
 		&i.ID,
@@ -2225,6 +2234,7 @@ SET
     completed_at = now(),
     updated_at = now()
 WHERE id = $1
+    AND status NOT IN ('cancelled', 'completed')
 RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
 `
 

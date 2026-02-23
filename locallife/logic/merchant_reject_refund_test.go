@@ -163,10 +163,7 @@ func TestProcessMerchantRejectRefund_WechatFailure(t *testing.T) {
 		CreateRefund(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil, errors.New("wechat down"))
-	store.EXPECT().
-		UpdateRefundOrderToFailed(gomock.Any(), int64(101)).
-		Times(1).
-		Return(db.RefundOrder{}, nil)
+	// R-05: 不再调用 UpdateRefundOrderToFailed，保持 pending 让恢复调度器补偿
 
 	_, err := ProcessMerchantRejectRefund(
 		context.Background(),
@@ -175,4 +172,5 @@ func TestProcessMerchantRejectRefund_WechatFailure(t *testing.T) {
 		MerchantRejectRefundInput{OrderID: 10, Reason: "sold out"},
 	)
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "wechat refund api")
 }

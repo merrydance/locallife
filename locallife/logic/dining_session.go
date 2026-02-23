@@ -300,6 +300,7 @@ func OpenDiningSession(ctx context.Context, store db.Store, input OpenDiningSess
 
 			activateOrder = &db.ActivateOrderInput{
 				OrderID:              order.ID,
+				OldStatus:            db.OrderStatusPaid,
 				Status:               order.Status,
 				NewFulfillmentStatus: pgtype.Text{String: newFulfillment, Valid: true},
 			}

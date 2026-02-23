@@ -1,8 +1,19 @@
 package db
 
 const (
-	OrderStatusPending   = "pending"
-	OrderStatusPaid      = "paid"
+	// Order statuses (SSOT — 所有层引用此处)
+	OrderStatusPending         = "pending"
+	OrderStatusPaid            = "paid"
+	OrderStatusPreparing       = "preparing"
+	OrderStatusReady           = "ready"
+	OrderStatusCourierAccepted = "courier_accepted"
+	OrderStatusPicked          = "picked"
+	OrderStatusDelivering      = "delivering"
+	OrderStatusRiderDelivered  = "rider_delivered"
+	OrderStatusUserDelivered   = "user_delivered"
+	OrderStatusCompleted       = "completed"
+	OrderStatusCancelled       = "cancelled"
+
 	OrderTypeReservation = "reservation"
 
 	FulfillmentStatusScheduled      = "scheduled"

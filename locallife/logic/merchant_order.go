@@ -35,14 +35,14 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 	if order.MerchantID != input.MerchantID {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("order does not belong to your merchant"))
 	}
-	if order.Status != "paid" {
+	if order.Status != db.OrderStatusPaid {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only paid orders can be accepted"))
 	}
 
-	fulfillment := "preparing"
+	fulfillment := db.FulfillmentStatusPreparing
 	result, err := store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
 		OrderID:              input.OrderID,
-		NewStatus:            "preparing",
+		NewStatus:            db.OrderStatusPreparing,
 		OldStatus:            order.Status,
 		OperatorID:           input.OperatorID,
 		OperatorType:         "merchant",
@@ -56,6 +56,7 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 }
 
 // RejectMerchantOrder validates and rejects a paid order.
+// Uses CancelOrderTx to atomically rollback vouchers, membership balance, and inventory.
 func RejectMerchantOrder(ctx context.Context, store db.Store, input MerchantOrderUpdateInput) (MerchantOrderUpdateResult, error) {
 	order, err := store.GetOrderForUpdate(ctx, input.OrderID)
 	if err != nil {
@@ -71,15 +72,16 @@ func RejectMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only paid orders can be rejected"))
 	}
 
-	fulfillment := "cancelled"
-	result, err := store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
-		OrderID:              input.OrderID,
-		NewStatus:            "cancelled",
-		OldStatus:            order.Status,
-		OperatorID:           input.OperatorID,
-		OperatorType:         "merchant",
-		Notes:                fmt.Sprintf("商户拒单：%s", input.Reason),
-		NewFulfillmentStatus: &fulfillment,
+	cancelReason := fmt.Sprintf("商户拒单：%s", input.Reason)
+
+	// R-06 修复：使用 CancelOrderTx 代替 UpdateOrderStatusTx
+	// 确保优惠券回滚、会员余额退回、库存恢复等关联操作原子执行
+	result, err := store.CancelOrderTx(ctx, db.CancelOrderTxParams{
+		OrderID:      input.OrderID,
+		OldStatus:    order.Status,
+		CancelReason: cancelReason,
+		OperatorID:   input.OperatorID,
+		OperatorType: "merchant",
 	})
 	if err != nil {
 		return MerchantOrderUpdateResult{}, err
@@ -100,14 +102,14 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 	if order.MerchantID != input.MerchantID {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("order does not belong to your merchant"))
 	}
-	if order.Status != "preparing" {
+	if order.Status != db.OrderStatusPreparing {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only preparing orders can be marked as ready"))
 	}
 
-	fulfillment := "ready"
+	fulfillment := db.FulfillmentStatusReady
 	result, err := store.UpdateOrderStatusTx(ctx, db.UpdateOrderStatusTxParams{
 		OrderID:              input.OrderID,
-		NewStatus:            "ready",
+		NewStatus:            db.OrderStatusReady,
 		OldStatus:            order.Status,
 		OperatorID:           input.OperatorID,
 		OperatorType:         "merchant",
@@ -135,7 +137,7 @@ func CompleteMerchantOrder(ctx context.Context, store db.Store, input MerchantOr
 	if order.OrderType == "takeout" {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("takeout orders cannot be completed by merchant"))
 	}
-	if order.Status != "ready" {
+	if order.Status != db.OrderStatusReady {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only ready orders can be completed"))
 	}
 

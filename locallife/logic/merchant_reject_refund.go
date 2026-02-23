@@ -94,8 +94,9 @@ func ProcessMerchantRejectRefund(
 		TotalAmount:  paymentOrder.Amount,
 	})
 	if err != nil {
-		_, _ = store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-		return result, err
+		// R-05 修复：微信API失败时不标记为failed，保持pending状态
+		// 由 RefundRecoveryScheduler 每5分钟自动补偿重试
+		return result, fmt.Errorf("wechat refund api: %w", err)
 	}
 
 	switch wxRefund.Status {

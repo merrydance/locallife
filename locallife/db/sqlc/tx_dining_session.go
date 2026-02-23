@@ -31,6 +31,7 @@ type CloseDiningSessionTxResult struct {
 // ActivateOrderInput describes an order update when binding to a session.
 type ActivateOrderInput struct {
 	OrderID              int64
+	OldStatus            string // expected current status for SQL-level guard
 	Status               string
 	NewFulfillmentStatus pgtype.Text
 }
@@ -136,6 +137,7 @@ func (store *SQLStore) OpenDiningSessionTx(ctx context.Context, arg OpenDiningSe
 				Status:            arg.ActivateOrder.Status,
 				FulfillmentStatus: arg.ActivateOrder.NewFulfillmentStatus,
 				ID:                arg.ActivateOrder.OrderID,
+				ExpectedStatus:    arg.ActivateOrder.OldStatus,
 			})
 			if err != nil {
 				return fmt.Errorf("update order status: %w", err)

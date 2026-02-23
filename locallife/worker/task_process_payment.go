@@ -847,13 +847,21 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 		}
 		log.Warn().Str("out_refund_no", payload.OutRefundNo).Msg("refund abnormal")
 
-		// ⚠️ 需通知运营人工介入（待实现）
-		log.Error().
-			Str("out_refund_no", payload.OutRefundNo).
-			Str("refund_id", payload.RefundID).
-			Str("status", "ABNORMAL").
-			Str("action", "notify_operations_team").
-			Msg("[ALERT] refund abnormal - operations team intervention required")
+		// R-07 修复：通过 Redis Pub/Sub + WebSocket 告警运营团队
+		processor.publishAlert(ctx, AlertData{
+			AlertType:   AlertTypeRefundFailed,
+			Level:       AlertLevelCritical,
+			Title:       "退款异常 - 需人工介入",
+			Message:     fmt.Sprintf("退款单 %s 状态异常(ABNORMAL)，微信退款ID: %s，请及时处理", payload.OutRefundNo, payload.RefundID),
+			RelatedID:   refundOrder.ID,
+			RelatedType: "refund_order",
+			Extra: map[string]interface{}{
+				"out_refund_no":    payload.OutRefundNo,
+				"refund_id":        payload.RefundID,
+				"payment_order_id": refundOrder.PaymentOrderID,
+				"refund_amount":    refundOrder.RefundAmount,
+			},
+		})
 
 	case "CLOSED":
 		_, err = processor.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)

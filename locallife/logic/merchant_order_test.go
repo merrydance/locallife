@@ -141,17 +141,16 @@ func TestRejectMerchantOrder(t *testing.T) {
 					Times(1).
 					Return(baseOrder, nil)
 				store.EXPECT().
-					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					CancelOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ context.Context, arg db.UpdateOrderStatusTxParams) (db.UpdateOrderStatusTxResult, error) {
-						require.Equal(t, "cancelled", arg.NewStatus)
+					DoAndReturn(func(_ context.Context, arg db.CancelOrderTxParams) (db.CancelOrderTxResult, error) {
+						require.Equal(t, input.OrderID, arg.OrderID)
+						require.Equal(t, "paid", arg.OldStatus)
 						require.Equal(t, "merchant", arg.OperatorType)
-						require.Equal(t, "商户拒单：sold out", arg.Notes)
-						require.NotNil(t, arg.NewFulfillmentStatus)
-						require.Equal(t, "cancelled", *arg.NewFulfillmentStatus)
+						require.Equal(t, "商户拒单：sold out", arg.CancelReason)
 						updated := baseOrder
 						updated.Status = "cancelled"
-						return db.UpdateOrderStatusTxResult{Order: updated}, nil
+						return db.CancelOrderTxResult{Order: updated}, nil
 					})
 			},
 			check: func(t *testing.T, result MerchantOrderUpdateResult, err error) {

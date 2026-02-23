@@ -33,29 +33,29 @@ const (
 	OrderTypeReservation = "reservation" // 预定包间点菜
 )
 
-// 订单状态常量
+// 订单状态常量 — 引用 db 层 SSOT，保持 API 层向后兼容
 const (
-	OrderStatusPending         = "pending"          // 待支付
-	OrderStatusPaid            = "paid"             // 已支付
-	OrderStatusPreparing       = "preparing"        // 制作中
-	OrderStatusReady           = "ready"            // 待取餐/待配送
-	OrderStatusCourierAccepted = "courier_accepted" // 骑手已接单
-	OrderStatusPicked          = "picked"           // 已取餐
-	OrderStatusDelivering      = "delivering"       // 配送中
-	OrderStatusRiderDelivered  = "rider_delivered"  // 骑手送达（待用户确认）
-	OrderStatusUserDelivered   = "user_delivered"   // 用户确认送达
-	OrderStatusCompleted       = "completed"        // 已完成
-	OrderStatusCancelled       = "cancelled"        // 已取消
+	OrderStatusPending         = db.OrderStatusPending         // 待支付
+	OrderStatusPaid            = db.OrderStatusPaid            // 已支付
+	OrderStatusPreparing       = db.OrderStatusPreparing       // 制作中
+	OrderStatusReady           = db.OrderStatusReady           // 待取餐/待配送
+	OrderStatusCourierAccepted = db.OrderStatusCourierAccepted // 骑手已接单
+	OrderStatusPicked          = db.OrderStatusPicked          // 已取餐
+	OrderStatusDelivering      = db.OrderStatusDelivering      // 配送中
+	OrderStatusRiderDelivered  = db.OrderStatusRiderDelivered  // 骑手送达（待用户确认）
+	OrderStatusUserDelivered   = db.OrderStatusUserDelivered   // 用户确认送达
+	OrderStatusCompleted       = db.OrderStatusCompleted       // 已完成
+	OrderStatusCancelled       = db.OrderStatusCancelled       // 已取消
 )
 
-// 履约状态常量
+// 履约状态常量 — 引用 db 层 SSOT
 const (
-	FulfillmentStatusScheduled      = "scheduled"       // 已排期，等待开始（预定/预约）
-	FulfillmentStatusPendingKitchen = "pending_kitchen" // 待出餐（已支付，等待接单/下发厨房）
-	FulfillmentStatusPreparing      = "preparing"       // 厨房制作中
-	FulfillmentStatusReady          = "ready"           // 出餐完成，等待取/配送
-	FulfillmentStatusCompleted      = "completed"       // 履约完成
-	FulfillmentStatusCancelled      = "cancelled"       // 履约取消
+	FulfillmentStatusScheduled      = db.FulfillmentStatusScheduled      // 已排期
+	FulfillmentStatusPendingKitchen = db.FulfillmentStatusPendingKitchen // 待出餐
+	FulfillmentStatusPreparing      = db.FulfillmentStatusPreparing      // 制作中
+	FulfillmentStatusReady          = db.FulfillmentStatusReady          // 出餐完成
+	FulfillmentStatusCompleted      = db.FulfillmentStatusCompleted      // 履约完成
+	FulfillmentStatusCancelled      = db.FulfillmentStatusCancelled      // 履约取消
 )
 
 // 支付方式常量

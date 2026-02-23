@@ -44,12 +44,12 @@ func CancelOrder(ctx context.Context, store db.Store, input CancelOrderInput) (C
 	}
 
 	lateStatuses := map[string]bool{
-		"preparing":        true,
-		"ready":            true,
-		"courier_accepted": true,
-		"picked":           true,
-		"delivering":       true,
-		"rider_delivered":  true,
+		db.OrderStatusPreparing:       true,
+		db.OrderStatusReady:           true,
+		db.OrderStatusCourierAccepted: true,
+		db.OrderStatusPicked:          true,
+		db.OrderStatusDelivering:      true,
+		db.OrderStatusRiderDelivered:  true,
 	}
 	if lateStatuses[order.Status] {
 		_, _ = store.UpdateOrderExceptionState(ctx, db.UpdateOrderExceptionStateParams{
@@ -68,7 +68,7 @@ func CancelOrder(ctx context.Context, store db.Store, input CancelOrderInput) (C
 		return CancelOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("订单已制作/配送，已记录取消诉求，请联系商户或客服处理"))
 	}
 
-	if order.Status != "pending" && order.Status != "paid" {
+	if order.Status != db.OrderStatusPending && order.Status != db.OrderStatusPaid {
 		return CancelOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("订单当前状态无法取消，商户已接单后请联系商户处理"))
 	}
 
@@ -90,7 +90,7 @@ func CancelOrder(ctx context.Context, store db.Store, input CancelOrderInput) (C
 
 	finalResult := CancelOrderResult{Order: result.Order}
 
-	if order.Status == "paid" {
+	if order.Status == db.OrderStatusPaid {
 		paymentOrders, err := store.GetPaymentOrdersByOrder(ctx, pgtype.Int8{Int64: order.ID, Valid: true})
 		if err == nil {
 			for _, paymentOrder := range paymentOrders {
