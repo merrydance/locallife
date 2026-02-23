@@ -406,6 +406,13 @@ func (server *Server) setupRouter() {
 		searchGroup.GET("/suggestions", server.getSearchSuggestions)   // 实时建议
 	}
 
+	// 协议中心
+	agreementsGroup := authGroup.Group("/agreements")
+	{
+		agreementsGroup.GET("", server.listAgreements)
+		agreementsGroup.GET("/:type", server.getAgreement)
+	}
+
 	// 餐厅优惠活动
 	authGroup.GET("/merchants/:id/promotions", server.getMerchantPromotions)
 

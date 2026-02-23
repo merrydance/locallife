@@ -1,0 +1,77 @@
+/* 协议详情 - 遵循 DESIGN_SYSTEM.md 规范 */
+
+.page-scroll {
+  background: var(--td-bg-color-page);
+  box-sizing: border-box;
+}
+
+.content-section {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacer-sm) var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+/* 文章样式 */
+.agreement-article {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.article-header {
+  margin-bottom: var(--spacer-lg);
+  border-bottom: 1rpx solid var(--td-border-level-1-color, #eee);
+  padding-bottom: var(--spacer-md);
+}
+
+.article-title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  line-height: 1.4;
+  margin-bottom: var(--spacer-sm);
+}
+
+.article-meta {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-placeholder);
+  display: flex;
+  gap: var(--spacer-md);
+}
+
+.article-content {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
+  line-height: 1.8;
+  word-break: break-all;
+}
+
+/* 内容中的 HTML 元素适配 */
+.article-content p {
+  margin-bottom: 1em;
+}
+
+.article-content h1, .article-content h2, .article-content h3 {
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin: 1.5em 0 0.5em;
+}
+
+.article-footer {
+  margin-top: var(--spacer-xl, 64rpx);
+  padding-top: var(--spacer-md);
+  border-top: 1rpx solid var(--td-border-level-1-color, #eee);
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-placeholder);
+  text-align: right;
+  font-style: italic;
+}

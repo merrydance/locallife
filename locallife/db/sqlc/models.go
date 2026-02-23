@@ -21,6 +21,18 @@ type AbnormalStatsDaily struct {
 	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
+type Agreement struct {
+	ID          int64       `json:"id"`
+	Type        string      `json:"type"`
+	Title       string      `json:"title"`
+	Content     string      `json:"content"`
+	Version     string      `json:"version"`
+	PublishedOn pgtype.Date `json:"published_on"`
+	IsActive    bool        `json:"is_active"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
 // 申诉表 - 商户/骑手对索赔的申诉
 type Appeal struct {
 	ID      int64 `json:"id"`

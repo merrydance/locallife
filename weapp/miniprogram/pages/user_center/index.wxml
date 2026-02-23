@@ -96,6 +96,7 @@
             <t-cell title="我的评价" left-icon="chat-bubble" arrow hover bind:click="onMyReviews" />
             <t-cell title="钱包" left-icon="wallet" arrow hover bind:click="onWallet" />
             <t-cell title="联系客服" left-icon="service" arrow hover bind:click="onContact" />
+            <t-cell title="协议中心" left-icon="info-circle" arrow hover bind:click="onAgreements" />
           </t-cell-group>
         </view>
       </view>

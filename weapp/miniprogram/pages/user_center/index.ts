@@ -241,6 +241,10 @@ Page({
     Navigation.toWallet()
   },
 
+  onAgreements() {
+    Navigation.toAgreementCenter()
+  },
+
 
   // Gap 4: 获取未读消息数
   async fetchUnreadCount() {

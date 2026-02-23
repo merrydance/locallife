@@ -1,0 +1,49 @@
+<custom-navbar title="关于我们" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<scroll-view 
+  scroll-y 
+  class="page-scroll" 
+  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
+  enhanced="{{true}}"
+  show-scrollbar="{{false}}"
+>
+  <view class="content-section">
+    <view class="about-card">
+      <view class="brand-section">
+        <view class="logo-wrapper">
+          <t-icon name="app" size="80rpx" color="#fff" />
+        </view>
+        <view class="brand-name">乐客来福</view>
+        <view class="version">Version 1.1.0</view>
+      </view>
+
+      <view class="intro-section">
+        <view class="section-title">品牌介绍</view>
+        <view class="section-content">
+          乐客来福 致力于连接本地商家与消费者，提供最优质的堂食预订、外卖点餐及跑腿服务。我们始终坚持“品质生活，触手可及”的理念，为每一位用户创造便捷、高效的本地化生活体验。
+        </view>
+      </view>
+
+      <t-divider />
+
+      <view class="company-section">
+        <view class="info-item">
+          <text class="label">运营主体</text>
+          <text class="value">来富网络（宁晋）有限公司</text>
+        </view>
+        <view class="info-item">
+          <text class="label">联系方式</text>
+          <text class="value">merrydance@foxmail.com</text>
+        </view>
+        <view class="info-item">
+          <text class="label">官方网站</text>
+          <text class="value">www.merrydance.cn</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="footer-info">
+      <view>品质生活 · 触手可及</view>
+    </view>
+  </view>
+</scroll-view>

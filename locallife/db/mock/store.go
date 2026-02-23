@@ -4861,6 +4861,21 @@ func (mr *MockStoreMockRecorder) GetAbnormalStatsSummary(ctx, arg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAbnormalStatsSummary", reflect.TypeOf((*MockStore)(nil).GetAbnormalStatsSummary), ctx, arg)
 }
 
+// GetActiveAgreementByType mocks base method.
+func (m *MockStore) GetActiveAgreementByType(ctx context.Context, type_ string) (db.Agreement, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveAgreementByType", ctx, type_)
+	ret0, _ := ret[0].(db.Agreement)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveAgreementByType indicates an expected call of GetActiveAgreementByType.
+func (mr *MockStoreMockRecorder) GetActiveAgreementByType(ctx, type_ any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveAgreementByType", reflect.TypeOf((*MockStore)(nil).GetActiveAgreementByType), ctx, type_)
+}
+
 // GetActiveBehaviorBlocklist mocks base method.
 func (m *MockStore) GetActiveBehaviorBlocklist(ctx context.Context, arg db.GetActiveBehaviorBlocklistParams) (db.BehaviorBlocklist, error) {
 	m.ctrl.T.Helper()
@@ -9999,6 +10014,21 @@ func (m *MockStore) ListAbnormalStatsDaily(ctx context.Context, arg db.ListAbnor
 func (mr *MockStoreMockRecorder) ListAbnormalStatsDaily(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAbnormalStatsDaily", reflect.TypeOf((*MockStore)(nil).ListAbnormalStatsDaily), ctx, arg)
+}
+
+// ListActiveAgreements mocks base method.
+func (m *MockStore) ListActiveAgreements(ctx context.Context) ([]db.ListActiveAgreementsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveAgreements", ctx)
+	ret0, _ := ret[0].([]db.ListActiveAgreementsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveAgreements indicates an expected call of ListActiveAgreements.
+func (mr *MockStoreMockRecorder) ListActiveAgreements(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveAgreements", reflect.TypeOf((*MockStore)(nil).ListActiveAgreements), ctx)
 }
 
 // ListActiveBehaviorBlocklists mocks base method.

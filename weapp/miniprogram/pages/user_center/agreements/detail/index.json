@@ -1,0 +1,8 @@
+{
+  "usingComponents": {
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "custom-navbar": "../../../../components/custom-navbar/index"
+  },
+  "navigationBarTitleText": "详情",
+  "navigationStyle": "custom"
+}

@@ -232,6 +232,30 @@ export class Navigation {
     })
   }
 
+  /**
+   * 跳转到协议中心
+   */
+  static toAgreementCenter() {
+    wx.navigateTo({
+      url: '/pages/user_center/agreements/index'
+    })
+  }
+
+  static toAgreementDetail(type: string, title?: string) {
+    let url = `/pages/user_center/agreements/detail/index?type=${type}`
+    if (title) url += `&title=${encodeURIComponent(title)}`
+    wx.navigateTo({ url })
+  }
+
+  /**
+   * 跳转到关于我们
+   */
+  static toAboutUs() {
+    wx.navigateTo({
+      url: '/pages/user_center/about_us/index'
+    })
+  }
+
 
   // ==================== 骑手相关 ====================
 

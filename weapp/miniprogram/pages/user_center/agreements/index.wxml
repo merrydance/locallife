@@ -1,0 +1,58 @@
+<custom-navbar title="协议中心" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<scroll-view 
+  scroll-y 
+  class="page-scroll" 
+  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
+  enhanced="{{true}}"
+  show-scrollbar="{{false}}"
+  refresher-enabled="{{true}}"
+  refresher-triggered="{{isRefreshing}}"
+  bindrefresherrefresh="onRefresh"
+>
+  <view class="content-section">
+    <!-- 加载中 -->
+    <view wx:if="{{loading && agreements.length === 0}}" class="loading-state">
+      <t-loading theme="circular" size="64rpx" text="加载中..." vertical />
+    </view>
+
+    <block wx:else>
+      <!-- 列表内容 -->
+      <view wx:if="{{agreements.length > 0}}" class="card-section">
+        <view class="card-title">平台法律协议</view>
+        <view class="card-body">
+          <t-cell-group>
+            <t-cell
+              wx:for="{{agreements}}"
+              wx:key="type"
+              title="{{item.title}}"
+              description="版本: {{item.version}}"
+              arrow
+              hover
+              bind:click="onAgreementTap"
+              data-type="{{item.type}}"
+              data-title="{{item.title}}"
+            />
+            <t-cell
+              title="关于我们"
+              arrow
+              hover
+              bind:click="onAboutUsTap"
+            />
+          </t-cell-group>
+        </view>
+      </view>
+
+      <!-- 空状态 -->
+      <view wx:else class="empty-state">
+        <t-empty icon="info-circle" description="暂无相关协议" />
+      </view>
+    </block>
+
+    <!-- 底部版权信息 -->
+    <view class="page-footer">
+      <view class="company-name">来富网络（宁晋）有限公司</view>
+      <view class="copyright">Copyright © 2026 All Rights Reserved</view>
+    </view>
+  </view>
+</scroll-view>

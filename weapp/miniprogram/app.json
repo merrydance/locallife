@@ -143,6 +143,14 @@
       "pages": ["index"]
     },
     {
+      "root": "pages/user_center/agreements",
+      "pages": ["index", "detail/index"]
+    },
+    {
+      "root": "pages/user_center/about_us",
+      "pages": ["index"]
+    },
+    {
       "root": "pages/merchant",
       "name": "merchant",
       "pages": [

@@ -1,0 +1,76 @@
+/* 协议中心 - 遵循 DESIGN_SYSTEM.md 规范 */
+
+.page-scroll {
+  background: var(--td-bg-color-page);
+  box-sizing: border-box;
+}
+
+.content-section {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacer-sm) var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
+}
+
+/* 卡片区块 */
+.card-section {
+  margin-bottom: var(--spacer-md);
+}
+
+.card-title {
+  padding: var(--spacer-sm) 0 var(--spacer-xs);
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+  font-weight: 500;
+  letter-spacing: 2rpx;
+  text-transform: uppercase;
+}
+
+.card-body {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+/* 状态样式 */
+.loading-state, .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+/* TDesign 覆盖 */
+.t-cell-group {
+  background-color: transparent !important;
+}
+
+.t-cell__description {
+  font-size: var(--font-size-sm) !important;
+  color: var(--td-text-color-secondary) !important;
+}
+
+/* 底部页脚 */
+.page-footer {
+  margin-top: var(--spacer-xl, 64rpx);
+  padding: var(--spacer-lg) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
+.company-name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-text-color-placeholder);
+  margin-bottom: var(--spacer-xs);
+  letter-spacing: 2rpx;
+}
+
+.copyright {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder);
+}

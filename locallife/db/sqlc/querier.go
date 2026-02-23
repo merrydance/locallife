@@ -499,6 +499,7 @@ type Querier interface {
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
 	// Phase3: abnormal stats aggregation queries
 	GetAbnormalStatsSummary(ctx context.Context, arg GetAbnormalStatsSummaryParams) (GetAbnormalStatsSummaryRow, error)
+	GetActiveAgreementByType(ctx context.Context, type_ string) (Agreement, error)
 	GetActiveBehaviorBlocklist(ctx context.Context, arg GetActiveBehaviorBlocklistParams) (BehaviorBlocklist, error)
 	GetActiveBillingGroupMember(ctx context.Context, arg GetActiveBillingGroupMemberParams) (BillingGroupMember, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
@@ -1009,6 +1010,7 @@ type Querier interface {
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
 	ListAbnormalStatsAlerts(ctx context.Context, arg ListAbnormalStatsAlertsParams) ([]ListAbnormalStatsAlertsRow, error)
 	ListAbnormalStatsDaily(ctx context.Context, arg ListAbnormalStatsDailyParams) ([]AbnormalStatsDaily, error)
+	ListActiveAgreements(ctx context.Context) ([]ListActiveAgreementsRow, error)
 	ListActiveBehaviorBlocklists(ctx context.Context) ([]BehaviorBlocklist, error)
 	ListActiveCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]CloudPrinter, error)
 	ListActiveDeliveryFeeConfigs(ctx context.Context) ([]DeliveryFeeConfig, error)

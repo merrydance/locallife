@@ -1,0 +1,11 @@
+{
+  "usingComponents": {
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "custom-navbar": "../../../components/custom-navbar/index"
+  },
+  "navigationBarTitleText": "协议中心",
+  "navigationStyle": "custom"
+}
