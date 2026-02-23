@@ -9,7 +9,7 @@
 
   <view wx:elif="{{hasError}}" class="error-container" style="padding-top: 200rpx; display: flex; flex-direction: column; align-items: center; gap: 32rpx;">
      <t-empty icon="error-circle" description="{{errorMessage || '加载失败'}}" />
-     <t-button theme="primary" size="medium" bindtap="onRetry">重试</t-button>
+     <t-button theme="primary" size="medium" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
   </view>
 
   <view wx:else class="content">
@@ -101,5 +101,5 @@
     <text class="summary-count">共{{totalCount}}份</text>
     <text class="summary-amount">预计¥{{totalAmountDisplay}}</text>
   </view>
-  <t-button theme="primary" size="large" block bindtap="onSubmit" loading="{{submitting}}">确认修改</t-button>
+  <t-button theme="primary" size="large" block bindtap="onSubmit" loading="{{submitting}}" shape="round">确认修改</t-button>
 </view>

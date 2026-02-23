@@ -106,7 +106,7 @@
 
 <!-- 底部提交栏 -->
 <view class="bottom-bar">
-  <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit">
+  <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit" shape="round">
     {{paymentMode === 'deposit' ? '确认预定 (¥' + calculation.totalDisplay + ')' : '下一步：选择菜品'}}
   </t-button>
 </view>

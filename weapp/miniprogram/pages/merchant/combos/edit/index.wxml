@@ -84,7 +84,7 @@
         loading="{{submitting}}"
         disabled="{{selectedDishIds.length === 0}}"
         bind:tap="onSubmit"
-      >
+       shape="round">
         {{isEdit ? '保存套餐' : '创建套餐'}}
       </t-button>
     </view>

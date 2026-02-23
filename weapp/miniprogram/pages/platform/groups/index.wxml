@@ -32,7 +32,7 @@
       <view wx:for="{{applications}}" wx:key="id" class="section-card app-card">
         <view class="title-row">
           <view class="name">{{item.group_name || ('申请#' + item.id)}}</view>
-          <t-tag theme="{{item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'danger' : item.status === 'submitted' ? 'warning' : 'primary'}}" variant="dark">{{getStatusLabel(item.status)}}</t-tag>
+          <t-tag theme="{{item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'danger' : item.status === 'submitted' ? 'warning' : 'primary'}}" variant="light-outline">{{getStatusLabel(item.status)}}</t-tag>
         </view>
         <view class="meta-row">
           <text class="meta-label">联系人电话</text>

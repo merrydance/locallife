@@ -48,7 +48,7 @@
           loading="{{submitting}}"
           disabled="{{loading || submitting}}"
           bindtap="onSubmitWithdraw"
-        >
+         shape="round">
           提交提现申请
         </t-button>
       </view>

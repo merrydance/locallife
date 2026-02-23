@@ -159,18 +159,18 @@
   <!-- Navigation Bar -->
   <view class="footer-bar animate-slide-up">
     <block wx:if="{{currentStep === 0}}">
-      <t-button block theme="primary" size="large" bindtap="onNext">立即入驻</t-button>
+      <t-button block theme="primary" size="large" bindtap="onNext" shape="round">立即入驻</t-button>
     </block>
     <block wx:elif="{{currentStep === 3}}">
       <view class="btn-group">
-        <t-button variant="outline" size="large" bindtap="onPrev">返回修改</t-button>
-        <t-button theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}">确认并提交</t-button>
+        <t-button variant="outline" size="large" bindtap="onPrev" shape="round">返回修改</t-button>
+        <t-button theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" shape="round">确认并提交</t-button>
       </view>
     </block>
     <block wx:elif="{{currentStep < 3}}">
       <view class="btn-group">
-        <t-button variant="outline" size="large" bindtap="onPrev">上一步</t-button>
-        <t-button theme="primary" size="large" bindtap="onNext">下一步</t-button>
+        <t-button variant="outline" size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
       </view>
     </block>
   </view>

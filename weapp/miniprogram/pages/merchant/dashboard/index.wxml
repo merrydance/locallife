@@ -50,7 +50,7 @@
           <t-icon name="{{isOpen ? 'check-circle' : 'error-circle'}}" size="32rpx" />
           <text class="ops-text">{{isOpen ? '正在接收订单中' : '已暂停接单'}}</text>
         </view>
-        <t-button size="extra-small" theme="primary" variant="outline" bind:tap="onToggleBusiness">
+        <t-button size="extra-small" theme="primary" variant="outline" bind:tap="onToggleBusiness" shape="round">
           {{isOpen ? '打烊' : '开门'}}
         </t-button>
       </view>
@@ -101,7 +101,7 @@
         </view>
 
         <view class="more-wrap">
-          <t-button size="small" variant="outline" theme="primary" bind:tap="onGoOrderList">查看更多订单</t-button>
+          <t-button size="small" variant="outline" theme="primary" bind:tap="onGoOrderList" shape="round">查看更多订单</t-button>
         </view>
       </view>
     </view>

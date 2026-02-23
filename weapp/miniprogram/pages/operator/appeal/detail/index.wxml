@@ -4,7 +4,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
     </t-empty>
   </view>
 
@@ -65,7 +65,7 @@
           block
           loading="{{recoverySubmitting}}"
           bindtap="onWaiveRecovery"
-        >核销追偿</t-button>
+         shape="round">核销追偿</t-button>
       </view>
 
       <view class="card input-card" wx:if="{{appeal.status === 'pending'}}">
@@ -89,8 +89,8 @@
       </view>
       
       <view class="footer-actions" wx:if="{{appeal.status === 'pending'}}">
-        <t-button theme="danger" variant="outline" block bind:tap="onReject" loading="{{submitting}}">驳回申诉</t-button>
-        <t-button theme="primary" block bind:tap="onApprove" loading="{{submitting}}">审核通过</t-button>
+        <t-button theme="danger" variant="outline" block bind:tap="onReject" loading="{{submitting}}" shape="round">驳回申诉</t-button>
+        <t-button theme="primary" block bind:tap="onApprove" loading="{{submitting}}" shape="round">审核通过</t-button>
       </view>
     </view>
   </block>

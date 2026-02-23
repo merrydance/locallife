@@ -5,7 +5,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
     </t-empty>
   </view>
 
@@ -67,7 +67,7 @@
       </view>
 
       <view wx:if="{{addressId}}" class="delete-section">
-         <t-button variant="text" theme="danger" bindtap="onDelete">删除收货地址</t-button>
+         <t-button variant="text" theme="danger" bindtap="onDelete" shape="round">删除收货地址</t-button>
       </view>
     </block>
   </block>

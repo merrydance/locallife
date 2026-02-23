@@ -18,7 +18,7 @@
         theme="{{isOnline ? 'danger' : 'success'}}" 
         size="small" 
         bind:tap="toggleOnlineStatus"
-      >
+       shape="round">
         {{isOnline ? '下线' : '上线'}}
       </t-button>
     </view>
@@ -114,8 +114,8 @@
       </view>
 
       <view class="modal-footer">
-        <t-button theme="light" bind:tap="closeExceptionModal">取消</t-button>
-        <t-button theme="primary" bind:tap="reportException">提交</t-button>
+        <t-button theme="light" bind:tap="closeExceptionModal" shape="round">取消</t-button>
+        <t-button theme="primary" bind:tap="reportException" shape="round">提交</t-button>
       </view>
     </view>
   </t-popup>

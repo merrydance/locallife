@@ -55,7 +55,7 @@
   <view wx:elif="{{!loading && membershipId}}" class="promo-simple">
     <view class="simple-row">
       <text class="simple-label">储值余额不足？</text>
-      <t-button theme="primary" variant="text" size="small" bind:tap="onCustomRecharge">
+      <t-button theme="primary" variant="text" size="small" bind:tap="onCustomRecharge" shape="round">
         去充值
       </t-button>
     </view>

@@ -26,14 +26,14 @@
       <t-textarea label="处置说明" placeholder="填写处置结果与结论" value="{{resolutionNotes}}" bindchange="onResolutionNotesChange" />
       <t-input label="恢复商户ID" placeholder="可选，多个用英文逗号分隔" value="{{recoverMerchantIdsRaw}}" bindchange="onRecoverMerchantIdsChange" />
       <t-input label="恢复原因" placeholder="有恢复商户时必填" value="{{recoverReason}}" bindchange="onRecoverReasonChange" />
-      <t-button theme="primary" block bindtap="onSubmitResolution">提交处置</t-button>
+      <t-button theme="primary" block bindtap="onSubmitResolution" shape="round">提交处置</t-button>
     </view>
 
     <view class="card">
       <view class="section-title">恢复商户上线</view>
       <t-input label="商户ID" placeholder="输入商户ID" value="{{singleResumeMerchantId}}" bindchange="onSingleResumeMerchantIdChange" />
       <t-input label="恢复原因" placeholder="输入恢复原因" value="{{singleResumeReason}}" bindchange="onSingleResumeReasonChange" />
-      <t-button theme="success" block bindtap="onResumeSingleMerchant">恢复上线</t-button>
+      <t-button theme="success" block bindtap="onResumeSingleMerchant" shape="round">恢复上线</t-button>
     </view>
   </view>
 

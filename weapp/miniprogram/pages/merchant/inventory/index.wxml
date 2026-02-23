@@ -39,7 +39,7 @@
             confirm-type="done"
           />
         </view>
-        <t-button size="small" theme="primary" loading="{{item.submitting}}" data-index="{{index}}" bind:tap="onSave">保存</t-button>
+        <t-button size="small" theme="primary" loading="{{item.submitting}}" data-index="{{index}}" bind:tap="onSave" shape="round">保存</t-button>
       </view>
     </view>
   </view>

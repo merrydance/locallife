@@ -89,7 +89,7 @@
              <view class="external-field">
                 <view class="custom-label-row">
                    <text class="external-label">店铺地址</text>
-                   <t-button theme="primary" variant="text" size="small" icon="location" bindtap="onChooseAddress">选择位置</t-button>
+                   <t-button theme="primary" variant="text" size="small" icon="location" bindtap="onChooseAddress" shape="round">选择位置</t-button>
                 </view>
                 <t-textarea placeholder="请选择或输入店铺地址" value="{{formData.address}}" autosize bindchange="onAddressInput" bindblur="onFieldBlur" data-field="address" />
              </view>
@@ -133,18 +133,18 @@
   <!-- 底部操作栏 -->
   <view class="submit-bar">
     <block wx:if="{{currentStep === 0}}">
-         <t-button class="submit-btn" theme="primary" size="large" bindtap="nextStep">开始入驻</t-button>
+         <t-button class="submit-btn" theme="primary" size="large" bindtap="nextStep" shape="round">开始入驻</t-button>
     </block>
     <block wx:if="{{currentStep > 0 && currentStep < 4}}">
          <view class="btn-row">
-            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep">上一步</t-button>
-            <t-button class="half-btn" theme="primary" size="large" bindtap="nextStep">下一步</t-button>
+            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep" shape="round">上一步</t-button>
+            <t-button class="half-btn" theme="primary" size="large" bindtap="nextStep" shape="round">下一步</t-button>
          </view>
     </block>
     <block wx:if="{{currentStep === 4}}">
          <view class="btn-row">
-            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep" disabled="{{isSubmitting}}">上一步</t-button>
-            <t-button class="half-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">提交入驻</t-button>
+            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep" disabled="{{isSubmitting}}" shape="round">上一步</t-button>
+            <t-button class="half-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}" shape="round">提交入驻</t-button>
          </view>
     </block>
   </view>

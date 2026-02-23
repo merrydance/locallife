@@ -6,7 +6,7 @@
     <!-- Error State -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
       </t-empty>
     </view>
 
@@ -55,7 +55,7 @@
         </view>
 
         <view class="footer-btn-wrapper">
-          <t-button theme="primary" size="large" block bind:tap="onSave">保存配置</t-button>
+          <t-button theme="primary" size="large" block bind:tap="onSave" shape="round">保存配置</t-button>
         </view>
       </view>
     </block>

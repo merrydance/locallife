@@ -5,7 +5,7 @@
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" variant="outline" size="medium" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" variant="outline" size="medium" bindtap="onRetry" shape="round">重新加载</t-button>
   </view>
 
   <!-- 2. 骨架屏 (App Shell + Skeleton) -->
@@ -44,7 +44,7 @@
         <text class="label">桌台:</text>
         <text class="value">{{session.table_name}}</text>
       </view>
-      <t-button class="call-btn" size="small" icon="service" bindtap="onCallWaiter">呼叫服务员</t-button>
+      <t-button class="call-btn" size="small" icon="service" bindtap="onCallWaiter" shape="round">呼叫服务员</t-button>
     </view>
 
     <!-- 菜品列表 -->
@@ -106,5 +106,5 @@
     <text class="cart-count">🛒 {{cartCount}}件</text>
     <text class="cart-price">¥{{cartPriceDisplay}}</text>
   </view>
-  <t-button class="submit-btn" theme="primary" bindtap="onSubmitOrder">下单</t-button>
+  <t-button class="submit-btn" theme="primary" bindtap="onSubmitOrder" shape="round">下单</t-button>
 </view>

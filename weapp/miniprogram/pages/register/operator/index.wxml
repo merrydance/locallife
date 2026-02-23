@@ -174,7 +174,7 @@
          <view class="status-text">申请已提交，审核中</view>
          <view class="status-hint">我们的合伙人经理将在 24 小时内致电与您进行初选沟通，请保持电话畅通。</view>
        </view>
-       <t-button theme="primary" ghost block size="large" bindtap="onBackHome">返回个人中心</t-button>
+       <t-button theme="primary" ghost block size="large" bindtap="onBackHome" shape="round" variant="outline">返回个人中心</t-button>
     </view>
 
   </view>
@@ -182,12 +182,12 @@
   <!-- Navigation -->
   <view class="bottom-action animate-slide-up" wx:if="{{currentStep < 4}}">
     <block wx:if="{{currentStep === 0}}">
-      <t-button block theme="primary" size="large" bindtap="onNext">立即申请区域合伙人</t-button>
+      <t-button block theme="primary" size="large" bindtap="onNext" shape="round">立即申请区域合伙人</t-button>
     </block>
     <block wx:else>
       <view class="btn-group">
-        <t-button variant="outline" size="large" bindtap="onPrev">上一步</t-button>
-        <t-button theme="primary" size="large" bindtap="{{currentStep === 3 ? 'onSubmit' : 'onNext'}}" loading="{{isSubmitting}}">
+        <t-button variant="outline" size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button theme="primary" size="large" bindtap="{{currentStep === 3 ? 'onSubmit' : 'onNext'}}" loading="{{isSubmitting}}" shape="round">
           {{currentStep === 3 ? '确认提交申请' : '下一步'}}
         </t-button>
       </view>

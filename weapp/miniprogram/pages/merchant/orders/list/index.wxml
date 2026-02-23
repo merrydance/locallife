@@ -70,7 +70,7 @@
             bind:tap="onAcceptOrder" 
             data-id="{{item.id}}"
             loading="{{item.submitting}}"
-          >
+           shape="round">
             接单制作
           </t-button>
           
@@ -83,7 +83,7 @@
             bind:tap="onMarkReady" 
             data-id="{{item.id}}"
             loading="{{item.submitting}}"
-          >
+           shape="round">
             制作完成
           </t-button>
 
@@ -95,7 +95,7 @@
             bind:tap="onCompleteOrder" 
             data-id="{{item.id}}"
             loading="{{item.submitting}}"
-          >
+           shape="round">
             确认送达/核销
           </t-button>
         </view>

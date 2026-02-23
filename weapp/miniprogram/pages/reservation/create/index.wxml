@@ -19,7 +19,7 @@
   </view>
 
   <view class="footer-action">
-    <t-button theme="primary" size="large" block loading="{{submitting}}" disabled="{{submitting}}" bind:tap="onSubmit">提交预订</t-button>
+    <t-button theme="primary" size="large" block loading="{{submitting}}" disabled="{{submitting}}" bind:tap="onSubmit" shape="round">提交预订</t-button>
   </view>
 
   <!-- Pickers -->

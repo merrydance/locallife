@@ -14,7 +14,7 @@
         <view class="status-item">子商户号：{{statusView.subMchId}}</view>
         <view class="status-item">驳回原因：{{statusView.rejectReason}}</view>
         <view wx:if="{{statusView.signURL}}" class="status-item">
-          <t-button theme="primary" variant="outline" size="small" bindtap="onOpenSignUrl">复制签约链接</t-button>
+          <t-button theme="primary" variant="outline" size="small" bindtap="onOpenSignUrl" shape="round">复制签约链接</t-button>
         </view>
       </block>
     </view>
@@ -53,7 +53,7 @@
       <t-input label="联系邮箱" placeholder="可选" value="{{form.contact_email}}" data-field="contact_email" bindchange="onInputChange" />
 
       <view class="submit-wrap">
-        <t-button theme="primary" block size="large" loading="{{submitting}}" bindtap="onSubmit">提交微信支付开户</t-button>
+        <t-button theme="primary" block size="large" loading="{{submitting}}" bindtap="onSubmit" shape="round">提交微信支付开户</t-button>
       </view>
     </view>
 

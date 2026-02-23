@@ -22,7 +22,7 @@
     <!-- 1. 错误状态 -->
     <view wx:if="{{isError}}" class="error-container">
       <t-empty icon="info-circle" description="{{errorMsg}}" />
-      <t-button theme="primary" variant="outline" size="small" bindtap="loadOrders" data-retry="true" style="margin-top: 24rpx;">重试</t-button>
+      <t-button theme="primary" variant="outline" size="small" bindtap="loadOrders" data-retry="true" style="margin-top: 24rpx;" shape="round">重试</t-button>
     </view>
 
     <!-- 2. 骨架屏加载 (App Shell + Skeleton) -->

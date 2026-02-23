@@ -25,6 +25,6 @@
   <t-empty wx:else icon="info-circle" description="暂无食安事件" />
 
   <view class="load-more" wx:if="{{hasMore}}">
-    <t-button size="small" variant="outline" bindtap="onLoadMore" loading="{{loading}}">加载更多</t-button>
+    <t-button size="small" variant="outline" bindtap="onLoadMore" loading="{{loading}}" shape="round">加载更多</t-button>
   </view>
 </view>

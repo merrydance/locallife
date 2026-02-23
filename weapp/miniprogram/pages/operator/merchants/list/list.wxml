@@ -26,7 +26,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
       </t-empty>
     </view>
 
@@ -114,7 +114,7 @@
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
                   catchtap="stopPropagation"
-                >
+                 shape="round">
                   暂停商户
                 </t-button>
                 <t-button
@@ -126,7 +126,7 @@
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
                   catchtap="stopPropagation"
-                >
+                 shape="round">
                   恢复营业
                 </t-button>
                 <t-button
@@ -136,7 +136,7 @@
                   bindtap="onMerchantTap"
                   data-id="{{item.id}}"
                   catchtap="stopPropagation"
-                >
+                 shape="round">
                   管理详情
                 </t-button>
               </view>

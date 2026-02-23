@@ -76,7 +76,7 @@
         disabled="{{content.length < 10 || rating === 0 || submitting}}"
         loading="{{submitting}}"
         bindtap="onSubmit"
-      >
+       shape="round">
         发布评价
       </t-button>
       <view class="policy-tip">发布内容将经过系统安全审核</view>

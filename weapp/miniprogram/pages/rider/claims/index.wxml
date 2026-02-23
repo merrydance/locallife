@@ -51,7 +51,7 @@
               loading="{{recoveryPaying[item.id]}}"
               data-claim-id="{{item.id}}"
               bindtap="onPayRecovery"
-            >支付追偿</t-button>
+             shape="round">支付追偿</t-button>
           </view>
         </view>
       </view>

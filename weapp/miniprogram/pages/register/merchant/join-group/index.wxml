@@ -32,7 +32,7 @@
                 bindtap="onApply" 
                 data-id="{{item.id}}" 
                 data-name="{{item.name}}"
-                >申请加入</t-button>
+                 shape="round">申请加入</t-button>
             </view>
         </view>
         <view class="empty-state" wx:elif="{{searched && groups.length === 0}}">

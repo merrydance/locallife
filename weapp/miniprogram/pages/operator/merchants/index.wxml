@@ -5,7 +5,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
       </t-empty>
     </view>
 
@@ -51,7 +51,7 @@
             </view>
 
             <view class="card-actions">
-              <t-button size="small" theme="default" variant="outline" data-id="{{item.id}}" bindtap="onViewDetail">查看详情</t-button>
+              <t-button size="small" theme="default" variant="outline" data-id="{{item.id}}" bindtap="onViewDetail" shape="round">查看详情</t-button>
             </view>
           </view>
         </view>

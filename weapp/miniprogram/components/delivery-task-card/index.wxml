@@ -80,7 +80,7 @@ module.exports = {
       size="medium" 
       block
       bind:tap="onGrab"
-    >
+     shape="round">
       立即抢单
     </t-button>
 
@@ -91,7 +91,7 @@ module.exports = {
             theme="primary" 
             size="small" 
             bind:tap="onPickup"
-        >
+         shape="round">
             开始取餐
         </t-button>
 
@@ -100,7 +100,7 @@ module.exports = {
             theme="success" 
             size="small" 
             bind:tap="onConfirmPickup"
-        >
+         shape="round">
             确认取餐
         </t-button>
 
@@ -109,7 +109,7 @@ module.exports = {
             theme="primary" 
             size="small" 
             bind:tap="onDeliver"
-        >
+         shape="round">
             开始配送
         </t-button>
 
@@ -118,7 +118,7 @@ module.exports = {
             theme="success" 
             size="small" 
             bind:tap="onConfirmDeliver"
-        >
+         shape="round">
             确认送达
         </t-button>
 
@@ -127,7 +127,7 @@ module.exports = {
             size="small" 
             variant="outline"
             bind:tap="onException"
-        >
+         shape="round">
             上报异常
         </t-button>
     </block>

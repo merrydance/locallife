@@ -2,7 +2,7 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
   <view class="header-actions">
-    <t-button size="small" variant="outline" theme="primary" bind:tap="onManageCategories">分类管理</t-button>
+    <t-button size="small" variant="outline" theme="primary" bind:tap="onManageCategories" shape="round">分类管理</t-button>
   </view>
 
   <!-- 搜索栏 -->

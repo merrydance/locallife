@@ -56,7 +56,7 @@
       <view wx:for="{{applications}}" wx:key="id" class="section-card app-card" bind:tap="onDetailTap" data-id="{{item.id}}">
         <view class="title-row">
           <view class="name">{{item.name || item.legal_person_name || ('申请#' + item.id)}}</view>
-          <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
+          <t-tag theme="{{item.statusTheme}}" variant="light-outline">{{item.statusLabel}}</t-tag>
         </view>
         <view class="meta-row">
           <text class="meta-label">联系人</text>

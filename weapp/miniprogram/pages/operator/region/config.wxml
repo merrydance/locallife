@@ -5,7 +5,7 @@
     <!-- Error State -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
       </t-empty>
     </view>
 
@@ -31,14 +31,14 @@
           </t-cell-group>
           
           <view class="btn-wrapper">
-              <t-button theme="primary" block bind:tap="onSaveFeeConfig">保存基础配置</t-button>
+              <t-button theme="primary" block bind:tap="onSaveFeeConfig" shape="round">保存基础配置</t-button>
           </view>
         </view>
 
         <view class="section">
           <view class="section-header">
               <view class="section-title">特殊/峰时配置</view>
-              <t-button size="small" variant="outline" bind:tap="onAddPeak">添加</t-button>
+              <t-button size="small" variant="outline" bind:tap="onAddPeak" shape="round">添加</t-button>
           </view>
           
           <view class="peak-list">
@@ -91,7 +91,7 @@
               </view>
           </view>
           <view class="popup-footer">
-              <t-button theme="primary" block bind:tap="onSavePeak">确定</t-button>
+              <t-button theme="primary" block bind:tap="onSavePeak" shape="round">确定</t-button>
           </view>
       </view>
   </t-popup>

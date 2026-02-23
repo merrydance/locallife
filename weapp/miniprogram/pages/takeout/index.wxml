@@ -68,15 +68,15 @@
       <view class="location-guide-title">需要您的位置信息</view>
       <view class="location-guide-desc">本地生活服务依赖于您的位置，请先完成定位</view>
       <view class="location-guide-buttons">
-        <t-button theme="primary" size="small" bind:tap="onRetryLocation">重新定位</t-button>
-        <t-button variant="outline" size="small" bind:tap="onManualLocation">手动选择</t-button>
+        <t-button theme="primary" size="small" bind:tap="onRetryLocation" shape="round">重新定位</t-button>
+        <t-button variant="outline" size="small" bind:tap="onManualLocation" shape="round">手动选择</t-button>
       </view>
     </view>
 
     <!-- 1. 错误状态 (Four States - Error) -->
     <view wx:elif="{{isError}}" class="error-container">
       <t-empty icon="info-circle" description="{{errorMsg}}" />
-      <t-button theme="primary" variant="outline" size="small" bindtap="loadData" block style="margin: 0 40rpx;">重试</t-button>
+      <t-button theme="primary" variant="outline" size="small" bindtap="loadData" block style="margin: 0 40rpx;" shape="round">重试</t-button>
     </view>
 
     <block wx:else>
@@ -122,8 +122,8 @@
         <view wx:elif="{{!loading}}" class="empty-entry">
           <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
           <view class="empty-actions">
-            <t-button theme="primary" size="large" block bind:tap="onMerchantRegister">商户入驻</t-button>
-            <t-button variant="outline" size="large" block bind:tap="onOperatorRegister">运营商入驻</t-button>
+            <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
+            <t-button variant="outline" size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
           </view>
         </view>
       </view>

@@ -28,7 +28,7 @@
           <text class="merchant-name">{{item.merchantName}}</text>
           
           <!-- 错误提示标签 -->
-          <t-tag wx:if="{{item.errorStatus}}" theme="danger" variant="dark" size="small" style="margin-left: 12rpx; flex-shrink: 0; max-width: 240rpx;">
+          <t-tag wx:if="{{item.errorStatus}}" theme="danger" variant="light-outline" size="small" style="margin-left: 12rpx; flex-shrink: 0; max-width: 240rpx;">
             <view style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{item.errorStatus}}</view>
           </t-tag>
         </view>
@@ -72,7 +72,7 @@
             </view>
             <view wx:if="{{!cartItem.isAvailable}}" class="unavailable-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 8rpx;">
               <text class="item-status">已下架</text>
-              <t-button size="extra-small" variant="text" theme="danger" bindtap="onRemoveUnavailable" data-item-id="{{cartItem.id}}" data-cart-id="{{item.cartId}}">移除</t-button>
+              <t-button size="extra-small" variant="text" theme="danger" bindtap="onRemoveUnavailable" data-item-id="{{cartItem.id}}" data-cart-id="{{item.cartId}}" shape="round">移除</t-button>
             </view>
           </view>
         </view>
@@ -98,7 +98,7 @@
       icon="cart"
       description="购物车是空的"
     >
-      <t-button theme="primary" size="large" bindtap="onBackToTakeout">去逛逛</t-button>
+      <t-button theme="primary" size="large" bindtap="onBackToTakeout" shape="round">去逛逛</t-button>
     </t-empty>
   </view>
 </view>
@@ -121,7 +121,7 @@
     disabled="{{selectedCartIds.length === 0}}"
     bindtap="onCheckout"
     t-class="checkout-btn-inner"
-  >
+   shape="round">
     去下单
   </t-button>
 </view>
