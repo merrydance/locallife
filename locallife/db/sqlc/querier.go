@@ -89,6 +89,7 @@ type Querier interface {
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error
+	ClearSearchHistory(ctx context.Context, userID int64) error
 	CloseDiningSession(ctx context.Context, id int64) (DiningSession, error)
 	// 批量关闭过期的 pending 支付订单
 	CloseExpiredPaymentOrders(ctx context.Context) (int64, error)
@@ -397,6 +398,7 @@ type Querier interface {
 	CreateRuleHit(ctx context.Context, arg CreateRuleHitParams) (RuleHit, error)
 	CreateRuleVersion(ctx context.Context, arg CreateRuleVersionParams) (RuleVersion, error)
 	CreateSafetyReport(ctx context.Context, arg CreateSafetyReportParams) (SafetyReport, error)
+	CreateSearchHistory(ctx context.Context, arg CreateSearchHistoryParams) (SearchHistory, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateTable(ctx context.Context, arg CreateTableParams) (Table, error)
 	CreateTableReservation(ctx context.Context, arg CreateTableReservationParams) (TableReservation, error)
@@ -477,6 +479,7 @@ type Querier interface {
 	DeleteReservationInventoryByDish(ctx context.Context, arg DeleteReservationInventoryByDishParams) error
 	DeleteReservationItems(ctx context.Context, reservationID int64) error
 	DeleteReview(ctx context.Context, id int64) error
+	DeleteSearchHistory(ctx context.Context, arg DeleteSearchHistoryParams) error
 	DeleteTable(ctx context.Context, id int64) error
 	DeleteTableImage(ctx context.Context, id int64) error
 	DeleteTag(ctx context.Context, id int64) error
@@ -801,6 +804,7 @@ type Querier interface {
 	// ============================================
 	// 获取全平台热门菜品（基于销量）
 	GetPopularDishes(ctx context.Context, limit int32) ([]GetPopularDishesRow, error)
+	GetPopularKeywords(ctx context.Context, arg GetPopularKeywordsParams) ([]GetPopularKeywordsRow, error)
 	// ============================================
 	// 商户推荐查询
 	// ============================================
@@ -991,6 +995,7 @@ type Querier interface {
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
 	IncrementMembershipBalance(ctx context.Context, arg IncrementMembershipBalanceParams) (MerchantMembership, error)
 	IncrementMerchantForeignObjectClaim(ctx context.Context, merchantID int64) error
+	IncrementPopularKeyword(ctx context.Context, arg IncrementPopularKeywordParams) error
 	IncrementRiderDamageIncident(ctx context.Context, riderID int64) error
 	IncrementSoldQuantity(ctx context.Context, arg IncrementSoldQuantityParams) (DailyInventory, error)
 	// 增加用户警告次数
@@ -1271,6 +1276,7 @@ type Querier interface {
 	ListRules(ctx context.Context, arg ListRulesParams) ([]Rule, error)
 	ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error)
 	ListSafetyReportsByRegionAndStatus(ctx context.Context, arg ListSafetyReportsByRegionAndStatusParams) ([]SafetyReport, error)
+	ListSearchHistory(ctx context.Context, arg ListSearchHistoryParams) ([]ListSearchHistoryRow, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
 	ListTableTags(ctx context.Context, tableID int64) ([]ListTableTagsRow, error)
@@ -1626,6 +1632,8 @@ type Querier interface {
 	UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error)
 	UpsertRegionRuleConfig(ctx context.Context, arg UpsertRegionRuleConfigParams) (RegionRuleConfig, error)
 	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)
+	// 插入或更新搜索历史（同一关键词存在时更新时间戳）
+	UpsertSearchHistory(ctx context.Context, arg UpsertSearchHistoryParams) (SearchHistory, error)
 	// ==========================================
 	// 设备指纹查询（M9欺诈检测）
 	// ==========================================

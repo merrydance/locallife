@@ -1669,6 +1669,22 @@ type SafetyReport struct {
 	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
+type SearchHistory struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Keyword   string    `json:"keyword"`
+	Type      string    `json:"type"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type SearchPopularKeyword struct {
+	ID        int64     `json:"id"`
+	Keyword   string    `json:"keyword"`
+	Type      string    `json:"type"`
+	Count     int32     `json:"count"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type Session struct {
 	ID                    int64     `json:"id"`
 	UserID                int64     `json:"user_id"`
