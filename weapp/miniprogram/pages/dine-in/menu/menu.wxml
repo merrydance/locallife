@@ -114,7 +114,7 @@
   <view class="cart-modal-content">
     <view class="cart-header">
       <text class="cart-title">购物车 ({{cart.total_quantity}})</text>
-      <t-button class="cart-close" size="small" theme="default" variant="text" icon="close" bindtap="hideCart" / shape="round">
+      <t-button class="cart-close" size="small" theme="default" variant="text" icon="close" bindtap="hideCart" shape="round" />
     </view>
     
     <scroll-view class="cart-items-scroll" scroll-y>
