@@ -4,6 +4,7 @@
     "pages/reservation/index",
     "pages/user_center/index",
     "pages/dining/index",
+    "pages/notification/index",
     "pages/user/bind-merchant/index"
   ],
   "subPackages": [
@@ -82,11 +83,6 @@
         "tracking/index",
         "success/index"
       ]
-    },
-    {
-      "root": "pages/notification",
-      "name": "notification",
-      "pages": ["index"]
     },
     {
       "root": "pages/dine-in",
