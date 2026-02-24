@@ -856,6 +856,9 @@ Page({
             let url = `/pages/dine-in/checkout/checkout?merchant_id=${merchantId}&order_type=${orderType}`
             if (orderType === 'dine_in') {
                 url += `&table_id=${tableId}`
+                if (this.data.tableNo) {
+                    url += `&table_no=${encodeURIComponent(this.data.tableNo)}`
+                }
             } else if (orderType === 'reservation') {
                 url += `&reservation_id=${reservationId}`
             }

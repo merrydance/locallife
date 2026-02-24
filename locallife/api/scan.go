@@ -193,8 +193,11 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	}
 
 	// 构建分类 -> 菜品映射
-	categoryMap := make(map[int64]*scanTableCategoryInfo)
-	var categoryList []scanTableCategoryInfo
+	categoryMap := make(map[int64]int)
+	categoryNameMap := make(map[int64]string)
+	categoryList := make([]scanTableCategoryInfo, 0, len(categories)+1)
+	const uncategorizedCategoryID int64 = -1
+	const uncategorizedCategoryName = "其他"
 	for _, cat := range categories {
 		catInfo := scanTableCategoryInfo{
 			ID:        cat.ID,
@@ -203,7 +206,25 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			Dishes:    []scanTableDishInfo{},
 		}
 		categoryList = append(categoryList, catInfo)
-		categoryMap[cat.ID] = &categoryList[len(categoryList)-1]
+		categoryMap[cat.ID] = len(categoryList) - 1
+		categoryNameMap[cat.ID] = cat.Name
+	}
+
+	ensureUncategorizedCategory := func() int {
+		if idx, ok := categoryMap[uncategorizedCategoryID]; ok {
+			return idx
+		}
+
+		categoryList = append(categoryList, scanTableCategoryInfo{
+			ID:        uncategorizedCategoryID,
+			Name:      uncategorizedCategoryName,
+			SortOrder: 9999,
+			Dishes:    []scanTableDishInfo{},
+		})
+		idx := len(categoryList) - 1
+		categoryMap[uncategorizedCategoryID] = idx
+		categoryNameMap[uncategorizedCategoryID] = uncategorizedCategoryName
+		return idx
 	}
 
 	// 将菜品分配到分类
@@ -243,16 +264,17 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups)
 		}
 
-		// 找到分类名称
-		for _, cat := range categories {
-			if cat.ID == categoryID {
-				dishInfo.CategoryName = cat.Name
-				break
-			}
+		if categoryName, ok := categoryNameMap[categoryID]; ok {
+			dishInfo.CategoryName = categoryName
 		}
 
-		if cat, ok := categoryMap[categoryID]; ok {
-			cat.Dishes = append(cat.Dishes, dishInfo)
+		if categoryIndex, ok := categoryMap[categoryID]; ok {
+			categoryList[categoryIndex].Dishes = append(categoryList[categoryIndex].Dishes, dishInfo)
+		} else {
+			fallbackIndex := ensureUncategorizedCategory()
+			dishInfo.CategoryID = uncategorizedCategoryID
+			dishInfo.CategoryName = uncategorizedCategoryName
+			categoryList[fallbackIndex].Dishes = append(categoryList[fallbackIndex].Dishes, dishInfo)
 		}
 	}
 

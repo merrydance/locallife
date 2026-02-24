@@ -216,10 +216,10 @@
       shape="round"
       loading="{{submitting}}"
       disabled="{{!cart.items || cart.items.length === 0}}"
-      bind:tap="onSubmitOrder"
+      bind:tap="onSubmit"
       class="submit-btn"
     >
-      去支付
+      提交并支付
     </t-button>
   </view>
 </view>

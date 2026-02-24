@@ -66,8 +66,10 @@
                 <t-tag wx:for="{{item.tags || []}}" wx:for-item="tag" wx:key="*this" size="small" theme="primary" variant="light">{{tag}}</t-tag>
               </view>
               <view class="dish-price-row">
-                <text class="dish-price">¥{{item.priceDisplay}}</text>
-                <text wx:if="{{item.memberPriceDisplay}}" class="dish-member-price">会员价 ¥{{item.memberPriceDisplay}}</text>
+                <view class="price-box">
+                  <text class="dish-price">¥{{item.priceDisplay}}</text>
+                  <text wx:if="{{item.memberPriceDisplay}}" class="dish-member-price">会员价 ¥{{item.memberPriceDisplay}}</text>
+                </view>
               </view>
             </view>
             <!-- 菜品控制区 -->

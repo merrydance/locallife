@@ -58,6 +58,11 @@
 .info-row {
   display: flex;
   align-items: center;
+  flex: 1;
+}
+
+.call-btn {
+  margin-left: auto;
 }
 
 .info-row .label {
@@ -165,7 +170,7 @@
 
 .dish-price-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
 }
 
@@ -188,6 +193,7 @@
   background: rgba(255, 107, 53, 0.1);
   padding: 2rpx 8rpx;
   border-radius: 4rpx;
+  white-space: nowrap;
 }
 
 /* 菜品控制区 */

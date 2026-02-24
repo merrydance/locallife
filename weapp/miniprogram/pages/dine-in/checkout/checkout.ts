@@ -3,6 +3,7 @@ import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merc
 import { createOrder } from '../../../api/order'
 import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
+import { getTableDetail } from '../../../api/table'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 
@@ -40,6 +41,17 @@ interface PaymentMethodView {
     name: string
     icon: string
     disabled: boolean
+}
+
+type CartItemView = CartResponse['items'][number] & {
+    image_url?: string
+    dish_image?: string
+    priceDisplay: string
+    subtotalDisplay: string
+}
+
+type CartView = CartResponse & {
+    items: CartItemView[]
 }
 
 Page({
@@ -92,18 +104,31 @@ Page({
         this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
-    async onLoad(options: { merchant_id?: string, table_id?: string, reservation_id?: string, order_type?: 'dine_in' | 'reservation' }) {
+    async onLoad(options: { merchant_id?: string, table_id?: string, reservation_id?: string, order_type?: 'dine_in' | 'reservation', table_no?: string }) {
         const merchantId = parseInt(options.merchant_id || '0')
         const tableId = options.table_id ? parseInt(options.table_id) : 0
         const reservationId = options.reservation_id ? parseInt(options.reservation_id) : 0
         const orderType = options.order_type || (reservationId ? 'reservation' : 'dine_in')
+        const tableNo = options.table_no ? decodeURIComponent(options.table_no) : ''
 
         this.setData({ 
             merchantId, 
             tableId, 
             reservationId, 
-            orderType 
+            orderType,
+            tableInfo: tableNo ? { table_no: tableNo } : null
         })
+
+        if (orderType === 'dine_in' && tableId > 0 && !tableNo) {
+            try {
+                const tableDetail = await getTableDetail(tableId)
+                if (tableDetail?.table_no) {
+                    this.setData({ tableInfo: { table_no: tableDetail.table_no } })
+                }
+            } catch (error) {
+                console.warn('获取桌台详情失败', error)
+            }
+        }
 
         await this.initData()
     },
@@ -197,6 +222,21 @@ Page({
             payment_assessment: calculation.payment_assessment || null
         }
 
+        const processedCart: CartView = {
+            ...cart,
+            items: (cart.items || []).map((item) => {
+                const rawDishImage = (item as unknown as { dish_image?: string }).dish_image
+                const normalizedImage = getPublicImageUrl(item.image_url || rawDishImage || '')
+                return {
+                    ...item,
+                    image_url: normalizedImage,
+                    dish_image: normalizedImage,
+                    priceDisplay: formatPriceNoSymbol(item.unit_price || 0),
+                    subtotalDisplay: formatPriceNoSymbol(item.subtotal || 0)
+                }
+            })
+        }
+
         const balanceInsufficient = this.data.memberBalance < calculation.total_amount
 
         const paymentMethods: PaymentMethodView[] = [
@@ -210,8 +250,11 @@ Page({
         ]
 
         this.setData({
-            merchantInfo: { ...merchantInfo, logo_url: getPublicImageUrl(merchantInfo.logo_url) },
-            cart,
+            merchantInfo: {
+                ...merchantInfo,
+                logo_url: getPublicImageUrl(merchantInfo.logo_url || merchantInfo.cover_image || '')
+            },
+            cart: processedCart,
             calculation: processedCalculation,
             balanceInsufficient,
             paymentMethods,

@@ -85,6 +85,14 @@ func TestScanTableAPI(t *testing.T) {
 		DeletedAt: category.DeletedAt,
 		SortOrder: 1,
 	}
+	category2 := randomDishCategory()
+	listCategory2 := db.ListDishCategoriesRow{
+		ID:        category2.ID,
+		Name:      category2.Name,
+		CreatedAt: category2.CreatedAt,
+		DeletedAt: category2.DeletedAt,
+		SortOrder: 2,
+	}
 	dish := randomDishForMenu(category.ID)
 	combo := randomComboForMenu(merchant.ID)
 	deliveryPromo := randomDeliveryPromotion(merchant.ID)
@@ -170,6 +178,63 @@ func TestScanTableAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:       "MultiCategories_DishInFirstCategory",
+			merchantID: merchant.ID,
+			tableNo:    table.TableNo,
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					GetTableByMerchantAndNo(gomock.Any(), gomock.Eq(db.GetTableByMerchantAndNoParams{
+						MerchantID: merchant.ID,
+						TableNo:    table.TableNo,
+					})).
+					Times(1).
+					Return(table, nil)
+
+				store.EXPECT().
+					ListDishCategories(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return([]db.ListDishCategoriesRow{listCategory, listCategory2}, nil)
+
+				store.EXPECT().
+					ListDishesForMenu(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return([]db.ListDishesForMenuRow{dish}, nil)
+
+				store.EXPECT().
+					ListOnlineCombosByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return([]db.ListOnlineCombosByMerchantRow{}, nil)
+
+				store.EXPECT().
+					ListActiveDeliveryPromotionsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return([]db.MerchantDeliveryPromotion{}, nil)
+
+				store.EXPECT().
+					ListActiveDiscountRules(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return([]db.DiscountRule{}, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{ID: dish.ID}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response scanTableResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Categories, 2)
+				require.Len(t, response.Categories[0].Dishes, 1)
+				require.Equal(t, dish.ID, response.Categories[0].Dishes[0].ID)
 			},
 		},
 		{
