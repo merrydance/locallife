@@ -224,7 +224,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     const error = new AppError({
       type: ErrorType.NETWORK,
       message: '网络不可用',
-      userMessage: '网络连接失败,请检查网络设置'
+      userMessage: '网络不可用,请检查网络设置后重试'
     })
 
     if (loading) wx.hideLoading()

@@ -39,7 +39,7 @@ interface IAppOption {
         } | null
     }
     userInfoReadyCallback?: WechatMiniprogram.GetUserInfoSuccessCallback
-    silentLogin(): void
+    silentLogin(attempt?: number): void
     getLocation(): void
     getLocationCoordinates(): void
     reverseGeocodeWhenReady(retryCount?: number): Promise<void>

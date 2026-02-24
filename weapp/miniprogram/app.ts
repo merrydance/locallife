@@ -162,13 +162,20 @@ App<IAppOption>({
     }
   },
 
-  silentLogin() {
-    logger.info('开始静默登录流程', undefined, 'App.silentLogin')
+  silentLogin(attempt = 0) {
+    const MAX_LOGIN_RETRIES = 3
+    const RETRY_DELAYS = [0, 2000, 4000] // 首次无延迟，第2次等2秒，第3次等4秒
 
-    // 清除旧 token，避免旧 token 导致的刷新循环
-    const { clearToken } = require('./utils/auth')
-    clearToken()
-    logger.debug('已清除旧 token，准备重新登录', undefined, 'silentLogin')
+    if (attempt === 0) {
+      logger.info('开始静默登录流程', undefined, 'App.silentLogin')
+
+      // 清除旧 token，避免旧 token 导致的刷新循环
+      const { clearToken } = require('./utils/auth')
+      clearToken()
+      logger.debug('已清除旧 token，准备重新登录', undefined, 'silentLogin')
+    } else {
+      logger.info(`静默登录重试 (${attempt}/${MAX_LOGIN_RETRIES})`, undefined, 'App.silentLogin')
+    }
 
     wx.login({
       success: async (res) => {
@@ -258,19 +265,28 @@ App<IAppOption>({
             }
 
           } catch (error) {
-            // 后端服务不可用时不显示Toast,仅记录日志
+            // 静默登录失败：仅记录日志，不弹 Toast（页面层的 tryLoadData 会处理超时引导）
             const appError = error as { message?: string }
-            const isBackendError = appError.message && (
-              appError.message.includes('502') ||
-              appError.message.includes('503') ||
-              appError.message.includes('504')
-            )
+            const errorMsg = appError.message || ''
 
-            if (isBackendError) {
-              logger.warn('[后端服务不可用] 静默登录失败,用户可继续浏览', { error: appError.message }, 'App.silentLogin')
+            // 判断是否可重试的错误（网络/后端不可用）
+            const isRetryable = errorMsg.includes('502') ||
+              errorMsg.includes('503') ||
+              errorMsg.includes('504') ||
+              errorMsg.includes('timeout') ||
+              errorMsg.includes('request:fail') ||
+              errorMsg.includes('网络请求失败')
+
+            if (isRetryable && attempt < MAX_LOGIN_RETRIES - 1) {
+              const delay = RETRY_DELAYS[attempt + 1] || 4000
+              logger.warn(`静默登录失败,${delay / 1000}秒后重试 (${attempt + 1}/${MAX_LOGIN_RETRIES})`, { error: errorMsg }, 'App.silentLogin')
+              setTimeout(() => this.silentLogin(attempt + 1), delay)
             } else {
-              logger.error('❌ 静默登录流程失败', error, 'App.silentLogin')
-              ErrorHandler.handle(error, 'App.silentLogin')
+              // 已达最大重试次数或不可重试的错误，仅记录日志
+              logger.warn('静默登录最终失败,用户可继续浏览', {
+                error: errorMsg,
+                attempts: attempt + 1
+              }, 'App.silentLogin')
             }
           }
         } else {
@@ -278,8 +294,8 @@ App<IAppOption>({
         }
       },
       fail: (err) => {
-        logger.error('❌ wx.login调用失败', err, 'App.wx.login')
-        ErrorHandler.handle(err, 'App.wx.login')
+        // wx.login 本身失败（极罕见），仅记录日志
+        logger.error('wx.login调用失败', err, 'App.wx.login')
       }
     })
   },

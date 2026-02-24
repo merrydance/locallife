@@ -89,16 +89,19 @@ export class ErrorHandler {
     const detail = this.resolveErrorText(error) || '未知错误'
     const normalized = detail.toLowerCase()
 
-    let userMessage = '网络连接失败,请检查网络设置'
+    // 根据错误特征提供更精准的用户提示
+    let userMessage = '服务暂时不可用,请稍后重试'
     if (normalized.includes('timeout') || normalized.includes('timed out')) {
-      userMessage = '请求超时,请稍后重试'
+      userMessage = '服务响应较慢,请稍后重试'
+    } else if (normalized.includes('abort')) {
+      userMessage = '请求已取消'
+    } else if (normalized.includes('offline') || normalized.includes('dns')) {
+      userMessage = '网络不可用,请检查网络设置'
     } else if (
       normalized.includes('fail') ||
-      normalized.includes('network') ||
-      normalized.includes('offline') ||
-      normalized.includes('dns')
+      normalized.includes('network')
     ) {
-      userMessage = '网络不可用,请检查网络设置'
+      userMessage = '服务暂时不可用,请稍后重试'
     }
 
     const appError = new AppError({
@@ -107,13 +110,12 @@ export class ErrorHandler {
       userMessage
     }, error)
 
-    // 后端不可用时使用简洁日志
+    // 仅记录日志,不主动弹 Toast（由调用方决定是否展示，避免双重 Toast）
     if (this.isBackendUnavailable(appError)) {
       logger.warn(`[后端服务不可用] ${appError.message}`, undefined, context)
     } else {
       logger.error(appError.message, error, context)
     }
-    this.showUserMessage(appError)
 
     return appError
   }
