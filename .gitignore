@@ -76,6 +76,8 @@ dist/
 build/
 out/
 lib/
+!web/src/lib/
+!web/src/lib/**
 
 # 微信小程序本地文件
 weapp/project.private.config.json
