@@ -228,10 +228,7 @@ Page({
   },
 
   previewTableQRCode(id?: number, url?: string) {
-    if (!url) {
-      if (!id) {
-        return wx.showToast({ title: '暂无二维码', icon: 'none' })
-      }
+    if (id) {
       tableManagementService.getTableQRCode(id)
         .then((res) => {
           const qrCodeUrl = normalizeMediaUrl(res?.qr_code_url)
@@ -247,6 +244,11 @@ Page({
         })
       return
     }
+
+    if (!url) {
+      return wx.showToast({ title: '暂无二维码', icon: 'none' })
+    }
+
     const finalUrl = normalizeMediaUrl(url)
     wx.previewImage({
       urls: [finalUrl],

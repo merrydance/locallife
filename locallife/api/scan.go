@@ -1,10 +1,16 @@
 package api
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -12,7 +18,12 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/basicfont"
+	"golang.org/x/image/math/fixed"
 )
+
+const labeledQRCodeFilenameSuffix = "_labeled.png"
 
 // =============================================================================
 // Scan Table API - 扫码点餐
@@ -379,6 +390,87 @@ type generateTableQRCodeResponse struct {
 	MerchantID int64  `json:"merchant_id" example:"1"`
 }
 
+func isLabeledQRCodePath(path string) bool {
+	return strings.HasSuffix(path, labeledQRCodeFilenameSuffix)
+}
+
+func tableTypeLabel(tableType string) string {
+	if tableType == "room" {
+		return "包间"
+	}
+	return "大厅"
+}
+
+func buildTableQRCodeLabel(merchantID int64, table db.Table) string {
+	return fmt.Sprintf("商户#%d | 桌号:%s | %s", merchantID, table.TableNo, tableTypeLabel(table.TableType))
+}
+
+func fitLabelTextForWidth(text string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return text
+	}
+	if font.MeasureString(basicfont.Face7x13, text).Round() <= maxWidth {
+		return text
+	}
+
+	runes := []rune(text)
+	for len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+		candidate := string(runes) + "..."
+		if font.MeasureString(basicfont.Face7x13, candidate).Round() <= maxWidth {
+			return candidate
+		}
+	}
+
+	return "..."
+}
+
+func decorateTableQRCodeWithLabel(pngData []byte, label string) ([]byte, error) {
+	srcImg, _, err := image.Decode(bytes.NewReader(pngData))
+	if err != nil {
+		return nil, fmt.Errorf("decode qrcode png failed: %w", err)
+	}
+
+	bounds := srcImg.Bounds()
+	qrW := bounds.Dx()
+	qrH := bounds.Dy()
+	labelAreaHeight := 52
+
+	canvas := image.NewRGBA(image.Rect(0, 0, qrW, qrH+labelAreaHeight))
+	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+	draw.Draw(canvas, image.Rect(0, 0, qrW, qrH), srcImg, bounds.Min, draw.Src)
+
+	dividerColor := color.NRGBA{R: 230, G: 230, B: 230, A: 255}
+	for x := 0; x < qrW; x++ {
+		canvas.Set(x, qrH, dividerColor)
+	}
+
+	labelText := fitLabelTextForWidth(strings.TrimSpace(label), qrW-16)
+	if labelText != "" {
+		textColor := color.NRGBA{R: 45, G: 45, B: 45, A: 255}
+		textWidth := font.MeasureString(basicfont.Face7x13, labelText).Round()
+		textX := (qrW - textWidth) / 2
+		if textX < 8 {
+			textX = 8
+		}
+		textY := qrH + 31
+		drawer := &font.Drawer{
+			Dst:  canvas,
+			Src:  image.NewUniform(textColor),
+			Face: basicfont.Face7x13,
+			Dot:  fixed.P(textX, textY),
+		}
+		drawer.DrawString(labelText)
+	}
+
+	var out bytes.Buffer
+	if err := png.Encode(&out, canvas); err != nil {
+		return nil, fmt.Errorf("encode labeled qrcode png failed: %w", err)
+	}
+
+	return out.Bytes(), nil
+}
+
 // generateTableQRCode godoc
 // @Summary 生成桌台二维码
 // @Description 为指定桌台生成微信小程序码。扫码后跳转到堂食菜单页面。仅桌台所属商户可调用。
@@ -424,8 +516,8 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
-	// 如果已有二维码URL，直接返回
-	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" {
+	// 如果已有已打标二维码，直接返回；历史未打标二维码走重新生成流程
+	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" && isLabeledQRCodePath(table.QrCodeUrl.String) {
 		ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
 			QrCodeUrl:  normalizeUploadURLForClient(table.QrCodeUrl.String),
 			TableNo:    table.TableNo,
@@ -458,10 +550,16 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
+	labeledPNG, err := decorateTableQRCodeWithLabel(pngData, buildTableQRCodeLabel(merchant.ID, table))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("二维码打标失败: %w", err)))
+		return
+	}
+
 	// 保存PNG图片到文件系统
-	filename := fmt.Sprintf("qrcode_m%d_t%d.png", merchant.ID, tableID)
+	filename := fmt.Sprintf("qrcode_m%d_t%d%s", merchant.ID, tableID, labeledQRCodeFilenameSuffix)
 	uploader := util.NewFileUploader("uploads")
-	relativePath, err := uploader.SaveQRCodeImage(merchant.ID, filename, pngData)
+	relativePath, err := uploader.SaveQRCodeImage(merchant.ID, filename, labeledPNG)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("保存二维码图片失败: %w", err)))
 		return

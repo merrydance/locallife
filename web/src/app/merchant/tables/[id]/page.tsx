@@ -41,6 +41,10 @@ type TableImage = {
   sort_order?: number;
 };
 
+type TableQRCode = {
+  qr_code_url?: string;
+};
+
 const fallbackDetail: TableItem = {
   id: 0,
   table_no: "",
@@ -85,14 +89,16 @@ export default async function TableDetailPage({
 }: {
   params: { id: string };
 }) {
-  const [detail, images] = await Promise.all([
+  const [detail, images, qrCodeResp] = await Promise.all([
     apiGet<TableItem>(`/tables/${params.id}`).catch(() => fallbackDetail),
     apiGet<TableImage[] | { items?: TableImage[]; images?: TableImage[] }>(
       `/tables/${params.id}/images`
     ).catch(() => fallbackImages),
+    apiGet<TableQRCode>(`/tables/${params.id}/qrcode`).catch(() => ({} as TableQRCode)),
   ]);
 
   const list = normalizeImages(images);
+  const qrCodeUrl = qrCodeResp.qr_code_url || detail.qr_code_url;
 
   async function updateTable(formData: FormData) {
     "use server";
@@ -169,9 +175,9 @@ export default async function TableDetailPage({
             <CardDescription>对应 /v1/tables/:id/qrcode</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {detail.qr_code_url ? (
+            {qrCodeUrl ? (
               <Image
-                src={detail.qr_code_url}
+                src={qrCodeUrl}
                 alt="桌台二维码"
                 width={160}
                 height={160}
@@ -182,9 +188,9 @@ export default async function TableDetailPage({
                 暂无二维码
               </div>
             )}
-            {detail.qr_code_url ? (
+            {qrCodeUrl ? (
               <Button asChild variant="outline" className="w-full">
-                <a href={detail.qr_code_url} target="_blank" rel="noreferrer">
+                <a href={qrCodeUrl} target="_blank" rel="noreferrer">
                   下载二维码
                 </a>
               </Button>

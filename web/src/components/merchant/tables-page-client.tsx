@@ -108,6 +108,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
     open: false,
     table: null,
   });
+  const [qrCodeLoading, setQrCodeLoading] = useState(false);
 
   // Image state
   const [tableImages, setTableImages] = useState<TableImageResponse[]>([]);
@@ -292,6 +293,23 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
     setDeleteTableDialog({ open: true, id });
   };
 
+  const openQRCodeDialog = async (table: TableResponse) => {
+    setQrCodeDialog({ open: true, table });
+    setQrCodeLoading(true);
+    try {
+      const res = await apiGet<{ qr_code_url: string }>(`/tables/${table.id}/qrcode`);
+      const qrCodeUrl = res?.qr_code_url || table.qr_code_url;
+      const nextTable = qrCodeUrl ? { ...table, qr_code_url: qrCodeUrl } : table;
+      setQrCodeDialog({ open: true, table: nextTable });
+      setTables((prev) => prev.map((item) => (item.id === table.id ? { ...item, qr_code_url: qrCodeUrl } : item)));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "获取二维码失败";
+      toast.error(message);
+    } finally {
+      setQrCodeLoading(false);
+    }
+  };
+
   const confirmDeleteTable = async () => {
     if (!deleteTableDialog.id) return;
     try {
@@ -412,7 +430,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                       </div>
                       
                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity translate-x-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary rounded-full" onClick={(e: React.MouseEvent) => { e.stopPropagation(); setQrCodeDialog({ open: true, table }); }}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary rounded-full" onClick={(e: React.MouseEvent) => { e.stopPropagation(); openQRCodeDialog(table); }}>
                           <QrCode className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary rounded-full" onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleEditTable(table); }}>
@@ -735,7 +753,12 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
           </DialogHeader>
           <div className="flex flex-col items-center justify-center py-6 gap-4">
             <div className="relative p-4 bg-white rounded-2xl shadow-inner border aspect-square w-64 flex items-center justify-center">
-              {qrCodeDialog.table?.qr_code_url ? (
+              {qrCodeLoading ? (
+                <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
+                  <RefreshCw className="h-12 w-12 animate-spin opacity-50" />
+                  <span className="text-xs">正在生成二维码...</span>
+                </div>
+              ) : qrCodeDialog.table?.qr_code_url ? (
                 <Image 
                   src={getMediaUrl(qrCodeDialog.table.qr_code_url)} 
                   alt="桌台二维码" 
@@ -755,10 +778,19 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
             </p>
           </div>
           <DialogFooter className="flex-col sm:flex-col gap-2">
-            <Button className="w-full">
-              <Download className="h-4 w-4 mr-2" />
-              下载打印图片
-            </Button>
+            {qrCodeDialog.table?.qr_code_url ? (
+              <Button className="w-full" asChild>
+                <a href={getMediaUrl(qrCodeDialog.table.qr_code_url)} target="_blank" rel="noreferrer">
+                  <Download className="h-4 w-4 mr-2" />
+                  下载打印图片
+                </a>
+              </Button>
+            ) : (
+              <Button className="w-full" disabled>
+                <Download className="h-4 w-4 mr-2" />
+                暂无可下载二维码
+              </Button>
+            )}
             <Button variant="ghost" className="w-full" onClick={() => setQrCodeDialog({ open: false, table: null })}>
               关闭
             </Button>

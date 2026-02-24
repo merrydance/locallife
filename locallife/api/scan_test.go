@@ -1,9 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -524,12 +528,37 @@ func TestScanTableAPI(t *testing.T) {
 
 // ==================== generateTableQRCode 测试 ====================
 
+func buildTestQRCodePNG(t *testing.T) []byte {
+	t.Helper()
+
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	white := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+	black := color.NRGBA{R: 0, G: 0, B: 0, A: 255}
+
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			img.Set(x, y, white)
+		}
+	}
+	for y := 8; y < 56; y++ {
+		for x := 8; x < 56; x++ {
+			if (x+y)%3 == 0 {
+				img.Set(x, y, black)
+			}
+		}
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return buf.Bytes()
+}
+
 func TestGenerateTableQRCodeAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	table := randomTable(merchant.ID)
 	table.QrCodeUrl = pgtype.Text{}
-	qrCodeData := []byte("fake-qrcode-png-data")
+	qrCodeData := buildTestQRCodePNG(t)
 
 	testCases := []struct {
 		name          string
@@ -571,7 +600,7 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotEmpty(t, response.QrCodeUrl)
 				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("uploads/public/merchants/%d/qrcodes/", merchant.ID))
-				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("qrcode_m%d_t%d.png", merchant.ID, table.ID))
+				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("qrcode_m%d_t%d_labeled.png", merchant.ID, table.ID))
 				require.Equal(t, table.TableNo, response.TableNo)
 				require.Equal(t, merchant.ID, response.MerchantID)
 
