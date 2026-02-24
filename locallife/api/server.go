@@ -121,30 +121,13 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		}
 	}
 
-	// 创建 LBS 地图客户端（支持多级故障转移：OSM -> Tianditu）
+	// 创建 LBS 地图客户端（统一使用腾讯地图）
 	var mapClient maps.TencentMapClientInterface
-	var lbsProviders []maps.TencentMapClientInterface
-
-	// 1. 优先使用自建 OSM
-	if config.OSMBaseURL != "" {
-		lbsProviders = append(lbsProviders, maps.NewOSMClient(config.OSMBaseURL))
-	}
-
-	// 2. 备用自建 OSM
-	if config.OSMBaseURLBackup != "" {
-		lbsProviders = append(lbsProviders, maps.NewOSMClient(config.OSMBaseURLBackup))
-	}
-
-	// 3. 天地图作为云端兜底（仅地理编码/逆地理编码）
-	if config.TiandituMapKey != "" {
-		lbsProviders = append(lbsProviders, maps.NewTiandituMapClient(config.TiandituMapKey, config.TiandituBaseURL))
-	}
-
-	if len(lbsProviders) > 0 {
-		mapClient = maps.NewFallbackMapClient(lbsProviders...)
-		log.Info().Int("providers_count", len(lbsProviders)).Msg("✅ LBS Fallback system initialized")
+	if config.TencentMapKey != "" {
+		mapClient = maps.NewTencentMapClient(config.TencentMapKey)
+		log.Info().Str("provider", maps.MapProviderTencent).Msg("✅ LBS initialized with Tencent Maps")
 	} else {
-		log.Warn().Msg("⚠️ No LBS providers configured, map features will be disabled")
+		log.Warn().Msg("⚠️ TENCENT_MAP_KEY not configured, map features will be disabled")
 	}
 
 	// 创建本地数据加密器（用于加密存储敏感信息）

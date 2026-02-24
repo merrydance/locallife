@@ -14,9 +14,9 @@ const (
 	baseURL = "https://apis.map.qq.com"
 
 	// 路径规划
-	bicyclingURL = "/ws/direction/v1/bicycling/" // 骑行
-	walkingURL   = "/ws/direction/v1/walking/"   // 步行
-	drivingURL   = "/ws/direction/v1/driving/"   // 驾车
+	ebicyclingURL = "/ws/direction/v1/ebicycling/" // 电动自行车
+	walkingURL    = "/ws/direction/v1/walking/"    // 步行
+	drivingURL    = "/ws/direction/v1/driving/"    // 驾车
 
 	// 距离矩阵
 	distanceMatrixURL = "/ws/distance/v1/matrix/"
@@ -168,7 +168,7 @@ type reverseGeocodeAPIResult struct {
 
 // GetBicyclingRoute 获取骑行路线（外卖骑手用）
 func (c *TencentMapClient) GetBicyclingRoute(ctx context.Context, from, to Location) (*RouteResult, error) {
-	return c.getRoute(ctx, bicyclingURL, from, to)
+	return c.getRoute(ctx, ebicyclingURL, from, to)
 }
 
 // GetWalkingRoute 获取步行路线

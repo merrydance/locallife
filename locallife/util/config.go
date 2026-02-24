@@ -13,9 +13,9 @@ type Config struct {
 	Environment          string        `mapstructure:"ENVIRONMENT"`
 	LogLevel             string        `mapstructure:"LOG_LEVEL"`
 	AllowedOrigins       []string      `mapstructure:"ALLOWED_ORIGINS"`
-	LBSProvider          string        `mapstructure:"LBS_PROVIDER"`        // 仅支持 "osm"（自建）
-	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"`        // OSM 反向代理基地址，如 https://lbs.merrydance.cn
-	OSMBaseURLBackup     string        `mapstructure:"OSM_BASE_URL_BACKUP"` // 备用 OSM 地址
+	LBSProvider          string        `mapstructure:"LBS_PROVIDER"`        // 运行时统一使用 "tencent"（兼容旧配置保留）
+	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"`        // 已废弃（历史 OSM 配置，保留兼容）
+	OSMBaseURLBackup     string        `mapstructure:"OSM_BASE_URL_BACKUP"` // 已废弃（历史 OSM 备用配置，保留兼容）
 	DBSource             string        `mapstructure:"DB_SOURCE"`
 	MigrationURL         string        `mapstructure:"MIGRATION_URL"`
 	AutoMigrate          bool          `mapstructure:"AUTO_MIGRATE"`
@@ -49,10 +49,10 @@ type Config struct {
 	// 数据加密配置
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）
 
-	// 腾讯地图配置
-	TencentMapKey string `mapstructure:"TENCENT_MAP_KEY"` // 已废弃，保留占位
+	// 腾讯地图配置（运行时必填）
+	TencentMapKey string `mapstructure:"TENCENT_MAP_KEY"`
 
-	// 天地图配置（地理编码/逆地理编码兜底）
+	// 天地图配置（仅历史/离线工具使用）
 	TiandituMapKey  string `mapstructure:"TIANDITU_MAP_KEY"`
 	TiandituBaseURL string `mapstructure:"TIANDITU_BASE_URL"`
 
