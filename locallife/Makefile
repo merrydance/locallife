@@ -1,4 +1,4 @@
-DB_URL=postgresql:///locallife_test?host=/var/run/postgresql&sslmode=disable
+DB_URL ?= $(if $(strip $(DB_SOURCE)),$(strip $(DB_SOURCE)),postgresql:///locallife_test?host=/var/run/postgresql&sslmode=disable)
 
 ＃ network:
 #	docker network create bank-network
