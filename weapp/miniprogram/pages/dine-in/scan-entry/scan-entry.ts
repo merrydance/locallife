@@ -34,6 +34,11 @@ Page({
     onLoad(options: { scene?: string, q?: string, table_id?: string }) {
         console.log('扫码点餐页面加载，参数:', options)
 
+        wx.showShareMenu({
+            withShareTicket: true,
+            menus: ['shareAppMessage', 'shareTimeline']
+        })
+
         // 从扫码参数中获取桌台信息
         const { scene, q } = options
 

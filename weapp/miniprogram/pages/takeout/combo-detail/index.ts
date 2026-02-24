@@ -75,6 +75,11 @@ Page({
   },
 
   onLoad(options: Record<string, string>) {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     const comboId = options.id
     const merchantId = options.merchant_id || options.shop_id || options.merchantId || ''
     const merchantName = decodeURIComponent(options.merchant_name || options.shop_name || options.merchantName || '')
@@ -339,6 +344,17 @@ Page({
     return {
       title: `${combo.name} - 只要 ¥${combo.comboPriceDisplay}`,
       path: `/pages/takeout/combo-detail/index?id=${combo.id}&merchant_id=${combo.merchant_id}&merchant_name=${encodeURIComponent(combo.merchant_name)}`,
+      imageUrl: combo.image_url
+    }
+  },
+
+  onShareTimeline() {
+    const { combo } = this.data
+    if (!combo) return {}
+
+    return {
+      title: `${combo.name} - 套餐推荐`,
+      query: `id=${combo.id}&merchant_id=${combo.merchant_id}`,
       imageUrl: combo.image_url
     }
   }

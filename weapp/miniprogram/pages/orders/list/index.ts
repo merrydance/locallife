@@ -87,6 +87,11 @@ Page({
   },
 
   onLoad(options: { order_type?: string }) {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     const orderType = normalizeOrderType(options?.order_type)
     
     // 根据订单类型设置标题
@@ -476,5 +481,18 @@ Page({
         wx.showToast({ title: '操作失败', icon: 'error' })
       }
     })()
+  },
+
+  onShareAppMessage() {
+    return {
+      title: this.data.pageTitle || '我的订单',
+      path: `/pages/orders/list/index${this.data.orderType ? `?order_type=${this.data.orderType}` : ''}`
+    }
+  },
+
+  onShareTimeline() {
+    return {
+      title: this.data.pageTitle || '我的订单'
+    }
   }
 })

@@ -158,6 +158,11 @@ Page({
   _unsubscribeLocation: undefined as undefined | (() => void),
 
   onLoad() {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     // 设置导航栏高度和滚动区域高度
     const { navBarHeight } = getStableBarHeights()
     const windowInfo = wx.getWindowInfo()
@@ -1219,6 +1224,19 @@ Page({
 
     if (hasUpdates) {
       this.setData({ packages: updatedPackages })
+    }
+  },
+
+  onShareAppMessage() {
+    return {
+      title: '本地生活外卖推荐，附近好店马上送达',
+      path: '/pages/takeout/index'
+    }
+  },
+
+  onShareTimeline() {
+    return {
+      title: '本地生活外卖推荐，附近好店马上送达'
     }
   }
 })

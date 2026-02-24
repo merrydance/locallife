@@ -48,6 +48,11 @@ Page({
   },
 
   onLoad(options: { id?: string }) {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     if (options.id) {
       this.setData({ orderId: options.id })
       this.loadOrderDetail()
@@ -384,5 +389,20 @@ Page({
     wx.navigateTo({
       url: `/pages/user_center/reviews/create/index?orderId=${orderId}`
     })
+  },
+
+  onShareAppMessage() {
+    const { order, orderId } = this.data
+    return {
+      title: order?.merchantName ? `${order.merchantName} 订单详情` : '订单详情',
+      path: `/pages/orders/detail/index?id=${orderId}`
+    }
+  },
+
+  onShareTimeline() {
+    const { order } = this.data
+    return {
+      title: order?.merchantName ? `${order.merchantName} 订单记录` : '订单记录'
+    }
   }
 })

@@ -113,6 +113,11 @@ Page({
   },
 
   onLoad(options: Record<string, string>) {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     const dishId = options.id
     const merchantId = options.merchant_id || ''
     // 从列表页传递过来的额外信息

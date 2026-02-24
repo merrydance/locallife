@@ -123,6 +123,11 @@ Page({
     },
 
     onLoad(options: { reservation_id?: string, merchant_id?: string, table_id?: string, scene?: string }) {
+        wx.showShareMenu({
+            withShareTicket: true,
+            menus: ['shareAppMessage', 'shareTimeline']
+        })
+
         // 设置导航栏高度
         const { navBarHeight } = getStableBarHeights()
         this.setData({ navBarHeight })
@@ -917,6 +922,16 @@ Page({
         return {
             title: `${merchantInfo?.name || '餐厅'}的菜单`,
             path: `/pages/dine-in/menu/menu?table_id=${tableId}&merchant_id=${this.data.merchantId}`,
+            imageUrl: merchantInfo?.logo_url
+        }
+    },
+
+    onShareTimeline() {
+        const { merchantInfo, tableId } = this.data
+
+        return {
+            title: `${merchantInfo?.name || '餐厅'}的菜单`,
+            query: `table_id=${tableId}&merchant_id=${this.data.merchantId}`,
             imageUrl: merchantInfo?.logo_url
         }
     },

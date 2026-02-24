@@ -1,5 +1,7 @@
 {
     "navigationBarTitleText": "我的订单",
+    "enableShareAppMessage": true,
+    "enableShareTimeline": true,
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "list-skeleton": "/components/list-skeleton/index",

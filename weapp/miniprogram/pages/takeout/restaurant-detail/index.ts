@@ -114,6 +114,11 @@ Page({
   },
 
   onLoad(options: { id?: string }) {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+
     const restaurantId = options.id
     if (!restaurantId) {
       wx.showToast({ title: '商家ID缺失', icon: 'error' })
