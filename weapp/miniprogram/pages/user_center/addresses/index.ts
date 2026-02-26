@@ -62,41 +62,38 @@ Page({
   },
 
   onAddAddress() {
+    const fromSelect = this.data.isSelectMode ? '?from_select=true' : ''
     wx.navigateTo({
-      url: '/pages/user_center/addresses/edit/index'
+      url: `/pages/user_center/addresses/edit/index${fromSelect}`
     })
   },
 
-  /**
-   * 从微信导入地址
-   */
   onImportWechatAddress() {
     wx.chooseAddress({
       success: (res) => {
-        // 跳转到编辑页，预填微信地址数据
+        const regionAddress = `${res.provinceName}${res.cityName}${res.countyName}`
         const params = encodeURIComponent(JSON.stringify({
           contact_name: res.userName,
           contact_phone: res.telNumber,
-          detail_address: `${res.provinceName}${res.cityName}${res.countyName}${res.detailInfo}`
+          region_address: regionAddress,
+          detail_address: res.detailInfo || ''
         }))
         wx.navigateTo({
-          url: `/pages/user_center/addresses/edit/index?wechat_data=${params}`
+          url: `/pages/user_center/addresses/edit/index?wechat_data=${params}${this.data.isSelectMode ? '&from_select=true' : ''}`
         })
       },
       fail: (err) => {
         if (err.errMsg.includes('cancel')) return
         logger.error('Choose address failed:', err, 'Addresses')
-        
-        // 如果是权限问题，提示用户打开权限
         if (err.errMsg.includes('auth')) {
-             wx.showModal({
-                title: '需要授权',
-                content: '请在设置中打开通讯录权限以导入地址',
-                confirmText: '去设置',
-                success: (modalRes) => {
-                    if (modalRes.confirm) wx.openSetting()
-                }
-             })
+          wx.showModal({
+            title: '需要授权',
+            content: '请在设置中打开通讯录权限以导入地址',
+            confirmText: '去设置',
+            success: (modalRes) => {
+              if (modalRes.confirm) wx.openSetting()
+            }
+          })
         }
       }
     })

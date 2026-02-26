@@ -172,12 +172,23 @@ Page({
           page_size: pageSize
         })
         // 在 TypeScript 中预处理距离和图片
-        newList = results.map((r: RoomSearchResult) => ({
-          ...r,
-          type: 'room',
-          primary_image: getPublicImageUrl(r.primary_image) || '',
-          distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
-        }))
+        newList = results.map((r: RoomSearchResult) => {
+          const room = r as RoomSearchResult & {
+            merchantName?: string
+            tableNo?: string
+            merchantAddress?: string
+          }
+
+          return {
+            ...r,
+            merchant_name: r.merchant_name || room.merchantName || '',
+            table_no: r.table_no || room.tableNo || r.name || '',
+            merchant_address: r.merchant_address || room.merchantAddress || '',
+            type: 'room',
+            primary_image: getPublicImageUrl(r.primary_image) || '',
+            distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
+          }
+        })
 
       } else {
         // Restaurant Stream - 与外卖页 loadRestaurants 保持一致的数据格式

@@ -1,6 +1,6 @@
 import { getCart, calculateCart, CartResponse, CalculateCartResponse } from '../../../api/cart'
 import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merchant'
-import { createOrder } from '../../../api/order'
+import { createOrderFromCart } from '../../../api/order'
 import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 import { getTableDetail } from '../../../api/table'
@@ -285,14 +285,11 @@ Page({
         const { merchantId, orderType, tableId, reservationId, selectedPaymentMethod, remark } = this.data
 
         try {
-            const order = await createOrder({
-                merchant_id: merchantId,
-                order_type: orderType,
+            const order = await createOrderFromCart(merchantId, orderType, {
                 table_id: tableId || undefined,
                 reservation_id: reservationId || undefined,
                 notes: remark,
-                use_balance: selectedPaymentMethod === 'balance',
-                items: [] // 购物车已经在后端，前端传空即可（符合后端逻辑）
+                use_balance: selectedPaymentMethod === 'balance'
             })
 
             await this.handlePayment(order.id)

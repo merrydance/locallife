@@ -4,6 +4,15 @@
   background-color: var(--td-bg-color-page);
 }
 
+.mode-tip {
+  margin: var(--spacer-sm) var(--spacer-md) 0;
+  padding: 16rpx 20rpx;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--td-brand-color);
+  background: var(--td-brand-color-light);
+}
+
 .loading {
   padding: 60rpx;
   text-align: center;
@@ -24,6 +33,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.empty-tip {
+  margin-top: 16rpx;
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .empty-actions {
@@ -90,6 +105,21 @@
   line-height: 1.5;
 }
 
+.select-hint {
+  margin-top: 10rpx;
+  font-size: var(--font-size-sm);
+  color: var(--td-brand-color);
+}
+
+.region-row {
+  margin-bottom: 8rpx;
+}
+
+.region-text {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
 /* Actions */
 .card-actions {
   display: flex;
@@ -151,6 +181,12 @@
   font-size: var(--font-size-base);
   color: var(--td-text-color-secondary);
   padding: 12rpx 0;
+}
+
+.wechat-tip {
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
 }
 
 /* 异常状态 */

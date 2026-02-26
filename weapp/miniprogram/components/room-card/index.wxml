@@ -10,7 +10,7 @@
   <view class="room-info">
     <!-- 第1行: 餐厅名·包间名 -->
     <view class="row-1">
-      <text class="restaurant-room-name">{{room.merchant_name}}·{{room.table_no}}</text>
+      <text class="restaurant-room-name">{{room.merchant_name || room.merchantName || '商户'}} · {{room.name || room.table_no || room.tableNo || '包间'}}</text>
     </view>
     
     <!-- 第2行: 容纳人数 + 低消 -->
@@ -33,8 +33,8 @@
     </view>
     
     <!-- 第5行: 地址 -->
-    <view class="row-5" wx:if="{{room.merchant_address}}">
-      <text class="address">{{room.merchant_address}}</text>
+    <view class="row-5" wx:if="{{room.merchant_address || room.merchantAddress || room.address}}">
+      <text class="address">{{room.merchant_address || room.merchantAddress || room.address}}</text>
     </view>
   </view>
 </view>

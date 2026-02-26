@@ -151,7 +151,7 @@ Page({
       const dishId = parseInt(this.data.dishId)
 
       // 获取菜品详情 (silent request implied by request.ts default)
-      const dishData: DishResponse = await DishManagementService.getDishDetail(dishId)
+      const dishData: DishResponse = await DishManagementService.getPublicDishDetail(dishId)
 
       if (!dishData) {
         this.setData({ 

@@ -40,24 +40,34 @@
       <view class="form-title">收货地址</view>
       <view class="form-card">
         <t-cell
-          title="定位"
-          note="{{latitude ? '已选择坐标' : '点击选择定位'}}"
+          title="地图定位"
+          note="{{latitude ? '已完成定位' : '请先选择地图定位'}}"
           arrow
           hover
           bind:click="onChooseLocation"
         >
            <t-icon slot="left-icon" name="location" size="40rpx" style="margin-right: 16rpx; color: var(--td-brand-color);" />
         </t-cell>
+
+        <t-cell
+          title="所在地区"
+          note="{{regionAddress || '定位后自动识别所在地区'}}"
+          bordered="{{false}}"
+        />
         
         <t-textarea
-          label="门牌号"
-          placeholder="详细地址，例：1层101室"
+          label="详细地址"
+          placeholder="请输入门牌号、楼栋、单元等信息"
           value="{{detailAddress}}"
           bind:change="onDetailChange"
           maxlength="100"
           autosize
           class="detail-textarea"
         />
+      </view>
+
+      <view class="form-hint">
+        微信导入仅带地址文本，保存前仍需完成地图定位以补全坐标。
       </view>
 
       <view class="form-card" style="margin-top: 32rpx;">

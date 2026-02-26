@@ -6,6 +6,7 @@ interface WechatAddressData {
   contact_name: string
   contact_phone: string
   detail_address: string
+  region_address?: string
 }
 
 const getErrorMessage = (error: unknown): string => {
@@ -30,8 +31,10 @@ const getErrorMessage = (error: unknown): string => {
 Page({
   data: {
     addressId: 0,
+    fromSelectMode: false,
     contactName: '',
     contactPhone: '',
+    regionAddress: '',
     detailAddress: '',
     latitude: '',
     longitude: '',
@@ -43,7 +46,10 @@ Page({
     navTitle: '编辑地址'
   },
 
-  onLoad(options: { id?: string, wechat_data?: string }) {
+  onLoad(options: { id?: string, wechat_data?: string, from_select?: string }) {
+    const fromSelectMode = options.from_select === 'true'
+    this.setData({ fromSelectMode })
+
     if (options.id) {
       this.setData({ 
         addressId: Number(options.id),
@@ -58,14 +64,15 @@ Page({
         this.setData({
           contactName: data.contact_name,
           contactPhone: data.contact_phone,
+          regionAddress: data.region_address || '',
           detailAddress: data.detail_address,
-          navTitle: '完善地址'
+          navTitle: fromSelectMode ? '导入并完善地址' : '完善地址'
         })
       } catch (e) {
         logger.error('Parse wechat data failed', e, 'AddressEdit')
       }
     } else {
-      this.setData({ navTitle: '新增地址' })
+      this.setData({ navTitle: fromSelectMode ? '新增并使用地址' : '新增地址' })
     }
   },
 
@@ -80,6 +87,7 @@ Page({
       this.setData({
         contactName: detail.contact_name,
         contactPhone: detail.contact_phone,
+        regionAddress: detail.region_name || '',
         detailAddress: detail.detail_address,
         latitude: detail.latitude,
         longitude: detail.longitude,
@@ -120,12 +128,13 @@ Page({
   onChooseLocation() {
     wx.chooseLocation({
       success: (res) => {
-        // 使用选择的位置更新地址和经纬度
-        const newAddress = res.name || res.address || ''
+        const regionAddress = res.address || ''
+        const detailLabel = res.name || ''
+        const newDetail = detailLabel ? `${detailLabel} ` : this.data.detailAddress
 
-        // 直接用地图选择的地址作为基础，用户可在此基础上修改门牌号
         this.setData({
-          detailAddress: newAddress ? `${newAddress} ` : this.data.detailAddress,
+          regionAddress,
+          detailAddress: newDetail,
           latitude: String(res.latitude),
           longitude: String(res.longitude)
         })
@@ -188,7 +197,10 @@ Page({
         await AddressService.createAddress(createData)
       }
 
-      wx.showToast({ title: '保存成功', icon: 'success' })
+      wx.showToast({
+        title: this.data.fromSelectMode ? '已保存，可用于本次下单' : '保存成功',
+        icon: 'success'
+      })
       setTimeout(() => wx.navigateBack(), 1000)
     } catch (error) {
       logger.error('Save failed', error)
@@ -236,7 +248,7 @@ Page({
   },
 
   validate(): boolean {
-    const { contactName, contactPhone, detailAddress } = this.data
+    const { contactName, contactPhone, detailAddress, latitude, longitude } = this.data
 
     if (!contactName.trim()) {
       wx.showToast({ title: '请填写联系人', icon: 'none' })
@@ -248,6 +260,10 @@ Page({
     }
     if (!detailAddress.trim()) {
       wx.showToast({ title: '请填写详细地址', icon: 'none' })
+      return false
+    }
+    if (!latitude || !longitude) {
+      wx.showToast({ title: '请先完成地图定位', icon: 'none' })
       return false
     }
     return true

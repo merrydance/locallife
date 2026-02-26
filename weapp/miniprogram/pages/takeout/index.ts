@@ -1,7 +1,7 @@
 import { DishAdapter } from '../../adapters/dish'
 import { Dish } from '../../models/dish'
 import { Category } from '../../models/category'
-import { searchDishes, DishSummary, getTags, DishSearchParams, ComboSummary, getRecommendedCombos } from '../../api/dish'
+import { searchDishes, DishSummary, DishSearchParams, ComboSummary, getRecommendedCombos } from '../../api/dish'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
 import { searchMerchants, MerchantSummary, getPublicMerchantCombos, getPublicMerchantDishes, PublicCombo } from '../../api/merchant'
@@ -91,17 +91,17 @@ Page({
     banners: [
       {
         id: 1,
-        title: '新客专享开销',
-        subtitle: '首单外卖下单减兘10元，等你来抢',
-        tag: '新客优惠',
+        title: '代取市场',
+        subtitle: '骑手接受顾客委托到店代取，对顾客负责',
+        tag: '权责明确',
         bg: 'linear-gradient(135deg, #FF6B00 0%, #FF9A3C 100%)',
         icon: '/assets/icons/dish.svg',
         url: ''
       },
       {
         id: 2,
-        title: '月卡会员',
-        subtitle: '充値享携手优惠，套餐折上折',
+        title: '店铺会员',
+        subtitle: '成为店铺专属会员，余额也可在线支付',
         tag: '尊享权益',
         bg: 'linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)',
         icon: '/assets/icons/wallet-safe.svg',
@@ -110,7 +110,7 @@ Page({
       {
         id: 3,
         title: '包间预订',
-        subtitle: '精品包间待君驾到，一键预订锁女好位',
+        subtitle: '到店前先预订，就餐更从容',
         tag: '极致体验',
         bg: 'linear-gradient(135deg, #0052D9 0%, #2979FF 100%)',
         icon: '/assets/icons/plate.svg',

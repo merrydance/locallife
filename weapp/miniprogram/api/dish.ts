@@ -659,6 +659,17 @@ export class DishManagementService {
     }
 
     /**
+     * 获取菜品详情（公开接口，消费者端使用）
+     * GET /v1/public/dishes/{id}
+     */
+    static async getPublicDishDetail(dishId: number): Promise<DishResponse> {
+        return await request({
+            url: `/v1/public/dishes/${dishId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
      * 更新菜品信息
      * PUT /v1/dishes/{id}
      */

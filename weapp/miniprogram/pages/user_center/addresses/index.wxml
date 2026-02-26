@@ -1,6 +1,7 @@
-<custom-navbar title="地址管理" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="{{isSelectMode ? '选择收货地址' : '地址管理'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(180rpx + env(safe-area-inset-bottom));">
+  <view wx:if="{{isSelectMode}}" class="mode-tip">请选择用于本次下单的收货地址</view>
   
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
@@ -17,11 +18,8 @@
 
     <!-- Empty State -->
     <view wx:elif="{{addresses.length === 0}}" class="empty-state animate-fade-in">
-      <t-empty image="/assets/icons/empty.svg" description="暂无收货地址" />
-      <view class="empty-actions">
-         <t-button theme="primary" size="medium" shape="round" bindtap="onAddAddress" icon="add">新建地址</t-button>
-         <t-button variant="outline" size="medium" shape="round" bindtap="onImportWechatAddress" icon="logo-wechat">微信导入</t-button>
-      </view>
+      <t-empty image="/assets/icons/empty.svg" description="{{isSelectMode ? '暂无可用收货地址' : '还没有收货地址'}}" />
+      <text class="empty-tip">可新建地址，或从微信导入后补充地图定位</text>
     </view>
 
     <!-- Address List -->
@@ -42,9 +40,14 @@
                <t-tag wx:if="{{item.is_default}}" size="small" variant="light" theme="primary">默认</t-tag>
             </view>
             
+            <view class="region-row" wx:if="{{item.region_name}}">
+              <text class="region-text">{{item.region_name}}</text>
+            </view>
             <view class="address-detail">
                <text>{{item.detail_address}}</text>
             </view>
+
+            <view wx:if="{{isSelectMode}}" class="select-hint">点击使用该地址</view>
           </view>
 
           <t-divider dashed />
@@ -79,9 +82,10 @@
 
 <!-- Bottom Fixed Bar -->
 <view class="bottom-bar">
-  <t-button block theme="primary" size="large" shape="round" icon="add" bindtap="onAddAddress">新建地址</t-button>
+  <t-button block theme="primary" size="large" shape="round" icon="add" bindtap="onAddAddress">{{isSelectMode ? '新建并使用地址' : '新建收货地址'}}</t-button>
   <view class="wechat-btn" bindtap="onImportWechatAddress">
      <t-icon name="logo-wechat" size="32rpx" color="#07C160" />
-     <text>从微信导入</text>
+     <text>{{isSelectMode ? '微信导入并补定位' : '从微信导入'}}</text>
   </view>
+  <text class="wechat-tip">导入后需在编辑页完成地图定位，确保坐标准确</text>
 </view>
