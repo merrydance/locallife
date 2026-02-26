@@ -1,4 +1,6 @@
 import AddressService, { CreateAddressRequest, UpdateAddressRequest } from '../../../../api/address'
+import { getCurrentRegion } from '../../../../api/location'
+import { listRegions, RegionItem } from '../../../../api/operator-application'
 import { logger } from '../../../../utils/logger'
 import { ErrorHandler } from '../../../../utils/error-handler'
 
@@ -7,6 +9,22 @@ interface WechatAddressData {
   contact_phone: string
   detail_address: string
   region_address?: string
+}
+
+const normalizeRegionName = (name: string): string =>
+  name.replace(/(省|市|区|县|旗|盟|州|地区|特别行政区|自治区)$/g, '').trim()
+
+const sameRegionName = (left: string, right: string): boolean => {
+  const a = normalizeRegionName(left)
+  const b = normalizeRegionName(right)
+  return !!a && !!b && (a === b || left.includes(right) || right.includes(left))
+}
+
+const extractRegionTokens = (regionAddress: string): { cityName: string, districtName: string } => {
+  const matched = regionAddress.match(/[^省市区县旗盟州]+(?:省|市|区|县|旗|盟|州|地区|自治区|特别行政区)/g) || []
+  const cityName = matched.find((item) => item.endsWith('市') || item.endsWith('地区') || item.endsWith('盟') || item.endsWith('州')) || ''
+  const districtName = [...matched].reverse().find((item) => item.endsWith('区') || item.endsWith('县') || item.endsWith('旗') || item.endsWith('市')) || ''
+  return { cityName, districtName }
 }
 
 const getErrorMessage = (error: unknown): string => {
@@ -32,9 +50,11 @@ Page({
   data: {
     addressId: 0,
     fromSelectMode: false,
+    fromWechatImport: false,
     contactName: '',
     contactPhone: '',
     regionAddress: '',
+    regionId: 0,
     detailAddress: '',
     latitude: '',
     longitude: '',
@@ -48,7 +68,10 @@ Page({
 
   onLoad(options: { id?: string, wechat_data?: string, from_select?: string }) {
     const fromSelectMode = options.from_select === 'true'
-    this.setData({ fromSelectMode })
+    this.setData({
+      fromSelectMode,
+      fromWechatImport: !!options.wechat_data
+    })
 
     if (options.id) {
       this.setData({ 
@@ -88,6 +111,7 @@ Page({
         contactName: detail.contact_name,
         contactPhone: detail.contact_phone,
         regionAddress: detail.region_name || '',
+        regionId: detail.region_id || 0,
         detailAddress: detail.detail_address,
         latitude: detail.latitude,
         longitude: detail.longitude,
@@ -127,13 +151,25 @@ Page({
 
   onChooseLocation() {
     wx.chooseLocation({
-      success: (res) => {
+      success: async (res) => {
         const regionAddress = res.address || ''
         const detailLabel = res.name || ''
-        const newDetail = detailLabel ? `${detailLabel} ` : this.data.detailAddress
+        const currentDetail = (this.data.detailAddress || '').trim()
+        const newDetail = currentDetail || (detailLabel ? `${detailLabel} ` : this.data.detailAddress)
+
+        let regionId = this.data.regionId
+        try {
+          const region = await getCurrentRegion({ latitude: res.latitude, longitude: res.longitude })
+          if (region?.region_id) {
+            regionId = region.region_id
+          }
+        } catch (error) {
+          logger.warn('Resolve region by location failed', error, 'AddressEdit.onChooseLocation')
+        }
 
         this.setData({
           regionAddress,
+          regionId,
           detailAddress: newDetail,
           latitude: String(res.latitude),
           longitude: String(res.longitude)
@@ -165,6 +201,68 @@ Page({
     this.setData({ saving: true })
 
     try {
+      let resolvedRegionId = this.data.regionId
+      let resolvedLatitude = (this.data.latitude || '').trim()
+      let resolvedLongitude = (this.data.longitude || '').trim()
+      const latitudeNum = Number(this.data.latitude)
+      const longitudeNum = Number(this.data.longitude)
+
+      if (!resolvedRegionId && Number.isFinite(latitudeNum) && Number.isFinite(longitudeNum) && latitudeNum && longitudeNum) {
+        try {
+          const region = await getCurrentRegion({ latitude: latitudeNum, longitude: longitudeNum })
+          resolvedRegionId = region?.region_id || 0
+        } catch (error) {
+          logger.warn('Resolve region before save by location failed', error, 'AddressEdit.onSave')
+        }
+      }
+
+      if (!resolvedRegionId && this.data.regionAddress.trim()) {
+        resolvedRegionId = await this.resolveRegionIdByAddressText(this.data.regionAddress)
+      }
+
+      if (!resolvedRegionId) {
+        const app = getApp<IAppOption>()
+        const fallbackLat = Number(app.globalData.latitude)
+        const fallbackLng = Number(app.globalData.longitude)
+        if (Number.isFinite(fallbackLat) && Number.isFinite(fallbackLng) && fallbackLat && fallbackLng) {
+          try {
+            const region = await getCurrentRegion({ latitude: fallbackLat, longitude: fallbackLng })
+            resolvedRegionId = region?.region_id || 0
+            if (!resolvedLatitude || !resolvedLongitude) {
+              resolvedLatitude = String(fallbackLat)
+              resolvedLongitude = String(fallbackLng)
+            }
+          } catch (error) {
+            logger.warn('Resolve region before save by app location failed', error, 'AddressEdit.onSave')
+          }
+        }
+      }
+
+      if (!resolvedLatitude || !resolvedLongitude) {
+        const app = getApp<IAppOption>()
+        const fallbackLat = Number(app.globalData.latitude)
+        const fallbackLng = Number(app.globalData.longitude)
+        if (Number.isFinite(fallbackLat) && Number.isFinite(fallbackLng) && fallbackLat && fallbackLng) {
+          resolvedLatitude = String(fallbackLat)
+          resolvedLongitude = String(fallbackLng)
+        }
+      }
+
+      if (!resolvedRegionId && (!resolvedLatitude || !resolvedLongitude)) {
+        wx.showModal({
+          title: '无法保存地址',
+          content: '请先在地图上选点后再保存',
+          showCancel: false
+        })
+        return
+      }
+
+      logger.info('Address save resolved params', {
+        regionId: resolvedRegionId,
+        hasLatitude: !!resolvedLatitude,
+        hasLongitude: !!resolvedLongitude
+      }, 'AddressEdit.onSave')
+
       if (this.data.addressId) {
         // 更新地址
         const updateData: UpdateAddressRequest = {
@@ -172,9 +270,12 @@ Page({
           contact_phone: this.data.contactPhone,
           detail_address: this.data.detailAddress
         }
-        if (this.data.latitude && this.data.longitude) {
-          updateData.latitude = this.data.latitude
-          updateData.longitude = this.data.longitude
+        if (resolvedRegionId > 0) {
+          updateData.region_id = resolvedRegionId
+        }
+        if (resolvedLatitude && resolvedLongitude) {
+          updateData.latitude = resolvedLatitude
+          updateData.longitude = resolvedLongitude
         }
         await AddressService.updateAddress(this.data.addressId, updateData)
 
@@ -190,9 +291,12 @@ Page({
           detail_address: this.data.detailAddress,
           is_default: this.data.isDefault
         }
-        if (this.data.latitude && this.data.longitude) {
-          createData.latitude = this.data.latitude
-          createData.longitude = this.data.longitude
+        if (resolvedRegionId > 0) {
+          createData.region_id = resolvedRegionId
+        }
+        if (resolvedLatitude && resolvedLongitude) {
+          createData.latitude = resolvedLatitude
+          createData.longitude = resolvedLongitude
         }
         await AddressService.createAddress(createData)
       }
@@ -223,6 +327,49 @@ Page({
     }
   },
 
+  async resolveRegionIdByAddressText(regionAddress: string): Promise<number> {
+    try {
+      const { cityName, districtName } = extractRegionTokens(regionAddress)
+      if (!districtName) return 0
+
+      let cityId = 0
+      if (cityName) {
+        for (let page = 1; page <= 8; page++) {
+          const cities = await listRegions({ page_id: page, page_size: 100, level: 2 })
+          const targetCity = (cities || []).find((city: RegionItem) => sameRegionName(city.name, cityName))
+          if (targetCity) {
+            cityId = targetCity.id
+            break
+          }
+          if (!cities || cities.length < 100) break
+        }
+      }
+
+      if (cityId > 0) {
+        for (let page = 1; page <= 8; page++) {
+          const districts = await listRegions({ page_id: page, page_size: 100, level: 3, parent_id: cityId })
+          const targetDistrict = (districts || []).find((district: RegionItem) => sameRegionName(district.name, districtName))
+          if (targetDistrict) {
+            return targetDistrict.id
+          }
+          if (!districts || districts.length < 100) break
+        }
+      }
+
+      for (let page = 1; page <= 20; page++) {
+        const districts = await listRegions({ page_id: page, page_size: 100, level: 3 })
+        const targetDistrict = (districts || []).find((district: RegionItem) => sameRegionName(district.name, districtName))
+        if (targetDistrict) {
+          return targetDistrict.id
+        }
+        if (!districts || districts.length < 100) break
+      }
+    } catch (error) {
+      logger.warn('Resolve region by address text failed', error, 'AddressEdit.resolveRegionIdByAddressText')
+    }
+    return 0
+  },
+
   async onDelete() {
     if (!this.data.addressId) return
 
@@ -248,7 +395,7 @@ Page({
   },
 
   validate(): boolean {
-    const { contactName, contactPhone, detailAddress, latitude, longitude } = this.data
+    const { contactName, contactPhone, detailAddress } = this.data
 
     if (!contactName.trim()) {
       wx.showToast({ title: '请填写联系人', icon: 'none' })
@@ -260,10 +407,6 @@ Page({
     }
     if (!detailAddress.trim()) {
       wx.showToast({ title: '请填写详细地址', icon: 'none' })
-      return false
-    }
-    if (!latitude || !longitude) {
-      wx.showToast({ title: '请先完成地图定位', icon: 'none' })
       return false
     }
     return true

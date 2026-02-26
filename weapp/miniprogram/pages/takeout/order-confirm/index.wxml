@@ -80,7 +80,7 @@
               <view class="item-info">
                 <text class="item-name">{{cartItem.name}}</text>
                 <view class="item-specs" wx:if="{{cartItem.specText}}">
-                  <text class="item-spec-tag">{{cartItem.specText}}</text>
+                  <t-tag size="extra-small" variant="light" theme="default" shape="round">{{cartItem.specText}}</t-tag>
                 </view>
               </view>
               <text class="item-quantity">×{{cartItem.quantity}}</text>

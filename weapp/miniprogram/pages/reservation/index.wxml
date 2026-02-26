@@ -60,14 +60,22 @@
 
     <!-- Empty State -->
     <view wx:elif="{{itemList.length === 0 && !loading}}" class="empty-container">
-      <t-empty
-        icon="info-circle-filled"
-        description="当前区域暂无可服务商户"
-      />
-      <view class="empty-actions">
-        <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
-        <t-button variant="outline" size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
-      </view>
+      <block wx:if="{{activeTab === 'room' && hasRestaurantsInArea}}">
+        <t-empty
+          icon="info-circle-filled"
+          description="当前区域餐厅暂无可预订包间"
+        />
+      </block>
+      <block wx:else>
+        <t-empty
+          icon="info-circle-filled"
+          description="当前区域暂无可服务商户"
+        />
+        <view class="empty-actions">
+          <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
+          <t-button variant="outline" size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
+        </view>
+      </block>
     </view>
 
     <!-- Item List -->

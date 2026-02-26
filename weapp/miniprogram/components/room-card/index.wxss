@@ -50,6 +50,10 @@
   flex-wrap: wrap;
 }
 
+.merchant-tag {
+  max-width: 100%;
+}
+
 /* 标题 */
 .restaurant-room-name {
   flex: 1;

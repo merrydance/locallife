@@ -8,6 +8,8 @@ type PreviousAddressPage = {
 }
 
 Page({
+  _skipNextOnShowLoad: false,
+
   data: {
     addresses: [] as Address[],
     navBarHeight: 88,
@@ -24,6 +26,10 @@ Page({
   },
 
   onShow() {
+    if (this._skipNextOnShowLoad) {
+      this._skipNextOnShowLoad = false
+      return
+    }
     this.loadAddresses()
   },
 
@@ -69,6 +75,7 @@ Page({
   },
 
   onImportWechatAddress() {
+    this._skipNextOnShowLoad = true
     wx.chooseAddress({
       success: (res) => {
         const regionAddress = `${res.provinceName}${res.cityName}${res.countyName}`
@@ -78,11 +85,15 @@ Page({
           region_address: regionAddress,
           detail_address: res.detailInfo || ''
         }))
-        wx.navigateTo({
-          url: `/pages/user_center/addresses/edit/index?wechat_data=${params}${this.data.isSelectMode ? '&from_select=true' : ''}`
-        })
+        const targetUrl = `/pages/user_center/addresses/edit/index?wechat_data=${params}${this.data.isSelectMode ? '&from_select=true' : ''}`
+        if (this.data.isSelectMode) {
+          wx.redirectTo({ url: targetUrl })
+        } else {
+          wx.navigateTo({ url: targetUrl })
+        }
       },
       fail: (err) => {
+        this._skipNextOnShowLoad = false
         if (err.errMsg.includes('cancel')) return
         logger.error('Choose address failed:', err, 'Addresses')
         if (err.errMsg.includes('auth')) {

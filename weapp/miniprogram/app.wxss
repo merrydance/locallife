@@ -202,8 +202,8 @@ page[data-theme="dark"] {
 .t-cell-group__title {
   padding: 12rpx 24rpx !important;
   font-size: 26rpx !important;
-  color: #666 !important;
-  background: #f7f7f7 !important;
+  color: var(--td-text-color-secondary) !important;
+  background: var(--td-bg-color-secondarycontainer) !important;
   line-height: 36rpx !important;
 }
 
@@ -217,16 +217,21 @@ page[data-theme="dark"] {
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, var(--td-bg-color-secondarycontainer) 25%, var(--td-bg-color-page) 50%, var(--td-bg-color-secondarycontainer) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
 .skeleton-rect {
-  background: #f0f0f0;
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .skeleton-circle {
   border-radius: 50%;
-  background: #f0f0f0;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+/* 全站标签视觉基线（非交互态） */
+.t-tag {
+  border-radius: var(--radius-round) !important;
 }

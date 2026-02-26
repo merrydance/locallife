@@ -134,7 +134,7 @@
             <view class="merchant-name">{{item.name}}</view>
             <view class="merchant-meta">{{item.is_open ? '营业中' : '休息中'}} · {{item.address}}</view>
             <view class="tag-row">
-              <text class="tag-chip" wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this">{{tag}}</text>
+              <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light" theme="default" shape="round">{{tag}}</t-tag>
             </view>
           </view>
         </view>

@@ -24,11 +24,11 @@
       <view class="hero-overlay">
         <view class="hero-name">{{restaurant.name}}</view>
         <view class="hero-meta">
-          <text class="hero-tag">本月服务 {{restaurant.monthly_sales || 0}} 单</text>
-          <text class="hero-tag">约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</text>
+          <t-tag size="small" variant="light" theme="default" shape="round" class="hero-static-tag">本月服务 {{restaurant.monthly_sales || 0}} 单</t-tag>
+          <t-tag size="small" variant="light" theme="default" shape="round" class="hero-static-tag">约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</t-tag>
         </view>
         <view class="hero-tags" wx:if="{{restaurant.tags.length > 0}}">
-          <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="light-outline" theme="primary">{{item}}</t-tag>
+          <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="light" theme="default" shape="round" class="hero-static-tag">{{item}}</t-tag>
         </view>
       </view>
     </view>

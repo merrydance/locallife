@@ -45,7 +45,7 @@
             <text class="merchant-name">{{item.merchantName}}</text>
             <t-icon name="chevron-right" size="32rpx" color="#999" />
           </view>
-          <view class="status-tag {{item.statusClass}}">{{item.statusLabel}}</view>
+          <t-tag size="small" variant="light" theme="default" shape="round" class="status-tag {{item.statusClass}}">{{item.statusLabel}}</t-tag>
         </view>
 
         <!-- 内容区：商品预览 -->

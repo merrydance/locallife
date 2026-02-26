@@ -14,7 +14,7 @@
 .skeleton-header-image {
   width: 100%;
   height: 560rpx;
-  background: #f0f0f0;
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .skeleton-scroll {
@@ -22,7 +22,7 @@
 }
 
 .skeleton-line {
-  background: #f0f0f0;
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: 4rpx;
 }
 
@@ -50,7 +50,7 @@
   position: relative;
   width: 100%;
   height: 560rpx;
-  background-color: #f5f5f5;
+  background-color: var(--td-bg-color-secondarycontainer);
   overflow: hidden;
 }
 
@@ -98,7 +98,7 @@
   border-radius: var(--radius-lg);
   padding: var(--spacer-lg);
   margin-bottom: var(--spacer-md);
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .title-row {
@@ -111,7 +111,7 @@
 .title {
   font-size: 40rpx;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--td-text-color-primary);
   line-height: 1.4;
   flex: 1;
   margin-right: 24rpx;
@@ -148,7 +148,7 @@
 
 .sales {
   font-size: var(--font-size-xs);
-  color: rgba(0, 0, 0, 0.4);
+  color: var(--td-text-color-placeholder);
 }
 
 .delivery-info {
@@ -156,12 +156,12 @@
   display: flex;
   align-items: center;
   font-size: var(--font-size-xs);
-  color: rgba(0, 0, 0, 0.4);
+  color: var(--td-text-color-placeholder);
 }
 
 .delivery-info .divider {
   margin: 0 12rpx;
-  color: rgba(0, 0, 0, 0.1);
+  color: var(--td-border-level-1-color);
 }
 
 .price-row {
@@ -190,7 +190,7 @@
 
 .original-price {
   font-size: var(--font-size-sm);
-  color: rgba(0, 0, 0, 0.26);
+  color: var(--td-text-color-placeholder);
   text-decoration: line-through;
   margin-left: 16rpx;
 }
@@ -204,13 +204,13 @@
 .spec-section {
   margin-bottom: var(--spacer-lg);
   padding-top: var(--spacer-sm);
-  border-top: 2rpx solid rgba(0,0,0,0.03);
+  border-top: 2rpx solid var(--td-border-level-1-color);
 }
 
 .spec-title {
   font-size: var(--font-size-base);
   font-weight: 600;
-  color: rgba(0,0,0,0.9);
+  color: var(--td-text-color-primary);
   margin-bottom: 16rpx;
 }
 
@@ -232,14 +232,14 @@
 
 .description {
   font-size: var(--font-size-base);
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--td-text-color-secondary);
   line-height: 1.6;
 }
 
 .desc-title {
   font-size: var(--font-size-base);
   font-weight: 600;
-  color: rgba(0,0,0,0.9);
+  color: var(--td-text-color-primary);
   margin-bottom: 8rpx;
 }
 
@@ -249,7 +249,7 @@
   border-radius: var(--radius-lg);
   padding: var(--spacer-lg);
   margin-bottom: var(--spacer-md);
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .section-title {
@@ -259,13 +259,13 @@
   margin-bottom: var(--spacer-lg);
   font-size: var(--font-size-heading);
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--td-text-color-primary);
 }
 
 .dish-count {
   font-size: var(--font-size-xs);
   font-weight: normal;
-  color: rgba(0, 0, 0, 0.4);
+  color: var(--td-text-color-placeholder);
 }
 
 .dish-list {
@@ -301,18 +301,18 @@
 .dish-name {
   font-size: var(--font-size-base);
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--td-text-color-primary);
 }
 
 .dish-qty {
   font-size: var(--font-size-base);
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--td-text-color-primary);
   font-weight: 500;
 }
 
 .dish-price-row {
   font-size: var(--font-size-xs);
-  color: rgba(0, 0, 0, 0.4);
+  color: var(--td-text-color-placeholder);
 }
 
 /* 备注 */
@@ -321,7 +321,7 @@
 }
 
 .remark-textarea {
-  --td-textarea-background-color: #f9f9f9;
+  --td-textarea-background-color: var(--td-bg-color-secondarycontainer);
   border-radius: 8rpx;
   margin-bottom: 24rpx;
 }
@@ -335,8 +335,8 @@
 .quick-remark-tag {
   border-radius: 4rpx;
   font-size: 24rpx;
-  color: rgba(0,0,0,0.6);
-  background: #f5f5f5;
+  color: var(--td-text-color-secondary);
+  background: var(--td-bg-color-secondarycontainer);
   border: none !important;
 }
 
@@ -353,7 +353,7 @@
 
 .merchant-name {
   font-size: var(--font-size-base);
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--td-text-color-primary);
   font-weight: 500;
   margin-left: 16rpx;
 }
@@ -369,7 +369,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-md);
   z-index: 100;
 }
 
@@ -403,7 +403,7 @@
 
 .resting-text {
   font-size: 26rpx;
-  color: rgba(0,0,0,0.4);
+  color: var(--td-text-color-placeholder);
   font-weight: 500;
 }
 

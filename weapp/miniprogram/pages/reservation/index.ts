@@ -73,6 +73,7 @@ Page({
     // Helper for Error State
     isError: false,
     errorMessage: '',
+    hasRestaurantsInArea: true,
 
     // Helpers
     guestOptionsShort: [
@@ -190,6 +191,13 @@ Page({
           }
         })
 
+        if (reset && newList.length === 0) {
+          const hasRestaurantsInArea = await this.checkRestaurantAvailability(latitude, longitude)
+          this.setData({ hasRestaurantsInArea })
+        } else if (newList.length > 0) {
+          this.setData({ hasRestaurantsInArea: true })
+        }
+
       } else {
         // Restaurant Stream - 与外卖页 loadRestaurants 保持一致的数据格式
         let merchantResults: MerchantSummary[] = []
@@ -222,6 +230,10 @@ Page({
           tags: m.tags ? m.tags.slice(0, 3) : [],
           type: 'restaurant'
         }))
+
+        if (reset) {
+          this.setData({ hasRestaurantsInArea: newList.length > 0 })
+        }
       }
 
       this.setData({
@@ -252,6 +264,22 @@ Page({
         isError: true,
         errorMessage: message
       })
+    }
+  },
+
+  async checkRestaurantAvailability(latitude?: number, longitude?: number): Promise<boolean> {
+    try {
+      const merchants = await searchMerchants({
+        keyword: '',
+        page_id: 1,
+        page_size: 1,
+        user_latitude: latitude,
+        user_longitude: longitude
+      })
+      return merchants.length > 0
+    } catch (error) {
+      logger.warn('检查区域餐厅供给失败，默认按有餐厅处理', error, 'Reservation.checkRestaurantAvailability')
+      return true
     }
   },
 

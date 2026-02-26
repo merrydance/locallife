@@ -25,8 +25,8 @@
           <view class="merchant-detail">
             <view class="merchant-name">{{merchantInfo.name}}</view>
             <view class="merchant-tags">
-              <view class="tag">支持外卖</view>
-              <view class="tag">支持预订</view>
+              <t-tag size="small" variant="light" theme="default" shape="round">支持外卖</t-tag>
+              <t-tag size="small" variant="light" theme="default" shape="round">支持预订</t-tag>
             </view>
           </view>
         </view>

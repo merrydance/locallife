@@ -1,7 +1,7 @@
 /* Pages Order Detail */
 .page-container {
   min-height: 100vh;
-  background-color: var(--td-bg-color-page, #f6f6f6);
+  background-color: var(--td-bg-color-page);
   padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
 }
 
@@ -21,7 +21,7 @@
 
 /* 1. Status Header */
 .status-header {
-  background: #fff;
+  background: var(--td-bg-color-container);
   padding: 32rpx 40rpx;
   display: flex;
   justify-content: space-between;
@@ -37,36 +37,36 @@
 .status-title {
   font-size: 44rpx; /* Display size */
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary);
   margin-bottom: 8rpx;
 }
 
 .status-desc {
   font-size: 26rpx;
-  color: #666;
+  color: var(--td-text-color-secondary);
 }
 
 /* Cards General */
 .card {
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container);
   margin: 20rpx 24rpx;
   border-radius: var(--radius-md, 16rpx);
   overflow: hidden;
-  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.02);
+  box-shadow: var(--shadow-1);
 }
 
 .card-title {
   font-size: 30rpx;
   font-weight: bold;
   padding: 24rpx 32rpx;
-  border-bottom: 1rpx solid #f5f5f5;
-  color: #333;
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
+  color: var(--td-text-color-primary);
 }
 
 /* 2. Action Card */
 .action-card {
   padding: 24rpx 32rpx;
-  background: #fff;
+  background: var(--td-bg-color-container);
   border: 1rpx solid rgba(0,0,0,0.05);
 }
 
@@ -78,7 +78,7 @@
 
 .action-text {
   font-size: 28rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
   font-weight: 500;
 }
 
@@ -99,7 +99,7 @@
   align-items: center;
   font-size: 30rpx;
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary);
 }
 
 .merchant-name {
@@ -126,7 +126,7 @@
 .item-img {
   flex-shrink: 0;
   margin-right: 20rpx;
-  background-color: #f9f9f9;
+  background-color: var(--td-bg-color-component);
 }
 
 .item-main {
@@ -145,7 +145,7 @@
 
 .item-name {
   font-size: 28rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
   font-weight: 500;
   line-height: 1.4;
   flex: 1;
@@ -154,7 +154,7 @@
 
 .item-price {
   font-size: 30rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
   font-weight: bold;
   font-family: 'DIN Alternate', sans-serif;
 }
@@ -168,20 +168,12 @@
 .item-specs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx;
-}
-
-.spec-tag {
-  font-size: 22rpx;
-  color: #999;
-  background: #f5f5f5;
-  padding: 2rpx 8rpx;
-  border-radius: 4rpx;
+  gap: var(--spacer-xs);
 }
 
 .item-qty {
   font-size: 26rpx;
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 /* Fees */
@@ -193,7 +185,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 26rpx;
-  color: #666;
+  color: var(--td-text-color-secondary);
   margin-bottom: 12rpx;
 }
 
@@ -204,11 +196,11 @@
 
 .discount-price {
   text-decoration: line-through;
-  color: #bbb;
+  color: var(--td-text-color-disabled);
 }
 
 .highlight-red {
-  color: var(--td-error-color, #E34D59);
+  color: var(--td-error-color);
 }
 
 .total-row {
@@ -221,13 +213,13 @@
 
 .total-label {
   margin-right: 12rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
   font-weight: bold;
 }
 
 .total-price {
   font-size: 40rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
   font-weight: bold;
   font-family: 'DIN Alternate', sans-serif;
 }
@@ -246,7 +238,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
+  background: var(--td-bg-color-container);
   padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
   box-shadow: 0 -2rpx 10rpx rgba(0,0,0,0.05);
   z-index: 100;
@@ -280,21 +272,21 @@
 }
 
 .skeleton-bg {
-  background: #fff;
+  background: var(--td-bg-color-container);
 }
 
 .skeleton-rect {
-  background-color: #f2f2f2;
+  background-color: var(--td-bg-color-component);
   border-radius: 8rpx;
 }
 
 .skeleton-circle {
-  background-color: #f2f2f2;
+  background-color: var(--td-bg-color-component);
   border-radius: 50%;
 }
 
 .skeleton-row {
-  background-color: #f2f2f2;
+  background-color: var(--td-bg-color-component);
   border-radius: 8rpx;
 }
 

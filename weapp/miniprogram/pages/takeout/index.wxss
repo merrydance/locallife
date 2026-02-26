@@ -75,6 +75,16 @@
   gap: var(--spacer-sm);
 }
 
+.package-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.package-list-item {
+  width: 100%;
+}
+
 .loading-wrapper {
   display: flex;
   justify-content: center;
@@ -169,12 +179,9 @@
 }
 
 .banner-tag {
-  display: inline-block;
   font-size: 20rpx;
-  color: #fff;
+  color: var(--td-text-color-anti);
   background: rgba(255,255,255,0.25);
-  border-radius: 999rpx;
-  padding: 4rpx 16rpx;
   margin-bottom: 12rpx;
   backdrop-filter: blur(4rpx);
 }
@@ -182,7 +189,7 @@
 .banner-title {
   font-size: 40rpx;
   font-weight: bold;
-  color: #fff;
+  color: var(--td-text-color-anti);
   text-shadow: 0 2rpx 8rpx rgba(0,0,0,0.2);
   margin-bottom: 8rpx;
   line-height: 1.3;

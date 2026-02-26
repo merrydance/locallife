@@ -1,6 +1,6 @@
 .page-container {
   min-height: 100vh;
-  background: #F6F6F6;
+  background: var(--td-bg-color-page);
 }
 
 .loading {
@@ -14,12 +14,12 @@
 }
 
 .credit-card {
-  background: linear-gradient(135deg, #0052D9 0%, #00A870 100%);
-  border-radius: 16rpx;
+  background: linear-gradient(135deg, var(--td-brand-color-9) 0%, var(--td-success-color) 100%);
+  border-radius: var(--radius-md);
   padding: 48rpx;
-  color: #fff;
+  color: var(--td-text-color-anti);
   margin-bottom: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 82, 217, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
@@ -48,9 +48,8 @@
 
 .level-tag {
   background: rgba(255, 255, 255, 0.2);
-  padding: 8rpx 24rpx;
-  border-radius: 32rpx;
   font-size: 26rpx;
+  color: var(--td-text-color-anti);
   font-weight: bold;
 }
 
@@ -64,7 +63,7 @@
 
 .progress {
   height: 100%;
-  background: #fff;
+  background: var(--td-text-color-anti);
   border-radius: 6rpx;
 }
 
@@ -74,8 +73,8 @@
 }
 
 .section {
-  background: #fff;
-  border-radius: 16rpx;
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
   padding: 24rpx;
   margin-bottom: 24rpx;
 }
@@ -83,7 +82,7 @@
 .section-title {
   font-size: 30rpx;
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary);
   margin-bottom: 24rpx;
 }
 
@@ -103,12 +102,12 @@
 .metric-value {
   font-size: 32rpx;
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary);
 }
 
 .metric-label {
   font-size: 24rpx;
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 .history-item {
@@ -116,7 +115,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 24rpx 0;
-  border-bottom: 1rpx solid #F0F0F0;
+  border-bottom: 1rpx solid var(--td-border-level-1-color);
 }
 
 .history-item:last-child {
@@ -131,12 +130,12 @@
 
 .item-reason {
   font-size: 28rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
 }
 
 .item-time {
   font-size: 24rpx;
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 .item-amount {
@@ -144,5 +143,5 @@
   font-weight: bold;
 }
 
-.item-amount.positive { color: #00A870; }
-.item-amount.negative { color: #E34D59; }
+.item-amount.positive { color: var(--td-success-color); }
+.item-amount.negative { color: var(--td-error-color); }

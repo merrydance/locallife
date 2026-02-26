@@ -35,18 +35,15 @@
 
 .status-tag {
   font-size: var(--font-size-xxs);
-  padding: 4rpx 12rpx;
-  border-radius: var(--radius-sm);
-  background: var(--td-brand-color-light);
 }
 
 .tag-open {
-  border: 1rpx solid var(--td-success-color);
+  background: var(--td-success-color-1);
   color: var(--td-success-color);
 }
 
 .tag-closed {
-  border: 1rpx solid var(--td-error-color);
+  background: var(--td-error-color-1);
   color: var(--td-error-color);
 }
 

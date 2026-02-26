@@ -17,18 +17,18 @@
 
       <view class="section-card controls-card">
         <view class="filter-row">
-          <view class="filter-chip {{statusFilter === 'all' ? 'active' : ''}}" data-name="all" bind:tap="onFilterChange">
+          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'all' ? 'active' : ''}}" data-name="all" bind:tap="onFilterChange">
             全部 ({{filterStats.all}})
-          </view>
-          <view class="filter-chip {{statusFilter === 'submitted' ? 'active' : ''}}" data-name="submitted" bind:tap="onFilterChange">
+          </t-tag>
+          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'submitted' ? 'active' : ''}}" data-name="submitted" bind:tap="onFilterChange">
             待审核 ({{filterStats.submitted}})
-          </view>
-          <view class="filter-chip {{statusFilter === 'approved' ? 'active' : ''}}" data-name="approved" bind:tap="onFilterChange">
+          </t-tag>
+          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'approved' ? 'active' : ''}}" data-name="approved" bind:tap="onFilterChange">
             已通过 ({{filterStats.approved}})
-          </view>
-          <view class="filter-chip {{statusFilter === 'rejected' ? 'active' : ''}}" data-name="rejected" bind:tap="onFilterChange">
+          </t-tag>
+          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'rejected' ? 'active' : ''}}" data-name="rejected" bind:tap="onFilterChange">
             已驳回 ({{filterStats.rejected}})
-          </view>
+          </t-tag>
         </view>
 
         <view class="sort-row">

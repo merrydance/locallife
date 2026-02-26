@@ -15,9 +15,9 @@
         <view class="merchant-profile">
           <t-icon name="avatar" size="48rpx" color="rgba(255,255,255,0.8)" />
           <view class="merchant-name">{{merchantInfo.name || '核心商圈店'}}</view>
-          <view class="status-tag {{isOpen ? 'tag-open' : 'tag-closed'}}">
+          <t-tag size="small" variant="light" theme="default" shape="round" class="status-tag {{isOpen ? 'tag-open' : 'tag-closed'}}">
             {{isOpen ? '营业中' : '休息中'}}
-          </view>
+          </t-tag>
         </view>
         <view class="setting-entry" bindtap="onGoToSettings">
           <t-icon name="setting" size="40rpx" color="#fff" />

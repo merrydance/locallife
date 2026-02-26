@@ -19,7 +19,7 @@
     <!-- Empty State -->
     <view wx:elif="{{addresses.length === 0}}" class="empty-state animate-fade-in">
       <t-empty image="/assets/icons/empty.svg" description="{{isSelectMode ? '暂无可用收货地址' : '还没有收货地址'}}" />
-      <text class="empty-tip">可新建地址，或从微信导入后补充地图定位</text>
+      <text class="empty-tip">可新建地址，或从微信导入后直接保存</text>
     </view>
 
     <!-- Address List -->
@@ -85,7 +85,6 @@
   <t-button block theme="primary" size="large" shape="round" icon="add" bindtap="onAddAddress">{{isSelectMode ? '新建并使用地址' : '新建收货地址'}}</t-button>
   <view class="wechat-btn" bindtap="onImportWechatAddress">
      <t-icon name="logo-wechat" size="32rpx" color="#07C160" />
-     <text>{{isSelectMode ? '微信导入并补定位' : '从微信导入'}}</text>
+      <text>{{isSelectMode ? '微信导入并使用' : '从微信导入'}}</text>
   </view>
-  <text class="wechat-tip">导入后需在编辑页完成地图定位，确保坐标准确</text>
 </view>

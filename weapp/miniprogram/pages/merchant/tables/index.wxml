@@ -111,7 +111,7 @@
           <view class="tags-grid">
             <label class="tag-option" wx:for="{{availableTags}}" wx:key="id">
               <checkbox value="{{item.id + ''}}" checked="{{formData.tag_ids.indexOf(item.id) !== -1}}" color="var(--td-brand-color)" />
-              <text class="tag-name">{{item.name}}</text>
+              <t-tag size="small" variant="light" theme="default" shape="round" class="tag-name">{{item.name}}</t-tag>
               <text class="tag-delete" data-id="{{item.id}}" data-name="{{item.name}}" catchtap="onDeleteTag">移除</text>
             </label>
           </view>

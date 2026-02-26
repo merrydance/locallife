@@ -69,14 +69,6 @@
   gap: 12rpx;
 }
 
-.tag {
-  font-size: 20rpx;
-  color: var(--td-brand-color);
-  background: var(--td-brand-color-light);
-  padding: 2rpx 12rpx;
-  border-radius: 4rpx;
-}
-
 /* 桌台操作区 */
 .table-action-card {
   background: #fff;

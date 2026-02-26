@@ -175,7 +175,7 @@
 }
 
 .tag-delete {
-  color: #ef4444;
+  color: var(--td-error-color);
   font-size: 24rpx;
 }
 

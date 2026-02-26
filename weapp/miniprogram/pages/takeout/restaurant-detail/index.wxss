@@ -1,5 +1,5 @@
 .skeleton-shimmer {
-  background: linear-gradient(90deg, #F2F2F2 25%, #E6E6E6 37%, #F2F2F2 63%);
+  background: linear-gradient(90deg, var(--td-bg-color-secondarycontainer) 25%, var(--td-bg-color-page) 37%, var(--td-bg-color-secondarycontainer) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.4s ease infinite;
 }
@@ -75,7 +75,7 @@
   right: 0;
   padding: var(--spacer-md);
   background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 100%);
-  color: #fff;
+  color: var(--td-text-color-anti);
   transition: padding var(--transition-base);
   height: 100%;
   display: flex;
@@ -145,7 +145,7 @@
 }
 
 .service-count {
-  color: #ffeb3b; /* 保持黄色强调 */
+  color: var(--td-warning-color);
 }
 
 .restaurant-tags {

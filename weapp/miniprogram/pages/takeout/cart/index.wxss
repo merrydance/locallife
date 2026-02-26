@@ -13,7 +13,7 @@
 .merchant-skeleton-group {
   margin-bottom: var(--spacer-md);
   padding: var(--spacer-md);
-  background: #fff;
+  background: var(--td-bg-color-container);
   border-radius: var(--radius-lg);
 }
 
@@ -21,7 +21,7 @@
   height: 40rpx;
   width: 40%;
   margin-bottom: 30rpx;
-  background: #f0f0f0;
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: 4rpx;
 }
 
@@ -29,7 +29,7 @@
   height: 60rpx;
   width: 100%;
   margin-top: 20rpx;
-  background: #f0f0f0;
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: 4rpx;
 }
 
@@ -184,7 +184,7 @@
 .item-status {
   font-size: var(--font-size-xs);
   color: var(--td-error-color);
-  background: var(--td-error-color-light, #fff2f0);
+  background: var(--td-error-color-light);
   padding: 4rpx 12rpx;
   border-radius: var(--radius-xs);
   margin-top: 8rpx;
@@ -214,7 +214,7 @@
 
 .quantity-btn.increase {
   background-color: var(--td-brand-color);
-  color: #fff;
+  color: var(--td-text-color-anti);
 }
 
 .quantity-btn.decrease {
@@ -294,8 +294,7 @@
   padding: 20rpx 32rpx;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
   background: var(--td-bg-color-container);
-  box-shadow: var(--shadow-top); /* 需确认 app.wxss 是否有，如无用 0 -4rpx ... */
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
   z-index: 100;
 }
 

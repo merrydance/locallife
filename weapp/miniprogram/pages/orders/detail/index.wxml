@@ -93,7 +93,7 @@
             </view>
             <view class="item-row-2">
               <view class="item-specs">
-                <text wx:for="{{item.customizations}}" wx:key="*this" wx:for-item="cust" class="spec-tag">{{cust}}</text>
+                <t-tag wx:for="{{item.customizations}}" wx:key="*this" wx:for-item="cust" size="extra-small" variant="light" theme="default" shape="round">{{cust}}</t-tag>
               </view>
               <view class="item-qty">x{{item.quantity}}</view>
             </view>

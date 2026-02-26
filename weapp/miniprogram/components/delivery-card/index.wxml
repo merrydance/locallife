@@ -45,9 +45,9 @@
   <view class="card-header">
     <view class="header-left">
       <text class="task-id">#{{task.id}}</text>
-      <view class="tag {{utils.getStatusClass(task.status)}}">
+      <t-tag size="small" variant="light" theme="default" shape="round" class="tag {{utils.getStatusClass(task.status)}}">
         {{utils.getStatusText(task.status)}}
-      </view>
+      </t-tag>
     </view>
     <text class="income">¥{{utils.formatMoney(task.fee)}}</text>
   </view>

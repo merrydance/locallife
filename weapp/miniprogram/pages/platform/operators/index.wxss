@@ -55,8 +55,6 @@
 }
 
 .filter-chip {
-  padding: 10rpx 20rpx;
-  border-radius: 999rpx;
   font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);

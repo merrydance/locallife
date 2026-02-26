@@ -35,6 +35,8 @@ interface RestaurantViewModel {
   monthlySales: number
   deliveryFee?: number
   deliveryFeeDisplay: string
+  promoText: string
+  subsidyText: string
 }
 
 interface PackageViewModel {
@@ -64,6 +66,42 @@ interface UserMessageError {
 }
 
 type SearchTimer = ReturnType<typeof setTimeout>
+type TakeoutTab = 'dishes' | 'restaurants' | 'packages'
+
+function resolveTakeoutTab(eventDetail: Record<string, unknown> | string): TakeoutTab {
+  const tabs: TakeoutTab[] = ['dishes', 'packages', 'restaurants']
+
+  if (typeof eventDetail === 'string' && (tabs as string[]).includes(eventDetail)) {
+    return eventDetail as TakeoutTab
+  }
+
+  const detail = (eventDetail || {}) as Record<string, unknown>
+  const rawValue = detail.value
+  if (typeof rawValue === 'string' && (tabs as string[]).includes(rawValue)) {
+    return rawValue as TakeoutTab
+  }
+
+  const rawIndex = detail.index
+  if (typeof rawIndex === 'number' && rawIndex >= 0 && rawIndex < tabs.length) {
+    return tabs[rawIndex]
+  }
+
+  return 'dishes'
+}
+
+function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
+  const promoTag = tags.find((tag) => /促销|满减|折扣|优惠|券/.test(tag)) || ''
+  let subsidyTag = tags.find((tag) => /补贴|免配送|免运费|运费减免|配送补贴/.test(tag)) || ''
+
+  if (!subsidyTag && deliveryFee === 0) {
+    subsidyTag = '运费补贴'
+  }
+
+  return {
+    promoText: promoTag,
+    subsidyText: subsidyTag
+  }
+}
 
 Page({
   data: {
@@ -72,7 +110,7 @@ Page({
     restaurants: [] as RestaurantViewModel[],
     packages: [] as PackageViewModel[],
     categories: [] as Category[],
-    activeCategoryId: '1',
+    activeCategoryId: '',
     cartTotalCount: 0,
     cartTotalPrice: 0,
     address: '点此获取位置',
@@ -87,6 +125,7 @@ Page({
     needLocation: false,
     refresherTriggered: false,
     isPrefetching: false,
+    hasServiceProviders: true,
     // 首页 Banner
     banners: [
       {
@@ -486,14 +525,18 @@ Page({
   },
 
   onTabChange(e: WechatMiniprogram.CustomEvent) {
-    const { value } = e.detail
-    this.setData({
-      activeTab: value,
-      page: 1
-    })
-    // 切换 Tab 时重新加载对应类型的标签
-    this.loadCategories()
-    this.loadData()
+    const nextTab = resolveTakeoutTab((e.detail || {}) as Record<string, unknown>)
+    this.setData(
+      {
+        activeTab: nextTab,
+        page: 1
+      },
+      () => {
+        // 切换 Tab 时重新加载对应类型的标签
+        this.loadCategories()
+        this.loadData()
+      }
+    )
   },
 
   async loadCategories() {
@@ -507,15 +550,19 @@ Page({
     this.setData({ loading: true, isError: false })
 
     try {
-      if (this.data.page === 1) {
-        // 第一页同时加载套餐横条和商家瀑布流
-        await Promise.all([
-          this.loadPackages(true),
-          this.loadRestaurants(true)
-        ])
+      const { activeTab, page } = this.data
+      const reset = page === 1
+
+      if (reset) {
+        await this.refreshServiceProviderState()
+      }
+
+      if (activeTab === 'dishes') {
+        await this.loadDishes(reset)
+      } else if (activeTab === 'packages') {
+        await this.loadPackages(reset)
       } else {
-        // 后续只加载商家瀑布流
-        await this.loadRestaurants(false)
+        await this.loadRestaurants(reset)
       }
     } catch (error: unknown) {
       ErrorHandler.handle(error, 'Takeout.loadData')
@@ -571,7 +618,14 @@ Page({
         if (tagId && !isNaN(tagId)) {
           params.tag_id = tagId
         }
-        const result = await searchDishes(params)
+        let result = await searchDishes(params)
+
+        // 生产级兜底1：若带标签过滤导致空列表，自动重试一次无标签过滤
+        if (currentPage === 1 && result.dishes.length === 0 && params.tag_id) {
+          const { tag_id: _removedTag, ...retryParams } = params
+          result = await searchDishes(retryParams)
+        }
+
         newDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
         hasMore = result.has_more
       }
@@ -606,6 +660,24 @@ Page({
     }
   },
 
+  async refreshServiceProviderState() {
+    try {
+      const app = getApp<IAppOption>()
+      const merchants = await searchMerchants({
+        keyword: '',
+        page_id: 1,
+        page_size: 1,
+        user_latitude: app.globalData.latitude || undefined,
+        user_longitude: app.globalData.longitude || undefined
+      })
+
+      this.setData({ hasServiceProviders: merchants.length > 0 })
+    } catch (error) {
+      logger.warn('探测区域商户状态失败，按有服务兜底展示', error, 'Takeout.refreshServiceProviderState')
+      this.setData({ hasServiceProviders: true })
+    }
+  },
+
   /**
    * 预加载下一页菜品（后台静默执行）
    */
@@ -615,12 +687,19 @@ Page({
     this.setData({ isPrefetching: true })
     try {
       const app = getApp<IAppOption>()
-      const result = await searchDishes({
+      const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null
+      const params: DishSearchParams = {
         user_latitude: app.globalData.latitude || undefined,
         user_longitude: app.globalData.longitude || undefined,
         limit: PAGE_SIZE,
         page: nextPage
-      })
+      }
+
+      if (tagId && !isNaN(tagId)) {
+        params.tag_id = tagId
+      }
+
+      const result = await searchDishes(params)
       this._prefetchedDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
       this._prefetchHasMore = result.has_more
     } catch (error) {
@@ -656,6 +735,7 @@ Page({
       const hasMore = merchants.length === PAGE_SIZE
 
       const restaurantViewModels: RestaurantViewModel[] = merchants.map((m: MerchantSummary) => ({
+        ...(deriveMerchantPromotions(m.tags || [], m.estimated_delivery_fee)),
         id: m.id,
         name: m.name,
         imageUrl: m.logo_url,
@@ -999,6 +1079,7 @@ Page({
 
       // 转换为与列表一致的展示格式（与 loadRestaurants 保持一致）
       const restaurants: RestaurantViewModel[] = (result || []).map((m: MerchantSummary) => ({
+        ...(deriveMerchantPromotions(m.tags || [], m.estimated_delivery_fee)),
         id: m.id,
         name: m.name,
         imageUrl: m.logo_url,
@@ -1012,7 +1093,7 @@ Page({
         availableRooms: 0,
         availableRoomsBadge: '',
         tags: m.tags ? m.tags.slice(0, 3) : [],
-        monthlySales: m.monthly_sales || 0,
+        monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
         deliveryFee: m.estimated_delivery_fee,
         deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
           ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`

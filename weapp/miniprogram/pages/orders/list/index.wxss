@@ -1,12 +1,12 @@
 /* Pages Order List */
 .page {
-  background-color: var(--td-bg-color-page, #f6f6f6);
+  background-color: var(--td-bg-color-page);
   min-height: 100vh;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
 .tabs-wrapper {
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -24,7 +24,7 @@
   flex: 1;
   text-align: center;
   font-size: 24rpx;
-  color: var(--td-text-color-secondary, #666);
+  color: var(--td-text-color-secondary);
 }
 
 .order-list {
@@ -37,17 +37,17 @@
 
 /* Order Card */
 .order-card {
-  background: var(--td-bg-color-container, #fff);
-  border-radius: var(--radius-md, 16rpx);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
   padding: 24rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.02);
+  box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
 }
 
 .order-card-hover {
   transform: scale(0.99);
-  background-color: #fafafa;
+  background-color: var(--td-bg-color-page);
 }
 
 /* Header */
@@ -63,7 +63,7 @@
   align-items: center;
   font-size: 30rpx;
   font-weight: 600;
-  color: #333;
+  color: var(--td-text-color-primary);
 }
 
 .merchant-name {
@@ -75,15 +75,15 @@
 }
 
 .status-tag {
-  font-size: 26rpx;
+  font-size: var(--font-size-xs);
   font-weight: 500;
 }
 
-.status-tag.class-pending { color: var(--td-brand-color, #FF6B58); }
-.status-tag.class-preparing { color: #2ba471; } 
-.status-tag.class-delivering { color: #0052d9; }
-.status-tag.class-completed { color: #999; }
-.status-tag.class-cancelled { color: #bbb; }
+.status-tag.class-pending { color: var(--td-brand-color); background: var(--td-brand-color-light); }
+.status-tag.class-preparing { color: var(--td-success-color); background: var(--td-success-color-light); }
+.status-tag.class-delivering { color: var(--td-brand-color-9); background: var(--td-brand-color-1); }
+.status-tag.class-completed { color: var(--td-text-color-placeholder); background: var(--td-bg-color-secondarycontainer); }
+.status-tag.class-cancelled { color: var(--td-text-color-disabled); background: var(--td-bg-color-secondarycontainer); }
 
 /* Content: Single Item */
 .single-item {
@@ -94,7 +94,7 @@
 .item-img {
   flex-shrink: 0;
   border-radius: 12rpx;
-  background-color: #f9f9f9;
+  background-color: var(--td-bg-color-secondarycontainer);
 }
 
 .item-details {
@@ -109,7 +109,7 @@
 
 .item-name {
   font-size: 28rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
   font-weight: 500;
   line-height: 1.4;
   overflow: hidden;
@@ -121,12 +121,12 @@
 
 .item-specs {
   font-size: 24rpx;
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 .item-qty {
   font-size: 26rpx;
-  color: #666;
+  color: var(--td-text-color-secondary);
   margin-top: 4rpx;
 }
 
@@ -158,7 +158,7 @@
 
 .item-sub-name {
   font-size: 20rpx;
-  color: #666;
+  color: var(--td-text-color-secondary);
   margin-top: 8rpx;
   width: 100%;
   overflow: hidden;
@@ -175,13 +175,13 @@
 .summary-price {
   font-size: 32rpx;
   font-weight: bold;
-  color: #333;
+  color: var(--td-text-color-primary);
   margin-bottom: 4rpx;
 }
 
 .summary-count {
   font-size: 24rpx;
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 /* Footer */
@@ -196,13 +196,13 @@
 
 .footer-price {
   font-size: 26rpx;
-  color: #333;
+  color: var(--td-text-color-primary);
   display: flex;
   align-items: baseline;
 }
 
 .count-label {
-  color: #999;
+  color: var(--td-text-color-placeholder);
   margin-right: 12rpx;
 }
 
@@ -237,7 +237,7 @@
 }
 
 .no-more {
-  color: #bbb;
+  color: var(--td-text-color-disabled);
   font-size: 24rpx;
 }
 

@@ -42,11 +42,15 @@
   gap: var(--spacer-sm);
 }
 
-.row-2, .row-3 {
+.row-2, .row-3, .row-4, .row-5 {
   display: flex;
   align-items: center;
   gap: var(--spacer-xs);
   flex-wrap: wrap;
+}
+
+.merchant-tag {
+  max-width: 100%;
 }
 
 /* 标题 */
@@ -86,4 +90,10 @@
   font-weight: 500;
   display: flex;
   align-items: center;
+}
+
+.delivery-fee,
+.monthly-sales {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
 }

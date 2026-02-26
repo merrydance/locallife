@@ -15,6 +15,8 @@
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-image": "tdesign-miniprogram/image/image",
-        "package-card": "../../components/package-card/index"
+        "package-card": "../../components/package-card/index",
+        "dish-card": "../../components/dish-card/index",
+        "list-skeleton": "../../components/list-skeleton/index"
     }
 }

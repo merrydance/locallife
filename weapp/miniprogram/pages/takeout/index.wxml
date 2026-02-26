@@ -1,5 +1,13 @@
 <custom-navbar title="外卖" location="{{address}}" bind:locationchange="onLocationChange" />
 
+<template name="provider-onboarding-empty">
+  <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
+  <view class="empty-actions">
+    <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
+    <t-button variant="outline" size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
+  </view>
+</template>
+
 <!-- Skyline 需要用 scroll-view 实现页面滚动和下拉刷新 -->
 <scroll-view 
   scroll-y 
@@ -35,7 +43,7 @@
     <swiper-item wx:for="{{banners}}" wx:key="id" bindtap="onBannerTap" data-item="{{item}}">
       <view class="banner-item" style="background: {{item.bg}}">
         <view class="banner-inner">
-          <view class="banner-tag" wx:if="{{item.tag}}">{{item.tag}}</view>
+          <t-tag wx:if="{{item.tag}}" size="small" variant="light" theme="default" shape="round" class="banner-tag">{{item.tag}}</t-tag>
           <view class="banner-title">{{item.title}}</view>
           <view class="banner-subtitle">{{item.subtitle}}</view>
         </view>
@@ -60,6 +68,15 @@
     </view>
   </view>
 
+  <!-- 三标签切换 -->
+  <view class="tabs-section">
+    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
+      <t-tab-panel value="dishes" label="菜品" />
+      <t-tab-panel value="packages" label="套餐" />
+      <t-tab-panel value="restaurants" label="餐厅" />
+    </t-tabs>
+  </view>
+
   <!-- 内容区域 (发现型排版) -->
   <view class="content-section">
     <!-- 0. 位置引导提示 (Persistent state) -->
@@ -80,57 +97,96 @@
     </view>
 
     <block wx:else>
-      <!-- 限时特惠专区 (横滑) -->
-      <view class="special-offers-section" wx:if="{{packages.length > 0}}">
-        <view class="section-title">限时特惠</view>
-        <scroll-view class="offers-scroll" scroll-x="{{true}}" show-scrollbar="{{false}}">
-          <view class="offers-list">
-            <package-card 
-              wx:for="{{packages}}" 
-              wx:key="id" 
-              package="{{item}}" 
-              class="offer-item"
+      <!-- 菜品列表 -->
+      <view wx:if="{{activeTab === 'dishes'}}" class="nearby-merchants-section">
+        <view class="section-title">推荐菜品</view>
+
+        <block wx:if="{{loading && dishes.length === 0}}">
+          <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
+        </block>
+
+        <block wx:elif="{{dishes.length > 0}}">
+          <dish-card
+            wx:for="{{dishes}}"
+            wx:key="id"
+            dish="{{item}}"
+            bind:add="onAddCart"
+          />
+          <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
+        </block>
+
+        <view wx:elif="{{!loading}}" class="empty-entry">
+          <block wx:if="{{!hasServiceProviders}}">
+            <template is="provider-onboarding-empty" />
+          </block>
+          <t-empty wx:else description="暂未找到菜品" />
+        </view>
+
+        <view wx:if="{{loading && dishes.length > 0}}" class="loading-wrapper">
+          <t-loading theme="circular" size="40rpx" text="加载中..." />
+        </view>
+      </view>
+
+      <!-- 套餐列表 -->
+      <view wx:elif="{{activeTab === 'packages'}}" class="nearby-merchants-section">
+        <view class="section-title">精选套餐</view>
+
+        <block wx:if="{{loading && packages.length === 0}}">
+          <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
+        </block>
+
+        <block wx:elif="{{packages.length > 0}}">
+          <view class="package-list">
+            <package-card
+              wx:for="{{packages}}"
+              wx:key="id"
+              package="{{item}}"
+              class="package-list-item"
               data-id="{{item.id}}"
               data-merchant-id="{{item.merchantId}}"
               bind:click="onPackageTap"
               bind:add="onAddComboToCart"
             />
           </view>
-        </scroll-view>
+          <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
+        </block>
+
+        <view wx:elif="{{!loading}}" class="empty-entry">
+          <block wx:if="{{!hasServiceProviders}}">
+            <template is="provider-onboarding-empty" />
+          </block>
+          <t-empty wx:else description="暂未找到套餐" />
+        </view>
+
+        <view wx:if="{{loading && packages.length > 0}}" class="loading-wrapper">
+          <t-loading theme="circular" size="40rpx" text="加载中..." />
+        </view>
       </view>
 
-      <!-- 附近商家 (主 Feed) -->
-      <view class="nearby-merchants-section">
+      <!-- 商户列表 -->
+      <view wx:else class="nearby-merchants-section">
         <view class="section-title">附近商家</view>
-        
-        <!-- 骨架屏 -->
+
         <block wx:if="{{loading && restaurants.length === 0}}">
           <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
         </block>
 
-        <!-- 真实数据 -->
         <block wx:elif="{{restaurants.length > 0}}">
-          <restaurant-card 
-            wx:for="{{restaurants}}" 
+          <restaurant-card
+            wx:for="{{restaurants}}"
             wx:key="id"
             restaurant="{{item}}"
           />
           <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
         </block>
 
-        <!-- 空状态 -->
         <view wx:elif="{{!loading}}" class="empty-entry">
-          <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
-          <view class="empty-actions">
-            <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
-            <t-button variant="outline" size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
-          </view>
+          <template is="provider-onboarding-empty" />
         </view>
-      </view>
 
-      <!-- 触底加载提示 -->
-      <view wx:if="{{loading && restaurants.length > 0}}" class="loading-wrapper">
-        <t-loading theme="circular" size="40rpx" text="加载中..." />
+        <view wx:if="{{loading && restaurants.length > 0}}" class="loading-wrapper">
+          <t-loading theme="circular" size="40rpx" text="加载中..." />
+        </view>
       </view>
     </block>
   </view>

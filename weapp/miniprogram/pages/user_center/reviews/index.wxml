@@ -52,7 +52,7 @@
 
           <!-- 标签行 -->
           <view class="tag-row" wx:if="{{item.tags && item.tags.length > 0}}">
-            <text class="review-tag" wx:for="{{item.tags}}" wx:key="*this">{{item}}</text>
+            <t-tag wx:for="{{item.tags}}" wx:key="*this" size="small" variant="light" theme="default" shape="round">{{item}}</t-tag>
           </view>
 
           <!-- 评价内容 -->

@@ -22,7 +22,7 @@
         <!-- 头部：订单号 + 类型标签 -->
         <view class="card-header">
           <view class="order-no-row">
-            <text class="type-tag {{item.order_type}}">{{item.order_type_label}}</text>
+            <t-tag size="extra-small" variant="light" theme="default" shape="round" class="type-tag {{item.order_type}}">{{item.order_type_label}}</t-tag>
             <text class="order-no">#{{item.order_no_short}}</text>
           </view>
           <view class="status-label" style="color: {{item.status_color}}">{{item.status_label}}</view>
