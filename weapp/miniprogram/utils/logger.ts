@@ -19,6 +19,8 @@ interface LogEntry {
   timestamp: number
 }
 
+const CLIENT_LOG_SHARED_KEY = ''
+
 class Logger {
   private isDev: boolean = false
   private logs: LogEntry[] = []
@@ -150,13 +152,19 @@ class Logger {
 
       // 2. 上报到自己的后端(可选)
       if (!this.isDev) {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Client-Platform': 'mp-wechat'
+        }
+        if (CLIENT_LOG_SHARED_KEY) {
+          headers['X-Client-Log-Key'] = CLIENT_LOG_SHARED_KEY
+        }
+
         wx.request({
           url: 'https://llapi.merrydance.cn/v1/logs/error',
           method: 'POST',
           data: errorData,
-          header: {
-            'Content-Type': 'application/json'
-          },
+          header: headers,
           fail: () => {
             // 静默失败
           }

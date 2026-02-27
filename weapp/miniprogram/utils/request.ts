@@ -738,7 +738,7 @@ function showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
 // 单次并发刷新锁
 let _refreshingPromise: Promise<void> | null = null
 const REFRESH_THRESHOLD = 5 * 60 * 1000 // 5分钟
-const REFRESH_TIMEOUT = 10000 // 10秒
+const REFRESH_TIMEOUT = 25000 // 覆盖 refresh_token 超时 + wx.login 降级链路
 const TOKEN_REFRESH_REQUEST_TIMEOUT = 10000
 
 /**

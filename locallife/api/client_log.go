@@ -1,11 +1,23 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
+
+const clientLogSharedKeyHeader = "X-Client-Log-Key"
+
+func isScannerUserAgent(userAgent string) bool {
+	ua := strings.ToLower(strings.TrimSpace(userAgent))
+	if ua == "" {
+		return false
+	}
+	return strings.Contains(ua, "tencent security team") || strings.Contains(ua, "scanner")
+}
 
 // reportClientErrorLog 接收前端错误日志上报（匿名、尽力而为）
 // @Summary 上报前端错误日志
@@ -18,6 +30,32 @@ import (
 // @Failure 400 {object} ErrorResponse "请求体非法"
 // @Router /v1/logs/error [post]
 func (server *Server) reportClientErrorLog(ctx *gin.Context) {
+	userAgent := ctx.GetHeader("User-Agent")
+
+	if isScannerUserAgent(userAgent) {
+		log.Info().
+			Str("request_id", GetRequestID(ctx)).
+			Str("client_ip", ctx.ClientIP()).
+			Str("user_agent", userAgent).
+			Msg("drop scanner traffic for frontend error log")
+		ctx.JSON(http.StatusOK, MessageResponse{Message: "ok"})
+		return
+	}
+
+	sharedKey := strings.TrimSpace(server.config.ClientLogSharedKey)
+	if sharedKey != "" {
+		providedKey := strings.TrimSpace(ctx.GetHeader(clientLogSharedKeyHeader))
+		if subtle.ConstantTimeCompare([]byte(providedKey), []byte(sharedKey)) != 1 {
+			log.Info().
+				Str("request_id", GetRequestID(ctx)).
+				Str("client_ip", ctx.ClientIP()).
+				Str("user_agent", userAgent).
+				Msg("drop untrusted frontend error log source")
+			ctx.JSON(http.StatusOK, MessageResponse{Message: "ok"})
+			return
+		}
+	}
+
 	var payload map[string]interface{}
 	if err := ctx.ShouldBindJSON(&payload); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -27,6 +65,7 @@ func (server *Server) reportClientErrorLog(ctx *gin.Context) {
 	log.Warn().
 		Str("request_id", GetRequestID(ctx)).
 		Str("client_ip", ctx.ClientIP()).
+		Str("user_agent", userAgent).
 		Str("path", ctx.Request.URL.Path).
 		Interface("payload", payload).
 		Msg("frontend error log received")
