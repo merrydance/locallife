@@ -3,6 +3,7 @@
  * 用于替代console.log/error,支持环境判断和日志上报
  */
 import { ErrorHandler } from './error-handler'
+import { getToken } from './auth'
 
 export enum LogLevel {
   DEBUG = 'DEBUG',
@@ -18,8 +19,6 @@ interface LogEntry {
   data?: unknown
   timestamp: number
 }
-
-const CLIENT_LOG_SHARED_KEY = ''
 
 class Logger {
   private isDev: boolean = false
@@ -152,12 +151,15 @@ class Logger {
 
       // 2. 上报到自己的后端(可选)
       if (!this.isDev) {
+        const token = getToken()
+        if (!token) {
+          return
+        }
+
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          'X-Client-Platform': 'mp-wechat'
-        }
-        if (CLIENT_LOG_SHARED_KEY) {
-          headers['X-Client-Log-Key'] = CLIENT_LOG_SHARED_KEY
+          'X-Client-Platform': 'mp-wechat',
+          'Authorization': `Bearer ${token}`
         }
 
         wx.request({

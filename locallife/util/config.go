@@ -66,7 +66,6 @@ type Config struct {
 	// 上传文件安全访问（签名URL）
 	UploadURLSigningKey string        `mapstructure:"UPLOAD_URL_SIGNING_KEY"` // HMAC签名密钥（建议随机长字符串）
 	UploadURLTTL        time.Duration `mapstructure:"UPLOAD_URL_TTL"`         // 签名URL有效期（例如 10m, 1h）
-	ClientLogSharedKey  string        `mapstructure:"CLIENT_LOG_SHARED_KEY"`  // 前端错误上报共享密钥（可选）
 
 	// WebSocket reliable push rollout
 	WebSocketReliableEnabled bool `mapstructure:"WS_RELIABLE_ENABLED"`

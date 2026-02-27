@@ -329,19 +329,6 @@ func (server *Server) setupRouter() {
 	// ✅ 统一 JSON 响应格式：{code,message,data}
 	// 注意：webhooks 与 websocket upgrade 在中间件内部会自动跳过
 	v1.Use(ResponseEnvelopeMiddleware())
-	clientLogGroup := v1.Group("/logs")
-	if rateLimiter != nil {
-		clientLogGroup.Use(rateLimiter.SensitiveAPIMiddleware(20)) // 客户端错误上报限流：每分钟 20 次/客户端
-	}
-	clientLogGroup.POST("/error", server.reportClientErrorLog)
-
-	// 兼容历史客户端：部分前端版本使用 /api/v1/logs/error
-	legacyV1 := router.Group("/api/v1")
-	legacyClientLogGroup := legacyV1.Group("/logs")
-	if rateLimiter != nil {
-		legacyClientLogGroup.Use(rateLimiter.SensitiveAPIMiddleware(20))
-	}
-	legacyClientLogGroup.POST("/error", server.reportClientErrorLog)
 
 	// 元数据：角色访问矩阵（供前端/SDK消费）
 	v1.GET("/role-access", server.getRoleAccessMetadata)
@@ -374,6 +361,11 @@ func (server *Server) setupRouter() {
 	authGroup := v1.Group("")
 	authGroup.Use(authMiddleware(server.tokenMaker))
 	authGroup.POST("/uploads/sign", server.signUploadURL)
+	authClientLogGroup := authGroup.Group("/logs")
+	if rateLimiter != nil {
+		authClientLogGroup.Use(rateLimiter.SensitiveAPIMiddleware(20)) // 客户端错误上报限流：每分钟 20 次/客户端
+	}
+	authClientLogGroup.POST("/error", server.reportClientErrorLog)
 
 	// M2: 地区查询路由
 	// 说明：前端已改为使用自建 OSM 获取行政区划/POI 数据。
