@@ -1,7 +1,5 @@
 {
     "navigationBarTitleText": "订单详情",
-    "enableShareAppMessage": true,
-    "enableShareTimeline": true,
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-icon": "tdesign-miniprogram/icon/icon",

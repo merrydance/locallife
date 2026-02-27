@@ -4,8 +4,6 @@
     "navigationBarTextStyle": "white",
     "backgroundColor": "#f5f5f5",
     "enablePullDownRefresh": true,
-    "enableShareAppMessage": true,
-    "enableShareTimeline": true,
     "disableScroll": false,
     "usingComponents": {
         "t-image": "tdesign-miniprogram/image/image",

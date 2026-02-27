@@ -1,7 +1,5 @@
 {
     "navigationBarTitleText": "餐厅详情",
-    "enableShareAppMessage": true,
-    "enableShareTimeline": true,
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "cart-bar": "/components/cart-bar/index",

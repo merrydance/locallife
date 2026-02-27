@@ -1,8 +1,6 @@
 {
     "navigationBarTitleText": "外卖",
     "enablePullDownRefresh": true,
-    "enableShareAppMessage": true,
-    "enableShareTimeline": true,
     "usingComponents": {
         "t-button": "tdesign-miniprogram/button/button",
         "t-tag": "tdesign-miniprogram/tag/tag",

@@ -1,6 +1,4 @@
 {
-  "enableShareAppMessage": true,
-  "enableShareTimeline": true,
   "usingComponents": {
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-button": "tdesign-miniprogram/button/button",
