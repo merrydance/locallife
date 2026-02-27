@@ -10,6 +10,7 @@
         "t-step-item": "tdesign-miniprogram/step-item/step-item",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-popup": "tdesign-miniprogram/popup/popup",
         "document-uploader": "/components/document-uploader/index"
     }
 }

@@ -1,5 +1,6 @@
 import { request, uploadFile } from '../utils/request'
 import { ApplicationStatus } from './onboarding'
+import type { AgreementConsentPayload } from './agreement-consent'
 
 export interface RiderApplicationResponse {
   id: number
@@ -86,10 +87,11 @@ export function ocrRiderHealthCert(filePath: string) {
 /**
  * 提交骑手入驻申请
  */
-export function submitRiderApplication() {
+export function submitRiderApplication(data?: AgreementConsentPayload) {
   return request<RiderApplicationResponse>({
     url: '/v1/rider/application/submit',
-    method: 'POST'
+    method: 'POST',
+    data
   })
 }
 

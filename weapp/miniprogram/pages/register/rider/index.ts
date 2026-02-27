@@ -8,6 +8,8 @@ import {
   type RiderApplicationResponse
 } from '../../../api/rider-application'
 import { logger } from '../../../utils/logger'
+import Navigation from '../../../utils/navigation'
+import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 
 type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
@@ -35,7 +37,9 @@ Page({
       idValidity: '',
       healthCertNo: '',
       healthCertDate: ''
-    }
+    },
+    consentChecked: false,
+    consentPopupVisible: false
   },
 
   async onLoad() {
@@ -145,8 +149,43 @@ Page({
     this.setData({ currentStep: this.data.currentStep - 1 })
   },
 
+  onConsentChange(e: WechatMiniprogram.CustomEvent<{ value?: string[] }>) {
+    const values = e.detail.value || []
+    this.setData({ consentChecked: values.includes('agree') })
+  },
+
+  openConsentPopup() {
+    this.setData({ consentPopupVisible: true })
+  },
+
+  closeConsentPopup() {
+    this.setData({ consentPopupVisible: false })
+  },
+
+  onConfirmConsent() {
+    this.setData({ consentChecked: true, consentPopupVisible: false })
+  },
+
+  onViewAgreement(e: WechatMiniprogram.CustomEvent<{ type?: string, title?: string }>) {
+    const type = (e.currentTarget.dataset as { type?: string }).type
+    const title = (e.currentTarget.dataset as { title?: string }).title
+    if (!type) return
+    Navigation.toAgreementDetail(type, title)
+  },
+
+  ensureConsent(): boolean {
+    if (this.data.consentChecked) return true
+    this.openConsentPopup()
+    wx.showToast({ title: '请先阅读并同意协议', icon: 'none' })
+    return false
+  },
+
   async onNext() {
     const { currentStep, idFront, idBack, healthCert, formData } = this.data
+
+    if (currentStep === 0 && !this.ensureConsent()) {
+      return
+    }
 
     if (currentStep === 1) {
       if (!idFront.url || !idBack.url || !healthCert.url) {
@@ -176,9 +215,21 @@ Page({
   },
 
   async onSubmit() {
+    if (!this.ensureConsent()) {
+      return
+    }
+
+    let consentPayload
+    try {
+      consentPayload = await buildAgreementConsentPayload()
+    } catch (e: unknown) {
+      wx.showToast({ title: getErrorMessage(e, '协议信息加载失败，请稍后重试'), icon: 'none' })
+      return
+    }
+
     this.setData({ isSubmitting: true, currentStep: 4 })
     try {
-      const res = await submitRiderApplication()
+      const res = await submitRiderApplication(consentPayload)
       
       // 模拟审核轮询或等待
       setTimeout(() => {

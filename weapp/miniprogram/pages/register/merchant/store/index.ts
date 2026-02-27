@@ -16,6 +16,8 @@ import {
   type MerchantApplicationDraftResponse
 } from '../../../../api/onboarding'
 import { resolveImageURL } from '../../../../utils/image-security'
+import Navigation from '../../../../utils/navigation'
+import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 
 const DRAFT_KEY = 'merchant_register_draft'
 
@@ -144,7 +146,9 @@ Page({
       { label: '午餐时段 (11:00-14:00)', value: 'lunch' },
       { label: '晚餐时段 (17:00-21:00)', value: 'dinner' },
       { label: '自定义时间', value: 'custom' }
-    ]
+    ],
+    consentChecked: false,
+    consentPopupVisible: false
   },
 
   async onLoad() {
@@ -518,11 +522,43 @@ Page({
   // ==================== 选择器 ====================
 
   // ==================== 步骤导航 ====================
+  onConsentChange(e: WechatMiniprogram.CustomEvent<{ value?: string[] }>) {
+    const values = e.detail.value || []
+    this.setData({ consentChecked: values.includes('agree') })
+  },
+
+  openConsentPopup() {
+    this.setData({ consentPopupVisible: true })
+  },
+
+  closeConsentPopup() {
+    this.setData({ consentPopupVisible: false })
+  },
+
+  onConfirmConsent() {
+    this.setData({ consentChecked: true, consentPopupVisible: false })
+  },
+
+  onViewAgreement(e: WechatMiniprogram.CustomEvent<{ type?: string, title?: string }>) {
+    const type = (e.currentTarget.dataset as { type?: string }).type
+    const title = (e.currentTarget.dataset as { title?: string }).title
+    if (!type) return
+    Navigation.toAgreementDetail(type, title)
+  },
+
+  ensureConsent(): boolean {
+    if (this.data.consentChecked) return true
+    this.openConsentPopup()
+    wx.showToast({ title: '请先阅读并同意协议', icon: 'none' })
+    return false
+  },
+
   nextStep() {
     const { currentStep, licenseImages, foodLicenseImages, idCardFrontImages, idCardBackImages } = this.data
 
     // Step 1 check (Intro) - No validation
     if (currentStep === 0) {
+      if (!this.ensureConsent()) return
       this.syncToBackend()
       this.setData({ currentStep: 1 })
       return
@@ -1077,6 +1113,18 @@ Page({
   // ==================== 提交申请 ====================
 
   async onSubmit() {
+    if (!this.ensureConsent()) {
+      return
+    }
+
+    let consentPayload
+    try {
+      consentPayload = await buildAgreementConsentPayload()
+    } catch (e: unknown) {
+      wx.showToast({ title: getErrorMessage(e, '协议信息加载失败，请稍后重试'), icon: 'none', duration: 3000 })
+      return
+    }
+
     const { formData, isSubmitting, licenseImages, idCardFrontImages, idCardBackImages } = this.data
 
     // 防止重复提交
@@ -1122,7 +1170,7 @@ Page({
       this.setData({ currentStep: 5 })
 
       // 3. Submit Application (自动审核)
-      const result = await submitMerchantApplication()
+      const result = await submitMerchantApplication(consentPayload)
       logger.info('[MerchantRegister] 提交结果', result)
 
       // 4. 检查审核结果

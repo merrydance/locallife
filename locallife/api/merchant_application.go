@@ -1131,6 +1131,12 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 // @Router /v1/merchant/application/submit [post]
 // @Security BearerAuth
 func (server *Server) submitMerchantApplication(ctx *gin.Context) {
+	consentReq, err := parseAgreementConsentRequest(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	requestID := ctx.GetString("request_id")
 	if requestID == "" {
@@ -1154,6 +1160,8 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("当前申请状态不可提交")))
 		return
 	}
+
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "merchant_application_consent_confirmed", "merchant_application", app.ID, consentReq)
 
 	// 检查必填字段
 	if err := validateMerchantApplicationRequired(app); err != nil {

@@ -533,6 +533,12 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 // @Router /v1/rider/application/submit [post]
 // @Security BearerAuth
 func (server *Server) submitRiderApplication(ctx *gin.Context) {
+	consentReq, err := parseAgreementConsentRequest(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
@@ -549,6 +555,8 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能提交草稿状态的申请")))
 		return
 	}
+
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "rider_application_consent_confirmed", "rider_application", app.ID, consentReq)
 
 	// 验证必填信息
 	var missingFields []string

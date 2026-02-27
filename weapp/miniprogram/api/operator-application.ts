@@ -1,5 +1,6 @@
 import { request, uploadFile } from '../utils/request'
 import { ApplicationStatus } from './onboarding'
+import type { AgreementConsentPayload } from './agreement-consent'
 
 type OCRResult = Record<string, unknown>
 
@@ -151,9 +152,10 @@ export function listRegions(params: { page_id: number, page_size: number, level?
 /**
  * 提交申请
  */
-export function submitOperatorApplication() {
+export function submitOperatorApplication(data?: AgreementConsentPayload) {
   return request<OperatorApplicationResponse>({
     url: '/v1/operator/application/submit',
-    method: 'POST'
+    method: 'POST',
+    data
   })
 }

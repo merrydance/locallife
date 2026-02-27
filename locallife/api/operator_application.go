@@ -737,6 +737,12 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 // @Router /v1/operator/application/submit [post]
 // @Security BearerAuth
 func (server *Server) submitOperatorApplication(ctx *gin.Context) {
+	consentReq, err := parseAgreementConsentRequest(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取申请
@@ -754,6 +760,8 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能提交草稿状态的申请")))
 		return
 	}
+
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "operator_application_consent_confirmed", "operator_application", app.ID, consentReq)
 
 	// 个人运营商兜底：若运营商名称为空，自动使用法人/个人姓名
 	if (!app.Name.Valid || strings.TrimSpace(app.Name.String) == "") && app.LegalPersonName.Valid {

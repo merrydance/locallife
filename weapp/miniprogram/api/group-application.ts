@@ -1,5 +1,6 @@
 import { request, uploadFile } from '../utils/request'
 import { ApplicationStatus } from './onboarding'
+import type { AgreementConsentPayload } from './agreement-consent'
 
 export interface GroupApplicationResponse {
   id: number
@@ -78,10 +79,11 @@ export function ocrGroupBusinessLicense(filePath: string) {
 /**
  * 提交集团入驻申请
  */
-export function submitGroupApplication() {
+export function submitGroupApplication(data?: AgreementConsentPayload) {
   return request<GroupApplicationResponse>({
     url: '/v1/groups/applications/submit',
-    method: 'POST'
+    method: 'POST',
+    data
   })
 }
 

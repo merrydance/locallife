@@ -489,6 +489,12 @@ func (server *Server) uploadGroupBusinessLicenseOCR(ctx *gin.Context) {
 // @Router /v1/groups/applications/submit [post]
 // @Security BearerAuth
 func (server *Server) submitGroupApplication(ctx *gin.Context) {
+	consentReq, err := parseAgreementConsentRequest(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	app, err := server.store.GetLatestGroupApplicationByApplicant(ctx, authPayload.UserID)
 	if err != nil {
@@ -508,6 +514,8 @@ func (server *Server) submitGroupApplication(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("group_name and contact_phone are required")))
 		return
 	}
+
+	server.writeAgreementConsentAudit(ctx, authPayload.UserID, "group_application_consent_confirmed", "group_application", app.ID, consentReq)
 
 	updated, err := server.store.SubmitGroupApplication(ctx, app.ID)
 	if err != nil {

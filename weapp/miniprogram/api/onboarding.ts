@@ -1,4 +1,5 @@
 import { request, uploadFile } from '../utils/request'
+import type { AgreementConsentPayload } from './agreement-consent'
 
 // ==================== OCR Status Types ====================
 
@@ -201,10 +202,11 @@ export function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back') 
  * POST /v1/merchant/application/submit
  * 无请求体，返回 approved 或 rejected
  */
-export function submitMerchantApplication() {
+export function submitMerchantApplication(data?: AgreementConsentPayload) {
   return request<MerchantApplicationDraftResponse>({
     url: '/v1/merchant/application/submit',
-    method: 'POST'
+    method: 'POST',
+    data
   })
 }
 
