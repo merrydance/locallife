@@ -45,6 +45,31 @@ interface CartItemView {
   dishImages?: string[] // 新增：套餐内的菜品图片
 }
 
+function isAbortLikeError(error: unknown): boolean {
+  if (!error) return false
+
+  if (typeof error === 'object' && error !== null) {
+    const maybeErrMsg = (error as { errMsg?: unknown }).errMsg
+    if (typeof maybeErrMsg === 'string' && maybeErrMsg.toLowerCase().includes('abort')) {
+      return true
+    }
+
+    const maybeMessage = (error as { message?: unknown }).message
+    if (typeof maybeMessage === 'string') {
+      const lower = maybeMessage.toLowerCase()
+      if (lower.includes('abort') || lower.includes('请求已取消')) {
+        return true
+      }
+    }
+  }
+
+  if (typeof error === 'string') {
+    return error.toLowerCase().includes('abort')
+  }
+
+  return false
+}
+
 Page({
   data: {
     loading: true,
@@ -150,6 +175,9 @@ Page({
     } catch (error) {
       logger.error('Failed to load carts', error, 'cart.loadAllCarts')
       this.setData({ loading: false })
+      if (isAbortLikeError(error)) {
+        return
+      }
       wx.showToast({ title: '加载购物车失败', icon: 'none' })
     }
   },

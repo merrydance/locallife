@@ -576,7 +576,11 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         if (loading) wx.hideLoading()
         return retryRequest(options, retryCount)
       }
-      throw error
+      throw new AppError({
+        type: ErrorType.NETWORK,
+        message: `请求已取消: ${method} ${url}`,
+        userMessage: '请求已取消'
+      }, error)
     }
 
     logger.error(`API请求失败: ${method} ${url}`, error || 'Unknown error', 'request')
