@@ -35,6 +35,8 @@ interface RefreshTokenPayload {
 
 type WechatLoginPayload = RefreshTokenPayload
 
+const _inflightGetRequests = new Map<string, Promise<unknown>>()
+
 function sanitizeGetParams(data: unknown): unknown {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return data
@@ -66,6 +68,16 @@ function sanitizeGetParams(data: unknown): unknown {
   })
 
   return cleaned
+}
+
+function buildGetSingleFlightKey(url: string, data: unknown, skipAuth: boolean): string {
+  let serialized = ''
+  try {
+    serialized = JSON.stringify(data || {})
+  } catch (_error) {
+    serialized = String(data)
+  }
+  return `GET|${url}|${serialized}|skipAuth:${skipAuth ? '1' : '0'}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -226,9 +238,22 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     skipAuth = false // 是否跳过认证
   } = options
 
+  const normalizedData = method === 'GET' ? sanitizeGetParams(data) : data
+  const singleFlightKey = method === 'GET'
+    ? buildGetSingleFlightKey(url, normalizedData, skipAuth)
+    : ''
+
+  if (singleFlightKey) {
+    const existing = _inflightGetRequests.get(singleFlightKey)
+    if (existing) {
+      logger.debug(`复用GET并发请求: ${url}`, { singleFlightKey }, 'request')
+      return existing as Promise<T>
+    }
+  }
+
   // 智能缓存策略(GET请求)
   if (useCache && method === 'GET') {
-    const cacheKey = `api_${url}_${JSON.stringify(data || {})}`
+    const cacheKey = `api_${url}_${JSON.stringify(normalizedData || {})}`
     const cached = cache.get<T>(cacheKey)
     if (cached) {
       logger.debug(`✅ 命中缓存: ${url}`, { cacheTTL }, 'request')
@@ -252,66 +277,66 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     }
   }
 
-  // 预检查网络状态（桌面微信长时间 idle 恢复后可能出现状态滞后）
-  // 注意：这里不做“硬拦截”。即便本地状态显示离线，也允许发起一次真实请求来判定，
-  // 避免出现“状态卡死，必须重进小程序才恢复”的问题。
-  if (!networkMonitor.isOnline()) {
-    const refreshed = await networkMonitor.refreshStatus(true)
-    if (!refreshed.isConnected) {
-      logger.warn('网络预检查仍显示离线，继续发起探测请求以避免状态误判', {
-        method,
-        url
-      }, 'request')
-    }
-  }
-
-  if (loading) {
-    wx.showLoading({ title: loadingText, mask: true })
-  }
-
-  try {
-    // 在每次请求前，若 token 在阈值内即将过期，则先尝试刷新一次（单并发）
-    // 跳过认证的请求（如登录、刷新 token）不需要检查 token
-    if (!skipAuth) {
-      await ensureValidToken()
+  const requestPromise = (async (): Promise<T> => {
+    // 预检查网络状态（桌面微信长时间 idle 恢复后可能出现状态滞后）
+    // 注意：这里不做“硬拦截”。即便本地状态显示离线，也允许发起一次真实请求来判定，
+    // 避免出现“状态卡死，必须重进小程序才恢复”的问题。
+    if (!networkMonitor.isOnline()) {
+      const refreshed = await networkMonitor.refreshStatus(true)
+      if (!refreshed.isConnected) {
+        logger.warn('网络预检查仍显示离线，继续发起探测请求以避免状态误判', {
+          method,
+          url
+        }, 'request')
+      }
     }
 
-    const app = getApp<IAppOption>()
-    const latitude = app?.globalData?.latitude || 0
-    const longitude = app?.globalData?.longitude || 0
+    if (loading) {
+      wx.showLoading({ title: loadingText, mask: true })
+    }
 
-    logger.debug(`API请求: ${method} ${url}`, { data, latitude, longitude, requestId }, 'request')
+    try {
+      // 在每次请求前，若 token 在阈值内即将过期，则先尝试刷新一次（单并发）
+      // 跳过认证的请求（如登录、刷新 token）不需要检查 token
+      if (!skipAuth) {
+        await ensureValidToken()
+      }
 
-    const normalizedData = method === 'GET' ? sanitizeGetParams(data) : data
-    const requestData = normalizedData as WechatMiniprogram.IAnyObject | string | ArrayBuffer | undefined
-    const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
-      const task = wx.request({
-        url: `${API_BASE}${url}`,
-        method: method as WechatMiniprogram.RequestOption['method'],
-        data: requestData,
-        timeout,
-        header: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getToken()}`,
-          'X-User-Latitude': String(latitude),
-          'X-User-Longitude': String(longitude),
-          'X-Response-Envelope': '1' // 启用统一响应信封：{ code, message, data }
-        },
-        success: (res) => {
-          requestManager.unregister(requestId)
-          resolve(res)
-        },
-        fail: (err) => {
-          requestManager.unregister(requestId)
-          // Ensure err is an object, not null or undefined
-          const errorInfo = err || { errMsg: 'wx.request failed with no error info' }
-          reject(errorInfo)
-        }
+      const app = getApp<IAppOption>()
+      const latitude = app?.globalData?.latitude || 0
+      const longitude = app?.globalData?.longitude || 0
+
+      logger.debug(`API请求: ${method} ${url}`, { data: normalizedData, latitude, longitude, requestId }, 'request')
+
+      const requestData = normalizedData as WechatMiniprogram.IAnyObject | string | ArrayBuffer | undefined
+      const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
+        const task = wx.request({
+          url: `${API_BASE}${url}`,
+          method: method as WechatMiniprogram.RequestOption['method'],
+          data: requestData,
+          timeout,
+          header: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getToken()}`,
+            'X-User-Latitude': String(latitude),
+            'X-User-Longitude': String(longitude),
+            'X-Response-Envelope': '1' // 启用统一响应信封：{ code, message, data }
+          },
+          success: (res) => {
+            requestManager.unregister(requestId)
+            resolve(res)
+          },
+          fail: (err) => {
+            requestManager.unregister(requestId)
+            // Ensure err is an object, not null or undefined
+            const errorInfo = err || { errMsg: 'wx.request failed with no error info' }
+            reject(errorInfo)
+          }
+        })
+
+        // 注册请求任务以便取消
+        requestManager.register(requestId, task, context)
       })
-
-      // 注册请求任务以便取消
-      requestManager.register(requestId, task, context)
-    })
 
     // 204 No Content 视为成功（如 DELETE 返回空）
     if (result.statusCode === 204) {
@@ -533,7 +558,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
       // 缓存兼容：直接缓存原始数据
       if (useCache && method === 'GET') {
-        const cacheKey = `api_${url}_${JSON.stringify(data || {})}`
+        const cacheKey = `api_${url}_${JSON.stringify(normalizedData || {})}`
         cache.set(cacheKey, response as unknown as T, cacheTTL, CacheStrategy.MEMORY_FIRST)
       }
 
@@ -548,7 +573,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
       // 保存缓存(GET请求)
       if (useCache && method === 'GET') {
-        const cacheKey = `api_${url}_${JSON.stringify(data || {})}`
+        const cacheKey = `api_${url}_${JSON.stringify(normalizedData || {})}`
         cache.set(cacheKey, response.data, cacheTTL, CacheStrategy.MEMORY_FIRST)
       }
 
@@ -587,58 +612,71 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         userMessage: errorMessage
       })
     }
-  } catch (error) {
-    // 网络错误或其他错误
-    if (error instanceof AppError) {
+    } catch (error) {
+      // 网络错误或其他错误
+      if (error instanceof AppError) {
+        // 如果启用了重试
+        if (retry) {
+          const retryCount = typeof retry === 'number' ? retry : 1
+          logger.warn(`请求失败,将重试 ${retryCount} 次`, { url }, 'request')
+          // 关闭loading后再重试
+          if (loading) wx.hideLoading()
+          return retryRequest(options, retryCount)
+        }
+        throw error
+      }
+
+      // 静默处理abort错误（并发请求被取消的正常情况）
+      const errMsg = (error as { errMsg?: string })?.errMsg || ''
+      if (errMsg.includes('abort')) {
+        // abort是正常的并发控制，静默处理
+        if (retry) {
+          const retryCount = typeof retry === 'number' ? retry : 1
+          if (loading) wx.hideLoading()
+          return retryRequest(options, retryCount)
+        }
+        throw new AppError({
+          type: ErrorType.NETWORK,
+          message: `请求已取消: ${method} ${url}`,
+          userMessage: '请求已取消'
+        }, error)
+      }
+
+      logger.error(`API请求失败: ${method} ${url}`, error || 'Unknown error', 'request')
+      const networkError = ErrorHandler.handleNetworkError(error || new Error('Network request failed'), `request:${method}:${url}`)
+
       // 如果启用了重试
       if (retry) {
         const retryCount = typeof retry === 'number' ? retry : 1
-        logger.warn(`请求失败,将重试 ${retryCount} 次`, { url }, 'request')
         // 关闭loading后再重试
         if (loading) wx.hideLoading()
         return retryRequest(options, retryCount)
       }
-      throw error
-    }
 
-    // 静默处理abort错误（并发请求被取消的正常情况）
-    const errMsg = (error as { errMsg?: string })?.errMsg || ''
-    if (errMsg.includes('abort')) {
-      // abort是正常的并发控制，静默处理
-      if (retry) {
-        const retryCount = typeof retry === 'number' ? retry : 1
-        if (loading) wx.hideLoading()
-        return retryRequest(options, retryCount)
-      }
-      throw new AppError({
-        type: ErrorType.NETWORK,
-        message: `请求已取消: ${method} ${url}`,
-        userMessage: '请求已取消'
-      }, error)
-    }
-
-    logger.error(`API请求失败: ${method} ${url}`, error || 'Unknown error', 'request')
-    const networkError = ErrorHandler.handleNetworkError(error || new Error('Network request failed'), `request:${method}:${url}`)
-
-    // 如果启用了重试
-    if (retry) {
-      const retryCount = typeof retry === 'number' ? retry : 1
-      // 关闭loading后再重试
-      if (loading) wx.hideLoading()
-      return retryRequest(options, retryCount)
-    }
-
-    throw networkError
-  } finally {
-    // 确保hideLoading在所有情况下都被调用
-    if (loading) {
-      try {
-        wx.hideLoading()
-      } catch (e) {
-        // 忽略hideLoading的错误
+      throw networkError
+    } finally {
+      // 确保hideLoading在所有情况下都被调用
+      if (loading) {
+        try {
+          wx.hideLoading()
+        } catch (e) {
+          // 忽略hideLoading的错误
+        }
       }
     }
+  })()
+
+  if (singleFlightKey) {
+    _inflightGetRequests.set(singleFlightKey, requestPromise as Promise<unknown>)
+    requestPromise.finally(() => {
+      const current = _inflightGetRequests.get(singleFlightKey)
+      if (current === requestPromise) {
+        _inflightGetRequests.delete(singleFlightKey)
+      }
+    })
   }
+
+  return requestPromise
 }
 
 /**
