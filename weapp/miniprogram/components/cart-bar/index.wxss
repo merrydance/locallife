@@ -47,6 +47,9 @@
   border-radius: 50%;
   background: var(--td-bg-color-container);
   padding: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
   box-shadow: var(--shadow-md);
 }
