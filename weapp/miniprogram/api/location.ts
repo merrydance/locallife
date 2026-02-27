@@ -7,11 +7,22 @@ export interface CurrentRegionResponse {
     parent_name?: string
 }
 
+function assertValidCoordinate(latitude: number, longitude: number): void {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error('invalid coordinates')
+    }
+}
+
 export function getCurrentRegion(params: { latitude: number, longitude: number }): Promise<CurrentRegionResponse> {
+    assertValidCoordinate(Number(params.latitude), Number(params.longitude))
+
     return request<CurrentRegionResponse>({
         url: '/v1/location/current-region',
         method: 'GET',
-        data: params
+        data: {
+            latitude: Number(params.latitude),
+            longitude: Number(params.longitude)
+        }
     })
 }
 

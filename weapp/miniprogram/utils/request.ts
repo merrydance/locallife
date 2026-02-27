@@ -35,6 +35,39 @@ interface RefreshTokenPayload {
 
 type WechatLoginPayload = RefreshTokenPayload
 
+function sanitizeGetParams(data: unknown): unknown {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return data
+  }
+
+  const source = data as Record<string, unknown>
+  const cleaned: Record<string, unknown> = {}
+
+  Object.entries(source).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      const lower = trimmed.toLowerCase()
+      if (!trimmed || lower === 'undefined' || lower === 'null' || lower === 'nan') {
+        return
+      }
+      cleaned[key] = trimmed
+      return
+    }
+
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      return
+    }
+
+    cleaned[key] = value
+  })
+
+  return cleaned
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -249,7 +282,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
     logger.debug(`API请求: ${method} ${url}`, { data, latitude, longitude, requestId }, 'request')
 
-    const requestData = data as WechatMiniprogram.IAnyObject | string | ArrayBuffer | undefined
+    const normalizedData = method === 'GET' ? sanitizeGetParams(data) : data
+    const requestData = normalizedData as WechatMiniprogram.IAnyObject | string | ArrayBuffer | undefined
     const result = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
       const task = wx.request({
         url: `${API_BASE}${url}`,

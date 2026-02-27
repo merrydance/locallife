@@ -34,6 +34,8 @@ const CANCEL_REASONS = [
   '其他原因'
 ]
 
+const ORDER_REQUEST_DEDUP_MS = 800
+
 type OrderTypeFilter = OrderType | '';
 
 const VALID_ORDER_TYPES: OrderType[] = ['takeout', 'reservation', 'dine_in', 'takeaway']
@@ -67,6 +69,10 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 }
 
 Page({
+  _activeRequestKey: '',
+  _lastRequestKey: '',
+  _lastRequestAt: 0,
+
   data: {
     orders: [] as OrderCardViewModel[],
     selectedPayMap: {} as Record<number, boolean>,
@@ -148,6 +154,27 @@ Page({
 
   async loadOrders(reset = false) {
     if (this.data.loading && !reset) return
+
+    const targetPage = reset ? 1 : this.data.page
+    const requestKey = [
+      targetPage,
+      this.data.pageSize,
+      this.data.currentStatus || 'all',
+      this.data.orderType || 'all'
+    ].join('|')
+
+    const now = Date.now()
+    if (this._activeRequestKey === requestKey) {
+      return
+    }
+    if (this._lastRequestKey === requestKey && (now - this._lastRequestAt) < ORDER_REQUEST_DEDUP_MS) {
+      return
+    }
+
+    this._activeRequestKey = requestKey
+    this._lastRequestKey = requestKey
+    this._lastRequestAt = now
+
     this.setData({ loading: true, isError: false })
 
     if (reset) {
@@ -155,10 +182,10 @@ Page({
     }
 
     try {
-      const { currentStatus, page, pageSize, orderType } = this.data
+      const { currentStatus, pageSize, orderType } = this.data
       
       const params: ListOrdersParams = {
-        page_id: page,
+        page_id: targetPage,
         page_size: pageSize,
         ...(currentStatus ? { status: currentStatus } : {}),
         ...(orderType ? { order_type: orderType } : {})
@@ -223,6 +250,8 @@ Page({
         this.setData({ loading: false })
         wx.showToast({ title: '加载失败', icon: 'error' })
       }
+    } finally {
+      this._activeRequestKey = ''
     }
   },
 
