@@ -23,6 +23,7 @@ interface RequestOptions {
   useCache?: boolean // 是否使用缓存
   cacheTTL?: number // 缓存时间(毫秒)
   skipAuth?: boolean // 跳过 token 验证和刷新（用于登录、刷新 token 等不需要认证的接口）
+  strictEnvelope?: boolean // 严格要求返回统一响应信封，缺少 code 时视为失败
 }
 
 const cache = new CacheManager()
@@ -235,7 +236,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     retry = false,
     useCache = false,
     cacheTTL = 5 * 60 * 1000, // 默认5分钟
-    skipAuth = false // 是否跳过认证
+    skipAuth = false, // 是否跳过认证
+    strictEnvelope = false
   } = options
 
   const normalizedData = method === 'GET' ? sanitizeGetParams(data) : data
@@ -551,6 +553,15 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     // 检查 code 字段是否存在（统一响应信封格式要求所有接口都有 code 字段）
     // 部分旧接口仍直接返回数组/对象，此时视为成功并直接返回原始数据，避免前端崩溃
     if (response.code === undefined || response.code === null) {
+      if (strictEnvelope) {
+        logger.error(`API响应缺少code字段(严格模式): ${method} ${url}`, response, 'request')
+        throw new AppError({
+          type: ErrorType.BUSINESS,
+          message: 'API响应缺少code字段(严格模式)',
+          userMessage: '服务器响应异常，请稍后重试'
+        }, response)
+      }
+
       logger.warn(`API响应缺少code字段，按兼容模式处理: ${method} ${url}`, response, 'request')
 
       // 记录性能监控 - 网络请求成功

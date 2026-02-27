@@ -434,7 +434,8 @@ export class PlatformManagementService {
         return request({
             url: '/v1/admin/merchants/applications/review',
             method: 'POST',
-            data: Object.assign({ application_id: applicationId }, reviewData)
+            data: Object.assign({ application_id: applicationId }, reviewData),
+            strictEnvelope: true
         })
     }
 
@@ -459,7 +460,8 @@ export class PlatformManagementService {
         return request({
             url: `/v1/admin/riders/${riderId}/approve`,
             method: 'POST',
-            data: approveData
+            data: approveData,
+            strictEnvelope: true
         })
     }
 
@@ -472,7 +474,8 @@ export class PlatformManagementService {
         return request({
             url: `/v1/admin/riders/${riderId}/reject`,
             method: 'POST',
-            data: rejectData
+            data: rejectData,
+            strictEnvelope: true
         })
     }
 
@@ -503,7 +506,8 @@ export class PlatformManagementService {
     async approveOperatorApplication(applicationID: number): Promise<AdminOperatorApplicationItem> {
         return request({
             url: `/v1/admin/operators/applications/${applicationID}/approve`,
-            method: 'POST'
+            method: 'POST',
+            strictEnvelope: true
         })
     }
 
@@ -514,7 +518,8 @@ export class PlatformManagementService {
         return request({
             url: `/v1/admin/operators/applications/${applicationID}/reject`,
             method: 'POST',
-            data
+            data,
+            strictEnvelope: true
         })
     }
 
@@ -546,7 +551,8 @@ export class PlatformManagementService {
         return request({
             url: `/v1/admin/groups/applications/${applicationID}/review`,
             method: 'POST',
-            data
+            data,
+            strictEnvelope: true
         })
     }
 
@@ -589,7 +595,8 @@ export class PlatformManagementService {
         return request({
             url: `/v1/platform/operator-rules/${key}`,
             method: 'PATCH',
-            data
+            data,
+            strictEnvelope: true
         })
     }
 
@@ -615,7 +622,8 @@ export class PlatformManagementService {
         return request({
             url: '/v1/platform/profit-sharing/configs',
             method: 'POST',
-            data
+            data,
+            strictEnvelope: true
         })
     }
 
@@ -629,7 +637,8 @@ export class PlatformManagementService {
         return request({
             url: `/v1/platform/profit-sharing/configs/${configId}`,
             method: 'PATCH',
-            data
+            data,
+            strictEnvelope: true
         })
     }
 
