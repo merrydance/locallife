@@ -151,7 +151,7 @@ class Logger {
       // 2. 上报到自己的后端(可选)
       if (!this.isDev) {
         wx.request({
-          url: 'https://llapi.merrydance.cn/api/v1/logs/error',
+          url: 'https://llapi.merrydance.cn/v1/logs/error',
           method: 'POST',
           data: errorData,
           header: {

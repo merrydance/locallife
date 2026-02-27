@@ -288,14 +288,14 @@ Page({
       return
     }
 
-    const allSelected = payableOrderIDs.every((id) => this.data.selectedPayMap[id])
+    const allSelected = payableOrderIDs.every((id: number) => this.data.selectedPayMap[id])
     if (allSelected) {
       this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
       return
     }
 
     const nextSelectedMap: Record<number, boolean> = {}
-    payableOrderIDs.forEach((id) => {
+    payableOrderIDs.forEach((id: number) => {
       nextSelectedMap[id] = true
     })
 

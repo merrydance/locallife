@@ -219,19 +219,17 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     }
   }
 
-  // 检查网络状态
+  // 预检查网络状态（桌面微信长时间 idle 恢复后可能出现状态滞后）
+  // 注意：这里不做“硬拦截”。即便本地状态显示离线，也允许发起一次真实请求来判定，
+  // 避免出现“状态卡死，必须重进小程序才恢复”的问题。
   if (!networkMonitor.isOnline()) {
-    const error = new AppError({
-      type: ErrorType.NETWORK,
-      message: '网络不可用',
-      userMessage: '网络不可用,请检查网络设置后重试'
-    })
-
-    if (loading) wx.hideLoading()
-
-    // 显示重试按钮
-    showRetryDialog(error, () => request(options))
-    throw error
+    const refreshed = await networkMonitor.refreshStatus(true)
+    if (!refreshed.isConnected) {
+      logger.warn('网络预检查仍显示离线，继续发起探测请求以避免状态误判', {
+        method,
+        url
+      }, 'request')
+    }
   }
 
   if (loading) {
@@ -654,6 +652,7 @@ function showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
 let _refreshingPromise: Promise<void> | null = null
 const REFRESH_THRESHOLD = 5 * 60 * 1000 // 5分钟
 const REFRESH_TIMEOUT = 10000 // 10秒
+const TOKEN_REFRESH_REQUEST_TIMEOUT = 10000
 
 /**
  * 统一的Token刷新入口 (带锁)
@@ -737,7 +736,7 @@ async function refreshTokenOnce(): Promise<void> {
             header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
             success: resolve,
             fail: reject,
-            timeout: 5000
+            timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
           })
         })
 
@@ -761,7 +760,7 @@ async function refreshTokenOnce(): Promise<void> {
       wx.login({
         success: (res) => res.code ? resolve(res.code) : reject(new Error('获取code失败: res.code missing')),
         fail: (err) => reject(err || new Error('wx.login failed')),
-        timeout: 5000
+        timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
       })
     })
 
@@ -774,7 +773,7 @@ async function refreshTokenOnce(): Promise<void> {
         header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
         success: resolve,
         fail: reject,
-        timeout: 5000
+        timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
       })
     })
 

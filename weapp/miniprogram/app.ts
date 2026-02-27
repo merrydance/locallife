@@ -71,6 +71,13 @@ App<IAppOption>({
     tracker.log(EventType.APP_OPEN)
   },
 
+  onShow() {
+    // 桌面微信长时间后台后，网络状态可能滞后；前台恢复时主动刷新
+    networkMonitor.refreshStatus(true).catch(() => {
+      // 忽略刷新失败，不影响主流程
+    })
+  },
+
   /**
      * 全局错误捕获 - 捕获未处理的同步错误
      */

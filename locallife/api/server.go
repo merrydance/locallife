@@ -329,6 +329,11 @@ func (server *Server) setupRouter() {
 	// ✅ 统一 JSON 响应格式：{code,message,data}
 	// 注意：webhooks 与 websocket upgrade 在中间件内部会自动跳过
 	v1.Use(ResponseEnvelopeMiddleware())
+	v1.POST("/logs/error", server.reportClientErrorLog)
+
+	// 兼容历史客户端：部分前端版本使用 /api/v1/logs/error
+	legacyV1 := router.Group("/api/v1")
+	legacyV1.POST("/logs/error", server.reportClientErrorLog)
 
 	// 元数据：角色访问矩阵（供前端/SDK消费）
 	v1.GET("/role-access", server.getRoleAccessMetadata)
