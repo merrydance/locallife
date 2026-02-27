@@ -45,6 +45,9 @@ interface CartItemView {
   dishImages?: string[] // 新增：套餐内的菜品图片
 }
 
+let _loadAllCartsPromise: Promise<void> | null = null
+let _lastLoadAllCartsAt = 0
+
 function isAbortLikeError(error: unknown): boolean {
   if (!error) return false
 
@@ -104,82 +107,98 @@ Page({
    * 加载所有商户的购物车
    */
   async loadAllCarts() {
-    try {
-      this.setData({ loading: true })
+    const now = Date.now()
+    if (_loadAllCartsPromise) {
+      return _loadAllCartsPromise
+    }
+    if (now - _lastLoadAllCartsAt < 800) {
+      logger.debug('skip duplicated loadAllCarts in short window', { since: now - _lastLoadAllCartsAt }, 'cart.loadAllCarts')
+      return
+    }
 
-      // 获取用户所有购物车汇总
-      const userCarts = await CartAPI.getUserCarts('takeout')
+    _loadAllCartsPromise = (async () => {
+      try {
+        this.setData({ loading: true })
 
-      if (!userCarts.carts || userCarts.carts.length === 0) {
+        // 获取用户所有购物车汇总
+        const userCarts = await CartAPI.getUserCarts('takeout')
+
+        if (!userCarts.carts || userCarts.carts.length === 0) {
+          this.setData({
+            loading: false,
+            merchantGroups: [],
+            summary: {
+              cartCount: 0,
+              totalItems: 0,
+              totalAmount: 0,
+              totalAmountDisplay: '¥0.00'
+            }
+          })
+          // 重要：空购物车也要同步到全局状态
+          this.syncToGlobalStore()
+          return
+        }
+
+        // 为每个商户获取详细购物车内容
+        let merchantGroups: MerchantCartGroup[] = []
+
+
+        for (const merchantCart of userCarts.carts) {
+          if (!merchantCart.merchant_id) continue
+
+          try {
+            const cartDetail = await CartAPI.getCart({
+              merchant_id: merchantCart.merchant_id,
+              order_type: merchantCart.order_type || 'takeout',
+              table_id: merchantCart.table_id ?? undefined,
+              reservation_id: merchantCart.reservation_id ?? undefined
+            })
+            const group = this.buildMerchantGroup(merchantCart, cartDetail)
+            merchantGroups.push(group)
+          } catch (error) {
+            logger.warn('Failed to load cart for merchant', { merchantId: merchantCart.merchant_id }, 'cart.loadAllCarts')
+          }
+        }
+
+        // 预先计算费用并校验商户状态（在显示前完成）
+        merchantGroups = await this.calculateDeliveryFees(merchantGroups, true)
+
+        // 默认全选（排除有错误的商户）
+        const selectedCartIds = merchantGroups
+          .filter((g) => !g.errorStatus)
+          .map((g) => g.cartId)
+
+        // 设置数据并显示
         this.setData({
           loading: false,
-          merchantGroups: [],
+          merchantGroups,
+          selectedCartIds,
           summary: {
-            cartCount: 0,
-            totalItems: 0,
-            totalAmount: 0,
-            totalAmountDisplay: '¥0.00'
+            cartCount: userCarts.summary?.cart_count || merchantGroups.length,
+            totalItems: userCarts.summary?.total_items || 0,
+            totalAmount: userCarts.summary?.total_amount || 0,
+            totalAmountDisplay: `¥${((userCarts.summary?.total_amount || 0) / 100).toFixed(2)}`
           }
         })
-        // 重要：空购物车也要同步到全局状态
+
+        this.calculateCheckoutTotal()
+
+        // 同步到全局状态，让其他页面（如外卖首页）能感知购物车变化
         this.syncToGlobalStore()
-        return
-      }
-
-      // 为每个商户获取详细购物车内容
-      let merchantGroups: MerchantCartGroup[] = []
-
-
-      for (const merchantCart of userCarts.carts) {
-        if (!merchantCart.merchant_id) continue
-
-        try {
-          const cartDetail = await CartAPI.getCart({
-            merchant_id: merchantCart.merchant_id,
-            order_type: merchantCart.order_type || 'takeout',
-            table_id: merchantCart.table_id ?? undefined,
-            reservation_id: merchantCart.reservation_id ?? undefined
-          })
-          const group = this.buildMerchantGroup(merchantCart, cartDetail)
-          merchantGroups.push(group)
-        } catch (error) {
-          logger.warn('Failed to load cart for merchant', { merchantId: merchantCart.merchant_id }, 'cart.loadAllCarts')
+      } catch (error) {
+        logger.error('Failed to load carts', error, 'cart.loadAllCarts')
+        this.setData({ loading: false })
+        if (isAbortLikeError(error)) {
+          return
         }
+        wx.showToast({ title: '加载购物车失败', icon: 'none' })
       }
+    })().finally(() => {
+      _loadAllCartsPromise = null
+      _lastLoadAllCartsAt = Date.now()
+    })
 
-      // 预先计算费用并校验商户状态（在显示前完成）
-      merchantGroups = await this.calculateDeliveryFees(merchantGroups, true)
-
-      // 默认全选（排除有错误的商户）
-      const selectedCartIds = merchantGroups
-        .filter((g) => !g.errorStatus)
-        .map((g) => g.cartId)
-
-      // 设置数据并显示
-      this.setData({
-        loading: false,
-        merchantGroups,
-        selectedCartIds,
-        summary: {
-          cartCount: userCarts.summary?.cart_count || merchantGroups.length,
-          totalItems: userCarts.summary?.total_items || 0,
-          totalAmount: userCarts.summary?.total_amount || 0,
-          totalAmountDisplay: `¥${((userCarts.summary?.total_amount || 0) / 100).toFixed(2)}`
-        }
-      })
-
-      this.calculateCheckoutTotal()
-
-      // 同步到全局状态，让其他页面（如外卖首页）能感知购物车变化
-      this.syncToGlobalStore()
-    } catch (error) {
-      logger.error('Failed to load carts', error, 'cart.loadAllCarts')
-      this.setData({ loading: false })
-      if (isAbortLikeError(error)) {
-        return
-      }
-      wx.showToast({ title: '加载购物车失败', icon: 'none' })
-    }
+    return _loadAllCartsPromise
   },
 
 

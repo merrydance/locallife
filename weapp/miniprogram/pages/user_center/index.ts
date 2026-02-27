@@ -7,6 +7,10 @@ import { getStableBarHeights } from '../../utils/responsive'
 import { notificationService } from '../../api/notification'
 
 const app = getApp<IAppOption>()
+let _refreshUserInfoPromise: Promise<void> | null = null
+let _lastRefreshUserInfoAt = 0
+let _fetchUnreadPromise: Promise<void> | null = null
+let _lastFetchUnreadAt = 0
 
 interface MessageError {
   userMessage?: string
@@ -158,37 +162,52 @@ Page({
   },
 
   async refreshUserInfo() {
-    if (this.data.loading) return
-    
-    this.setData({ loading: true, error: null })
-    try {
-      const user = await getUserInfo()
-      if (user) {
-        logger.debug('Refreshed User Info from Backend', user)
-
-        // Recover avatar from local storage if backend returns empty
-        const localAvatar = wx.getStorageSync('user_avatar')
-        const finalAvatar = user.avatar_url || localAvatar || ''
-        console.log('[UserCenter] Refresh Info - Avatar:', finalAvatar, 'User:', user)
-
-        // Update Global Data
-        app.globalData.userInfo = {
-          nickName: user.full_name || '微信用户',
-          avatarUrl: finalAvatar
-        } as WechatMiniprogram.UserInfo
-
-        // Update Local Data
-        this.updateUser(app.globalData.userInfo, user.roles || [])
-      }
-      this.setData({ initialLoading: false, loading: false })
-    } catch (err) {
-      logger.error('Failed to refresh user info', err)
-      this.setData({ 
-        error: '加载用户信息失败', 
-        loading: false,
-        initialLoading: false 
-      })
+    const now = Date.now()
+    if (_refreshUserInfoPromise) {
+      return _refreshUserInfoPromise
     }
+    if (now - _lastRefreshUserInfoAt < 1000) {
+      return
+    }
+
+    _refreshUserInfoPromise = (async () => {
+      if (this.data.loading) return
+
+      this.setData({ loading: true, error: null })
+      try {
+        const user = await getUserInfo()
+        if (user) {
+          logger.debug('Refreshed User Info from Backend', user)
+
+          // Recover avatar from local storage if backend returns empty
+          const localAvatar = wx.getStorageSync('user_avatar')
+          const finalAvatar = user.avatar_url || localAvatar || ''
+          console.log('[UserCenter] Refresh Info - Avatar:', finalAvatar, 'User:', user)
+
+          // Update Global Data
+          app.globalData.userInfo = {
+            nickName: user.full_name || '微信用户',
+            avatarUrl: finalAvatar
+          } as WechatMiniprogram.UserInfo
+
+          // Update Local Data
+          this.updateUser(app.globalData.userInfo, user.roles || [])
+        }
+        this.setData({ initialLoading: false, loading: false })
+      } catch (err) {
+        logger.error('Failed to refresh user info', err)
+        this.setData({
+          error: '加载用户信息失败',
+          loading: false,
+          initialLoading: false
+        })
+      }
+    })().finally(() => {
+      _refreshUserInfoPromise = null
+      _lastRefreshUserInfoAt = Date.now()
+    })
+
+    return _refreshUserInfoPromise
   },
 
   onRetry() {
@@ -248,12 +267,27 @@ Page({
 
   // Gap 4: 获取未读消息数
   async fetchUnreadCount() {
-    try {
-      const res = await notificationService.getUnreadCount()
-      this.setData({ unreadCount: res.count || 0 })
-    } catch (err) {
-      logger.warn('获取未读消息失败', err, 'UserCenter.fetchUnreadCount')
+    const now = Date.now()
+    if (_fetchUnreadPromise) {
+      return _fetchUnreadPromise
     }
+    if (now - _lastFetchUnreadAt < 1000) {
+      return
+    }
+
+    _fetchUnreadPromise = (async () => {
+      try {
+        const res = await notificationService.getUnreadCount()
+        this.setData({ unreadCount: res.count || 0 })
+      } catch (err) {
+        logger.warn('获取未读消息失败', err, 'UserCenter.fetchUnreadCount')
+      }
+    })().finally(() => {
+      _fetchUnreadPromise = null
+      _lastFetchUnreadAt = Date.now()
+    })
+
+    return _fetchUnreadPromise
   },
 
   // Gap 4: 跳转通知中心
