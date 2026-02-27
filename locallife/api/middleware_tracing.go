@@ -61,10 +61,13 @@ func RequestLoggingMiddleware() gin.HandlerFunc {
 		clientIP := ctx.ClientIP()
 		method := ctx.Request.Method
 		userAgent := ctx.Request.UserAgent()
+		isClientLogScanner401 := path == "/v1/logs/error" && status == 401 && isScannerUserAgent(userAgent)
 
 		// 根据状态码选择日志级别
 		var logEvent *zerolog.Event
 		switch {
+		case isClientLogScanner401:
+			logEvent = log.Info()
 		case status >= 500:
 			logEvent = log.Error()
 		case status >= 400:
