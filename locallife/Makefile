@@ -84,4 +84,25 @@ evans:
 redis:
 	docker run --name redis -p 6379:6379 -d redis:7-alpine
 
-.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger test test-unit test-integration server mock proto evans redis sync_regions_test doc-audit
+# Handler/Logic 文件行数检查（上限 500 行，排除自动生成和测试文件）
+MAX_FILE_LINES ?= 500
+lint-filesize:
+	@echo "Checking Go files exceeding $(MAX_FILE_LINES) lines..."
+	@violations=0; \
+	for f in $$(find api logic worker -name '*.go' \
+	  ! -name '*_test.go' ! -name 'mock_*.go' ! -name '*.sql.go' \
+	  ! -path '*/mock/*' ! -path '*/sqlc/*.sql.go' 2>/dev/null); do \
+	  lines=$$(wc -l < "$$f"); \
+	  if [ "$$lines" -gt $(MAX_FILE_LINES) ]; then \
+	    echo "  ⚠️  $$f: $$lines lines (limit $(MAX_FILE_LINES))"; \
+	    violations=$$((violations + 1)); \
+	  fi; \
+	done; \
+	if [ "$$violations" -gt 0 ]; then \
+	  echo "\n❌ $$violations file(s) exceed $(MAX_FILE_LINES)-line limit"; \
+	  exit 1; \
+	else \
+	  echo "✅ All files within $(MAX_FILE_LINES)-line limit"; \
+	fi
+
+.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger test test-unit test-integration server mock proto evans redis sync_regions_test doc-audit lint-filesize

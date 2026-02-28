@@ -257,91 +257,22 @@ func newOrderResponse(o db.Order) orderResponse {
 		Overtime:            o.Overtime,
 	}
 
-	if len(o.Badges) > 0 {
-		resp.Badges = decodeOrderBadges(o.Badges)
-	}
-
-	if o.AddressID.Valid {
-		resp.AddressID = &o.AddressID.Int64
-	}
-	if o.DeliveryDistance.Valid {
-		resp.DeliveryDistance = &o.DeliveryDistance.Int32
-	}
-	if o.TableID.Valid {
-		resp.TableID = &o.TableID.Int64
-	}
-	if o.ReservationID.Valid {
-		resp.ReservationID = &o.ReservationID.Int64
-	}
-	if o.PaymentMethod.Valid {
-		resp.PaymentMethod = &o.PaymentMethod.String
-	}
-	if o.Notes.Valid {
-		resp.Notes = &o.Notes.String
-	}
-	if o.PaidAt.Valid {
-		resp.PaidAt = &o.PaidAt.Time
-	}
-	if o.CompletedAt.Valid {
-		resp.CompletedAt = &o.CompletedAt.Time
-	}
-	if o.CancelledAt.Valid {
-		resp.CancelledAt = &o.CancelledAt.Time
-	}
-	if o.CancelReason.Valid {
-		resp.CancelReason = &o.CancelReason.String
-	}
-	if o.ReplacedByOrderID.Valid {
-		resp.ReplacedByOrderID = &o.ReplacedByOrderID.Int64
-	}
-	if o.UpdatedAt.Valid {
-		resp.UpdatedAt = &o.UpdatedAt.Time
-	}
-	if o.PickupCode.Valid {
-		resp.PickupCode = &o.PickupCode.String
-		resp.PickupCodeMasked = maskPickupCode(o.PickupCode.String)
-	}
-	if o.DispatchOrderID.Valid {
-		resp.DispatchOrderID = &o.DispatchOrderID.Int64
-	}
-	if o.FlowID.Valid {
-		resp.FlowID = &o.FlowID.Int64
-	}
-	if o.StatusHint.Valid {
-		resp.StatusHint = &o.StatusHint.String
-	}
-	if o.ExceptionState.Valid {
-		resp.ExceptionState = &o.ExceptionState.String
-	}
-	if o.ClaimChannel.Valid {
-		resp.ClaimChannel = &o.ClaimChannel.String
-	}
-	if o.PrepStartAt.Valid {
-		resp.PrepStartAt = &o.PrepStartAt.Time
-	}
-	if o.ReadyAt.Valid {
-		resp.ReadyAt = &o.ReadyAt.Time
-	}
-	if o.CourierAcceptAt.Valid {
-		resp.CourierAcceptAt = &o.CourierAcceptAt.Time
-	}
-	if o.PickedAt.Valid {
-		resp.PickedAt = &o.PickedAt.Time
-	}
-	if o.RiderDeliveredAt.Valid {
-		resp.RiderDeliveredAt = &o.RiderDeliveredAt.Time
-	}
-	if o.UserDeliveredAt.Valid {
-		resp.UserDeliveredAt = &o.UserDeliveredAt.Time
-	}
-	if o.AutoUserDeliveredAt.Valid {
-		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
-	}
-
-	if o.DeliveryDuration.Valid && o.DeliveryDuration.Int32 > 0 {
-		etaMinutes := o.DeliveryDuration.Int32 / 60
-		resp.DeliveryEtaMinutes = &etaMinutes
-	}
+	orderNullableFields{
+		AddressID: o.AddressID, DeliveryDistance: o.DeliveryDistance,
+		TableID: o.TableID, ReservationID: o.ReservationID,
+		PaymentMethod: o.PaymentMethod, Notes: o.Notes,
+		PaidAt: o.PaidAt, CompletedAt: o.CompletedAt,
+		CancelledAt: o.CancelledAt, CancelReason: o.CancelReason,
+		ReplacedByOrderID: o.ReplacedByOrderID, UpdatedAt: o.UpdatedAt,
+		PickupCode: o.PickupCode, DispatchOrderID: o.DispatchOrderID,
+		FlowID: o.FlowID, StatusHint: o.StatusHint,
+		ExceptionState: o.ExceptionState, ClaimChannel: o.ClaimChannel,
+		PrepStartAt: o.PrepStartAt, ReadyAt: o.ReadyAt,
+		CourierAcceptAt: o.CourierAcceptAt, PickedAt: o.PickedAt,
+		RiderDeliveredAt: o.RiderDeliveredAt, UserDeliveredAt: o.UserDeliveredAt,
+		AutoUserDeliveredAt: o.AutoUserDeliveredAt, DeliveryDuration: o.DeliveryDuration,
+		Badges: o.Badges,
+	}.applyTo(&resp)
 
 	resp.Actions = orderActions(o)
 
@@ -421,102 +352,30 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 		Overtime:            o.Overtime,
 	}
 
-	if len(o.Badges) > 0 {
-		resp.Badges = decodeOrderBadges(o.Badges)
-	}
+	orderNullableFields{
+		AddressID: o.AddressID, DeliveryDistance: o.DeliveryDistance,
+		TableID: o.TableID, ReservationID: o.ReservationID,
+		PaymentMethod: o.PaymentMethod, Notes: o.Notes,
+		PaidAt: o.PaidAt, CompletedAt: o.CompletedAt,
+		CancelledAt: o.CancelledAt, CancelReason: o.CancelReason,
+		ReplacedByOrderID: o.ReplacedByOrderID, UpdatedAt: o.UpdatedAt,
+		PickupCode: o.PickupCode, DispatchOrderID: o.DispatchOrderID,
+		FlowID: o.FlowID, StatusHint: o.StatusHint,
+		ExceptionState: o.ExceptionState, ClaimChannel: o.ClaimChannel,
+		PrepStartAt: o.PrepStartAt, ReadyAt: o.ReadyAt,
+		CourierAcceptAt: o.CourierAcceptAt, PickedAt: o.PickedAt,
+		RiderDeliveredAt: o.RiderDeliveredAt, UserDeliveredAt: o.UserDeliveredAt,
+		AutoUserDeliveredAt: o.AutoUserDeliveredAt, DeliveryDuration: o.DeliveryDuration,
+		Badges: o.Badges,
+	}.applyTo(&resp)
 
-	// 商户电话
+	// 订单详情独有：商户电话和配送地址
 	if o.MerchantPhone != "" {
 		resp.MerchantPhone = &o.MerchantPhone
 	}
-
-	// 配送地址信息
-	if o.DeliveryContactName.Valid {
-		resp.DeliveryContactName = &o.DeliveryContactName.String
-	}
-	if o.DeliveryContactPhone.Valid {
-		resp.DeliveryContactPhone = &o.DeliveryContactPhone.String
-	}
-	if o.DeliveryAddress.Valid {
-		resp.DeliveryAddress = &o.DeliveryAddress.String
-	}
-
-	if o.AddressID.Valid {
-		resp.AddressID = &o.AddressID.Int64
-	}
-	if o.DeliveryDistance.Valid {
-		resp.DeliveryDistance = &o.DeliveryDistance.Int32
-	}
-	if o.TableID.Valid {
-		resp.TableID = &o.TableID.Int64
-	}
-	if o.ReservationID.Valid {
-		resp.ReservationID = &o.ReservationID.Int64
-	}
-	if o.PaymentMethod.Valid {
-		resp.PaymentMethod = &o.PaymentMethod.String
-	}
-	if o.Notes.Valid {
-		resp.Notes = &o.Notes.String
-	}
-	if o.PaidAt.Valid {
-		resp.PaidAt = &o.PaidAt.Time
-	}
-	if o.CompletedAt.Valid {
-		resp.CompletedAt = &o.CompletedAt.Time
-	}
-	if o.CancelledAt.Valid {
-		resp.CancelledAt = &o.CancelledAt.Time
-	}
-	if o.CancelReason.Valid {
-		resp.CancelReason = &o.CancelReason.String
-	}
-	if o.ReplacedByOrderID.Valid {
-		resp.ReplacedByOrderID = &o.ReplacedByOrderID.Int64
-	}
-	if o.UpdatedAt.Valid {
-		resp.UpdatedAt = &o.UpdatedAt.Time
-	}
-	if o.PickupCode.Valid {
-		resp.PickupCode = &o.PickupCode.String
-		resp.PickupCodeMasked = maskPickupCode(o.PickupCode.String)
-	}
-	if o.DispatchOrderID.Valid {
-		resp.DispatchOrderID = &o.DispatchOrderID.Int64
-	}
-	if o.FlowID.Valid {
-		resp.FlowID = &o.FlowID.Int64
-	}
-	if o.StatusHint.Valid {
-		resp.StatusHint = &o.StatusHint.String
-	}
-	if o.ExceptionState.Valid {
-		resp.ExceptionState = &o.ExceptionState.String
-	}
-	if o.ClaimChannel.Valid {
-		resp.ClaimChannel = &o.ClaimChannel.String
-	}
-	if o.PrepStartAt.Valid {
-		resp.PrepStartAt = &o.PrepStartAt.Time
-	}
-	if o.ReadyAt.Valid {
-		resp.ReadyAt = &o.ReadyAt.Time
-	}
-	if o.CourierAcceptAt.Valid {
-		resp.CourierAcceptAt = &o.CourierAcceptAt.Time
-	}
-	if o.PickedAt.Valid {
-		resp.PickedAt = &o.PickedAt.Time
-	}
-	if o.RiderDeliveredAt.Valid {
-		resp.RiderDeliveredAt = &o.RiderDeliveredAt.Time
-	}
-	if o.UserDeliveredAt.Valid {
-		resp.UserDeliveredAt = &o.UserDeliveredAt.Time
-	}
-	if o.AutoUserDeliveredAt.Valid {
-		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
-	}
+	resp.DeliveryContactName = pgtypeTextPtr(o.DeliveryContactName)
+	resp.DeliveryContactPhone = pgtypeTextPtr(o.DeliveryContactPhone)
+	resp.DeliveryAddress = pgtypeTextPtr(o.DeliveryAddress)
 
 	resp.Actions = orderActions(db.Order{
 		ID:                o.ID,
@@ -611,85 +470,22 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 		Overtime:            o.Overtime,
 	}
 
-	if len(o.Badges) > 0 {
-		resp.Badges = decodeOrderBadges(o.Badges)
-	}
-
-	if o.AddressID.Valid {
-		resp.AddressID = &o.AddressID.Int64
-	}
-	if o.DeliveryDistance.Valid {
-		resp.DeliveryDistance = &o.DeliveryDistance.Int32
-	}
-	if o.TableID.Valid {
-		resp.TableID = &o.TableID.Int64
-	}
-	if o.ReservationID.Valid {
-		resp.ReservationID = &o.ReservationID.Int64
-	}
-	if o.PaymentMethod.Valid {
-		resp.PaymentMethod = &o.PaymentMethod.String
-	}
-	if o.Notes.Valid {
-		resp.Notes = &o.Notes.String
-	}
-	if o.PaidAt.Valid {
-		resp.PaidAt = &o.PaidAt.Time
-	}
-	if o.CompletedAt.Valid {
-		resp.CompletedAt = &o.CompletedAt.Time
-	}
-	if o.CancelledAt.Valid {
-		resp.CancelledAt = &o.CancelledAt.Time
-	}
-	if o.CancelReason.Valid {
-		resp.CancelReason = &o.CancelReason.String
-	}
-	if o.ReplacedByOrderID.Valid {
-		resp.ReplacedByOrderID = &o.ReplacedByOrderID.Int64
-	}
-	if o.UpdatedAt.Valid {
-		resp.UpdatedAt = &o.UpdatedAt.Time
-	}
-	if o.PickupCode.Valid {
-		resp.PickupCode = &o.PickupCode.String
-	}
-	if o.DispatchOrderID.Valid {
-		resp.DispatchOrderID = &o.DispatchOrderID.Int64
-	}
-	if o.FlowID.Valid {
-		resp.FlowID = &o.FlowID.Int64
-	}
-	if o.StatusHint.Valid {
-		resp.StatusHint = &o.StatusHint.String
-	}
-	if o.ExceptionState.Valid {
-		resp.ExceptionState = &o.ExceptionState.String
-	}
-	if o.ClaimChannel.Valid {
-		resp.ClaimChannel = &o.ClaimChannel.String
-	}
-	if o.PrepStartAt.Valid {
-		resp.PrepStartAt = &o.PrepStartAt.Time
-	}
-	if o.ReadyAt.Valid {
-		resp.ReadyAt = &o.ReadyAt.Time
-	}
-	if o.CourierAcceptAt.Valid {
-		resp.CourierAcceptAt = &o.CourierAcceptAt.Time
-	}
-	if o.PickedAt.Valid {
-		resp.PickedAt = &o.PickedAt.Time
-	}
-	if o.RiderDeliveredAt.Valid {
-		resp.RiderDeliveredAt = &o.RiderDeliveredAt.Time
-	}
-	if o.UserDeliveredAt.Valid {
-		resp.UserDeliveredAt = &o.UserDeliveredAt.Time
-	}
-	if o.AutoUserDeliveredAt.Valid {
-		resp.AutoUserDeliveredAt = &o.AutoUserDeliveredAt.Time
-	}
+	orderNullableFields{
+		AddressID: o.AddressID, DeliveryDistance: o.DeliveryDistance,
+		TableID: o.TableID, ReservationID: o.ReservationID,
+		PaymentMethod: o.PaymentMethod, Notes: o.Notes,
+		PaidAt: o.PaidAt, CompletedAt: o.CompletedAt,
+		CancelledAt: o.CancelledAt, CancelReason: o.CancelReason,
+		ReplacedByOrderID: o.ReplacedByOrderID, UpdatedAt: o.UpdatedAt,
+		PickupCode: o.PickupCode, DispatchOrderID: o.DispatchOrderID,
+		FlowID: o.FlowID, StatusHint: o.StatusHint,
+		ExceptionState: o.ExceptionState, ClaimChannel: o.ClaimChannel,
+		PrepStartAt: o.PrepStartAt, ReadyAt: o.ReadyAt,
+		CourierAcceptAt: o.CourierAcceptAt, PickedAt: o.PickedAt,
+		RiderDeliveredAt: o.RiderDeliveredAt, UserDeliveredAt: o.UserDeliveredAt,
+		AutoUserDeliveredAt: o.AutoUserDeliveredAt, DeliveryDuration: o.DeliveryDuration,
+		Badges: o.Badges,
+	}.applyTo(&resp)
 
 	return resp
 }
