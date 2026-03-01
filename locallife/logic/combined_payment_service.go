@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -58,6 +59,39 @@ type CreateCombinedPaymentOrderResult struct {
 	CombinedPayment db.CombinedPaymentOrder
 	SubOrders       []CombinedSubOrder
 	PayParams       *wechat.JSAPIPayParams
+}
+
+type GetCombinedPaymentOrderInput struct {
+	UserID            int64
+	CombinedPaymentID int64
+}
+
+type GetCombinedPaymentOrderResult struct {
+	CombinedPayment db.GetCombinedPaymentOrderWithSubOrdersRow
+}
+
+type CloseCombinedPaymentOrderInput struct {
+	UserID            int64
+	CombinedPaymentID int64
+}
+
+type CloseCombinedPaymentOrderResult struct {
+	CombinedPayment db.CombinedPaymentOrder
+	SubOrders       []CombinedSubOrder
+}
+
+type combinedSubOrderPayload struct {
+	OrderID             int64  `json:"order_id"`
+	PaymentOrderID      int64  `json:"payment_order_id"`
+	MerchantID          int64  `json:"merchant_id"`
+	SubMchID            string `json:"sub_mch_id"`
+	Amount              int64  `json:"amount"`
+	OutTradeNo          string `json:"out_trade_no"`
+	Description         string `json:"description"`
+	ProfitSharingStatus string `json:"profit_sharing_status,omitempty"`
+	MerchantName        string `json:"merchant_name,omitempty"`
+	MerchantLogo        string `json:"merchant_logo,omitempty"`
+	OrderNo             string `json:"order_no,omitempty"`
 }
 
 // CreateCombinedPaymentOrder creates a combined payment order.
@@ -134,6 +168,9 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	if err != nil {
 		return result, fmt.Errorf("create combine order: %w", err)
 	}
+	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
+		return result, fmt.Errorf("create combine order: empty prepay id")
+	}
 
 	updatedCombined, err := svc.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
 		ID:       txResult.CombinedPaymentOrder.ID,
@@ -147,6 +184,91 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	result.SubOrders = subOrders
 	result.PayParams = payParams
 	return result, nil
+}
+
+func (svc *CombinedPaymentService) GetCombinedPaymentOrder(ctx context.Context, input GetCombinedPaymentOrderInput) (GetCombinedPaymentOrderResult, error) {
+	combinedRow, err := svc.store.GetCombinedPaymentOrderWithSubOrders(ctx, input.CombinedPaymentID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return GetCombinedPaymentOrderResult{}, NewRequestError(http.StatusNotFound, errors.New("combined payment order not found"))
+		}
+		return GetCombinedPaymentOrderResult{}, err
+	}
+
+	if combinedRow.UserID != input.UserID {
+		return GetCombinedPaymentOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("combined payment order does not belong to you"))
+	}
+
+	return GetCombinedPaymentOrderResult{CombinedPayment: combinedRow}, nil
+}
+
+func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context, input CloseCombinedPaymentOrderInput) (CloseCombinedPaymentOrderResult, error) {
+	if svc.ecommerceClient == nil {
+		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+	}
+
+	combinedRow, err := svc.store.GetCombinedPaymentOrderWithSubOrders(ctx, input.CombinedPaymentID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusNotFound, errors.New("combined payment order not found"))
+		}
+		return CloseCombinedPaymentOrderResult{}, err
+	}
+
+	if combinedRow.UserID != input.UserID {
+		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("combined payment order does not belong to you"))
+	}
+
+	if combinedRow.Status != paymentStatusPending {
+		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("only pending combined payment orders can be closed"))
+	}
+
+	var subPayloads []combinedSubOrderPayload
+	if err := json.Unmarshal(combinedRow.SubOrders, &subPayloads); err != nil {
+		return CloseCombinedPaymentOrderResult{}, err
+	}
+
+	closeSubs := make([]wechat.SubOrderClose, 0, len(subPayloads))
+	for _, sub := range subPayloads {
+		if sub.SubMchID == "" || sub.OutTradeNo == "" {
+			continue
+		}
+		closeSubs = append(closeSubs, wechat.SubOrderClose{MchID: sub.SubMchID, OutTradeNo: sub.OutTradeNo})
+	}
+	if len(closeSubs) == 0 {
+		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("no sub orders available to close"))
+	}
+
+	if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedRow.CombineOutTradeNo, closeSubs); err != nil {
+		return CloseCombinedPaymentOrderResult{}, err
+	}
+
+	updatedCombined, err := svc.store.UpdateCombinedPaymentOrderToClosed(ctx, combinedRow.ID)
+	if err != nil {
+		return CloseCombinedPaymentOrderResult{}, err
+	}
+
+	resultSubs := make([]CombinedSubOrder, 0, len(subPayloads))
+	for _, sub := range subPayloads {
+		if sub.OutTradeNo != "" {
+			paymentOrder, err := svc.store.GetPaymentOrderByOutTradeNo(ctx, sub.OutTradeNo)
+			if err == nil && paymentOrder.Status == paymentStatusPending {
+				_, _ = svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+			}
+		}
+
+		resultSubs = append(resultSubs, CombinedSubOrder{
+			OrderID:        sub.OrderID,
+			PaymentOrderID: sub.PaymentOrderID,
+			MerchantID:     sub.MerchantID,
+			SubMchID:       sub.SubMchID,
+			Amount:         sub.Amount,
+			OutTradeNo:     sub.OutTradeNo,
+			Description:    sub.Description,
+		})
+	}
+
+	return CloseCombinedPaymentOrderResult{CombinedPayment: updatedCombined, SubOrders: resultSubs}, nil
 }
 
 func dedupePositiveIDs(ids []int64) []int64 {

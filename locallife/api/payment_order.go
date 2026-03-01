@@ -13,13 +13,11 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ==================== 支付订单管理 ====================
@@ -232,8 +230,12 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	service := logic.NewPaymentOrderService(server.store, server.paymentClient)
-	result, err := service.CreatePaymentOrder(ctx, logic.CreatePaymentOrderInput{
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.CreatePaymentOrder(ctx, logic.CreatePaymentOrderInput{
 		UserID:       authPayload.UserID,
 		OrderID:      req.OrderID,
 		PaymentType:  req.PaymentType,
@@ -303,8 +305,12 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	service := logic.NewCombinedPaymentService(server.store, server.ecommerceClient)
-	result, err := service.CreateCombinedPaymentOrder(ctx, logic.CreateCombinedPaymentOrderInput{
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.CreateCombinedPaymentOrder(ctx, logic.CreateCombinedPaymentOrderInput{
 		UserID:   authPayload.UserID,
 		OrderIDs: req.OrderIDs,
 		ClientIP: ctx.ClientIP(),
@@ -394,21 +400,23 @@ func (server *Server) getCombinedPaymentOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
 
-	combinedRow, err := server.store.GetCombinedPaymentOrderWithSubOrders(ctx, req.ID)
+	result, err := facade.GetCombinedPaymentOrder(ctx, logic.GetCombinedPaymentOrderInput{
+		UserID:            authPayload.UserID,
+		CombinedPaymentID: req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combined payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	if combinedRow.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("combined payment order does not belong to you")))
-		return
-	}
+	combinedRow := result.CombinedPayment
 
 	var subOrders []combinedPaymentSubOrderResponse
 	if err := json.Unmarshal(combinedRow.SubOrders, &subOrders); err != nil {
@@ -455,11 +463,6 @@ type closeCombinedPaymentOrderRequest struct {
 // @Router /v1/payments/combined/{id}/close [post]
 // @Security BearerAuth
 func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
-	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("ecommerce client not configured")))
-		return
-	}
-
 	var req closeCombinedPaymentOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -467,70 +470,35 @@ func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
 
-	combinedRow, err := server.store.GetCombinedPaymentOrderWithSubOrders(ctx, req.ID)
+	result, err := facade.CloseCombinedPaymentOrder(ctx, logic.CloseCombinedPaymentOrderInput{
+		UserID:            authPayload.UserID,
+		CombinedPaymentID: req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("combined payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if combinedRow.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("combined payment order does not belong to you")))
-		return
-	}
-
-	if combinedRow.Status != PaymentStatusPending {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only pending combined payment orders can be closed")))
-		return
-	}
-
-	var subOrders []combinedPaymentSubOrderResponse
-	if err := json.Unmarshal(combinedRow.SubOrders, &subOrders); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	closeSubs := make([]wechat.SubOrderClose, 0, len(subOrders))
-	for _, sub := range subOrders {
-		if sub.SubMchID == "" || sub.OutTradeNo == "" {
-			continue
-		}
-		closeSubs = append(closeSubs, wechat.SubOrderClose{
-			MchID:      sub.SubMchID,
-			OutTradeNo: sub.OutTradeNo,
+	updatedCombined := result.CombinedPayment
+	subOrders := make([]combinedPaymentSubOrderResponse, 0, len(result.SubOrders))
+	for _, sub := range result.SubOrders {
+		subOrders = append(subOrders, combinedPaymentSubOrderResponse{
+			OrderID:        sub.OrderID,
+			PaymentOrderID: sub.PaymentOrderID,
+			MerchantID:     sub.MerchantID,
+			SubMchID:       sub.SubMchID,
+			Amount:         sub.Amount,
+			OutTradeNo:     sub.OutTradeNo,
+			Description:    sub.Description,
 		})
-	}
-	if len(closeSubs) == 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("no sub orders available to close")))
-		return
-	}
-
-	if err := server.ecommerceClient.CloseCombineOrder(ctx, combinedRow.CombineOutTradeNo, closeSubs); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	updatedCombined, err := server.store.UpdateCombinedPaymentOrderToClosed(ctx, combinedRow.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	for _, sub := range subOrders {
-		if sub.OutTradeNo == "" {
-			continue
-		}
-		paymentOrder, err := server.store.GetPaymentOrderByOutTradeNo(ctx, sub.OutTradeNo)
-		if err != nil {
-			continue
-		}
-		if paymentOrder.Status == PaymentStatusPending {
-			_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-		}
 	}
 
 	resp := combinedPaymentOrderResponse{
@@ -580,21 +548,24 @@ func (server *Server) getPaymentOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.GetPaymentOrder(ctx, logic.GetPaymentOrderInput{
+		UserID:         authPayload.UserID,
+		PaymentOrderID: req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证支付订单属于当前用户
-	if paymentOrder.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("payment order does not belong to you")))
-		return
-	}
+	paymentOrder := result.PaymentOrder
 
 	ctx.JSON(http.StatusOK, newPaymentOrderResponse(paymentOrder))
 }
@@ -639,67 +610,34 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	pageID := req.PageID
-	pageSize := req.PageSize
 	if pageID == 0 {
 		pageID = 1
 	}
+	pageSize := req.PageSize
 	if pageSize == 0 {
 		pageSize = 10
 	}
 
-	// 如果指定了 order_id，直接查询该订单的支付记录
-	if req.OrderID != nil {
-		payment, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:      pgtype.Int8{Int64: *req.OrderID, Valid: true},
-			BusinessType: BusinessTypeOrder,
-		})
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
-					PaymentOrders: []paymentOrderResponse{},
-					TotalCount:    0,
-					Total:         0,
-					PageID:        pageID,
-					PageSize:      pageSize,
-				})
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		// 验证支付订单属于当前用户
-		if payment.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
-				PaymentOrders: []paymentOrderResponse{},
-				TotalCount:    0,
-				Total:         0,
-				PageID:        pageID,
-				PageSize:      pageSize,
-			})
-			return
-		}
-		ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
-			PaymentOrders: []paymentOrderResponse{newPaymentOrderResponse(payment)},
-			TotalCount:    1,
-			Total:         1,
-			PageID:        pageID,
-			PageSize:      pageSize,
-		})
-		return
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
 	}
 
-	// 默认分页查询
-	offset := pageOffset(pageID, pageSize)
-
-	paymentOrders, err := server.store.ListPaymentOrdersByUser(ctx, db.ListPaymentOrdersByUserParams{
-		UserID: authPayload.UserID,
-		Limit:  pageSize,
-		Offset: offset,
+	result, err := facade.ListPaymentOrders(ctx, logic.ListPaymentOrdersInput{
+		UserID:   authPayload.UserID,
+		OrderID:  req.OrderID,
+		PageID:   pageID,
+		PageSize: pageSize,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	paymentOrders := result.PaymentOrders
 
 	resp := make([]paymentOrderResponse, len(paymentOrders))
 	for i, p := range paymentOrders {
@@ -708,8 +646,8 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
 		PaymentOrders: resp,
-		TotalCount:    int64(len(resp)),
-		Total:         int64(len(resp)),
+		TotalCount:    result.TotalCount,
+		Total:         result.TotalCount,
 		PageID:        pageID,
 		PageSize:      pageSize,
 	})
@@ -744,45 +682,24 @@ func (server *Server) closePaymentOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.ClosePaymentOrder(ctx, logic.ClosePaymentOrderInput{
+		UserID:         authPayload.UserID,
+		PaymentOrderID: req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证支付订单属于当前用户
-	if paymentOrder.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("payment order does not belong to you")))
-		return
-	}
-
-	// 验证状态
-	if paymentOrder.Status != PaymentStatusPending {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only pending payment orders can be closed")))
-		return
-	}
-
-	// 关闭支付订单
-	updatedPayment, err := server.store.UpdatePaymentOrderToClosed(ctx, req.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 调用微信关单 API（如果有 prepay_id）
-	if server.paymentClient != nil && paymentOrder.PrepayID.Valid {
-		err = server.paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo)
-		if err != nil {
-			// 关单失败不影响本地状态，微信支付订单会在超时后自动关闭
-			// 记录日志即可
-		}
-	}
-
-	ctx.JSON(http.StatusOK, newPaymentOrderResponse(updatedPayment))
+	ctx.JSON(http.StatusOK, newPaymentOrderResponse(result.PaymentOrder))
 }
 
 // ==================== 退款订单API ====================
@@ -859,19 +776,6 @@ func newRefundOrderResponse(r db.RefundOrder) refundOrderResponse {
 	return resp
 }
 
-// generateOutRefundNo 生成退款单号
-func generateOutRefundNo() string {
-	now := time.Now()
-	dateStr := now.Format("20060102150405")
-
-	// 生成8位随机数
-	b := make([]byte, 4)
-	rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
-
-	return "R" + dateStr + randomNum[:8]
-}
-
 // createRefundOrder 创建退款订单（商户端）
 type createRefundOrderRequest struct {
 	PaymentOrderID int64  `json:"payment_order_id" binding:"required,min=1"`
@@ -903,350 +807,28 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取当前用户的商户
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
 	}
 
-	// 获取支付订单
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.PaymentOrderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 验证支付订单已支付
-	if paymentOrder.Status != PaymentStatusPaid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("payment order is not paid")))
-		return
-	}
-
-	// 获取订单验证归属
-	if !paymentOrder.OrderID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("payment order has no associated order")))
-		return
-	}
-
-	order, err := server.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "merchant",
-			Action:      "merchant_resource_access_denied",
-			TargetType:  "payment_order",
-			TargetID:    &paymentOrder.ID,
-			RegionID:    &merchant.RegionID,
-			Metadata: map[string]any{
-				"reason":           "payment_order_not_belong_to_merchant",
-				"merchant_id":      merchant.ID,
-				"order_id":         order.ID,
-				"payment_order_id": paymentOrder.ID,
-			},
-		})
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
-		return
-	}
-
-	// 验证退款金额
-	if req.RefundAmount > paymentOrder.Amount {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("refund amount exceeds payment amount")))
-		return
-	}
-
-	// 生成退款单号
-	outRefundNo := generateOutRefundNo()
-
-	// 创建退款订单
-	refundOrder, err := server.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-		PaymentOrderID: req.PaymentOrderID,
-		RefundType:     req.RefundType,
-		RefundAmount:   req.RefundAmount,
-		RefundReason:   pgtype.Text{String: req.RefundReason, Valid: req.RefundReason != ""},
-		OutRefundNo:    outRefundNo,
-		Status:         "pending",
+	result, err := orchestrator.CreateRefundOrder(ctx, logic.CreateRefundOrderInput{
+		ActorUserID:                      authPayload.UserID,
+		PaymentOrderID:                   req.PaymentOrderID,
+		RefundType:                       req.RefundType,
+		RefundAmount:                     req.RefundAmount,
+		RefundReason:                     req.RefundReason,
+		ProfitSharingReturnRetryInterval: server.config.ProfitSharingReturnRetryInterval,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	server.writeAuditLog(ctx, AuditLogInput{
-		ActorUserID: authPayload.UserID,
-		ActorRole:   "merchant",
-		Action:      "refund_order_created",
-		TargetType:  "refund_order",
-		TargetID:    &refundOrder.ID,
-		RegionID:    &merchant.RegionID,
-		Metadata: map[string]any{
-			"order_id":         order.ID,
-			"payment_order_id": paymentOrder.ID,
-			"refund_type":      req.RefundType,
-			"refund_amount":    req.RefundAmount,
-			"refund_reason":    req.RefundReason,
-			"out_refund_no":    outRefundNo,
-		},
-	})
-
-	// 调用微信退款 API
-	if paymentOrder.PaymentType == PaymentTypeProfitShare {
-		if server.ecommerceClient == nil {
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("ecommerce client not configured")))
-			return
-		}
-
-		profitSharingOrder, err := server.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
-		if err != nil {
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("profit sharing order not found")))
-			return
-		}
-		if !profitSharingOrder.SharingOrderID.Valid || profitSharingOrder.SharingOrderID.String == "" {
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("profit sharing order id missing")))
-			return
-		}
-
-		paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
-		if err != nil {
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if paymentConfig.SubMchID == "" {
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant sub mchid not configured")))
-			return
-		}
-
-		var operator db.Operator
-		if profitSharingOrder.OperatorCommission > 0 {
-			if !profitSharingOrder.OperatorID.Valid {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("operator not found for profit sharing")))
-				return
-			}
-			op, err := server.store.GetOperator(ctx, profitSharingOrder.OperatorID.Int64)
-			if err != nil {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			if !op.WechatMchID.Valid || op.WechatMchID.String == "" {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("operator wechat mchid not configured")))
-				return
-			}
-			operator = op
-		}
-
-		riderOpenID := ""
-		if profitSharingOrder.RiderAmount > 0 && profitSharingOrder.RiderID.Valid {
-			rider, getRiderErr := server.store.GetRider(ctx, profitSharingOrder.RiderID.Int64)
-			if getRiderErr != nil {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, getRiderErr))
-				return
-			}
-			user, getUserErr := server.store.GetUser(ctx, rider.UserID)
-			if getUserErr != nil {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, getUserErr))
-				return
-			}
-			if user.WechatOpenid == "" {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("rider wechat openid not configured")))
-				return
-			}
-			riderOpenID = user.WechatOpenid
-		}
-
-		hasProcessing := false
-		processReturn := func(outReturnNo, returnAccountType, returnAccount, description string, amount int64) error {
-			returnRecord, err := server.store.CreateProfitSharingReturn(ctx, db.CreateProfitSharingReturnParams{
-				RefundOrderID:        refundOrder.ID,
-				ProfitSharingOrderID: profitSharingOrder.ID,
-				PaymentOrderID:       paymentOrder.ID,
-				SubMchid:             paymentConfig.SubMchID,
-				OutOrderNo:           profitSharingOrder.OutOrderNo,
-				OutReturnNo:          outReturnNo,
-				ReturnMchid:          returnAccount,
-				Amount:               amount,
-				Status:               "pending",
-			})
-			if err != nil {
-				return err
-			}
-
-			returnResp, err := server.ecommerceClient.CreateProfitSharingReturn(ctx, &wechat.ProfitSharingReturnRequest{
-				SubMchID:          paymentConfig.SubMchID,
-				OrderID:           profitSharingOrder.SharingOrderID.String,
-				OutOrderNo:        profitSharingOrder.OutOrderNo,
-				OutReturnNo:       outReturnNo,
-				ReturnAccountType: returnAccountType,
-				ReturnAccount:     returnAccount,
-				Amount:            amount,
-				Description:       description,
-			})
-			if err != nil {
-				_, _ = server.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-					ID:         returnRecord.ID,
-					FailReason: pgtype.Text{String: err.Error(), Valid: true},
-				})
-				return err
-			}
-
-			switch returnResp.Result {
-			case "SUCCESS":
-				if returnResp.ReturnID != "" {
-					_, _ = server.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
-						ID:       returnRecord.ID,
-						ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: true},
-					})
-				}
-				_, _ = server.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID)
-			case "PROCESSING":
-				_, _ = server.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
-					ID:       returnRecord.ID,
-					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
-				})
-				if server.taskDistributor != nil {
-					_ = server.taskDistributor.DistributeTaskProcessProfitSharingReturnResult(
-						ctx,
-						&worker.ProfitSharingReturnResultPayload{
-							ProfitSharingReturnID: returnRecord.ID,
-							OutReturnNo:           returnRecord.OutReturnNo,
-							OutOrderNo:            returnRecord.OutOrderNo,
-							SubMchID:              returnRecord.SubMchid,
-							RefundOrderID:         returnRecord.RefundOrderID,
-							RetryCount:            0,
-						},
-						asynq.ProcessIn(server.config.ProfitSharingReturnRetryInterval),
-					)
-				}
-				hasProcessing = true
-			case "FAILED":
-				_, _ = server.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-					ID:         returnRecord.ID,
-					FailReason: pgtype.Text{String: returnResp.FailReason, Valid: returnResp.FailReason != ""},
-				})
-				return fmt.Errorf("profit sharing return failed")
-			default:
-				_, _ = server.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-					ID:         returnRecord.ID,
-					FailReason: pgtype.Text{String: "unknown return result", Valid: true},
-				})
-				return fmt.Errorf("profit sharing return unknown result")
-			}
-
-			return nil
-		}
-
-		if profitSharingOrder.PlatformCommission > 0 {
-			outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
-			if err := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, server.ecommerceClient.GetSpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission); err != nil {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("profit sharing return failed")))
-				return
-			}
-		}
-		if profitSharingOrder.OperatorCommission > 0 {
-			outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
-			if err := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("profit sharing return failed")))
-				return
-			}
-		}
-		if profitSharingOrder.RiderAmount > 0 {
-			outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
-			if err := processReturn(outReturnNo, wechat.ReceiverTypePersonal, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount); err != nil {
-				server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-				ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("profit sharing return failed")))
-				return
-			}
-		}
-		if hasProcessing {
-			ctx.JSON(http.StatusOK, newRefundOrderResponse(refundOrder))
-			return
-		}
-
-		wxRefund, err := server.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-			SubMchID:     paymentConfig.SubMchID,
-			OutTradeNo:   paymentOrder.OutTradeNo,
-			OutRefundNo:  outRefundNo,
-			Reason:       req.RefundReason,
-			RefundAmount: req.RefundAmount,
-			TotalAmount:  paymentOrder.Amount,
-		})
-		if err != nil {
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("wechat ecommerce refund: %w", err)))
-			return
-		}
-
-		switch wxRefund.Status {
-		case wechat.RefundStatusSuccess:
-			server.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-			server.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
-		case wechat.RefundStatusProcessing:
-			server.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-				ID:       refundOrder.ID,
-				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-			})
-		default:
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-		}
-	} else if server.paymentClient != nil {
-		wxRefund, err := server.paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-			OutTradeNo:   paymentOrder.OutTradeNo,
-			OutRefundNo:  outRefundNo,
-			Reason:       req.RefundReason,
-			RefundAmount: req.RefundAmount,
-			TotalAmount:  paymentOrder.Amount,
-		})
-		if err != nil {
-			// 退款失败，更新退款订单状态
-			server.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("wechat refund: %w", err)))
-			return
-		}
-
-		// 根据微信返回状态更新退款订单
-		switch wxRefund.Status {
-		case wechat.RefundStatusSuccess:
-			server.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-			// 更新支付订单状态为已退款
-			server.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
-		case wechat.RefundStatusProcessing:
-			server.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-				ID:       refundOrder.ID,
-				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-			})
-		}
-	}
-
-	// 重新获取退款订单以返回最新状态
-	refundOrder, _ = server.store.GetRefundOrder(ctx, refundOrder.ID)
-
-	ctx.JSON(http.StatusOK, newRefundOrderResponse(refundOrder))
+	ctx.JSON(http.StatusOK, newRefundOrderResponse(result.RefundOrder))
 }
 
 // listProfitSharingReturnsByRefund 获取退款关联的分账回退记录
@@ -1277,55 +859,25 @@ func (server *Server) listProfitSharingReturnsByRefund(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
 
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	result, err := orchestrator.ListProfitSharingReturnsByRefund(ctx, logic.ListProfitSharingReturnsByRefundInput{
+		ActorUserID: authPayload.UserID,
+		RefundID:    req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	refundOrder, err := server.store.GetRefundOrder(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("refund order not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if !paymentOrder.OrderID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("refund order has no associated order")))
-		return
-	}
-
-	order, err := server.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if order.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("refund order does not belong to your merchant")))
-		return
-	}
-
-	returns, err := server.store.ListProfitSharingReturnsByRefundOrder(ctx, refundOrder.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	resp := make([]profitSharingReturnResponse, 0, len(returns))
-	for _, r := range returns {
+	resp := make([]profitSharingReturnResponse, 0, len(result.Returns))
+	for _, r := range result.Returns {
 		resp = append(resp, newProfitSharingReturnResponse(r))
 	}
 
@@ -1360,43 +912,24 @@ func (server *Server) getRefundOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
 
-	refundOrder, err := server.store.GetRefundOrder(ctx, req.ID)
+	result, err := orchestrator.GetRefundOrder(ctx, logic.GetRefundOrderInput{
+		ActorUserID: authPayload.UserID,
+		RefundID:    req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("refund order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 获取支付订单和订单，验证权限
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 用户可以查看
-	if paymentOrder.UserID == authPayload.UserID {
-		ctx.JSON(http.StatusOK, newRefundOrderResponse(refundOrder))
-		return
-	}
-
-	// 检查是否是商户
-	if paymentOrder.OrderID.Valid {
-		order, err := server.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-		if err == nil {
-			merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-			if err == nil && order.MerchantID == merchant.ID {
-				ctx.JSON(http.StatusOK, newRefundOrderResponse(refundOrder))
-				return
-			}
-		}
-	}
-
-	ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
+	ctx.JSON(http.StatusOK, newRefundOrderResponse(result.RefundOrder))
 }
 
 // listRefundOrdersByPayment 获取支付订单的退款列表
@@ -1433,45 +966,25 @@ func (server *Server) listRefundOrdersByPayment(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
 
-	// 获取支付订单
-	paymentOrder, err := server.store.GetPaymentOrder(ctx, req.ID)
+	result, err := orchestrator.ListRefundOrdersByPayment(ctx, logic.ListRefundOrdersByPaymentInput{
+		ActorUserID:    authPayload.UserID,
+		PaymentOrderID: req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("payment order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证权限
-	if paymentOrder.UserID != authPayload.UserID {
-		if paymentOrder.OrderID.Valid {
-			order, err := server.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-			if err != nil || order.MerchantID != merchant.ID {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
-				return
-			}
-		} else {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("access denied")))
-			return
-		}
-	}
-
-	refundOrders, err := server.store.ListRefundOrdersByPaymentOrder(ctx, req.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	resp := make([]refundOrderResponse, len(refundOrders))
-	for i, r := range refundOrders {
+	resp := make([]refundOrderResponse, len(result.RefundOrders))
+	for i, r := range result.RefundOrders {
 		resp[i] = newRefundOrderResponse(r)
 	}
 

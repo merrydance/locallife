@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
@@ -490,27 +488,6 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 	return resp
 }
 
-// generateOrderNo 生成订单号
-func generateOrderNo() string {
-	now := time.Now()
-	dateStr := now.Format("20060102150405")
-
-	// 生成6位随机数
-	b := make([]byte, 3)
-	rand.Read(b)
-	randomNum := fmt.Sprintf("%06d", int(b[0])*10000+int(b[1])*100+int(b[2]))
-
-	return dateStr + randomNum[:6]
-}
-
-// generatePickupCode 生成6位取餐码（数字）
-func generatePickupCode() string {
-	b := make([]byte, 3)
-	rand.Read(b)
-	num := int(b[0])<<16 | int(b[1])<<8 | int(b[2])
-	return fmt.Sprintf("%06d", num%1000000)
-}
-
 // ==================== 订单API ====================
 
 // createOrder godoc
@@ -557,174 +534,36 @@ func (server *Server) createOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 验证订单类型与关联字段
 	if err := validateOrderTypeFields(req); err != nil {
 		log.Warn().Err(err).Msg("[DEBUG] createOrder: validateOrderTypeFields failed")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
-	// 验证商户存在且正常营业
-	merchant, err := logic.ValidateMerchantForOrder(ctx, server.store, req.MerchantID)
-	if err != nil {
-		if writeLogicRequestError(ctx, err) {
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
 	}
 
-	if req.OrderType == OrderTypeTakeout {
-		suspension, err := logic.GetTakeoutSuspension(ctx, server.store, merchant.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if suspension != nil {
-			ctx.JSON(http.StatusForbidden, gin.H{
-				"error":          "merchant takeout ordering is suspended",
-				"suspend_reason": suspension.Reason,
-				"suspend_until":  suspension.Until,
-			})
-			return
-		}
-	}
-
-	log.Info().Msg("[DEBUG] createOrder: merchant validated")
-
-	ruleInput := rules.Context{
-		Domain:     rules.DomainOrder,
-		RegionID:   merchant.RegionID,
-		MerchantID: merchant.ID,
-		UserID:     authPayload.UserID,
-		OrderType:  req.OrderType,
-		Metadata: map[string]interface{}{
-			"items_count": len(req.Items),
-			"use_balance": req.UseBalance,
-		},
-	}
-	ruleDecision, err := logic.EvaluateRules(ctx, logic.RuleEvaluationInput{
-		Enabled:   server.rulesEngine != nil && server.config.RulesEngineEnabled,
-		Engine:    server.rulesEngine,
-		Context:   ruleInput,
-		ActorRole: RoleCustomer,
-		OnDecision: func(input rules.Context, decision rules.Decision, actorRole string) {
+	result, err := service.CreateOrder(ctx, logic.CreateOrderCommandInput{
+		UserID:             authPayload.UserID,
+		MerchantID:         req.MerchantID,
+		OrderType:          req.OrderType,
+		AddressID:          req.AddressID,
+		TableID:            req.TableID,
+		ReservationID:      req.ReservationID,
+		BillingGroupID:     req.BillingGroupID,
+		Items:              toOrderItemInputs(req.Items),
+		Notes:              req.Notes,
+		UserVoucherID:      req.UserVoucherID,
+		UseBalance:         req.UseBalance,
+		RulesEngine:        server.rulesEngine,
+		RulesEngineEnabled: server.config.RulesEngineEnabled,
+		OnRuleDecision: func(input rules.Context, decision rules.Decision, actorRole string) {
 			server.recordRuleHit(ctx, input, decision, actorRole)
 		},
-	})
-	if err != nil {
-		if writeLogicRequestError(ctx, err) {
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// P0安全: 堂食订单验证桌台归属商户
-	if req.OrderType == OrderTypeDineIn && req.TableID != nil {
-		if err := logic.ValidateTableOwnership(ctx, server.store, req.MerchantID, *req.TableID); err != nil {
-			if writeLogicRequestError(ctx, err) {
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	// 堂食/预订订单需要开放用餐会话，绑定会话到订单
-	var diningSession *db.DiningSession
-	var reservation *db.TableReservation
-	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
-		result, err := logic.ValidateOrderSessionAndBilling(ctx, server.store, logic.OrderSessionInput{
-			UserID:         authPayload.UserID,
-			MerchantID:     req.MerchantID,
-			OrderType:      req.OrderType,
-			TableID:        req.TableID,
-			ReservationID:  req.ReservationID,
-			BillingGroupID: req.BillingGroupID,
-		})
-		if err != nil {
-			if writeLogicRequestError(ctx, err) {
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if result.DiningSession != nil {
-			diningSession = result.DiningSession
-		}
-		if result.Reservation != nil {
-			reservation = result.Reservation
-		}
-		if result.BillingGroupID != nil {
-			req.BillingGroupID = result.BillingGroupID
-		}
-		if result.TableID != nil {
-			req.TableID = result.TableID
-		}
-	}
-
-	// 定金模式仅允许一笔尾款订单，避免重复抵扣
-	if reservation != nil && reservation.PaymentMode == PaymentModeDeposit {
-		if err := logic.EnsureReservationSingleActiveOrder(ctx, server.store, reservation.ID); err != nil {
-			if writeLogicRequestError(ctx, err) {
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	// 计算订单金额
-	subtotal, items, err := logic.CalculateOrderItems(ctx, server.store, req.MerchantID, toOrderItemInputs(req.Items),
-		func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
-			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID, customizations)
-			if err != nil {
-				return nil, 0, err
-			}
-			if len(normalized) == 0 {
-				return nil, extra, nil
-			}
-			data, err := json.Marshal(normalized)
-			if err != nil {
-				return nil, 0, err
-			}
-			return data, extra, nil
-		},
-	)
-	if err != nil {
-		log.Warn().Err(err).Msg("[DEBUG] createOrder: calculateOrderItems failed")
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	log.Info().Int64("subtotal", subtotal).Int("items_count", len(items)).Msg("[DEBUG] createOrder: items calculated")
-
-	// 计算配送费（仅外卖订单）
-	// P1-017 fix: 默认且强制初始化为0，仅在外卖逻辑中通过服务端计算赋值
-	var deliveryFee int64 = 0
-	var deliveryDistance int32 = 0
-	var deliveryFeeDiscount int64 = 0
-	var deliveryDuration int32
-	if req.OrderType == OrderTypeTakeout && req.AddressID != nil {
-		// 获取用户地址
-		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusNotFound, errorResponse(errors.New("address not found")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		quote, err := logic.ComputeDeliveryQuote(ctx, logic.DeliveryQuoteInput{
-			UserID:    authPayload.UserID,
-			OrderType: req.OrderType,
-			Subtotal:  subtotal,
-			Merchant:  merchant,
-			Address:   address,
-		}, server.mapClient, func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
+		MapClient: server.mapClient,
+		DeliveryFeeCalculator: func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
 			feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, merchantID, distance, orderAmount)
 			if err != nil {
 				return logic.DeliveryFeeComputation{}, err
@@ -735,99 +574,9 @@ func (server *Server) createOrder(ctx *gin.Context) {
 				Suspended:     feeResult.DeliverySuspended,
 				SuspendReason: feeResult.SuspendReason,
 			}, nil
-		})
-		if err != nil {
-			if writeLogicRequestError(ctx, err) {
-				return
-			}
-			log.Error().Err(err).
-				Int64("merchant_id", req.MerchantID).
-				Int64("address_id", *req.AddressID).
-				Msg("createOrder: failed to compute delivery fee")
-			ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("failed to calculate delivery fee")))
-			return
-		}
-
-		deliveryDistance = quote.Distance
-		deliveryDuration = quote.Duration
-		deliveryFee = quote.Fee
-		deliveryFeeDiscount = quote.Discount
-	}
-
-	// 计算满减优惠
-	var discountAmount int64 = 0
-	if bestAmount, err := logic.GetBestDiscountAmount(ctx, server.store, req.MerchantID, subtotal); err == nil {
-		discountAmount = bestAmount
-	}
-
-	// ==================== 优惠券验证 ====================
-	var userVoucherID *int64
-	var voucherAmount int64 = 0
-
-	if req.UserVoucherID != nil {
-		voucherResult, err := logic.ValidateVoucher(ctx, server.store, logic.VoucherValidationInput{
-			UserID:        authPayload.UserID,
-			MerchantID:    req.MerchantID,
-			OrderType:     req.OrderType,
-			Subtotal:      subtotal,
-			UserVoucherID: req.UserVoucherID,
-		})
-		if err != nil {
-			if writeLogicRequestError(ctx, err) {
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		userVoucherID = voucherResult.UserVoucherID
-		voucherAmount = voucherResult.VoucherAmount
-	}
-
-	// 定金抵扣：预订定金到店点菜直接抵扣应付
-	var depositDeduction int64
-	if reservation != nil && reservation.PaymentMode == PaymentModeDeposit {
-		depositDeduction = reservation.DepositAmount
-	}
-
-	// ==================== 会员余额验证 ====================
-	var membershipID *int64
-	var balancePaid int64 = 0
-	var totalAmount int64 = 0
-	var membership *db.MerchantMembership
-
-	if req.UseBalance {
-		mem, err := logic.ValidateMembershipPayment(ctx, server.store, logic.MembershipPaymentInput{
-			UserID:             authPayload.UserID,
-			MerchantID:         req.MerchantID,
-			OrderType:          req.OrderType,
-			RulesEngineEnabled: server.config.RulesEngineEnabled,
-		})
-		if err != nil {
-			if writeLogicRequestError(ctx, err) {
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		membershipID = &mem.ID
-		membership = mem
-	}
-
-	membershipBalance := int64(0)
-	if membership != nil {
-		membershipBalance = membership.Balance
-	}
-
-	totals, err := logic.ComputeOrderTotals(logic.OrderTotalsInput{
-		Subtotal:            subtotal,
-		DiscountAmount:      discountAmount,
-		VoucherAmount:       voucherAmount,
-		DeliveryFee:         deliveryFee,
-		DeliveryFeeDiscount: deliveryFeeDiscount,
-		DepositDeduction:    depositDeduction,
-		MembershipBalance:   membershipBalance,
-		UseBalance:          req.UseBalance,
+		},
+		RiderAverageSpeed:  server.config.RiderAverageSpeed,
+		DefaultPrepareTime: server.config.DefaultPrepareTime,
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -836,193 +585,8 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	// 计算总金额（扣除优惠券后）
-	totalAmount = totals.TotalAmount
-	// 计算余额支付金额
-	balancePaid = totals.BalancePaid
 
-	// 外卖拒绝服务检查（仅外卖，不影响预订/堂食）
-	if req.OrderType == OrderTypeTakeout && !server.config.RulesEngineEnabled {
-		blocked, err := logic.CheckTakeoutBlocklist(ctx, server.store, authPayload.UserID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if blocked {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("外卖服务已被限制：该账号存在异常索赔记录")))
-			return
-		}
-	}
-
-	// 生成订单号
-	orderNo := generateOrderNo()
-
-	// 构建创建参数
-	arg := db.CreateOrderParams{
-		OrderNo:             orderNo,
-		UserID:              authPayload.UserID,
-		MerchantID:          req.MerchantID,
-		OrderType:           req.OrderType,
-		DeliveryFee:         deliveryFee,
-		Subtotal:            subtotal,
-		DiscountAmount:      discountAmount,
-		DeliveryFeeDiscount: deliveryFeeDiscount,
-		TotalAmount:         totalAmount,
-		Status:              OrderStatusPending,
-		FulfillmentStatus:   "scheduled",
-	}
-
-	if req.OrderType == OrderTypeTakeout || req.OrderType == OrderTypeTakeaway {
-		arg.PickupCode = pgtype.Text{String: generatePickupCode(), Valid: true}
-	}
-
-	// 设置可选字段
-	if req.AddressID != nil {
-		arg.AddressID = pgtype.Int8{Int64: *req.AddressID, Valid: true}
-	}
-	if deliveryDistance > 0 {
-		arg.DeliveryDistance = pgtype.Int4{Int32: deliveryDistance, Valid: true}
-	}
-	if deliveryDuration > 0 {
-		arg.DeliveryDuration = pgtype.Int4{Int32: deliveryDuration, Valid: true}
-	}
-	if req.TableID != nil {
-		arg.TableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
-	}
-	if req.ReservationID != nil {
-		arg.ReservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
-	}
-	if req.Notes != "" {
-		arg.Notes = pgtype.Text{String: req.Notes, Valid: true}
-	}
-
-	// 设置优惠券字段
-	if userVoucherID != nil {
-		arg.UserVoucherID = pgtype.Int8{Int64: *userVoucherID, Valid: true}
-	}
-	arg.VoucherAmount = voucherAmount
-
-	// 设置余额支付字段
-	if membershipID != nil {
-		arg.MembershipID = pgtype.Int8{Int64: *membershipID, Valid: true}
-	}
-	arg.BalancePaid = balancePaid
-
-	// 创建订单（使用事务，同时处理优惠券核销和余额扣减）
-	txResult, err := server.store.CreateOrderTx(ctx, db.CreateOrderTxParams{
-		CreateOrderParams:  arg,
-		Items:              items,
-		BillingGroupID:     req.BillingGroupID,
-		UserVoucherID:      userVoucherID,
-		VoucherAmount:      voucherAmount,
-		MembershipID:       membershipID,
-		BalancePaid:        balancePaid,
-		DeliveryDuration:   deliveryDuration,
-		RiderAverageSpeed:  server.config.RiderAverageSpeed,
-		DefaultPrepareTime: server.config.DefaultPrepareTime,
-	})
-	if err != nil {
-		// 处理特定错误
-		if errors.Is(err, fmt.Errorf("voucher already used")) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已被使用")))
-			return
-		}
-		if errors.Is(err, fmt.Errorf("voucher has expired")) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("优惠券已过期")))
-			return
-		}
-		if errors.Is(err, fmt.Errorf("insufficient balance")) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("会员余额不足")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	resp := newOrderResponse(txResult.Order)
-
-	// 分发订单支付超时任务 (30分钟后执行)
-	if server.taskDistributor != nil && txResult.Order.Status == OrderStatusPending {
-		_ = server.taskDistributor.DistributeTaskOrderPaymentTimeout(
-			ctx,
-			&worker.PayloadOrderPaymentTimeout{OrderID: txResult.Order.ID},
-			asynq.ProcessIn(worker.OrderPaymentTimeoutMinutes*time.Minute),
-		)
-	}
-
-	// 堂食扫码点餐：若用户在外卖拒绝服务名单中，实时提醒商户后台
-	if req.OrderType == OrderTypeDineIn && server.wsHub != nil {
-		if server.config.RulesEngineEnabled && ruleDecision.Action == "alert" {
-			message := ruleDecision.Reason
-			if message == "" {
-				message = "该顾客有多次恶意索赔记录，谨慎服务"
-			}
-			alertPayload, _ := json.Marshal(map[string]any{
-				"user_id":  authPayload.UserID,
-				"order_id": txResult.Order.ID,
-				"order_no": txResult.Order.OrderNo,
-				"message":  message,
-			})
-			server.wsHub.SendToMerchant(req.MerchantID, websocket.Message{
-				Type:      "merchant_user_risk_alert",
-				Data:      alertPayload,
-				Timestamp: time.Now(),
-			})
-		} else {
-			block, err := server.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
-				EntityType: "user",
-				EntityID:   authPayload.UserID,
-			})
-			if err == nil {
-				alertPayload, _ := json.Marshal(map[string]any{
-					"user_id":     authPayload.UserID,
-					"order_id":    txResult.Order.ID,
-					"order_no":    txResult.Order.OrderNo,
-					"reason_code": block.ReasonCode,
-					"message":     "该顾客有多次恶意索赔记录，谨慎服务",
-				})
-				server.wsHub.SendToMerchant(req.MerchantID, websocket.Message{
-					Type:      "merchant_user_risk_alert",
-					Data:      alertPayload,
-					Timestamp: time.Now(),
-				})
-			}
-		}
-	}
-
-	// 绑定用餐会话的活跃订单（失败不影响下单返回，但记录日志）
-	if diningSession != nil {
-		if err := logic.BindDiningSessionActiveOrder(ctx, server.store, diningSession.ID, txResult.Order.ID); err != nil {
-			log.Warn().Err(err).
-				Int64("session_id", diningSession.ID).
-				Int64("order_id", txResult.Order.ID).
-				Msg("createOrder: failed to bind dining session active order")
-		}
-	}
-
-	// 清空堂食/预订购物车（外卖保留移除已支付商品逻辑）
-	if req.OrderType == OrderTypeDineIn || req.OrderType == OrderTypeReservation {
-		_ = logic.ClearDiningOrderCart(ctx, server.store, logic.ClearDiningOrderCartInput{
-			UserID:        authPayload.UserID,
-			MerchantID:    req.MerchantID,
-			OrderType:     req.OrderType,
-			TableID:       req.TableID,
-			ReservationID: req.ReservationID,
-		})
-	}
-
-	// 调度订单支付超时任务：对于仍处于 pending 状态（需在线支付）的订单
-	// 30分钟后自动取消
-	if txResult.Order.Status == OrderStatusPending && server.taskDistributor != nil {
-		timeoutAt := time.Now().Add(worker.OrderPaymentTimeoutMinutes * time.Minute)
-		_ = server.taskDistributor.DistributeTaskOrderPaymentTimeout(
-			ctx,
-			&worker.PayloadOrderPaymentTimeout{OrderID: txResult.Order.ID},
-			asynq.ProcessAt(timeoutAt),
-		)
-	}
-
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, newOrderResponse(result.Order))
 }
 
 // validateOrderTypeFields 验证订单类型与关联字段
@@ -1098,32 +662,27 @@ func (server *Server) getOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	service := server.orderQuerySvc
+	if service == nil {
+		service = server.buildOrderQueryService()
+	}
 
-	// 使用 JOIN 查询，一次获取订单 + 商户信息 + 配送地址
-	order, err := server.store.GetOrderWithDetails(ctx, req.ID)
+	result, err := service.GetUserOrder(ctx, logic.GetUserOrderQueryInput{
+		UserID:  authPayload.UserID,
+		OrderID: req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证订单属于当前用户
-	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to you")))
-		return
-	}
-
-	// 获取订单明细
-	items, err := server.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	order := result.Order
 
 	resp := newOrderWithDetailsResponse(order)
+	items := result.Items
 	resp.Items = make([]orderItemResponse, len(items))
 	for i, item := range items {
 		resp.Items[i] = orderItemResponse{
@@ -1251,35 +810,34 @@ func (server *Server) listOrders(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	service := server.orderQuerySvc
+	if service == nil {
+		service = server.buildOrderQueryService()
+	}
 
-	offset := pageOffset(req.PageID, req.PageSize)
-
-	status := pgtype.Text{}
+	var status *string
 	if req.Status != "" {
-		status = pgtype.Text{String: req.Status, Valid: true}
+		status = &req.Status
 	}
-	orderType := pgtype.Text{}
+	var orderType *string
 	if req.OrderType != "" {
-		orderType = pgtype.Text{String: req.OrderType, Valid: true}
-	}
-	reservationID := pgtype.Int8{}
-	if req.ReservationID != nil {
-		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+		orderType = &req.OrderType
 	}
 
-	orders, err := server.store.ListOrdersByUserWithFilters(ctx, db.ListOrdersByUserWithFiltersParams{
+	result, err := service.ListUserOrders(ctx, logic.ListUserOrdersQueryInput{
 		UserID:        authPayload.UserID,
 		Status:        status,
 		OrderType:     orderType,
-		ReservationID: reservationID,
-		Limit:         req.PageSize,
-		Offset:        offset,
+		ReservationID: req.ReservationID,
+		PageID:        req.PageID,
+		PageSize:      req.PageSize,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
+	orders := result.Orders
 	resp := make([]orderResponse, len(orders))
 	for i, o := range orders {
 		resp[i] = newOrderWithMerchantFromFilterResponse(o)
@@ -1333,7 +891,7 @@ func (server *Server) cancelOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	result, err := logic.CancelOrder(ctx, server.store, logic.CancelOrderInput{
+	result, err := server.orderCommandSvc.CancelOrder(ctx, logic.CancelOrderInput{
 		UserID:  authPayload.UserID,
 		OrderID: uriReq.ID,
 		Reason:  bodyReq.Reason,
@@ -1389,7 +947,7 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	result, err := logic.UrgeOrder(ctx, server.store, logic.UrgeOrderInput{
+	result, err := server.orderCommandSvc.UrgeOrder(ctx, logic.UrgeOrderInput{
 		UserID:          authPayload.UserID,
 		OrderID:         uriReq.ID,
 		RateLimitWindow: time.Duration(UrgeOrderRateLimitWindowSeconds) * time.Second,
@@ -1467,31 +1025,12 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	result, err := logic.ReplaceReservationOrder(
-		ctx,
-		server.store,
-		server.paymentClient,
-		logic.ReplaceOrderInput{
-			UserID:  authPayload.UserID,
-			OrderID: uriReq.ID,
-			Items:   toOrderItemInputs(req.Items),
-			Notes:   req.Notes,
-		},
-		func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
-			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID, customizations)
-			if err != nil {
-				return nil, 0, err
-			}
-			if len(normalized) == 0 {
-				return nil, extra, nil
-			}
-			data, err := json.Marshal(normalized)
-			if err != nil {
-				return nil, 0, err
-			}
-			return data, extra, nil
-		},
-	)
+	result, err := server.orderCommandSvc.ReplaceOrder(ctx, logic.ReplaceOrderInput{
+		UserID:  authPayload.UserID,
+		OrderID: uriReq.ID,
+		Items:   toOrderItemInputs(req.Items),
+		Notes:   req.Notes,
+	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
 			return
@@ -1537,7 +1076,7 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	result, err := logic.ConfirmTakeoutOrder(ctx, server.store, logic.ConfirmOrderInput{
+	result, err := server.orderCommandSvc.ConfirmOrder(ctx, logic.ConfirmOrderInput{
 		UserID:  authPayload.UserID,
 		OrderID: req.ID,
 	})
@@ -1668,41 +1207,28 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 		merchant = value
 	}
 
-	offset := pageOffset(req.PageID, req.PageSize)
-
-	var orders []db.Order
-	var totalCount int64
-	var err error
-
-	if req.Status != "" {
-		orders, err = server.store.ListOrdersByMerchantAndStatus(ctx, db.ListOrdersByMerchantAndStatusParams{
-			MerchantID: merchant.ID,
-			Status:     req.Status,
-			Limit:      req.PageSize,
-			Offset:     offset,
-		})
-		if err == nil {
-			totalCount, err = server.store.CountOrdersByMerchantAndStatus(ctx, db.CountOrdersByMerchantAndStatusParams{
-				MerchantID: merchant.ID,
-				Status:     req.Status,
-			})
-		}
-	} else {
-		orders, err = server.store.ListOrdersByMerchant(ctx, db.ListOrdersByMerchantParams{
-			MerchantID: merchant.ID,
-			Limit:      req.PageSize,
-			Offset:     offset,
-		})
-		if err == nil {
-			totalCount, err = server.store.CountOrdersByMerchant(ctx, merchant.ID)
-		}
+	service := server.orderQuerySvc
+	if service == nil {
+		service = server.buildOrderQueryService()
 	}
 
+	var status *string
+	if req.Status != "" {
+		status = &req.Status
+	}
+
+	result, err := service.ListMerchantOrders(ctx, logic.ListMerchantOrdersQueryInput{
+		MerchantID: merchant.ID,
+		Status:     status,
+		PageID:     req.PageID,
+		PageSize:   req.PageSize,
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
+	orders := result.Orders
 	resp := make([]orderResponse, len(orders))
 	for i, o := range orders {
 		resp[i] = newOrderResponse(o)
@@ -1710,8 +1236,8 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
 		Orders:     resp,
-		TotalCount: totalCount,
-		Total:      totalCount,
+		TotalCount: result.TotalCount,
+		Total:      result.TotalCount,
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,
 	})
@@ -1762,43 +1288,43 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		merchant = value
 	}
 
-	order, err := server.store.GetOrder(ctx, req.ID)
+	service := server.orderQuerySvc
+	if service == nil {
+		service = server.buildOrderQueryService()
+	}
+
+	result, err := service.GetMerchantOrder(ctx, logic.GetMerchantOrderQueryInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("order not found")))
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Status == http.StatusForbidden && reqErr.Err != nil && reqErr.Err.Error() == "order does not belong to your merchant" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "merchant_resource_access_denied",
+				TargetType:  "order",
+				TargetID:    &req.ID,
+				RegionID:    &merchant.RegionID,
+				Metadata: map[string]any{
+					"reason":      "order_not_belong_to_merchant",
+					"merchant_id": merchant.ID,
+					"order_id":    req.ID,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 验证订单属于当前商户
-	if order.MerchantID != merchant.ID {
-		server.writeAuditLog(ctx, AuditLogInput{
-			ActorUserID: authPayload.UserID,
-			ActorRole:   "merchant",
-			Action:      "merchant_resource_access_denied",
-			TargetType:  "order",
-			TargetID:    &order.ID,
-			RegionID:    &merchant.RegionID,
-			Metadata: map[string]any{
-				"reason":      "order_not_belong_to_merchant",
-				"merchant_id": merchant.ID,
-				"order_id":    order.ID,
-			},
-		})
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("order does not belong to your merchant")))
-		return
-	}
-
-	// 获取订单明细
-	items, err := server.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	order := result.Order
 
 	resp := newOrderResponse(order)
+	items := result.Items
 	resp.Items = make([]orderItemResponse, len(items))
 	for i, item := range items {
 		resp.Items[i] = orderItemResponse{
@@ -1871,7 +1397,12 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 		merchant = value
 	}
 
-	result, err := logic.AcceptMerchantOrder(ctx, server.store, logic.MerchantOrderUpdateInput{
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
+	}
+
+	result, err := service.AcceptMerchantOrder(ctx, logic.MerchantOrderUpdateInput{
 		MerchantID: merchant.ID,
 		OrderID:    req.ID,
 		OperatorID: authPayload.UserID,
@@ -1900,24 +1431,6 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 		return
 	}
 	updatedOrder := result.Order
-
-	// 📢 M14: 异步发送订单接单通知
-	expiresAt := time.Now().Add(24 * time.Hour)
-	_ = server.SendNotification(ctx, SendNotificationParams{
-		UserID:      updatedOrder.UserID,
-		Type:        "order",
-		Title:       "商家已接单",
-		Content:     fmt.Sprintf("您的订单%s已被商家接单，正在准备中", updatedOrder.OrderNo),
-		RelatedType: "order",
-		RelatedID:   updatedOrder.ID,
-		ExtraData: map[string]any{
-			"order_no": updatedOrder.OrderNo,
-			"status":   OrderStatusPreparing,
-		},
-		ExpiresAt: &expiresAt,
-	})
-
-	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
 
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
@@ -1994,7 +1507,12 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 		merchant = value
 	}
 
-	result, err := logic.RejectMerchantOrder(ctx, server.store, logic.MerchantOrderUpdateInput{
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
+	}
+
+	result, err := service.RejectMerchantOrder(ctx, logic.MerchantOrderUpdateInput{
 		MerchantID: merchant.ID,
 		OrderID:    uriReq.ID,
 		OperatorID: authPayload.UserID,
@@ -2041,8 +1559,6 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 		},
 		ExpiresAt: &expiresAt,
 	})
-
-	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
 
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
@@ -2120,7 +1636,12 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 		merchant = value
 	}
 
-	result, err := logic.MarkMerchantOrderReady(ctx, server.store, logic.MerchantOrderUpdateInput{
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
+	}
+
+	result, err := service.MarkMerchantOrderReady(ctx, logic.MerchantOrderUpdateInput{
 		MerchantID: merchant.ID,
 		OrderID:    req.ID,
 		OperatorID: authPayload.UserID,
@@ -2165,8 +1686,6 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 		},
 		ExpiresAt: &expiresAt,
 	})
-
-	server.pushMerchantOrderSnapshot(ctx, merchant.ID, updatedOrder, "order_update")
 
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
@@ -2231,7 +1750,12 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 		merchant = value
 	}
 
-	result, err := logic.CompleteMerchantOrder(ctx, server.store, logic.MerchantOrderUpdateInput{
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
+	}
+
+	result, err := service.CompleteMerchantOrder(ctx, logic.MerchantOrderUpdateInput{
 		MerchantID: merchant.ID,
 		OrderID:    req.ID,
 		OperatorID: authPayload.UserID,
@@ -2260,8 +1784,6 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 		},
 		ExpiresAt: &expiresAt,
 	})
-
-	server.pushMerchantOrderSnapshot(ctx, merchant.ID, completedOrder, "order_update")
 
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
@@ -2364,15 +1886,22 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 	// 结束日期包含整天
 	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
 
-	stats, err := server.store.GetOrderStats(ctx, db.GetOrderStatsParams{
+	service := server.orderQuerySvc
+	if service == nil {
+		service = server.buildOrderQueryService()
+	}
+
+	result, err := service.GetMerchantOrderStats(ctx, logic.GetMerchantOrderStatsQueryInput{
 		MerchantID: merchant.ID,
-		StartAt:    startDate,
-		EndAt:      endDate,
+		StartDate:  startDate,
+		EndDate:    endDate,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+
+	stats := result.Stats
 
 	ctx.JSON(http.StatusOK, orderStatsResponse{
 		PendingCount:    stats.PendingCount,
@@ -2465,11 +1994,13 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 
 	// 获取当前用户
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	result, err := logic.CalculateOrderPreview(
-		ctx,
-		server.store,
-		server.mapClient,
-		logic.OrderCalculationInput{
+	service := server.orderQuerySvc
+	if service == nil {
+		service = server.buildOrderQueryService()
+	}
+
+	result, err := service.CalculateOrderPreview(ctx, logic.CalculateOrderPreviewInput{
+		OrderCalculationInput: logic.OrderCalculationInput{
 			UserID:        authPayload.UserID,
 			MerchantID:    req.MerchantID,
 			OrderType:     req.OrderType,
@@ -2479,7 +2010,8 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 			UserVoucherID: req.UserVoucherID,
 			VoucherCode:   req.VoucherCode,
 		},
-		func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
+		MapClient: server.mapClient,
+		Normalize: func(_ context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
 			normalized, extra, _, err := server.normalizeDishCustomizations(ctx, dishID, customizations)
 			if err != nil {
 				return nil, 0, err
@@ -2493,7 +2025,7 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 			}
 			return data, extra, nil
 		},
-		func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
+		CalculateFee: func(ctx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
 			feeResult, err := server.calculateDeliveryFeeInternal(ctx, regionID, merchantID, distance, orderAmount)
 			if err != nil {
 				return logic.DeliveryFeeComputation{}, err
@@ -2503,7 +2035,7 @@ func (server *Server) calculateOrder(ctx *gin.Context) {
 				Discount: feeResult.PromotionDiscount,
 			}, nil
 		},
-	)
+	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
 			return

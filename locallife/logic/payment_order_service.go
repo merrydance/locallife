@@ -59,6 +59,36 @@ type CreatePaymentOrderResult struct {
 	PayParams    *wechat.JSAPIPayParams
 }
 
+type GetPaymentOrderInput struct {
+	UserID         int64
+	PaymentOrderID int64
+}
+
+type GetPaymentOrderResult struct {
+	PaymentOrder db.PaymentOrder
+}
+
+type ListPaymentOrdersInput struct {
+	UserID   int64
+	OrderID  *int64
+	PageID   int32
+	PageSize int32
+}
+
+type ListPaymentOrdersResult struct {
+	PaymentOrders []db.PaymentOrder
+	TotalCount    int64
+}
+
+type ClosePaymentOrderInput struct {
+	UserID         int64
+	PaymentOrderID int64
+}
+
+type ClosePaymentOrderResult struct {
+	PaymentOrder db.PaymentOrder
+}
+
 // CreatePaymentOrder validates and creates a payment order.
 func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input CreatePaymentOrderInput) (CreatePaymentOrderResult, error) {
 	var result CreatePaymentOrderResult
@@ -222,6 +252,91 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	}
 
 	return result, nil
+}
+
+func (svc *PaymentOrderService) GetPaymentOrder(ctx context.Context, input GetPaymentOrderInput) (GetPaymentOrderResult, error) {
+	paymentOrder, err := svc.store.GetPaymentOrder(ctx, input.PaymentOrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return GetPaymentOrderResult{}, NewRequestError(http.StatusNotFound, errors.New("payment order not found"))
+		}
+		return GetPaymentOrderResult{}, err
+	}
+
+	if paymentOrder.UserID != input.UserID {
+		return GetPaymentOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("payment order does not belong to you"))
+	}
+
+	return GetPaymentOrderResult{PaymentOrder: paymentOrder}, nil
+}
+
+func (svc *PaymentOrderService) ListPaymentOrders(ctx context.Context, input ListPaymentOrdersInput) (ListPaymentOrdersResult, error) {
+	pageID := input.PageID
+	pageSize := input.PageSize
+	if pageID == 0 {
+		pageID = 1
+	}
+	if pageSize == 0 {
+		pageSize = 10
+	}
+
+	if input.OrderID != nil {
+		payment, err := svc.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: *input.OrderID, Valid: true},
+			BusinessType: businessTypeOrder,
+		})
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				return ListPaymentOrdersResult{PaymentOrders: []db.PaymentOrder{}, TotalCount: 0}, nil
+			}
+			return ListPaymentOrdersResult{}, err
+		}
+		if payment.UserID != input.UserID {
+			return ListPaymentOrdersResult{PaymentOrders: []db.PaymentOrder{}, TotalCount: 0}, nil
+		}
+		return ListPaymentOrdersResult{PaymentOrders: []db.PaymentOrder{payment}, TotalCount: 1}, nil
+	}
+
+	offset := (pageID - 1) * pageSize
+	paymentOrders, err := svc.store.ListPaymentOrdersByUser(ctx, db.ListPaymentOrdersByUserParams{
+		UserID: input.UserID,
+		Limit:  pageSize,
+		Offset: offset,
+	})
+	if err != nil {
+		return ListPaymentOrdersResult{}, err
+	}
+
+	return ListPaymentOrdersResult{PaymentOrders: paymentOrders, TotalCount: int64(len(paymentOrders))}, nil
+}
+
+func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input ClosePaymentOrderInput) (ClosePaymentOrderResult, error) {
+	paymentOrder, err := svc.store.GetPaymentOrder(ctx, input.PaymentOrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return ClosePaymentOrderResult{}, NewRequestError(http.StatusNotFound, errors.New("payment order not found"))
+		}
+		return ClosePaymentOrderResult{}, err
+	}
+
+	if paymentOrder.UserID != input.UserID {
+		return ClosePaymentOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("payment order does not belong to you"))
+	}
+
+	if paymentOrder.Status != paymentStatusPending {
+		return ClosePaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("only pending payment orders can be closed"))
+	}
+
+	updatedPayment, err := svc.store.UpdatePaymentOrderToClosed(ctx, input.PaymentOrderID)
+	if err != nil {
+		return ClosePaymentOrderResult{}, err
+	}
+
+	if svc.paymentClient != nil && paymentOrder.PrepayID.Valid {
+		_ = svc.paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo)
+	}
+
+	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
 }
 
 func generateOutTradeNo() string {

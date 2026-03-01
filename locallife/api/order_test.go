@@ -1534,9 +1534,9 @@ func TestRejectOrderAPI(t *testing.T) {
 				rejectedOrder := paidOrder
 				rejectedOrder.Status = "cancelled"
 				store.EXPECT().
-					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					CancelOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.UpdateOrderStatusTxResult{Order: rejectedOrder}, nil)
+					Return(db.CancelOrderTxResult{Order: rejectedOrder}, nil)
 
 				store.EXPECT().
 					GetUserNotificationPreferences(gomock.Any(), rejectedOrder.UserID).

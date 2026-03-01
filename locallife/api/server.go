@@ -33,24 +33,28 @@ type MessageResponse struct {
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
-	config            util.Config
-	store             db.Store
-	tokenMaker        token.Maker
-	auditWriter       AuditWriter
-	wechatClient      wechat.WechatClient
-	paymentClient     wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
-	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
-	dataEncryptor     util.DataEncryptor              // 敏感数据加密器（本地存储加密）
-	mapClient         maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
-	weatherCache      weather.WeatherCache
-	taskDistributor   worker.TaskDistributor
-	wsHub             *websocket.Hub           // WebSocket连接管理（骑手和商户）
-	wsPubSub          *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
-	deliveryBroadcast *logic.DeliveryBroadcastLogic
-	rateLimiter       *RateLimiter
-	rulesEngine       rules.Engine
-	routeService      *logic.RouteService
-	router            *gin.Engine
+	config             util.Config
+	store              db.Store
+	tokenMaker         token.Maker
+	auditWriter        AuditWriter
+	wechatClient       wechat.WechatClient
+	paymentClient      wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
+	ecommerceClient    wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
+	dataEncryptor      util.DataEncryptor              // 敏感数据加密器（本地存储加密）
+	mapClient          maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
+	weatherCache       weather.WeatherCache
+	taskDistributor    worker.TaskDistributor
+	wsHub              *websocket.Hub           // WebSocket连接管理（骑手和商户）
+	wsPubSub           *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	deliveryBroadcast  *logic.DeliveryBroadcastLogic
+	rateLimiter        *RateLimiter
+	rulesEngine        rules.Engine
+	routeService       *logic.RouteService
+	orderCommandSvc    logic.OrderCommandService
+	orderQuerySvc      logic.OrderQueryService
+	paymentFacade      logic.PaymentFacade
+	refundOrchestrator logic.RefundOrchestrator
+	router             *gin.Engine
 }
 
 // SetPaymentClientForTest injects a payment client in tests.
@@ -207,6 +211,10 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		wsPubSub:        wsPubSub,
 		rulesEngine:     engine,
 	}
+	server.orderCommandSvc = server.buildOrderCommandService()
+	server.orderQuerySvc = server.buildOrderQueryService()
+	server.paymentFacade = server.buildPaymentFacade()
+	server.refundOrchestrator = server.buildRefundOrchestrator()
 
 	if wsPubSub != nil {
 		server.deliveryBroadcast = logic.NewDeliveryBroadcastLogic(store, wsPubSub.GetRedisClient())
