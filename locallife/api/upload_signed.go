@@ -220,6 +220,11 @@ func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized 
 
 	switch entityType {
 	case "merchants":
+		// uploads/merchants/{userID}/... 目录以调用者的 userID 命名，
+		// 用户本人始终有权访问自己上传的文件（申请阶段及审批后均适用）
+		if entityID == uid {
+			return true, nil
+		}
 		allowed, err := server.canAccessMerchantUpload(ctx, uid, entityID)
 		if err != nil {
 			return false, err
@@ -232,6 +237,10 @@ func (server *Server) canSignUploadPath(ctx *gin.Context, uid int64, normalized 
 		}
 		return false, nil
 	case "riders":
+		// uploads/riders/{userID}/... 目录也以 userID 命名，用户本人始终有权限
+		if entityID == uid {
+			return true, nil
+		}
 		allowed, err := server.canAccessRiderUpload(ctx, uid, entityID)
 		if err != nil {
 			return false, err
