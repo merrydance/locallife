@@ -1323,6 +1323,9 @@ func (server *Server) recordSearchKeyword(userID int64, keyword, ktype string) {
 	if keyword == "" {
 		return
 	}
+	if gin.Mode() == gin.TestMode {
+		return
+	}
 	go func() {
 		ctx := context.Background()
 		// 记录用户历史（upsert）

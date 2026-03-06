@@ -3,10 +3,13 @@ package logic
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQueryInput) (GetUserOrderQueryResult, error) {
@@ -27,10 +30,53 @@ func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQuery
 		return GetUserOrderQueryResult{}, err
 	}
 
+	etaMinutes, estimatedDeliveryAt := s.buildGetUserOrderDeliveryETA(ctx, order)
+
 	return GetUserOrderQueryResult{
-		Order: order,
-		Items: items,
+		Order:               order,
+		Items:               items,
+		DeliveryEtaMinutes:  etaMinutes,
+		EstimatedDeliveryAt: estimatedDeliveryAt,
 	}, nil
+}
+
+func (s *OrderService) buildGetUserOrderDeliveryETA(ctx context.Context, order db.GetOrderWithDetailsRow) (*int32, *time.Time) {
+	if order.OrderType != "takeout" || order.Status == db.OrderStatusCancelled {
+		return nil, nil
+	}
+
+	delivery, err := s.store.GetDeliveryByOrderID(ctx, order.ID)
+	if err == nil {
+		if delivery.EstimatedDeliveryAt.Valid {
+			estimatedAt := delivery.EstimatedDeliveryAt.Time
+			delta := time.Until(estimatedAt)
+			eta := int32(math.Ceil(delta.Minutes()))
+			if eta < 0 {
+				eta = 0
+			}
+			return &eta, &estimatedAt
+		}
+
+		distance := ExtractDistance(delivery.Distance, order.DeliveryDistance)
+		eta := ComputeDeliveryETA(ctx, s.store, order.MerchantID, distance, EstimateDurationSecByDistance(distance))
+		estimatedAt := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
+		etaMinutes := eta.DeliveryEtaMinutes
+		return &etaMinutes, &estimatedAt
+	}
+
+	distance := ExtractDistance(0, order.DeliveryDistance)
+	if distance > 0 {
+		eta := ComputeDeliveryETA(ctx, s.store, order.MerchantID, distance, EstimateDurationSecByDistance(distance))
+		estimatedAt := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
+		etaMinutes := eta.DeliveryEtaMinutes
+		return &etaMinutes, &estimatedAt
+	}
+
+	if !errors.Is(err, db.ErrRecordNotFound) {
+		log.Warn().Err(err).Int64("order_id", order.ID).Msg("get delivery by order failed")
+	}
+
+	return nil, nil
 }
 
 func (s *OrderService) ListUserOrders(ctx context.Context, input ListUserOrdersQueryInput) (ListUserOrdersQueryResult, error) {

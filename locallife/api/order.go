@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"math"
 	"net/http"
 	"time"
 
@@ -13,11 +11,8 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/websocket"
-	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 )
 
@@ -277,57 +272,22 @@ func newOrderResponse(o db.Order) orderResponse {
 	return resp
 }
 
-func (server *Server) buildOrderSnapshotWithItems(ctx *gin.Context, order db.Order) (orderResponse, error) {
-	items, err := server.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+func (server *Server) requireMerchantForOrder(ctx *gin.Context, userID int64) (db.Merchant, bool) {
+	if merchant, ok := GetMerchantFromContext(ctx); ok {
+		return merchant, true
+	}
+
+	merchant, err := server.store.GetMerchantByOwner(ctx, userID)
 	if err != nil {
-		return orderResponse{}, err
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		}
+		return db.Merchant{}, false
 	}
 
-	resp := newOrderResponse(order)
-	resp.Items = make([]orderItemResponse, len(items))
-	for i, item := range items {
-		resp.Items[i] = orderItemResponse{
-			ID:        item.ID,
-			Name:      item.Name,
-			UnitPrice: item.UnitPrice,
-			Quantity:  item.Quantity,
-			Subtotal:  item.Subtotal,
-		}
-		if item.DishID.Valid {
-			resp.Items[i].DishID = &item.DishID.Int64
-		}
-		if item.ComboID.Valid {
-			resp.Items[i].ComboID = &item.ComboID.Int64
-		}
-		if item.DishImageUrl.Valid {
-			img := normalizeUploadURLForClient(item.DishImageUrl.String)
-			resp.Items[i].ImageURL = &img
-		}
-		if item.Customizations != nil {
-			json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
-		}
-	}
-
-	return resp, nil
-}
-
-func (server *Server) pushMerchantOrderSnapshot(ctx *gin.Context, merchantID int64, order db.Order, msgType string) {
-	if server.wsHub == nil {
-		return
-	}
-
-	resp, err := server.buildOrderSnapshotWithItems(ctx, order)
-	if err != nil {
-		log.Warn().Err(err).Int64("order_id", order.ID).Msg("build order snapshot failed")
-		resp = newOrderResponse(order)
-	}
-
-	payload, _ := json.Marshal(resp)
-	server.wsHub.SendToMerchant(merchantID, websocket.Message{
-		Type:      msgType,
-		Data:      payload,
-		Timestamp: time.Now(),
-	})
+	return merchant, true
 }
 
 // newOrderWithDetailsResponse 用于订单详情，包含商户信息和配送地址
@@ -706,42 +666,8 @@ func (server *Server) getOrder(ctx *gin.Context) {
 			json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
 		}
 	}
-
-	// 获取配送预计到达时间用于前端展示 ETA 时间段
-	if order.OrderType == OrderTypeTakeout && order.Status != OrderStatusCancelled {
-		// 先尝试已有配送单的精确时间
-		if delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID); err == nil {
-			if delivery.EstimatedDeliveryAt.Valid {
-				resp.EstimatedDeliveryAt = &delivery.EstimatedDeliveryAt.Time
-				delta := time.Until(delivery.EstimatedDeliveryAt.Time)
-				eta := int32(math.Ceil(delta.Minutes()))
-				if eta < 0 {
-					eta = 0
-				}
-				resp.DeliveryEtaMinutes = &eta
-			} else {
-				// 无精确送达时间时根据距离估算 ETA，避免前端空白
-				distance := logic.ExtractDistance(delivery.Distance, order.DeliveryDistance)
-				eta := logic.ComputeDeliveryETA(ctx, server.store, order.MerchantID, distance, logic.EstimateDurationSecByDistance(distance))
-				resp.DeliveryEtaMinutes = &eta.DeliveryEtaMinutes
-				est := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
-				resp.EstimatedDeliveryAt = &est
-			}
-		} else {
-			// 未生成配送单（如待支付）也给出基于距离的预计时间
-			distance := logic.ExtractDistance(0, order.DeliveryDistance)
-			if distance > 0 {
-				eta := logic.ComputeDeliveryETA(ctx, server.store, order.MerchantID, distance, logic.EstimateDurationSecByDistance(distance))
-				resp.DeliveryEtaMinutes = &eta.DeliveryEtaMinutes
-				est := time.Now().Add(time.Duration(eta.DeliveryEtaMinutes) * time.Minute)
-				resp.EstimatedDeliveryAt = &est
-			}
-			// err 在此分支恒为非 nil，记录非 NotFound 的情况
-			if !isNotFoundError(err) {
-				log.Warn().Err(err).Int64("order_id", order.ID).Msg("get delivery by order failed")
-			}
-		}
-	}
+	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
+	resp.EstimatedDeliveryAt = result.EstimatedDeliveryAt
 
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -904,20 +830,6 @@ func (server *Server) cancelOrder(ctx *gin.Context) {
 		return
 	}
 
-	if result.Refund != nil && server.taskDistributor != nil {
-		err = server.taskDistributor.DistributeTaskProcessRefund(ctx, &worker.PayloadProcessRefund{
-			PaymentOrderID: result.Refund.PaymentOrderID,
-			OrderID:        result.Order.ID,
-			RefundAmount:   result.Refund.Amount,
-			Reason:         result.Refund.Reason,
-		})
-		if err != nil {
-			log.Error().Err(err).Int64("order_id", result.Order.ID).Msg("failed to distribute refund task")
-		}
-	}
-
-	server.pushMerchantOrderSnapshot(ctx, result.Order.MerchantID, result.Order, "order_update")
-
 	ctx.JSON(http.StatusOK, newOrderResponse(result.Order))
 }
 
@@ -963,28 +875,6 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 	}
 
 	order := result.Order
-
-	if result.NotifyMerchant {
-		_ = server.SendNotification(ctx, SendNotificationParams{
-			UserID:      order.MerchantID,
-			Title:       "用户催单提醒",
-			Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快处理", order.OrderNo),
-			Type:        "order_urge",
-			RelatedType: "order",
-			RelatedID:   order.ID,
-		})
-	}
-
-	if result.RiderID != nil {
-		_ = server.SendNotification(ctx, SendNotificationParams{
-			UserID:      *result.RiderID,
-			Title:       "用户催单提醒",
-			Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快送达", order.OrderNo),
-			Type:        "order_urge",
-			RelatedType: "order",
-			RelatedID:   order.ID,
-		})
-	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"message":  "urge notification sent",
@@ -1094,41 +984,6 @@ func (server *Server) confirmOrder(ctx *gin.Context) {
 		return
 	}
 
-	// 发送通知给商户和骑手
-	_ = server.SendNotification(ctx, SendNotificationParams{
-		UserID:      order.MerchantID,
-		Title:       "订单已完成",
-		Content:     fmt.Sprintf("订单 %s 用户已确认收货", order.OrderNo),
-		Type:        "order_completed",
-		RelatedType: "order",
-		RelatedID:   order.ID,
-	})
-
-	if result.RiderID != nil {
-		_ = server.SendNotification(ctx, SendNotificationParams{
-			UserID:      *result.RiderID,
-			Title:       "配送已完成",
-			Content:     fmt.Sprintf("订单 %s 用户已确认收货", order.OrderNo),
-			Type:        "delivery_completed",
-			RelatedType: "order",
-			RelatedID:   order.ID,
-		})
-	}
-
-	// 完成触发分账（若是 profit_sharing）
-	if server.taskDistributor != nil {
-		po, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-			BusinessType: "order",
-		})
-		if err == nil && po.Status == "paid" && po.PaymentType == "profit_sharing" {
-			_ = server.taskDistributor.DistributeTaskProcessProfitSharing(ctx, &worker.ProfitSharingPayload{
-				PaymentOrderID: po.ID,
-				OrderID:        order.ID,
-			})
-		}
-	}
-
 	ctx.JSON(http.StatusOK, newOrderResponse(order))
 }
 
@@ -1193,18 +1048,9 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, ok := GetMerchantFromContext(ctx)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
 	if !ok {
-		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		merchant = value
+		return
 	}
 
 	service := server.orderQuerySvc
@@ -1274,18 +1120,9 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, ok := GetMerchantFromContext(ctx)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
 	if !ok {
-		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		merchant = value
+		return
 	}
 
 	service := server.orderQuerySvc
@@ -1383,18 +1220,9 @@ func (server *Server) acceptOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, ok := GetMerchantFromContext(ctx)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
 	if !ok {
-		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		merchant = value
+		return
 	}
 
 	service := server.orderCommandSvc
@@ -1493,18 +1321,9 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, ok := GetMerchantFromContext(ctx)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
 	if !ok {
-		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		merchant = value
+		return
 	}
 
 	service := server.orderCommandSvc
@@ -1543,23 +1362,6 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 	}
 	updatedOrder := result.Order
 
-	// 📢 M14: 异步发送拒单通知
-	expiresAt := time.Now().Add(24 * time.Hour)
-	_ = server.SendNotification(ctx, SendNotificationParams{
-		UserID:      updatedOrder.UserID,
-		Type:        "order",
-		Title:       "订单被商家取消",
-		Content:     fmt.Sprintf("您的订单%s已被商家取消，原因：%s。支付金额将原路退回", updatedOrder.OrderNo, bodyReq.Reason),
-		RelatedType: "order",
-		RelatedID:   updatedOrder.ID,
-		ExtraData: map[string]any{
-			"order_no": updatedOrder.OrderNo,
-			"status":   OrderStatusCancelled,
-			"reason":   bodyReq.Reason,
-		},
-		ExpiresAt: &expiresAt,
-	})
-
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
 		ActorRole:   "merchant",
@@ -1575,18 +1377,6 @@ func (server *Server) rejectOrder(ctx *gin.Context) {
 			"reason":      bodyReq.Reason,
 		},
 	})
-
-	refundResult, err := logic.ProcessMerchantRejectRefund(ctx, server.store, server.paymentClient, logic.MerchantRejectRefundInput{
-		OrderID: updatedOrder.ID,
-		Reason:  bodyReq.Reason,
-	})
-	if err != nil {
-		if refundResult.RefundOrder != nil {
-			log.Error().Err(err).Int64("refund_order_id", refundResult.RefundOrder.ID).Msg("merchant reject refund failed")
-		} else {
-			log.Error().Err(err).Int64("order_id", updatedOrder.ID).Msg("merchant reject refund failed")
-		}
-	}
 
 	ctx.JSON(http.StatusOK, newOrderResponse(updatedOrder))
 }
@@ -1622,18 +1412,9 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, ok := GetMerchantFromContext(ctx)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
 	if !ok {
-		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		merchant = value
+		return
 	}
 
 	service := server.orderCommandSvc
@@ -1670,22 +1451,6 @@ func (server *Server) markOrderReady(ctx *gin.Context) {
 		return
 	}
 	updatedOrder := result.Order
-
-	// 📢 P1: 异步发送出餐完成通知
-	expiresAt := time.Now().Add(24 * time.Hour)
-	_ = server.SendNotification(ctx, SendNotificationParams{
-		UserID:      updatedOrder.UserID,
-		Type:        "order",
-		Title:       "订单已出餐",
-		Content:     fmt.Sprintf("您的订单%s已出餐，请及时取餐", updatedOrder.OrderNo),
-		RelatedType: "order",
-		RelatedID:   updatedOrder.ID,
-		ExtraData: map[string]any{
-			"order_no": updatedOrder.OrderNo,
-			"status":   OrderStatusReady,
-		},
-		ExpiresAt: &expiresAt,
-	})
 
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
@@ -1736,18 +1501,9 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, ok := GetMerchantFromContext(ctx)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
 	if !ok {
-		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		merchant = value
+		return
 	}
 
 	service := server.orderCommandSvc
@@ -1768,22 +1524,6 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 		return
 	}
 	completedOrder := result.Order
-
-	// 📢 P1: 异步发送订单完成通知
-	expiresAt := time.Now().Add(24 * time.Hour)
-	_ = server.SendNotification(ctx, SendNotificationParams{
-		UserID:      completedOrder.UserID,
-		Type:        "order",
-		Title:       "订单已完成",
-		Content:     fmt.Sprintf("您的订单%s已完成，欢迎再次光临", completedOrder.OrderNo),
-		RelatedType: "order",
-		RelatedID:   completedOrder.ID,
-		ExtraData: map[string]any{
-			"order_no": completedOrder.OrderNo,
-			"status":   OrderStatusCompleted,
-		},
-		ExpiresAt: &expiresAt,
-	})
 
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,
@@ -1847,18 +1587,9 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取当前用户的商户
-	merchant, ok := GetMerchantFromContext(ctx)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
 	if !ok {
-		value, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		merchant = value
+		return
 	}
 
 	// 解析日期

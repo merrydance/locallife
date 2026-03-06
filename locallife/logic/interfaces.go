@@ -225,8 +225,10 @@ type GetUserOrderQueryInput struct {
 }
 
 type GetUserOrderQueryResult struct {
-	Order db.GetOrderWithDetailsRow
-	Items []db.ListOrderItemsWithDishByOrderRow
+	Order               db.GetOrderWithDetailsRow
+	Items               []db.ListOrderItemsWithDishByOrderRow
+	DeliveryEtaMinutes  *int32
+	EstimatedDeliveryAt *time.Time
 }
 
 type ListUserOrdersQueryInput struct {

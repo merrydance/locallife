@@ -11,6 +11,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/rs/zerolog/log"
 )
 
 const orderPaymentTimeoutMinutes = 30
@@ -344,11 +345,62 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 }
 
 func (s *OrderService) CancelOrder(ctx context.Context, input CancelOrderInput) (CancelOrderResult, error) {
-	return CancelOrder(ctx, s.store, input)
+	result, err := CancelOrder(ctx, s.store, input)
+	if err != nil {
+		return CancelOrderResult{}, err
+	}
+
+	if result.Refund != nil && s.taskScheduler != nil {
+		scheduleErr := s.taskScheduler.ScheduleProcessRefund(ctx, ProcessRefundTaskInput{
+			PaymentOrderID: result.Refund.PaymentOrderID,
+			OrderID:        result.Order.ID,
+			RefundAmount:   result.Refund.Amount,
+			Reason:         result.Refund.Reason,
+		})
+		if scheduleErr != nil {
+			log.Error().Err(scheduleErr).Int64("order_id", result.Order.ID).Msg("failed to schedule refund task")
+		}
+	}
+
+	if s.eventPublisher != nil {
+		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, result.Order.MerchantID, result.Order, "order_update")
+	}
+
+	return result, nil
 }
 
 func (s *OrderService) UrgeOrder(ctx context.Context, input UrgeOrderInput) (UrgeOrderResult, error) {
-	return UrgeOrder(ctx, s.store, input)
+	result, err := UrgeOrder(ctx, s.store, input)
+	if err != nil {
+		return UrgeOrderResult{}, err
+	}
+
+	if s.notificationPublisher != nil {
+		order := result.Order
+		if result.NotifyMerchant {
+			_ = s.notificationPublisher.Send(ctx, NotificationInput{
+				UserID:      order.MerchantID,
+				Title:       "用户催单提醒",
+				Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快处理", order.OrderNo),
+				Type:        "order_urge",
+				RelatedType: "order",
+				RelatedID:   order.ID,
+			})
+		}
+
+		if result.RiderID != nil {
+			_ = s.notificationPublisher.Send(ctx, NotificationInput{
+				UserID:      *result.RiderID,
+				Title:       "用户催单提醒",
+				Content:     fmt.Sprintf("订单 %s 的用户正在催单，请尽快送达", order.OrderNo),
+				Type:        "order_urge",
+				RelatedType: "order",
+				RelatedID:   order.ID,
+			})
+		}
+	}
+
+	return result, nil
 }
 
 func (s *OrderService) ReplaceOrder(ctx context.Context, input ReplaceOrderInput) (ReplaceOrderResult, error) {
@@ -357,7 +409,48 @@ func (s *OrderService) ReplaceOrder(ctx context.Context, input ReplaceOrderInput
 }
 
 func (s *OrderService) ConfirmOrder(ctx context.Context, input ConfirmOrderInput) (ConfirmOrderResult, error) {
-	return ConfirmTakeoutOrder(ctx, s.store, input)
+	result, err := ConfirmTakeoutOrder(ctx, s.store, input)
+	if err != nil {
+		return ConfirmOrderResult{}, err
+	}
+
+	if result.AlreadyCompleted {
+		return result, nil
+	}
+
+	if s.notificationPublisher != nil {
+		_ = s.notificationPublisher.Send(ctx, NotificationInput{
+			UserID:      result.Order.MerchantID,
+			Type:        "order_completed",
+			Title:       "订单已完成",
+			Content:     fmt.Sprintf("订单 %s 用户已确认收货", result.Order.OrderNo),
+			RelatedType: "order",
+			RelatedID:   result.Order.ID,
+		})
+
+		if result.RiderID != nil {
+			_ = s.notificationPublisher.Send(ctx, NotificationInput{
+				UserID:      *result.RiderID,
+				Type:        "delivery_completed",
+				Title:       "配送已完成",
+				Content:     fmt.Sprintf("订单 %s 用户已确认收货", result.Order.OrderNo),
+				RelatedType: "order",
+				RelatedID:   result.Order.ID,
+			})
+		}
+	}
+
+	if s.taskScheduler != nil {
+		po, getErr := s.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: result.Order.ID, Valid: true},
+			BusinessType: businessTypeOrder,
+		})
+		if getErr == nil && po.Status == "paid" && po.PaymentType == paymentTypeProfitSharing {
+			_ = s.taskScheduler.ScheduleProfitSharing(ctx, po.ID, result.Order.ID)
+		}
+	}
+
+	return result, nil
 }
 
 func (s *OrderService) AcceptMerchantOrder(ctx context.Context, input MerchantOrderUpdateInput) (MerchantOrderUpdateResult, error) {
@@ -394,6 +487,33 @@ func (s *OrderService) RejectMerchantOrder(ctx context.Context, input MerchantOr
 		return MerchantOrderUpdateResult{}, err
 	}
 
+	if s.notificationPublisher != nil {
+		expiresAt := s.clock.Now().Add(24 * time.Hour)
+		_ = s.notificationPublisher.Send(ctx, NotificationInput{
+			UserID:      result.Order.UserID,
+			Type:        "order",
+			Title:       "订单被商家取消",
+			Content:     fmt.Sprintf("您的订单%s已被商家取消，原因：%s。支付金额将原路退回", result.Order.OrderNo, input.Reason),
+			RelatedType: "order",
+			RelatedID:   result.Order.ID,
+			ExpiresAt:   &expiresAt,
+			OrderNo:     result.Order.OrderNo,
+			OrderStatus: db.OrderStatusCancelled,
+		})
+	}
+
+	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.paymentClient, MerchantRejectRefundInput{
+		OrderID: result.Order.ID,
+		Reason:  input.Reason,
+	})
+	if refundErr != nil {
+		if refundResult.RefundOrder != nil {
+			log.Error().Err(refundErr).Int64("refund_order_id", refundResult.RefundOrder.ID).Msg("merchant reject refund failed")
+		} else {
+			log.Error().Err(refundErr).Int64("order_id", result.Order.ID).Msg("merchant reject refund failed")
+		}
+	}
+
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
 	}
@@ -406,6 +526,22 @@ func (s *OrderService) MarkMerchantOrderReady(ctx context.Context, input Merchan
 	if err != nil {
 		return MerchantOrderUpdateResult{}, err
 	}
+
+	if s.notificationPublisher != nil {
+		expiresAt := s.clock.Now().Add(24 * time.Hour)
+		_ = s.notificationPublisher.Send(ctx, NotificationInput{
+			UserID:      result.Order.UserID,
+			Type:        "order",
+			Title:       "订单已出餐",
+			Content:     fmt.Sprintf("您的订单%s已出餐，请及时取餐", result.Order.OrderNo),
+			RelatedType: "order",
+			RelatedID:   result.Order.ID,
+			ExpiresAt:   &expiresAt,
+			OrderNo:     result.Order.OrderNo,
+			OrderStatus: db.OrderStatusReady,
+		})
+	}
+
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
 	}
@@ -417,6 +553,22 @@ func (s *OrderService) CompleteMerchantOrder(ctx context.Context, input Merchant
 	if err != nil {
 		return MerchantOrderUpdateResult{}, err
 	}
+
+	if s.notificationPublisher != nil {
+		expiresAt := s.clock.Now().Add(24 * time.Hour)
+		_ = s.notificationPublisher.Send(ctx, NotificationInput{
+			UserID:      result.Order.UserID,
+			Type:        "order",
+			Title:       "订单已完成",
+			Content:     fmt.Sprintf("您的订单%s已完成，欢迎再次光临", result.Order.OrderNo),
+			RelatedType: "order",
+			RelatedID:   result.Order.ID,
+			ExpiresAt:   &expiresAt,
+			OrderNo:     result.Order.OrderNo,
+			OrderStatus: db.OrderStatusCompleted,
+		})
+	}
+
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
 	}

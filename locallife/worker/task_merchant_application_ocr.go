@@ -199,19 +199,22 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationBusinessLicen
 		return fmt.Errorf("wechat OCRBusinessLicense: %w", err)
 	}
 
+	// 营业期限归一化：若为空或仅含注册/成立日期（无终止日期），默认视为长期有效
+	validPeriod := normalizeValidPeriod(ocrResult.ValidPeriod)
+
 	ocrData := map[string]any{
-		"status":                "done",
-		"started_at":            startedAt,
-		"reg_num":               ocrResult.RegNum,
-		"enterprise_name":       ocrResult.EnterpriseEName,
-		"legal_representative":  ocrResult.LegalRepresentative,
-		"type_of_enterprise":    ocrResult.TypeOfEnterprise,
-		"address":               ocrResult.Address,
-		"business_scope":        ocrResult.BusinessScope,
-		"registered_capital":    ocrResult.RegisteredCapital,
-		"valid_period":          ocrResult.ValidPeriod,
-		"credit_code":           ocrResult.CreditCode,
-		"ocr_at":                time.Now().Format(time.RFC3339),
+		"status":               "done",
+		"started_at":           startedAt,
+		"reg_num":              ocrResult.RegNum,
+		"enterprise_name":      ocrResult.EnterpriseEName,
+		"legal_representative": ocrResult.LegalRepresentative,
+		"type_of_enterprise":   ocrResult.TypeOfEnterprise,
+		"address":              ocrResult.Address,
+		"business_scope":       ocrResult.BusinessScope,
+		"registered_capital":   ocrResult.RegisteredCapital,
+		"valid_period":         validPeriod,
+		"credit_code":          ocrResult.CreditCode,
+		"ocr_at":               time.Now().Format(time.RFC3339),
 	}
 	ocrJSON, _ := json.Marshal(ocrData)
 
@@ -441,10 +444,10 @@ func (processor *RedisTaskProcessor) parseMerchantApplicationOCRPayload(task *as
 // foodPermitOCRData is a minimal copy of the API response struct for storage.
 // Kept in worker package to avoid import cycles.
 type foodPermitOCRData struct {
-	Status    string `json:"status,omitempty"`
-	Error     string `json:"error,omitempty"`
-	QueuedAt  string `json:"queued_at,omitempty"`
-	StartedAt string `json:"started_at,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Error       string `json:"error,omitempty"`
+	QueuedAt    string `json:"queued_at,omitempty"`
+	StartedAt   string `json:"started_at,omitempty"`
 	RawText     string `json:"raw_text,omitempty"`
 	PermitNo    string `json:"permit_no,omitempty"`
 	CompanyName string `json:"company_name,omitempty"`
@@ -586,4 +589,29 @@ func cleanCompanyName(name string) string {
 	}
 
 	return name
+}
+
+// normalizeValidPeriod 归一化营业执照营业期限字段。
+// 部分营业执照（如个体工商户）仅登记注册日期（成立日期），无明确到期日，
+// 在微信 OCR 接口中 valid_period 可能为空或仅含单个起始日期。
+// 按产品设计，此类情况一律视为「长期有效」。
+func normalizeValidPeriod(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "长期"
+	}
+	// 已明确包含长期/永久关键字，直接返回
+	if strings.Contains(raw, "长期") || strings.Contains(raw, "永久") {
+		return raw
+	}
+	// 包含范围分隔符「至」，说明是有明确起止日期的固定期限，不做转换
+	if strings.Contains(raw, "至") {
+		return raw
+	}
+	// 仅含单个日期（注册/成立日期），无终止日期 → 视为长期
+	dateRegex := regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日`)
+	if dateRegex.MatchString(raw) {
+		return "长期"
+	}
+	return raw
 }

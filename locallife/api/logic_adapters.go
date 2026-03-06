@@ -252,12 +252,17 @@ func (server *Server) buildOrderCommandService() logic.OrderCommandService {
 		eventPublisher = apiOrderEventPublisher{server: server}
 	}
 
+	var taskScheduler logic.TaskScheduler
+	if server.taskDistributor != nil {
+		taskScheduler = apiTaskScheduler{server: server}
+	}
+
 	service := logic.NewOrderService(
 		server.store,
 		apiNotificationPublisher{server: server},
 		nil,
 		eventPublisher,
-		apiTaskScheduler{server: server},
+		taskScheduler,
 		apiDishCustomizationNormalizer{server: server},
 		server.paymentClient,
 		nil,
@@ -277,12 +282,17 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 		}
 	}
 
+	var taskScheduler logic.TaskScheduler
+	if server.taskDistributor != nil {
+		taskScheduler = apiTaskScheduler{server: server}
+	}
+
 	service := logic.NewOrderService(
 		server.store,
 		apiNotificationPublisher{server: server},
 		nil,
 		nil,
-		apiTaskScheduler{server: server},
+		taskScheduler,
 		apiDishCustomizationNormalizer{server: server},
 		server.paymentClient,
 		nil,
@@ -304,10 +314,16 @@ func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 	if server.paymentClient != nil || server.ecommerceClient != nil {
 		paymentFacade = logic.NewDefaultPaymentFacade(server.store, server.paymentClient, server.ecommerceClient)
 	}
+
+	var taskScheduler logic.TaskScheduler
+	if server.taskDistributor != nil {
+		taskScheduler = apiTaskScheduler{server: server}
+	}
+
 	return logic.NewRefundService(
 		server.store,
 		paymentFacade,
-		apiTaskScheduler{server: server},
+		taskScheduler,
 		nil,
 		nil,
 	)
