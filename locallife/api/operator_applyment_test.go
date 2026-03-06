@@ -33,7 +33,7 @@ func randomOperatorForApplyment(userID int64) db.Operator {
 		Name:         util.RandomString(10),
 		ContactName:  util.RandomString(6),
 		ContactPhone: "13800138000",
-		Status:       "pending_bindbank",
+		Status:       "active", // 入驻审批通过后直接 active，绑卡为可选后置步骤
 		CreatedAt:    time.Now(),
 	}
 }

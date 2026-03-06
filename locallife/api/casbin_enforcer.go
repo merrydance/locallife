@@ -382,7 +382,9 @@ func (server *Server) LoadOperatorMiddleware() gin.HandlerFunc {
 
 func isOperatorConsoleAccessibleStatus(status string) bool {
 	switch status {
-	case "active", "approved", "pending_bindbank", "bindbank_submitted", "bindbank_rejected":
+	case "active", "bindbank_submitted":
+		// active: 正常入驻后的状态
+		// bindbank_submitted: 绑卡进件进行中（瞬时状态），不影响运营商控制台访问
 		return true
 	default:
 		return false

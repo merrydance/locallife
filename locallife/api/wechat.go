@@ -73,10 +73,20 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 				DefaultRole:  "customer",
 			})
 			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create user tx: %w", err)))
-				return
+				// 并发请求可能导致重复 key 冲突（TOCTOU），此时降级为查询已存在的用户
+				if isDuplicateKeyError(err) {
+					user, err = server.store.GetUserByWechatOpenID(ctx, wechatResp.OpenID)
+					if err != nil {
+						ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user after duplicate: %w", err)))
+						return
+					}
+				} else {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create user tx: %w", err)))
+					return
+				}
+			} else {
+				user = txResult.User
 			}
-			user = txResult.User
 		} else {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user by openid: %w", err)))
 			return

@@ -68,16 +68,10 @@ function isNotFoundError(error: unknown): boolean {
 
 function mapApplicationStatusDesc(status: string): string {
   switch (status) {
-  case 'pending_bindbank':
-    return '待开户'
   case 'bindbank_submitted':
     return '开户审核中'
-  case 'bindbank_rejected':
-    return '开户驳回'
   case 'active':
-    return '待开户'
-  case 'approved':
-    return '待提交开户信息'
+    return '可选择开户'
   default:
     return status || '未提交'
   }

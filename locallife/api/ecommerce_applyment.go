@@ -859,8 +859,8 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
-	// 检查运营商状态：待绑卡或绑卡提交流程中
-	if operator.Status != "pending_bindbank" && operator.Status != "bindbank_submitted" {
+	// 检查运营商状态：已入驻（active）或绑卡进件进行中（bindbank_submitted）均可提交/重新提交绑卡
+	if operator.Status != "active" && operator.Status != "bindbank_submitted" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("运营商状态不正确，当前状态: %s", operator.Status)))
 		return
 	}
@@ -1254,7 +1254,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 				if newStatus == "rejected" || newStatus == "canceled" {
 					_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
 						ID:     operator.ID,
-						Status: "pending_bindbank",
+						Status: "active",
 					})
 				}
 				if newStatus != applyment.Status {
@@ -1321,15 +1321,10 @@ func normalizeApplymentStatus(status string, hasSubMchID bool) string {
 
 func mapOperatorStatusToApplymentStatus(operatorStatus string) string {
 	switch operatorStatus {
-	case "pending_bindbank", "approved":
-		return "pending"
 	case "bindbank_submitted":
 		return "submitted"
-	case "bindbank_rejected":
-		return "rejected"
-	case "active":
-		return "pending"
 	default:
+		// active / suspended / expired: 尚未发起或不再需要绑卡
 		return "pending"
 	}
 }

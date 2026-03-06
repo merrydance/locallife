@@ -1213,6 +1213,11 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 			if err != nil {
 				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("update operator sub_mch_id")
 			}
+			// 绑卡成功，恢复到 active（清除 bindbank_submitted 瞬时状态）
+			_, _ = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
+				ID:     applyment.SubjectID,
+				Status: "active",
+			})
 		}
 	} else {
 		// 更新进件状态
@@ -1226,12 +1231,13 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		}
 
 		if applyment.SubjectType == "operator" && (newStatus == "rejected" || newStatus == "canceled") {
+			// 绑卡被拒/撤销，回到 active（绑卡是可选步骤，不阻塞运营）
 			_, err = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{
 				ID:     applyment.SubjectID,
-				Status: "pending_bindbank",
+				Status: "active",
 			})
 			if err != nil {
-				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("reset operator status to pending_bindbank")
+				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("reset operator status to active after bindbank rejection")
 			}
 		}
 	}

@@ -187,7 +187,7 @@ func TestLoadOperatorMiddleware(t *testing.T) {
 			},
 		},
 		{
-			name: "OK_PendingBindBank",
+			name: "OK_BindbankSubmitted",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -199,12 +199,13 @@ func TestLoadOperatorMiddleware(t *testing.T) {
 						{ID: 1, UserID: user.ID, Role: RoleOperator, Status: "active"},
 					}, nil)
 
-				pendingOperator := operator
-				pendingOperator.Status = "pending_bindbank"
+				// bindbank_submitted 是绑卡进件进行中的瞬时状态，仍可访问控制台
+				bindbankOperator := operator
+				bindbankOperator.Status = "bindbank_submitted"
 				store.EXPECT().
 					GetOperatorByUser(gomock.Any(), user.ID).
 					Times(1).
-					Return(pendingOperator, nil)
+					Return(bindbankOperator, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

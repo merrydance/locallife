@@ -34,14 +34,10 @@ function isNotFoundError(message: string) {
 
 function mapApplicationStatusToApplymentStatus(applicationStatus: string): string {
   switch (applicationStatus) {
-    case "pending_bindbank":
-    case "approved":
-      return "pending";
     case "bindbank_submitted":
       return "submitted";
-    case "bindbank_rejected":
-      return "rejected";
     case "active":
+      // active 且无进件记录，展示“待提交”
       return "pending";
     default:
       return "pending";
