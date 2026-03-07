@@ -528,14 +528,15 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 		ID: app.ID,
 	}
 
-	if len(req.StorefrontImages) > 0 {
+	// 注意：用 != nil 而非 len > 0，使得前端传空数组 [] 时能正确清空图片
+	if req.StorefrontImages != nil {
 		for i, img := range req.StorefrontImages {
 			req.StorefrontImages[i] = normalizeImageURLForStorage(img)
 		}
 		jsonData, _ := json.Marshal(req.StorefrontImages)
 		arg.StorefrontImages = jsonData
 	}
-	if len(req.EnvironmentImages) > 0 {
+	if req.EnvironmentImages != nil {
 		for i, img := range req.EnvironmentImages {
 			req.EnvironmentImages[i] = normalizeImageURLForStorage(img)
 		}

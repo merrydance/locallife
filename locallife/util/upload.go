@@ -135,9 +135,23 @@ func (u *FileUploader) UploadMerchantImage(userID int64, category string, file m
 		os.Remove(filePath)
 		return "", fmt.Errorf("failed to copy file: %w", err)
 	}
+	dst.Close() // 关闭文件以便 WebP 转换可以读取
+
+	// 门头照/环境照对外公开展示，转换为 WebP 格式节省带宽
+	if (category == "storefront" || category == "environment") && CanConvertToWebP(ext) && IsWebPSupported() {
+		converter := NewWebPConverter()
+		webpPath, webpErr := converter.ConvertToWebP(filePath, "")
+		if webpErr != nil {
+			log.Warn().Err(webpErr).Str("file", filePath).Msg("WebP conversion failed, keeping original")
+		} else {
+			os.Remove(filePath)
+			filePath = webpPath
+			filename = strings.TrimSuffix(filename, ext) + ".webp"
+		}
+	}
 
 	// 返回相对路径 (强制使用斜杠 /, 解决 Windows 反斜杠问题)
-	relativePath := filepath.Join(dir, filename)
+	relativePath := filepath.Join(dir, filepath.Base(filePath))
 	return filepath.ToSlash(relativePath), nil
 }
 

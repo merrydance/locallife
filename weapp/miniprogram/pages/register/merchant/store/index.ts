@@ -343,39 +343,30 @@ Page({
     }
 
     try {
-      // 构造完整的数据对象
-      // 注意：字段映射要与后端 UpdateMerchantBasicInfoRequest 一致
+      // 构造基础信息 payload（仅包含 PUT /basic 支持的字段）
       const payload = {
-        // Basic Info
         merchant_name: formData.name,
         contact_phone: formData.phone,
         business_address: formData.addressDetail || formData.address,
         longitude: formData.longitude ? String(formData.longitude) : undefined,
         latitude: formData.latitude ? String(formData.latitude) : undefined,
         region_id: formData.regionId,
-
-        // License Info
-        business_license_number: formData.creditCode,
-        business_license_image_url: this.data.licenseImages[0]?.url,
-        business_scope: formData.businessScope,
-
-        // Legal Person Info
-        legal_person_name: formData.legalPerson,
-        legal_person_id_number: formData.idCard,
-        legal_person_id_front_url: this.data.idCardFrontImages[0]?.url,
-        legal_person_id_back_url: this.data.idCardBackImages[0]?.url,
-
-        // Food Permit
-        food_permit_url: this.data.foodLicenseImages[0]?.url,
-
-        // Images (Assuming API supports it, otherwise separate call needed)
-        storefront_images: (this.data.storefrontImages || []).map((i) => i.url),
-        environment_images: (this.data.environmentImages || []).map((i) => i.url)
       }
 
       console.log('[MerchantRegister] syncToBackend payload:', JSON.stringify(payload, null, 2))
 
       await updateMerchantBasicInfo(payload)
+
+      // 门头照/环境照通过单独接口保存（PUT /basic 不处理这两个字段）
+      const storefrontImages = this.data.storefrontImages || []
+      const environmentImages = this.data.environmentImages || []
+      if (storefrontImages.length > 0 || environmentImages.length > 0) {
+        await updateMerchantImages({
+          storefront_images: storefrontImages.map((i) => i.rawUrl || i.url),
+          environment_images: environmentImages.map((i) => i.rawUrl || i.url)
+        })
+      }
+
       console.log('[MerchantRegister] Sync to backend success')
     } catch (err: unknown) {
       console.error('[MerchantRegister] Sync to backend failed', err)
@@ -972,7 +963,7 @@ Page({
     try {
       // 884 require REMOVED
       await updateMerchantImages({
-        storefront_images: images.map((img) => img.url)
+        storefront_images: images.map((img) => img.rawUrl || img.url)
       })
       this.saveDraft()
     } catch (error) {
@@ -1047,7 +1038,7 @@ Page({
     try {
       // 960 require REMOVED
       await updateMerchantImages({
-        environment_images: images.map((img) => img.url)
+        environment_images: images.map((img) => img.rawUrl || img.url)
       })
       this.saveDraft()
     } catch (error) {
