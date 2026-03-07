@@ -57,4 +57,3 @@ func yuanToFen(amount float64) int64 {
 func fenToYuanString(amount int64, precision int) string {
 	return strconv.FormatFloat(float64(amount)/float64(fenPerYuan), 'f', precision, 64)
 }
-
