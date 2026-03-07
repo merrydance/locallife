@@ -150,11 +150,11 @@ func isPubliclyAccessibleUploadPath(normalized string) bool {
 	if strings.HasPrefix(normalized, "uploads/public/") {
 		return true
 	}
-	// 商户 logo/门头照/环境照 属于对外展示素材
+	// 商户 logo/门头照/环境照/菜品图 属于对外展示素材
 	parts := strings.Split(normalized, "/")
 	if len(parts) >= 5 && parts[0] == "uploads" && parts[1] == "merchants" {
 		category := parts[3]
-		if category == "logo" || category == "storefront" || category == "environment" {
+		if category == "logo" || category == "storefront" || category == "environment" || category == "dishes" {
 			return true
 		}
 	}

@@ -1,0 +1,108 @@
+<custom-navbar title="申请更多区域" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+
+  <!-- ── 已有申请列表 ── -->
+  <view class="section">
+    <view class="section-title">申请记录</view>
+
+    <view wx:if="{{listLoading}}" class="loading-wrap">
+      <t-loading theme="circular" size="40rpx" />
+    </view>
+
+    <view wx:elif="{{listError}}" class="error-wrap">
+      <t-empty icon="info-circle" description="{{listError}}">
+        <t-button slot="action" size="small" theme="primary" variant="outline" shape="round" bindtap="onRetry">重试</t-button>
+      </t-empty>
+    </view>
+
+    <block wx:elif="{{applications.length > 0}}">
+      <t-cell-group theme="card">
+        <t-cell
+          wx:for="{{applications}}"
+          wx:key="id"
+          title="{{item.region_name}}"
+          note="{{item.created_at}}"
+        >
+          <view slot="right-icon">
+            <t-tag
+              theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'primary' : 'danger')}}"
+              size="small"
+            >{{item.status === 'pending' ? '审核中' : (item.status === 'approved' ? '已通过' : '已拒绝')}}</t-tag>
+          </view>
+          <view wx:if="{{item.status === 'rejected' && item.reject_reason}}" slot="description" class="reject-reason">
+            拒绝原因：{{item.reject_reason}}
+          </view>
+        </t-cell>
+      </t-cell-group>
+    </block>
+
+    <view wx:else class="empty-hint">暂无申请记录</view>
+  </view>
+
+  <!-- ── 新申请表单 ── -->
+  <view class="section">
+    <view wx:if="{{!showForm}}" class="apply-entry">
+      <t-button theme="primary" block bindtap="onShowForm">
+        + 申请管理新区域
+      </t-button>
+    </view>
+
+    <view wx:else class="form-card">
+      <view class="section-title">选择目标区域</view>
+
+      <!-- 城市选择 -->
+      <view class="field-label">选择城市</view>
+      <picker mode="selector" range="{{cityOptions}}" range-key="label" value="{{selectedCityIndex}}" bindchange="onCityChange">
+        <view class="picker-display">
+          <text class="{{selectedCityName ? '' : 'placeholder'}}">{{selectedCityName || '请选择城市'}}</text>
+          <text class="picker-arrow">›</text>
+        </view>
+      </picker>
+
+      <!-- 区域搜索 + 列表 -->
+      <view class="field-label">选择区县</view>
+      <t-input
+        placeholder="搜索区县名称"
+        value="{{regionKeyword}}"
+        bind:change="onRegionSearch"
+        clearable
+        t-class="region-search"
+      />
+
+      <view class="region-list">
+        <view
+          wx:for="{{filteredRegions}}"
+          wx:key="value"
+          class="region-item {{selectedRegionId === item.value ? 'selected' : ''}}"
+          data-id="{{item.value}}"
+          data-name="{{item.label}}"
+          bindtap="onSelectRegion"
+        >
+          <view class="region-item-name">{{item.label}}</view>
+          <view class="region-item-sub">{{item.secondary}}</view>
+          <view wx:if="{{selectedRegionId === item.value}}" class="region-check">✓</view>
+        </view>
+        <view wx:if="{{filteredRegions.length === 0}}" class="region-empty">暂无可申请区域</view>
+      </view>
+
+      <!-- 已选区域提示 -->
+      <view wx:if="{{selectedRegionName}}" class="selected-region-tip">
+        已选：{{selectedRegionName}}
+      </view>
+
+      <!-- 操作按钮 -->
+      <view class="form-actions">
+        <t-button theme="light" bindtap="onHideForm">取消</t-button>
+        <t-button
+          theme="primary"
+          bindtap="onSubmit"
+          loading="{{submitting}}"
+          disabled="{{!selectedRegionId || submitting}}"
+        >提交申请</t-button>
+      </view>
+    </view>
+  </view>
+
+  <view class="safe-bottom"></view>
+</view>

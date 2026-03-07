@@ -342,6 +342,21 @@ func (mr *MockStoreMockRecorder) ApproveOperatorApplication(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveOperatorApplication", reflect.TypeOf((*MockStore)(nil).ApproveOperatorApplication), ctx, arg)
 }
 
+// ApproveOperatorRegionApplication mocks base method.
+func (m *MockStore) ApproveOperatorRegionApplication(ctx context.Context, id int64) (db.OperatorRegionApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApproveOperatorRegionApplication", ctx, id)
+	ret0, _ := ret[0].(db.OperatorRegionApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApproveOperatorRegionApplication indicates an expected call of ApproveOperatorRegionApplication.
+func (mr *MockStoreMockRecorder) ApproveOperatorRegionApplication(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).ApproveOperatorRegionApplication), ctx, id)
+}
+
 // ApproveRiderApplication mocks base method.
 func (m *MockStore) ApproveRiderApplication(ctx context.Context, arg db.ApproveRiderApplicationParams) (db.RiderApplication, error) {
 	m.ctrl.T.Helper()
@@ -1652,6 +1667,21 @@ func (m *MockStore) CountPendingPrintLogs(ctx context.Context, printerID int64) 
 func (mr *MockStoreMockRecorder) CountPendingPrintLogs(ctx, printerID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPendingPrintLogs", reflect.TypeOf((*MockStore)(nil).CountPendingPrintLogs), ctx, printerID)
+}
+
+// CountPendingRegionApplications mocks base method.
+func (m *MockStore) CountPendingRegionApplications(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPendingRegionApplications", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPendingRegionApplications indicates an expected call of CountPendingRegionApplications.
+func (mr *MockStoreMockRecorder) CountPendingRegionApplications(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPendingRegionApplications", reflect.TypeOf((*MockStore)(nil).CountPendingRegionApplications), ctx)
 }
 
 // CountProfitSharingReturnsByRefundOrder mocks base method.
@@ -3184,6 +3214,21 @@ func (mr *MockStoreMockRecorder) CreateOperatorApplicationDraft(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOperatorApplicationDraft", reflect.TypeOf((*MockStore)(nil).CreateOperatorApplicationDraft), ctx, arg)
 }
 
+// CreateOperatorRegionApplication mocks base method.
+func (m *MockStore) CreateOperatorRegionApplication(ctx context.Context, arg db.CreateOperatorRegionApplicationParams) (db.OperatorRegionApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOperatorRegionApplication", ctx, arg)
+	ret0, _ := ret[0].(db.OperatorRegionApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOperatorRegionApplication indicates an expected call of CreateOperatorRegionApplication.
+func (mr *MockStoreMockRecorder) CreateOperatorRegionApplication(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).CreateOperatorRegionApplication), ctx, arg)
+}
+
 // CreateOrder mocks base method.
 func (m *MockStore) CreateOrder(ctx context.Context, arg db.CreateOrderParams) (db.Order, error) {
 	m.ctrl.T.Helper()
@@ -4516,6 +4561,20 @@ func (m *MockStore) DeleteOldWechatNotifications(ctx context.Context) error {
 func (mr *MockStoreMockRecorder) DeleteOldWechatNotifications(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteOldWechatNotifications", reflect.TypeOf((*MockStore)(nil).DeleteOldWechatNotifications), ctx)
+}
+
+// DeleteOperatorRegionApplication mocks base method.
+func (m *MockStore) DeleteOperatorRegionApplication(ctx context.Context, id int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteOperatorRegionApplication", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteOperatorRegionApplication indicates an expected call of DeleteOperatorRegionApplication.
+func (mr *MockStoreMockRecorder) DeleteOperatorRegionApplication(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).DeleteOperatorRegionApplication), ctx, id)
 }
 
 // DeleteOrderItems mocks base method.
@@ -7514,6 +7573,36 @@ func (m *MockStore) GetOperatorRegion(ctx context.Context, arg db.GetOperatorReg
 func (mr *MockStoreMockRecorder) GetOperatorRegion(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorRegion", reflect.TypeOf((*MockStore)(nil).GetOperatorRegion), ctx, arg)
+}
+
+// GetOperatorRegionApplication mocks base method.
+func (m *MockStore) GetOperatorRegionApplication(ctx context.Context, id int64) (db.OperatorRegionApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorRegionApplication", ctx, id)
+	ret0, _ := ret[0].(db.OperatorRegionApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOperatorRegionApplication indicates an expected call of GetOperatorRegionApplication.
+func (mr *MockStoreMockRecorder) GetOperatorRegionApplication(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).GetOperatorRegionApplication), ctx, id)
+}
+
+// GetOperatorRegionApplicationByOperatorAndRegion mocks base method.
+func (m *MockStore) GetOperatorRegionApplicationByOperatorAndRegion(ctx context.Context, arg db.GetOperatorRegionApplicationByOperatorAndRegionParams) (db.OperatorRegionApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorRegionApplicationByOperatorAndRegion", ctx, arg)
+	ret0, _ := ret[0].(db.OperatorRegionApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOperatorRegionApplicationByOperatorAndRegion indicates an expected call of GetOperatorRegionApplicationByOperatorAndRegion.
+func (mr *MockStoreMockRecorder) GetOperatorRegionApplicationByOperatorAndRegion(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorRegionApplicationByOperatorAndRegion", reflect.TypeOf((*MockStore)(nil).GetOperatorRegionApplicationByOperatorAndRegion), ctx, arg)
 }
 
 // GetOperatorRiderRanking mocks base method.
@@ -11816,6 +11905,21 @@ func (mr *MockStoreMockRecorder) ListOperatorApplications(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorApplications", reflect.TypeOf((*MockStore)(nil).ListOperatorApplications), ctx, arg)
 }
 
+// ListOperatorRegionApplicationsByOperator mocks base method.
+func (m *MockStore) ListOperatorRegionApplicationsByOperator(ctx context.Context, operatorID int64) ([]db.ListOperatorRegionApplicationsByOperatorRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOperatorRegionApplicationsByOperator", ctx, operatorID)
+	ret0, _ := ret[0].([]db.ListOperatorRegionApplicationsByOperatorRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOperatorRegionApplicationsByOperator indicates an expected call of ListOperatorRegionApplicationsByOperator.
+func (mr *MockStoreMockRecorder) ListOperatorRegionApplicationsByOperator(ctx, operatorID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorRegionApplicationsByOperator", reflect.TypeOf((*MockStore)(nil).ListOperatorRegionApplicationsByOperator), ctx, operatorID)
+}
+
 // ListOperatorRegions mocks base method.
 func (m *MockStore) ListOperatorRegions(ctx context.Context, operatorID int64) ([]db.ListOperatorRegionsRow, error) {
 	m.ctrl.T.Helper()
@@ -12159,6 +12263,21 @@ func (m *MockStore) ListPendingOrdersBefore(ctx context.Context, arg db.ListPend
 func (mr *MockStoreMockRecorder) ListPendingOrdersBefore(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingOrdersBefore", reflect.TypeOf((*MockStore)(nil).ListPendingOrdersBefore), ctx, arg)
+}
+
+// ListPendingRegionApplications mocks base method.
+func (m *MockStore) ListPendingRegionApplications(ctx context.Context, arg db.ListPendingRegionApplicationsParams) ([]db.ListPendingRegionApplicationsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingRegionApplications", ctx, arg)
+	ret0, _ := ret[0].([]db.ListPendingRegionApplicationsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingRegionApplications indicates an expected call of ListPendingRegionApplications.
+func (mr *MockStoreMockRecorder) ListPendingRegionApplications(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingRegionApplications", reflect.TypeOf((*MockStore)(nil).ListPendingRegionApplications), ctx, arg)
 }
 
 // ListPendingReservationsNearDeadline mocks base method.
@@ -13701,6 +13820,21 @@ func (m *MockStore) RejectOperatorApplication(ctx context.Context, arg db.Reject
 func (mr *MockStoreMockRecorder) RejectOperatorApplication(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectOperatorApplication", reflect.TypeOf((*MockStore)(nil).RejectOperatorApplication), ctx, arg)
+}
+
+// RejectOperatorRegionApplication mocks base method.
+func (m *MockStore) RejectOperatorRegionApplication(ctx context.Context, arg db.RejectOperatorRegionApplicationParams) (db.OperatorRegionApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RejectOperatorRegionApplication", ctx, arg)
+	ret0, _ := ret[0].(db.OperatorRegionApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RejectOperatorRegionApplication indicates an expected call of RejectOperatorRegionApplication.
+func (mr *MockStoreMockRecorder) RejectOperatorRegionApplication(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).RejectOperatorRegionApplication), ctx, arg)
 }
 
 // RejectRiderApplication mocks base method.

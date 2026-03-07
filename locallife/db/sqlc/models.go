@@ -1100,6 +1100,17 @@ type OperatorRegion struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// 运营商区域扩展申请，允许已入驻运营商申请管理更多区县
+type OperatorRegionApplication struct {
+	ID           int64              `json:"id"`
+	OperatorID   int64              `json:"operator_id"`
+	RegionID     int64              `json:"region_id"`
+	Status       string             `json:"status"`
+	RejectReason pgtype.Text        `json:"reject_reason"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Order struct {
 	ID                  int64              `json:"id"`
 	OrderNo             string             `json:"order_no"`

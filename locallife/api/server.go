@@ -901,6 +901,15 @@ func (server *Server) setupRouter() {
 		adminOperatorGroup.POST("/:id/reject", server.rejectOperatorApplicationAdmin)
 	}
 
+	// 平台管理员审核运营商区域扩展申请
+	adminRegionExpansionGroup := authGroup.Group("/admin/operators/region-applications")
+	adminRegionExpansionGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		adminRegionExpansionGroup.GET("", server.listPendingRegionApplicationsAdmin)
+		adminRegionExpansionGroup.POST("/:id/approve", server.approveRegionApplicationAdmin)
+		adminRegionExpansionGroup.POST("/:id/reject", server.rejectRegionApplicationAdmin)
+	}
+
 	// 平台管理员审核集团入驻申请
 	adminGroupApplicationGroup := authGroup.Group("/admin/groups/applications")
 	adminGroupApplicationGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
@@ -984,6 +993,10 @@ func (server *Server) setupRouter() {
 	operatorStatsGroup := authGroup.Group("/operator")
 	operatorStatsGroup.Use(server.CasbinRoleMiddleware(RoleOperator), server.LoadOperatorMiddleware())
 	{
+
+		// 区域扩展申请
+		operatorStatsGroup.POST("/region-expansion", server.applyOperatorRegionExpansion)  // 申请运营更多区域
+		operatorStatsGroup.GET("/region-expansion", server.listOperatorRegionApplications) // 查看自己的扩展申请
 
 		// 区域相关路由（需要额外验证区域管理权限）
 		operatorStatsGroup.GET("/regions", server.listOperatorRegions) // 获取管理的区域列表

@@ -44,6 +44,8 @@ export interface OperatorApplicationResponse {
   business_license_ocr?: OCRResult
   id_card_front_ocr?: OCRResult
   id_card_back_ocr?: OCRResult
+  /** 申请已通过且运营商账号已建立（即用户已是正式运营商）*/
+  is_operator?: boolean
 }
 
 export interface CreateOperatorDraftRequest {
@@ -157,5 +159,38 @@ export function submitOperatorApplication(data?: AgreementConsentPayload) {
     url: '/v1/operator/application/submit',
     method: 'POST',
     data
+  })
+}
+
+// ─── 运营商区域扩展申请 ───
+
+export interface RegionExpansionApplication {
+  id: number
+  operator_id: number
+  region_id: number
+  region_name: string
+  status: 'pending' | 'approved' | 'rejected'
+  reject_reason?: string
+  created_at: string
+}
+
+/**
+ * 申请运营更多区域
+ */
+export function applyRegionExpansion(regionId: number) {
+  return request<RegionExpansionApplication>({
+    url: '/v1/operator/region-expansion',
+    method: 'POST',
+    data: { region_id: regionId }
+  })
+}
+
+/**
+ * 获取自己的区域扩展申请列表
+ */
+export function listRegionExpansionApplications() {
+  return request<{ applications: RegionExpansionApplication[] }>({
+    url: '/v1/operator/region-expansion',
+    method: 'GET'
   })
 }

@@ -157,7 +157,23 @@ Page({
         // 根据状态跳转
         if (res.status === 'submitted') {
           this.setData({ currentStep: 4 })
-        } else if (res.status === 'approved') {
+        } else if (res.status === 'approved' && res.is_operator) {
+          // 已是正式运营商：询问去控制台还是申请更多区域
+          wx.showModal({
+            title: '您已是运营商',
+            content: '您的入驻已完成，请选择下一步操作',
+            confirmText: '进入控制台',
+            cancelText: '申请更多区域',
+            success(r) {
+              if (r.confirm) {
+                wx.reLaunch({ url: '/pages/operator/dashboard/index' })
+              } else if (r.cancel) {
+                wx.reLaunch({ url: '/pages/operator/region-expansion/index' })
+              }
+            }
+          })
+        } else if (res.status === 'approved' && !res.is_operator) {
+          // 审核通过但运营商账号尚未建立（极少数中间态）→ 正常进开户流程
           wx.showToast({ title: '审核通过，请先完成微信开户', icon: 'none' })
           setTimeout(() => wx.reLaunch({ url: '/pages/operator/applyment/index' }), 1500)
         } else if (res.status === 'rejected') {

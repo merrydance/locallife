@@ -1,0 +1,167 @@
+.page-container {
+  padding: 24rpx;
+  background: #f5f5f5;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.section {
+  margin-bottom: 32rpx;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16rpx;
+  padding: 0 4rpx;
+}
+
+/* 申请列表 */
+.loading-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 48rpx 0;
+}
+
+.error-wrap {
+  padding: 24rpx 0;
+}
+
+.empty-hint {
+  color: #999;
+  font-size: 26rpx;
+  text-align: center;
+  padding: 40rpx 0;
+}
+
+.reject-reason {
+  font-size: 24rpx;
+  color: #e34d59;
+  margin-top: 4rpx;
+}
+
+/* 申请入口 */
+.apply-entry {
+  padding: 8rpx 0;
+}
+
+/* 表单卡片 */
+.form-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+}
+
+.field-label {
+  font-size: 26rpx;
+  color: #666;
+  margin: 24rpx 0 12rpx;
+}
+
+.field-label:first-child {
+  margin-top: 0;
+}
+
+/* 城市选择器 */
+.picker-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  background: #f7f7f7;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  color: #333;
+}
+
+.picker-display .placeholder {
+  color: #bbb;
+}
+
+.picker-arrow {
+  color: #999;
+  font-size: 32rpx;
+}
+
+/* 区域搜索 */
+.region-search {
+  margin-bottom: 16rpx;
+  background: #f7f7f7;
+  border-radius: 12rpx;
+}
+
+/* 区域列表 */
+.region-list {
+  max-height: 480rpx;
+  overflow-y: auto;
+  border-radius: 12rpx;
+  border: 1rpx solid #f0f0f0;
+}
+
+.region-item {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.region-item:last-child {
+  border-bottom: none;
+}
+
+.region-item.selected {
+  background: #e8f4ff;
+}
+
+.region-item-name {
+  font-size: 28rpx;
+  color: #333;
+  flex: 1;
+}
+
+.region-item-sub {
+  font-size: 24rpx;
+  color: #999;
+  margin-left: 16rpx;
+}
+
+.region-check {
+  font-size: 28rpx;
+  color: #0052d9;
+  margin-left: 16rpx;
+}
+
+.region-empty {
+  text-align: center;
+  color: #999;
+  font-size: 26rpx;
+  padding: 40rpx 0;
+}
+
+/* 已选区域提示 */
+.selected-region-tip {
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  color: #0052d9;
+  background: #e8f4ff;
+  border-radius: 8rpx;
+  padding: 12rpx 20rpx;
+}
+
+/* 操作按钮 */
+.form-actions {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 40rpx;
+}
+
+.form-actions t-button {
+  flex: 1;
+}
+
+.safe-bottom {
+  height: 60rpx;
+}

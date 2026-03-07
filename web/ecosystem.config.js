@@ -8,7 +8,8 @@ module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3000,
+        API_PROXY_TARGET: 'https://llapi.merrydance.cn'
       }
     }
   ]

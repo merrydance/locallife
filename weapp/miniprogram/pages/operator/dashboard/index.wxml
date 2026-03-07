@@ -143,6 +143,12 @@
             </view>
             <text>规则配置</text>
           </navigator>
+          <navigator url="/pages/operator/region-expansion/index" class="menu-item">
+            <view class="menu-icon-bg color-primary">
+              <t-icon name="location" size="48rpx" />
+            </view>
+            <text>申请更多区域</text>
+          </navigator>
         </view>
       </view>
       

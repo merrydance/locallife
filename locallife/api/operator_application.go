@@ -49,6 +49,8 @@ type operatorApplicationResponse struct {
 	UpdatedAt              time.Time               `json:"updated_at"`
 	SubmittedAt            *time.Time              `json:"submitted_at,omitempty"`
 	ReviewedAt             *time.Time              `json:"reviewed_at,omitempty"`
+	// IsOperator 表示申请已通过且运营商账号已建立（即用户已是正式运营商）
+	IsOperator bool `json:"is_operator,omitempty"`
 }
 
 // OperatorIDCardOCRData 运营商身份证正面OCR数据
@@ -272,8 +274,14 @@ func (server *Server) getOperatorApplication(ctx *gin.Context) {
 		return
 	}
 
-	regionName := server.getRegionName(ctx, app.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(app, regionName))
+	resp := newOperatorApplicationResponse(app, server.getRegionName(ctx, app.RegionID))
+	// 若申请已通过，进一步检查运营商账号是否已建立
+	if app.Status == "approved" {
+		if _, opErr := server.store.GetOperatorByUser(ctx, authPayload.UserID); opErr == nil {
+			resp.IsOperator = true
+		}
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 更新区域 ====================

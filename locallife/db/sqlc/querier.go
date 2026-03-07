@@ -48,6 +48,8 @@ type Querier interface {
 	ApproveMerchantApplication(ctx context.Context, id int64) (MerchantApplication, error)
 	// 审核通过运营商申请（平台管理员操作）
 	ApproveOperatorApplication(ctx context.Context, arg ApproveOperatorApplicationParams) (OperatorApplication, error)
+	// 审批通过区域扩展申请
+	ApproveOperatorRegionApplication(ctx context.Context, id int64) (OperatorRegionApplication, error)
 	// 审核通过骑手申请
 	ApproveRiderApplication(ctx context.Context, arg ApproveRiderApplicationParams) (RiderApplication, error)
 	AssignDelivery(ctx context.Context, arg AssignDeliveryParams) (Delivery, error)
@@ -161,6 +163,7 @@ type Querier interface {
 	// 统计申请数量（包含 submitted/approved/rejected）
 	CountPendingOperatorApplications(ctx context.Context) (int64, error)
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
+	CountPendingRegionApplications(ctx context.Context) (int64, error)
 	CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error)
 	CountProfitSharingReturnsByRefundOrderStatus(ctx context.Context, arg CountProfitSharingReturnsByRefundOrderStatusParams) (int32, error)
 	// 统计多个用户最近N天的索赔总数
@@ -355,6 +358,8 @@ type Querier interface {
 	// ==================== 运营商入驻申请（草稿模式+人工审核） ====================
 	// 创建运营商申请草稿（需要用户ID和区域ID）
 	CreateOperatorApplicationDraft(ctx context.Context, arg CreateOperatorApplicationDraftParams) (OperatorApplication, error)
+	// 运营商提交区域扩展申请
+	CreateOperatorRegionApplication(ctx context.Context, arg CreateOperatorRegionApplicationParams) (OperatorRegionApplication, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
@@ -470,6 +475,7 @@ type Querier interface {
 	DeleteOldWeatherCoefficients(ctx context.Context, recordedAt time.Time) error
 	// 删除30天前的通知记录（数据清理）
 	DeleteOldWechatNotifications(ctx context.Context) error
+	DeleteOperatorRegionApplication(ctx context.Context, id int64) error
 	DeleteOrderItems(ctx context.Context, orderID int64) error
 	DeletePeakHourConfig(ctx context.Context, id int64) error
 	DeletePeakHourConfigsByRegion(ctx context.Context, regionID int64) error
@@ -760,6 +766,8 @@ type Querier interface {
 	GetOperatorMerchantRanking(ctx context.Context, arg GetOperatorMerchantRankingParams) ([]GetOperatorMerchantRankingRow, error)
 	GetOperatorProfitSharingStats(ctx context.Context, arg GetOperatorProfitSharingStatsParams) (GetOperatorProfitSharingStatsRow, error)
 	GetOperatorRegion(ctx context.Context, arg GetOperatorRegionParams) (OperatorRegion, error)
+	GetOperatorRegionApplication(ctx context.Context, id int64) (OperatorRegionApplication, error)
+	GetOperatorRegionApplicationByOperatorAndRegion(ctx context.Context, arg GetOperatorRegionApplicationByOperatorAndRegionParams) (OperatorRegionApplication, error)
 	// 运营商区域内骑手绩效排行(通过配送订单关联区域)
 	GetOperatorRiderRanking(ctx context.Context, arg GetOperatorRiderRankingParams) ([]GetOperatorRiderRankingRow, error)
 	// 获取或创建用户余额账户（原子操作）
@@ -1180,6 +1188,8 @@ type Querier interface {
 	ListOperatorAppeals(ctx context.Context, arg ListOperatorAppealsParams) ([]ListOperatorAppealsRow, error)
 	// 列出所有申请（支持状态筛选）
 	ListOperatorApplications(ctx context.Context, arg ListOperatorApplicationsParams) ([]ListOperatorApplicationsRow, error)
+	// 列出某运营商的所有区域扩展申请
+	ListOperatorRegionApplicationsByOperator(ctx context.Context, operatorID int64) ([]ListOperatorRegionApplicationsByOperatorRow, error)
 	// 列出运营商管理的所有区域
 	ListOperatorRegions(ctx context.Context, operatorID int64) ([]ListOperatorRegionsRow, error)
 	ListOperators(ctx context.Context, arg ListOperatorsParams) ([]ListOperatorsRow, error)
@@ -1209,6 +1219,8 @@ type Querier interface {
 	// ==================== 订单超时清理 ====================
 	// 获取超时未支付的 pending 订单（创建时间早于指定时间）
 	ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error)
+	// 管理后台：列出所有待审核的区域扩展申请
+	ListPendingRegionApplications(ctx context.Context, arg ListPendingRegionApplicationsParams) ([]ListPendingRegionApplicationsRow, error)
 	// Find pending reservations within N minutes of payment deadline (for reminder notifications)
 	ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]TableReservation, error)
 	ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error)
@@ -1329,6 +1341,8 @@ type Querier interface {
 	RejectMerchantApplication(ctx context.Context, arg RejectMerchantApplicationParams) (MerchantApplication, error)
 	// 拒绝运营商申请（平台管理员操作）
 	RejectOperatorApplication(ctx context.Context, arg RejectOperatorApplicationParams) (OperatorApplication, error)
+	// 审批拒绝区域扩展申请
+	RejectOperatorRegionApplication(ctx context.Context, arg RejectOperatorRegionApplicationParams) (OperatorRegionApplication, error)
 	// 拒绝骑手申请
 	RejectRiderApplication(ctx context.Context, arg RejectRiderApplicationParams) (RiderApplication, error)
 	ReleaseReservedInventory(ctx context.Context, arg ReleaseReservedInventoryParams) (DailyInventory, error)
