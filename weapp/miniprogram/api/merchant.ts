@@ -99,7 +99,8 @@ export async function searchMerchants(params: {
     estimated_delivery_fee: item.estimated_delivery_fee,
     total_orders: item.total_orders,
     region_id: item.region_id,
-    status: item.status
+    status: item.status,
+    is_open: item.is_open
   }))
 }
 
